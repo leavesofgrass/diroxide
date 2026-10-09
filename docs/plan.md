@@ -2,19 +2,19 @@
 
 Written on Friday, October 9, 2026, by the planning session (Fable 5.1), for the owner. It is a proposal: the owner adopts it, or parts of it, and the orchestrator applies it to the task log. Nothing in it starts until the owner says go. Every date and weekday in it was computed from the machine's clock.
 
-What it is built on: the Worker 5.4.0 source at `D:\worker-5.4.0` (191,399 lines of C++ under `src/`, GPL-2.0-or-later) and its documentation; the owner's wiki, above all the textweaver hub, its wave planning pages, the Research Agent Rules and the Wave 4 orchestration plan; the textweaver repository's conventions (`CLAUDE.md`, the shared preamble in the planning repository, the guard, `safe-remove.ps1`, the build profiles, the Docker setup, ADRs 0027, 0043 and 0045); abax's earlier Worker-style file manager; and today's measurements of this machine. The two surveys that fed it (Worker's architecture, and the textweaver method) are kept with the planning records.
+What it is built on: the Worker 5.4.0 source at `D:\worker-5.4.0` (GPL-2.0-or-later) and its documentation; the owner's wiki, above all the textweaver hub, its wave planning pages, the Research Agent Rules and the Wave 4 orchestration plan; the textweaver repository's conventions (`CLAUDE.md`, the shared preamble in the planning repository, the guard, `safe-remove.ps1`, the build profiles, the Docker setup, ADRs 0027, 0043 and 0045); abax's earlier Worker-style file manager; and today's measurements of this machine. The two surveys that fed it are in the planning repository: `research/worker-survey.md` (Worker's architecture, read-only, with file and line citations) and `research/textweaver-method.md` (the textweaver method).
 
 ## The short version
 
 - **What it is.** A two-panel file manager in pure Rust, in the orthodox style of Worker and Directory Opus, built accessibility-first for the owner's screen readers and Braille display, with a terminal frontend, a window frontend on AccessKit, and a plugin system that takes bash, Python and Lua.
 - **License.** Apache-2.0 OR MIT, the Rust convention, decided by the owner on Friday, October 9, 2026 (question 2). Worker is GPL-2.0-or-later, so this is a reimplementation of its behavior, never a port of its code. The clean-room rule in section 3 keeps that true.
-- **Name.** The project is diroxide. The short command cannot be `do`: `do` is a reserved word in sh, bash, zsh and PowerShell, so typing it at a prompt is a syntax error. The command is `diro`, decided by the owner on Friday, October 9, 2026 (question 1).
+- **Name.** The project is diroxide, "Directory Oxide". The short command cannot be `do`: `do` is a reserved word in sh, bash, zsh and PowerShell, so typing it at a prompt is a syntax error. The repository, the binary, the crates and the config folder are all `diro`, decided by the owner on Friday, October 9, 2026 (question 1).
 - **Shape.** One app core that holds all state and returns effects; three frontends over it: the terminal reader on ratatui, the window on Masonry and AccessKit (the stack textweaver already carries), and a headless JSON-RPC server for scripts and tests. The same list model, menu model and keymap serve all three, as textweaver's do.
 - **Plugins.** Process plugins over JSON-RPC 2.0 on standard input and output, in any language; "script commands" for one-file bash and Python scripts with no protocol code at all; an optional in-process Lua tier for the fastest hooks; a transport designed so WebAssembly can be added later without changing the plugin API.
 - **The must-haves.** Archives in both directions: zip, 7z, tar, tar.gz, tar.xz and xz, all in pure Rust. Regex search at ripgrep speed, on names and contents. ImageMagick, FFmpeg and pandoc found and driven through one tools registry, for previews that are text first and for conversions that run as jobs.
 - **The alphas.** Seven: two panels (alpha.1); archives, search and the viewer (alpha.2); plugins and SSH (alpha.3); the window (alpha.4); previews and conversions (alpha.5); the modern features, tabs, flat view, collections, compare, batch rename, volumes (alpha.6); and the feature-complete final alpha (alpha.7). The final alpha is what most projects call 1.0.
 - **The method.** The textweaver method, unchanged where it worked: a Phase 0 contract first, waves of three to five building agents in their own worktrees with crate ownership, one app-wiring agent per sub-wave, batch merges, CI watched by run id, the guard and `safe-remove.ps1`, dates from the clock, and the owner's sessions as follow-ups rather than gates. Fable plans, Opus builds, Sonnet researches and writes prose, Haiku watches.
-- **Pace.** textweaver went from an empty folder to a feature-complete alpha in two weeks with this method. diroxide is smaller in scope and reuses that infrastructure, so four to six weeks of wall time to the final alpha is plausible if the owner keeps the same pace. Nothing here is a promise or a date.
+- **Pace.** The owner's decision (Friday, October 9, 2026): a secondary project at about a quarter of textweaver's pace. textweaver went from an empty folder to a feature-complete alpha in two weeks with up to five builders at a time; diroxide runs one or two builders at a time and waits for the owner's check between waves, so the final alpha is a matter of months, not weeks. Nothing here is a promise or a date.
 - **Twelve questions** for the owner are in section 13, each with a default so that a "go" alone is enough to start.
 
 ## 1. What diroxide is
@@ -29,9 +29,10 @@ The owner first: blind, reading through JAWS and NVDA and a 40-cell HumanWare Ma
 
 ### Names
 
-- **Project:** diroxide, "Directory Oxide". Folder `D:\diroxide`, crates `diroxide-*`, lowercase everywhere, as textweaver is written.
-- **Command:** `diro`. The owner suggested `do`, which is a reserved word in every shell the project targets (`for ... do ... done` in sh, bash and zsh; `do { } while` in PowerShell), so a binary named `do` cannot be run by typing its name. `diro` is four letters, reads as one word in speech, and is free on PATH on all three platforms. Alternatives if the owner prefers: `dxo`, `dro`. (Question 1.)
-- **Config folder:** `diroxide` under the platform's config directory (`%APPDATA%\diroxide`, `~/.config/diroxide`, `~/Library/Application Support/diroxide`).
+- **Project:** diroxide, "Directory Oxide", is the long name, used in prose, the README and the window title. Everything concrete is `diro` (the owner, Friday, October 9, 2026): the repository is `diro`, the binary is `diro`, the crates are `diro-*`, and the config folder is `diro`. Lowercase everywhere, as textweaver is written.
+- **Folders:** the local folder is `D:\diroxide` today, with the planning repository at `D:\diroxide-planning`. They become `D:\diro` and `D:\diro-planning` when the owner renames them between sessions (a running session's working folder cannot be moved from inside it); the wiki and the memory folder follow (question 13).
+- **Command:** `diro`. The owner suggested `do`, which is a reserved word in every shell the project targets (`for ... do ... done` in sh, bash and zsh; `do { } while` in PowerShell), so a binary named `do` cannot be run by typing its name. `diro` is four letters, reads as one word in speech, and is free on PATH on all three platforms. (Decided, question 1.)
+- **Config folder:** `diro` under the platform's config directory (`%APPDATA%\diro`, `~/.config/diro`, `~/Library/Application Support/diro`).
 
 ### License
 
@@ -43,47 +44,78 @@ A rusty file cabinet: two drawers for the two panels, the top one pulled open a 
 
 ## 2. What Worker does, and what carries over
 
-Worker is 191,399 lines of C++ in 517 source files, carrying its own X11 widget toolkit (AGUIX), its own configuration grammar (a yacc and lex parser), its own JSON parser, and the glue for AVFS, libmagic, HAL and uDisks. The Wave 0 parity inventory (section 9) verifies and completes the list below from the source, with file and line citations, the way textweaver's Star inventory did. What follows is the planning session's reading of the source listing and the documentation; items marked "verify" are expected but not yet confirmed line by line.
+The Worker survey (`research/worker-survey.md` in the planning repository, Friday, October 9, 2026, read-only, with file and line citations) replaced the planning session's guesses. Worker 5.4.0 is dated March 1, 2026, and its first release was in March 1999. It is about 176,000 hand-written lines of C++17, plus 17,000 generated by bison, flex and Ragel; 35,000 of the hand-written lines are AGUIX, the author's own X11 toolkit. Two thirds to three quarters of the code is entangled with that toolkit, and even the copy command carries its own dialog. The survey's conclusion: a clean split of core and frontend is a redesign, not a port, which is what the clean-room rule requires anyway.
+
+### How Worker is built
+
+- One application object owns the window, the button, hotkey and path tables, the status and clock bars, and two listers; a select loop over the X connection, timers and child exits drives it.
+- A lister hosts one mode at a time: the file list, an image view, an information view or the text view. Modes register named string commands.
+- The file list mode (10,000 lines) holds tabs, a directory cache of 50 entries, filters, sorting, selection, breadcrumbs, an info line, free space and an inotify watch.
+- Entries form a small tree of types: entry, directory, file and virtual directory. A virtual directory is any list of paths, and it is the universal result type: search results, flattened trees, the selection as a list, a command's output, path jump results, directory compare results and clipboard paste all become one.
+- One visitor interface walks directories for copy, delete, search and dirsize. Copy runs on its own thread with several overwrite policies and background copies; delete unlinks directly; trash is a script in the default configuration that calls `gio trash`.
+- Sixty command classes, each with a run method and its own configuration dialog, in eight categories (file type actions, cursor, file list, file operations, selections, settings, scripting, other), plus about forty-five string commands reachable from scripts.
+- File type checking, directory reading, search, copy and the path store run on threads; the interface stays on one.
+- Configuration is a hand-editable text file with its own grammar (a 1,862-line bison parser and 230 keywords), with sections for global settings, colors, startup, fonts, clock bar sets, path buttons, 41 hotkeys, 157 buttons in banks on a four by seven grid, and 144 file types. Keys are X keysyms with X modifier names.
 
 ### Carried over as features
 
-- **Two listers** with an active and an inactive side, Tab between them, each with its own path, sort order, filter, selection and column set.
-- **Columns** chosen per lister: name, size, type, permissions, owner, group, modification time, link destination, and more. Verify the full set.
-- **Buttons in banks**: configurable rows of buttons, each running a list of commands, switched by bank. In diroxide a bank is a named command bar that both frontends show and the keymap can switch.
-- **Hotkeys** bound to commands, global and per context. In diroxide: one keymap with layers (section 5.7).
-- **Commands as the unit of configuration**: copy, delete, rename, make directory, chmod, chown, chtime, change symlink, change label, change layout, change columns, clipboard, command menu, text view mode, enter and parent directory, go to, select all, none, invert, by pattern, quick search, path jump, bookmarks, dirsize, search, filter, show hidden, own command, run script. The source listing shows one file pair per command (`copyop`, `chmodop`, `changelabelop` and the rest); the inventory lists them all.
-- **File types**: recognized by name pattern, by content (libmagic) and by a conditional "deep" check, with actions per type: double-click, show, raw show, user actions. diroxide keeps the model with a pure-Rust detector (section 5.6).
-- **Path jump**: type a path with completion and history. **Bookmarks** with a database and filter (`bookmarkdb*`). **Directory history** per lister.
-- **Dirsize**: the size of each folder in the listing on demand.
-- **Search**: by name and by content, with results as a list to act on.
-- **Text view**: a built-in viewer, with a hex mode (verify), search inside it, and a "raw" mode for file types that need it.
-- **Labels** on files, colored in Worker. In diroxide a label is a word first, shown in a column, and colored only in addition.
-- **Filters** per lister: show and hide patterns.
-- **Volume manager**: list, mount and unmount volumes through HAL or uDisks. In diroxide: a volumes list on every platform (drives on Windows, mounts on Linux and macOS), with mount and unmount through a plugin where the platform needs D-Bus.
-- **Layouts**: which parts of the window are shown. **Clipboard** operations between listers and other programs.
-- **Background copy** (`bgcopy_*`, `async_job_limiter`): operations that run while the panels stay usable. In diroxide every operation is a job.
-- **Lua scripting** (Worker 3 and later): scripts run from buttons, hotkeys and file-type actions, with an API into the listers. In diroxide the same places run plugins in any language (section 5.8).
+Everything in this list is in Worker today and becomes a diroxide feature, in the alpha noted.
 
-### Modernized, in Directory Opus's direction
+- Two panels, one active, Tab between them, each with tabs, tab lock and saved tab profiles (alpha.1; tabs in alpha.6).
+- Columns: name, size, human size, type, permissions, owner, link destination, modified, accessed, changed, inode, links, blocks, extension and a custom attribute (alpha.1).
+- Buttons in banks, switched by a command, each running a list of commands (alpha.1).
+- One key table for buttons, hotkeys and path buttons; single keys and Emacs-style two-key chords with the continuations shown in the status line; a help mode that explains a key; unmatched keys as type-ahead filtering (alpha.1).
+- Sixty commands as the unit of configuration: copy (also move, rename and duplicate), delete, rename, make directory, chmod, chown, chtime, create and change symlink, dirsize, reload, directory compare, clipboard; enter directory, enter path, path to the other side, path jump, bookmarks, directory cache, newest files, external virtual directory; change columns, hidden flag, layout, lister set, sort mode, filter, search entry, filter select and unselect, scroll, toggle mode, switch lister, tabs, tab profiles, label; own command, start program, script, internal view, text view, search; switch bank, shortkey from list, command menu, context menu, menu, volume manager, help, command log (alpha.1 to alpha.6, as their areas land).
+- The flag language of "own commands": `{f}` the name, `{F}` the full path, `{a}` and `{A}` all selected, `{p}` the path, `{lp}` and `{rp}` the left and right paths, `{op}` the other path, with escaped, unquoted and other-side variants, plus a prompt, stack access, size, environment, current time and random. diroxide keeps these as the placeholders of script commands (alpha.3).
+- Start modes for commands: normal, in a terminal, in a terminal that waits, with output shown, output shown to the other side, or output stored as a custom attribute (alpha.3).
+- File types as a tree with subtypes and priority; detection by a 64-byte magic signature with wildcards or libmagic, then an extended condition (size, permissions, name, content at an offset, link state), then a name pattern (fnmatch, comma list or regex); checked in the background with "not yet checked" shown until the result arrives; per-directory "don't check" for slow mounts; actions per type for drop, double-click, show, raw show, ten user actions and named context-menu actions (alpha.5).
+- Path jump with learned ranking (a prefix database with aging), by time, by filter or by program, with results as a virtual directory; bookmarks with categories, aliases, sticky entries and a bookmark-only filter; directory history and a previous-directory key; breadcrumbs; per-directory sort and filter presets (alpha.2 and alpha.6).
+- Filter expressions per lister over name, size, type, state, access time, modification time and content, with a fuzzy operator; type-ahead filtering; stashed filters (alpha.2).
+- Search by name (fnmatch or regex, comma-separated, full path) and by content (regex, case, byte limit, line numbers), with follow symlinks, search inside archives, one filesystem, exclude by label, age and size bounds, a match expression, histories and a result preview (alpha.2).
+- Dirsize into the size column (alpha.2; in diroxide a job, not a synchronous walk).
+- The text view: wrap, line numbers, jump to line, reload, follow and watch a file, command output, smart-case regex search (alpha.2).
+- Directory compare by name, size, date, content or checksum, and a newest-files view (alpha.6).
+- Labels with colors, in diroxide words first (alpha.2).
+- The volume manager through udisks2 over D-Bus, falling back to fstab and mtab with configurable mount, unmount and eject commands (alpha.6, through a plugin).
+- Clipboard exchange with other file managers (`text/uri-list` and GNOME's copied-files form), drag and drop, a command log, hint tips, and eleven translations (the window in alpha.4; translations after the final alpha if wanted).
 
-- **Folder tabs** per panel, with their own histories.
-- **Flat view**: a folder and all its subfolders as one list, with the relative path in a column.
-- **Collections**: virtual folders that hold search results, selections and drops, and that every command can act on.
-- **Compare and synchronize** two panels: same, different, only here, only there, with a plan the owner reads before anything is copied.
-- **Find duplicates** by size and hash.
-- **Batch rename** with regex and a preview list of old and new names, nothing renamed until confirmed.
-- **Metadata**: a details view of the focused entry (section 5.9), text first.
-- **Command line everywhere**: the palette takes commands, and `diro` exposes the same commands from a shell.
+### Changed on purpose
+
+- **Every operation is a job.** Worker's dirsize and delete are synchronous and its copy is threaded. diroxide runs all of them through one engine with plans, progress in words, cancel and undo.
+- **The trash is the default,** and permanent delete is its own listed command. Worker unlinks and leaves the trash to a script.
+- **Space selects, not Insert.** Insert is the NVDA and JAWS key. Worker's keypad plus, minus, star and slash for select all, none, invert and by pattern stay, with letter equivalents for laptops.
+- **A hex mode in the viewer.** Worker has none; it shows non-printable bytes as escapes and leaves hex to an external editor.
+- **Archives in pure Rust, both directions.** Worker reads archives through AVFS (`#utar`, `#uzip`, `#u7z` and the rest) and writes them with external packers. diroxide's provider reads and writes zip, 7z, tar, tar.gz, tar.xz and xz in-process; the member path form `archive.zip!member` replaces Worker's `#` suffix.
+- **A regex crate, not POSIX.** Worker uses `regcomp` with an extended-syntax switch; diroxide uses Rust's `regex` everywhere, with the same syntax in filters, search and rename.
+- **TOML, not a grammar.** Worker's parser and keywords become `config.toml`, `keymap.toml`, `filetypes.toml` and `banks.toml`, with a schema that generates the reference page; Worker's 8,600 lines of configuration dialogs become the Settings list.
+- **No shell in built-in operations.** Worker runs every external command as a temporary shell script through `xterm -e /bin/sh`. diroxide runs tools with argument lists and opens a terminal only for commands that ask for one.
+- **The plugin protocol replaces Worker's scripting.** The survey's most useful correction: Worker's Lua is 223 lines that only compute the info line under the list (eight variables, no API, no callbacks). Its real scripting is the stack-based script command (push, pop, label, if, goto, settings, window, evaluate), the flag language and the string commands, which the default configuration uses for batch rename, trash and case conversion. diroxide keeps the flags as placeholders, replaces the stack scripts with script commands in any language, and makes Lua one in-process tier among several.
+- **Pure-Rust file type detection** with the same three-stage model (magic, condition, pattern) and the same background checking, with libmagic as an optional plugin rather than a build dependency.
+- **The window on AccessKit** instead of AGUIX: real list, grid, menu and dialog roles, so a screen reader reads a panel as a table rather than as drawn text.
+
+### Added from Directory Opus
+
+- Flat view as a lister mode (Worker's `flatten_dir` exists as a string command; diroxide makes it a mode with the relative path in a column).
+- Collections: Worker's virtual directories made persistent and nameable, so a search result or a hand-picked set survives a restart.
+- Synchronize from a compare, with a plan the owner reads before anything is copied.
+- Duplicates by size, hash and comparison.
+- Batch rename with a regex and a preview of every old and new name (Worker's is a script with no preview).
+- A details view that says what a file is, text first (Worker's information mode and info line, extended with the tools of section 5.9).
+- The same commands from a shell through `diro`.
 
 ### Dropped or replaced
 
-- AGUIX and every X11 call: replaced by ratatui in the terminal and by Masonry, winit, Vello and AccessKit in the window.
-- The configuration grammar: replaced by TOML with a schema that generates its own reference page.
-- AVFS: replaced by diroxide's own virtual file system with archive providers that also write.
-- libmagic: replaced by a pure-Rust detector (`infer` plus diroxide's own table) with libmagic as an optional plugin.
-- HAL and uDisks linkage: replaced by `sysinfo` for listing and a plugin for mounting.
+- AGUIX and every X11 call (XDND, X selections, XIM, Xinerama, Xft, imlib2): replaced by ratatui in the terminal and by Masonry, winit, Vello and AccessKit in the window.
+- The configuration grammar and its dialogs: replaced by TOML and the Settings list.
+- AVFS and its FTP module: replaced by the archive and SFTP providers.
+- libmagic, HAL and uDisks as build dependencies: replaced by pure-Rust detection and a plugin for mounting.
 - autotools: replaced by Cargo, xtask and the release workflow.
-- Lua as the only scripting language: replaced by the plugin system, with Lua as one tier.
+- The image mode on imlib2: the window renders images through the `image` crate, and the details view describes them in words.
+- POSIX-only calls (fork and exec, waitpid, chown, mkfifo, statvfs, inotify, getpwuid): behind the local provider's platform module, with Windows equivalents.
+
+### What the survey could not verify
+
+The online manual is not in the tarball, so the meaning of "raw show", the mouse defaults and the button bank arithmetic are inferred from code and configuration; AVFS's internals and the `cd2*.sh` helper scripts were not read; nothing was built or run. The R1 inventory in Wave 0 closes these with the manual.
 
 ## 3. The clean-room rule
 
@@ -114,21 +146,21 @@ Worker's code is GPL-2.0-or-later. diroxide is Apache-2.0 OR MIT. A port of Work
 
 One Cargo workspace, edition 2024, resolver 3, toolchain pinned to the installed stable (1.98.1 today), `[workspace.dependencies]` declared once, one crate per job, dependency direction checked by `cargo xtask deps --check`:
 
-- `diroxide-core`: ids, errors, `Place` and `Entry`, the list model, commands and effects, messages and announcement kinds, the clock trait. No I/O.
-- `diroxide-vfs`: the `Provider` trait, places, capabilities, cancellation, the registry, and the local provider.
-- `diroxide-archive`: the archive provider for zip, 7z, tar, tar.gz, tar.xz and xz, reading and writing, with limits.
-- `diroxide-sftp`: the SFTP provider on russh.
-- `diroxide-ops`: the job engine: copy, move, delete, rename, make directory, links, attributes, times, trash, conflicts, progress, undo log.
-- `diroxide-search`: name and content search, dirsize, duplicates, results as a lister.
-- `diroxide-filetype`: detection and the file-type registry with actions.
-- `diroxide-config`: settings, keymap, file types, banks and plugins configuration, in TOML.
-- `diroxide-plugins`: the protocol types, the host, script commands, and the Lua tier behind a feature.
-- `diroxide-tools`: the external tools registry (ImageMagick, FFmpeg, pandoc, and others), detection and safe running.
-- `diroxide-preview`: previewers, text first, over tools and pure-Rust readers.
-- `diroxide-app`: the app core: two panels, tabs, commands, keymap dispatch, menus, palette, dialogs, jobs, announcements.
-- `diroxide-tui`: the terminal frontend on ratatui and crossterm.
-- `diroxide-gui`: the window on Masonry and AccessKit.
-- `diroxide-cli`: the `diro` binary: open, serve, search, convert, plugin tooling.
+- `diro-core`: ids, errors, `Place` and `Entry`, the list model, commands and effects, messages and announcement kinds, the clock trait. No I/O.
+- `diro-vfs`: the `Provider` trait, places, capabilities, cancellation, the registry, and the local provider.
+- `diro-archive`: the archive provider for zip, 7z, tar, tar.gz, tar.xz and xz, reading and writing, with limits.
+- `diro-sftp`: the SFTP provider on russh.
+- `diro-ops`: the job engine: copy, move, delete, rename, make directory, links, attributes, times, trash, conflicts, progress, undo log.
+- `diro-search`: name and content search, dirsize, duplicates, results as a lister.
+- `diro-filetype`: detection and the file-type registry with actions.
+- `diro-config`: settings, keymap, file types, banks and plugins configuration, in TOML.
+- `diro-plugins`: the protocol types, the host, script commands, and the Lua tier behind a feature.
+- `diro-tools`: the external tools registry (ImageMagick, FFmpeg, pandoc, and others), detection and safe running.
+- `diro-preview`: previewers, text first, over tools and pure-Rust readers.
+- `diro-app`: the app core: two panels, tabs, commands, keymap dispatch, menus, palette, dialogs, jobs, announcements.
+- `diro-tui`: the terminal frontend on ratatui and crossterm.
+- `diro-gui`: the window on Masonry and AccessKit.
+- `diro-cli`: the `diro` binary: open, serve, search, convert, plugin tooling.
 - `xtask`: deps, regen, keyboard, settings reference, notices, icons, dist, bench.
 
 Sixteen crates. textweaver reached 36; a file manager needs fewer. A crate is added only when a wave's brief says so.
@@ -145,26 +177,26 @@ Sixteen crates. textweaver reached 36; a file manager needs fewer. A crate is ad
 
 A `Provider` trait with `list`, `stat`, `read`, `write`, `create_dir`, `rename`, `remove`, `set_attributes`, `copy_hint` (for same-provider fast paths), `watch` (optional), each taking a cancellation token and reporting progress; a `Capabilities` set (writable, trash, links, attributes, case-sensitive, max name length, reserved names); and a registry that resolves a place to a provider. Providers:
 
-- **Local** (in `diroxide-vfs`): `std::fs` with platform details behind a small `sys` module: Windows attributes, long paths, reparse points, drive listing from `GetLogicalDrives` (never touching the drive, as textweaver's browser does); Unix modes, owners and groups; macOS resource forks ignored.
-- **Archive** (`diroxide-archive`): zip through the `zip` crate (deflate, bzip2, zstd, lzma and xz entries), 7z through `sevenz-rust2` (LZMA, LZMA2, BZIP2, PPMd, with writing), tar and its gzip and xz wrappers through `tar`, `flate2` and `liblzma` or `lzma-rust2` (question 6), plain `.xz` as a one-member archive. Reading lists and reads members in place; writing packs a selection into a new archive or adds to one, as a job with progress. Limits from textweaver's archive module: member size, bytes decompressed, 7z dictionary size, entry count, nesting depth of four, normalized names so a member called `../../x` cannot leave the archive, junk entries hidden.
-- **SFTP** (`diroxide-sftp`): russh and russh-sftp, key and agent authentication, known hosts checked, a connection per host kept open, listings and transfers streamed. Password entry goes through the frontends' prompt, never a command line.
+- **Local** (in `diro-vfs`): `std::fs` with platform details behind a small `sys` module: Windows attributes, long paths, reparse points, drive listing from `GetLogicalDrives` (never touching the drive, as textweaver's browser does); Unix modes, owners and groups; macOS resource forks ignored.
+- **Archive** (`diro-archive`): zip through the `zip` crate (deflate, bzip2, zstd, lzma and xz entries), 7z through `sevenz-rust2` (LZMA, LZMA2, BZIP2, PPMd, with writing), tar and its gzip and xz wrappers through `tar`, `flate2` and `liblzma` or `lzma-rust2` (question 6), plain `.xz` as a one-member archive. Reading lists and reads members in place; writing packs a selection into a new archive or adds to one, as a job with progress. Limits from textweaver's archive module: member size, bytes decompressed, 7z dictionary size, entry count, nesting depth of four, normalized names so a member called `../../x` cannot leave the archive, junk entries hidden.
+- **SFTP** (`diro-sftp`): russh and russh-sftp, key and agent authentication, known hosts checked, a connection per host kept open, listings and transfers streamed. Password entry goes through the frontends' prompt, never a command line.
 - **Plugin providers** (section 5.8): S3, WebDAV, MTP and anything else, served by a process plugin that implements the provider methods.
 
 ### 5.4 The job engine
 
-Every operation that touches more than one entry, or that can take more than a moment, is a job in `diroxide-ops`: a plan (what will happen, computed first and shown on request), a queue, progress in words ("copying 12 of 300, 1.2 of 4.0 GB, about two minutes left"), pause, cancel, a conflict policy asked once per job (ask, skip, overwrite, keep both, rename), and a result list (done, skipped, failed, with reasons). Copy preserves times and attributes, uses reflinks or server-side copy where the provider offers them, and moves within one provider by rename. Delete goes to the trash through the `trash` crate; permanent delete is a separate command that lists every path first. Renames and moves are recorded in an undo log that the Undo command replays for the last job. Nothing in the engine runs a shell.
+Every operation that touches more than one entry, or that can take more than a moment, is a job in `diro-ops`: a plan (what will happen, computed first and shown on request), a queue, progress in words ("copying 12 of 300, 1.2 of 4.0 GB, about two minutes left"), pause, cancel, a conflict policy asked once per job (ask, skip, overwrite, keep both, rename), and a result list (done, skipped, failed, with reasons). Copy preserves times and attributes, uses reflinks or server-side copy where the provider offers them, and moves within one provider by rename. Delete goes to the trash through the `trash` crate; permanent delete is a separate command that lists every path first. Renames and moves are recorded in an undo log that the Undo command replays for the last job. Nothing in the engine runs a shell.
 
 ### 5.5 Search
 
-`diroxide-search` uses ripgrep's own crates: `ignore` for the parallel walker (with gitignore rules optional), `globset` for name patterns, `grep-regex` and `grep-searcher` for contents, so a content search runs at ripgrep's speed in-process. Filters: name glob or regex, content regex, size, dates, kind, depth, hidden. Results arrive as they are found into a results lister that every command can act on (copy, move, open, collect), and the search can be saved as a collection or a filter. Dirsize walks with the same walker. Duplicates by size, then by a fast hash (`blake3`), then by full comparison for the hits.
+`diro-search` uses ripgrep's own crates: `ignore` for the parallel walker (with gitignore rules optional), `globset` for name patterns, `grep-regex` and `grep-searcher` for contents, so a content search runs at ripgrep's speed in-process. Filters: name glob or regex, content regex, size, dates, kind, depth, hidden. Results arrive as they are found into a results lister that every command can act on (copy, move, open, collect), and the search can be saved as a collection or a filter. Dirsize walks with the same walker. Duplicates by size, then by a fast hash (`blake3`), then by full comparison for the hits.
 
 ### 5.6 File types and actions
 
-Detection in `diroxide-filetype`: extension first, then magic bytes through `infer` and diroxide's own table (text, scripts, archives, documents), then an optional content check. Types are in `filetypes.toml`, user-extendable, with a priority order and actions: open (the default), view, preview, convert, and user actions, each a command or a plugin call. Actions that run a program use the tools registry (section 5.9), never a shell string.
+Detection in `diro-filetype`: extension first, then magic bytes through `infer` and diroxide's own table (text, scripts, archives, documents), then an optional content check. Types are in `filetypes.toml`, user-extendable, with a priority order and actions: open (the default), view, preview, convert, and user actions, each a command or a plugin call. Actions that run a program use the tools registry (section 5.9), never a shell string.
 
 ### 5.7 Commands, keys, banks, menus and the palette
 
-One model in the app core, as textweaver's ADR-0043: menus (File, Edit, View, Go, Select, Tools, Plugins, Help), the palette (ranked by name), and banks (named command bars) all read command names and keys from the keymap, so no menu or button can show an unbound key. The keymap has layers (global, panel, list, viewer, dialog), a `keymap.toml` override, and a generated `docs/keyboard.md`. WCAG 2.1.4 applies: single-letter keys can be turned off. The defaults follow Worker and the Norton Commander line where screen readers allow: Tab switches panels, Enter opens, Backspace goes up, Space selects and moves on, F5 copy, F6 move, F7 make folder, F8 delete, F3 view, F4 edit, F2 rename, F9 menus, Ctrl+P the palette. **Insert is not used for selection,** because Insert is the NVDA and JAWS modifier key. The keymap is checked for conflicts with NVDA's and JAWS's default keys as textweaver's is.
+One model in the app core, as textweaver's ADR-0043: menus (File, Edit, View, Go, Select, Tools, Plugins, Help), the palette (ranked by name), and banks (named command bars) all read command names and keys from the keymap, so no menu or button can show an unbound key. The keymap has layers (global, panel, list, viewer, dialog), two-key chords in the Emacs style as Worker has them (with the continuations said and shown in the status line), a `keymap.toml` override, and a generated `docs/keyboard.md`. WCAG 2.1.4 applies: single-letter keys can be turned off. The defaults follow Worker and the Norton Commander line where screen readers allow: Tab switches panels, Enter opens, Backspace goes up, Space selects and moves on, F5 copy, F6 move, F7 make folder, F8 delete, F3 view, F4 edit, F2 rename, F9 menus, Ctrl+P the palette. **Insert is not used for selection,** because Insert is the NVDA and JAWS modifier key. The keymap is checked for conflicts with NVDA's and JAWS's default keys as textweaver's is.
 
 ### 5.8 The plugin system
 
@@ -181,20 +213,20 @@ The owner wants to automate file management in bash and Python before Lua, and t
 
 **Safety.** A plugin runs with the user's rights, so the manifest's capability list is shown on first enable and nothing is enabled by default. A plugin crash or timeout is reported and the app continues. `--no-plugins` starts clean. Plugins never receive a shell string; `tools/run` takes an argument list. Each plugin has its own log in the state folder.
 
-**Why this works for SSH.** SSH is built in through `diroxide-sftp` because the owner needs it from the start. The provider protocol lets the same thing be done by a Python plugin with paramiko for a protocol diroxide does not carry.
+**Why this works for SSH.** SSH is built in through `diro-sftp` because the owner needs it from the start. The provider protocol lets the same thing be done by a Python plugin with paramiko for a protocol diroxide does not carry.
 
 ### 5.9 Previews, tools and conversions
 
-**The tools registry** (`diroxide-tools`): one table of external programs (`magick` and `convert`, `ffmpeg` and `ffprobe`, `pandoc`, `7z`, `pdftotext`, `xdg-open` and its platform equivalents), each with how to find it (PATH through one lookup rule, then `tools.toml` overrides), how to read its version, and how to run it: an argument list, no shell, no console window on Windows, output captured, cancellable. Settings shows each tool as found with its version or not found with how to install it, in words. This is the "plays nice" layer: nothing requires a tool, and everything that can use one says so.
+**The tools registry** (`diro-tools`): one table of external programs (`magick` and `convert`, `ffmpeg` and `ffprobe`, `pandoc`, `7z`, `pdftotext`, `xdg-open` and its platform equivalents), each with how to find it (PATH through one lookup rule, then `tools.toml` overrides), how to read its version, and how to run it: an argument list, no shell, no console window on Windows, output captured, cancellable. Settings shows each tool as found with its version or not found with how to install it, in words. This is the "plays nice" layer: nothing requires a tool, and everything that can use one says so.
 
-**Previews** (`diroxide-preview`) are text first, because the owner cannot see a thumbnail, and because text is what a Braille line shows. The details view of the focused entry says, for an image, "PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB" from the `image` crate's header read and EXIF from `kamadak-exif`, with ImageMagick for formats `image` does not read; for audio and video, "MP3, 3 minutes 41 seconds, 320 kbps, stereo" from `ffprobe`'s JSON; for documents, the first lines of text through pandoc, or `pdftotext` for PDF; for archives, the listing; for text, the text, with a hex mode. The window also renders the image and plays nothing; a preview never blocks, and a newer request cancels an older one, as textweaver's browser preview does.
+**Previews** (`diro-preview`) are text first, because the owner cannot see a thumbnail, and because text is what a Braille line shows. The details view of the focused entry says, for an image, "PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB" from the `image` crate's header read and EXIF from `kamadak-exif`, with ImageMagick for formats `image` does not read; for audio and video, "MP3, 3 minutes 41 seconds, 320 kbps, stereo" from `ffprobe`'s JSON; for documents, the first lines of text through pandoc, or `pdftotext` for PDF; for archives, the listing; for text, the text, with a hex mode. The window also renders the image and plays nothing; a preview never blocks, and a newer request cancels an older one, as textweaver's browser preview does.
 
 **Conversions** are commands over recipes in `conversions.toml`: image formats and resizing through ImageMagick; audio and video transcoding through FFmpeg; Markdown, HTML, DOCX, EPUB and PDF through pandoc; pack and unpack through the archive provider. A conversion runs as a job, writes to the other panel by default (the orthodox rule), reports progress in words, and leaves a report of what was made and what failed. Users add recipes, and plugins register converters.
 
 ### 5.10 Frontends
 
-- **Terminal** (`diroxide-tui`): ratatui on crossterm, raw mode. Two panels, a title line that says the active place first, a status line that says the key fact first, a jobs line, and the minibuffer for prompts. The hardware cursor sits on the focused row so screen readers and Braille displays follow it. The default theme uses no box drawing; a "lines" theme adds it for sighted users. Highlights carry an attribute (reverse or bold) and a text marker (a leading asterisk on selected rows), never color alone. No spinners; progress is a sentence that changes at most twice a second. Screen-reader mode detection and a quiet-screen option follow textweaver's terminal reader.
-- **Window** (`diroxide-gui`): Masonry, `masonry_winit`, Vello, Parley and AccessKit, vendored from textweaver's `third_party/xilem` at the same revision and with the same patches (question 7), so the AccessKit floor that lets Orca find the app, and the Windows AcceleratorKey patch, come along. Each panel is an AccessKit grid with real row and cell nodes, named columns, a selection state, and a focus that the screen reader follows; menus are native (ADR-0046's approach); announcements go through a live region; dialogs are modal, named, close on Escape and return focus. Wayland, Windows and macOS through winit; X11 only through winit's X11 backend, with no X11-specific code anywhere.
+- **Terminal** (`diro-tui`): ratatui on crossterm, raw mode. Two panels, a title line that says the active place first, a status line that says the key fact first, a jobs line, and the minibuffer for prompts. The hardware cursor sits on the focused row so screen readers and Braille displays follow it. The default theme uses no box drawing; a "lines" theme adds it for sighted users. Highlights carry an attribute (reverse or bold) and a text marker (a leading asterisk on selected rows), never color alone. No spinners; progress is a sentence that changes at most twice a second. Screen-reader mode detection and a quiet-screen option follow textweaver's terminal reader.
+- **Window** (`diro-gui`): Masonry, `masonry_winit`, Vello, Parley and AccessKit, vendored from textweaver's `third_party/xilem` at the same revision and with the same patches (question 7), so the AccessKit floor that lets Orca find the app, and the Windows AcceleratorKey patch, come along. Each panel is an AccessKit grid with real row and cell nodes, named columns, a selection state, and a focus that the screen reader follows; menus are native (ADR-0046's approach); announcements go through a live region; dialogs are modal, named, close on Escape and return focus. Wayland, Windows and macOS through winit; X11 only through winit's X11 backend, with no X11-specific code anywhere.
 - **Headless** (`diro serve --stdio`): the app core over JSON-RPC, the same protocol the plugins speak, for tests, scripts and other programs.
 
 ### 5.11 Configuration and state
@@ -299,19 +331,19 @@ The textweaver method, as it stands after Wave 9 and the beta brief:
 
 - **Phase 0 is the contract.** The orchestrator and one Opus agent write a workspace in which every crate compiles, the core crate is finished, every owned crate has its public types with deliberately naive bodies, the ADRs are drafted, CI and Docker run, and the task log exists. Building agents keep the public signatures and replace the bodies.
 - **Ownership by crate.** Each brief names the crates, binary subcommand files and fixture folders the agent owns. No one edits the core crate, the root `Cargo.toml`, the toolchain file, `.github/`, `docker/` or another agent's paths. Contract changes are written as requests in the report; the orchestrator resolves them at integration.
-- **Three to five builders at a time,** by the machine's budget (section 12), plus research and docs agents that do not build. One agent per sub-wave touches the app core's messages and keys; one GUI lane at a time.
+- **One or two builders at a time.** The owner set the pace on Friday, October 9, 2026: a secondary project at about a quarter of textweaver's pace. So a wave's briefs run two at a time, never more, plus one research or docs agent that does not build. The machine's budget (section 12) would allow more; the pace is the owner's choice, not the machine's limit. One agent per sub-wave touches the app core's messages and keys; one GUI lane at a time.
 - **Worktrees and branches.** `D:\diroxide\.claude\worktrees\<id>` on `wave<N>/<letter>-<name>`, each with `CARGO_TARGET_DIR=D:/diroxide/target/<id>` and its own Docker volume. Agents never push, merge, rebase onto main or tag.
 - **Integration.** The orchestrator merges in batches of three or four, the widest app change first, runs one full native and container check per batch, pushes, and watches CI by run id before calling a merge done. `cargo xtask regen` rebuilds every generated file after a merge; nothing generated is hand-merged.
 - **Between waves.** `git status --short` in both repositories after every hand-back; strays removed by `safe-remove.ps1` after a dry run, the same hour, and recorded; build output flushed by the hygiene script; Docker restarted gracefully; D: and RAM checked; the task log's status lines written with clock-substituted times; the wiki updated by the orchestrator (agents never write it); a readiness page per alpha.
-- **The owner's sessions are follow-ups, not gates.** Findings go into the next wave. Small reversible decisions take a recorded default. Tags, releases, new licenses, accounts, downloads outside the pre-approved list, guard changes and deletes outside the task's own output wait for the owner.
+- **Each wave waits for the owner.** At this pace a wave ends with its readiness page and the owner's check, and the next wave starts on the owner's go, not on its own. Findings go into the next wave. Inside a wave, small reversible decisions take a recorded default. Tags, releases, new licenses, accounts, downloads outside the pre-approved list, guard changes and deletes outside the task's own output always wait for the owner.
 - **Models.** Fable plans and orchestrates; Opus builds; Sonnet researches, surveys, and writes docs and prose; Haiku runs timers, CI watches and status polls.
 - **Time boxes.** Every brief has one. An agent that reaches it stops and reports what is left.
 
 ### Wave 0: the contract, the inventories and the setup
 
-Orchestrator (Fable) with one Opus builder and four Sonnet researchers, about three days.
+Orchestrator (Fable) with one Opus builder and four Sonnet researchers run two at a time, about two weeks.
 
-- **P0 (Opus): the contract.** The sixteen crates, `diroxide-core` complete (ids, `Place`, `Entry`, the list model, commands and effects, messages, the clock), naive bodies elsewhere, the lints, the profiles, `xtask` with `deps`, `regen` and `keyboard`, CI, the Docker image and compose file, `docs/README.md`, `docs/dev/architecture.md`, ADRs 0001 to 0008 (workspace and dependencies; the core model; the provider trait; the job engine; commands, keys and menus from one model; the plugin protocol; frontends over one core; safety rules). Acceptance: `cargo test --workspace` green natively and in the container with nothing implemented; `deps --check` green.
+- **P0 (Opus): the contract.** The sixteen crates, `diro-core` complete (ids, `Place`, `Entry`, the list model, commands and effects, messages, the clock), naive bodies elsewhere, the lints, the profiles, `xtask` with `deps`, `regen` and `keyboard`, CI, the Docker image and compose file, `docs/README.md`, `docs/dev/architecture.md`, ADRs 0001 to 0008 (workspace and dependencies; the core model; the provider trait; the job engine; commands, keys and menus from one model; the plugin protocol; frontends over one core; safety rules). Acceptance: `cargo test --workspace` green natively and in the container with nothing implemented; `deps --check` green.
 - **R1 (Sonnet): the Worker parity inventory.** Reads `D:\worker-5.4.0` and the documentation; writes `research/worker-parity.md`: every command, key, column, file-type rule, configuration block, Lua API function and viewer feature, each with what it does and a file and line citation, and a list of what diroxide keeps, changes or drops. Research rules apply: one file, read-only shell.
 - **R2 (Sonnet): the modern features inventory.** Directory Opus, Double Commander, Total Commander, yazi, lf, ranger and nnn: tabs, flat view, collections, synchronize, duplicates, batch rename, previews, and how each does plugins and scripting (yazi's Lua, lf's shell, ranger's Python, nnn's scripts). Writes `research/modern-features.md` with the shape diroxide should take and the keys users expect.
 - **R3 (Sonnet): the plugin protocol review.** Reads the Language Server Protocol, the Debug Adapter Protocol, dprint's process and WebAssembly plugins, and the Extism and wasmtime component model; reviews section 5.8's draft; writes `research/plugin-protocol.md` with the message list, the manifest schema, the script-command directives, and the WebAssembly path, plus what each decision costs.
@@ -320,68 +352,68 @@ Orchestrator (Fable) with one Opus builder and four Sonnet researchers, about th
 
 ### Wave 1: two panels (alpha.1)
 
-Four Opus builders, one Sonnet docs agent, about five days, two sub-waves.
+Four Opus briefs run two at a time, one Sonnet docs agent, about three weeks, two sub-waves.
 
-- **1a, three builders at once:**
-  - **W1a (core and local VFS):** `diroxide-vfs`: the provider trait finished, the local provider with drives, attributes, long paths, links and watching; the name sanitizer; proptests over path normalization; fuzz target for the sanitizer. Owns `diroxide-vfs`, `fixtures/vfs/`.
-  - **W1b (the job engine):** `diroxide-ops`: plans, the queue, copy, move, rename, make folder, trash, permanent delete with its listing, conflicts, progress, cancel, undo log; a fake provider for tests; proptests that a plan equals what ran. Owns `diroxide-ops`.
-  - **W1c (configuration, keys and commands):** `diroxide-config` and the command model in `diroxide-app` (commands, keymap with layers, menus, palette, banks, settings schema and generated docs, NVDA and JAWS conflict check). Owns `diroxide-config`, `diroxide-app/src/{commands,keymap,menu,palette,settings}.rs`, `xtask/src/{keyboard,settings_doc}.rs`.
-- **1b, two builders and one writer:**
-  - **W1d (the app and the terminal):** the app core's panels, dispatch and effects, dialogs, jobs wiring, announcements; the terminal frontend with its accessibility rules; `diro PATH` and `diro serve --stdio`; the scripted ratatui test (open, move, select, copy, rename, delete, undo, relaunch and find the cursor restored); the bench gate. Owns the rest of `diroxide-app`, `diroxide-tui`, `diroxide-cli`. This is the one agent in the app's messages.
-  - **W1e (the CLI and the bench):** `diro search`, `diro ls` (plain output), `cargo xtask bench` with the three scenarios and the ratchet. Owns `diroxide-cli/src/cmd/`, `xtask/src/bench.rs`. Light.
+- **1a, two builders at a time:**
+  - **W1a (core and local VFS):** `diro-vfs`: the provider trait finished, the local provider with drives, attributes, long paths, links and watching; the name sanitizer; proptests over path normalization; fuzz target for the sanitizer. Owns `diro-vfs`, `fixtures/vfs/`.
+  - **W1b (the job engine):** `diro-ops`: plans, the queue, copy, move, rename, make folder, trash, permanent delete with its listing, conflicts, progress, cancel, undo log; a fake provider for tests; proptests that a plan equals what ran. Owns `diro-ops`.
+  - **W1c (configuration, keys and commands):** `diro-config` and the command model in `diro-app` (commands, keymap with layers, menus, palette, banks, settings schema and generated docs, NVDA and JAWS conflict check). Owns `diro-config`, `diro-app/src/{commands,keymap,menu,palette,settings}.rs`, `xtask/src/{keyboard,settings_doc}.rs`.
+- **1b, two builders and one writer, after 1a merges:**
+  - **W1d (the app and the terminal):** the app core's panels, dispatch and effects, dialogs, jobs wiring, announcements; the terminal frontend with its accessibility rules; `diro PATH` and `diro serve --stdio`; the scripted ratatui test (open, move, select, copy, rename, delete, undo, relaunch and find the cursor restored); the bench gate. Owns the rest of `diro-app`, `diro-tui`, `diro-cli`. This is the one agent in the app's messages.
+  - **W1e (the CLI and the bench):** `diro search`, `diro ls` (plain output), `cargo xtask bench` with the three scenarios and the ratchet. Owns `diro-cli/src/cmd/`, `xtask/src/bench.rs`. Light.
   - **W1f (docs, Sonnet):** quickstart, panels, operations, keyboard (generated), settings (generated), screen readers, accessibility, troubleshooting; the docs checks. Owns `docs/` except `docs/dev/` and `docs/adr/`.
 
 ### Wave 2: archives, search and the viewer (alpha.2)
 
-Four Opus builders, one Sonnet docs agent, about four days.
+Four Opus briefs run two at a time, one Sonnet docs agent, about three weeks.
 
-- **W2a (archives):** `diroxide-archive`, reading and writing the six formats; the limits; junk and hostile names; nesting; pack and unpack as jobs through `diroxide-ops`; fuzz targets for each reader; cross-checks against p7zip and `tar` in the container. Owns `diroxide-archive`, `fixtures/archives/`, `fuzz/archive_*`.
-- **W2b (search):** `diroxide-search`: the walker, name and content search, filters, the results lister, saved searches, dirsize, duplicates; the bench scenario. Owns `diroxide-search`.
-- **W2c (the viewer, labels, bookmarks):** the text viewer with hex mode and search, as a list over lines; labels and bookmarks in the state folder. Owns `diroxide-app/src/{viewer,labels,bookmarks}.rs`, `diroxide-tui/src/viewer.rs`.
+- **W2a (archives):** `diro-archive`, reading and writing the six formats; the limits; junk and hostile names; nesting; pack and unpack as jobs through `diro-ops`; fuzz targets for each reader; cross-checks against p7zip and `tar` in the container. Owns `diro-archive`, `fixtures/archives/`, `fuzz/archive_*`.
+- **W2b (search):** `diro-search`: the walker, name and content search, filters, the results lister, saved searches, dirsize, duplicates; the bench scenario. Owns `diro-search`.
+- **W2c (the viewer, labels, bookmarks):** the text viewer with hex mode and search, as a list over lines; labels and bookmarks in the state folder. Owns `diro-app/src/{viewer,labels,bookmarks}.rs`, `diro-tui/src/viewer.rs`.
 - **W2d (app wiring):** the Enter-an-archive flow, the Search dialog and results, the viewer keys, the pack and unpack commands, the announcements. Starts after 2a to 2c report; the one app-message agent.
 - **W2e (docs, Sonnet):** archives, search, the viewer, labels and bookmarks guides.
 
 ### Wave 3: plugins and SSH (alpha.3)
 
-Four Opus builders, one Sonnet writer, about five days.
+Four Opus briefs run two at a time, one Sonnet writer, about three weeks.
 
-- **W3a (the protocol and the host):** `diroxide-plugins`: the JSON-RPC types with a fuzzed parser, the manifest, the host (spawn, lifecycle, routing, timeouts, logs, crash isolation), the host-side services (`ui/*`, `panel/*`, `fs/*` through the job engine, `tools/run`, `config/get`), the `PluginTransport` trait with the stdio transport; a test plugin in Rust that records everything. Owns `diroxide-plugins` except `script.rs` and `lua.rs`.
-- **W3b (script commands and Lua):** script commands with the header, environment, stdin JSON, directives and exit codes; the Lua tier behind the feature, with the same API names; the three example plugins; `diro plugin` subcommands and `new --language`. Owns `diroxide-plugins/src/{script,lua}.rs`, `examples/plugins/`, `diroxide-cli/src/cmd/plugin.rs`.
-- **W3c (SFTP):** `diroxide-sftp` with authentication, known hosts, connection reuse, streaming transfers; tests against the container's OpenSSH server. Owns `diroxide-sftp`, `docker/sftp/`.
+- **W3a (the protocol and the host):** `diro-plugins`: the JSON-RPC types with a fuzzed parser, the manifest, the host (spawn, lifecycle, routing, timeouts, logs, crash isolation), the host-side services (`ui/*`, `panel/*`, `fs/*` through the job engine, `tools/run`, `config/get`), the `PluginTransport` trait with the stdio transport; a test plugin in Rust that records everything. Owns `diro-plugins` except `script.rs` and `lua.rs`.
+- **W3b (script commands and Lua):** script commands with the header, environment, stdin JSON, directives and exit codes; the Lua tier behind the feature, with the same API names; the three example plugins; `diro plugin` subcommands and `new --language`. Owns `diro-plugins/src/{script,lua}.rs`, `examples/plugins/`, `diro-cli/src/cmd/plugin.rs`.
+- **W3c (SFTP):** `diro-sftp` with authentication, known hosts, connection reuse, streaming transfers; tests against the container's OpenSSH server. Owns `diro-sftp`, `docker/sftp/`.
 - **W3d (app wiring):** the Plugins menu, plugin commands in the palette and banks, the connect-to-host flow with the password prompt, hooks; after 3a to 3c report.
 - **W3e (the plugin author's guide, Sonnet):** `docs/plugins.md`, `docs/writing-a-plugin.md` with the three worked examples, `docs/ssh.md`.
 
 ### Wave 4: the window (alpha.4)
 
-Two GUI lanes in sequence, one packaging agent beside them, about six days.
+Two GUI lanes in sequence, one packaging agent beside them, about four weeks.
 
-- **W4a (the window's foundation):** the vendored stack brought in; the window, the two panels as accessible grids with named columns, row and cell nodes, selection and focus; the live region; native menus from the menu model; the palette; the accessibility tree test harness and the UI Automation report. Owns `diroxide-gui`, `third_party/`.
-- **W4b (the window's dialogs and jobs):** after 4a: dialogs under the dialogs contract, jobs and progress, settings, the viewer, themes with the contrast check in words, the theme-following title bar and menus. Owns `diroxide-gui` after 4a hands back.
+- **W4a (the window's foundation):** the vendored stack brought in; the window, the two panels as accessible grids with named columns, row and cell nodes, selection and focus; the live region; native menus from the menu model; the palette; the accessibility tree test harness and the UI Automation report. Owns `diro-gui`, `third_party/`.
+- **W4b (the window's dialogs and jobs):** after 4a: dialogs under the dialogs contract, jobs and progress, settings, the viewer, themes with the contrast check in words, the theme-following title bar and menus. Owns `diro-gui` after 4a hands back.
 - **W4c (the icon and packaging):** the three concepts for the owner's choice (a design task first), then `xtask icons`, `dist`, the Windows zip, the macOS tarball, the Linux AppImage and tarball, the release workflow with SHA256SUMS, the clean-install smoke test. Owns `xtask/src/{icons,dist}.rs`, `assets/`, `.github/workflows/release.yml` (the one exception to the `.github` rule, by brief).
 - **W4d (docs, Sonnet):** the window guide, install, themes, the window in pictures with alt text.
 
 ### Wave 5: previews and conversions (alpha.5)
 
-Three Opus builders, one Sonnet writer, about four days.
+Three Opus briefs run two at a time, one Sonnet writer, about two weeks.
 
-- **W5a (tools):** `diroxide-tools`: the registry, detection, versions, overrides, safe running, the Settings page data. Owns `diroxide-tools`.
-- **W5b (previews and the details view):** `diroxide-preview`: the previewers in section 5.9, the details view model, cancellation. Owns `diroxide-preview`.
-- **W5c (conversions and file-type actions):** recipes, the Convert command as a job with reports, the file-type registry's actions through the tools, the Convert dialog in both frontends. Owns `diroxide-filetype`, `diroxide-app/src/convert.rs`, both frontends' convert dialogs.
+- **W5a (tools):** `diro-tools`: the registry, detection, versions, overrides, safe running, the Settings page data. Owns `diro-tools`.
+- **W5b (previews and the details view):** `diro-preview`: the previewers in section 5.9, the details view model, cancellation. Owns `diro-preview`.
+- **W5c (conversions and file-type actions):** recipes, the Convert command as a job with reports, the file-type registry's actions through the tools, the Convert dialog in both frontends. Owns `diro-filetype`, `diro-app/src/convert.rs`, both frontends' convert dialogs.
 - **W5d (docs, Sonnet):** tools and previews, converting, file types.
 
 ### Wave 6: the modern file manager (alpha.6)
 
-Four Opus builders, one Sonnet writer, about five days.
+Four Opus briefs run two at a time, one Sonnet writer, about three weeks.
 
-- **W6a (tabs, flat view, collections):** the tab model per panel, flat view as a lister mode, collections in the state folder. Owns `diroxide-app/src/{tabs,flat,collections}.rs`.
-- **W6b (compare, synchronize, duplicates, batch rename):** in `diroxide-ops` and `diroxide-search`; the plan views; the rename preview. Owns those files.
-- **W6c (volumes, history, hooks):** the volumes list, mount and unmount through a plugin, history across sessions, plugin hooks wired to the job engine. Owns `diroxide-vfs/src/volumes.rs`, `diroxide-plugins/src/hooks.rs`, the example mount plugin.
+- **W6a (tabs, flat view, collections):** the tab model per panel, flat view as a lister mode, collections in the state folder. Owns `diro-app/src/{tabs,flat,collections}.rs`.
+- **W6b (compare, synchronize, duplicates, batch rename):** in `diro-ops` and `diro-search`; the plan views; the rename preview. Owns those files.
+- **W6c (volumes, history, hooks):** the volumes list, mount and unmount through a plugin, history across sessions, plugin hooks wired to the job engine. Owns `diro-vfs/src/volumes.rs`, `diro-plugins/src/hooks.rs`, the example mount plugin.
 - **W6d (app and window wiring):** after 6a to 6c.
 - **W6e (docs, Sonnet).**
 
 ### Wave 7: the final alpha (alpha.7)
 
-Stabilization, as textweaver's Wave 8c and 9: the findings from the owner's sessions; a whole-codebase review by a research agent; performance against the budget; the gates list (two-way checks, report-only steps with reasons, release asset checks, the sentinel against tests touching real data, the clean-install smoke); a docs sweep; the known-limits page; the feature-complete list closed with the owner. Three builders at a time from a rolling queue.
+Stabilization, as textweaver's Wave 8c and 9: the findings from the owner's sessions; a whole-codebase review by a research agent; performance against the budget; the gates list (two-way checks, report-only steps with reasons, release asset checks, the sentinel against tests touching real data, the clean-install smoke); a docs sweep; the known-limits page; the feature-complete list closed with the owner. One or two builders at a time from a rolling queue, for as long as the owner's daily use keeps finding things.
 
 ## 10. Rules for every agent
 
@@ -402,11 +434,11 @@ The shared preamble in `D:\diroxide-planning\history\tasks.md` carries these, ad
 
 ## 11. Repository conventions
 
-- **Layout.** `crates/diroxide-*`, `xtask/`, `docs/` (user guides at the top, `dev/`, `adr/`, `site/` later), `fixtures/`, `fuzz/`, `examples/plugins/`, `assets/`, `docker/`, `scripts/` (`dev-check.ps1` and `.sh`), `tools/` (build hygiene, accessibility checks), `third_party/` (the vendored window stack), `.claude/` (the guard, tools, settings; worktrees and temp folders ignored).
+- **Layout.** `crates/diro-*`, `xtask/`, `docs/` (user guides at the top, `dev/`, `adr/`, `site/` later), `fixtures/`, `fuzz/`, `examples/plugins/`, `assets/`, `docker/`, `scripts/` (`dev-check.ps1` and `.sh`), `tools/` (build hygiene, accessibility checks), `third_party/` (the vendored window stack), `.claude/` (the guard, tools, settings; worktrees and temp folders ignored).
 - **Project `CLAUDE.md`,** untracked as in textweaver, master copy in the wiki: the owner overrides rules; privacy; where to work and deleting; plain names; the guard; the clean-room rule; accessibility first; color never alone; writing; the pointer to the planning preamble.
 - **The guard** from textweaver with the new allow-list and the Worker-folder read denial for building agents; its test file updated; installed by the owner, since the hook refuses to edit itself.
 - **Docs rules.** User guides have no tables, one command per fenced block, end with "See also"; generated files never hand-edited; ADRs keep their decisions with dated status updates; no feature numbers in user docs.
-- **Tests.** `tests/it/main.rs` per crate; nextest profiles; insta snapshots of listings and plans; proptests for paths, names, plans and the protocol; fuzz targets nightly; real-tool tests `#[ignore]` unless `DIROXIDE_TOOLS=1`, with CI naming required tools so a missing tool fails instead of skipping; a sentinel against tests touching real folders; tests never touch the real trash or the real config folder (an injected state folder).
+- **Tests.** `tests/it/main.rs` per crate; nextest profiles; insta snapshots of listings and plans; proptests for paths, names, plans and the protocol; fuzz targets nightly; real-tool tests `#[ignore]` unless `DIRO_TOOLS=1`, with CI naming required tools so a missing tool fails instead of skipping; a sentinel against tests touching real folders; tests never touch the real trash or the real config folder (an injected state folder).
 - **Changelog.** Agents write under a scratch heading with their id; the orchestrator regroups by area before an alpha.
 - **Versioning.** `0.1.0-alpha.N` in `[workspace.package]`; the final alpha is feature-complete; beta and stable only when the owner starts them.
 
@@ -419,6 +451,7 @@ Measured on this machine on Friday, October 9, 2026:
 - Toolchain: rustc and cargo 1.98.1 installed; Docker 29.8.0; sccache not on PATH (install in Wave 0; pre-approved).
 - Docker: restart gracefully between waves; never purge; compact with the owner past 300 GB.
 - Compute: textweaver found six agents' full checks at once made one clippy run take 70 minutes. Agents check only the crates they changed; the full workspace check runs once per merge batch.
+- At the owner's pace of one or two builders, none of these limits binds. The floors still hold, and textweaver's own waves, which run beside this project, keep the first claim on the machine.
 
 ## 13. Questions for the owner, each with a default
 
@@ -450,8 +483,10 @@ Given on Friday, October 9, 2026, in the planning session:
 2. **The license:** Apache-2.0 OR MIT.
 3. **Relicensing textweaver pieces:** yes. The list model, the archive module, the keymap, the dialogs contract and the message rules may move to diroxide under Apache-2.0 OR MIT. Before any piece moves, the orchestrator confirms with the owner that no third party holds copyright in it.
 4. **This plan file** lives in the repository at `docs/plan.md`, not in the Claude application's plan folder on drive C.
+5. **The repository and the executable are both named `diro`** (given later the same day). The crates and the config folder follow. The long name diroxide stays for prose and the window title.
+6. **The pace is about a quarter of textweaver's,** as a secondary project (given the same day). Sections 9 and 12 were rewritten for it: one or two builders at a time, and the next wave waits for the owner's go.
 
-Questions 4 to 12 are open and take their defaults until the owner says otherwise.
+Questions 4 to 12 are open and take their defaults until the owner says otherwise. A thirteenth question follows from answer 5: when to rename `D:\diroxide` to `D:\diro` and `D:\diroxide-planning` to `D:\diro-planning`. Default: the owner renames both between sessions, before Wave 0 starts, and the next session updates the wiki paths and moves the memory folder's contents to the new project key.
 
 ## Bookkeeping left from the planning session
 
@@ -461,7 +496,7 @@ Still to do, once the owner approves:
 
 - Fold the Worker 5.4.0 source survey into section 2 when the research agent reports, and save the survey as `research/worker-survey.md` in the planning repository.
 - Wiki bookkeeping: the diroxide lines in `index.md`, `domains/domains index.md` and `meta/meta index.md`; a log entry at the top of `log.md`; a section in `hot.md`; the owner's answers in the wiki record.
-- A project memory (`diroxide-project-state`) in the Claude memory folder, with its copy under `claude/memory/D--diroxide/` in the wiki and a line in `Claude Memory`.
+- A project memory (`diro-project-state`) in the Claude memory folder, with its copy under `claude/memory/D--diroxide/` in the wiki and a line in `Claude Memory`.
 - Commit the planning repository; commit this plan's update in the project repository.
 - Report the Obsidian MCP server's timeout to the owner (the wiki was read and written directly on disk this session).
 
