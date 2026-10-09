@@ -7,8 +7,8 @@ What it is built on: the Worker 5.4.0 source at `D:\worker-5.4.0` (191,399 lines
 ## The short version
 
 - **What it is.** A two-panel file manager in pure Rust, in the orthodox style of Worker and Directory Opus, built accessibility-first for the owner's screen readers and Braille display, with a terminal frontend, a window frontend on AccessKit, and a plugin system that takes bash, Python and Lua.
-- **License.** Apache-2.0 OR MIT, the Rust convention, chosen by the owner (question 2). Worker is GPL-2.0-or-later, so this is a reimplementation of its behavior, never a port of its code. The clean-room rule in section 3 keeps that true.
-- **Name.** The project is diroxide. The short command cannot be `do`: `do` is a reserved word in sh, bash, zsh and PowerShell, so typing it at a prompt is a syntax error. The recommended command is `diro` (question 1).
+- **License.** Apache-2.0 OR MIT, the Rust convention, decided by the owner on Friday, October 9, 2026 (question 2). Worker is GPL-2.0-or-later, so this is a reimplementation of its behavior, never a port of its code. The clean-room rule in section 3 keeps that true.
+- **Name.** The project is diroxide. The short command cannot be `do`: `do` is a reserved word in sh, bash, zsh and PowerShell, so typing it at a prompt is a syntax error. The command is `diro`, decided by the owner on Friday, October 9, 2026 (question 1).
 - **Shape.** One app core that holds all state and returns effects; three frontends over it: the terminal reader on ratatui, the window on Masonry and AccessKit (the stack textweaver already carries), and a headless JSON-RPC server for scripts and tests. The same list model, menu model and keymap serve all three, as textweaver's do.
 - **Plugins.** Process plugins over JSON-RPC 2.0 on standard input and output, in any language; "script commands" for one-file bash and Python scripts with no protocol code at all; an optional in-process Lua tier for the fastest hooks; a transport designed so WebAssembly can be added later without changing the plugin API.
 - **The must-haves.** Archives in both directions: zip, 7z, tar, tar.gz, tar.xz and xz, all in pure Rust. Regex search at ripgrep speed, on names and contents. ImageMagick, FFmpeg and pandoc found and driven through one tools registry, for previews that are text first and for conversions that run as jobs.
@@ -441,6 +441,29 @@ Measured on this machine on Friday, October 9, 2026:
 2. Wave 0 starts: the planning repository, the guard and settings, sccache, the license files, the Phase 0 builder and the four researchers, all the same day.
 3. The wiki hub and the planning record are updated at the end of Wave 0 and after every wave.
 4. Wave 1 starts when P0's workspace is green natively and in the container, and R1 and R3 have handed back.
+
+## The owner's answers
+
+Given on Friday, October 9, 2026, in the planning session:
+
+1. **The command name:** `diro`.
+2. **The license:** Apache-2.0 OR MIT.
+3. **Relicensing textweaver pieces:** yes. The list model, the archive module, the keymap, the dialogs contract and the message rules may move to diroxide under Apache-2.0 OR MIT. Before any piece moves, the orchestrator confirms with the owner that no third party holds copyright in it.
+4. **This plan file** lives in the repository at `docs/plan.md`, not in the Claude application's plan folder on drive C.
+
+Questions 4 to 12 are open and take their defaults until the owner says otherwise.
+
+## Bookkeeping left from the planning session
+
+Done before this section was written: the repository initialized with this plan as its first commit; the planning repository `D:\diroxide-planning` initialized (not yet committed) with the textweaver-method survey in `research/`; the wiki hub `domains/diroxide.md` and the record `meta/diroxide-releases/diroxide first alpha plan.md` written.
+
+Still to do, once the owner approves:
+
+- Fold the Worker 5.4.0 source survey into section 2 when the research agent reports, and save the survey as `research/worker-survey.md` in the planning repository.
+- Wiki bookkeeping: the diroxide lines in `index.md`, `domains/domains index.md` and `meta/meta index.md`; a log entry at the top of `log.md`; a section in `hot.md`; the owner's answers in the wiki record.
+- A project memory (`diroxide-project-state`) in the Claude memory folder, with its copy under `claude/memory/D--diroxide/` in the wiki and a line in `Claude Memory`.
+- Commit the planning repository; commit this plan's update in the project repository.
+- Report the Obsidian MCP server's timeout to the owner (the wiki was read and written directly on disk this session).
 
 ## Related
 
