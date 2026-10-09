@@ -1,0 +1,12 @@
+# Build output
+/target
+/target-*
+
+# Claude Code session folders (worktrees, temp)
+/.claude/worktrees/
+/.claude/tmp/
+
+# Editor and OS noise
+*.swp
+.DS_Store
+Thumbs.db
