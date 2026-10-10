@@ -1,0 +1,24 @@
+[package]
+name = "diroxide-plugins"
+description = "The plugin system of diroxide: JSON-RPC process plugins, script commands, and a Lua tier behind a feature."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[features]
+# The in-process Lua tier. Phase 0 compiles an empty module; Wave 3 adds
+# `dep:mlua` here.
+lua = []
+
+[dependencies]
+diroxide-config.workspace = true
+diroxide-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true
