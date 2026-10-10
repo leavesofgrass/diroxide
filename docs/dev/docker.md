@@ -4,7 +4,7 @@ Linux builds and tests run in a container from day one, beside the native Window
 
 ## What the image has
 
-- Debian trixie with Rust 1.98.1 (the official `rust` image), rustfmt and clippy.
+- Debian trixie with Rust 1.96 (the official `rust` image), rustfmt and clippy.
 - cargo-nextest, for the tests.
 - ImageMagick, FFmpeg and pandoc, for the tools registry's real-tool tests.
 - 7-Zip (Debian's `7zip` package, the successor of p7zip), for cross-checking archives the archive provider writes.

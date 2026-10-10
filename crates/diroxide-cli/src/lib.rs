@@ -83,11 +83,11 @@ impl Explain for CliError {
     }
 }
 
-/// The version text. The copyright line belongs here too (plan section
-/// 1); it is added when the owner's go for it reaches this file.
+/// The version text, with the copyright line the plan puts here (section 1):
+/// the one place besides NOTICE and the README that names the owner.
 pub fn version_text() -> String {
     format!(
-        "diro {}\nDirectory Oxide (diroxide), a two-panel file manager.\nLicense: Apache-2.0 OR MIT.",
+        "diro {}\nDirectory Oxide (diroxide), a two-panel file manager.\nCopyright (c) 2026 Jon Pielaet. License: Apache-2.0 OR MIT.",
         env!("CARGO_PKG_VERSION")
     )
 }

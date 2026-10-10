@@ -1,6 +1,6 @@
 # Building
 
-diroxide builds with Cargo alone. The toolchain is pinned in `rust-toolchain.toml` (Rust 1.98.1, with rustfmt and clippy), so rustup installs and uses the right one.
+diroxide builds with Cargo alone. The toolchain is pinned in `rust-toolchain.toml` (Rust 1.96, with rustfmt and clippy), so rustup installs and uses the right one.
 
 ## On the owner's Windows machine
 
@@ -74,7 +74,7 @@ CARGO_HOME=D:/rust/cargo cargo install cargo-nextest --locked
 
 ## Phase 0 measurements
 
-The first clean build of the workspace, its time and its target folder's size are recorded in the Phase 0 report. Phase 0 ran its checks with Rust 1.96.1, because 1.98.1 was not yet installed in `D:\rust\rustup`; installing it is the orchestrator's step.
+The first clean build of the workspace, its time and its target folder's size are recorded in the Phase 0 report. Phase 0 ran its checks with Rust 1.96.1; it had pinned 1.98.1, which was not installed in the project's rustup home, so the orchestrator repinned to 1.96 at integration, the toolchain textweaver also uses.
 
 ## See also
 

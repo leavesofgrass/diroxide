@@ -7,7 +7,7 @@
 #   MSYS_NO_PATHCONV=1 docker compose build dev
 # See docs/dev/docker.md.
 
-FROM rust:1.98.1-slim-trixie
+FROM rust:1.96-slim-trixie
 
 ARG NEXTEST_VERSION=0.9.148
 
