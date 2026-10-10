@@ -1,0 +1,40 @@
+# ADR-0001: Workspace and dependencies
+
+Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0).
+
+## Context
+
+diroxide is built by waves of agents, one or two at a time, each owning crates. The workspace has to keep their work apart, keep builds lean on the owner's machine (shared with textweaver), and make the license and dependency rules checkable by a machine rather than by memory.
+
+## Decision
+
+- One Cargo workspace: edition 2024, resolver 3, members `crates/*` and `xtask`.
+- Fifteen `diroxide-*` crates as named in plan section 5.1, the binary crate `diro`, and `xtask`: seventeen packages. The plan's `diroxide-cli` ("the diro binary") is split into the library `diroxide-cli`, which holds the command line and is tested as a library, and a thin binary crate `diro`, so that `cargo install diro` is the install line the plan names.
+- The toolchain is pinned in `rust-toolchain.toml` to 1.98.1, with rustfmt and clippy. No `rust-version` is set; resolver 3 then picks dependency versions the running toolchain can build.
+- `[workspace.package]` carries version `0.1.0-alpha.1`, license `Apache-2.0 OR MIT`, homepage `https://diroxide.app`, and `publish = false` until the owner says otherwise.
+- Every dependency is declared once in `[workspace.dependencies]`, and members take it with `workspace = true`. The heavy crates of plan section 6 are declared there but used by no crate yet, so the first build stays small; versions follow textweaver's pins where it uses the crate, so the two projects share a cache. Versions that were not in the local cache on the Phase 0 day are marked "unverified" and are checked by the wave that first uses them.
+- Internal dependencies point one way, by the table in `xtask/src/deps.rs` and `docs/dev/architecture.md`. `cargo xtask deps --check` fails on a dependency without `workspace = true`, on one that points the wrong way, on a member missing from the table, and on any dependency on `xtask` or `diro`.
+- Lints: `missing_docs` and `unsafe_code` denied workspace-wide (denied, not forbidden, so the local provider's `sys` module can allow `unsafe` for platform calls, reviewed at integration); `dbg_macro`, `todo` and `unimplemented` denied; `unwrap_used` and `expect_used` warned (so denied in CI), allowed in tests by `clippy.toml`.
+- Profiles from plan section 7: `dev` and `test` with line-tables-only debug info and no incremental compilation, dependencies at `opt-level = 1` without debug info, `release` without LTO, `dist` with fat LTO, one codegen unit and stripped symbols.
+
+## Alternatives
+
+- **Explicit member list.** Clearer, but every new crate would also need a root edit; the glob plus the dependency table gives the same control, because an unknown crate fails `deps --check`.
+- **`diroxide-cli` as the binary itself.** Fewer packages, but then `cargo install diro` does not work, and the command line is harder to test without spawning a process.
+- **Forbid `unsafe_code`.** Stronger, but the local provider needs a few platform calls (the drive bitmask, attributes); a forbidden lint cannot be allowed in one module.
+- **Depending on the heavy crates now.** Shows the real build cost early, but makes the first build slow and fetches crates the stubs do not use.
+
+## Fallback
+
+If a crate boundary proves wrong, two crates merge, or a module moves, by a contract change request resolved at integration. If a heavy crate fails, plan section 6 names its fallback (liblzma or lzma-rust2, russh or openssh-sftp-client, the vendored window stack or a fresh vendor).
+
+## Consequences
+
+- The first clean build compiles only serde, thiserror, toml, serde_json and anyhow with their own dependencies.
+- Each wave adds its heavy dependency to its own crate's manifest with `workspace = true`; changing a version in the root is the orchestrator's.
+- A crate is added only when a wave's brief says so, in three places: the folder, the table in `xtask`, and the architecture page.
+
+## See also
+
+- [Architecture](../dev/architecture.md)
+- [Building](../dev/building.md)
