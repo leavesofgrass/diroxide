@@ -7,7 +7,7 @@ Linux builds and tests run in a container from day one, beside the native Window
 - Debian trixie with Rust 1.98.1 (the official `rust` image), rustfmt and clippy.
 - cargo-nextest, for the tests.
 - ImageMagick, FFmpeg and pandoc, for the tools registry's real-tool tests.
-- p7zip, for cross-checking archives the archive provider writes.
+- 7-Zip (Debian's `7zip` package, the successor of p7zip), for cross-checking archives the archive provider writes.
 - An OpenSSH server, for the SFTP provider's tests (not started by default).
 - A non-root user, `builder`, who runs everything.
 
