@@ -10,3 +10,7 @@
 *.swp
 .DS_Store
 Thumbs.db
+
+# Machine-specific and owner-rules files kept out of the repository (master copies in the owner's wiki)
+/CLAUDE.md
+/.claude/settings.json
