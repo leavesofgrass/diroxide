@@ -1,0 +1,18 @@
+[package]
+name = "diroxide-app"
+description = "The app core of diroxide: two panels, commands, keymap dispatch, menus, the palette, dialogs, jobs and announcements."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-config.workspace = true
+diroxide-core.workspace = true
+diroxide-filetype.workspace = true
+diroxide-ops.workspace = true
+diroxide-vfs.workspace = true
+
+[lints]
+workspace = true

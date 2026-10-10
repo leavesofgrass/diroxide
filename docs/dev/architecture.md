@@ -1,0 +1,51 @@
+# Architecture
+
+diroxide is one Cargo workspace. One app core holds all state and returns effects; three frontends show it (the terminal, the window, and a headless JSON-RPC server). Every crate has one job. This page is the crate map: what each crate does, who owns it after Phase 0, and which workspace crates it may depend on. `cargo xtask deps --check` enforces the dependency lists below; the table it checks is in `xtask/src/deps.rs`, and the two must change together.
+
+## How a key press travels
+
+1. A frontend turns its own key event into a `diroxide_core::Key` and hands it to `App::handle` as `AppEvent::Key`.
+2. The app looks the keys up in the keymap's layers (panel, list, global; a dialog first when one is open). A whole chord gives a command; the first key of a two-key chord makes the status line say the continuations; an unbound printable key jumps to the next row starting with that letter.
+3. `App::dispatch` changes the app's state and returns `Effect`s.
+4. The frontend handles the screen and speech effects (`Redraw`, `Announce`, `OpenDialog`, `CloseDialog`, `Quit`). The `Runtime` handles the I/O effects (`List`, `StartJob`, `CancelJob`, `RunPlugin`, `OpenExternally`, `SetClipboard`) and turns their results into `AppEvent`s, which go back to `App::handle`.
+5. A listing or job answer carries the request id it answers, so a late answer to an old request is dropped.
+
+The app core never does I/O and never blocks; tests drive it without a terminal or a window.
+
+## The crates
+
+Each entry gives the crate's job, its owner after Phase 0, and the workspace crates it may depend on.
+
+- `diroxide-core`: ids, `Place`, `Entry`, the list model, commands and effects, the job vocabulary, messages and their importance, keys and layers, the clock, errors and the `Explain` trait. No I/O. Finished in Phase 0; changed only through a contract change request. Depends on no workspace crate.
+- `diroxide-vfs`: the `Provider` trait, `OpContext` (cancellation and progress), capabilities, the registry, the name checks, and the local provider with its `sys` platform module (the one module where `unsafe` may be allowed). Owner: W1a. May depend on core.
+- `diroxide-config`: settings, keymap overrides, file types, banks, conversions and tools, in TOML, with the config and state paths. Owner: W1c. May depend on core.
+- `diroxide-ops`: the job engine: plans, runs, progress in words, conflicts, job control, reports and the undo log. Owner: W1b. May depend on core and vfs.
+- `diroxide-archive`: the archive provider for zip, 7z, tar, tar.gz, tar.xz and xz, with limits and member name rules. Owner: W2a. May depend on core, vfs and ops.
+- `diroxide-sftp`: the SFTP provider. Owner: W3c. May depend on core and vfs.
+- `diroxide-search`: name and content search, dirsize, duplicates, the results list. Owner: W2b. May depend on core and vfs.
+- `diroxide-tools`: the external tools registry and safe running. Owner: W5a. May depend on core, vfs and config.
+- `diroxide-filetype`: file type detection and the type registry with actions. Owner: W5c. May depend on core, vfs, config and tools.
+- `diroxide-preview`: previews, text first. Owner: W5b. May depend on core, vfs, tools and filetype.
+- `diroxide-plugins`: the JSON-RPC protocol, manifests, the host, the transport, script commands and the Lua tier. Owners: W3a, with W3b for `script.rs` and `lua.rs`. May depend on core, vfs, config, tools and ops.
+- `diroxide-app`: the app core: panels, commands, keymap dispatch, menus, the palette, banks, dialogs, jobs, announcements and the runtime. Owners: W1c for `commands.rs`, `keymap.rs`, `menu.rs`, `palette.rs` and `settings.rs`; W1d for the rest; later waves add their own files. May depend on core, vfs, archive, sftp, ops, search, filetype, config, plugins, tools and preview.
+- `diroxide-tui`: the terminal frontend. Owner: W1d. May depend on core and app.
+- `diroxide-gui`: the window frontend. Owners: W4a, then W4b. May depend on core and app.
+- `diroxide-cli`: the command line behind `diro`: open, serve, search, convert, plugin tooling. Owners: W1d, with W1e for `src/cmd/` and W3b for `src/cmd/plugin.rs`. May depend on every `diroxide-*` crate.
+- `diro`: the thin binary that `cargo install diro` installs. May depend on cli only.
+- `xtask`: the workspace's own tasks. Owner: the orchestrator, with W1c, W1e and W4c adding their tasks. May depend on core, vfs, config and app. Nothing depends on it.
+
+Plan section 5.1 counts sixteen crates with `diroxide-cli` as "the diro binary". Phase 0 splits that into the library `diroxide-cli`, which holds the command line and is tested as a library, and the binary crate `diro`, so that `cargo install diro` is the install line (plan section 1). With `xtask`, that is seventeen packages.
+
+## Rules every crate keeps
+
+- Third-party crates come from `[workspace.dependencies]` in the root `Cargo.toml`, taken with `name.workspace = true`.
+- Public items have rustdoc; `missing_docs` and `unsafe_code` are denied workspace-wide.
+- Library code returns `thiserror` errors that implement `diroxide_core::Explain`, so the app can say "Could not VERB OBJECT: CAUSE. NEXT STEP." the same way everywhere.
+- No `unwrap` or `expect` outside tests; no `todo!`, `unimplemented!` or `dbg!`.
+- Every user-visible string puts its meaning in its first 40 characters.
+
+## See also
+
+- [Building](building.md)
+- [ADR-0001: Workspace and dependencies](../adr/0001-workspace-and-dependencies.md)
+- [ADR-0007: Frontends over one core](../adr/0007-frontends-over-one-core.md)

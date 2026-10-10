@@ -1,0 +1,40 @@
+# ADR-0002: The core model
+
+Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0).
+
+## Context
+
+Every crate speaks about places, entries, lists, commands, effects, messages, keys and time. If each defined its own, the frontends would read differently and the owner's screen readers would hear different words for the same thing. `diroxide-core` holds these types once, does no I/O, and is finished in Phase 0, so later waves build on it without changing it.
+
+## Decision
+
+- **Place.** A full location of one of three kinds: local (`D:\photos`, `/home/owner`), inside an archive (`D:\docs\course.zip!week1`), or remote (`sftp://user@host:22/path`). It is opaque, with accessors, so no crate can build an invalid one. Parsing is textual in one path style, the platform's by default: `D:\photos` is full on Windows and a file name on Linux. Relative paths, `C:` and `C:docs` (drive-relative), `\home` without a drive on Windows, and device paths are refused with errors that say what to type instead; `Place::resolve` reads typed relative input against a base. `!` starts a member path only after an archive extension, so names such as `wow!` stay names; the last such `!` splits, so nested archives work. `..` is resolved lexically, and a member path that climbs out of its archive is refused. A place is text in TOML and JSON and round-trips. `title()` says the name first ("week1, in course.zip"). `is_within` follows parents, into archives, ignoring case on Windows, so recursive work can stay inside its root.
+- **Entry.** The real name is kept for operations; `display_name()` replaces control, format, direction and private-use characters with a question mark. Private-use characters are added to the plan's list because the character behind September 26 was one. `needs_care` marks names a row must flag. Names that are not valid Unicode are listed with a lossy copy and `name_not_unicode`, and operations on them are refused with a message. `Entry` is non-exhaustive, built with `Entry::new` and its fields.
+- **The list model.** One `ListModel` for panels, results, menus, the palette and every chooser: a title, rows, a focus, F1 help and an empty text. A row is said label first, "selected" next when it is, then its details, then its position: "report.pdf, PDF, 2.1 MB, modified Tuesday, 3 of 40". Letters jump to the next row starting with them and wrap; moves stop at the ends; replacing the rows keeps the focus on the same id. Say Status reads the title, the count, the selection and the focus, in that order.
+- **Commands and effects.** A command is a dotted lowercase id (`file.copy`) with named arguments. Dispatching returns `Effect`s, a non-exhaustive enum split into screen-and-speech effects for frontends and I/O effects for the runtime (ADR-0007). The job vocabulary (`JobKind`, `ConflictPolicy`, `JobRequest`) is in core so the app, the engine, plugins and `diro` share it.
+- **Messages.** Text with an importance (Low: shown, said on Say Status; Normal: polite; High: assertive) and a kind. Errors read "Could not VERB OBJECT: CAUSE. NEXT STEP."; every error type implements `Explain`, whose display is the cause and whose `next_step` is the advice. Questions end "y or n".
+- **Keys.** `Key`, `KeyChord` (one or two keys) and `Layer` are in core, so the configuration can read `keymap.toml` without the app. Written letters ignore case (`Ctrl+X` is Control and x) and Shift is written when meant; frontends build keys with `Key::new`, which turns an uppercase letter into the letter with Shift. Keys display as they are said: "Ctrl+Shift+T", "Page Down".
+- **Time.** The `Clock` trait gives the time and the local offset; the app supplies the offset, and tests use `FixedClock`. Times are said relative to today on a 12-hour US clock: "today, 2:05 PM", "yesterday", "Tuesday", "October 3", "October 3, 2025". The calendar arithmetic is a few lines in core, not a crate.
+- **Words.** `format` has sizes in decimal units ("2.1 MB", "1 byte"), counts ("1 item", "no items"), and the 40-cell Braille test `within_cells`.
+
+## Alternatives
+
+- **`PathBuf` or `OsString` inside `Place`.** Exact for every name, but platform-dependent text operations and no stable text form for configuration and JSON. Recorded as the fallback.
+- **The `url` crate for places.** Good for remote places, wrong for Windows paths and archive members.
+- **Public enum variants for `Place`.** Easier matching, but any crate could build a relative or drive-relative place.
+- **Keys in the configuration crate.** Then frontends would depend on configuration to name a key.
+- **A date crate in core.** jiff or time would do it, but the core needs only civil dates and an offset; the time zone lookup is the app's.
+
+## Fallback
+
+If names that are not valid Unicode prove common on Linux, `Place` and `Entry` move to byte-exact storage behind the same accessors, by a contract change request.
+
+## Consequences
+
+- Core has 50 unit tests and its own integration test; every later crate builds on its types.
+- A change to core is a contract change request, resolved by the orchestrator at integration.
+
+## See also
+
+- [ADR-0007: Frontends over one core](0007-frontends-over-one-core.md)
+- [ADR-0008: Safety rules](0008-safety-rules.md)

@@ -1,0 +1,16 @@
+[package]
+name = "diroxide-search"
+description = "Name and content search, dirsize and duplicates for diroxide, with results as a list."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-core.workspace = true
+diroxide-vfs.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

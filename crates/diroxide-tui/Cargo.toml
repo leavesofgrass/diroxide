@@ -1,0 +1,16 @@
+[package]
+name = "diroxide-tui"
+description = "The terminal frontend of diroxide: words first, the cursor on the focused row, no box drawing by default."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-app.workspace = true
+diroxide-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

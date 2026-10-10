@@ -1,0 +1,17 @@
+[package]
+name = "diroxide-filetype"
+description = "File type detection and the file type registry of diroxide, with actions."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-config.workspace = true
+diroxide-core.workspace = true
+diroxide-tools.workspace = true
+diroxide-vfs.workspace = true
+
+[lints]
+workspace = true

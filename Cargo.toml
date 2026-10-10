@@ -1,0 +1,127 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+# Nothing is published until the owner says so.
+publish = false
+
+# Every dependency is declared once, here. Member crates take what they need
+# with `name.workspace = true`; `cargo xtask deps --check` enforces both that
+# and the direction of the internal dependencies (docs/dev/architecture.md).
+[workspace.dependencies]
+# The workspace's own crates.
+diroxide-core = { path = "crates/diroxide-core", version = "0.1.0-alpha.1" }
+diroxide-vfs = { path = "crates/diroxide-vfs", version = "0.1.0-alpha.1" }
+diroxide-archive = { path = "crates/diroxide-archive", version = "0.1.0-alpha.1" }
+diroxide-sftp = { path = "crates/diroxide-sftp", version = "0.1.0-alpha.1" }
+diroxide-ops = { path = "crates/diroxide-ops", version = "0.1.0-alpha.1" }
+diroxide-search = { path = "crates/diroxide-search", version = "0.1.0-alpha.1" }
+diroxide-filetype = { path = "crates/diroxide-filetype", version = "0.1.0-alpha.1" }
+diroxide-config = { path = "crates/diroxide-config", version = "0.1.0-alpha.1" }
+diroxide-plugins = { path = "crates/diroxide-plugins", version = "0.1.0-alpha.1" }
+diroxide-tools = { path = "crates/diroxide-tools", version = "0.1.0-alpha.1" }
+diroxide-preview = { path = "crates/diroxide-preview", version = "0.1.0-alpha.1" }
+diroxide-app = { path = "crates/diroxide-app", version = "0.1.0-alpha.1" }
+diroxide-tui = { path = "crates/diroxide-tui", version = "0.1.0-alpha.1" }
+diroxide-gui = { path = "crates/diroxide-gui", version = "0.1.0-alpha.1" }
+diroxide-cli = { path = "crates/diroxide-cli", version = "0.1.0-alpha.1" }
+
+# Used by the Phase 0 stubs.
+anyhow = "1.0.100"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.146"
+thiserror = "2.0.18"
+toml = "1.1.6"
+
+# Declared for the waves to come (plan section 6), not yet depended on, so the
+# first build stays small. Versions are textweaver's where it uses the crate,
+# so the two projects share a cache. The ones marked "unverified" were not in
+# the local registry cache on the Phase 0 day: check them when first used.
+#
+# Search.
+regex = "1.13.1"
+ignore = "0.4.26"
+globset = "0.4.18"
+grep-regex = "0.1" # unverified
+grep-searcher = "0.1" # unverified
+# Archives. xz takes liblzma by default (plan question 6); lzma-rust2 is the
+# pure-Rust alternative to try in the final alpha.
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs", "lzma", "xz", "bzip2", "ppmd"] }
+sevenz-rust2 = "0.23.0"
+tar = "0.4.46"
+flate2 = { version = "1.1.5", default-features = false, features = ["zlib-rs"] }
+liblzma = "0.4.8"
+# SSH.
+russh = "0.54" # unverified
+russh-sftp = "2.1" # unverified
+# Watching, trash, volumes, folders, hashing.
+notify = "8.2.0"
+trash = "5" # unverified
+sysinfo = "0.36.1"
+dirs = "6.0.0"
+blake3 = "1.8.2"
+# Detection and images.
+infer = "0.19" # unverified
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
+kamadak-exif = "0.6" # unverified
+resvg = "0.47.0"
+# Async, confined to the plugin host, SFTP and jobs (plan question 8).
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "sync", "process", "io-util", "time", "macros"] }
+# Lua, behind the `lua` feature of diroxide-plugins.
+mlua = { version = "0.11", features = ["lua54", "vendored"] } # unverified
+# Terminal and window.
+ratatui = "0.30.2"
+crossterm = "0.29.0"
+accesskit = "0.25.1"
+accesskit_winit = "0.34.1"
+# Command line and logging.
+clap = { version = "4.6.1", features = ["derive"] }
+tracing = "0.1.44"
+# Tests.
+insta = "1.48.0"
+proptest = "1.11.0"
+tempfile = "3.27.0"
+
+[workspace.lints.rust]
+missing_docs = "deny"
+# Denied, not forbidden: the platform module of diroxide-vfs may allow it,
+# and is reviewed at integration.
+unsafe_code = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+# No unwrap or expect in library code; tests may use them (clippy.toml).
+unwrap_used = "warn"
+expect_used = "warn"
+
+# Build profiles (plan section 7): lean debug builds that share a cache.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false
+
+[profile.test]
+debug = "line-tables-only"
+incremental = false
+
+[profile.release]
+lto = false
+
+# Packages for the owner and for releases.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = true

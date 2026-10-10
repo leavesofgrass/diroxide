@@ -1,0 +1,40 @@
+# The diroxide development container. One target volume per agent, named
+# by DIRO_AGENT, so containers never share a build lock; the cargo registry
+# and git caches are shared. Nothing outside the repository is mounted.
+#
+#   MSYS_NO_PATHCONV=1 docker compose build dev
+#   MSYS_NO_PATHCONV=1 DIRO_AGENT=w1a docker compose run --rm dev scripts/dev-check.sh
+#
+# Defaults: 6 GB of memory, 4 CPUs and 4 cargo jobs per container; at most
+# three containers build at once on the owner's machine. See
+# docs/dev/docker.md.
+
+name: diroxide
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: diroxide-dev
+    working_dir: /work
+    volumes:
+      - .:/work
+      - target:/target
+      - cargo-registry:/home/builder/.cargo/registry
+      - cargo-git:/home/builder/.cargo/git
+    environment:
+      CARGO_TARGET_DIR: /target
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: ${DIRO_JOBS:-4}
+      CARGO_TERM_COLOR: never
+    mem_limit: ${DIRO_MEM:-6g}
+    cpus: ${DIRO_CPUS:-4}
+
+volumes:
+  target:
+    name: diro-target-${DIRO_AGENT:-orch}
+  cargo-registry:
+    name: diro-cargo-registry
+  cargo-git:
+    name: diro-cargo-git
