@@ -1,0 +1,18 @@
+[package]
+name = "diro"
+description = "diro, the two-panel file manager Directory Oxide (diroxide): keyboard first, accessible first, plugins in any language."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "diro"
+path = "src/main.rs"
+
+[dependencies]
+diroxide-cli.workspace = true
+
+[lints]
+workspace = true

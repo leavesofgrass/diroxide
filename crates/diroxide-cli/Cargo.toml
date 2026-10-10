@@ -1,0 +1,22 @@
+[package]
+name = "diroxide-cli"
+description = "The command line of diroxide behind the diro binary: open, serve, search, convert and plugin tooling."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-app.workspace = true
+diroxide-config.workspace = true
+diroxide-core.workspace = true
+diroxide-plugins.workspace = true
+diroxide-search.workspace = true
+diroxide-tui.workspace = true
+diroxide-vfs.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
