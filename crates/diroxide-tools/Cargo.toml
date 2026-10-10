@@ -1,0 +1,17 @@
+[package]
+name = "diroxide-tools"
+description = "The external tools registry of diroxide: ImageMagick, FFmpeg, pandoc and others, found on PATH and run without a shell."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-config.workspace = true
+diroxide-core.workspace = true
+diroxide-vfs.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
