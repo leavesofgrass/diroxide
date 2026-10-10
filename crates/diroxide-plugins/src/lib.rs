@@ -2,7 +2,8 @@
 //!
 //! - **Process plugins:** a folder with a `plugin.toml` [`Manifest`] and a
 //!   program in any language, spoken to in JSON-RPC 2.0 over standard input
-//!   and output, one JSON object per line ([`protocol`]), through a
+//!   and output, one JSON object per line ([`protocol`]), with shared JSON
+//!   shapes for places, entries and the command context ([`shapes`]), through a
 //!   [`PluginTransport`] (standard input and output today; WebAssembly can
 //!   be a second transport later without changing the API).
 //! - **Script commands:** one-file scripts with a header comment, run with
@@ -26,10 +27,12 @@ pub mod lua;
 pub mod manifest;
 pub mod protocol;
 pub mod script;
+pub mod shapes;
 pub mod transport;
 
 pub use error::PluginError;
 pub use host::{Host, HostServices, PanelSnapshot, PluginInfo};
 pub use manifest::{Capability, CommandSpec, HookKind, Manifest};
-pub use protocol::{Id, Incoming, Request, Response, RpcError};
+pub use protocol::{ErrorKind, Id, Incoming, Notification, Request, Response, RpcError};
+pub use shapes::{PanelRef, WireContext, WireEntry, WireImportance, WirePlace};
 pub use transport::{PluginTransport, StdioTransport};
