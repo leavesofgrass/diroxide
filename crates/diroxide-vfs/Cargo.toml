@@ -1,0 +1,15 @@
+[package]
+name = "diroxide-vfs"
+description = "The virtual file system of diroxide: the provider trait, capabilities, cancellation, the registry and the local provider."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
