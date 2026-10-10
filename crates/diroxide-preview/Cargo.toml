@@ -1,0 +1,17 @@
+[package]
+name = "diroxide-preview"
+description = "Previews for diroxide, text first: details in words, text, hex, and what the tools can say."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-core.workspace = true
+diroxide-filetype.workspace = true
+diroxide-vfs.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
