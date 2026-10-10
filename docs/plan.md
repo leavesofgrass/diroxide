@@ -146,7 +146,7 @@ Worker's code is GPL-2.0-or-later. diroxide is Apache-2.0 OR MIT. A port of Work
 
 ### 5.1 The workspace
 
-One Cargo workspace, edition 2024, resolver 3, toolchain pinned to the installed stable (1.98.1 today), `[workspace.dependencies]` declared once, one crate per job, dependency direction checked by `cargo xtask deps --check`:
+One Cargo workspace, edition 2024, resolver 3, toolchain pinned to 1.96 (the toolchain in the project's rustup home, shared with textweaver; repinned from 1.98.1 at the Phase 0 integration), `[workspace.dependencies]` declared once, one crate per job, dependency direction checked by `cargo xtask deps --check`:
 
 - `diroxide-core`: ids, errors, `Place` and `Entry`, the list model, commands and effects, messages and announcement kinds, the clock trait. No I/O.
 - `diroxide-vfs`: the `Provider` trait, places, capabilities, cancellation, the registry, and the local provider.
@@ -483,7 +483,7 @@ Measured on this machine on Friday, October 9, 2026:
 
 - D: 579.7 GB free. Floor: 200 GB. Each native builder's target folder is budgeted at 8 GB for a project this size (textweaver's lean build measured 16 GB for a far larger workspace); five builders and the orchestrator fit with room.
 - RAM: 37.6 GB free of 63.8. Floor: 20 GB free. Docker's machine has about 31 GB: at most three containers at 6 GB, and 26 GB of host RAM free before a container build.
-- Toolchain: rustc and cargo 1.98.1 installed; Docker 29.8.0; sccache not on PATH (install in Wave 0; pre-approved).
+- Toolchain: rustc and cargo 1.98.1 on the global PATH, but the project's rustup home `D:\rust\rustup` holds 1.95 and 1.96, so the pin is 1.96; Docker 29.8.0; sccache at `D:\rust\cargo\bin\sccache.exe` (built in September, not on PATH; the project settings name it by full path).
 - Docker: restart gracefully between waves; never purge; compact with the owner past 300 GB.
 - Compute: textweaver found six agents' full checks at once made one clippy run take 70 minutes. Agents check only the crates they changed; the full workspace check runs once per merge batch.
 - At the owner's pace of one or two builders, none of these limits binds. The floors still hold, and textweaver's own waves, which run beside this project, keep the first claim on the machine.
