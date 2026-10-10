@@ -31,7 +31,7 @@ The research reports live in the planning repository's `research` folder. Each i
 - `textweaver-method.md`: the textweaver method this project follows (the planning session).
 - `worker-parity.md`: R1, the Worker parity inventory: every command, key, column, file-type rule, configuration block and viewer feature, with what diroxide keeps, changes or drops (Wave 0).
 - `modern-features.md`: R2, the modern features inventory from other file managers (Wave 0, not yet written).
-- `plugin-protocol.md`: R3, the review of the plugin protocol (Wave 0, not yet written).
+- `plugin-protocol.md`: R3, the review of the plugin protocol (Wave 0). Its wire conventions, error codes and shared shapes are folded into ADR-0006 and `diroxide-plugins`.
 - `accessibility-stack.md`: R4, the accessibility stack check (Wave 0, not yet written).
 
 ## See also
