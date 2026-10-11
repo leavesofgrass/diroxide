@@ -9,11 +9,11 @@ What it is built on: the Worker 5.4.0 source at `D:\worker-5.4.0` (GPL-2.0-or-la
 - **What it is.** A two-panel file manager in pure Rust, in the orthodox style of Worker and Directory Opus, built accessibility-first for the owner's screen readers and Braille display, with a terminal frontend, a window frontend on AccessKit, and a plugin system that takes bash, Python and Lua.
 - **License.** Apache-2.0 OR MIT, the Rust convention, decided by the owner on Friday, October 9, 2026 (question 2). Worker is GPL-2.0-or-later, so this is a reimplementation of its behavior, never a port of its code. The clean-room rule in section 3 keeps that true.
 - **Name.** The project and the repository are diroxide, "Directory Oxide", matching the domain `diroxide.app`. The short command cannot be `do`: `do` is a reserved word in sh, bash, zsh and PowerShell, so typing it at a prompt is a syntax error. The binary is `diro`, decided by the owner on Friday, October 9, 2026 (question 1).
-- **The website.** `diroxide.app`, bought by the owner on Friday, October 9, 2026: a small project site in the shape of carta.rs (one landing page and the guides, no JavaScript), built the way kd7swh.com is built (Eleventy, the whole toolchain in Docker, GitHub Pages), after alpha.1 runs. Section 8 has the design and section 9 the wave.
+- **The website.** `diroxide.app`, bought by the owner on Friday, October 9, 2026: a small project site in the shape of carta.rs (one landing page and the guides, no JavaScript), built the way kd7swh.com is built (Eleventy, the whole toolchain in Docker, GitHub Pages), after the final alpha and before beta.1 (the owner's decision, Saturday, October 10, 2026). Section 8 has the design and section 9 the wave.
 - **Shape.** One app core that holds all state and returns effects; three frontends over it: the terminal reader on ratatui, the window on Masonry and AccessKit (the stack textweaver already carries), and a headless JSON-RPC server for scripts and tests. The same list model, menu model and keymap serve all three, as textweaver's do.
 - **Plugins.** Process plugins over JSON-RPC 2.0 on standard input and output, in any language; "script commands" for one-file bash and Python scripts with no protocol code at all; an optional in-process Lua tier for the fastest hooks; a transport designed so WebAssembly can be added later without changing the plugin API.
 - **The must-haves.** Archives in both directions: zip, 7z, tar, tar.gz, tar.xz and xz, all in pure Rust. Regex search at ripgrep speed, on names and contents. ImageMagick, FFmpeg and pandoc found and driven through one tools registry, for previews that are text first and for conversions that run as jobs.
-- **The alphas.** Seven: two panels (alpha.1); archives, search and the viewer (alpha.2); plugins and SSH (alpha.3); the window (alpha.4); previews and conversions (alpha.5); the modern features, tabs, flat view, collections, compare, batch rename, volumes (alpha.6); and the feature-complete final alpha (alpha.7). The website comes between alpha.1 and alpha.2. The final alpha is what most projects call 1.0.
+- **The alphas.** Nine (the owner's decision, Saturday, October 10, 2026), each carrying a large number of commits: two panels (alpha.1); archives and the viewer (alpha.2); search, filters, labels, bookmarks and saved searches (alpha.3); the plugin protocol, script commands and the Lua tier (alpha.4); SSH and remote places (alpha.5); the window (alpha.6); tools, previews and conversions (alpha.7); tabs, flat view, collections, compare and synchronize, duplicates, batch rename and volumes (alpha.8); and the feature-complete final alpha (alpha.9). The split from alpha.2 on is provisional until the feature catalog (R6) lands. The website is built after alpha.9 and before beta.1. The final alpha is what most projects call 1.0.
 - **The method.** The textweaver method, unchanged where it worked: a Phase 0 contract first, waves of three to five building agents in their own worktrees with crate ownership, one app-wiring agent per sub-wave, batch merges, CI watched by run id, the guard and `safe-remove.ps1`, dates from the clock, and the owner's sessions as follow-ups rather than gates. Fable plans, Opus builds, Sonnet researches and writes prose, Haiku watches.
 - **Pace.** The owner's decision (Friday, October 9, 2026): a secondary project at about a quarter of textweaver's pace. textweaver went from an empty folder to a feature-complete alpha in two weeks with up to five builders at a time; diroxide runs one or two builders at a time and waits for the owner's check between waves, so the final alpha is a matter of months, not weeks. Nothing here is a promise or a date.
 - **Twelve questions** for the owner are in section 13, each with a default so that a "go" alone is enough to start.
@@ -289,6 +289,21 @@ Each is reuse rather than new work, and each saves a wave's worth of mistakes al
 
 Each alpha has a goal, contents, what the owner checks, and exit criteria. "Readiness" means the orchestrator hands the owner one page: the packages built on a branch, the checks dated, the known gaps, the open decisions. The owner decides every tag; nothing tags on its own.
 
+**Nine alphas, then the website, then beta.1** (the owner's decision, Saturday, October 10, 2026). Each alpha carries a large number of commits. The seven headings below are the first plan's; the nine-alpha split, provisional until the feature catalog (R6, `research/feature-catalog.md`) lands and is folded in, is:
+
+- alpha.1: two panels (as below, unchanged).
+- alpha.2: archives and the viewer.
+- alpha.3: search, filters, labels, bookmarks and saved searches.
+- alpha.4: the plugin protocol, script commands and the Lua tier.
+- alpha.5: SSH and remote places.
+- alpha.6: the window.
+- alpha.7: tools, previews and conversions.
+- alpha.8: tabs, flat view, collections, compare and synchronize, duplicates, batch rename and volumes.
+- alpha.9: the final alpha, feature-complete.
+- Then the website (section 8's website part and Wave S), then beta.1 when the owner starts it.
+
+The waves of section 9 follow the same split once the catalog is in; until then they keep the first plan's numbering with the mapping above.
+
 ### alpha.1: two panels
 
 - **Goal.** A terminal file manager the owner can use every day on local folders.
@@ -296,9 +311,9 @@ Each alpha has a goal, contents, what the owner checks, and exit criteria. "Read
 - **The owner checks.** Ten minutes with NVDA, then JAWS, then the Mantis: open, move around, select, copy to the other panel, rename, delete, undo; the status line on the display; the palette.
 - **Exit.** All checks green on three OSes; the readiness page; the owner's findings filed for alpha.2.
 
-### Between alpha.1 and alpha.2: the website, diroxide.app
+### After the final alpha, before beta.1: the website, diroxide.app
 
-The owner bought `diroxide.app` on Friday, October 9, 2026, and wants a small project site there in the shape of carta.rs, built the way kd7swh.com is built, once alpha.1 runs and there is something to show. The repository is named `diroxide` to match the domain.
+The owner bought `diroxide.app` on Friday, October 9, 2026, and wants a small project site there in the shape of carta.rs, built the way kd7swh.com is built. First placed between alpha.1 and alpha.2, it moved on Saturday, October 10, 2026, by the owner's decision, to after the ninth and final alpha and before the first beta, when the whole feature set is there to show. The repository is named `diroxide` to match the domain.
 
 **The shape, from carta.rs.** One landing page and a few guide pages, no JavaScript:
 
@@ -317,7 +332,7 @@ The owner bought `diroxide.app` on Friday, October 9, 2026, and wants a small pr
 
 **The domain.** `.app` is on the HSTS preload list, so the site must serve HTTPS from the first visit. GitHub Pages issues the certificate once the domain is verified, and "Enforce HTTPS" is turned on in the repository settings. At the registrar: the four A records and four AAAA records that GitHub's custom-domain documentation lists at the time (checked there, not copied from here), and a `www` CNAME to the owner's GitHub Pages host if `www.diroxide.app` should redirect. The owner does the registrar and settings steps; the brief writes them out one per line.
 
-**When.** After alpha.1 runs, as its own small wave (Wave S in section 9), about two to three weeks at the owner's pace, one agent at a time. The mark is chosen then, because the hero needs it; the rasterized icon set still ships with the window in alpha.4.
+**When.** After alpha.9, as its own small wave (Wave S in section 9), about two to three weeks at the owner's pace, one agent at a time, before beta.1. The mark no longer waits for it: the logo concepts (a rusty filing cabinet with a crab popping out, cel-shaded, comic-book tech style) are being drawn in Wave 0b (D1), the owner picks one, and the rasterized icon set ships with the window alpha.
 
 ### alpha.2: archives, search and the viewer
 
@@ -389,11 +404,11 @@ Four Opus briefs run two at a time, one Sonnet docs agent, about three weeks, tw
   - **W1e (the CLI and the bench):** `diro search`, `diro ls` (plain output), `cargo xtask bench` with the three scenarios and the ratchet. Owns `diroxide-cli/src/cmd/`, `xtask/src/bench.rs`. Light.
   - **W1f (docs, Sonnet):** quickstart, panels, operations, keyboard (generated), settings (generated), screen readers, accessibility, troubleshooting; the docs checks. Owns `docs/` except `docs/dev/` and `docs/adr/`.
 
-### Wave S: the website (after alpha.1)
+### Wave S: the website (after the final alpha, before beta.1)
 
-One agent at a time, about two to three weeks; the first thing after alpha.1 and before Wave 2.
+One agent at a time, about two to three weeks; the last wave before beta.1, moved there from its first place after alpha.1 by the owner's decision of Saturday, October 10, 2026.
 
-- **WSa (the mark, a design task):** three SVG concepts of the rusty file cabinet in the planning repository under `design/icon/`; the owner picks one; the chosen SVG goes to `assets/` with its alt text. Moved here from Wave 4, which keeps the rasterization and the platform icon files.
+- **WSa (the mark):** done early, in Wave 0b, by D1: three SVG concepts of the rusty filing cabinet with the crab in the planning repository under `design/logo/`; the owner picks one; the chosen SVG goes to `assets/` with its alt text, and the window wave rasterizes it into the platform icon files.
 - **WSb (the site, Opus):** `site/` with the toolchain copied from kd7swh and trimmed (Dockerfile, compose, the guard script and its denylist, the lychee ignore file, `pages.yml`, `pr.yml`), the landing page in carta's shape, the guide pages built from `docs/`, the install and changelog pages, the accessibility statement, the stylesheet, and the text-browser check in the dev notes. Owns `site/`, `.github/workflows/pages.yml` and `.github/workflows/pr.yml` (the `.github` exception, by brief).
 - **WSc (the words, Sonnet):** the tagline, the feature text, the accessibility promises, the bench numbers once the gate has them, the alt text, and one editorial rule for the site, in the spirit of kd7swh's: nothing on the site that the current alpha cannot do today. Owns `site/content/`.
 - **The owner:** the registrar's DNS records, the repository's custom domain and "Enforce HTTPS", the remote, and the switch to public.
@@ -531,6 +546,7 @@ Given on Saturday, October 10, 2026, after the Wave 0 research:
 10. **Progress in screen-reader mode:** a progress announcement at most every ten seconds by default (a setting), instead of the twice-a-second redraw that a screen reader reading new text would speak every time. The sentence in section 5.10 is amended accordingly.
 11. **ADR-0007** (R4's three amendments: the window's panel as a list box first, the cursor at the row's first cell on every frame, a layout setting of single, stacked and side by side, side by side never in screen-reader mode): all three accepted on Saturday, October 10, 2026, and applied to the ADR, section 5.10 above and the window crate's module comment.
 12. **The two-panel layout is primary** (the same evening, overriding the third amendment's last clause): side by side is the default for everyone; stacked is the fallback offered to screen-reader users and to narrow or limited terminal sessions; single stays as a third value. Applied to ADR-0007, section 5.10 and the Wave 1 briefs.
+14. **Nine alphas, then the website, then beta.1** (the same evening, later): the alpha series is nine releases, each carrying a large number of commits, with the website built after the ninth alpha and before the first beta; the provisional split is in section 8 and the feature catalog (R6) lays its items out over the nine.
 13. **Extended research before Wave 1** (the same evening): two more research agents, on the history and the paradigm of the orthodox file managers (Norton Commander, Midnight Commander, FAR and their kin) and on the other paradigms and the per-alpha feature catalog (ranger and its kin, Emacs dired, Directory Opus's Amiga roots), so each alpha's feature list is fleshed out before building. The owner expects each alpha to carry a large number of commits; the alphas are big, as textweaver's were, and the waves are sized to them.
 
 Questions 4 to 14 are open and take their defaults until the owner says otherwise.
