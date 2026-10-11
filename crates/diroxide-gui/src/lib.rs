@@ -1,12 +1,17 @@
 //! The window frontend: Masonry, `masonry_winit`, Vello, Parley and
 //! AccessKit, vendored from textweaver at the same revision and patches.
-//! Each panel is an AccessKit grid with real row and cell nodes, named
-//! columns, a selection state and a focus the screen reader follows; menus
-//! are native; announcements go through a live region; dialogs are modal,
-//! named, close on Escape and return the focus.
+//! Each panel is one focusable AccessKit list box whose options are the
+//! rows: an option's name is the row as the list model speaks it (name
+//! first, details after), its position and the list's real size are set on
+//! it, marked rows are selected, and the focused row is the active
+//! descendant. A grid with named columns replaces this only if AccessKit's
+//! adapters gain the Grid and Table patterns, or the owner prefers it after
+//! a listening session (ADR-0007, amended Saturday, October 10, 2026).
+//! Menus are native; announcements go through a live region; dialogs are
+//! modal, named, close on Escape and return the focus.
 //!
-//! Phase 0: [`panel_grid`] computes the grid the accessibility tree will
-//! carry, without AccessKit; [`run`] says the window is not built yet.
+//! Phase 0: [`panel_grid`] computes the row and column data both shapes are
+//! built from, without AccessKit; [`run`] says the window is not built yet.
 //! Wave 4 (W4a and W4b) owns this crate.
 
 use diroxide_app::{App, Panel, Runtime};
