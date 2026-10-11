@@ -11,13 +11,14 @@
 
 mod deps;
 mod keyboard;
+mod logo;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | regen [--check] | keyboard [--check]";
+const USAGE: &str = "Usage: cargo xtask deps --check | regen [--check] | keyboard [--check] | logo";
 
 fn main() -> ExitCode {
     match run() {
@@ -53,6 +54,7 @@ fn run() -> Result<bool> {
         }
         ["keyboard"] => keyboard::write(&root),
         ["keyboard", "--check"] => keyboard::check(&root),
+        ["logo"] => logo::run(&root),
         _ => {
             eprintln!("{USAGE}");
             Ok(false)

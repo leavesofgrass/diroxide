@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 376" width="500" height="376" role="img" aria-labelledby="lk-title lk-desc">
+  <title id="lk-title">diroxide: Directory Oxide, a modern Rust file manager</title>
+  <desc id="lk-desc">The diroxide mark, a friendly orange crab waving from the open drawer of a rusty steel-blue filing cabinet, centered above the word diroxide and the tagline Directory Oxide: a modern Rust file manager.</desc>
+  <!-- Composed by cargo xtask logo from diroxide-mark.svg and diroxide-wordmark.svg. Edit those files, then run the task again. -->
+  <svg x="170" y="12" width="160" height="160" viewBox="0 0 32 32">
+  <title id="bi-title">diroxide icon: an orange crab waving from the open drawer of a steel-blue filing cabinet</title>
+  <defs>
+    <style>
+      .ln { fill: none; stroke: #1b1f2b; stroke-linecap: round; stroke-linejoin: round; }
+      .ed { stroke: #1b1f2b; stroke-linejoin: round; }
+    </style>
+    <clipPath id="bi-body-clip"><path d="M 5.5 20 C 5.5 14 8 11.5 11 11.5 C 14 11.5 16.5 14 16.5 20 Z"/></clipPath>
+  </defs>
+
+  <!-- Cabinet in three-quarter view: lit top, base front, shaded side with rust. -->
+  <polygon points="9,15 14,12 28,12 23,15" fill="#7ea6cc" class="ed" stroke-width="1.5"/>
+  <polygon points="23,15 28,12 28,27 23,30" fill="#2b4f75"/>
+  <path d="M 23 27 C 25 26.5 26.5 26 28 24.5 L 28 27 L 23 30 Z" fill="#7c3312"/>
+  <polygon points="23,15 28,12 28,27 23,30" class="ln" stroke-width="1.5"/>
+  <rect x="9" y="15" width="14" height="15" fill="#3f6e9e" class="ed" stroke-width="1.5"/>
+  <rect x="14" y="26.5" width="5" height="1.8" rx="0.9" fill="#1b1f2b"/>
+
+  <!-- Open drawer: interior and shaded side wall. -->
+  <polygon points="5,19 17,19 22,16 10,16" fill="#252c3c" class="ed" stroke-width="1.5"/>
+  <polygon points="17,19 22,16 22,22 17,25" fill="#2b4f75" class="ed" stroke-width="1.5"/>
+
+  <!-- Crab: waving arm and claw, body, eyes, resting claw. -->
+  <path class="ln" stroke-width="3.5" d="M 15.5 15 L 20 10.5"/>
+  <path class="ln" style="stroke:#e2742a" stroke-width="1.6" d="M 15.5 15 L 20 10.5"/>
+  <path d="M 26.14 4.9 A 4.2 4.2 0 1 1 22.5 2.8 L 23 6.13 Z" fill="#e2742a" class="ed" stroke-width="1.5"/>
+  <path d="M 5.5 20 C 5.5 14 8 11.5 11 11.5 C 14 11.5 16.5 14 16.5 20 Z" fill="#b0521b"/>
+  <ellipse cx="10" cy="16.5" rx="5.5" ry="5.5" fill="#e2742a" clip-path="url(#bi-body-clip)"/>
+  <path d="M 5.5 20 C 5.5 14 8 11.5 11 11.5 C 14 11.5 16.5 14 16.5 20 Z" class="ln" stroke-width="1.5"/>
+  <circle cx="9" cy="8.7" r="2.1" fill="#f6f1e7" class="ed" stroke-width="1.2"/>
+  <circle cx="13.5" cy="8.2" r="2.1" fill="#f6f1e7" class="ed" stroke-width="1.2"/>
+  <circle cx="9.5" cy="8.9" r="1" fill="#1b1f2b"/>
+  <circle cx="14" cy="8.4" r="1" fill="#1b1f2b"/>
+  <path d="M 6.2 13.73 A 3.2 3.2 0 1 1 3 13.73 L 4.6 15.5 Z" fill="#e2742a" class="ed" stroke-width="1.5"/>
+
+  <!-- Drawer front, nearest the viewer. -->
+  <rect x="5" y="19" width="12" height="6" rx="0.8" fill="#3f6e9e" class="ed" stroke-width="1.5"/>
+  <rect x="6.2" y="20.2" width="1.4" height="3.6" rx="0.7" fill="#f6f1e7"/>
+  <rect x="8.5" y="21.5" width="5" height="1.8" rx="0.9" fill="#1b1f2b"/>
+</svg>
+  <svg x="0" y="196" width="500" height="180" viewBox="0 0 500 180">
+  <title id="w-title">diroxide: Directory Oxide, a modern Rust file manager</title>
+  <desc id="w-desc">The word diroxide in bold, rounded, lowercase letters with dark outlines and a hard steel-blue drop shadow. The letters d, i, r are steel blue and the letters o, x, i, d, e are rust orange, splitting the name into dir and oxide. Below it, in plain dark sans-serif text: Directory Oxide: a modern Rust file manager.</desc>
+  <defs>
+    <style>
+      .gl { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <!-- The letters are stroked centerlines: x-height 60, stroke 16, round caps and joins. -->
+  <!-- Layer 1: hard drop shadow, offset 5 right and 5 down, steel shade. -->
+  <g transform="translate(5 5)" class="gl" stroke="#2b4f75" stroke-width="24">
+    <path d="M 72 90 A 22 22 0 1 1 28 90 A 22 22 0 1 1 72 90 Z M 72 36 L 72 112 M 102 68 L 102 112 M 132 68 L 132 112 M 132 94 C 132 76 144 68 160 68"/>
+    <path d="M 230 90 A 22 22 0 1 1 186 90 A 22 22 0 1 1 230 90 Z M 260 68 L 296 112 M 296 68 L 260 112 M 326 68 L 326 112 M 400 90 A 22 22 0 1 1 356 90 A 22 22 0 1 1 400 90 Z M 400 36 L 400 112 M 430 90 L 474 90 A 22 22 0 1 0 468.9 104.1"/>
+  </g>
+
+  <!-- Layer 2: dark outline, 4 units each side of the letter stroke. -->
+  <g class="gl" stroke="#1b1f2b" stroke-width="24">
+    <path d="M 72 90 A 22 22 0 1 1 28 90 A 22 22 0 1 1 72 90 Z M 72 36 L 72 112 M 102 68 L 102 112 M 132 68 L 132 112 M 132 94 C 132 76 144 68 160 68"/>
+    <path d="M 230 90 A 22 22 0 1 1 186 90 A 22 22 0 1 1 230 90 Z M 260 68 L 296 112 M 296 68 L 260 112 M 326 68 L 326 112 M 400 90 A 22 22 0 1 1 356 90 A 22 22 0 1 1 400 90 Z M 400 36 L 400 112 M 430 90 L 474 90 A 22 22 0 1 0 468.9 104.1"/>
+  </g>
+
+  <!-- Layer 3: letter color, "dir" in steel blue and "oxide" in rust orange. -->
+  <path class="gl" stroke="#3f6e9e" stroke-width="16" d="M 72 90 A 22 22 0 1 1 28 90 A 22 22 0 1 1 72 90 Z M 72 36 L 72 112 M 102 68 L 102 112 M 132 68 L 132 112 M 132 94 C 132 76 144 68 160 68"/>
+  <path class="gl" stroke="#e2742a" stroke-width="16" d="M 230 90 A 22 22 0 1 1 186 90 A 22 22 0 1 1 230 90 Z M 260 68 L 296 112 M 296 68 L 260 112 M 326 68 L 326 112 M 400 90 A 22 22 0 1 1 356 90 A 22 22 0 1 1 400 90 Z M 400 36 L 400 112 M 430 90 L 474 90 A 22 22 0 1 0 468.9 104.1"/>
+
+  <!-- The dots over the two i letters: filled circles, because a tiny circle stroked
+       twenty-four units wide renders as a ring in some rasterizers. Radius 12 matches
+       the outline stroke, radius 8 the letter stroke. -->
+  <circle cx="107" cy="43" r="12" fill="#2b4f75"/>
+  <circle cx="331" cy="43" r="12" fill="#2b4f75"/>
+  <circle cx="102" cy="38" r="12" fill="#1b1f2b"/>
+  <circle cx="326" cy="38" r="12" fill="#1b1f2b"/>
+  <circle cx="102" cy="38" r="8" fill="#3f6e9e"/>
+  <circle cx="326" cy="38" r="8" fill="#e2742a"/>
+
+  <!-- Layer 4: hard off-white highlights on the upper left of each bowl and on the d stems. -->
+  <path class="gl" stroke="#f6f1e7" stroke-width="3.5" d="M 26.5 81.45 A 25 25 0 0 1 37.5 68.35 M 184.5 81.45 A 25 25 0 0 1 195.5 68.35 M 354.5 81.45 A 25 25 0 0 1 365.5 68.35 M 428.5 81.45 A 25 25 0 0 1 439.5 68.35 M 68.5 44 L 68.5 58 M 396.5 44 L 396.5 58"/>
+
+  <!-- Tagline: real text, so it stays selectable and searchable; generic sans-serif fallback. -->
+  <text x="20" y="162" font-family="'Atkinson Hyperlegible', Verdana, 'DejaVu Sans', Arial, sans-serif" font-size="19" fill="#1b1f2b" textLength="462" lengthAdjust="spacing">Directory Oxide: a modern Rust file manager</text>
+</svg>
+</svg>
