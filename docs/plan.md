@@ -338,35 +338,18 @@ The owner bought `diroxide.app` on Friday, October 9, 2026, and wants a small pr
 
 **When.** After alpha.9, as its own small wave (Wave S in section 9), about two to three weeks at the owner's pace, one agent at a time, before beta.1. The mark no longer waits for it: the logo concepts (a rusty filing cabinet with a crab popping out, cel-shaded, comic-book tech style) are being drawn in Wave 0b (D1), the owner picks one, and the rasterized icon set ships with the window alpha.
 
-### alpha.2: archives, search and the viewer
+### The alphas after the first (consolidated Saturday, October 10, 2026, from the twelve research reports)
 
-- **Contents.** The archive provider, reading and writing all six formats, with limits and fuzz targets; pack and unpack as jobs; search by name and content with the results lister, dirsize, saved searches; the text viewer with hex mode and search; labels; bookmarks.
-- **The owner checks.** Enter a zip and a 7z, copy out of one and into the other, pack a selection, search a large folder for a regex, read a file in the viewer.
+The one-line feature items with their sources, keys, accessibility notes, sizes and the order of commits per alpha are in the planning repository's `research/feature-catalog.md`; below are the goals and the research placements, and each wave's briefs are written from the catalog when the previous alpha ships.
 
-### alpha.3: plugins and SSH
-
-- **Contents.** The protocol, the host, script commands, the Lua tier, `diro plugin` (list, new, enable, disable, run, log), the three example plugins, the plugin author's guide, the SFTP provider with key and agent authentication and known hosts, the Plugins menu.
-- **The owner checks.** Write a five-line bash script command and a Python plugin that adds a command; connect to a host over SFTP and copy both ways.
-
-### alpha.4: the window
-
-- **Contents.** The Masonry window: panels as accessible grids, native menus, the palette, dialogs, jobs, settings, the viewer, themes with contrast checked; the icon; packaging for all three platforms with the release workflow.
-- **The owner checks.** The same ten minutes as alpha.1, in the window, with NVDA, JAWS and the display; the UI Automation report.
-
-### alpha.5: previews and conversions
-
-- **Contents.** The tools registry and its Settings page; previewers for images, audio, video, documents, archives and text; the details view; conversions with recipes, reports and the Convert command; file-type actions that use tools.
-- **The owner checks.** Focus a photo, a song and a PDF and read their details; convert a folder of images and a document.
-
-### alpha.6: the modern file manager
-
-- **Contents.** Folder tabs; flat view; collections; compare and synchronize with a plan; duplicates; batch rename with regex and a preview; the volumes list with mount and unmount through a plugin; directory history across sessions; the plugin hooks.
-- **The owner checks.** Synchronize two folders from the plan; rename fifty files with a regex and read the preview; find duplicates.
-
-### alpha.7: the final alpha
-
-- **Contents.** The findings from every session; the feature-complete list reviewed and closed; performance against the budget; thirty days of clean nightly fuzzing; documentation complete and checked; packages started on every platform; a clean-install smoke test; the known-limits page.
-- **The owner checks.** Two weeks of daily use.
+- **alpha.2: archives and the viewer.** Open a zip or a 7z like a folder, copy in and out, pack a selection, read any file. The archive provider on the seekable read, with the guards and starting limits of `research/archives.md` section 6, a one-pass unpack runner, a forward cursor for sequential formats, the fixed member-name normalizer and its fuzz target; zip 9.x, 7z, tar, tar.gz, tar.xz and xz in pure Rust, `lzma-rust2` for xz, ZipCrypto read with a warning and never written, AES-256 read and written where the crates allow, the masked password prompt of ADR-0009; the text viewer with hex mode and search; the document quick view for Markdown, plain text and code; symbolic links and change permissions in words first, with the engine part of change time; the item information list on `DetailRow`. The owner checks: enter a zip and a 7z, copy out of one and into the other, pack a selection, read a file in the viewer, preview a Markdown file in the other panel.
+- **alpha.3: search, filters, labels, bookmarks and saved searches.** Find anything by name or content; narrow any list with one filter language (the shared pattern module); label and bookmark; select the way Directory Opus and dired do; dirsize; directory history across sessions; per-folder sort and filter presets; the newest-files view; the copy buffer; saved searches in the file shape collections will use. The owner checks: search a large folder for a regular expression and act on the results; filter a panel by expression; label and bookmark.
+- **alpha.4: the plugin protocol and script commands.** Automate in bash or Python with no protocol (script commands, directives by file) and in any language with the protocol of `research/plugin-protocol.md`; the host, `diro plugin`, the example plugins, the minimal tool runner (PATH lookup and the no-shell process helper) behind `tools/run`; the manifest declares hooks and columns. The owner checks: a five-line bash script command and a Python plugin that adds a command.
+- **alpha.5: SSH and remote places.** Work on another machine as on this one: the SFTP provider with the agent, a key file, then a password, host keys shown in groups of four and a changed key refused, hosts read from the SSH configuration; every place a place: the volumes list with mount and unmount through a plugin, the trash browser where the trash crate can list and restore, the free-space check in the copy plan, the error policy for a share that vanishes; hooks wired. The lightest feature alpha on purpose, because network and host keys are the riskiest code in the series. The owner checks: connect over SFTP and copy both ways; eject a drive from the volumes list.
+- **alpha.6: the window.** The same ten minutes as alpha.1 in a window, with NVDA, JAWS and the display, over every feature of alpha.2 to alpha.5: panels as list boxes first (ADR-0007), native menus, the palette, dialogs under the contract, jobs, settings, the viewer and the quick view, the forms for archives, search, labels, bookmarks, the connect flow and plugin prompts; themes with contrast in words; the icon files from the approved mark; the release workflow with the Windows zip, the Linux tarball and SHA256SUMS. The largest alpha by nature. The owner checks: the ten minutes, in the window; the UI Automation report.
+- **alpha.7: tools, previews and conversions.** Know what a file is, say it in a sentence, convert it: the tools registry and its Settings page (ImageMagick, FFmpeg, pandoc, the 7z tool, ExifTool, pdfinfo); previewers text first; the details view and Say Details in the order of facts of `research/metadata.md`; custom columns computed lazily; checksums as computed metadata; the `diroxide-meta` crate reading every kind and writing only the low-risk kinds (the owner's notes and labels, extended attributes, the internet mark, strip into a copy); the document quick view for DOCX, PDF, HTML, EPUB, spreadsheets and images in words; conversions with recipes and reports; file-type actions through the tools; RAR, ISO and the rest read-only through the 7z tool; age encryption in-process and OpenPGP through gpg; checksum and signature verification; the access details view (ACL in words, flags, labels, "you can"); the change-owner and change-time dialogs; editing inside an archive; the text encoding chooser; the retro file-type pack. The owner checks: focus a photo, a song and a PDF and read their details; convert a folder of images and a document; verify a download against its checksum.
+- **alpha.8: tabs, virtual lists, compare and synchronize, duplicates, batch rename, hooks and Lua.** Folder tabs with lock and profiles; flat view; collections (virtual listers made persistent; Delete removes only the item); compare and synchronize with a plan (overwrites go to the trash first); duplicates; batch rename as one engine with three doors in (a rules list, an editor buffer, pairs from scripts), one preview that puts problems first, never an overwrite or a move, cycles through temporary names, the whole batch one undo step, `diro rename --dry-run`; tag fields as rename placeholders with audio and image tag editing; recent files; the Lua tier only if a measured plugin round trip is too slow. The owner checks: synchronize two folders from the plan; rename fifty files with a regular expression and read the preview; find duplicates.
+- **alpha.9: the final alpha.** Feature-complete and stable: the findings from every session; the feature-complete list reviewed and closed with the owner; performance against the budget; thirty days of clean nightly fuzzing; the key editor and the bank editor; keymap presets as data; the AppImage, the macOS tarball, the package-manager entries and the clean-install smoke test; the publishing work for `cargo install diro`; documentation complete and checked; the known-limits page. The owner checks: two weeks of daily use. Then the website (Wave S), then beta.1 when the owner starts it.
 
 ## 9. The waves and the agents
 
@@ -417,7 +400,11 @@ One agent at a time, about two to three weeks; the last wave before beta.1, move
 - **WSc (the words, Sonnet):** the tagline, the feature text, the accessibility promises, the bench numbers once the gate has them, the alt text, and one editorial rule for the site, in the spirit of kd7swh's: nothing on the site that the current alpha cannot do today. Owns `site/content/`.
 - **The owner:** the registrar's DNS records, the repository's custom domain and "Enforce HTTPS", the remote, and the switch to public.
 
-### Wave 2: archives, search and the viewer (alpha.2)
+### Waves 2 to 9
+
+One wave per alpha, Wave N for alpha.N of section 8, each briefed from the feature catalog when the previous alpha ships, two builders at a time with one docs agent beside them, each ending with the owner's check and a readiness page. The six wave drafts that follow are the first plan's seven-alpha drafts, kept as the seed of those briefs; where they disagree with section 8, section 8 wins.
+
+### Wave 2 draft: archives, search and the viewer (first plan; now alpha.2 and alpha.3)
 
 Four Opus briefs run two at a time, one Sonnet docs agent, about three weeks.
 
@@ -523,6 +510,26 @@ Measured on this machine on Friday, October 9, 2026:
 12. **Self-voicing.** Default none: diroxide relies on the screen reader. A speaking mode through textweaver's speech crates could come later as a plugin.
 13. **Where the website lives.** Default `site/` in the `diroxide` repository, built from the same `docs/`; the alternative is a separate `diroxide.app` repository exactly like kd7swh.
 14. **The website's text license.** Default the same Apache-2.0 OR MIT as the docs it is built from, so packagers and forks can reuse it; the alternative is CC BY-NC-SA 4.0 as on kd7swh.com.
+
+After the research round of Saturday, October 10, 2026 (twelve reports), each with a default the orchestrator applies when the owner says "start" without answers:
+
+15. **R6's alpha.1 additions** (swap panels, the go-to-place list, back and forward keeping cursor and selection, next and previous selected row, selection size in Say Status, quit-and-go-there) and the three in-the-plan pieces no Wave 1 brief held (open with the system opener, the F4 editor handoff, the job history list): default yes, all into W1d, last and cheapest first.
+16. **The quit key.** The settled terminal keys had none. Default Ctrl+X then Ctrl+C (R5).
+17. **The palette key.** Ctrl+P is "previous line" in Emacs, bash and Midnight Commander, and the owner uses Emacspeak daily. Default keep Ctrl+P; the alternative is Ctrl+X then P.
+18. **A run-command prompt and shell-here in alpha.1,** since diroxide has no command line under the panels. Default yes (R5).
+19. **Free space on each place in W1a** now, for Say Status; the copy plan's check follows in alpha.5. Default yes (R6).
+20. **The Lua tier.** Default: decide at the start of alpha.8, after a measured plugin round trip; build it only if that is too slow (R3, R6).
+21. **xz through `lzma-rust2`** (question 6 flipped, with R7's four gates and `liblzma` behind an off feature) and **zip 9.x now.** Default yes.
+22. **Where nested archives spool.** Default a `spool` folder under the state folder on the data drive, never the platform's temp folder, which is drive C on the owner's machine (R7).
+23. **The pattern module's home.** Default in `diroxide-core` (regex becomes a core dependency); the alternative is a new crate (R10).
+24. **Conflicts asked per file with an "all" modifier,** as every manager studied does, replacing ask-once (R8). Default yes.
+25. **The trash on Windows gated by drive type** with a post-check, and a listed permanent delete where the trash is unsafe (R8). Default yes.
+26. **The secret prompt:** masked, modal, named, a Show toggle off by default, a canary test that no secret reaches a log; nothing stored through alpha.9 (R9). Default yes.
+27. **No "secure delete" command,** one honest sentence in the permanent-delete confirmation and a help topic (R9). Default yes.
+28. **russh's C-backed cryptography** (ring or aws-lc-rs) as the one recorded exception to "pure Rust", in an ADR at alpha.5 (R9). Default accept.
+29. **Bulk rename:** never an overwrite or a move, portable names on by default, a journal before the first rename, F2 on several marked entries stepping through them in alpha.1 (R10). Default yes.
+30. **Permissions in words first,** with the `ls` string and the octal as extra columns; no self-elevation and no "take ownership" before beta; the group row in alpha.2 (R11). Default yes.
+31. **Metadata:** a `diroxide-meta` crate in alpha.7; strip makes a copy by default, never replaces; audio and image tag editing in alpha.8 (R12). Default yes.
 
 ## 14. What happens when the owner says go
 
