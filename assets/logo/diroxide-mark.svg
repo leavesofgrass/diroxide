@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-labelledby="bi-title">
+  <title id="bi-title">diroxide icon: an orange crab waving from the open drawer of a steel-blue filing cabinet</title>
+  <defs>
+    <style>
+      .ln { fill: none; stroke: #1b1f2b; stroke-linecap: round; stroke-linejoin: round; }
+      .ed { stroke: #1b1f2b; stroke-linejoin: round; }
+    </style>
+    <clipPath id="bi-body-clip"><path d="M 5.5 20 C 5.5 14 8 11.5 11 11.5 C 14 11.5 16.5 14 16.5 20 Z"/></clipPath>
+  </defs>
+
+  <!-- Cabinet in three-quarter view: lit top, base front, shaded side with rust. -->
+  <polygon points="9,15 14,12 28,12 23,15" fill="#7ea6cc" class="ed" stroke-width="1.5"/>
+  <polygon points="23,15 28,12 28,27 23,30" fill="#2b4f75"/>
+  <path d="M 23 27 C 25 26.5 26.5 26 28 24.5 L 28 27 L 23 30 Z" fill="#7c3312"/>
+  <polygon points="23,15 28,12 28,27 23,30" class="ln" stroke-width="1.5"/>
+  <rect x="9" y="15" width="14" height="15" fill="#3f6e9e" class="ed" stroke-width="1.5"/>
+  <rect x="14" y="26.5" width="5" height="1.8" rx="0.9" fill="#1b1f2b"/>
+
+  <!-- Open drawer: interior and shaded side wall. -->
+  <polygon points="5,19 17,19 22,16 10,16" fill="#252c3c" class="ed" stroke-width="1.5"/>
+  <polygon points="17,19 22,16 22,22 17,25" fill="#2b4f75" class="ed" stroke-width="1.5"/>
+
+  <!-- Crab: waving arm and claw, body, eyes, resting claw. -->
+  <path class="ln" stroke-width="3.5" d="M 15.5 15 L 20 10.5"/>
+  <path class="ln" style="stroke:#e2742a" stroke-width="1.6" d="M 15.5 15 L 20 10.5"/>
+  <path d="M 26.14 4.9 A 4.2 4.2 0 1 1 22.5 2.8 L 23 6.13 Z" fill="#e2742a" class="ed" stroke-width="1.5"/>
+  <path d="M 5.5 20 C 5.5 14 8 11.5 11 11.5 C 14 11.5 16.5 14 16.5 20 Z" fill="#b0521b"/>
+  <ellipse cx="10" cy="16.5" rx="5.5" ry="5.5" fill="#e2742a" clip-path="url(#bi-body-clip)"/>
+  <path d="M 5.5 20 C 5.5 14 8 11.5 11 11.5 C 14 11.5 16.5 14 16.5 20 Z" class="ln" stroke-width="1.5"/>
+  <circle cx="9" cy="8.7" r="2.1" fill="#f6f1e7" class="ed" stroke-width="1.2"/>
+  <circle cx="13.5" cy="8.2" r="2.1" fill="#f6f1e7" class="ed" stroke-width="1.2"/>
+  <circle cx="9.5" cy="8.9" r="1" fill="#1b1f2b"/>
+  <circle cx="14" cy="8.4" r="1" fill="#1b1f2b"/>
+  <path d="M 6.2 13.73 A 3.2 3.2 0 1 1 3 13.73 L 4.6 15.5 Z" fill="#e2742a" class="ed" stroke-width="1.5"/>
+
+  <!-- Drawer front, nearest the viewer. -->
+  <rect x="5" y="19" width="12" height="6" rx="0.8" fill="#3f6e9e" class="ed" stroke-width="1.5"/>
+  <rect x="6.2" y="20.2" width="1.4" height="3.6" rx="0.7" fill="#f6f1e7"/>
+  <rect x="8.5" y="21.5" width="5" height="1.8" rx="0.9" fill="#1b1f2b"/>
+</svg>

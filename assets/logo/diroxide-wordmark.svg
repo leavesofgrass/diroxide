@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 180" width="500" height="180" role="img" aria-labelledby="w-title w-desc">
+  <title id="w-title">diroxide: Directory Oxide, a modern Rust file manager</title>
+  <desc id="w-desc">The word diroxide in bold, rounded, lowercase letters with dark outlines and a hard steel-blue drop shadow. The letters d, i, r are steel blue and the letters o, x, i, d, e are rust orange, splitting the name into dir and oxide. Below it, in plain dark sans-serif text: Directory Oxide: a modern Rust file manager.</desc>
+  <defs>
+    <style>
+      .gl { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <!-- The letters are stroked centerlines: x-height 60, stroke 16, round caps and joins. -->
+  <!-- Layer 1: hard drop shadow, offset 5 right and 5 down, steel shade. -->
+  <g transform="translate(5 5)" class="gl" stroke="#2b4f75" stroke-width="24">
+    <path d="M 72 90 A 22 22 0 1 1 28 90 A 22 22 0 1 1 72 90 Z M 72 36 L 72 112 M 102 68 L 102 112 M 103 38 A 1 1 0 1 1 101 38 A 1 1 0 1 1 103 38 Z M 132 68 L 132 112 M 132 94 C 132 76 144 68 160 68"/>
+    <path d="M 230 90 A 22 22 0 1 1 186 90 A 22 22 0 1 1 230 90 Z M 260 68 L 296 112 M 296 68 L 260 112 M 326 68 L 326 112 M 327 38 A 1 1 0 1 1 325 38 A 1 1 0 1 1 327 38 Z M 400 90 A 22 22 0 1 1 356 90 A 22 22 0 1 1 400 90 Z M 400 36 L 400 112 M 430 90 L 474 90 A 22 22 0 1 0 468.9 104.1"/>
+  </g>
+
+  <!-- Layer 2: dark outline, 4 units each side of the letter stroke. -->
+  <g class="gl" stroke="#1b1f2b" stroke-width="24">
+    <path d="M 72 90 A 22 22 0 1 1 28 90 A 22 22 0 1 1 72 90 Z M 72 36 L 72 112 M 102 68 L 102 112 M 103 38 A 1 1 0 1 1 101 38 A 1 1 0 1 1 103 38 Z M 132 68 L 132 112 M 132 94 C 132 76 144 68 160 68"/>
+    <path d="M 230 90 A 22 22 0 1 1 186 90 A 22 22 0 1 1 230 90 Z M 260 68 L 296 112 M 296 68 L 260 112 M 326 68 L 326 112 M 327 38 A 1 1 0 1 1 325 38 A 1 1 0 1 1 327 38 Z M 400 90 A 22 22 0 1 1 356 90 A 22 22 0 1 1 400 90 Z M 400 36 L 400 112 M 430 90 L 474 90 A 22 22 0 1 0 468.9 104.1"/>
+  </g>
+
+  <!-- Layer 3: letter color, "dir" in steel blue and "oxide" in rust orange. -->
+  <path class="gl" stroke="#3f6e9e" stroke-width="16" d="M 72 90 A 22 22 0 1 1 28 90 A 22 22 0 1 1 72 90 Z M 72 36 L 72 112 M 102 68 L 102 112 M 103 38 A 1 1 0 1 1 101 38 A 1 1 0 1 1 103 38 Z M 132 68 L 132 112 M 132 94 C 132 76 144 68 160 68"/>
+  <path class="gl" stroke="#e2742a" stroke-width="16" d="M 230 90 A 22 22 0 1 1 186 90 A 22 22 0 1 1 230 90 Z M 260 68 L 296 112 M 296 68 L 260 112 M 326 68 L 326 112 M 327 38 A 1 1 0 1 1 325 38 A 1 1 0 1 1 327 38 Z M 400 90 A 22 22 0 1 1 356 90 A 22 22 0 1 1 400 90 Z M 400 36 L 400 112 M 430 90 L 474 90 A 22 22 0 1 0 468.9 104.1"/>
+
+  <!-- Layer 4: hard off-white highlights on the upper left of each bowl and on the d stems. -->
+  <path class="gl" stroke="#f6f1e7" stroke-width="3.5" d="M 26.5 81.45 A 25 25 0 0 1 37.5 68.35 M 184.5 81.45 A 25 25 0 0 1 195.5 68.35 M 354.5 81.45 A 25 25 0 0 1 365.5 68.35 M 428.5 81.45 A 25 25 0 0 1 439.5 68.35 M 68.5 44 L 68.5 58 M 396.5 44 L 396.5 58"/>
+
+  <!-- Tagline: real text, so it stays selectable and searchable; generic sans-serif fallback. -->
+  <text x="20" y="162" font-family="'Atkinson Hyperlegible', Verdana, 'DejaVu Sans', Arial, sans-serif" font-size="19" fill="#1b1f2b" textLength="462" lengthAdjust="spacing">Directory Oxide: a modern Rust file manager</text>
+</svg>

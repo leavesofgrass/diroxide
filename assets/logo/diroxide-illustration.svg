@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="b-title b-desc">
+  <title id="b-title">diroxide logo, concept B: a crab waving from the open drawer of a rusty filing cabinet</title>
+  <desc id="b-desc">A steel-blue two-drawer filing cabinet seen from the front right, with rust running down its shaded side. The top drawer is pulled open toward the viewer, with two file folder tabs inside. A friendly rust-orange crab sits on the drawer's front edge, legs dangling over it, one claw resting on the corner and the other raised high in a wave, on a pale steel-blue rounded square.</desc>
+  <defs>
+    <style>
+      .ln { fill: none; stroke: #1b1f2b; stroke-linecap: round; stroke-linejoin: round; }
+      .ed { stroke: #1b1f2b; stroke-linejoin: round; }
+    </style>
+    <pattern id="b-dots" width="8" height="8" patternUnits="userSpaceOnUse">
+      <circle cx="4" cy="4" r="1.6" fill="#b9cde0"/>
+    </pattern>
+    <clipPath id="b-back-clip"><rect x="8" y="8" width="240" height="240" rx="40"/></clipPath>
+    <clipPath id="b-front-face-clip"><rect x="52" y="108" width="96" height="128" rx="3"/></clipPath>
+    <clipPath id="b-panel-clip"><rect x="30" y="134" width="80" height="48" rx="3"/></clipPath>
+    <clipPath id="b-body-clip"><path d="M 38 140 C 38 108 52 96 70 96 C 88 96 102 108 102 140 Z"/></clipPath>
+    <clipPath id="b-claw-l-clip"><path d="M 31.6 104.1 A 15 15 0 1 1 20.4 104.1 L 26 114 Z"/></clipPath>
+    <clipPath id="b-claw-r-clip"><path d="M 143.8 45.7 A 20 20 0 1 1 130.8 38.2 L 130.5 53.7 Z"/></clipPath>
+  </defs>
+
+  <!-- Backdrop: pale steel rounded square with halftone dots in the lower right. -->
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="#dde7f0"/>
+  <polygon points="256,40 256,256 40,256" fill="url(#b-dots)" clip-path="url(#b-back-clip)"/>
+  <rect x="8" y="8" width="240" height="240" rx="40" class="ln" stroke-width="4"/>
+
+  <!-- Ground shadow. -->
+  <ellipse cx="128" cy="238" rx="76" ry="6" fill="#2b4f75"/>
+
+  <!-- Cabinet: lit top face, base front face, shaded right side face. -->
+  <g id="b-cabinet">
+    <polygon points="52,108 92,86 188,86 148,108" fill="#7ea6cc"/>
+    <polygon points="62,108 102,86 114,86 74,108" fill="#f6f1e7"/>
+    <polygon points="148,108 188,86 188,214 148,236" fill="#2b4f75"/>
+    <path d="M 148 214 C 158 210 168 216 176 206 C 180 200 186 204 188 200 L 188 214 L 148 236 Z" fill="#7c3312"/>
+    <path d="M 166 118 L 170 116 L 170 136 L 167 140 Z" fill="#7c3312"/>
+    <rect x="52" y="108" width="96" height="128" rx="3" fill="#3f6e9e"/>
+    <path d="M 52 214 C 60 214 66 222 64 236 L 52 236 Z" fill="#b0521b" clip-path="url(#b-front-face-clip)"/>
+    <path d="M 52 226 C 56 227 58 231 57 236 L 52 236 Z" fill="#7c3312" clip-path="url(#b-front-face-clip)"/>
+    <polygon points="52,108 92,86 188,86 148,108" class="ln" stroke-width="5"/>
+    <polygon points="148,108 188,86 188,214 148,236" class="ln" stroke-width="5"/>
+    <rect x="52" y="108" width="96" height="128" rx="3" class="ln" stroke-width="5"/>
+
+    <!-- Bottom drawer, closed. -->
+    <rect x="60" y="176" width="80" height="50" rx="3" fill="#3f6e9e"/>
+    <rect x="60" y="220" width="80" height="6" fill="#2b4f75"/>
+    <rect x="60" y="176" width="80" height="50" rx="3" class="ln" stroke-width="4"/>
+    <rect x="86" y="186" width="28" height="10" rx="2" fill="#f6f1e7" class="ed" stroke-width="3"/>
+    <path class="ln" stroke-width="2" d="M 100 188 L 100 194"/>
+    <rect x="88" y="202" width="24" height="7" rx="3.5" fill="#1b1f2b"/>
+    <path d="M 94 209 L 98 209 L 97.2 216 L 94.8 216 Z" fill="#b0521b"/>
+    <path d="M 106 209 L 109 209 L 108.4 213 L 106.6 213 Z" fill="#b0521b"/>
+
+    <!-- Slot of the top drawer, then the drawer pulled out toward the viewer. -->
+    <rect x="60" y="118" width="80" height="48" fill="#252c3c" class="ed" stroke-width="4"/>
+    <polygon points="30,134 110,134 140,118 60,118" fill="#252c3c" class="ed" stroke-width="4"/>
+  </g>
+
+  <!-- Two file folders standing in the drawer, behind the crab. -->
+  <path d="M 90 124 L 90 102 L 97 102 L 100 98 L 110 98 L 113 102 L 118 102 L 118 120 Z" fill="#b0521b" class="ed" stroke-width="3.5"/>
+  <path d="M 100 132 L 100 108 L 108 108 L 111 104 L 122 104 L 125 108 L 130 108 L 130 126 Z" fill="#f6f1e7" class="ed" stroke-width="3.5"/>
+
+  <!-- Drawer's right side wall, in shade; it hides the folders' lower edges. -->
+  <polygon points="110,134 140,118 140,166 110,182" fill="#2b4f75" class="ed" stroke-width="4"/>
+
+  <!-- The crab. -->
+  <g id="b-crab">
+    <path class="ln" stroke-width="9" d="M 62 100 L 58 80 M 78 100 L 82 78"/>
+    <path class="ln" style="stroke:#e2742a" stroke-width="4" d="M 62 100 L 58 80 M 78 100 L 82 78"/>
+    <path class="ln" stroke-width="16" d="M 44 126 Q 36 128 30 124 M 96 116 Q 118 108 124 76"/>
+    <path class="ln" style="stroke:#e2742a" stroke-width="9" d="M 44 126 Q 36 128 30 124 M 96 116 Q 118 108 124 76"/>
+
+    <!-- Resting claw on the drawer's corner. -->
+    <path d="M 31.6 104.1 A 15 15 0 1 1 20.4 104.1 L 26 114 Z" fill="#b0521b"/>
+    <circle cx="23" cy="115" r="13" fill="#e2742a" clip-path="url(#b-claw-l-clip)"/>
+    <ellipse cx="18" cy="122" rx="2" ry="4.5" transform="rotate(20 18 122)" fill="#f6f1e7"/>
+    <path d="M 31.6 104.1 A 15 15 0 1 1 20.4 104.1 L 26 114 Z" class="ln" stroke-width="5"/>
+
+    <!-- Waving claw, raised above the cabinet. -->
+    <path d="M 143.8 45.7 A 20 20 0 1 1 130.8 38.2 L 130.5 53.7 Z" fill="#b0521b"/>
+    <circle cx="124" cy="54" r="17" fill="#e2742a" clip-path="url(#b-claw-r-clip)"/>
+    <ellipse cx="116" cy="62" rx="2.5" ry="6" transform="rotate(20 116 62)" fill="#f6f1e7"/>
+    <path d="M 143.8 45.7 A 20 20 0 1 1 130.8 38.2 L 130.5 53.7 Z" class="ln" stroke-width="5"/>
+
+    <!-- Body dome with an open smile. -->
+    <path d="M 38 140 C 38 108 52 96 70 96 C 88 96 102 108 102 140 Z" fill="#b0521b"/>
+    <ellipse cx="62" cy="122" rx="32" ry="30" fill="#e2742a" clip-path="url(#b-body-clip)"/>
+    <path d="M 48 118 C 49 108 56 102 64 100 C 58 105 53 110 52 120 Z" fill="#f6f1e7"/>
+    <path d="M 38 140 C 38 108 52 96 70 96 C 88 96 102 108 102 140 Z" class="ln" stroke-width="5"/>
+    <path d="M 60 116 Q 70 128 80 116 Z" fill="#1b1f2b" class="ed" stroke-width="2"/>
+
+    <!-- Small eyes with a glint. -->
+    <circle cx="58" cy="76" r="8" fill="#f6f1e7" class="ed" stroke-width="4"/>
+    <circle cx="82" cy="74" r="8" fill="#f6f1e7" class="ed" stroke-width="4"/>
+    <circle cx="60" cy="77" r="4" fill="#1b1f2b"/>
+    <circle cx="84" cy="75" r="4" fill="#1b1f2b"/>
+    <circle cx="58.6" cy="75.4" r="1.4" fill="#f6f1e7"/>
+    <circle cx="82.6" cy="73.4" r="1.4" fill="#f6f1e7"/>
+  </g>
+
+  <!-- Top drawer front, nearest the viewer. -->
+  <g id="b-drawer-front">
+    <rect x="30" y="134" width="80" height="48" rx="3" fill="#3f6e9e"/>
+    <g clip-path="url(#b-panel-clip)">
+      <rect x="28" y="176" width="84" height="8" fill="#2b4f75"/>
+      <path d="M 110 168 C 102 170 98 176 98 182 L 110 182 Z" fill="#b0521b"/>
+    </g>
+    <rect x="34" y="140" width="3" height="30" rx="1.5" fill="#f6f1e7"/>
+    <rect x="30" y="134" width="80" height="48" rx="3" class="ln" stroke-width="5"/>
+    <rect x="56" y="152" width="28" height="10" rx="2" fill="#f6f1e7" class="ed" stroke-width="3"/>
+    <path class="ln" stroke-width="2" d="M 70 154 L 70 160"/>
+    <rect x="58" y="168" width="24" height="7" rx="3.5" fill="#1b1f2b"/>
+  </g>
+
+  <!-- Legs dangling over the drawer's front edge. -->
+  <path class="ln" stroke-width="9" d="M 48 130 Q 42 138 46 148 M 58 132 Q 54 140 57 148 M 82 132 Q 86 140 83 148 M 92 130 Q 98 138 94 148"/>
+  <path class="ln" style="stroke:#e2742a" stroke-width="4.5" d="M 48 130 Q 42 138 46 148 M 58 132 Q 54 140 57 148 M 82 132 Q 86 140 83 148 M 92 130 Q 98 138 94 148"/>
+
+  <!-- Wave marks around the raised claw. -->
+  <path class="ln" stroke-width="4" d="M 156 40 Q 163 54 156 68 M 166 32 Q 176 54 166 76 M 100 40 Q 94 52 100 62"/>
+</svg>
