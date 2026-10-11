@@ -25,6 +25,15 @@ const PNG_DIR: &str = "assets/logo/png";
 
 /// The widths at which the lockup is rendered, in pixels.
 const LOCKUP_WIDTHS: [u32; 4] = [240, 480, 960, 1600];
+/// The tagline's color rule for a light page, as the wordmark writes it.
+/// The SVG switches to the dark rule through a media query, which the
+/// rasterizer does not evaluate, so the dark renders bake the dark rule in.
+const TAG_LIGHT_RULE: &str = ".tag { fill: #3f6e9e; }";
+/// The tagline's color rule for a dark page: pale steel, never black.
+const TAG_DARK_RULE: &str = ".tag { fill: #7ea6cc; }";
+/// Where the check renders for the orchestrator's eyes go (build output,
+/// never committed): the lockup over a dark page and over a light one.
+const CHECK_DIR: &str = "target/logo-check";
 /// The sizes at which the mark alone is rendered, in pixels.
 const MARK_SIZES: [u32; 6] = [16, 32, 64, 128, 256, 512];
 
@@ -54,16 +63,44 @@ pub fn run(root: &Path) -> Result<bool> {
     let mut options = usvg::Options::default();
     options.fontdb_mut().load_system_fonts();
 
+    let lockup_dark = lockup.replacen(TAG_LIGHT_RULE, TAG_DARK_RULE, 1);
+    if lockup_dark == lockup {
+        bail!("the wordmark has no tagline rule {TAG_LIGHT_RULE:?}; the dark renders need it");
+    }
+
     for width in LOCKUP_WIDTHS {
-        let name = format!("diroxide-lockup-{width}.png");
-        render(&lockup, width, &png_dir.join(&name), &options)?;
-        println!("logo: wrote {PNG_DIR}/{name}");
+        let light = format!("diroxide-lockup-light-{width}.png");
+        render(&lockup, width, &png_dir.join(&light), &options, None)?;
+        println!("logo: wrote {PNG_DIR}/{light}");
+        let dark = format!("diroxide-lockup-dark-{width}.png");
+        render(&lockup_dark, width, &png_dir.join(&dark), &options, None)?;
+        println!("logo: wrote {PNG_DIR}/{dark}");
     }
     for size in MARK_SIZES {
         let name = format!("diroxide-mark-{size}.png");
-        render(&mark, size, &png_dir.join(&name), &options)?;
+        render(&mark, size, &png_dir.join(&name), &options, None)?;
         println!("logo: wrote {PNG_DIR}/{name}");
     }
+
+    let check_dir = root.join(CHECK_DIR);
+    fs::create_dir_all(&check_dir).with_context(|| format!("creating {CHECK_DIR}"))?;
+    let ink = tiny_skia::Color::from_rgba8(0x1b, 0x1f, 0x2b, 0xff);
+    let paper = tiny_skia::Color::from_rgba8(0xff, 0xff, 0xff, 0xff);
+    render(
+        &lockup_dark,
+        960,
+        &check_dir.join("lockup-on-dark-960.png"),
+        &options,
+        Some(ink),
+    )?;
+    render(
+        &lockup,
+        960,
+        &check_dir.join("lockup-on-light-960.png"),
+        &options,
+        Some(paper),
+    )?;
+    println!("logo: check renders in {CHECK_DIR} (not committed)");
     Ok(true)
 }
 
@@ -114,13 +151,23 @@ fn compose(mark: &str, wordmark: &str) -> String {
     )
 }
 
-/// Renders an SVG to a PNG of the given width, keeping its aspect ratio.
-fn render(svg: &str, width: u32, path: &Path, options: &usvg::Options<'_>) -> Result<()> {
+/// Renders an SVG to a PNG of the given width, keeping its aspect ratio,
+/// over a transparent background or the given color.
+fn render(
+    svg: &str,
+    width: u32,
+    path: &Path,
+    options: &usvg::Options<'_>,
+    background: Option<tiny_skia::Color>,
+) -> Result<()> {
     let tree = usvg::Tree::from_str(svg, options).context("parsing the SVG")?;
     let size = tree.size();
     let scale = width as f32 / size.width();
     let height = (size.height() * scale).round().max(1.0) as u32;
     let mut pixmap = tiny_skia::Pixmap::new(width, height).context("allocating the pixmap")?;
+    if let Some(color) = background {
+        pixmap.fill(color);
+    }
     resvg::render(
         &tree,
         tiny_skia::Transform::from_scale(scale, scale),
@@ -140,6 +187,13 @@ mod tests {
     fn inner_strips_the_root_element() {
         let svg = "<svg xmlns=\"x\" viewBox=\"0 0 1 1\">\n  <rect/>\n</svg>\n";
         assert_eq!(inner(svg).unwrap(), "\n  <rect/>\n");
+    }
+
+    #[test]
+    fn the_dark_rule_replaces_the_light_rule_once() {
+        let svg = format!("<style>{TAG_LIGHT_RULE}</style>");
+        let dark = svg.replacen(TAG_LIGHT_RULE, TAG_DARK_RULE, 1);
+        assert!(dark.contains("#7ea6cc") && !dark.contains("#3f6e9e"));
     }
 
     #[test]

@@ -1,9 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 180" width="500" height="180" role="img" aria-labelledby="w-title w-desc">
   <title id="w-title">diroxide: Directory Oxide, a modern Rust file manager</title>
-  <desc id="w-desc">The word diroxide in bold, rounded, lowercase letters with dark outlines and a hard steel-blue drop shadow. The letters d, i, r are steel blue and the letters o, x, i, d, e are rust orange, splitting the name into dir and oxide. Below it, in plain dark sans-serif text: Directory Oxide: a modern Rust file manager.</desc>
+  <desc id="w-desc">The word diroxide in bold, rounded, lowercase letters with dark outlines and a hard steel-blue drop shadow. The letters d, i, r are steel blue and the letters o, x, i, d, e are rust orange, splitting the name into dir and oxide. Below it, in steel-blue sans-serif text (pale steel on a dark page): Directory Oxide: a modern Rust file manager.</desc>
   <defs>
     <style>
       .gl { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      /* The tagline is never black: steel blue on a light page, pale steel on a dark one. */
+      .tag { fill: #3f6e9e; }
+      @media (prefers-color-scheme: dark) { .tag { fill: #7ea6cc; } }
     </style>
   </defs>
 
@@ -37,6 +40,6 @@
   <!-- Layer 4: hard off-white highlights on the upper left of each bowl and on the d stems. -->
   <path class="gl" stroke="#f6f1e7" stroke-width="3.5" d="M 26.5 81.45 A 25 25 0 0 1 37.5 68.35 M 184.5 81.45 A 25 25 0 0 1 195.5 68.35 M 354.5 81.45 A 25 25 0 0 1 365.5 68.35 M 428.5 81.45 A 25 25 0 0 1 439.5 68.35 M 68.5 44 L 68.5 58 M 396.5 44 L 396.5 58"/>
 
-  <!-- Tagline: real text, so it stays selectable and searchable; generic sans-serif fallback. -->
-  <text x="20" y="162" font-family="'Atkinson Hyperlegible', Verdana, 'DejaVu Sans', Arial, sans-serif" font-size="19" fill="#1b1f2b" textLength="462" lengthAdjust="spacing">Directory Oxide: a modern Rust file manager</text>
+  <!-- Tagline: real text, so it stays selectable and searchable; generic sans-serif fallback; never black (the owner, Saturday, October 10, 2026). -->
+  <text x="20" y="162" font-family="'Atkinson Hyperlegible', Verdana, 'DejaVu Sans', Arial, sans-serif" font-size="19" class="tag" textLength="462" lengthAdjust="spacing">Directory Oxide: a modern Rust file manager</text>
 </svg>
