@@ -8,7 +8,7 @@ Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from the owne
 - **Two columns.** The keymap has a terminal column and a window column (`KeyColumn`), each with the layers above.
 - **`keymap.toml` is command to key**: one line per command, in a table per column and layer (`[terminal.panel]` with `"file.copy" = "f5"`; a list of keys, or `"none"` to unbind). The built-in defaults are written beside it as a read-only reference, and every unknown command or key is reported in words, never dropped.
 - **The defaults change as decided.** F10 no longer quits (Ctrl+Q does); it opens the menus in the window, and the terminal column does not use it. Ctrl+I and Ctrl+H are gone; Ctrl+Shift+S no longer says the status, and in the window it opens the Sort list; Say Status is on Ctrl+D, details on Alt+Enter alone; the palette is on Ctrl+Shift+P, and Ctrl+P too in the terminal; sorting is on Ctrl+F3 to Ctrl+F7. The menus are a data file, `menus.toml`, with the same command ids.
-- W1c applies these to the catalog and writes the terminal-unsafe table; until then the Phase 0 catalog keeps its old keys.
+- Done by W1c on Friday, October 16, 2026: the catalog carries the decided keys in both columns, and the terminal-unsafe, screen-reader and reserved tables are data files under `crates/diroxide-app/keys/`, each entry with its source; the owner's key probe amends them.
 
 ## Context
 

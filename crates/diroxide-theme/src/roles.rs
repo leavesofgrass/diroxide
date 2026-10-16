@@ -13,7 +13,7 @@
 //! Each role is drawn from the theme's own colors and styles, so it is
 //! checked by the theme's own contrast checks; [`panel_checks`] checks
 //! each pair again, which is what an override by name needs (W1c's
-//! `[panel]` table re-checks a changed role and says the result in
+//! `[colors]` table re-checks a changed role and says the result in
 //! words). The words are those of [`verdict`]: "meets AA", or "below AA: 2
 //! checks fall short" (AAA for high-contrast themes).
 //!
