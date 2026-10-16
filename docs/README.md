@@ -25,19 +25,19 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Quick start](quickstart.md): starting, moving, marking, copying, renaming, deleting, undoing and quitting.
 - [Installing diroxide](install.md): building from source today, the one file per platform that comes with alpha.6, and `cargo install diro` at beta.1.
 - [Using diroxide with a screen reader](screen-readers.md): how diroxide talks to NVDA, JAWS, Orca and VoiceOver, what you should hear, the settings to check, and the Braille display.
-- [Terminals](terminals.md): which terminal to use, the keys terminals keep, Windows Terminal's own keys and how to give them back, and the plain `diro ls` for when the full screen fails.
+- [Terminals](terminals.md): which terminal to use, the keys terminals keep, Windows Terminal's own keys and how to give them back, the key test, and `diro --inline`, `diro ls` and `diro search` for when the full screen fails.
 - [Troubleshooting](troubleshooting.md): common problems, and how to report a bug.
 
 ### Using the panels
 
-- [The panels](panels.md): the three layouts, what a row says, moving, going to a path, path jump, sorting, filtering and marking rows.
-- [Operations and undo](operations.md): copy, move, rename, make folder, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo.
-- [Every key](keyboard.md): the default keys, generated from the keymap.
+- [The panels](panels.md): the three layouts, what a row says, moving, going to a path or a place, path jump, sorting, filtering and marking rows.
+- [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo.
+- [Every key](keyboard.md): the default keys for the terminal and the window, the keys a terminal may keep and the keys screen readers keep, generated from the keymap.
 
 ### Settings
 
 - [Settings and where the files live](settings.md): the config and state folders, the settings most people look for, themes, changing keys, menus and banks.
-- The settings reference lists every setting with its default, range and help. It is generated from the program's own list of settings.
+- [Settings reference](settings-reference.md): every setting with its default, range and help, generated from the program's own list of settings.
 
 ### Coming with later alphas
 
@@ -57,6 +57,7 @@ These guides are not written yet, because the features they describe are not in 
 - [Architecture](dev/architecture.md): the crates, what each does, and which way dependencies point.
 - [Building](dev/building.md): the toolchain, the checks, the profiles and the tasks.
 - [Docker](dev/docker.md): the Linux container for builds and tests.
+- [The bench](dev/bench.md): the speed measurements that gate a change.
 - [The clean-room rule](dev/clean-room.md): how diroxide stays a reimplementation of Worker's behavior, never a port of its code.
 - [The changelog](../CHANGELOG.md): what changed in each alpha.
 
@@ -72,6 +73,7 @@ Each architecture decision record keeps one decision: the context, the choice, t
 - [ADR-0006: The plugin protocol](adr/0006-the-plugin-protocol.md): plugins over JSON-RPC in any language.
 - [ADR-0007: Frontends over one core](adr/0007-frontends-over-one-core.md): the terminal, the window and the headless server over one app core.
 - [ADR-0008: Safety rules](adr/0008-safety-rules.md): lists before deletes, literal paths, the trash by default and confirmations that start on No.
+- [ADR-0009: Secrets and the masked prompt](adr/0009-secrets-and-the-masked-prompt.md): one secret type that is wiped and never logged, and a password prompt that says what it is for.
 
 ## See also
 

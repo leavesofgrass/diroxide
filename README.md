@@ -34,7 +34,7 @@ Run `diro` in a terminal. These keys are the same on every platform.
 3. Space marks the row and moves down. A marked row says "selected".
 4. F5 copies the marked rows, or the focused row, to the other panel. It asks first, and the answer starts on No.
 5. F2 renames the focused entry.
-6. Ctrl+Shift+P opens the command palette, a list of every command: type part of a name and press Enter. In the terminal, Ctrl+P does the same.
+6. Ctrl+P opens the command palette, a list of every command: type part of a name and press Enter. In the window, which comes with alpha.6, Ctrl+Shift+P does the same.
 7. Ctrl+Q quits.
 
 Ctrl+Z undoes the last job. Every delete, move and overwrite lists what it will touch before it asks.
@@ -54,7 +54,7 @@ Plugins, in any language, come with alpha.4.
 ## Learn more
 
 - [Quick start](docs/quickstart.md) and [installing diroxide](docs/install.md).
-- [The panels](docs/panels.md), [operations and undo](docs/operations.md) and [settings](docs/settings.md).
+- [The panels](docs/panels.md), [operations and undo](docs/operations.md), [settings](docs/settings.md) and the [settings reference](docs/settings-reference.md).
 - [Every key](docs/keyboard.md), generated from the keymap.
 - [Terminals](docs/terminals.md) and [troubleshooting](docs/troubleshooting.md).
 - [Known limits](docs/known-limits.md), [privacy](docs/privacy.md) and the [accessibility statement](docs/accessibility.md).
