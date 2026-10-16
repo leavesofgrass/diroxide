@@ -13,11 +13,10 @@
 //! crate and brings in `russh` and `russh-sftp`, tested against the
 //! container's OpenSSH server.
 
-use std::fmt;
 use std::io::Read;
 use std::path::PathBuf;
 
-use diroxide_core::{Entry, Place};
+use diroxide_core::{Entry, Place, SecretKind, SecretRequest};
 use diroxide_vfs::{
     AttributeChange, Capabilities, FileWriter, OpContext, Provider, VfsError, WriteMode,
 };
@@ -63,32 +62,17 @@ impl HostSettings {
     }
 }
 
-/// A password, kept out of logs and debug output.
-#[derive(Clone, PartialEq, Eq)]
-pub struct Secret(String);
-
-impl Secret {
-    /// Wraps a password.
-    pub fn new(text: String) -> Self {
-        Self(text)
+/// A host password is asked through the operation's secret source
+/// ([`OpContext::ask_secret`]), with a [`SecretRequest`] of kind
+/// [`SecretKind::HostPassword`], and held as a core
+/// [`Secret`](diroxide_core::Secret): the one
+/// secret type of the workspace, which redacts itself and is wiped when
+/// dropped (ADR-0009). This builds the request for a host.
+pub fn password_request(settings: &HostSettings) -> SecretRequest {
+    SecretRequest {
+        user: settings.user.clone(),
+        ..SecretRequest::new(SecretKind::HostPassword, settings.host.clone())
     }
-
-    /// The password, for the SSH library only.
-    pub fn expose(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for Secret {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Secret(hidden)")
-    }
-}
-
-/// Asks the user for a password, through a frontend's accessible prompt.
-pub trait PasswordPrompt: Send + Sync {
-    /// Asks for the password of `user` at `host`; `None` when cancelled.
-    fn ask(&self, host: &str, user: &str) -> Option<Secret>;
 }
 
 /// What the known-hosts file says about a host's key.
@@ -185,6 +169,7 @@ impl Provider for SftpProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diroxide_core::Secret;
 
     #[test]
     fn host_settings_come_from_the_place() {
@@ -206,6 +191,10 @@ mod tests {
         let secret = Secret::new("hunter2".to_owned());
         assert_eq!(format!("{secret:?}"), "Secret(hidden)");
         assert_eq!(secret.expose(), "hunter2");
+        let place = Place::parse("sftp://ada@example.org/x").unwrap();
+        let request = password_request(&HostSettings::for_place(&place).unwrap());
+        assert_eq!(request.title(), "Password for ada@example.org");
+        assert!(OpContext::new().ask_secret(&request).is_none());
     }
 
     #[test]
