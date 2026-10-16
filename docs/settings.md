@@ -21,7 +21,7 @@ In the config folder, alpha.1 uses these files:
 
 Later alphas add more files, such as the tools list and the plugins folder. They are described when they arrive.
 
-The state folder holds each panel's folder, focused row, sort, filter and the layout from your last session; the history of each prompt; the list of folders path jump learned from; the list of recent jobs for Undo; and the log file. Nothing in it needs editing.
+The state folder holds each panel's folder, focused row and sort, and the layout, from your last session; the history of each prompt; the list of folders path jump learned from; the list of recent jobs for Undo; and the log file. Nothing in it needs editing.
 
 ## How diroxide treats these files
 

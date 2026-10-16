@@ -88,7 +88,7 @@ Sorting is quick and has many keys, because sorting is how you find things and d
 - Choosing the same key again reverses the direction. Each key has a sensible first direction: names A to Z, sizes largest first, dates newest first, kinds A to Z.
 - The Sort list has every key and marks the current one, saying its direction: "Name, A to Z, current". Type a letter to jump, press Enter to apply, and choose the same key again to reverse. In the terminal you reach it from the View menu (Alt+V, then S), because a terminal cannot reliably send Ctrl+Shift+S, which opens it in the window. The palette has a "Sort by" entry for every key, such as "Sort by size, Ctrl+F6".
 - The sort keys also include the created and accessed times, kind, permissions, owner and label. A key with no data says so: "Label, none yet" or "Owner, not available here".
-- Names sort in natural order, so `file2` comes before `file10`, and capitals do not matter. Folders come first, as a setting (first, mixed or last). Whatever the first key is, name is always the last, so two files that tie come in name order and the cursor never jumps.
+- Names sort in natural order, so `file2` comes before `file10`, and capitals do not matter. Folders come first, as a setting (first, mixed or last). Whatever key you sort by, name is always the last key, so two files that tie come in name order and the cursor never jumps.
 - The status line says the result first and never the position: "Sorted by size, largest first", then "Sorted by size, smallest first" when you press it again. The cursor stays on the same entry.
 - The title line says the sort when it is not the default, so a panel you reach with Tab tells you.
 
@@ -140,7 +140,7 @@ diroxide watches the folders on screen on a fixed local drive and merges outside
 
 ## The session
 
-When you quit, diroxide remembers each panel's folder, the focused row, the sort, the filter and the layout, and puts them back at the next start. The first thing spoken is the restored cursor's row.
+When you quit, diroxide remembers each panel's folder, the focused row, the sort, whether hidden files are shown and the layout, and puts them back at the next start. The first thing spoken is the restored cursor's row.
 
 ## See also
 
