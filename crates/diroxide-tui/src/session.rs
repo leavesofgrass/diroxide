@@ -167,6 +167,27 @@ impl<'a, B: Backend> Session<'a, B> {
         self.app
     }
 
+    /// The app, for a test's hooks (the server's and the window's ways in,
+    /// such as [`App::focus_name`]).
+    pub fn app_mut(&mut self) -> &mut App {
+        self.redraw = true;
+        self.app
+    }
+
+    /// Runs a command, as the palette or a menu does, and carries out its
+    /// effects.
+    pub fn command(&mut self, command: diroxide_core::Command, now: Instant) {
+        let effects = self.app.handle(AppEvent::Command(command));
+        self.carry(effects, now);
+    }
+
+    /// Hands the app an event from outside the terminal (a test's
+    /// listing, a server's request) and carries out its effects.
+    pub fn event(&mut self, event: AppEvent, now: Instant) {
+        let effects = self.app.handle(event);
+        self.carry(effects, now);
+    }
+
     /// The terminal.
     pub fn terminal(&self) -> &Terminal<B> {
         &self.terminal
