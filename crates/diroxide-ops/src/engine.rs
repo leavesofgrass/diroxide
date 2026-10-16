@@ -352,6 +352,11 @@ impl Engine {
         match *policy {
             ConflictPolicy::Ask | ConflictPolicy::Skip => Ok(None),
             ConflictPolicy::Overwrite => Ok(Some((to.clone(), WriteMode::Overwrite))),
+            ConflictPolicy::Newer => {
+                let source = self.registry.resolve(from)?.stat(from, ctx)?.modified;
+                let existing = target.stat(to, ctx)?.modified;
+                Ok((source > existing).then(|| (to.clone(), WriteMode::Overwrite)))
+            }
             ConflictPolicy::KeepBoth | ConflictPolicy::Rename => {
                 let folder = to.parent().ok_or(OpsError::NoDestination)?;
                 let name = to.name().ok_or(OpsError::NoName)?;
