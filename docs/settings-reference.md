@@ -85,6 +85,13 @@ Columns. The details said after each name, in this order. Permissions read in wo
 - Holds: a list of columns: type, size, modified, created, accessed, changed, permissions, mode, octal, owner, group, attributes, link and extension.
 - Default: `["type", "size", "modified"]`.
 
+### editor
+
+Editor. The program Edit opens a file with: a name on the path or a full path, with no arguments. Empty uses VISUAL, then EDITOR, then the system's own editor.
+
+- Holds: text.
+- Default: `""`.
+
 ## Keys
 
 ### single_letters

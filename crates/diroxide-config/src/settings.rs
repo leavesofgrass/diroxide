@@ -190,6 +190,9 @@ pub struct Settings {
     /// The columns of a panel row, in order, after the name, by
     /// [`ColumnKind`] name.
     pub columns: Vec<String>,
+    /// The program the Edit command opens a file with; empty for
+    /// `$VISUAL`, then `$EDITOR`, then the platform's editor.
+    pub editor: String,
     /// What single-character keys do.
     pub single_letters: SingleLetters,
     /// The key preset under `keymap.toml` (alpha.3).
@@ -265,6 +268,7 @@ impl Default for Settings {
             show_hidden: false,
             sort: SortSpec::default(),
             columns: vec!["type".to_owned(), "size".to_owned(), "modified".to_owned()],
+            editor: String::new(),
             single_letters: SingleLetters::TypeAhead,
             preset: "diroxide".to_owned(),
             screen_reader_mode: ScreenReaderMode::Auto,
