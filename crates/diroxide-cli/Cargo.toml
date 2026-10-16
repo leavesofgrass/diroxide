@@ -23,6 +23,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+diroxide-ops.workspace = true
+diroxide-theme.workspace = true
+ratatui.workspace = true
 tempfile.workspace = true
 
 [lints]

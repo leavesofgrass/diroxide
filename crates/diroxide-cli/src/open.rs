@@ -226,6 +226,22 @@ pub fn build(
     paths: Option<&Paths>,
     here: &Place,
 ) -> Result<(App, Runtime), CliError> {
+    build_on(
+        options,
+        paths,
+        here,
+        std::sync::Arc::new(diroxide_vfs::Registry::with_local()),
+    )
+}
+
+/// The app as [`build`] makes it, over a registry of providers: the tests'
+/// way to a provider whose trash is a test folder, never the system's.
+pub fn build_on(
+    options: &OpenOptions,
+    paths: Option<&Paths>,
+    here: &Place,
+    registry: std::sync::Arc<diroxide_vfs::Registry>,
+) -> Result<(App, Runtime), CliError> {
     let resolve = |text: &str| {
         Place::resolve(text, here)
             .map_err(|e| CliError::Failed(Message::from_error("open", text, &e).text))
@@ -270,7 +286,7 @@ pub fn build(
     app_options.startup = startup;
     let app = App::new(app_options);
     let editor = app.settings().editor.clone();
-    let mut runtime = Runtime::with_local().with_engine_options(engine);
+    let mut runtime = Runtime::new(registry).with_engine_options(engine);
     runtime.set_editor(&editor);
     if let Some(paths) = paths {
         runtime = runtime.with_paths(paths.clone());
