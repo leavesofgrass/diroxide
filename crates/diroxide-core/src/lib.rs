@@ -32,7 +32,7 @@ pub use error::{CoreError, Explain, PlaceError};
 pub use ids::{DialogId, IdSource, JobId, RequestId, Side, TabId};
 pub use job::{ConflictPolicy, JobKind, JobRequest};
 pub use keys::{Key, KeyChord, KeyCode, Layer, Modifiers};
-pub use list::{ListModel, ListRow, Move};
+pub use list::{FrozenSelection, ListModel, ListRow, Move, RowsReplaced};
 pub use message::{Importance, Message, MessageKind};
 pub use pattern::{Pattern, PatternError};
 pub use place::{Place, PlaceKind, Remote};
