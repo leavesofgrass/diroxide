@@ -150,6 +150,18 @@ pub(crate) fn watch_for_stalls(
     }
 }
 
+/// How one file is streamed: its write mode, whether it replaces a file,
+/// whether the bytes are hashed for the read-back, and whether the commit
+/// flushes to storage first (a move, whose source is removed after, and a
+/// replace).
+#[derive(Clone, Copy, Debug)]
+struct Stream {
+    mode: WriteMode,
+    replace: bool,
+    hash: bool,
+    durable: bool,
+}
+
 /// What a step made, to check against a fresh read at the end.
 struct Made {
     place: Place,
@@ -745,17 +757,15 @@ impl<'a> Run<'a> {
                 }
                 Err(VfsError::NotFound) => {}
                 Err(VfsError::Cancelled) => return Outcome::Cancelled,
-                Err(error) => {
+                Err(_) => {
+                    // Asked like any error; on Retry, look again.
                     let ctx = self.ctx.clone();
                     let provider = Arc::clone(&provider);
-                    let retried = self.attempt(to, |_| {
-                        provider.stat(to, &ctx).map(|_| ()).or_else(|e| match e {
-                            VfsError::NotFound => Ok(()),
-                            _ => Err(e),
-                        })
+                    let retried = self.attempt(to, |_| match provider.stat(to, &ctx) {
+                        Ok(_) | Err(VfsError::NotFound) => Ok(()),
+                        Err(error) => Err(error),
                     });
                     if let Err(stop) = retried {
-                        let _ = error;
                         return stop.into();
                     }
                     continue;
@@ -1032,8 +1042,14 @@ impl<'a> Run<'a> {
             None => {
                 let source = Arc::clone(&source);
                 let destination = Arc::clone(&destination);
+                let how = Stream {
+                    mode,
+                    replace,
+                    hash: verify,
+                    durable: moving || replace,
+                };
                 self.attempt(from, |run| {
-                    run.stream_once(&*source, from, &*destination, target, mode, replace, verify)
+                    run.stream_once(&*source, from, &*destination, target, how)
                 })?
             }
         };
@@ -1080,17 +1096,20 @@ impl<'a> Run<'a> {
     /// One try at streaming a file into a committing writer, in chunks.
     /// A replace sends the old file to the trash only after every byte is
     /// written, and brings it back if the commit fails.
-    #[allow(clippy::too_many_arguments)]
     fn stream_once(
         &mut self,
         source: &dyn Provider,
         from: &Place,
         destination: &dyn Provider,
         target: &Place,
-        mode: WriteMode,
-        replace: bool,
-        hash: bool,
+        how: Stream,
     ) -> Result<(u64, Option<Vec<u8>>), VfsError> {
+        let Stream {
+            mode,
+            replace,
+            hash,
+            durable,
+        } = how;
         let ctx = self.ctx.clone();
         let mut reader = source.read(from, &ctx)?;
         let mut writer = destination.write(target, mode, &ctx)?;
@@ -1156,7 +1175,7 @@ impl<'a> Run<'a> {
                 }
             }
         }
-        if let Err(error) = writer.commit(true) {
+        if let Err(error) = writer.commit(durable) {
             if old_in_trash && destination.restore(target, &OpContext::new()).is_err() {
                 self.warn(target, "the old copy is in the trash");
             }
