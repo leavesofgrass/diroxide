@@ -410,7 +410,7 @@ pub static CATALOG: [CommandInfo; 89] = [
     command(
         ids::SETTINGS,
         "Settings",
-        "Lists the settings; F1 on a setting says what it does.",
+        "Lists the settings; Help on a setting says what it does.",
         Global,
         &[],
         &["ctrl+,"],
@@ -418,7 +418,7 @@ pub static CATALOG: [CommandInfo; 89] = [
     command(
         ids::KEY_TEST,
         "Test keys",
-        "Says what each key you press sends and what it would run; Escape ends it.",
+        "Says what each key you press sends and what it would run; Cancel ends it.",
         Global,
         &[],
         &[],
@@ -626,7 +626,7 @@ pub static CATALOG: [CommandInfo; 89] = [
     command(
         ids::GO_PATH,
         "Go to a path",
-        "Asks for a path and goes there; Tab completes it.",
+        "Asks for a path and goes there, completing names as you type.",
         Panel,
         &["ctrl+l", "alt+d"],
         &["ctrl+l", "alt+d", "ctrl+enter"],
@@ -730,7 +730,7 @@ pub static CATALOG: [CommandInfo; 89] = [
     command(
         ids::SELECT_PATTERN,
         "Select by pattern",
-        "Selects the rows whose names match a pattern; Enter alone selects all.",
+        "Selects the rows whose names match a pattern; it starts as a star, which selects all.",
         Panel,
         &["plus"],
         &["plus", "kp-divide"],
@@ -914,7 +914,7 @@ pub static CATALOG: [CommandInfo; 89] = [
     command(
         ids::FILTER,
         "Filter",
-        "Shows only the names that match what you type; Escape clears it.",
+        "Shows only the names that match what you type; Cancel or Clear filter ends it.",
         Panel,
         &["ctrl+s"],
         &["ctrl+s"],
@@ -1283,6 +1283,30 @@ mod tests {
                 info.id
             );
         }
+    }
+
+    /// Whether text names a key literally, which a rebinding would make
+    /// untrue.
+    fn names_a_key(text: &str) -> bool {
+        let fixed = ["Ctrl+", "Alt+", "Shift+", "Cmd+"];
+        let words = ["Escape", "Enter", "Tab", "Backspace", "Insert", "Space"];
+        fixed.iter().any(|f| text.contains(f))
+            || text.split(|c: char| !c.is_alphanumeric()).any(|w| {
+                words.contains(&w)
+                    || (w.len() <= 3 && w.starts_with('F') && w[1..].parse::<u8>().is_ok())
+            })
+    }
+
+    #[test]
+    fn no_help_sentence_names_a_key() {
+        for info in &CATALOG {
+            assert!(!names_a_key(info.help), "{}: {}", info.id, info.help);
+        }
+        for info in diroxide_config::SCHEMA.iter() {
+            assert!(!names_a_key(info.help), "{}: {}", info.key, info.help);
+        }
+        assert!(names_a_key("Press F5 now"));
+        assert!(!names_a_key("Enters the folder"));
     }
 
     #[test]

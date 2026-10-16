@@ -275,7 +275,7 @@ pub const SCHEMA: [SettingInfo; 43] = [
         group: G::Panels,
         kind: SettingKind::Choice(SORT_KEYS),
         default: "\"name\"",
-        help: "What a new panel sorts by. Ctrl+F3 to Ctrl+F7 and the Sort list change it for one panel.",
+        help: "What a new panel sorts by. The sort commands and the Sort list change it for one panel.",
         arrives: None,
     },
     SettingInfo {
@@ -329,7 +329,7 @@ pub const SCHEMA: [SettingInfo; 43] = [
         group: G::Keys,
         kind: SettingKind::Choice(SINGLE_LETTERS),
         default: "\"type_ahead\"",
-        help: "What a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. Off turns every such key off; Ctrl+S still filters.",
+        help: "What a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. Off turns every such key off; the Filter command still filters.",
         arrives: None,
     },
     SettingInfo {
@@ -400,7 +400,7 @@ pub const SCHEMA: [SettingInfo; 43] = [
         group: G::Speech,
         kind: SettingKind::Choice(COMPLETION_LISTS),
         default: "\"auto\"",
-        help: "When the candidates appear under a text field: as you type, or on Tab. Auto lists them as you type in the window and on Tab in a terminal.",
+        help: "When the candidates appear under a text field: as you type, or only when you ask for them. Auto lists them as you type in the window and on request in a terminal.",
         arrives: None,
     },
     SettingInfo {
@@ -562,7 +562,7 @@ pub const SCHEMA: [SettingInfo; 43] = [
         group: G::Look,
         kind: K::Flag,
         default: "true",
-        help: "In the window on Windows, keeps the menu bar hidden until Alt or F10 shows it.",
+        help: "In the window on Windows, keeps the menu bar hidden until the Menus command or Alt alone shows it.",
         arrives: Some("alpha.6"),
     },
     SettingInfo {

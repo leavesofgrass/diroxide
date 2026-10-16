@@ -27,7 +27,7 @@ Hidden files. Lists files and folders that are hidden by their name or their att
 
 ### sort.key
 
-Sort by. What a new panel sorts by. Ctrl+F3 to Ctrl+F7 and the Sort list change it for one panel.
+Sort by. What a new panel sorts by. The sort commands and the Sort list change it for one panel.
 
 - Holds: one of name, extension, size, modified, created, accessed, kind, attributes, owner, label or unsorted.
 - Default: `"name"`.
@@ -89,7 +89,7 @@ Columns. The details said after each name, in this order. Permissions read in wo
 
 ### single_letters
 
-Single letters. What a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. Off turns every such key off; Ctrl+S still filters.
+Single letters. What a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. Off turns every such key off; the Filter command still filters.
 
 - Holds: one of type_ahead, commands or off.
 - Default: `"type_ahead"`.
@@ -147,7 +147,7 @@ Dialog settle time. How long a new dialog waits before it takes keys, so a key p
 
 ### completion_list
 
-Completion list. When the candidates appear under a text field: as you type, or on Tab. Auto lists them as you type in the window and on Tab in a terminal.
+Completion list. When the candidates appear under a text field: as you type, or only when you ask for them. Auto lists them as you type in the window and on request in a terminal.
 
 - Holds: one of auto, as_you_type or on_tab.
 - Default: `"auto"`.
@@ -288,7 +288,7 @@ Thumbnails. Shows pictures as small images in the window's thumbnail mode. The w
 
 ### auto_hide_menu
 
-Hide the menu bar. In the window on Windows, keeps the menu bar hidden until Alt or F10 shows it.
+Hide the menu bar. In the window on Windows, keeps the menu bar hidden until the Menus command or Alt alone shows it.
 
 - Holds: true or false.
 - Default: `true`.
