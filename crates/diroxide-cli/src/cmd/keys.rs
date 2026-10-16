@@ -9,11 +9,14 @@
 //! - `print` writes the current keys of both columns as `keymap.toml`
 //!   text, every command with its keys or "none"; read back, it gives the
 //!   same keys, and `check` finds it clean.
+//! - `test` says, for each key pressed, what diroxide would run and what
+//!   the terminal sent, until Escape or ten seconds without a key (the key
+//!   probe of R19 spike one, for the owner's terminals).
 //!
-//! Exit codes: 0 clean or printed, 1 problems found, 2 wrong use or a file
-//! that cannot be read (R14's table).
+//! Exit codes: 0 clean, printed or tested, 1 problems found, 2 wrong use, a
+//! file that cannot be read, or `test` without a terminal (R14's table).
 
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 
 use diroxide_app::keymap::{self, Platform};
@@ -29,6 +32,8 @@ pub enum KeysArgs {
     Check(Option<String>),
     /// Print the current keys.
     Print,
+    /// Say what each key sends and runs.
+    Test,
     /// Print the help.
     Help,
 }
@@ -41,11 +46,12 @@ pub fn help_text() -> String {
         "Usage:",
         "diro keys check [FILE]   say each problem in FILE, or in keymap.toml",
         "diro keys print          write the current keys of both columns",
+        "diro keys test           say what each key sends and runs; Escape ends it",
         "",
         "Exit codes:",
-        "0  clean, or printed",
+        "0  clean, printed or tested",
         "1  problems found; each is a line",
-        "2  wrong use, or the file cannot be read",
+        "2  wrong use, the file cannot be read, or no terminal for test",
     ]
     .join("\n")
 }
@@ -60,6 +66,8 @@ pub fn parse(args: &[String]) -> Result<KeysArgs, CliError> {
         [check, _, ..] if check == "check" => Err(CliError::TooMany("keys check".to_owned())),
         [print] if print == "print" => Ok(KeysArgs::Print),
         [print, ..] if print == "print" => Err(CliError::TooMany("keys print".to_owned())),
+        [test] if test == "test" => Ok(KeysArgs::Test),
+        [test, ..] if test == "test" => Err(CliError::TooMany("keys test".to_owned())),
         [other, ..] => Err(CliError::UnknownOption(other.clone())),
     }
 }
@@ -81,6 +89,20 @@ pub fn run(args: &KeysArgs, paths: Option<&Paths>, out: &mut dyn Write) -> Resul
             let config = paths.map(diroxide_config::load).unwrap_or_default();
             let (terminal, window) = keymap::keymaps(&config.keymap, platform);
             write!(out, "{}", keymap::print_keys(&terminal, &window)).map_err(failed)?;
+            Ok(0)
+        }
+        KeysArgs::Test => {
+            if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal()) {
+                writeln!(
+                    out,
+                    "Could not test the keys: this is not a terminal. Run diro keys test in one."
+                )
+                .map_err(failed)?;
+                return Ok(2);
+            }
+            let config = paths.map(diroxide_config::load).unwrap_or_default();
+            let (terminal, _) = keymap::keymaps(&config.keymap, platform);
+            diroxide_tui::keytest::run(&terminal).map_err(|e| CliError::Failed(e.to_string()))?;
             Ok(0)
         }
         KeysArgs::Check(file) => {
@@ -152,6 +174,11 @@ mod tests {
             Ok(KeysArgs::Check(Some("k.toml".into())))
         );
         assert_eq!(parse(&args(&["print"])), Ok(KeysArgs::Print));
+        assert_eq!(parse(&args(&["test"])), Ok(KeysArgs::Test));
+        assert_eq!(
+            parse(&args(&["test", "x"])),
+            Err(CliError::TooMany("keys test".into()))
+        );
         assert_eq!(parse(&args(&["-h"])), Ok(KeysArgs::Help));
         assert_eq!(parse(&args(&[])), Err(CliError::Missing("keys".into())));
         assert_eq!(

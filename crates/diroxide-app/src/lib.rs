@@ -33,6 +33,13 @@ pub mod settings;
 pub mod startup;
 pub mod state;
 
+/// The configuration types a frontend reads through the app: the terminal
+/// crate may depend only on core, app and theme (`cargo xtask deps`), and
+/// draws from [`App::settings`].
+pub mod config {
+    pub use diroxide_config::{Layout, ScreenReaderMode, SecretEcho, Settings};
+}
+
 pub use app::{App, AppEvent, AppOptions, Clipboard};
 pub use commands::{CATALOG, CommandInfo, Menu};
 pub use dialog::{Answer, Dialog};

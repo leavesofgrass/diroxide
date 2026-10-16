@@ -1,4 +1,7 @@
-//! Integration tests of the command line.
+//! Integration tests of the command line, and the scripted terminal test
+//! with the braille walk on the drawn screen (`screen`).
+
+mod screen;
 
 use std::ffi::OsString;
 

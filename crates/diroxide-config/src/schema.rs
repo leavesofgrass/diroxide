@@ -250,7 +250,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 43] = [
+pub const SCHEMA: [SettingInfo; 44] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -321,6 +321,17 @@ pub const SCHEMA: [SettingInfo; 43] = [
         kind: K::Columns,
         default: "[\"type\", \"size\", \"modified\"]",
         help: "The details said after each name, in this order. Permissions read in words; mode and octal give the Unix forms.",
+        arrives: None,
+    },
+    // The F4 editor (the owner's answer 74): the setting first, then
+    // $VISUAL, $EDITOR and the platform's editor. Added by W1d-2.
+    SettingInfo {
+        key: "editor",
+        name: "Editor",
+        group: G::Panels,
+        kind: K::Text,
+        default: "\"\"",
+        help: "The program Edit opens a file with: a name on the path or a full path, with no arguments. Empty uses VISUAL, then EDITOR, then the system's own editor.",
         arrives: None,
     },
     SettingInfo {

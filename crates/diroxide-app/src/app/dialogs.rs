@@ -73,6 +73,7 @@ impl App {
             other => Message::info(other.title()),
         };
         self.dialogs.push((id, dialog));
+        self.tabbed = None;
         let opened = self.now();
         self.opens.push(Open { purpose, opened });
         vec![Effect::OpenDialog(id), self.say(message)]
@@ -85,6 +86,7 @@ impl App {
             return Vec::new();
         };
         self.opens.pop();
+        self.tabbed = None;
         if self.top_purpose().is_none() {
             self.completing = None;
         }
@@ -983,6 +985,24 @@ impl App {
     /// what it did said ("completed to Downloads", "4 matches, Down arrow
     /// lists them"). A path field asks for its folder's listing first.
     fn complete(&mut self) -> Vec<Effect> {
+        // A second Tab, with the list the first one opened and the text as
+        // it left it, moves into the list (plan section 5.19).
+        let tabbed = self.tabbed.take();
+        if let Some((
+            _,
+            Dialog::Edit {
+                field,
+                candidates: Some(list),
+                in_list,
+            },
+        )) = self.dialogs.last_mut()
+            && !*in_list
+            && !list.is_empty()
+            && tabbed.as_deref() == Some(field.text())
+        {
+            *in_list = true;
+            return self.list_focus_said();
+        }
         let (source, text, stem) = match self.dialogs.last() {
             Some((_, Dialog::Edit { field, .. })) => (
                 field.source().clone(),
@@ -1090,9 +1110,9 @@ impl App {
         if let Some((
             _,
             Dialog::Edit {
+                field,
                 candidates,
                 in_list,
-                ..
             },
         )) = self.dialogs.last_mut()
         {
@@ -1100,6 +1120,7 @@ impl App {
                 Completion::Several(_) | Completion::Extended { .. } => {
                     *candidates = Some(candidate_list(&sentence, &matches));
                     *in_list = false;
+                    self.tabbed = Some(field.text().to_owned());
                 }
                 _ => {
                     *candidates = None;

@@ -95,6 +95,39 @@ fn confirmation_lines(plan: &Plan) -> Vec<String> {
     lines
 }
 
+/// The plan's question with a copy's or a move's destination named by its
+/// folder's own name, so the question keeps its fact inside 40 cells
+/// ("Copy 3 items to Backup, 312 bytes? y or n"); the listing under it
+/// still says the whole path first.
+fn short_question(plan: &Plan) -> Message {
+    let question = plan.question();
+    if !matches!(plan.kind, JobKind::Copy | JobKind::Move) || plan.facts.typed.is_some() {
+        return question;
+    }
+    let destination = plan.facts.destination.clone().or_else(|| {
+        plan.steps.iter().find_map(|step| match step {
+            diroxide_ops::Step::Copy { to, .. } | diroxide_ops::Step::Move { to, .. } => {
+                to.parent()
+            }
+            _ => None,
+        })
+    });
+    let Some(destination) = destination else {
+        return question;
+    };
+    let Some(leaf) = destination.name() else {
+        return question;
+    };
+    let full = diroxide_core::names::spell_out(&destination.to_string()).into_owned();
+    let leaf = diroxide_core::names::spell_out(leaf).into_owned();
+    Message {
+        text: question
+            .text
+            .replacen(&format!(" to {full}"), &format!(" to {leaf}"), 1),
+        ..question
+    }
+}
+
 /// "name: reason" rows for the job history.
 fn named(places: &[(Place, String)]) -> Vec<String> {
     places
@@ -667,7 +700,7 @@ impl App {
                         let summary = plan.summary();
                         Message::question(&format!("{summary}. Not enough room. Go on anyway"))
                     }
-                    _ => plan.question(),
+                    _ => short_question(&plan),
                 },
             };
             let question = with_default_no(question);
@@ -842,7 +875,7 @@ impl App {
             let place = panel.place().clone();
             let keep = if each == side { focus.clone() } else { None }
                 .or_else(|| panel.list().focused().map(|r| r.id.clone()));
-            effects.extend(self.open_as(each, place, keep, Load::Refresh));
+            effects.extend(self.open_as(each, place, keep, Load::AfterJob));
         }
         effects
     }

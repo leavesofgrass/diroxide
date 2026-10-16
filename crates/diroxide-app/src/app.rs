@@ -337,6 +337,8 @@ pub struct App {
     jobs: JobTable,
     undo: UndoLog,
     status: String,
+    /// The status lines said since the frontend last took them.
+    status_log: Vec<String>,
     quit: bool,
     requests: Vec<Request>,
     next_job: u64,
@@ -356,6 +358,9 @@ pub struct App {
     quit_folder: Option<Place>,
     keep_shell: bool,
     completing: Option<Completing>,
+    /// The field's text as the last Tab left it with the list open, so a
+    /// second Tab moves into the list (plan section 5.19).
+    tabbed: Option<String>,
     places: Vec<LocalPlace>,
     first_run: bool,
     session: Option<diroxide_config::SessionState>,
@@ -373,6 +378,9 @@ struct Kept {
 
 /// How many folders' replaced selections are kept.
 const KEPT_LIMIT: usize = 16;
+
+/// How many status lines wait for a frontend that does not take them.
+const STATUS_LOG_LIMIT: usize = 16;
 
 impl std::fmt::Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -603,6 +611,7 @@ impl App {
             jobs: JobTable::new(),
             undo,
             status: String::new(),
+            status_log: Vec::new(),
             quit: false,
             requests: Vec::new(),
             next_job: startup.first_job.max(1),
@@ -622,6 +631,7 @@ impl App {
             quit_folder: None,
             keep_shell: false,
             completing: None,
+            tabbed: None,
             places: Vec::new(),
             first_run: startup.first_run,
             session: startup.session,
@@ -740,6 +750,12 @@ impl App {
         self.key_test
     }
 
+    /// Sets how many rows Page Up and Page Down move in each panel: the
+    /// frontend gives the rows it shows.
+    pub fn set_page_rows(&mut self, side: Side, rows: usize) {
+        self.panel_mut(side).list_mut().set_page_size(rows);
+    }
+
     /// Whether the app behaves for a screen reader: progress at its
     /// interval, the inactive panel never redrawn but on demand.
     pub fn screen_reader(&self) -> bool {
@@ -796,23 +812,88 @@ impl App {
         }
     }
 
-    /// The title line, the active place first: "photos, in D:\, left
-    /// panel".
+    /// The title line, the active place first and the panel before the
+    /// parent (research/alpha1-plan.md part three): "Documents, left
+    /// panel, in D:\work". A filter and a sort other than the configured
+    /// one follow the panel: "Documents, left panel, filter *.pdf, in
+    /// D:\work, sorted by size". Hidden characters in names are drawn as
+    /// question marks (the display-name rule).
     pub fn title_line(&self) -> String {
+        self.title_line_within(usize::MAX)
+    }
+
+    /// The title line cut to `cells` characters: a long parent is cut from
+    /// its left with three dots ("in ...\finance\2026"), so the leaf and
+    /// the panel always fit; the whole path is Go to a path's default
+    /// text. The terminal draws this; the window uses the whole line.
+    pub fn title_line_within(&self, cells: usize) -> String {
         let panel = self.active_panel();
-        let loading = if panel.is_loading() { ", loading" } else { "" };
-        format!(
-            "{}, {} panel{loading}",
-            panel.list().title(),
+        let place = panel.loading_place().unwrap_or(panel.place());
+        let mut head = format!(
+            "{}, {} panel",
+            crate::panel::place_leaf(place),
             self.active.word()
-        )
+        );
+        if panel.is_loading() {
+            head.push_str(", loading");
+        }
+        if let Some(filter) = panel.filter() {
+            head.push_str(&format!(
+                ", filter {}",
+                diroxide_core::names::display_name(filter.text())
+            ));
+        }
+        let sort = panel.sort();
+        let tail = if *sort == self.settings.sort_spec() {
+            String::new()
+        } else if sort.key == diroxide_core::SortKey::Unsorted {
+            ", not sorted".to_owned()
+        } else {
+            format!(", sorted by {}", sort.key.word())
+        };
+        let parent = place
+            .parent()
+            .map(|p| diroxide_core::place::strip_extended_prefix(&p.to_string()).into_owned())
+            .map(|p| diroxide_core::names::display_name(&p).into_owned());
+        let Some(parent) = parent else {
+            return format!("{head}{tail}");
+        };
+        let whole = format!("{head}, in {parent}{tail}");
+        let used = whole.chars().count();
+        if used <= cells {
+            return whole;
+        }
+        // Cut the parent from its left; keep at least its last part.
+        let room =
+            cells.saturating_sub(head.chars().count() + ", in ...".len() + tail.chars().count());
+        let kept: String = {
+            let chars: Vec<char> = parent.chars().collect();
+            let start = chars.len().saturating_sub(room.max(1));
+            chars[start..].iter().collect()
+        };
+        format!("{head}, in ...{kept}{tail}")
     }
 
     /// The status line, the key fact first: the last message, or the
-    /// active panel's status.
+    /// active panel's folder and counts ("Documents, 40 items, 2
+    /// selected"). It never follows the focus: the cursor's row says
+    /// where the focus is, so a move changes nothing here and a screen
+    /// reader that speaks changed text says the row once (R4 section
+    /// 5.1). A focus move keeps the last message.
     pub fn status_line(&self) -> String {
         if self.status.is_empty() {
-            self.active_panel().list().status()
+            let panel = self.active_panel();
+            let list = panel.list();
+            let mut line = format!(
+                "{}, {}",
+                crate::panel::place_leaf(panel.place()),
+                diroxide_core::format::count(list.len() as u64, "item", "items")
+            );
+            let selected = list.selected_count();
+            if selected > 0 {
+                line.push_str(&format!(", {selected} selected"));
+            }
+            line
         } else {
             self.status.clone()
         }
@@ -963,10 +1044,24 @@ impl App {
         }
     }
 
-    /// Says a message: it becomes the status line and is announced.
+    /// Says a message: it becomes the status line and is announced, and
+    /// the status lines said since the frontend last took them keep it.
     fn say(&mut self, message: Message) -> Effect {
         self.status = message.text.clone();
+        if self.status_log.len() >= STATUS_LOG_LIMIT {
+            self.status_log.remove(0);
+        }
+        self.status_log.push(message.text.clone());
         Effect::Announce(message)
+    }
+
+    /// Takes the status lines said since the last call, oldest first. A
+    /// terminal draws one frame for several messages (a refusal and the
+    /// prompt that opens again, a job's result and the listing after it),
+    /// so it shows them together, the first first, instead of only the
+    /// last. App-side hook for the terminal's status line.
+    pub fn take_status_lines(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.status_log)
     }
 
     /// The written key of a command from the live keymap ("Ctrl+R"), or
@@ -1017,7 +1112,19 @@ impl App {
         ];
         match self.keymap.lookup(&layers, &key) {
             Lookup::Command(id) => {
-                self.status.clear();
+                // A focus move keeps the last message, so the status line
+                // does not change under a screen reader on every move.
+                let moves = [
+                    ids::LIST_UP,
+                    ids::LIST_DOWN,
+                    ids::LIST_PAGE_UP,
+                    ids::LIST_PAGE_DOWN,
+                    ids::LIST_HOME,
+                    ids::LIST_END,
+                ];
+                if !moves.contains(&id) {
+                    self.status.clear();
+                }
                 self.dispatch(&Command::new(id))
             }
             Lookup::NoMatch => match typed(&key) {

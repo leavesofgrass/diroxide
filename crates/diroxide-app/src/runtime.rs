@@ -98,7 +98,9 @@ pub trait Launcher: Send + Sync {
     /// no PowerShell 7 on the owner's machine).
     fn shell(&self) -> (OsString, Vec<OsString>);
 
-    /// The editor for F4: `$VISUAL`, `$EDITOR`, then the platform's.
+    /// The editor for F4 when the `editor` setting is empty: `$VISUAL`,
+    /// `$EDITOR`, then the platform's. The runtime checks the setting
+    /// first (the owner's answer 74).
     fn editor(&self) -> OsString;
 }
 
@@ -386,6 +388,8 @@ pub struct Runtime {
     opener: Arc<dyn Opener>,
     launcher: Arc<dyn Launcher>,
     hook: Option<TerminalHook>,
+    /// The `editor` setting, when it names a program.
+    editor: Option<OsString>,
 }
 
 impl fmt::Debug for Runtime {
@@ -422,7 +426,17 @@ impl Runtime {
             opener: Arc::new(SystemOpener),
             launcher: Arc::new(SystemLauncher),
             hook: None,
+            editor: None,
         }
+    }
+
+    /// Sets the editor from the `editor` setting: a program's name on the
+    /// path or its full path; empty leaves the choice to the launcher
+    /// (`$VISUAL`, `$EDITOR`, then the platform's). A changed setting
+    /// reaches here through [`Request::SaveSetting`] too.
+    pub fn set_editor(&mut self, editor: &str) {
+        let editor = editor.trim();
+        self.editor = (!editor.is_empty()).then(|| OsString::from(editor));
     }
 
     /// A runtime with only the local provider.
@@ -691,6 +705,14 @@ impl Runtime {
                 }
             }
             Request::SaveSetting { key, value } => {
+                if key == "editor" {
+                    let editor = value
+                        .as_ref()
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_owned();
+                    self.set_editor(&editor);
+                }
                 if let Some(paths) = &self.paths {
                     let saved = match value {
                         Some(value) => diroxide_config::set_setting(paths, &key, value),
@@ -844,7 +866,11 @@ impl Runtime {
                         "",
                     )
                 })?;
-                (self.launcher.editor(), vec![OsString::from(path)])
+                let editor = self
+                    .editor
+                    .clone()
+                    .unwrap_or_else(|| self.launcher.editor());
+                (editor, vec![OsString::from(path)])
             }
         };
         Ok(Program {
@@ -1190,6 +1216,54 @@ mod tests {
         let names: Vec<&str> = program.env.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.contains(&"DIRO_ACTIVE") && names.contains(&"DIRO_CURSOR"));
         assert!(names.contains(&"DIRO_LEVEL"));
+    }
+
+    #[test]
+    fn the_editor_setting_comes_before_the_launchers_choice() {
+        let recorder = Arc::new(Recorder::default());
+        let mut runtime = Runtime::with_local().with_launcher(recorder.clone());
+        let here = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let file = here.join("Cargo.toml").unwrap();
+        let spawn = |runtime: &mut Runtime| {
+            runtime.request(Request::Spawn(Box::new(Spawn {
+                kind: SpawnKind::Editor(file.clone()),
+                folder: here.clone(),
+                other: here.clone(),
+                cursor: None,
+                selection: Vec::new(),
+            })));
+            runtime.poll();
+        };
+        spawn(&mut runtime);
+        runtime.set_editor("  ");
+        spawn(&mut runtime);
+        runtime.set_editor("myeditor");
+        spawn(&mut runtime);
+        runtime.request(Request::SaveSetting {
+            key: "editor".to_owned(),
+            value: Some(toml::Value::String("othereditor".to_owned())),
+        });
+        spawn(&mut runtime);
+        runtime.request(Request::SaveSetting {
+            key: "editor".to_owned(),
+            value: None,
+        });
+        spawn(&mut runtime);
+        let used: Vec<OsString> = lock(&recorder.programs)
+            .iter()
+            .map(|p| p.program.clone())
+            .collect();
+        assert_eq!(
+            used,
+            [
+                "testeditor",
+                "testeditor",
+                "myeditor",
+                "othereditor",
+                "testeditor"
+            ]
+            .map(OsString::from)
+        );
     }
 
     #[test]

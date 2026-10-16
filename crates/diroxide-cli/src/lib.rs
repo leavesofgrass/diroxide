@@ -118,6 +118,7 @@ pub fn help_text() -> String {
         "diro completions SHELL    print the completion script for bash, zsh, fish or powershell",
         "diro keys check [FILE]    say each problem in keymap.toml or FILE",
         "diro keys print           print the current keys as keymap.toml text",
+        "diro keys test            say what each key sends and runs; Escape ends it",
         "diro init SHELL           print the shell function that moves the shell where diro left it",
         "diro plugin list          list the plugins",
         "diro --version            print the version",

@@ -234,7 +234,9 @@ impl App {
                 )
             ));
         }
-        let changes = (refreshed.added > 0 || refreshed.removed > 0).then(|| {
+        // After the app's own job its result already said what changed.
+        let changed = refreshed.added > 0 || refreshed.removed > 0;
+        let changes = (changed && how != Load::AfterJob).then(|| {
             format!(
                 "Folder changed: {} added, {} removed",
                 refreshed.added, refreshed.removed
@@ -271,7 +273,10 @@ impl App {
             return self.open(side, parent, Some(name));
         }
         let gone = matches!(error, VfsError::NotFound);
-        let refreshing = matches!(how, Some(Load::Refresh) | Some(Load::Reload));
+        let refreshing = matches!(
+            how,
+            Some(Load::Refresh) | Some(Load::Reload) | Some(Load::AfterJob)
+        );
         let shown = place_title(place);
         let up_instead = (gone && refreshing) || !listed;
         if up_instead && let Some(parent) = place.parent() {
@@ -342,7 +347,6 @@ impl App {
     pub(super) fn move_focus(&mut self, movement: Move) -> Vec<Effect> {
         let side = self.active;
         if self.panel_mut(side).list_mut().move_focus(movement) {
-            self.status.clear();
             self.focus_effects(side)
         } else if self.panel(side).list().is_empty() {
             let empty = self.panel(side).list().empty_text().to_owned();
