@@ -11,7 +11,7 @@ use std::sync::Arc;
 use diroxide_core::format::count;
 use diroxide_core::{Command, CommandId, Effect, Message, Move, Pattern, Redraw, Side, SortKey};
 
-use super::{App, Purpose, Quick};
+use super::{App, KEPT_LIMIT, Kept, Purpose, Quick};
 use crate::commands::{self, ids};
 use crate::entry::{CompletionSource, EntryField};
 use crate::jobs::millis_between;
@@ -51,20 +51,88 @@ impl App {
 
     pub(super) fn select_all(&mut self) -> Vec<Effect> {
         let side = self.active;
+        self.keep_selection(side);
         self.panel_mut(side).list_mut().select_all();
         self.selection_said(side)
     }
 
     pub(super) fn select_none(&mut self) -> Vec<Effect> {
         let side = self.active;
+        self.keep_selection(side);
         self.panel_mut(side).list_mut().select_none();
         self.selection_said(side)
     }
 
     pub(super) fn select_invert(&mut self) -> Vec<Effect> {
         let side = self.active;
+        self.keep_selection(side);
         self.panel_mut(side).list_mut().invert_selection();
         self.selection_said(side)
+    }
+
+    /// Keeps a panel's marks, if it has any, for Restore selection, before
+    /// a wholesale change replaces them: select all, none or invert, a
+    /// pattern, a finished job, or leaving the folder. One kept selection
+    /// a folder, for the newest 16 folders.
+    pub(super) fn keep_selection(&mut self, side: Side) {
+        let panel = self.panel(side);
+        let ids: Vec<String> = panel
+            .list()
+            .selected_ids()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
+        let place = panel.place().clone();
+        self.kept.retain(|kept| kept.place != place);
+        self.kept.push(Kept { place, ids });
+        if self.kept.len() > KEPT_LIMIT {
+            self.kept.remove(0);
+        }
+    }
+
+    /// Restore selection: the marks the last wholesale change in this
+    /// folder replaced come back, and the marks they replace are kept in
+    /// turn, so a second Restore swaps back. "Selection restored: 31
+    /// selected." Rows no longer in the list are counted, never guessed.
+    pub(super) fn restore_selection(&mut self) -> Vec<Effect> {
+        let side = self.active;
+        let place = self.panel(side).place().clone();
+        let Some(index) = self.kept.iter().position(|kept| kept.place == place) else {
+            let text = "No earlier selection in this folder to restore";
+            return vec![self.say(Message::status(text))];
+        };
+        let wanted: HashSet<&str> = self.kept[index].ids.iter().map(String::as_str).collect();
+        let present = self
+            .panel(side)
+            .list()
+            .rows()
+            .iter()
+            .filter(|row| wanted.contains(row.id.as_str()))
+            .count();
+        let missing = wanted.len().saturating_sub(present);
+        if present == 0 {
+            let text = format!(
+                "Nothing restored: the earlier selection's {} not in the list",
+                count(missing as u64, "item is", "items are")
+            );
+            return vec![self.say(Message::status(text))];
+        }
+        let kept = self.kept.remove(index);
+        self.keep_selection(side);
+        let wanted: HashSet<String> = kept.ids.into_iter().collect();
+        let list = self.panel_mut(side).list_mut();
+        list.select_none();
+        list.select_matching(|row| wanted.contains(&row.id));
+        let total = list.selected_count();
+        let mut text = format!("Selection restored: {total} selected.");
+        if missing > 0 {
+            let gone = count(missing as u64, "is", "are");
+            text = format!("{text} {gone} not in the list.");
+        }
+        vec![self.redraw_panel(side), self.say(Message::info(text))]
     }
 
     /// Select or unselect by pattern: a command with a `pattern` applies
@@ -99,6 +167,7 @@ impl App {
             }
         };
         self.remember(state::keys::PATTERN, text);
+        self.keep_selection(side);
         let matching: HashSet<String> = self
             .panel(side)
             .entries()

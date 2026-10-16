@@ -291,7 +291,11 @@ impl App {
         let mut rows: Vec<ListRow> = file
             .rows()
             .iter()
-            .filter(|r| r.id != ids::QUIT.as_str() && r.id != ids::QUIT_TO_FOLDER.as_str())
+            .filter(|r| {
+                ![ids::QUIT, ids::QUIT_TO_FOLDER, ids::QUIT_KEEP_FOLDER]
+                    .iter()
+                    .any(|quit| r.id == quit.as_str())
+            })
             .cloned()
             .collect();
         for id in [
@@ -782,8 +786,12 @@ impl App {
     }
 
     /// Quit: asks only when a job runs or a prompt holds text (the owner's
-    /// answer 74); the question starts on No.
-    pub(super) fn ask_quit(&mut self, _to_folder: bool) -> Vec<Effect> {
+    /// answer 74); the question starts on No. With `keep_shell`, the shell
+    /// that started diroxide stays in its own folder even with
+    /// `--cwd-file` (R14's "Quit and keep the shell where it was", named
+    /// "Quit, shell stays where it was" to fit a Braille line).
+    pub(super) fn ask_quit(&mut self, keep_shell: bool) -> Vec<Effect> {
+        self.keep_shell = keep_shell;
         let jobs = self.jobs.len() as u64;
         let typing = self.dialogs.iter().any(|(_, dialog)| match dialog {
             Dialog::Edit { field, .. } => !field.text().is_empty(),
@@ -820,11 +828,16 @@ impl App {
     }
 
     /// Quits: running jobs are cancelled, the session and the path jump
-    /// store are saved, and the shell's folder is noted for `--cwd-file`.
+    /// store are saved, and the shell's folder is noted for `--cwd-file`
+    /// unless the shell keeps its own.
     pub(super) fn quit_now(&mut self) -> Vec<Effect> {
         let mut effects: Vec<Effect> = self.jobs.ids().into_iter().map(Effect::CancelJob).collect();
         self.quit = true;
-        self.quit_folder = local_folder(self.active_panel().place());
+        self.quit_folder = if self.keep_shell {
+            None
+        } else {
+            local_folder(self.active_panel().place())
+        };
         let session = self.session();
         self.request(Request::SaveSession(Box::new(session)));
         let visits = self.visits.to_lines();

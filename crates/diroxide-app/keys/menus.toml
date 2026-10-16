@@ -76,6 +76,10 @@ command = "app.quit-to-folder"
 access = "f"
 
 [[menu.item]]
+command = "app.quit-keep-folder"
+access = "k"
+
+[[menu.item]]
 command = "app.quit"
 access = "q"
 
@@ -300,6 +304,10 @@ access = "x"
 [[menu.item]]
 command = "select.previous"
 access = "v"
+
+[[menu.item]]
+command = "select.restore"
+access = "r"
 
 [[menu]]
 id = "tools"

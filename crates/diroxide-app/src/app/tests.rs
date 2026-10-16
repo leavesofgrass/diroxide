@@ -114,9 +114,21 @@ fn quit_asks_the_frontend_to_leave() {
     assert_eq!(effects, vec![Effect::Quit]);
     assert!(app.wants_quit());
     assert_eq!(app.quit_folder(), Some(&here()));
+    assert!(!app.keeps_shell_folder());
     assert!(
         app.take_requests()
             .iter()
             .any(|r| matches!(r, Request::SaveSession(_)))
     );
+}
+
+#[test]
+fn quit_and_keep_the_shell_where_it_was() {
+    let (mut app, _) = app();
+    let command = Command::new(ids::QUIT_KEEP_FOLDER);
+    let effects = app.handle(AppEvent::Command(command));
+    assert_eq!(effects, vec![Effect::Quit]);
+    assert!(app.wants_quit());
+    assert!(app.keeps_shell_folder());
+    assert_eq!(app.quit_folder(), None);
 }

@@ -832,6 +832,7 @@ impl App {
             .filter_map(|(place, _)| place.name().map(str::to_owned))
             .collect();
         if report.kind != JobKind::MakeFolder && report.kind != JobKind::Rename {
+            self.keep_selection(side);
             let list = self.panel_mut(side).list_mut();
             list.select_none();
             list.select_matching(|row| failed.contains(&row.id));

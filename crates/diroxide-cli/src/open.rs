@@ -226,6 +226,11 @@ pub fn run_with(
         .run(&mut app, &mut runtime, out)
         .map_err(|e| CliError::Failed(e.to_string()))?;
     if let Some(file) = &options.cwd_file {
+        if app.keeps_shell_folder() {
+            // Empty: the wrapper leaves the shell where it was.
+            write_cwd_file(Path::new(file), None)?;
+            return Ok(0);
+        }
         let folder = app
             .quit_folder()
             .cloned()

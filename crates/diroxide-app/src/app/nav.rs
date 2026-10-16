@@ -47,6 +47,9 @@ impl App {
         focus: Option<String>,
         how: Load,
     ) -> Vec<Effect> {
+        if &place != self.panel(side).place() {
+            self.keep_selection(side);
+        }
         let request = self.ids.request();
         self.panel_mut(side)
             .begin_load_as(request, place.clone(), focus, how);

@@ -89,6 +89,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 ### By the palette and the menus
 
 - Quit to this folder. Leaves diroxide, and the shell that started it moves to the active folder. (app.quit-to-folder)
+- Quit, shell stays where it was. Leaves diroxide, and the shell that started it stays in its own folder. (app.quit-keep-folder)
 - Say key bar. Says the function keys and what each one does. (app.say-key-bar)
 - Settings. Lists the settings; Help on a setting says what it does. (app.settings)
 - Test keys. Says what each key you press sends and what it would run; Cancel ends it. (app.key-test)
@@ -98,6 +99,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Job history. Lists the jobs that ran, what failed in each, and why. (jobs.history)
 - Folder history. Lists the folders visited, newest first. (go.history)
 - Select none. Clears the selection. (select.none)
+- Restore selection. Brings back the selection the last select all, none, invert, pattern, finished job or folder change replaced. (select.restore)
 - Copy to a place. Copies the selection to a place you choose, recent places first. (file.copy-to)
 - Move to a place. Moves the selection to a place you choose, recent places first. (file.move-to)
 - Run a command. Asks for a command line and runs it in this folder. (file.run-command)
@@ -200,6 +202,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 ### By the palette and the menus
 
 - Quit to this folder. Leaves diroxide, and the shell that started it moves to the active folder. (app.quit-to-folder)
+- Quit, shell stays where it was. Leaves diroxide, and the shell that started it stays in its own folder. (app.quit-keep-folder)
 - Say key bar. Says the function keys and what each one does. (app.say-key-bar)
 - Test keys. Says what each key you press sends and what it would run; Cancel ends it. (app.key-test)
 - Change layout. Moves between side by side, stacked and single panel. (app.layout)
@@ -207,6 +210,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Config problems. Lists what could not be read from the config files, and why. (app.problems)
 - Job history. Lists the jobs that ran, what failed in each, and why. (jobs.history)
 - Folder history. Lists the folders visited, newest first. (go.history)
+- Restore selection. Brings back the selection the last select all, none, invert, pattern, finished job or folder change replaced. (select.restore)
 - Copy to a place. Copies the selection to a place you choose, recent places first. (file.copy-to)
 - Move to a place. Moves the selection to a place you choose, recent places first. (file.move-to)
 - Run a command. Asks for a command line and runs it in this folder. (file.run-command)

@@ -239,6 +239,67 @@ fn selection_by_every_command() {
 }
 
 #[test]
+fn the_previous_selection_comes_back() {
+    let mut f = open();
+    assert_eq!(
+        f.s.command(ids::SELECT_RESTORE),
+        ["No earlier selection in this folder to restore"]
+    );
+    f.s.focus("budget.xlsx");
+    f.s.key("space");
+    f.s.key("space");
+    // A stray select none does not cost the marks.
+    assert_eq!(f.s.command(ids::SELECT_NONE), ["Nothing selected"]);
+    assert_eq!(
+        f.s.command(ids::SELECT_RESTORE),
+        ["Selection restored: 2 selected."]
+    );
+    // Select all replaces them; Restore swaps back, and again.
+    f.s.key("ctrl+a");
+    assert_eq!(
+        f.s.command(ids::SELECT_RESTORE),
+        ["Selection restored: 2 selected."]
+    );
+    assert_eq!(
+        f.s.command(ids::SELECT_RESTORE),
+        ["Selection restored: 8 selected."]
+    );
+    f.s.command(ids::SELECT_RESTORE);
+    // A finished copy clears the marks, and they come back.
+    f.s.key("f5");
+    let said = f.s.key("y");
+    assert!(
+        said.contains(&"Copy finished: 2 done.".to_owned()),
+        "{said:?}"
+    );
+    assert_eq!(f.s.app.active_panel().list().selected_count(), 0);
+    assert_eq!(
+        f.s.command(ids::SELECT_RESTORE),
+        ["Selection restored: 2 selected."]
+    );
+    // Leaving the folder and coming up again.
+    f.s.focus("Photos");
+    f.s.key("enter");
+    f.s.key("backspace");
+    assert_eq!(f.s.app.active_panel().list().selected_count(), 0);
+    assert_eq!(
+        f.s.command(ids::SELECT_RESTORE),
+        ["Selection restored: 2 selected."]
+    );
+    // A row that went away is counted, never guessed.
+    f.s.command(ids::SELECT_NONE);
+    f.s.focus("notes.txt");
+    f.s.key("f8");
+    f.s.key("y");
+    assert!(!f.work.join("notes.txt").exists());
+    assert_eq!(
+        f.s.command(ids::SELECT_RESTORE),
+        ["Selection restored: 1 selected. 1 is not in the list."]
+    );
+    assert_eq!(f.trash.count(), 1);
+}
+
+#[test]
 fn type_ahead_jumps_and_counts_matches() {
     let mut f = open();
     assert_eq!(f.s.key("r"), ["raccoon \u{1f99d}.txt, 1 of 3 matches"]);

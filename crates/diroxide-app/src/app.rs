@@ -354,12 +354,25 @@ pub struct App {
     quick: Option<Quick>,
     key_test: bool,
     quit_folder: Option<Place>,
+    keep_shell: bool,
     completing: Option<Completing>,
     places: Vec<LocalPlace>,
     first_run: bool,
     session: Option<diroxide_config::SessionState>,
     restore: [Option<String>; 2],
+    kept: Vec<Kept>,
 }
+
+/// A selection a wholesale change replaced, kept for Restore selection:
+/// the folder it was in and its marks by id.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Kept {
+    place: Place,
+    ids: Vec<String>,
+}
+
+/// How many folders' replaced selections are kept.
+const KEPT_LIMIT: usize = 16;
 
 impl std::fmt::Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -399,6 +412,7 @@ enum Action {
     UnselectPattern,
     SelectNext,
     SelectPrevious,
+    SelectRestore,
     View,
     Edit,
     Copy,
@@ -425,6 +439,7 @@ enum Action {
     Plugins,
     Quit,
     QuitToFolder,
+    QuitKeepFolder,
     Help,
     SayStatus,
     SayOther,
@@ -445,9 +460,10 @@ enum Action {
     Accept,
 }
 
-const ROUTES: [(CommandId, Action); 89] = [
+const ROUTES: [(CommandId, Action); 91] = [
     (ids::QUIT, Action::Quit),
     (ids::QUIT_TO_FOLDER, Action::QuitToFolder),
+    (ids::QUIT_KEEP_FOLDER, Action::QuitKeepFolder),
     (ids::HELP, Action::Help),
     (ids::SAY_STATUS, Action::SayStatus),
     (ids::SAY_OTHER, Action::SayOther),
@@ -498,6 +514,7 @@ const ROUTES: [(CommandId, Action); 89] = [
     (ids::UNSELECT_PATTERN, Action::UnselectPattern),
     (ids::SELECT_NEXT, Action::SelectNext),
     (ids::SELECT_PREVIOUS, Action::SelectPrevious),
+    (ids::SELECT_RESTORE, Action::SelectRestore),
     (ids::VIEW, Action::View),
     (ids::EDIT, Action::Edit),
     (ids::COPY, Action::Copy),
@@ -603,11 +620,13 @@ impl App {
             quick: None,
             key_test: false,
             quit_folder: None,
+            keep_shell: false,
             completing: None,
             places: Vec::new(),
             first_run: startup.first_run,
             session: startup.session,
             restore: [None, None],
+            kept: Vec::new(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -688,6 +707,13 @@ impl App {
     /// for W1d-2's entry point, which writes it.
     pub fn quit_folder(&self) -> Option<&Place> {
         self.quit_folder.as_ref()
+    }
+
+    /// Whether the quit was "Quit, shell stays where it was": the
+    /// `--cwd-file` is then written empty. App-side hook for W1d-2's entry
+    /// point.
+    pub fn keeps_shell_folder(&self) -> bool {
+        self.quit && self.keep_shell
     }
 
     /// The file clipboard.
@@ -891,6 +917,7 @@ impl App {
             Action::UnselectPattern => self.pattern_prompt(false, command),
             Action::SelectNext => self.next_selected(true),
             Action::SelectPrevious => self.next_selected(false),
+            Action::SelectRestore => self.restore_selection(),
             Action::View => vec![self.say(Message::info("The viewer comes with alpha.2."))],
             Action::Edit => self.edit_file(),
             Action::Copy => self.copy_or_move(diroxide_core::JobKind::Copy),
@@ -915,8 +942,8 @@ impl App {
             Action::Sort => self.sort_by(&command.id),
             Action::SortList => self.sort_list(),
             Action::Plugins => vec![self.say(Message::info("Plugins come with alpha.4."))],
-            Action::Quit => self.ask_quit(false),
-            Action::QuitToFolder => self.ask_quit(true),
+            Action::Quit | Action::QuitToFolder => self.ask_quit(false),
+            Action::QuitKeepFolder => self.ask_quit(true),
             Action::Help => self.help(),
             Action::SayStatus => self.say_status(),
             Action::SayOther => self.say_other(),

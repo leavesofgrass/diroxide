@@ -204,8 +204,8 @@ impl App {
                 self.accept()
             }
             Action::Cancel => self.dialog_escape(),
-            Action::Quit => self.ask_quit(false),
-            Action::QuitToFolder => self.ask_quit(true),
+            Action::Quit | Action::QuitToFolder => self.ask_quit(false),
+            Action::QuitKeepFolder => self.ask_quit(true),
             Action::Menu => {
                 if matches!(
                     self.top_purpose(),
