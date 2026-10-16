@@ -6,11 +6,11 @@ This page says what diroxide keeps on your computer, when it uses the network, a
 
 diroxide keeps its files in two folders. [The settings guide](settings.md) says where they are on each system.
 
-- The config folder holds the files you can edit: `config.toml`, `keymap.toml`, `menus.toml` and the banks of command buttons.
-- The state folder holds what diroxide remembers for you: where each panel was and which row was focused when you quit, the history of the prompts you used, the folders you visited (so path jump can rank them), the undo journal of your last jobs, and the log file.
+- The config folder holds the files you can edit: `config.toml`, `keymap.toml`, `menus.toml`, the banks of command buttons and your own themes, and two read-only copies of the built-in keys and menus.
+- The state folder holds what diroxide remembers for you: where each panel was and which row was focused when you quit (`session.toml`), the history of the prompts you used (the `history` folder), the folders you visited so path jump can rank them, the undo journal of your last jobs, and `terminal.log`.
 - With `--portable`, both folders sit beside the program instead, so you can carry diroxide on a drive.
 
-All of these are plain files. You can read them, copy them and delete them. Deleting the state folder only makes diroxide forget. The Forget history command clears the history of your prompts without touching anything else.
+All of these are plain files. You can read them, copy them and delete them. Deleting the state folder only makes diroxide forget.
 
 diroxide never sends any of this anywhere. It has no account, no sign-in, no usage statistics, no crash reports and no update check.
 
@@ -35,15 +35,15 @@ When a request does leave your computer, it carries only what that feature needs
 
 ## The log file
 
-diroxide writes a log file in the state folder. You can open it, move it or delete it at any time.
+diroxide writes one log file, `terminal.log`, in the state folder. You can open it, move it or delete it at any time. Each start replaces it.
 
-- It records how diroxide started: the version, the platform, which settings files it read, any problems it found in them, and what the terminal said about its keyboard.
-- It records errors and failed operations with the reason in words. For an error that involves a file, it may include that file's path and name. Read the log before you share it, and take out anything private.
+- It holds what the terminal reported about itself: whether diroxide drew on the alternate screen or inline, that mouse capture is off, what the terminal answered about its enhanced keyboard protocol, and how many colors it supports.
+- It holds no file names, no paths and no messages. Errors and failed operations are told to you on the screen and in the job history, and they are not written to the log.
 - It never holds a password or other secret. A test checks that nothing secret reaches a log, a debug output or the undo journal.
 
-## The undo journal and the history
+## The undo journal, the history and what Run a command writes
 
-The undo journal lists the paths of the last jobs so that Undo can reverse them, even after a restart. The prompt history and the path jump list hold paths you typed or visited. They stay in the state folder. They are the reason to treat the state folder as private when you share your screen or your files.
+The undo journal lists the paths of the last jobs so that Undo can reverse them, even after a restart. The prompt histories and the path jump list hold paths you typed or visited. When you use Run a command or Shell here, diroxide writes the paths you had selected to a list file in the `run` folder of the state folder, so your command can read them. All of this stays in the state folder. It is the reason to treat the state folder as private when you share your screen or your files.
 
 ## Plugins
 
@@ -51,7 +51,7 @@ Plugins arrive with alpha.4. A plugin runs with your own rights and can read wha
 
 ## Reporting a problem
 
-When you report a problem, say what you did, what you heard or saw, the output of `diro --version`, and the name and version of your terminal and screen reader. Leave out file names you do not want to share, and trim the log to the lines that matter.
+When you report a problem, say what you did, what you heard or saw, the output of `diro --version`, and the name and version of your terminal and screen reader. Leave out file names you do not want to share. The log file holds no file names, so it is safe to share as it is.
 
 ## See also
 
