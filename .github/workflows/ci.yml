@@ -73,6 +73,9 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo xtask deps --check
+      # The pure-Rust gate: no cc, cmake or cxx build dependency in the
+      # main workspace but ring for the fetch feature (plan section 4).
+      - run: cargo xtask native --check
       - run: cargo xtask keyboard --check
       - run: cargo xtask regen --check
 
