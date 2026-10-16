@@ -621,15 +621,25 @@ pub fn key_test_typed(keymap: &Keymap, layers: &[Layer], text: &str) -> String {
     }
 }
 
-/// The app's checks of `keymap.toml`, after the file's own (which the
-/// config crate made): unknown commands, Insert, keys the terminal cannot
-/// deliver in the terminal column, keys a screen reader owns, and keys
-/// bound twice in a layer once the file is applied. Each is one sentence,
-/// meaning first, with its line where it has one. `diro keys check` and
-/// the startup line use these.
+/// Every problem with `keymap.toml`: the file's own (which the config
+/// crate found while reading it) followed by the app's
+/// ([`app_keymap_problems`]). `diro keys check FILE` says these.
 pub fn check_keymap(config: &KeymapConfig, platform: Platform) -> Vec<ConfigProblem> {
+    let mut problems = config.problems.clone();
+    problems.extend(app_keymap_problems(config, platform));
+    problems
+}
+
+/// The app's checks of `keymap.toml`, which need the catalog and the key
+/// tables: unknown commands, Insert, keys the terminal cannot deliver in
+/// the terminal column, keys a screen reader owns, a key given twice in a
+/// table, and keys bound twice in a layer once the file is applied. Each
+/// is one sentence, meaning first, with its line where it has one. At
+/// startup the app adds these to `diroxide_config::load`'s problems, which
+/// already hold the file's own.
+pub fn app_keymap_problems(config: &KeymapConfig, platform: Platform) -> Vec<ConfigProblem> {
     let file = Paths::KEYMAP;
-    let mut problems: Vec<ConfigProblem> = config.problems.clone();
+    let mut problems: Vec<ConfigProblem> = Vec::new();
     let at = |line: usize| {
         if line == 0 {
             String::new()
