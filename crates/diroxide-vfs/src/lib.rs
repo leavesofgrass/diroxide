@@ -21,6 +21,7 @@
 pub mod cancel;
 pub mod capabilities;
 pub mod error;
+pub mod facts;
 pub mod limits;
 pub mod local;
 pub mod names;

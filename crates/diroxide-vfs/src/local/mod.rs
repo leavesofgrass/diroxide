@@ -1,25 +1,34 @@
-//! The local provider: the disks of this machine through `std::fs`.
+//! The local provider: the disks of this machine through `std::fs`, with
+//! the platform's details in the `sys` module.
 //!
-//! Phase 0 bodies are deliberately naive: no Windows attributes, no long
-//! paths, no owners, no trash, no watching, and a committing writer that
-//! checks the target name and then renames, where W1a's renames without
-//! replacing. Wave 1 (W1a) replaces them, with platform calls in the `sys`
-//! module.
+//! - **Reading.** One stat per entry, the platform's attributes, owners by
+//!   name from one cached map, links with their targets, identities for
+//!   the plan's re-checks, hidden by the platform's rule (the attribute on
+//!   Windows, the leading dot elsewhere), online-only and sparse files
+//!   recognized ([`crate::facts`]). Unfinished `.diro-part-` files are left
+//!   out of listings; [`LocalProvider::unfinished`] lists them.
+//! - **Long paths.** The standard library lists, reads, copies, renames
+//!   and removes at any depth; the extended-length prefix is never built
+//!   by hand for it, and never shown.
 
-use std::fs::{self, File, Metadata, OpenOptions};
+pub(crate) mod entry;
+pub(crate) mod owners;
+
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use diroxide_core::place::ARCHIVE_EXTENSIONS;
-use diroxide_core::{Entry, EntryKind, Place, PlaceError, Timestamp};
+use diroxide_core::{Entry, EntryKind, Place, PlaceError};
 
 use crate::cancel::{OpContext, ProgressUpdate};
 use crate::capabilities::Capabilities;
 use crate::error::VfsError;
 use crate::names;
 use crate::provider::{AttributeChange, FileWriter, Provider, ReadSeek, WriteMode};
+use crate::sys;
+use entry::{EntryContext, entry_from};
 
 /// How often a listing reports progress, in entries.
 const PROGRESS_EVERY: u64 = 1000;
@@ -36,7 +45,8 @@ impl LocalProvider {
         Self::default()
     }
 
-    fn path_of(place: &Place) -> Result<PathBuf, VfsError> {
+    /// The path of a local place, refused for any other kind.
+    pub(crate) fn path_of(place: &Place) -> Result<PathBuf, VfsError> {
         let path = place
             .local_path()
             .ok_or_else(|| VfsError::unsupported("file", "open places that are not local"))?;
@@ -49,33 +59,58 @@ impl LocalProvider {
         Ok(PathBuf::from(path))
     }
 
-    fn entry_from(name: String, metadata: &Metadata) -> Entry {
-        let file_type = metadata.file_type();
-        let is_archive = {
-            let lower = name.to_lowercase();
-            ARCHIVE_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
-        };
-        let kind = if file_type.is_symlink() {
-            EntryKind::Link
-        } else if file_type.is_dir() {
-            EntryKind::Folder
-        } else if file_type.is_file() && is_archive {
-            EntryKind::Archive
-        } else if file_type.is_file() {
-            EntryKind::File
-        } else {
-            EntryKind::Special
-        };
-        let mut entry = Entry::new(name, kind);
-        if file_type.is_file() {
-            entry.size = Some(metadata.len());
+    /// The unfinished files in a folder (`.diro-part-` and eight
+    /// hexadecimal digits): writes that never committed, left by a crash.
+    /// Listings leave them out; this finds them, so a command can say
+    /// "Found 2 partial copies in this folder" and offer a listed delete.
+    /// Nothing removes them on its own.
+    pub fn unfinished(&self, place: &Place, ctx: &OpContext) -> Result<Vec<Entry>, VfsError> {
+        self.read_folder(place, ctx, true)
+    }
+
+    fn read_folder(
+        &self,
+        place: &Place,
+        ctx: &OpContext,
+        unfinished: bool,
+    ) -> Result<Vec<Entry>, VfsError> {
+        ctx.check()?;
+        let path = Self::path_of(place)?;
+        let reader = fs::read_dir(&path)?;
+        let context = sys::list_context(&path);
+        let mut entries = Vec::new();
+        let mut seen: u64 = 0;
+        for item in reader {
+            ctx.check()?;
+            let item = item?;
+            seen += 1;
+            if seen.is_multiple_of(PROGRESS_EVERY) {
+                ctx.progress.report(ProgressUpdate {
+                    items_done: seen,
+                    ..ProgressUpdate::default()
+                });
+            }
+            let (name, lossy) = match item.file_name().into_string() {
+                Ok(name) => (name, false),
+                Err(raw) => (raw.to_string_lossy().into_owned(), true),
+            };
+            if names::is_unfinished(&name) != unfinished {
+                continue;
+            }
+            let mut entry = match item.metadata() {
+                Ok(metadata) => entry_from(name, &metadata, &item.path(), &context),
+                // An entry that cannot be examined is listed with its
+                // details unknown, never dropped and never an error.
+                Err(_) => {
+                    let mut entry = Entry::new(name, EntryKind::Special);
+                    entry.needs_care = names::needs_care(&entry.name);
+                    entry
+                }
+            };
+            entry.name_not_unicode = lossy;
+            entries.push(entry);
         }
-        entry.modified = metadata.modified().ok().map(Timestamp::from_system_time);
-        entry.accessed = metadata.accessed().ok().map(Timestamp::from_system_time);
-        entry.created = metadata.created().ok().map(Timestamp::from_system_time);
-        entry.hidden = entry.name.starts_with('.');
-        entry.needs_care = names::needs_care(&entry.name);
-        entry
+        Ok(entries)
     }
 }
 
@@ -97,30 +132,7 @@ impl Provider for LocalProvider {
     }
 
     fn list(&self, place: &Place, ctx: &OpContext) -> Result<Vec<Entry>, VfsError> {
-        let path = Self::path_of(place)?;
-        let mut entries = Vec::new();
-        for item in fs::read_dir(&path)? {
-            ctx.check()?;
-            let item = item?;
-            let (name, lossy) = match item.file_name().into_string() {
-                Ok(name) => (name, false),
-                Err(raw) => (raw.to_string_lossy().into_owned(), true),
-            };
-            let mut entry = match item.metadata() {
-                Ok(metadata) => Self::entry_from(name, &metadata),
-                Err(_) => Entry::new(name, EntryKind::Special),
-            };
-            entry.name_not_unicode = lossy;
-            entries.push(entry);
-            let done = entries.len() as u64;
-            if done.is_multiple_of(PROGRESS_EVERY) {
-                ctx.progress.report(ProgressUpdate {
-                    items_done: done,
-                    ..ProgressUpdate::default()
-                });
-            }
-        }
-        Ok(entries)
+        self.read_folder(place, ctx, false)
     }
 
     fn stat(&self, place: &Place, ctx: &OpContext) -> Result<Entry, VfsError> {
@@ -130,7 +142,10 @@ impl Provider for LocalProvider {
         let name = place
             .name()
             .map_or_else(|| place.to_string(), str::to_owned);
-        Ok(Self::entry_from(name, &metadata))
+        let context = stat_context();
+        let mut entry = entry_from(name, &metadata, &path, &context);
+        sys::fill_from_handle(&mut entry, &path);
+        Ok(entry)
     }
 
     fn read(&self, place: &Place, ctx: &OpContext) -> Result<Box<dyn Read + Send>, VfsError> {
@@ -168,10 +183,7 @@ impl Provider for LocalProvider {
     fn rename(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         ctx.check()?;
         let target = Self::path_of(to)?;
-        Ok(crate::sys::rename_no_replace(
-            &Self::path_of(from)?,
-            &target,
-        )?)
+        Ok(sys::rename_no_replace(&Self::path_of(from)?, &target)?)
     }
 
     fn remove(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
@@ -192,6 +204,22 @@ impl Provider for LocalProvider {
         _ctx: &OpContext,
     ) -> Result<AttributeChange, VfsError> {
         Err(VfsError::unsupported("file", "change attributes yet"))
+    }
+}
+
+/// The context of a single stat: the owner names on Unix; nothing more is
+/// shared with siblings.
+fn stat_context() -> EntryContext {
+    #[cfg(unix)]
+    {
+        EntryContext {
+            owners: Some(owners::Owners::shared()),
+            ..EntryContext::default()
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        EntryContext::default()
     }
 }
 
@@ -216,7 +244,7 @@ struct LocalWriter {
 }
 
 impl LocalWriter {
-    fn start(folder: &std::path::Path, target: PathBuf, mode: WriteMode) -> Result<Self, VfsError> {
+    fn start(folder: &Path, target: PathBuf, mode: WriteMode) -> Result<Self, VfsError> {
         let mut last = VfsError::AlreadyExists;
         for _ in 0..8 {
             let unfinished = folder.join(names::unfinished_name(unfinished_token()));
@@ -300,6 +328,7 @@ mod tests {
         let manifest = entries.iter().find(|e| e.name == "Cargo.toml").unwrap();
         assert_eq!(manifest.kind, EntryKind::File);
         assert!(manifest.size.unwrap_or(0) > 0);
+        assert!(manifest.attributes.is_some());
         let src = entries.iter().find(|e| e.name == "src").unwrap();
         assert_eq!(src.kind, EntryKind::Folder);
     }
@@ -318,6 +347,7 @@ mod tests {
         let provider = LocalProvider::new();
         let entry = provider.stat(&manifest, &OpContext::new()).unwrap();
         assert_eq!(entry.name, "Cargo.toml");
+        assert!(entry.inode.is_some() && entry.volume.is_some());
         let mut text = String::new();
         provider
             .read(&manifest, &OpContext::new())

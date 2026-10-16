@@ -1,5 +1,13 @@
-//! Integration tests of the provider contract, through the registry.
+//! Integration tests of the provider contract, through the registry, and
+//! of the local provider on temporary folders under the build's own
+//! target folder (never a user's folder, the real trash, or drive C).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test helpers: a failure is the test's"
+)]
 
+mod local;
 mod names;
 
 use diroxide_core::{EntryKind, Place};
