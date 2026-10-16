@@ -979,7 +979,7 @@ fn a_permanent_delete_keeps_a_folder_with_a_survivor_and_goes_on() {
     let fake = tree();
     fake.switches_mut().locked.push(p("/a/photos/trip/two.jpg"));
     let report = run(
-        &engine(&fake),
+        &engine(&fake).with_pacer(Arc::new(FakePacer::new())),
         &request(JobKind::DeletePermanently, &["/a/photos", "/a/notes.txt"]),
         &Script::default(),
     );

@@ -458,6 +458,19 @@ impl FakeProvider {
         self.state().trash.iter().any(|(k, _)| *k == key)
     }
 
+    /// The bytes of every file in the fake trash, a trashed folder's files
+    /// included: with [`FakeProvider::snapshot`], what a job may never
+    /// lose.
+    pub fn trash_contents(&self) -> Vec<Vec<u8>> {
+        self.state()
+            .trash
+            .iter()
+            .flat_map(|(_, nodes)| nodes.iter())
+            .filter(|(_, node)| node.entry.kind == EntryKind::File)
+            .map(|(_, node)| node.data.clone())
+            .collect()
+    }
+
     /// How many calls the fake has served.
     pub fn calls(&self) -> u32 {
         self.state().calls

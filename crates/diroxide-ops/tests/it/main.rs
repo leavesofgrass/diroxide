@@ -1,4 +1,14 @@
-//! Integration tests of the job engine's contract.
+//! Integration tests of the job engine: the contract, the journal and the
+//! kill test, and the property tests over the fake provider. Tests that
+//! write use a folder under the target directory (`CARGO_TARGET_TMPDIR`),
+//! never a real user folder, trash or state folder.
+
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod journal;
+mod kill;
+mod props;
+mod support;
 
 use std::sync::Arc;
 

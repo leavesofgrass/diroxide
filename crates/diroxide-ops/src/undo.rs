@@ -90,12 +90,12 @@ impl UndoRecord {
         self.moves.is_empty() && self.trashed.is_empty() && self.created.is_empty()
     }
 
-    /// The plan that undoes this record: what it made goes first, newest
-    /// first (files to the trash, folders removed if still empty, so the
-    /// deepest go first); then moves backwards in reverse order; then
-    /// restores from the trash. `folders` says which created places were
-    /// folders. The undo-time checks (a changed copy is kept, a non-empty
-    /// folder stays) are the engine's.
+    /// The plan that undoes this record: the files it made go first,
+    /// newest first, to the trash; then its moves backwards, in reverse
+    /// order; then the folders it made, removed if still empty, deepest
+    /// first; then restores from the trash. `folders` says which created
+    /// places were folders. The undo-time checks (a changed copy is kept,
+    /// a non-empty folder stays) are the engine's.
     ///
     /// A file that replaced another (made at a place whose old file went
     /// to the trash) is first renamed out of the way to a temporary name,
@@ -105,9 +105,10 @@ impl UndoRecord {
     pub fn undo_plan(&self, job: JobId, folders: &[Place]) -> Plan {
         let mut set_aside: Vec<Place> = Vec::new();
         let mut steps: Vec<Step> = Vec::new();
+        let mut emptied: Vec<Step> = Vec::new();
         for place in self.created.iter().rev() {
             if folders.contains(place) {
-                steps.push(Step::RemoveEmptyFolder {
+                emptied.push(Step::RemoveEmptyFolder {
                     place: place.clone(),
                 });
             } else if self.trashed.contains(place)
@@ -132,6 +133,7 @@ impl UndoRecord {
             from: to.clone(),
             to: from.clone(),
         }));
+        steps.extend(emptied);
         steps.extend(self.trashed.iter().map(|place| Step::Restore {
             place: place.clone(),
         }));
