@@ -93,7 +93,7 @@ The two values must match exactly. If they do not, do not run the file.
 
 Two optional pieces make diroxide pleasant at a prompt.
 
-- Leave your shell in the folder you were in when you quit. `diro init` prints a small function for your shell, and you add it to your shell's startup file. [The quick start](quickstart.md) shows the command.
+- Leave your shell in the folder you were in when you quit. `diro init` prints a small function named `dcd` for your shell, and you add it to your shell's startup file; then you start diroxide with `dcd`. [The quick start](quickstart.md) shows the command. For cmd, the function is a file named `dcd.cmd` that you put on your PATH.
 - Complete diroxide's subcommands and flags with Tab. `diro completions` writes the completion script for bash, zsh, fish or PowerShell to standard output. Save it where your shell loads completions; your shell's documentation says where. For example:
 
 ```bash
