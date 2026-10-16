@@ -4,6 +4,8 @@
 //! - `diro serve --stdio`: the app core over JSON-RPC, the protocol the
 //!   plugins speak, for tests, scripts and other programs.
 //! - `diro search ROOT PATTERN`: search names, printing one place a line.
+//! - `diro ls [PLACE]` and `diro ls -`: list a place, or the paths on
+//!   standard input, one entry a line, the name first.
 //! - `diro plugin list|new|enable|disable|run|log`: plugin tooling.
 //! - `diro --version`, `diro --help`.
 //!
@@ -46,6 +48,8 @@ pub enum Invocation {
     },
     /// Plugin tooling.
     Plugin(cmd::plugin::PluginCommand),
+    /// List a place, or the paths on standard input.
+    Ls(cmd::ls::LsArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -101,6 +105,8 @@ pub fn help_text() -> String {
         "diro [PATH] [OTHER]       open the panels at PATH and OTHER",
         "diro serve --stdio        serve the app over JSON-RPC on standard input and output",
         "diro search ROOT PATTERN  print the places under ROOT whose names match PATTERN",
+        "diro ls [PLACE]           list a folder, one entry a line, the name first",
+        "diro ls -                 list the NUL-separated paths on standard input",
         "diro plugin list          list the plugins",
         "diro --version            print the version",
         "diro --help               print this help",
@@ -108,6 +114,14 @@ pub fn help_text() -> String {
         "Options for opening:",
         "--portable                keep the settings beside the program",
         "--no-plugins              start without plugins",
+        "",
+        "Exit codes:",
+        "0  done",
+        "1  failed, or nothing found",
+        "2  wrong use, such as an unknown option",
+        "3  partly done: some items failed; the output says which",
+        "",
+        "diro ls --help gives the options of diro ls.",
     ]
     .join("\n")
 }
@@ -146,6 +160,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
             _ => Err(CliError::Missing("search".to_owned())),
         },
         "plugin" => cmd::plugin::parse(&args[1..]).map(Invocation::Plugin),
+        "ls" => cmd::ls::parse(&args[1..]).map(Invocation::Ls),
         _ => {
             let mut places = Vec::new();
             let mut portable = false;
@@ -195,12 +210,13 @@ pub fn run(
         Invocation::Serve => serve::run(input, out),
         Invocation::Search { root, pattern } => cmd::search::run(&root, &pattern, out),
         Invocation::Plugin(command) => cmd::plugin::run(&command, out),
+        Invocation::Ls(args) => cmd::ls::run(&args, input, out),
     }
 }
 
 /// The whole program: parse, run, and turn errors into the house style on
 /// `err`. Returns the exit code: 0 for success, 1 for failure, 2 for a
-/// usage mistake.
+/// usage mistake, 3 when a subcommand was partly done.
 pub fn main_with(
     args: Vec<OsString>,
     input: &mut dyn BufRead,

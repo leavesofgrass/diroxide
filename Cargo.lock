@@ -286,6 +286,7 @@ dependencies = [
  "diroxide-tui",
  "diroxide-vfs",
  "serde_json",
+ "tempfile",
  "thiserror",
 ]
 
