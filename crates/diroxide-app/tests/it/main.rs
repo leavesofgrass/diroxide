@@ -25,5 +25,6 @@ fn every_row_says_its_meaning_within_forty_cells() {
             _ => None,
         })
         .collect();
-    assert!(said[0].ends_with("2 of 3"), "{said:?}");
+    let rows = app.panel(Side::Left).list().len();
+    assert!(said[0].ends_with(&format!("2 of {rows}")), "{said:?}");
 }
