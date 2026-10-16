@@ -124,6 +124,20 @@ fn the_cursor_sits_on_the_focus_in_every_state() {
     cursor_at(&s, 0, 1);
     press(&mut s, &clock, "n");
     clock.advance(Duration::from_secs(1));
+    // A job's question: the situation first, the cursor on the choice
+    // that changes nothing.
+    press(&mut s, &clock, "f5");
+    press(&mut s, &clock, "y");
+    let screen = s.screen();
+    assert!(
+        screen.lines[1].starts_with("Name taken: report.pdf"),
+        "{:#?}",
+        screen.lines
+    );
+    let skip = line_of(&screen, "Skip this one");
+    cursor_at(&s, 0, skip);
+    press(&mut s, &clock, "escape");
+    assert!(s.app().dialog().is_none());
     // Every frame drawn so far showed the cursor.
     assert!(s.terminal().backend().cursor_visible());
 }
