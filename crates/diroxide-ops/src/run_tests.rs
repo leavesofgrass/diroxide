@@ -1634,6 +1634,12 @@ fn undo_of_a_replace_brings_the_old_file_back() {
         )
         .unwrap();
     assert!(undo.failed.is_empty(), "{undo:?}");
+    assert_eq!(undo.summary(), "Undo finished: 3 done.");
+    assert!(
+        !fake.exists(&p("/b/diro-undo-22-1")),
+        "the set-aside copy went"
+    );
+    assert!(fake.trash_contents().contains(&b"new one".to_vec()));
     assert_eq!(fake.contents(&p("/b/1.txt")).unwrap(), b"old one");
 }
 

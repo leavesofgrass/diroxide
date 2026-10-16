@@ -312,6 +312,11 @@ proptest! {
             .undo_last(&mut log, JobId::new(2), &JobControl::new(), &Answers::default())
             .unwrap();
         prop_assert!(undo.failed.is_empty() && undo.skipped.is_empty(), "{undo:?}");
+        prop_assert!(
+            undo.summary().starts_with("Undo finished"),
+            "{}: {undo:?}",
+            undo.summary()
+        );
         let after = fake.snapshot();
         prop_assert_eq!(after, before);
     }

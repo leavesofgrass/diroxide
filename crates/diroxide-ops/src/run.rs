@@ -169,6 +169,7 @@ pub(crate) struct Run<'a> {
     answers: HashMap<ConflictKind, ConflictAction>,
     skip_classes: HashSet<ErrorClass>,
     made: Vec<Made>,
+    gone: Vec<Place>,
     folders: Vec<(Place, Entry)>,
     lost: Vec<(Place, String)>,
     journal: Option<JournalWriter>,
@@ -230,6 +231,7 @@ impl<'a> Run<'a> {
             answers: HashMap::new(),
             skip_classes: HashSet::new(),
             made: Vec::new(),
+            gone: Vec::new(),
             folders: Vec::new(),
             lost: Vec::new(),
             journal: None,
@@ -541,13 +543,23 @@ impl<'a> Run<'a> {
         };
         if let Some(journal) = &mut self.journal {
             let undo = &self.report.undo;
+            let tail = |list: &[Place], from: usize| list.get(from..).unwrap_or_default().to_vec();
             let delta = UndoRecord {
-                moves: undo.moves[before.0..].to_vec(),
-                trashed: undo.trashed[before.1..].to_vec(),
-                created: undo.created[before.2..].to_vec(),
+                moves: undo.moves.get(before.0..).unwrap_or_default().to_vec(),
+                trashed: tail(&undo.trashed, before.1),
+                created: tail(&undo.created, before.2),
                 ..UndoRecord::default()
             };
             let _ = journal.step(index as u64, word, &delta);
+        }
+    }
+
+    /// Takes a place back off the made list: the newest mention, the one
+    /// this step added.
+    fn unmake(&mut self, place: &Place) {
+        let created = &mut self.report.undo.created;
+        if let Some(at) = created.iter().rposition(|made| made == place) {
+            created.remove(at);
         }
     }
 
@@ -589,6 +601,7 @@ impl<'a> Run<'a> {
     /// missing (a provider that said yes and did nothing).
     fn reconcile(&mut self) {
         let mut planned = self.plan.planned_results();
+        planned.retain(|place| !self.gone.iter().any(|gone| place.is_within(gone)));
         for made in &self.made {
             if !planned.contains(&made.place) {
                 planned.push(made.place.clone());
@@ -638,6 +651,13 @@ impl<'a> Run<'a> {
             kind,
             size,
         });
+    }
+
+    /// An entry the job itself took away again (a temporary name renamed,
+    /// a set-aside copy trashed): it is not looked for at the end.
+    fn gone(&mut self, place: &Place) {
+        self.made.retain(|made| !made.place.is_within(place));
+        self.gone.push(place.clone());
     }
 
     fn step(&mut self, step: &Step) -> Outcome {
@@ -1331,7 +1351,7 @@ impl<'a> Run<'a> {
             Outcome::Done => {}
             other => return other,
         }
-        self.report.undo.created.retain(|place| place != target);
+        self.unmake(target);
         self.remove_source(from, target)
     }
 
@@ -1367,7 +1387,7 @@ impl<'a> Run<'a> {
                 ));
             }
         }
-        self.report.undo.created.retain(|place| place != target);
+        self.unmake(target);
         self.remove_source(from, target)
     }
 
@@ -1464,7 +1484,7 @@ impl<'a> Run<'a> {
         if outcome == Outcome::Done && made_here {
             // The whole folder went: undo moves it back as one.
             self.report.undo.moves.truncate(mark);
-            self.report.undo.created.retain(|place| place != to);
+            self.unmake(to);
             self.report.undo.moves.push((from.clone(), to.clone()));
         }
         outcome
@@ -1808,10 +1828,12 @@ impl<'a> Run<'a> {
         match self.post_check(&*provider, place, check) {
             TrashCheck::InTrash => {
                 self.report.undo.trashed.push(place.clone());
+                self.gone(place);
                 Outcome::Done
             }
             TrashCheck::NotChecked => {
                 self.report.undo.trashed.push(place.clone());
+                self.gone(place);
                 self.warn(place, "Moved to the trash; not checked.");
                 Outcome::Done
             }
@@ -1884,7 +1906,10 @@ impl<'a> Run<'a> {
             }
         });
         match result {
-            Ok(true) => Outcome::Done,
+            Ok(true) => {
+                self.gone(place);
+                Outcome::Done
+            }
             Ok(false) => Outcome::Skipped("Folder kept: it is not empty".to_owned()),
             Err(stop) => stop.into(),
         }
