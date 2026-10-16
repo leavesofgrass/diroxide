@@ -12,17 +12,59 @@
 //! on Linux; `/home` is a full path on Linux and drive-relative on Windows.
 //! Lexical `..` is resolved at parse time, as a file manager's "up" does.
 
+use std::borrow::Cow;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::PlaceError;
 
-/// The archive extensions after which `!` starts a member path,
-/// lowercase. The longest are listed first.
-pub const ARCHIVE_EXTENSIONS: [&str; 8] = [
+/// The archive extensions, lowercase, the longest first: a local file
+/// with one of them is listed as an archive, and `!` after one starts a
+/// member path. A slice, so the formats of later alphas (`.tar.bz2`,
+/// `.tar.zst`, `.gz`, `.bz2`, `.zst`, `.rar`, `.iso`) join without
+/// breaking callers.
+pub const ARCHIVE_EXTENSIONS: &[&str] = &[
     ".tar.gz", ".tar.xz", ".zip", ".tgz", ".txz", ".tar", ".7z", ".xz",
 ];
+
+/// Files that are zip archives inside, lowercase: `!` after one of them
+/// also starts a member path, so "Open as archive" on `report.docx` makes
+/// a place that reads back. They are not listed as archives; Enter on one
+/// opens it in its program, as its file type says.
+pub const ZIP_DOCUMENT_EXTENSIONS: &[&str] = &[
+    ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".epub", ".jar", ".apk",
+];
+
+/// Whether `name` ends with an archive extension, or with a zip-based
+/// document's, followed by an optional part number (`backup.7z.001`): the
+/// names after which `!` starts a member path, so a split archive opens as
+/// one place. Case is ignored. `photo.jpg.001` is not one.
+pub fn opens_as_archive(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    let base = match crate::names::split_part(&lower) {
+        Some(part) => part.base,
+        None => lower.as_str(),
+    };
+    ARCHIVE_EXTENSIONS
+        .iter()
+        .chain(ZIP_DOCUMENT_EXTENSIONS)
+        .any(|ext| base.len() > ext.len() && base.ends_with(ext))
+}
+
+/// A path for showing and speaking, with the extended-length prefix that
+/// canonicalizing adds on Windows removed: `\\?\D:\x` reads `D:\x`, and
+/// `\\?\UNC\server\share` reads `\\server\share`. Other text is borrowed
+/// unchanged. The prefix never reaches a user (spike four).
+pub fn strip_extended_prefix(path: &str) -> Cow<'_, str> {
+    let Some(rest) = path.strip_prefix(r"\\?\") else {
+        return Cow::Borrowed(path);
+    };
+    match rest.get(..4) {
+        Some(unc) if unc.eq_ignore_ascii_case(r"UNC\") => Cow::Owned(format!(r"\\{}", &rest[4..])),
+        _ => Cow::Borrowed(rest),
+    }
+}
 
 /// How local paths are written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -346,7 +388,9 @@ impl Place {
 
     /// The place of a child called `name`. The name must be one name: not
     /// empty, not `.` or `..`, with no `/` (and no `\` in a Windows path or
-    /// an archive), and no NUL.
+    /// an archive), and no NUL. Inside an archive the name may not hold an
+    /// archive marker (`inner.zip!x.txt`), which would read back as a
+    /// nested archive; the archive provider flags such a member instead.
     pub fn join(&self, name: &str) -> Result<Self, PlaceError> {
         let backslash_ok = matches!(&self.0, Repr::Local(path) if path.starts_with('/'))
             || matches!(&self.0, Repr::Remote(_));
@@ -357,6 +401,9 @@ impl Place {
             || (!backslash_ok && name.contains('\\'))
         {
             return Err(PlaceError::BadName(name.to_owned()));
+        }
+        if matches!(self.0, Repr::Archive(..)) && has_archive_marker(name) {
+            return Err(PlaceError::ArchiveMarker(name.to_owned()));
         }
         Ok(match &self.0 {
             Repr::Local(path) => {
@@ -483,17 +530,21 @@ fn valid_scheme(scheme: &str) -> bool {
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "+-.".contains(c))
 }
 
-/// The byte index of the last `!` that follows an archive extension.
+/// The byte index of the last `!` that follows an archive extension (see
+/// [`opens_as_archive`]).
 fn archive_split(text: &str) -> Option<usize> {
     text.char_indices()
         .filter(|&(_, c)| c == '!')
         .map(|(at, _)| at)
-        .rfind(|&at| {
-            let before = text[..at].to_lowercase();
-            ARCHIVE_EXTENSIONS
-                .iter()
-                .any(|ext| before.len() > ext.len() && before.ends_with(ext))
-        })
+        .rfind(|&at| opens_as_archive(&text[..at]))
+}
+
+/// Whether a name holds an archive marker: a `!` after an archive
+/// extension, which would read back as a nested archive.
+fn has_archive_marker(name: &str) -> bool {
+    name.char_indices()
+        .filter(|&(_, c)| c == '!')
+        .any(|(at, _)| opens_as_archive(&name[..at]))
 }
 
 /// A member path with forward slashes, no leading slash, `.` removed and
@@ -829,6 +880,56 @@ mod tests {
         assert!(root.is_within(&root));
         assert!(!win("D:\\Docs2").is_within(&root));
         assert!(!unix("/Home/x").is_within(&unix("/home")));
+    }
+
+    #[test]
+    fn split_archives_open_as_one_place() {
+        let p = unix("/srv/backup.7z.001!dir/file");
+        let (container, member) = p.archive().unwrap();
+        assert_eq!(container.to_string(), "/srv/backup.7z.001");
+        assert_eq!(member, "dir/file");
+        assert_eq!(unix(&p.to_string()), p);
+        assert_eq!(unix("/srv/BACKUP.TAR.GZ.1000!x").archive().unwrap().1, "x");
+        assert_eq!(
+            unix("/srv/photo.jpg.001!x").local_path(),
+            Some("/srv/photo.jpg.001!x")
+        );
+        assert_eq!(unix("/srv/a.7z.01!x").local_path(), Some("/srv/a.7z.01!x"));
+        assert!(opens_as_archive("backup.7z.001"));
+        assert!(!opens_as_archive("photo.jpg.001"));
+    }
+
+    #[test]
+    fn zip_documents_open_as_archives_and_read_back() {
+        let p = win("D:\\docs\\report.docx!word/document.xml");
+        assert_eq!(p.archive().unwrap().1, "word/document.xml");
+        assert_eq!(win(&p.to_string()), p);
+        assert_eq!(
+            win("D:\\docs\\report.docx").into_archive().to_string(),
+            "D:\\docs\\report.docx!"
+        );
+        assert!(!ARCHIVE_EXTENSIONS.contains(&".docx"));
+    }
+
+    #[test]
+    fn archive_markers_are_refused_inside_archives() {
+        let root = unix("/a.zip").into_archive();
+        assert_eq!(
+            root.join("inner.zip!x.txt"),
+            Err(PlaceError::ArchiveMarker("inner.zip!x.txt".into()))
+        );
+        assert!(root.join("Hello!.txt").is_ok());
+        assert!(root.join("inner.zip").is_ok());
+        assert!(unix("/srv").join("Hello!.txt").is_ok());
+    }
+
+    #[test]
+    fn the_extended_prefix_is_never_shown() {
+        assert_eq!(strip_extended_prefix(r"\\?\D:\x\y"), r"D:\x\y");
+        assert_eq!(strip_extended_prefix(r"\\?\UNC\srv\sh\x"), r"\\srv\sh\x");
+        assert_eq!(strip_extended_prefix(r"\\?\unc\srv\sh"), r"\\srv\sh");
+        assert_eq!(strip_extended_prefix(r"D:\x"), r"D:\x");
+        assert!(matches!(strip_extended_prefix("/home"), Cow::Borrowed(_)));
     }
 
     #[test]

@@ -46,6 +46,10 @@ pub enum PlaceError {
     /// A remote address that could not be read, such as a missing host.
     #[error("the address \"{0}\" could not be read")]
     BadRemote(String),
+    /// A name inside an archive with a `!` after an archive extension,
+    /// which would read back as a nested archive.
+    #[error("\"{0}\" contains an archive marker")]
+    ArchiveMarker(String),
 }
 
 impl Explain for PlaceError {
@@ -66,6 +70,9 @@ impl Explain for PlaceError {
             }
             PlaceError::BadName(_) => "Use one name without slashes.".to_owned(),
             PlaceError::BadRemote(_) => "Write it as sftp://host/path.".to_owned(),
+            PlaceError::ArchiveMarker(_) => {
+                "Unpack the archive to reach this member by its name.".to_owned()
+            }
         }
     }
 }
