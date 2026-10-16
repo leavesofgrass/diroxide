@@ -26,6 +26,10 @@
 //!   [`css`] (custom properties with `prefers-color-scheme` pairs), and
 //!   [`Theme::rgb_table`] for the GUI.
 //! - [`os`] follows the system's light, dark, or high-contrast setting.
+//! - [`roles`] adds diroxide's own roles, the file manager's screen
+//!   ([`PanelRole`]), each a color pair and an attribute drawn from the
+//!   theme, and the verdict in words: "meets AA" or "below AA: 2 checks
+//!   fall short".
 //! - [`reading`] lays the reader's `[highlight]` colors over a theme's
 //!   spoken-word and spoken-sentence styles, with a contrast warning.
 
@@ -40,6 +44,7 @@ pub mod os;
 pub mod reading;
 pub mod registry;
 pub mod resolve;
+pub mod roles;
 pub mod star;
 pub mod terminal;
 
@@ -54,6 +59,7 @@ pub use model::{
 pub use os::OsScheme;
 pub use registry::{LoadReport, Registry};
 pub use resolve::{Adjustment, Repair};
+pub use roles::{PanelRole, RoleStyle, panel_checks, role_style, verdict};
 pub use terminal::{ColorSupport, TermColor, TermStyle, TerminalTheme, term_color};
 
 /// The theme used when none is chosen or the chosen one is missing.
