@@ -1,0 +1,36 @@
+# The SFTP provider plugin. A workspace of its own, outside the main one,
+# because its cryptography (russh's ring or aws-lc-rs) carries C and
+# assembly, which the main binary never links (plan section 5.8, item 3;
+# ADR-0001). Built and installed on its own:
+#
+#   cargo build --manifest-path plugins/diro-sftp/Cargo.toml
+#
+# Phase 0's types only, moved here by the Wave 1 contract step (P0b); W3c
+# adds russh and russh-sftp to this manifest, never to the main one.
+[workspace]
+
+[package]
+name = "diro-sftp"
+description = "The SFTP provider plugin of diroxide, with key and agent authentication and known hosts."
+version = "0.1.0-alpha.1"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+publish = false
+
+[dependencies]
+diroxide-core = { path = "../../crates/diroxide-core", version = "0.1.0-alpha.1" }
+diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.1" }
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_qualifications = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "warn"
+expect_used = "warn"

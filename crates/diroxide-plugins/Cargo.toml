@@ -1,16 +1,15 @@
 [package]
 name = "diroxide-plugins"
-description = "The plugin system of diroxide: JSON-RPC process plugins, script commands, and a Lua tier behind a feature."
+description = "The plugin system of diroxide: JSON-RPC process plugins and script commands, in any language."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 publish.workspace = true
 
-[features]
-# The in-process Lua tier. Phase 0 compiles an empty module; Wave 3 adds
-# `dep:mlua` here.
-lua = []
+# No features: the in-process Lua tier is retired (plan section 5.8, item
+# 3). Lua scripts run through the Lua runner plugin, a process like any
+# other, in its own workspace under plugins/.
 
 [dependencies]
 diroxide-config.workspace = true

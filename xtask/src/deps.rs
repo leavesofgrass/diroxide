@@ -15,7 +15,7 @@ use toml::{Table, Value};
 
 /// Each crate and the workspace crates it may depend on. Keep in step with
 /// docs/dev/architecture.md.
-pub const ALLOWED: [(&str, &[&str]); 17] = [
+pub const ALLOWED: [(&str, &[&str]); 16] = [
     ("diroxide-core", &[]),
     ("diroxide-vfs", &["diroxide-core"]),
     ("diroxide-config", &["diroxide-core"]),
@@ -24,7 +24,6 @@ pub const ALLOWED: [(&str, &[&str]); 17] = [
         "diroxide-archive",
         &["diroxide-core", "diroxide-vfs", "diroxide-ops"],
     ),
-    ("diroxide-sftp", &["diroxide-core", "diroxide-vfs"]),
     ("diroxide-search", &["diroxide-core", "diroxide-vfs"]),
     (
         "diroxide-tools",
@@ -64,7 +63,6 @@ pub const ALLOWED: [(&str, &[&str]); 17] = [
             "diroxide-core",
             "diroxide-vfs",
             "diroxide-archive",
-            "diroxide-sftp",
             "diroxide-ops",
             "diroxide-search",
             "diroxide-filetype",
@@ -82,7 +80,6 @@ pub const ALLOWED: [(&str, &[&str]); 17] = [
             "diroxide-core",
             "diroxide-vfs",
             "diroxide-archive",
-            "diroxide-sftp",
             "diroxide-ops",
             "diroxide-search",
             "diroxide-filetype",

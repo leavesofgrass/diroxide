@@ -1,7 +1,12 @@
-//! The SFTP provider: places such as `sftp://user@host:22/path`, with key
-//! and agent authentication, known hosts checked, one connection per host
-//! kept open, listings and transfers streamed. A password is asked through
-//! the frontend's prompt, never taken from a command line.
+//! The SFTP provider plugin: places such as `sftp://user@host:22/path`,
+//! with key and agent authentication, known hosts checked, one connection
+//! per host kept open, listings and transfers streamed. A password is asked
+//! through the frontend's prompt, never taken from a command line.
+//!
+//! This crate is a plugin in a workspace of its own (`plugins/diro-sftp`),
+//! outside the main workspace, because russh's cryptography carries C and
+//! assembly and the `diro` binary links none (plan section 5.8, item 3).
+//! It reaches the app through the plugin protocol, as a separate process.
 //!
 //! Phase 0: the provider's shape, host settings and the known-hosts answer;
 //! every provider method says "not built yet". Wave 3 (W3c) owns this
