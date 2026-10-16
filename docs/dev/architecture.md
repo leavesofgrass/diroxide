@@ -32,7 +32,7 @@ Each entry gives the crate's job, its owner after Phase 0, and the workspace cra
 - `diroxide-gui`: the window frontend. Owners: W4a, then W4b. May depend on core, app and theme.
 - `diroxide-cli`: the command line behind `diro`: open, serve, search, convert, plugin tooling. Owners: W1d, with W1e for `src/cmd/` and W3b for `src/cmd/plugin.rs`. May depend on every `diroxide-*` crate.
 - `diro`: the thin binary that `cargo install diro` installs. May depend on cli only, and on `ureq` behind its default `fetch` feature, the owner's one exception to the pure-Rust rule (ADR-0001).
-- `xtask`: the workspace's own tasks. Owner: the orchestrator, with W1c, W1e and W4c adding their tasks. May depend on core, vfs, config, app and theme. Nothing depends on it.
+- `xtask`: the workspace's own tasks. Owner: the orchestrator, with W1c, W1e and W4c adding their tasks. May depend on core, vfs, ops, config, app and theme (ops for the bench, which copies through the engine). Nothing depends on it.
 
 Plan section 5.1 counts sixteen crates with `diroxide-cli` as "the diro binary". Phase 0 splits that into the library `diroxide-cli`, which holds the command line and is tested as a library, and the binary crate `diro`, so that `cargo install diro` is the install line (plan section 1). The Wave 1 contract adds the seventeenth crate of the plan's count, `diroxide-theme`, and moves the SFTP provider out of the main workspace (below). The main workspace has seventeen packages: fifteen `diroxide-*` crates, `diro` and `xtask`. The compare crate of plan section 6, `diroxide-diff`, will be the eighteenth when alpha.3 adds it.
 

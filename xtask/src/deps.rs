@@ -107,6 +107,7 @@ pub const ALLOWED: [(&str, &[&str]); 17] = [
         &[
             "diroxide-core",
             "diroxide-vfs",
+            "diroxide-ops",
             "diroxide-config",
             "diroxide-app",
             "diroxide-theme",
