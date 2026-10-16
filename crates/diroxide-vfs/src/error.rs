@@ -250,18 +250,80 @@ impl VfsError {
     }
 }
 
-/// Windows's sharing and lock violations, which the standard library does
-/// not name.
-const WINDOWS_IN_USE: [i32; 2] = [32, 33];
+/// Windows error codes the standard library leaves without a kind of
+/// their own, or whose kind is not stable (winerror.h).
+fn from_windows_code(code: i32) -> Option<VfsError> {
+    Some(match code {
+        // Sharing and lock violations.
+        32 | 33 => VfsError::InUse,
+        // Not the same device: a move to another drive.
+        17 => VfsError::CrossesDevices,
+        // The disk is write-protected.
+        19 => VfsError::ReadOnlyFilesystem,
+        // The disk is full, or the handle's disk is.
+        39 | 112 => VfsError::StorageFull,
+        // The quota is used up.
+        1295 => VfsError::QuotaExceeded,
+        // The file is too large for the file system.
+        223 => VfsError::FileTooLarge,
+        // A name the system will not take, or a path too long for it.
+        123 | 206 => VfsError::NameInvalid,
+        // The links could not be resolved (a loop).
+        1921 => VfsError::TooManyLinks,
+        // The network went away: not listed, bad path, device gone,
+        // unexpected error, name deleted, bad name, timeout, unreachable
+        // network or host, connection aborted.
+        51 | 53 | 55 | 59 | 64 | 67 | 121 | 1231 | 1232 | 1236 => VfsError::NetworkLost,
+        _ => return None,
+    })
+}
+
+/// Unix error codes whose kinds are not stable in the standard library:
+/// a loop of links (`ELOOP`) and a running program's file (`ETXTBSY`).
+fn from_unix_code(code: i32) -> Option<VfsError> {
+    const ETXTBSY: i32 = 26;
+    let eloop = if cfg!(target_vendor = "apple") {
+        62
+    } else {
+        40
+    };
+    if code == eloop {
+        Some(VfsError::TooManyLinks)
+    } else if code == ETXTBSY {
+        Some(VfsError::InUse)
+    } else {
+        None
+    }
+}
+
+/// The system's words for an error, as the cause of a sentence: lowercase
+/// first, without the "(os error 21)" number or a final period, which
+/// read badly aloud in "Could not copy x: CAUSE. NEXT STEP."
+fn cause_words(error: &io::Error) -> String {
+    let text = error.to_string();
+    let text = match text.rfind(" (os error ") {
+        Some(at) if text.ends_with(')') => &text[..at],
+        _ => text.as_str(),
+    };
+    let text = text.trim().trim_end_matches('.');
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_lowercase().chain(chars).collect(),
+        None => "an input or output error happened".to_owned(),
+    }
+}
 
 impl From<io::Error> for VfsError {
     fn from(error: io::Error) -> Self {
-        if cfg!(windows)
-            && error
-                .raw_os_error()
-                .is_some_and(|c| WINDOWS_IN_USE.contains(&c))
-        {
-            return Self::InUse;
+        if let Some(code) = error.raw_os_error() {
+            let known = if cfg!(windows) {
+                from_windows_code(code)
+            } else {
+                from_unix_code(code)
+            };
+            if let Some(known) = known {
+                return known;
+            }
         }
         match error.kind() {
             io::ErrorKind::NotFound => Self::NotFound,
@@ -285,15 +347,10 @@ impl From<io::Error> for VfsError {
             | io::ErrorKind::ConnectionAborted
             | io::ErrorKind::NotConnected
             | io::ErrorKind::TimedOut => Self::NetworkLost,
-            kind => {
-                let text = error.to_string();
-                let mut chars = text.chars();
-                let message = match chars.next() {
-                    Some(first) => first.to_lowercase().chain(chars).collect(),
-                    None => "an input or output error happened".to_owned(),
-                };
-                Self::Io { kind, message }
-            }
+            kind => Self::Io {
+                kind,
+                message: cause_words(&error),
+            },
         }
     }
 }
@@ -381,13 +438,62 @@ mod tests {
     }
 
     #[test]
+    fn platform_codes_map_to_their_classes() {
+        let raw = |code| VfsError::from(io::Error::from_raw_os_error(code));
+        if cfg!(windows) {
+            assert_eq!(raw(17), VfsError::CrossesDevices);
+            assert_eq!(raw(32), VfsError::InUse);
+            assert_eq!(raw(112), VfsError::StorageFull);
+            assert_eq!(raw(206), VfsError::NameInvalid);
+            assert_eq!(raw(64), VfsError::NetworkLost);
+            assert_eq!(raw(183), VfsError::AlreadyExists);
+            assert_eq!(raw(145), VfsError::NotEmpty);
+        } else {
+            // EXDEV is 18 on Linux and macOS.
+            assert_eq!(raw(18), VfsError::CrossesDevices);
+            assert_eq!(raw(26), VfsError::InUse);
+            let eloop = if cfg!(target_vendor = "apple") {
+                62
+            } else {
+                40
+            };
+            assert_eq!(raw(eloop), VfsError::TooManyLinks);
+        }
+    }
+
+    #[test]
+    fn system_words_lose_the_number_and_the_period() {
+        let error = io::Error::other("The device is not ready. (os error 21)");
+        assert_eq!(cause_words(&error), "the device is not ready");
+        let m = Message::from_error("open", "E:", &VfsError::from(error));
+        assert!(!m.text.contains("os error"), "{}", m.text);
+    }
+
+    #[test]
     fn the_cause_comes_inside_40_cells() {
         let errors = [
+            VfsError::Cancelled,
+            VfsError::NotFound,
+            VfsError::PermissionDenied,
+            VfsError::AlreadyExists,
+            VfsError::NotEmpty,
+            VfsError::NotAFolder,
+            VfsError::unsupported("file", "clone this file here"),
+            VfsError::NameNotUnicode,
             VfsError::StorageFull,
+            VfsError::QuotaExceeded,
+            VfsError::ReadOnlyFilesystem,
+            VfsError::CrossesDevices,
             VfsError::InUse,
             VfsError::NetworkLost,
+            VfsError::NameInvalid,
+            VfsError::FileTooLarge,
+            VfsError::TooManyLinks,
             VfsError::PasswordRequired,
             VfsError::WrongPassword,
+            VfsError::Unsafe {
+                why: "it changed since it was listed".into(),
+            },
             VfsError::TrashRefused {
                 why: "this drive has no trash".into(),
             },

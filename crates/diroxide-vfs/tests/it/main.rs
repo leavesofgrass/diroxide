@@ -1,4 +1,22 @@
-//! Integration tests of the provider contract, through the registry.
+//! Integration tests of the provider contract, through the registry, and
+//! of the local provider on temporary folders under the build's own
+//! target folder (never a user's folder, the real trash, or drive C).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test helpers: a failure is the test's"
+)]
+
+mod bench;
+mod local;
+mod long_paths;
+mod names;
+mod paths;
+mod primitives;
+mod trash;
+mod walk;
+mod watch;
+mod writer;
 
 use diroxide_core::{EntryKind, Place};
 use diroxide_vfs::{OpContext, Registry, VfsError, local_roots};
@@ -18,7 +36,9 @@ fn the_registry_lists_a_local_folder() {
 }
 
 #[test]
-fn the_local_provider_has_no_trash_yet() {
+fn the_local_provider_trashes_only_what_exists() {
+    // Phase 0 answered "unsupported"; W1a's trash checks the item is there
+    // before the gate and before any call.
     let registry = Registry::with_local();
     let place = Place::parse(env!("CARGO_MANIFEST_DIR"))
         .unwrap()
@@ -27,13 +47,15 @@ fn the_local_provider_has_no_trash_yet() {
     let provider = registry.resolve(&place).unwrap();
     assert!(matches!(
         provider.trash(&place, &OpContext::new()),
-        Err(VfsError::Unsupported { .. })
+        Err(VfsError::NotFound)
     ));
 }
 
 #[test]
 fn roots_are_full_places() {
-    for root in local_roots() {
+    let roots = local_roots();
+    assert!(!roots.is_empty());
+    for root in roots {
         assert!(root.is_root());
     }
 }

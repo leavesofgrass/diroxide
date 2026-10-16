@@ -11,24 +11,28 @@
 //! The safety rules of plan section 5.12 have their types here: the trash
 //! gate and its post-check ([`trash`]), the depth limits of the
 //! shell-bound operations ([`limits`]), the volume kind a place is on
-//! ([`volume`]), and the name rules ([`names`]).
+//! ([`volume`]), the name rules ([`names`]), the walk with its boundary
+//! rule ([`mod@walk`]), and the places a recursive removal never takes
+//! whole ([`protected`]). [`facts`] reads online-only, sparse and read-only
+//! entries the same way for every caller.
 //!
-//! Phase 0 and the Wave 1 contract: the trait and types are the contract;
-//! the local provider's bodies are deliberately naive (`std::fs` only, no
-//! attributes, no trash, no watching, no long-path handling). Wave 1 (W1a)
-//! replaces them.
+//! The local provider ([`LocalProvider`], Wave 1, W1a) is complete on the
+//! Wave 1 contract: see its module for what each method does, per place.
 
 pub mod cancel;
 pub mod capabilities;
 pub mod error;
+pub mod facts;
 pub mod limits;
 pub mod local;
 pub mod names;
+pub mod protected;
 pub mod provider;
 pub mod registry;
 mod sys;
 pub mod trash;
 pub mod volume;
+pub mod walk;
 
 pub use cancel::{
     CancelToken, NoProgress, NoSecrets, OpContext, ProgressSink, ProgressUpdate, SecretSource,
@@ -36,17 +40,49 @@ pub use cancel::{
 pub use capabilities::{AccessCapabilities, Can, Capabilities};
 pub use error::{ErrorClass, ErrorScope, VfsError};
 pub use local::LocalProvider;
-pub use names::{NameIssue, NameRules, check_name, check_name_with};
+pub use names::{NameIssue, NameRules, check_name, check_name_with, first_refused};
+pub use protected::{Protection, protection};
 pub use provider::{
     AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Principal, Provider, ReadSeek,
     StreamingList, WatchEvent, WatchHandle, WatchSink, WriteMode,
 };
 pub use registry::Registry;
 pub use trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
-pub use volume::{SpaceInfo, VolumeInfo, VolumeKind};
+pub use volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
+pub use walk::{SkipReason, WalkEvent, WalkOptions, WalkSummary, walk};
 
 /// The tops of the local file system: the drives on Windows, `/` elsewhere.
 /// Listing them never touches a drive.
 pub fn local_roots() -> Vec<diroxide_core::Place> {
     sys::roots()
+}
+
+/// The places for the go-to-place list, each with its kind and its words:
+/// see [`local::places`].
+pub fn local_places() -> Vec<LocalPlace> {
+    local::places()
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    //! Helpers for the unit tests that write.
+
+    use std::path::Path;
+
+    /// A folder for a unit test that writes, under the build's own target
+    /// folder (the test binary lives in `target/<profile>/deps`), never a
+    /// user's folder or the system's temporary folder.
+    pub(crate) fn scratch() -> tempfile::TempDir {
+        let exe = std::env::current_exe().expect("the test's own path");
+        let base = exe
+            .parent()
+            .and_then(Path::parent)
+            .expect("the target folder")
+            .join("vfs-unit-tmp");
+        std::fs::create_dir_all(&base).expect("a scratch folder");
+        tempfile::Builder::new()
+            .prefix("vfs-unit-")
+            .tempdir_in(base)
+            .expect("a scratch folder")
+    }
 }
