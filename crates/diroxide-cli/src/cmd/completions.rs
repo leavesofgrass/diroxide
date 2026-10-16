@@ -212,6 +212,9 @@ pub fn command() -> Command {
                 )
                 .subcommand(
                     Command::new("print").about("Print the current keys as keymap.toml text"),
+                )
+                .subcommand(
+                    Command::new("test").about("Say what each key sends and runs; Escape ends it"),
                 ),
         )
         .subcommand(
