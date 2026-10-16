@@ -9,27 +9,36 @@
 //! - Place rules: case-insensitive names, Windows reserved names, no
 //!   trash, a second volume (a rename across it fails with
 //!   `CrossesDevices`), read-only and locked entries, a largest file, a
-//!   free-space budget.
+//!   free-space budget, no created time (as on Linux).
 //! - Timing ([`Latency`]): a delay on every call, and a stall that holds
 //!   one call for a while after a number of calls.
 //! - Lies ([`Lies`]): a commit that reports success without writing, a
 //!   clone that fails after it has started writing, a trash that reports
-//!   the item in the trash and does nothing.
-//! - Faults ([`Fault`]): a chosen error at a place, optionally after N
-//!   bytes of a read or a write.
+//!   the item in the trash and does nothing; and per place, a write that
+//!   stores nothing ([`FakeSwitches::lie_about`]) or one changed byte
+//!   ([`FakeSwitches::corrupt`]).
+//! - Faults ([`Fault`], [`CallFault`]): a chosen error at a place, on any
+//!   call or on one kind of call, always or a number of times, optionally
+//!   after N bytes of a read or a write.
 //!
-//! Phase 0 bodies are naive but whole enough for the engine's tests; W1b
-//! completes the switches it needs and tests each one.
+//! A write shows its unfinished name (`.diro-part-` and eight hex digits)
+//! in the folder while it runs, as the local provider's committing writer
+//! does, so a test can check that a cancelled or failed job leaves none.
+//! Links are stored, never followed; a folder alias
+//! ([`FakeProvider::add_folder_alias`]) makes a folder that is another one
+//! under a second name (a hard-linked folder, a bind mount), for the walk's
+//! loop test.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{self, Cursor, Read, Write};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
 
 use diroxide_core::{Attributes, Entry, EntryKind, Place, Timestamp};
+use diroxide_vfs::names::unfinished_name;
 use diroxide_vfs::{
-    AttributeChange, Capabilities, CopyHint, FileWriter, LinkKind, LinkRequest, OpContext,
+    AttributeChange, Can, Capabilities, CopyHint, FileWriter, LinkKind, LinkRequest, OpContext,
     Provider, ReadSeek, SpaceInfo, TrashCheck, TrashGate, VfsError, VolumeInfo, VolumeKind,
     WriteMode,
 };
@@ -68,6 +77,70 @@ pub struct Fault {
     pub error: VfsError,
 }
 
+/// A kind of provider call, for a [`CallFault`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum FakeCall {
+    /// `list`.
+    List,
+    /// `stat`.
+    Stat,
+    /// `read` and `open_seekable`.
+    Read,
+    /// `write`, when the writer is opened.
+    Write,
+    /// A writer's `commit`.
+    Commit,
+    /// `create_dir`.
+    CreateDir,
+    /// `create_link`.
+    CreateLink,
+    /// `rename`, at its source.
+    Rename,
+    /// `remove`.
+    Remove,
+    /// `trash`.
+    Trash,
+    /// `restore`.
+    Restore,
+    /// `set_attributes`.
+    SetAttributes,
+    /// `copy_within`, at its source.
+    CopyWithin,
+}
+
+/// A failure of one kind of call at one place: always, or the first
+/// `times` calls (an auto-retry test fails twice, then succeeds).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallFault {
+    /// Which call fails.
+    pub call: FakeCall,
+    /// Where.
+    pub place: Place,
+    /// The error it gives.
+    pub error: VfsError,
+    /// How many calls fail; `None` for every call.
+    pub times: Option<u32>,
+}
+
+impl CallFault {
+    /// A call at a place that always fails with this error.
+    pub fn new(call: FakeCall, place: Place, error: VfsError) -> Self {
+        Self {
+            call,
+            place,
+            error,
+            times: None,
+        }
+    }
+
+    /// The same fault for the first `n` calls only.
+    pub fn times(mut self, n: u32) -> Self {
+        self.times = Some(n);
+        self
+    }
+}
+
 /// The switches of a fake provider.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FakeSwitches {
@@ -99,10 +172,22 @@ pub struct FakeSwitches {
     pub lies: Lies,
     /// Failures.
     pub faults: Vec<Fault>,
+    /// Failures of one kind of call.
+    pub call_faults: Vec<CallFault>,
+    /// Writes to these places report success and store nothing: a place
+    /// that silently drops one of two case twins.
+    pub lie_about: Vec<Place>,
+    /// Writes to these places store their bytes with the first one
+    /// changed, for the verification of a move.
+    pub corrupt: Vec<Place>,
+    /// The place cannot keep a created time, as on Linux.
+    pub no_created_time: bool,
 }
 
 #[derive(Clone, Debug)]
 struct Node {
+    place: Place,
+    parent: Option<String>,
     entry: Entry,
     data: Vec<u8>,
 }
@@ -110,25 +195,45 @@ struct Node {
 #[derive(Debug, Default)]
 struct State {
     nodes: BTreeMap<String, Node>,
-    trash: Vec<(String, Node)>,
+    trash: Vec<(String, Vec<(String, Node)>)>,
+    aliases: Vec<(String, String)>,
+    fault_uses: HashMap<usize, u32>,
     calls: u32,
+    next_inode: u64,
+    next_token: u32,
 }
 
 /// An in-memory provider for tests. Its places are local places in the
-/// platform's own style; the roots exist from the start.
+/// platform's own style, or remote places of any scheme; the roots exist
+/// from the start.
 #[derive(Debug, Default, Clone)]
 pub struct FakeProvider {
     state: Arc<Mutex<State>>,
     switches: Arc<Mutex<FakeSwitches>>,
 }
 
-fn key_of(place: &Place, insensitive: bool) -> String {
-    let text = place.to_string();
-    if insensitive {
-        text.to_lowercase()
-    } else {
-        text
+/// The separator under a place, in its text: `\` in a Windows path, `/`
+/// everywhere else.
+fn separator(place: &Place) -> char {
+    match place.local_path() {
+        Some(path) if !path.starts_with('/') => '\\',
+        _ => '/',
     }
+}
+
+/// Wraps a provider error in an I/O error that carries it, so the engine
+/// gets the same error back from a reader or a writer.
+fn io_error(error: &VfsError) -> io::Error {
+    let kind = match error {
+        VfsError::NotFound => io::ErrorKind::NotFound,
+        VfsError::PermissionDenied => io::ErrorKind::PermissionDenied,
+        VfsError::StorageFull => io::ErrorKind::StorageFull,
+        VfsError::NetworkLost => io::ErrorKind::NetworkDown,
+        VfsError::InUse => io::ErrorKind::ResourceBusy,
+        VfsError::Cancelled => io::ErrorKind::Interrupted,
+        _ => io::ErrorKind::Other,
+    };
+    io::Error::new(kind, error.clone())
 }
 
 impl FakeProvider {
@@ -157,6 +262,69 @@ impl FakeProvider {
         self.state.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// The key of a place: its text, folded when names ignore case.
+    fn key(&self, place: &Place) -> String {
+        let text = place.to_string();
+        if self.switches().case_insensitive {
+            text.to_lowercase()
+        } else {
+            text
+        }
+    }
+
+    /// The prefix every key inside `key` starts with.
+    fn inside(key: &str, sep: char) -> String {
+        if key.ends_with(sep) {
+            key.to_owned()
+        } else {
+            format!("{key}{sep}")
+        }
+    }
+
+    /// The key a place resolves to, through any folder alias on its way:
+    /// the alias itself stays (so its parent lists it), and what is inside
+    /// it is the other folder's.
+    fn resolve(state: &State, key: &str, sep: char) -> String {
+        for (alias, target) in &state.aliases {
+            let prefix = Self::inside(alias, sep);
+            if let Some(rest) = key.strip_prefix(&prefix) {
+                return Self::resolve(state, &format!("{}{rest}", Self::inside(target, sep)), sep);
+            }
+        }
+        key.to_owned()
+    }
+
+    /// The key whose children a listing of this place shows.
+    fn listing_key(state: &State, key: &str, sep: char) -> String {
+        let key = Self::resolve(state, key, sep);
+        match state.aliases.iter().find(|(alias, _)| *alias == key) {
+            Some((_, target)) => Self::resolve(state, target, sep),
+            None => key,
+        }
+    }
+
+    fn node_key(&self, place: &Place) -> String {
+        let key = self.key(place);
+        Self::resolve(&self.state(), &key, separator(place))
+    }
+
+    fn new_node(&self, place: &Place, mut entry: Entry, data: Vec<u8>) -> (String, Node) {
+        let key = self.node_key(place);
+        let parent = place.parent().map(|p| self.node_key(&p));
+        let mut state = self.state();
+        state.next_inode += 1;
+        entry.inode = Some(state.next_inode);
+        (
+            key,
+            Node {
+                place: place.clone(),
+                parent,
+                entry,
+                data,
+            },
+        )
+    }
+
     /// Adds a folder, and its parents.
     pub fn add_folder(&self, place: &Place) {
         if let Some(parent) = place.parent()
@@ -164,60 +332,191 @@ impl FakeProvider {
         {
             self.add_folder(&parent);
         }
-        if place.is_root() {
+        if place.is_root() || self.exists(place) {
             return;
         }
-        let insensitive = self.switches().case_insensitive;
         let name = place.name().unwrap_or_default().to_owned();
-        self.state()
-            .nodes
-            .entry(key_of(place, insensitive))
-            .or_insert_with(|| Node {
-                entry: Entry::new(name, EntryKind::Folder),
-                data: Vec::new(),
-            });
+        let mut entry = Entry::new(name, EntryKind::Folder);
+        entry.modified = self.switches().now;
+        let (key, node) = self.new_node(place, entry, Vec::new());
+        self.state().nodes.insert(key, node);
     }
 
-    /// Adds a file with these bytes, and its parent folders.
+    /// Adds a file with these bytes, and its parent folders, replacing
+    /// any file there.
     pub fn add_file(&self, place: &Place, data: &[u8]) {
         if let Some(parent) = place.parent() {
             self.add_folder(&parent);
         }
-        let switches = self.switches();
         let mut entry = Entry::new(place.name().unwrap_or_default(), EntryKind::File)
             .with_size(data.len() as u64);
-        entry.modified = switches.now;
+        entry.modified = self.switches().now;
+        let (key, node) = self.new_node(place, entry, data.to_vec());
+        self.state().nodes.insert(key, node);
+    }
+
+    /// Adds a symbolic link that stores `target`, pointing to a folder or
+    /// a file. Nothing follows it.
+    pub fn add_link(&self, place: &Place, target: &str, to_folder: bool) {
+        if let Some(parent) = place.parent() {
+            self.add_folder(&parent);
+        }
+        let mut entry = Entry::new(place.name().unwrap_or_default(), EntryKind::Link);
+        entry.link = Some(diroxide_core::Link {
+            target: target.to_owned(),
+            points_to: Some(if to_folder {
+                EntryKind::Folder
+            } else {
+                EntryKind::File
+            }),
+        });
+        let (key, node) = self.new_node(place, entry, Vec::new());
+        self.state().nodes.insert(key, node);
+    }
+
+    /// Adds a second name for an existing file: a hard link, the same
+    /// entry by identity, with its own copy of the bytes.
+    pub fn add_hard_link(&self, place: &Place, existing: &Place) {
+        let Some(original) = self.lookup(existing) else {
+            return;
+        };
+        let mut entry = original.entry.clone();
+        entry.name = place.name().unwrap_or_default().to_owned();
+        let key = self.node_key(place);
+        let parent = place.parent().map(|p| self.node_key(&p));
         self.state().nodes.insert(
-            key_of(place, switches.case_insensitive),
+            key,
             Node {
+                place: place.clone(),
+                parent,
                 entry,
-                data: data.to_vec(),
+                data: original.data,
             },
         );
     }
 
+    /// Adds a folder `alias` that is the folder `of` under a second name:
+    /// the same identity, the same contents. Put it inside `of` and a walk
+    /// that followed it would never end.
+    pub fn add_folder_alias(&self, alias: &Place, of: &Place) {
+        let Some(original) = self.lookup(of) else {
+            return;
+        };
+        let mut entry = original.entry.clone();
+        entry.name = alias.name().unwrap_or_default().to_owned();
+        let key = self.node_key(alias);
+        let target = self.node_key(of);
+        let parent = alias.parent().map(|p| self.node_key(&p));
+        let mut state = self.state();
+        state.nodes.insert(
+            key.clone(),
+            Node {
+                place: alias.clone(),
+                parent,
+                entry,
+                data: Vec::new(),
+            },
+        );
+        state.aliases.push((key, target));
+    }
+
+    fn lookup(&self, place: &Place) -> Option<Node> {
+        let key = self.node_key(place);
+        self.state().nodes.get(&key).cloned()
+    }
+
     /// The bytes of a file, if it exists.
     pub fn contents(&self, place: &Place) -> Option<Vec<u8>> {
-        let insensitive = self.switches().case_insensitive;
-        self.state()
-            .nodes
-            .get(&key_of(place, insensitive))
-            .map(|node| node.data.clone())
+        self.lookup(place).map(|node| node.data)
+    }
+
+    /// The entry at a place, as `stat` would give it, without counting a
+    /// call or applying a switch.
+    pub fn entry(&self, place: &Place) -> Option<Entry> {
+        let switches = self.switches();
+        self.lookup(place).map(|node| {
+            let mut entry = node.entry;
+            entry.volume = Some(Self::volume_of(&switches, place));
+            entry
+        })
     }
 
     /// Whether an entry exists.
     pub fn exists(&self, place: &Place) -> bool {
-        let insensitive = self.switches().case_insensitive;
-        place.is_root() || self.state().nodes.contains_key(&key_of(place, insensitive))
+        place.is_root() || self.lookup(place).is_some()
     }
 
-    /// How many entries are in the fake trash.
+    /// How many entries are in the fake trash (a trashed folder counts
+    /// once).
     pub fn trashed(&self) -> usize {
         self.state().trash.len()
     }
 
+    /// Whether the fake trash holds an entry from this place.
+    pub fn in_trash(&self, place: &Place) -> bool {
+        let key = self.node_key(place);
+        self.state().trash.iter().any(|(k, _)| *k == key)
+    }
+
+    /// How many calls the fake has served.
+    pub fn calls(&self) -> u32 {
+        self.state().calls
+    }
+
+    /// Every entry, by its place's text, with its kind and bytes: the
+    /// tree's state, for comparing before and after a job.
+    pub fn snapshot(&self) -> BTreeMap<String, (EntryKind, Vec<u8>)> {
+        self.state()
+            .nodes
+            .values()
+            .map(|node| (node.place.to_string(), (node.entry.kind, node.data.clone())))
+            .collect()
+    }
+
+    /// The names of unfinished writes still in the tree.
+    pub fn unfinished(&self) -> Vec<String> {
+        self.state()
+            .nodes
+            .values()
+            .filter(|node| diroxide_vfs::names::is_unfinished(&node.entry.name))
+            .map(|node| node.place.to_string())
+            .collect()
+    }
+
+    /// Sets an entry's modified time, as if it had changed.
+    pub fn set_modified(&self, place: &Place, modified: Timestamp) {
+        let key = self.node_key(place);
+        if let Some(node) = self.state().nodes.get_mut(&key) {
+            node.entry.modified = Some(modified);
+        }
+    }
+
+    /// Sets an entry's attributes directly.
+    pub fn set_attributes_now(&self, place: &Place, attributes: Attributes) {
+        let key = self.node_key(place);
+        if let Some(node) = self.state().nodes.get_mut(&key) {
+            node.entry.attributes = Some(attributes);
+        }
+    }
+
+    /// Removes an entry and everything inside it at once, as another
+    /// program would: no call is counted and no switch applies.
+    pub fn vanish(&self, place: &Place) {
+        let sep = separator(place);
+        let key = self.node_key(place);
+        let prefix = Self::inside(&key, sep);
+        self.state()
+            .nodes
+            .retain(|k, _| *k != key && !k.starts_with(&prefix));
+    }
+
     /// Delays, stalls and faults at the start of a call.
-    fn enter(&self, place: &Place, ctx: &OpContext) -> Result<FakeSwitches, VfsError> {
+    fn enter(
+        &self,
+        call: FakeCall,
+        place: &Place,
+        ctx: &OpContext,
+    ) -> Result<FakeSwitches, VfsError> {
         ctx.check()?;
         let switches = self.switches();
         let calls = {
@@ -238,6 +537,18 @@ impl FakeProvider {
         {
             return Err(fault.error.clone());
         }
+        let key = self.key(place);
+        for (index, fault) in switches.call_faults.iter().enumerate() {
+            if fault.call != call || self.key(&fault.place) != key {
+                continue;
+            }
+            let mut state = self.state();
+            let used = state.fault_uses.entry(index).or_insert(0);
+            if fault.times.is_none_or(|times| *used < times) {
+                *used += 1;
+                return Err(fault.error.clone());
+            }
+        }
         ctx.check()?;
         Ok(switches)
     }
@@ -247,6 +558,52 @@ impl FakeProvider {
             Some(root) if place.is_within(root) => 2,
             _ => 1,
         }
+    }
+
+    fn children(&self, place: &Place) -> Vec<Node> {
+        let sep = separator(place);
+        let key = self.key(place);
+        let state = self.state();
+        let parent = Self::listing_key(&state, &key, sep);
+        state
+            .nodes
+            .values()
+            .filter(|node| node.parent.as_deref() == Some(parent.as_str()))
+            .cloned()
+            .collect()
+    }
+
+    /// The place of a node moved from `from` to `to`.
+    fn rebase(&self, place: &Place, from: &Place, to: &Place) -> Option<Place> {
+        let from_key = self.key(from);
+        let mut names = Vec::new();
+        let mut current = place.clone();
+        while self.key(&current) != from_key {
+            names.push(current.name()?.to_owned());
+            current = current.parent()?;
+        }
+        let mut rebased = to.clone();
+        for name in names.iter().rev() {
+            rebased = rebased.join(name).ok()?;
+        }
+        Some(rebased)
+    }
+
+    /// Takes an entry and everything inside it out of the tree.
+    fn take_subtree(&self, place: &Place) -> Vec<(String, Node)> {
+        let sep = separator(place);
+        let key = self.node_key(place);
+        let prefix = Self::inside(&key, sep);
+        let mut state = self.state();
+        let keys: Vec<String> = state
+            .nodes
+            .keys()
+            .filter(|k| **k == key || k.starts_with(&prefix))
+            .cloned()
+            .collect();
+        keys.into_iter()
+            .filter_map(|k| state.nodes.remove(&k).map(|node| (k, node)))
+            .collect()
     }
 }
 
@@ -262,10 +619,10 @@ impl Read for FaultyReader {
         if let (Some(at), Some(error)) = (self.fail_at, &self.error)
             && self.inner.position() >= at
         {
-            return Err(io::Error::other(error.to_string()));
+            return Err(io_error(error));
         }
         let limit = match self.fail_at {
-            Some(at) => usize::try_from(at - self.inner.position())
+            Some(at) => usize::try_from(at.saturating_sub(self.inner.position()))
                 .unwrap_or(usize::MAX)
                 .min(buf.len()),
             None => buf.len(),
@@ -274,10 +631,12 @@ impl Read for FaultyReader {
     }
 }
 
-/// The fake's committing writer.
+/// The fake's committing writer. Its unfinished name shows in the folder
+/// until the commit or the drop.
 struct FakeWriter {
     fake: FakeProvider,
     place: Place,
+    unfinished: Option<Place>,
     mode: WriteMode,
     buffer: Vec<u8>,
     fail_at: Option<(u64, VfsError)>,
@@ -288,7 +647,7 @@ impl Write for FakeWriter {
         if let Some((at, error)) = &self.fail_at
             && self.buffer.len() as u64 + bytes.len() as u64 > *at
         {
-            return Err(io::Error::other(error.to_string()));
+            return Err(io_error(error));
         }
         self.buffer.extend_from_slice(bytes);
         Ok(bytes.len())
@@ -299,10 +658,22 @@ impl Write for FakeWriter {
     }
 }
 
+impl Drop for FakeWriter {
+    fn drop(&mut self) {
+        if let Some(unfinished) = self.unfinished.take() {
+            self.fake.vanish(&unfinished);
+        }
+    }
+}
+
 impl FileWriter for FakeWriter {
-    fn commit(self: Box<Self>, _durable: bool) -> Result<(), VfsError> {
-        let switches = self.fake.switches();
-        if switches.lies.write_without_writing {
+    fn commit(mut self: Box<Self>, _durable: bool) -> Result<(), VfsError> {
+        if let Some(unfinished) = self.unfinished.take() {
+            self.fake.vanish(&unfinished);
+        }
+        let ctx = OpContext::new();
+        let switches = self.fake.enter(FakeCall::Commit, &self.place, &ctx)?;
+        if switches.lies.write_without_writing || switches.lie_about.contains(&self.place) {
             return Ok(());
         }
         if let Some(max) = switches.max_file_size
@@ -310,17 +681,38 @@ impl FileWriter for FakeWriter {
         {
             return Err(VfsError::FileTooLarge);
         }
+        let old_size = self
+            .fake
+            .contents(&self.place)
+            .map_or(0, |data| data.len() as u64);
+        let needed = (self.buffer.len() as u64).saturating_sub(old_size);
         if let Some(free) = switches.free_space
-            && self.buffer.len() as u64 > free
+            && needed > free
         {
             return Err(VfsError::StorageFull);
         }
-        if self.mode == WriteMode::CreateNew && self.fake.exists(&self.place) {
-            return Err(VfsError::AlreadyExists);
+        if let Some(parent) = self.place.parent()
+            && !self.fake.exists(&parent)
+        {
+            return Err(VfsError::NotFound);
         }
-        self.fake.add_file(&self.place, &self.buffer);
+        if let Some(existing) = self.fake.lookup(&self.place) {
+            if self.mode == WriteMode::CreateNew {
+                return Err(VfsError::AlreadyExists);
+            }
+            if existing.entry.kind == EntryKind::Folder {
+                return Err(VfsError::AlreadyExists);
+            }
+        }
+        let mut data = std::mem::take(&mut self.buffer);
+        if switches.corrupt.contains(&self.place)
+            && let Some(first) = data.first_mut()
+        {
+            *first ^= 0xFF;
+        }
+        self.fake.add_file(&self.place, &data);
         if let Some(free) = switches.free_space {
-            self.fake.switches_mut().free_space = Some(free - self.buffer.len() as u64);
+            self.fake.switches_mut().free_space = Some(free - needed);
         }
         Ok(())
     }
@@ -338,6 +730,15 @@ impl Provider for FakeProvider {
         capabilities.trash = !switches.no_trash;
         capabilities.restore = !switches.no_trash;
         capabilities.links = true;
+        capabilities.attributes = true;
+        capabilities.access.mode = Can::Yes;
+        capabilities.access.os_attributes = Can::Yes;
+        capabilities.access.times = Can::Yes;
+        capabilities.access.created_time = if switches.no_created_time {
+            Can::No
+        } else {
+            Can::Yes
+        };
         capabilities.case_sensitive = !switches.case_insensitive;
         capabilities.reserved_names = switches.reserved_names;
         capabilities.max_name_length = Some(255);
@@ -347,59 +748,60 @@ impl Provider for FakeProvider {
     }
 
     fn list(&self, place: &Place, ctx: &OpContext) -> Result<Vec<Entry>, VfsError> {
-        let switches = self.enter(place, ctx)?;
-        if !self.exists(place) {
-            return Err(VfsError::NotFound);
-        }
-        let insensitive = switches.case_insensitive;
-        let parent_key = key_of(place, insensitive);
-        let state = self.state();
-        let mut entries = Vec::new();
-        for (key, node) in &state.nodes {
-            let Ok(child) = Place::parse(key) else {
-                continue;
-            };
-            if child.parent().map(|parent| key_of(&parent, insensitive)) == Some(parent_key.clone())
-            {
-                let mut entry = node.entry.clone();
-                entry.volume = Some(Self::volume_of(&switches, &child));
-                entries.push(entry);
+        let switches = self.enter(FakeCall::List, place, ctx)?;
+        match self.lookup(place) {
+            None if !place.is_root() => return Err(VfsError::NotFound),
+            Some(node) if node.entry.kind != EntryKind::Folder => {
+                return Err(VfsError::NotAFolder);
             }
+            _ => {}
         }
-        Ok(entries)
+        Ok(self
+            .children(place)
+            .into_iter()
+            .map(|node| {
+                let mut entry = node.entry;
+                entry.volume = Some(Self::volume_of(&switches, &node.place));
+                entry
+            })
+            .collect())
     }
 
     fn stat(&self, place: &Place, ctx: &OpContext) -> Result<Entry, VfsError> {
-        let switches = self.enter(place, ctx)?;
+        let switches = self.enter(FakeCall::Stat, place, ctx)?;
         if place.is_root() {
-            return Ok(Entry::new(place.to_string(), EntryKind::Folder));
+            let mut entry = Entry::new(place.to_string(), EntryKind::Folder);
+            entry.volume = Some(Self::volume_of(&switches, place));
+            return Ok(entry);
         }
-        let state = self.state();
-        let node = state
-            .nodes
-            .get(&key_of(place, switches.case_insensitive))
-            .ok_or(VfsError::NotFound)?;
-        let mut entry = node.entry.clone();
+        let node = self.lookup(place).ok_or(VfsError::NotFound)?;
+        let mut entry = node.entry;
         entry.volume = Some(Self::volume_of(&switches, place));
         Ok(entry)
     }
 
     fn read(&self, place: &Place, ctx: &OpContext) -> Result<Box<dyn Read + Send>, VfsError> {
-        let switches = self.enter(place, ctx)?;
-        let data = self.contents(place).ok_or(VfsError::NotFound)?;
+        let switches = self.enter(FakeCall::Read, place, ctx)?;
+        let node = self.lookup(place).ok_or(VfsError::NotFound)?;
+        if node.entry.kind == EntryKind::Folder {
+            return Err(VfsError::NotAFolder);
+        }
+        if switches.locked.contains(place) {
+            return Err(VfsError::InUse);
+        }
         let fault = switches
             .faults
             .iter()
             .find(|f| &f.place == place && f.at_byte.is_some());
         Ok(Box::new(FaultyReader {
-            inner: Cursor::new(data),
+            inner: Cursor::new(node.data),
             fail_at: fault.and_then(|f| f.at_byte),
             error: fault.map(|f| f.error.clone()),
         }))
     }
 
     fn open_seekable(&self, place: &Place, ctx: &OpContext) -> Result<Box<dyn ReadSeek>, VfsError> {
-        self.enter(place, ctx)?;
+        self.enter(FakeCall::Read, place, ctx)?;
         let data = self.contents(place).ok_or(VfsError::NotFound)?;
         Ok(Box::new(Cursor::new(data)))
     }
@@ -410,21 +812,33 @@ impl Provider for FakeProvider {
         mode: WriteMode,
         ctx: &OpContext,
     ) -> Result<Box<dyn FileWriter>, VfsError> {
-        let switches = self.enter(place, ctx)?;
+        let switches = self.enter(FakeCall::Write, place, ctx)?;
         if switches.read_only.contains(place) {
             return Err(VfsError::PermissionDenied);
         }
         if switches.locked.contains(place) {
             return Err(VfsError::InUse);
         }
-        if let Some(parent) = place.parent()
-            && !self.exists(&parent)
-        {
+        let Some(folder) = place.parent() else {
+            return Err(VfsError::NotFound);
+        };
+        if !self.exists(&folder) {
             return Err(VfsError::NotFound);
         }
         if mode == WriteMode::CreateNew && self.exists(place) {
             return Err(VfsError::AlreadyExists);
         }
+        let token = {
+            let mut state = self.state();
+            state.next_token += 1;
+            state.next_token
+        };
+        let unfinished = folder
+            .join(&unfinished_name(token))
+            .map_err(VfsError::from)?;
+        let entry = Entry::new(unfinished.name().unwrap_or_default(), EntryKind::File);
+        let (key, node) = self.new_node(&unfinished, entry, Vec::new());
+        self.state().nodes.insert(key, node);
         let fail_at = switches
             .faults
             .iter()
@@ -433,6 +847,7 @@ impl Provider for FakeProvider {
         Ok(Box::new(FakeWriter {
             fake: self.clone(),
             place: place.clone(),
+            unfinished: Some(unfinished),
             mode,
             buffer: Vec::new(),
             fail_at,
@@ -440,7 +855,7 @@ impl Provider for FakeProvider {
     }
 
     fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
-        self.enter(place, ctx)?;
+        self.enter(FakeCall::CreateDir, place, ctx)?;
         if self.exists(place) {
             return Err(VfsError::AlreadyExists);
         }
@@ -459,31 +874,30 @@ impl Provider for FakeProvider {
         request: &LinkRequest,
         ctx: &OpContext,
     ) -> Result<(), VfsError> {
-        let switches = self.enter(place, ctx)?;
+        self.enter(FakeCall::CreateLink, place, ctx)?;
         if self.exists(place) {
             return Err(VfsError::AlreadyExists);
         }
-        let kind = match request.kind {
-            LinkKind::Hard => EntryKind::File,
-            LinkKind::Symbolic | LinkKind::Junction => EntryKind::Link,
-        };
-        let mut entry = Entry::new(place.name().unwrap_or_default(), kind);
-        entry.link = (kind == EntryKind::Link).then(|| diroxide_core::Link {
-            target: request.target.clone(),
-            points_to: None,
-        });
-        self.state().nodes.insert(
-            key_of(place, switches.case_insensitive),
-            Node {
-                entry,
-                data: Vec::new(),
+        if !place.parent().is_some_and(|parent| self.exists(&parent)) {
+            return Err(VfsError::NotFound);
+        }
+        match request.kind {
+            LinkKind::Hard => match self.lookup(&Place::parse(&request.target)?) {
+                Some(node) if node.entry.kind == EntryKind::File => {
+                    self.add_hard_link(place, &node.place);
+                }
+                Some(_) => return Err(VfsError::NotAFolder),
+                None => return Err(VfsError::NotFound),
             },
-        );
+            LinkKind::Symbolic | LinkKind::Junction => {
+                self.add_link(place, &request.target, request.target_is_folder);
+            }
+        }
         Ok(())
     }
 
     fn rename(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
-        let switches = self.enter(from, ctx)?;
+        let switches = self.enter(FakeCall::Rename, from, ctx)?;
         if switches.read_only.contains(from) {
             return Err(VfsError::PermissionDenied);
         }
@@ -493,53 +907,64 @@ impl Provider for FakeProvider {
         if Self::volume_of(&switches, from) != Self::volume_of(&switches, to) {
             return Err(VfsError::CrossesDevices);
         }
-        let insensitive = switches.case_insensitive;
-        let (from_key, to_key) = (key_of(from, insensitive), key_of(to, insensitive));
-        let mut state = self.state();
-        if from_key != to_key && state.nodes.contains_key(&to_key) {
-            return Err(VfsError::AlreadyExists);
-        }
-        let moved: Vec<String> = state
-            .nodes
-            .keys()
-            .filter(|k| **k == from_key || k.starts_with(&format!("{from_key}{}", separator(from))))
-            .cloned()
-            .collect();
-        if moved.is_empty() {
+        let from_key = self.node_key(from);
+        let to_key = self.node_key(to);
+        if !self.state().nodes.contains_key(&from_key) {
             return Err(VfsError::NotFound);
         }
-        for key in moved {
-            if let Some(mut node) = state.nodes.remove(&key) {
-                if key == from_key {
-                    node.entry.name = to.name().unwrap_or_default().to_owned();
-                }
-                let new_key = format!("{to_key}{}", &key[from_key.len()..]);
-                state.nodes.insert(new_key, node);
-            }
+        if from_key != to_key && self.state().nodes.contains_key(&to_key) {
+            return Err(VfsError::AlreadyExists);
         }
+        if !to.parent().is_some_and(|parent| self.exists(&parent)) {
+            return Err(VfsError::NotFound);
+        }
+        if to.is_within(from) && from_key != to_key {
+            return Err(VfsError::Unsafe {
+                why: "a folder cannot go inside itself".to_owned(),
+            });
+        }
+        let moved = self.take_subtree(from);
+        let mut nodes = Vec::with_capacity(moved.len());
+        for (_, mut node) in moved {
+            let place = self
+                .rebase(&node.place, from, to)
+                .unwrap_or(node.place.clone());
+            if self.key(&node.place) == self.key(from) {
+                node.entry.name = to.name().unwrap_or_default().to_owned();
+            }
+            node.parent = place.parent().map(|p| self.node_key(&p));
+            node.place = place;
+            nodes.push(node);
+        }
+        let mut keyed = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            keyed.push((self.node_key(&node.place), node));
+        }
+        self.state().nodes.extend(keyed);
         Ok(())
     }
 
     fn remove(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
-        let switches = self.enter(place, ctx)?;
+        let switches = self.enter(FakeCall::Remove, place, ctx)?;
         if switches.read_only.contains(place) {
             return Err(VfsError::PermissionDenied);
         }
         if switches.locked.contains(place) {
             return Err(VfsError::InUse);
         }
-        if !self.list(place, ctx).map(|e| e.is_empty()).unwrap_or(true) {
+        let node = self.lookup(place).ok_or(VfsError::NotFound)?;
+        if node.entry.kind == EntryKind::Folder && !self.children(place).is_empty() {
             return Err(VfsError::NotEmpty);
         }
-        let key = key_of(place, switches.case_insensitive);
-        match self.state().nodes.remove(&key) {
-            Some(_) => Ok(()),
-            None => Err(VfsError::NotFound),
-        }
+        let key = self.node_key(place);
+        let mut state = self.state();
+        state.nodes.remove(&key);
+        state.aliases.retain(|(alias, _)| *alias != key);
+        Ok(())
     }
 
     fn trash_gate(&self, place: &Place, ctx: &OpContext) -> Result<TrashGate, VfsError> {
-        let switches = self.enter(place, ctx)?;
+        let switches = self.enter(FakeCall::Stat, place, ctx)?;
         if switches.no_trash {
             return Ok(TrashGate::NoTrashHere(
                 switches.volume_kind.unwrap_or(VolumeKind::Unknown),
@@ -549,7 +974,7 @@ impl Provider for FakeProvider {
     }
 
     fn trash(&self, place: &Place, ctx: &OpContext) -> Result<TrashCheck, VfsError> {
-        let switches = self.enter(place, ctx)?;
+        let switches = self.enter(FakeCall::Trash, place, ctx)?;
         if switches.no_trash {
             return Err(VfsError::TrashRefused {
                 why: "this drive has no trash".to_owned(),
@@ -561,27 +986,34 @@ impl Provider for FakeProvider {
         if switches.lies.trash_does_nothing {
             return Ok(TrashCheck::InTrash);
         }
-        let key = key_of(place, switches.case_insensitive);
+        if !self.exists(place) {
+            return Err(VfsError::NotFound);
+        }
+        let key = self.node_key(place);
+        let subtree = self.take_subtree(place);
         let mut state = self.state();
-        let node = state.nodes.remove(&key).ok_or(VfsError::NotFound)?;
-        state.trash.push((key, node));
+        state.aliases.retain(|(alias, _)| *alias != key);
+        state.trash.push((key, subtree));
         Ok(TrashCheck::InTrash)
     }
 
     fn restore(&self, original: &Place, ctx: &OpContext) -> Result<(), VfsError> {
-        let switches = self.enter(original, ctx)?;
-        let key = key_of(original, switches.case_insensitive);
-        let mut state = self.state();
-        if state.nodes.contains_key(&key) {
+        self.enter(FakeCall::Restore, original, ctx)?;
+        let key = self.node_key(original);
+        if self.state().nodes.contains_key(&key) {
             return Err(VfsError::AlreadyExists);
         }
+        if !original.parent().is_some_and(|parent| self.exists(&parent)) {
+            return Err(VfsError::NotFound);
+        }
+        let mut state = self.state();
         let at = state
             .trash
             .iter()
             .rposition(|(k, _)| *k == key)
             .ok_or(VfsError::NotFound)?;
-        let (key, node) = state.trash.remove(at);
-        state.nodes.insert(key, node);
+        let (_, subtree) = state.trash.remove(at);
+        state.nodes.extend(subtree);
         Ok(())
     }
 
@@ -591,8 +1023,11 @@ impl Provider for FakeProvider {
         change: &AttributeChange,
         ctx: &OpContext,
     ) -> Result<AttributeChange, VfsError> {
-        let switches = self.enter(place, ctx)?;
-        let key = key_of(place, switches.case_insensitive);
+        let switches = self.enter(FakeCall::SetAttributes, place, ctx)?;
+        if change.created.is_some() && switches.no_created_time {
+            return Err(VfsError::unsupported("file", "set a created time"));
+        }
+        let key = self.node_key(place);
         let mut state = self.state();
         let node = state.nodes.get_mut(&key).ok_or(VfsError::NotFound)?;
         if let Some(expected) = change.expect
@@ -631,46 +1066,53 @@ impl Provider for FakeProvider {
     }
 
     fn copy_within(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
-        let switches = self.enter(from, ctx)?;
+        let switches = self.enter(FakeCall::CopyWithin, from, ctx)?;
         if !switches.clone_copy {
             return Err(VfsError::unsupported("file", "copy without streaming"));
         }
-        let data = self.contents(from).ok_or(VfsError::NotFound)?;
+        let source = self.lookup(from).ok_or(VfsError::NotFound)?;
+        if source.entry.kind != EntryKind::File {
+            return Err(VfsError::unsupported("file", "clone a folder"));
+        }
         if self.exists(to) {
             return Err(VfsError::AlreadyExists);
         }
+        if !to.parent().is_some_and(|parent| self.exists(&parent)) {
+            return Err(VfsError::NotFound);
+        }
         if switches.lies.clone_fails_late {
-            self.add_file(to, &data[..data.len() / 2]);
+            self.add_file(to, &source.data[..source.data.len() / 2]);
             return Err(VfsError::Io {
                 kind: io::ErrorKind::Other,
                 message: "the clone failed part of the way".to_owned(),
             });
         }
-        self.add_file(to, &data);
+        self.add_file(to, &source.data);
+        let key = self.node_key(to);
+        if let Some(node) = self.state().nodes.get_mut(&key) {
+            node.entry.modified = source.entry.modified;
+            node.entry.created = source.entry.created;
+            node.entry.attributes = source.entry.attributes;
+        }
         Ok(())
     }
 
     fn volume(&self, place: &Place, ctx: &OpContext) -> Result<VolumeInfo, VfsError> {
-        let switches = self.enter(place, ctx)?;
-        Ok(VolumeInfo::unknown(VolumeInfo::top_of(place))
-            .with_kind(switches.volume_kind.unwrap_or(VolumeKind::Fixed)))
+        let switches = self.enter(FakeCall::Stat, place, ctx)?;
+        let root = match &switches.second_volume {
+            Some(root) if place.is_within(root) => root.clone(),
+            _ => VolumeInfo::top_of(place),
+        };
+        Ok(VolumeInfo::unknown(root).with_kind(switches.volume_kind.unwrap_or(VolumeKind::Fixed)))
     }
 
     fn space(&self, place: &Place, ctx: &OpContext) -> Result<SpaceInfo, VfsError> {
-        let switches = self.enter(place, ctx)?;
+        let switches = self.enter(FakeCall::Stat, place, ctx)?;
         Ok(SpaceInfo {
             free_to_user: switches.free_space,
             total: None,
             max_file_size: switches.max_file_size,
         })
-    }
-}
-
-fn separator(place: &Place) -> char {
-    if place.to_string().starts_with('/') {
-        '/'
-    } else {
-        '\\'
     }
 }
 
@@ -688,31 +1130,57 @@ mod tests {
         .unwrap()
     }
 
+    fn names(fake: &FakeProvider, place: &Place) -> Vec<String> {
+        let mut names: Vec<String> = fake
+            .list(place, &OpContext::new())
+            .unwrap()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        names.sort();
+        names
+    }
+
     #[test]
     fn a_tree_lists_writes_and_renames() {
         let fake = FakeProvider::new();
         let ctx = OpContext::new();
         fake.add_file(&p("/a/x.txt"), b"hello");
         fake.add_folder(&p("/a/sub"));
-        let names: Vec<String> = fake
-            .list(&p("/a"), &ctx)
-            .unwrap()
-            .into_iter()
-            .map(|e| e.name)
-            .collect();
-        assert_eq!(names.len(), 2, "{names:?}");
+        fake.add_file(&p("/a/sub/inner.txt"), b"in");
+        assert_eq!(names(&fake, &p("/a")), vec!["sub", "x.txt"]);
         let mut writer = fake
             .write(&p("/a/new.txt"), WriteMode::CreateNew, &ctx)
             .unwrap();
         writer.write_all(b"made").unwrap();
+        assert_eq!(fake.unfinished().len(), 1, "the unfinished name shows");
         writer.commit(false).unwrap();
+        assert!(fake.unfinished().is_empty());
         assert_eq!(fake.contents(&p("/a/new.txt")).unwrap(), b"made");
         fake.rename(&p("/a/sub"), &p("/a/moved"), &ctx).unwrap();
         assert!(fake.exists(&p("/a/moved")));
+        assert_eq!(fake.contents(&p("/a/moved/inner.txt")).unwrap(), b"in");
+        assert!(!fake.exists(&p("/a/sub/inner.txt")));
         assert!(matches!(
             fake.rename(&p("/a/x.txt"), &p("/a/new.txt"), &ctx),
             Err(VfsError::AlreadyExists)
         ));
+        assert!(matches!(
+            fake.remove(&p("/a/moved"), &ctx),
+            Err(VfsError::NotEmpty)
+        ));
+    }
+
+    #[test]
+    fn a_dropped_writer_leaves_nothing() {
+        let fake = FakeProvider::new();
+        let ctx = OpContext::new();
+        fake.add_folder(&p("/a"));
+        let mut writer = fake.write(&p("/a/x"), WriteMode::CreateNew, &ctx).unwrap();
+        writer.write_all(b"half").unwrap();
+        drop(writer);
+        assert!(fake.unfinished().is_empty());
+        assert!(!fake.exists(&p("/a/x")));
     }
 
     #[test]
@@ -730,6 +1198,27 @@ mod tests {
         writer.write_all(b"data").unwrap();
         writer.commit(true).unwrap();
         assert!(!fake.exists(&p("/a/x")));
+        fake.switches_mut().lies.write_without_writing = false;
+        fake.switches_mut().lie_about.push(p("/a/y"));
+        let mut writer = fake.write(&p("/a/y"), WriteMode::CreateNew, &ctx).unwrap();
+        writer.write_all(b"data").unwrap();
+        writer.commit(true).unwrap();
+        assert!(!fake.exists(&p("/a/y")), "the lie for one place");
+    }
+
+    #[test]
+    fn a_corrupting_place_changes_one_byte() {
+        let fake = FakeProvider::with_switches(FakeSwitches {
+            corrupt: vec![p("/a/x")],
+            ..FakeSwitches::default()
+        });
+        let ctx = OpContext::new();
+        fake.add_folder(&p("/a"));
+        let mut writer = fake.write(&p("/a/x"), WriteMode::CreateNew, &ctx).unwrap();
+        writer.write_all(b"abc").unwrap();
+        writer.commit(true).unwrap();
+        assert_ne!(fake.contents(&p("/a/x")).unwrap(), b"abc");
+        assert_eq!(&fake.contents(&p("/a/x")).unwrap()[1..], b"bc");
     }
 
     #[test]
@@ -739,6 +1228,7 @@ mod tests {
         fake.add_file(&p("/a/x"), b"1");
         assert_eq!(fake.trash(&p("/a/x"), &ctx).unwrap(), TrashCheck::InTrash);
         assert!(!fake.exists(&p("/a/x")));
+        assert!(fake.in_trash(&p("/a/x")));
         fake.restore(&p("/a/x"), &ctx).unwrap();
         assert!(fake.exists(&p("/a/x")));
         fake.switches_mut().lies.trash_does_nothing = true;
@@ -749,6 +1239,25 @@ mod tests {
             fake.trash(&p("/a/x"), &ctx),
             Err(VfsError::TrashRefused { .. })
         ));
+    }
+
+    #[test]
+    fn a_trashed_folder_takes_its_contents_and_comes_back_whole() {
+        let fake = FakeProvider::new();
+        let ctx = OpContext::new();
+        fake.add_file(&p("/a/f/1.txt"), b"1");
+        fake.add_file(&p("/a/f/g/2.txt"), b"2");
+        fake.trash(&p("/a/f"), &ctx).unwrap();
+        assert!(!fake.exists(&p("/a/f/g/2.txt")));
+        assert_eq!(fake.trashed(), 1);
+        fake.add_file(&p("/a/f"), b"taken");
+        assert!(matches!(
+            fake.restore(&p("/a/f"), &ctx),
+            Err(VfsError::AlreadyExists)
+        ));
+        fake.vanish(&p("/a/f"));
+        fake.restore(&p("/a/f"), &ctx).unwrap();
+        assert_eq!(fake.contents(&p("/a/f/g/2.txt")).unwrap(), b"2");
     }
 
     #[test]
@@ -767,6 +1276,7 @@ mod tests {
         let _ = fake.stat(&p("/a"), &ctx);
         let _ = fake.stat(&p("/a"), &ctx);
         assert!(start.elapsed() >= Duration::from_millis(50));
+        assert_eq!(fake.calls(), 2);
     }
 
     #[test]
@@ -782,6 +1292,9 @@ mod tests {
             fake.rename(&p("/a/x"), &p("/b/x"), &ctx),
             Err(VfsError::CrossesDevices)
         );
+        assert_eq!(fake.stat(&p("/b"), &ctx).unwrap().volume, Some(2));
+        assert_eq!(fake.stat(&p("/a/x"), &ctx).unwrap().volume, Some(1));
+        assert_eq!(fake.volume(&p("/b/y"), &ctx).unwrap().root, p("/b"));
     }
 
     #[test]
@@ -798,6 +1311,9 @@ mod tests {
         fake.add_file(&p("/a/x"), b"abcdef");
         assert!(fake.copy_within(&p("/a/x"), &p("/a/y"), &ctx).is_err());
         assert_eq!(fake.contents(&p("/a/y")).unwrap(), b"abc");
+        fake.switches_mut().lies.clone_fails_late = false;
+        fake.copy_within(&p("/a/x"), &p("/a/z"), &ctx).unwrap();
+        assert_eq!(fake.contents(&p("/a/z")).unwrap(), b"abcdef");
     }
 
     #[test]
@@ -811,8 +1327,201 @@ mod tests {
             error: VfsError::NetworkLost,
         });
         let mut text = Vec::new();
-        let result = fake.read(&p("/a/x"), &ctx).unwrap().read_to_end(&mut text);
-        assert!(result.is_err());
+        let error = fake
+            .read(&p("/a/x"), &ctx)
+            .unwrap()
+            .read_to_end(&mut text)
+            .unwrap_err();
         assert_eq!(text, b"abc");
+        let inner = error.get_ref().unwrap().downcast_ref::<VfsError>();
+        assert_eq!(inner, Some(&VfsError::NetworkLost), "the error travels");
+    }
+
+    #[test]
+    fn faults_fail_writes_after_n_bytes() {
+        let fake = FakeProvider::new();
+        let ctx = OpContext::new();
+        fake.add_folder(&p("/a"));
+        fake.switches_mut().faults.push(Fault {
+            place: p("/a/x"),
+            at_byte: Some(4),
+            error: VfsError::StorageFull,
+        });
+        let mut writer = fake.write(&p("/a/x"), WriteMode::CreateNew, &ctx).unwrap();
+        writer.write_all(b"ab").unwrap();
+        assert!(writer.write_all(b"cdef").is_err());
+        drop(writer);
+        assert!(!fake.exists(&p("/a/x")));
+        assert!(fake.unfinished().is_empty());
+    }
+
+    #[test]
+    fn a_call_fault_fails_its_call_a_number_of_times() {
+        let fake = FakeProvider::new();
+        let ctx = OpContext::new();
+        fake.add_file(&p("/a/x"), b"1");
+        fake.switches_mut()
+            .call_faults
+            .push(CallFault::new(FakeCall::Remove, p("/a/x"), VfsError::NetworkLost).times(2));
+        assert!(fake.stat(&p("/a/x"), &ctx).is_ok(), "other calls work");
+        assert_eq!(fake.remove(&p("/a/x"), &ctx), Err(VfsError::NetworkLost));
+        assert_eq!(fake.remove(&p("/a/x"), &ctx), Err(VfsError::NetworkLost));
+        assert_eq!(fake.remove(&p("/a/x"), &ctx), Ok(()));
+    }
+
+    #[test]
+    fn names_that_differ_by_case_are_one_entry_when_case_is_ignored() {
+        let fake = FakeProvider::with_switches(FakeSwitches {
+            case_insensitive: true,
+            ..FakeSwitches::default()
+        });
+        let ctx = OpContext::new();
+        fake.add_file(&p("/a/Report.txt"), b"1");
+        assert!(fake.exists(&p("/a/report.TXT")));
+        assert_eq!(
+            fake.stat(&p("/a/REPORT.txt"), &ctx).unwrap().name,
+            "Report.txt"
+        );
+        fake.rename(&p("/a/Report.txt"), &p("/a/report.txt"), &ctx)
+            .unwrap();
+        assert_eq!(names(&fake, &p("/a")), vec!["report.txt"]);
+        assert!(!fake.capabilities(&p("/a")).case_sensitive);
+    }
+
+    #[test]
+    fn read_only_and_locked_entries_refuse_changes() {
+        let fake = FakeProvider::with_switches(FakeSwitches {
+            read_only: vec![p("/a/r")],
+            locked: vec![p("/a/l")],
+            ..FakeSwitches::default()
+        });
+        let ctx = OpContext::new();
+        fake.add_file(&p("/a/r"), b"1");
+        fake.add_file(&p("/a/l"), b"1");
+        assert_eq!(
+            fake.remove(&p("/a/r"), &ctx),
+            Err(VfsError::PermissionDenied)
+        );
+        assert_eq!(fake.remove(&p("/a/l"), &ctx), Err(VfsError::InUse));
+        assert!(matches!(
+            fake.write(&p("/a/r"), WriteMode::Overwrite, &ctx),
+            Err(VfsError::PermissionDenied)
+        ));
+    }
+
+    #[test]
+    fn space_and_size_limits_are_kept() {
+        let fake = FakeProvider::with_switches(FakeSwitches {
+            free_space: Some(5),
+            max_file_size: Some(4),
+            ..FakeSwitches::default()
+        });
+        let ctx = OpContext::new();
+        fake.add_folder(&p("/a"));
+        let mut big = fake
+            .write(&p("/a/big"), WriteMode::CreateNew, &ctx)
+            .unwrap();
+        big.write_all(b"12345").unwrap();
+        assert_eq!(big.commit(false), Err(VfsError::FileTooLarge));
+        let mut ok = fake.write(&p("/a/ok"), WriteMode::CreateNew, &ctx).unwrap();
+        ok.write_all(b"1234").unwrap();
+        ok.commit(false).unwrap();
+        assert_eq!(
+            fake.space(&p("/a"), &ctx).unwrap().free_to_user,
+            Some(1),
+            "the budget shrinks"
+        );
+        let mut full = fake
+            .write(&p("/a/two"), WriteMode::CreateNew, &ctx)
+            .unwrap();
+        full.write_all(b"12").unwrap();
+        assert_eq!(full.commit(false), Err(VfsError::StorageFull));
+    }
+
+    #[test]
+    fn reserved_names_and_created_times_follow_the_switches() {
+        let fake = FakeProvider::with_switches(FakeSwitches {
+            reserved_names: true,
+            no_created_time: true,
+            ..FakeSwitches::default()
+        });
+        let ctx = OpContext::new();
+        let capabilities = fake.capabilities(&p("/a"));
+        assert!(capabilities.reserved_names);
+        assert_eq!(capabilities.access.created_time, Can::No);
+        fake.add_file(&p("/a/x"), b"1");
+        let change = AttributeChange {
+            created: Some(Timestamp::from_unix(5, 0)),
+            ..AttributeChange::default()
+        };
+        assert!(fake.set_attributes(&p("/a/x"), &change, &ctx).is_err());
+        let change = AttributeChange {
+            modified: Some(Timestamp::from_unix(7, 0)),
+            ..AttributeChange::default()
+        };
+        let inverse = fake.set_attributes(&p("/a/x"), &change, &ctx).unwrap();
+        assert_eq!(inverse.modified, None);
+        assert_eq!(
+            fake.entry(&p("/a/x")).unwrap().modified,
+            Some(Timestamp::from_unix(7, 0))
+        );
+    }
+
+    #[test]
+    fn links_are_stored_and_never_followed() {
+        let fake = FakeProvider::new();
+        let ctx = OpContext::new();
+        fake.add_file(&p("/outside/secret.txt"), b"keep");
+        fake.add_link(&p("/a/out"), &p("/outside").to_string(), true);
+        let entry = fake.stat(&p("/a/out"), &ctx).unwrap();
+        assert_eq!(entry.kind, EntryKind::Link);
+        assert!(fake.list(&p("/a/out"), &ctx).is_err(), "not a folder");
+        fake.remove(&p("/a/out"), &ctx).unwrap();
+        assert_eq!(fake.contents(&p("/outside/secret.txt")).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn hard_links_and_folder_aliases_share_an_identity() {
+        let fake = FakeProvider::new();
+        let ctx = OpContext::new();
+        fake.add_file(&p("/a/x"), b"1");
+        fake.add_hard_link(&p("/a/y"), &p("/a/x"));
+        let x = fake.stat(&p("/a/x"), &ctx).unwrap();
+        let y = fake.stat(&p("/a/y"), &ctx).unwrap();
+        assert_eq!((x.volume, x.inode), (y.volume, y.inode));
+        assert!(matches!(
+            fake.rename(&p("/a/x"), &p("/a/y"), &ctx),
+            Err(VfsError::AlreadyExists)
+        ));
+        fake.add_folder_alias(&p("/a/loop"), &p("/a"));
+        let a = fake.stat(&p("/a"), &ctx).unwrap();
+        let alias = fake.stat(&p("/a/loop"), &ctx).unwrap();
+        assert_eq!(a.inode, alias.inode);
+        assert_eq!(names(&fake, &p("/a/loop")), vec!["loop", "x", "y"]);
+        assert_eq!(names(&fake, &p("/a/loop/loop")), vec!["loop", "x", "y"]);
+        assert_eq!(fake.contents(&p("/a/loop/loop/x")).unwrap(), b"1");
+    }
+
+    #[test]
+    fn remote_places_have_their_own_tree() {
+        let fake = FakeProvider::new();
+        let ctx = OpContext::new();
+        let remote = Place::parse("fake://host/share/x.txt").unwrap();
+        fake.add_file(&remote, b"far");
+        assert_eq!(
+            names(&fake, &Place::parse("fake://host/share").unwrap()),
+            vec!["x.txt"]
+        );
+        fake.rename(
+            &Place::parse("fake://host/share").unwrap(),
+            &Place::parse("fake://host/moved").unwrap(),
+            &ctx,
+        )
+        .unwrap();
+        assert_eq!(
+            fake.contents(&Place::parse("fake://host/moved/x.txt").unwrap())
+                .unwrap(),
+            b"far"
+        );
     }
 }

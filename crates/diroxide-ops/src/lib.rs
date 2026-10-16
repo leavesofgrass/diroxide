@@ -31,7 +31,7 @@ pub use engine::{
     numbered_name,
 };
 pub use error::OpsError;
-pub use fake::{FakeProvider, FakeSwitches, Fault, Latency, Lies};
+pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies};
 pub use plan::{Plan, Step};
 pub use progress::JobProgress;
 pub use undo::{UndoLog, UndoRecord};
