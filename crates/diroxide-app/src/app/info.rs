@@ -774,7 +774,9 @@ impl App {
         };
         let mut effects = vec![Effect::Redraw(Redraw::All), self.say(message)];
         for side in Side::BOTH {
-            effects.extend(self.reload(side));
+            let place = self.panel(side).place().clone();
+            let focus = self.panel(side).list().focused().map(|r| r.id.clone());
+            effects.extend(self.open_as(side, place, focus, crate::panel::Load::Refresh));
         }
         effects
     }

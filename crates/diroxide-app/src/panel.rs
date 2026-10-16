@@ -534,6 +534,11 @@ impl Panel {
             if entry.type_name.is_none() {
                 entry.type_name = types.short_name(entry);
             }
+            // Every provider's names are checked the same way, so a row
+            // says "name needs care" whatever served it.
+            if !entry.needs_care {
+                entry.needs_care = diroxide_vfs::names::needs_care(&entry.name);
+            }
         }
         self.all_entries = entries;
         self.refresh(clock)

@@ -841,7 +841,7 @@ impl App {
             let place = panel.place().clone();
             let keep = if each == side { focus.clone() } else { None }
                 .or_else(|| panel.list().focused().map(|r| r.id.clone()));
-            effects.extend(self.open_as(each, place, keep, Load::Reload));
+            effects.extend(self.open_as(each, place, keep, Load::Refresh));
         }
         effects
     }
@@ -901,6 +901,12 @@ impl App {
                     .collect();
                 let mut list = ListModel::new(line.clone()).with_rows(rows);
                 list.set_help("Up and Down choose, Enter answers, Escape skips this one.");
+                if let Some(skip) = choices
+                    .iter()
+                    .position(|c| *c == diroxide_core::ErrorAction::Skip)
+                {
+                    list.move_focus(diroxide_core::Move::To(skip));
+                }
                 self.open_dialog(
                     Dialog::Question {
                         lines: vec![line],

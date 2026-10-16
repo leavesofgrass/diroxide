@@ -191,12 +191,20 @@ impl App {
                 place: Some(place),
             });
             if active {
-                let list = self.panel(side).list();
-                let text = format!(
+                // The leaf and the count first, the folder it is in after:
+                // "Backup, 12 items, in D:\work".
+                let panel = self.panel(side);
+                let mut text = format!(
                     "{}, {}",
-                    list.title(),
-                    count(list.len() as u64, "item", "items")
+                    place_leaf(panel.place()),
+                    count(panel.list().len() as u64, "item", "items")
                 );
+                if let Some(parent) = panel.place().parent() {
+                    text.push_str(&format!(
+                        ", in {}",
+                        diroxide_core::names::display_name(&parent.to_string())
+                    ));
+                }
                 effects.push(Effect::Redraw(Redraw::TitleLine));
                 effects.push(self.say(Message::info(text)));
             }

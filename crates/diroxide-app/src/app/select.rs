@@ -193,7 +193,8 @@ impl App {
             at: now,
         });
         let focus = self.panel(side).list().focus_index().unwrap_or(0);
-        let target = if cycle {
+        let fresh = text.chars().count() == 1;
+        let target = if cycle || fresh {
             matches
                 .iter()
                 .copied()

@@ -40,7 +40,8 @@ fn starting_lists_both_panels() {
     let (mut app, mut runtime) = app();
     let start = app.start();
     let said = settle(&mut app, &mut runtime, start);
-    assert!(said[0].starts_with("diroxide-app, in "), "{said:?}");
+    assert!(said[0].starts_with("diroxide-app, "), "{said:?}");
+    assert!(said[0].contains(" items, in "), "{said:?}");
     assert!(app.panel(Side::Left).list().len() >= 3);
     assert!(
         app.panel(Side::Right)
@@ -64,7 +65,7 @@ fn keys_move_switch_and_enter() {
     assert!(said[0].starts_with("Right panel: src, "), "{said:?}");
     let effects = app.handle(AppEvent::Key(key("backspace")));
     let said = settle(&mut app, &mut runtime, effects);
-    assert!(said[0].starts_with("diroxide-app, in "), "{said:?}");
+    assert!(said[0].starts_with("diroxide-app, "), "{said:?}");
     assert_eq!(app.active_panel().list().focused().unwrap().id, "src");
     let effects = app.handle(AppEvent::Key(key("enter")));
     settle(&mut app, &mut runtime, effects);
