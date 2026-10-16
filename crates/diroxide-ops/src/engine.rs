@@ -1,4 +1,13 @@
 //! The engine: plans jobs and runs plans.
+//!
+//! The order is fixed (plan section 5.4): create, verify, then destroy.
+//! A replacement is written and committed before anything it replaces is
+//! removed; a provider's clone is tried before the destination is
+//! touched; a trash failure never falls through to a permanent delete;
+//! every job ends with a reconciliation against a fresh read of what it
+//! made. Phase 0's run is naive (single files, no walk, no verify);
+//! W1b builds the walk, the copy loop and the property test over Skip,
+//! Keep, Retry and Cancel on these types.
 
 use std::io;
 use std::sync::Arc;
@@ -6,7 +15,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use diroxide_core::{ConflictPolicy, JobId, JobKind, JobRequest, Message, Place};
+use diroxide_core::clock::describe_time;
+use diroxide_core::format::{count, human_size};
+use diroxide_core::{
+    Clock, ConflictAction, ConflictAnswer, ConflictKind, ConflictPolicy, Entry, ErrorAction, JobId,
+    JobKind, JobRequest, JobState, Message, Place,
+};
 use diroxide_vfs::{CancelToken, OpContext, Registry, VfsError, WriteMode};
 
 use crate::error::OpsError;
@@ -14,19 +28,157 @@ use crate::plan::{Plan, Step};
 use crate::progress::JobProgress;
 use crate::undo::UndoRecord;
 
-/// A name that is taken, and the question to ask about it.
+pub use diroxide_vfs::names::numbered_name;
+
+/// A name that is taken, with both entries, so the question can say how
+/// they differ (research/file-operations.md C4).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Conflict {
+    /// What kind of clash it is.
+    pub kind: ConflictKind,
     /// What was being copied or moved.
     pub source: Place,
     /// The place that already exists.
     pub target: Place,
+    /// The source's entry.
+    pub source_entry: Entry,
+    /// The existing entry.
+    pub target_entry: Entry,
+    /// The name "Keep both" would give the new one: "report (2).pdf".
+    pub keep_both_name: String,
+}
+
+/// One choice of a conflict question: its line, verb first and inside 40
+/// cells, and the answer it gives.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConflictChoice {
+    /// The line: "Skip this one", "Keep both: report (2).pdf".
+    pub label: String,
+    /// The answer. A rename's name is empty: the app asks for it.
+    pub answer: ConflictAnswer,
+}
+
+fn newer_older(source: &Entry, target: &Entry) -> Option<&'static str> {
+    match (source.modified, target.modified) {
+        (Some(a), Some(b)) if a > b => Some("newer"),
+        (Some(a), Some(b)) if a < b => Some("older"),
+        _ => None,
+    }
+}
+
+fn larger_smaller(source: &Entry, target: &Entry) -> Option<&'static str> {
+    match (source.size, target.size) {
+        (Some(a), Some(b)) if a > b => Some("larger"),
+        (Some(a), Some(b)) if a < b => Some("smaller"),
+        _ => None,
+    }
+}
+
+fn fact_line(who: &str, entry: &Entry, clock: &dyn Clock) -> String {
+    let mut parts = Vec::new();
+    if let Some(size) = entry.size {
+        parts.push(human_size(size));
+    }
+    if let Some(modified) = entry.modified {
+        parts.push(describe_time(modified, clock));
+    }
+    if parts.is_empty() {
+        format!("{who}: {}", entry.kind.word())
+    } else {
+        format!("{who}: {}", parts.join(", "))
+    }
 }
 
 impl Conflict {
-    /// The question, meaning first and ending "y or n": "report.pdf exists
-    /// in D:\backup. Replace it? y or n". A No answer skips; the dialog
-    /// also offers keep both and rename.
+    /// The question's lines, the situation first (R8): "Name taken:
+    /// report.pdf"; then how the new one differs ("New is newer and
+    /// larger"); then a fact line for each ("Existing: 2.1 MB, October
+    /// 9", "New: 2.3 MB, today, 9:02 PM"). The same file has one line,
+    /// and asks nothing.
+    pub fn lines(&self, clock: &dyn Clock) -> Vec<String> {
+        let name = self.target.name().unwrap_or("the entry");
+        match self.kind {
+            ConflictKind::SameFile => vec![format!("Same file: {name}. Nothing to do.")],
+            ConflictKind::FileOverFolder => vec![format!("Cannot merge: {name} is a folder here")],
+            ConflictKind::FolderOverFile => vec![format!("Cannot merge: {name} is a file here")],
+            ConflictKind::FolderOverFolder => {
+                vec![format!("Folder exists: {name}. Its contents are merged.")]
+            }
+            ConflictKind::FileOverFile | ConflictKind::ReadOnlyTarget => {
+                let time = newer_older(&self.source_entry, &self.target_entry);
+                let size = larger_smaller(&self.source_entry, &self.target_entry);
+                let difference = match (time, size) {
+                    (Some(t), Some(s)) => format!("New is {t} and {s}"),
+                    (Some(t), None) => format!("New is {t}, the same size"),
+                    (None, Some(s)) => format!("New is {s}, from the same time"),
+                    (None, None) => "New has the same size and time".to_owned(),
+                };
+                vec![
+                    format!("{}: {name}", self.kind.situation()),
+                    difference,
+                    fact_line("Existing", &self.target_entry, clock),
+                    fact_line("New", &self.source_entry, clock),
+                ]
+            }
+        }
+    }
+
+    /// The choices, each line starting with its verb, in the order listed;
+    /// focus starts on the first, "Skip this one", the choice that changes
+    /// nothing, and Escape answers it. A file over a folder, or a folder
+    /// over a file, is skipped and never resolved by deleting; the same
+    /// file and a folder over a folder ask nothing.
+    pub fn choices(&self) -> Vec<ConflictChoice> {
+        let choice = |label: String, answer: ConflictAnswer| ConflictChoice { label, answer };
+        let skip = choice("Skip this one".to_owned(), ConflictAnswer::skip());
+        let skip_all = choice(
+            "Skip all that exist".to_owned(),
+            ConflictAnswer::for_all(ConflictAction::Skip),
+        );
+        let cancel = choice(
+            "Cancel the job".to_owned(),
+            ConflictAnswer::once(ConflictAction::Cancel),
+        );
+        match self.kind {
+            ConflictKind::SameFile | ConflictKind::FolderOverFolder => Vec::new(),
+            ConflictKind::FileOverFolder | ConflictKind::FolderOverFile => {
+                vec![skip, skip_all, cancel]
+            }
+            ConflictKind::FileOverFile | ConflictKind::ReadOnlyTarget => vec![
+                skip,
+                skip_all,
+                choice(
+                    "Replace this one".to_owned(),
+                    ConflictAnswer::once(ConflictAction::Replace),
+                ),
+                choice(
+                    "Replace all that exist".to_owned(),
+                    ConflictAnswer::for_all(ConflictAction::Replace),
+                ),
+                choice(
+                    format!("Keep both: {}", self.keep_both_name),
+                    ConflictAnswer::once(ConflictAction::KeepBoth),
+                ),
+                choice(
+                    "Keep both for all".to_owned(),
+                    ConflictAnswer::for_all(ConflictAction::KeepBoth),
+                ),
+                choice(
+                    "Replace only if newer, for all".to_owned(),
+                    ConflictAnswer::for_all(ConflictAction::ReplaceIfNewer),
+                ),
+                choice(
+                    "Rename this copy...".to_owned(),
+                    ConflictAnswer::once(ConflictAction::Rename(String::new())),
+                ),
+                cancel,
+            ],
+        }
+    }
+
+    /// The Phase 0 question, kept for the app's naive dialog: the first
+    /// line as a yes-or-no question about replacing. W1d moves to
+    /// [`Conflict::lines`] and [`Conflict::choices`].
     pub fn question(&self) -> Message {
         let name = self.target.name().unwrap_or("The entry");
         let folder = self
@@ -37,21 +189,72 @@ impl Conflict {
     }
 }
 
-/// Receives a running job's progress and answers its conflict question.
-/// Called on the job's thread.
+/// An error on one item, as the sink is asked about it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ItemError {
+    /// The job's kind, for the message's verb.
+    pub kind: JobKind,
+    /// The item.
+    pub place: Place,
+    /// What went wrong.
+    pub error: VfsError,
+    /// Which try failed, from 1.
+    pub attempt: u32,
+}
+
+impl ItemError {
+    /// The message in the house style: "Could not copy report.pdf:
+    /// another program is using it. Close it in the other program, then
+    /// retry."
+    pub fn message(&self) -> Message {
+        let name = self
+            .place
+            .name()
+            .map_or_else(|| self.place.to_string(), str::to_owned);
+        Message::from_error(self.kind.verb(), &name, &self.error)
+    }
+
+    /// The choices, at most four and the same everywhere: Retry first for
+    /// the errors retrying can fix (in use, network lost), Skip first for
+    /// the rest, and no Retry where it cannot help.
+    pub fn choices(&self) -> Vec<ErrorAction> {
+        let class = self.error.class();
+        let mut choices = Vec::with_capacity(4);
+        if class.retry_first() {
+            choices.push(ErrorAction::Retry);
+        }
+        choices.push(ErrorAction::Skip);
+        choices.push(ErrorAction::SkipAllLikeThis);
+        if class.can_retry() && !class.retry_first() {
+            choices.push(ErrorAction::Retry);
+        }
+        choices.push(ErrorAction::Cancel);
+        choices
+    }
+}
+
+/// Receives a running job's progress and answers its questions. Called on
+/// the job's thread; the answers block until the user gives them.
 pub trait JobSink: Send + Sync {
-    /// Takes a progress update; the app says at most two a second.
+    /// Takes a progress update. The app says a change of state at once
+    /// and the rest at its progress interval.
     fn progress(&self, progress: &JobProgress);
 
-    /// Answers a conflict, blocking until the user does. The answer applies
-    /// to the rest of the job; answering `Ask` again counts as `Skip`.
-    fn conflict(&self, conflict: &Conflict) -> ConflictPolicy;
+    /// Answers one conflict. `apply_to_rest` settles the job's later
+    /// conflicts of the same kind.
+    fn conflict(&self, conflict: &Conflict) -> ConflictAnswer;
+
+    /// Answers an error on one item that the job's policy does not already
+    /// settle (the engine retries a lost network on its own first, and
+    /// skips a class already answered "Skip all like this").
+    fn error(&self, error: &ItemError) -> ErrorAction;
 }
 
 /// Cancels or pauses a running job. Cloning shares the control.
 #[derive(Clone, Debug, Default)]
 pub struct JobControl {
-    /// Cancels the job between steps.
+    /// Cancels the job between steps, and inside providers through the
+    /// token.
     pub cancel: CancelToken,
     paused: Arc<AtomicBool>,
 }
@@ -62,7 +265,7 @@ impl JobControl {
         Self::default()
     }
 
-    /// Pauses the job after its current step.
+    /// Pauses the job after its current chunk.
     pub fn pause(&self) {
         self.paused.store(true, Ordering::Relaxed);
     }
@@ -75,6 +278,52 @@ impl JobControl {
     /// Whether the job is paused.
     pub fn is_paused(&self) -> bool {
         self.paused.load(Ordering::Relaxed)
+    }
+}
+
+/// What a job made, checked against a fresh read after the run (plan
+/// section 5.4): every planned result, whether it is present, and which
+/// are missing. The count comes first in the result.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Reconciliation {
+    /// What the plan was to make or change.
+    pub planned: Vec<Place>,
+    /// What a fresh read found.
+    pub present: Vec<Place>,
+    /// What a fresh read did not find, though the job did not skip or fail
+    /// it: a provider that said yes and did nothing.
+    pub missing: Vec<Place>,
+}
+
+impl Reconciliation {
+    /// A reconciliation of a plan's results, nothing read yet.
+    pub fn of(planned: Vec<Place>) -> Self {
+        Self {
+            planned,
+            present: Vec::new(),
+            missing: Vec::new(),
+        }
+    }
+
+    /// Whether every planned result that was not skipped or failed was
+    /// found.
+    pub fn is_whole(&self) -> bool {
+        self.missing.is_empty()
+    }
+
+    /// The result's line, the count first: "Checked 120 of 120: all
+    /// present", "Checked 118 of 120: 2 missing".
+    pub fn summary(&self) -> String {
+        let checked = self.present.len() + self.missing.len();
+        if self.missing.is_empty() {
+            format!("Checked {checked} of {}: all present", self.planned.len())
+        } else {
+            format!(
+                "Checked {checked} of {}: {} missing",
+                self.planned.len(),
+                self.missing.len()
+            )
+        }
     }
 }
 
@@ -91,8 +340,13 @@ pub struct JobReport {
     pub skipped: Vec<(Place, String)>,
     /// The places that failed, with the cause in words.
     pub failed: Vec<(Place, String)>,
+    /// Done, with something to say: an attribute or time that could not be
+    /// kept, a trash that could not be checked.
+    pub warnings: Vec<(Place, String)>,
     /// Whether the job was cancelled before its end.
     pub cancelled: bool,
+    /// The check of what the job made against a fresh read, when it ran.
+    pub reconciliation: Option<Reconciliation>,
     /// What the Undo command can reverse.
     pub undo: UndoRecord,
 }
@@ -106,16 +360,17 @@ impl JobReport {
             done: Vec::new(),
             skipped: Vec::new(),
             failed: Vec::new(),
+            warnings: Vec::new(),
             cancelled: false,
-            undo: UndoRecord {
-                job: Some(job),
-                ..UndoRecord::default()
-            },
+            reconciliation: None,
+            undo: UndoRecord::for_job(job, kind),
         }
     }
 
-    /// The report in one line, the outcome first: "Copy finished: 3 done,
-    /// 1 skipped, 1 failed." or "Copy cancelled: 2 done."
+    /// The report in one line, the problems first (R8): "Copy had 8
+    /// failures: 290 done, 2 skipped."; "Copy cancelled: 2 done."; "Copy
+    /// finished with 1 warning: 3 done."; "Copy finished: 3 done, 1
+    /// skipped." A missing result counts as a failure.
     pub fn summary(&self) -> String {
         let verb = self.kind.verb();
         let mut chars = verb.chars();
@@ -123,19 +378,28 @@ impl JobReport {
             Some(c) => c.to_uppercase().chain(chars).collect(),
             None => String::new(),
         };
-        let state = if self.cancelled {
-            "cancelled"
-        } else {
-            "finished"
-        };
-        let mut parts = vec![format!("{} done", self.done.len())];
+        let mut counts = vec![format!("{} done", self.done.len())];
         if !self.skipped.is_empty() {
-            parts.push(format!("{} skipped", self.skipped.len()));
+            counts.push(format!("{} skipped", self.skipped.len()));
         }
-        if !self.failed.is_empty() {
-            parts.push(format!("{} failed", self.failed.len()));
-        }
-        format!("{verb} {state}: {}.", parts.join(", "))
+        let missing = self.reconciliation.as_ref().map_or(0, |r| r.missing.len());
+        let failures = self.failed.len() + missing;
+        let head = if self.cancelled {
+            format!("{verb} cancelled")
+        } else if failures > 0 {
+            format!(
+                "{verb} had {}",
+                count(failures as u64, "failure", "failures")
+            )
+        } else if !self.warnings.is_empty() {
+            format!(
+                "{verb} finished with {}",
+                count(self.warnings.len() as u64, "warning", "warnings")
+            )
+        } else {
+            format!("{verb} finished")
+        };
+        format!("{head}: {}.", counts.join(", "))
     }
 }
 
@@ -173,7 +437,10 @@ impl Engine {
         };
         let new_name = || request.new_name.clone().ok_or(OpsError::NoName);
         let destination = || request.destination.clone().ok_or(OpsError::NoDestination);
-        if request.sources.is_empty() && request.kind != JobKind::MakeFolder {
+        if request.sources.is_empty()
+            && request.renames.is_empty()
+            && request.kind != JobKind::MakeFolder
+        {
             return Err(OpsError::NothingSelected);
         }
         let mut steps = Vec::new();
@@ -187,6 +454,16 @@ impl Engine {
                         Step::Copy { from, to }
                     } else {
                         Step::Move { from, to }
+                    });
+                }
+            }
+            JobKind::Rename if !request.renames.is_empty() => {
+                for (from, name) in &request.renames {
+                    let parent = from.parent().ok_or(OpsError::NothingSelected)?;
+                    let to = parent.join(name).map_err(VfsError::from)?;
+                    steps.push(Step::Rename {
+                        from: from.clone(),
+                        to,
                     });
                 }
             }
@@ -215,20 +492,21 @@ impl Engine {
             }
             other => return Err(OpsError::NotBuilt(other.verb().to_owned())),
         }
-        Ok(Plan {
-            job: request.id,
-            kind: request.kind,
+        Ok(Plan::new(
+            request.id,
+            request.kind,
             steps,
-            conflicts: request.conflicts,
-        })
+            request.conflicts,
+        ))
     }
 
     /// Runs a plan to its end, or until cancelled, reporting progress and
-    /// asking about conflicts through the sink.
+    /// asking about conflicts and errors through the sink.
     pub fn run(&self, plan: &Plan, control: &JobControl, sink: &dyn JobSink) -> JobReport {
         let mut report = JobReport::new(plan.job, plan.kind);
         let mut policy = plan.conflicts;
         let mut progress = JobProgress::start(plan.kind, plan.steps.len() as u64, None);
+        progress.state = JobState::Running;
         let ctx = OpContext::new().with_cancel(control.cancel.clone());
         for step in &plan.steps {
             while control.is_paused() && !control.cancel.is_cancelled() {
@@ -241,13 +519,14 @@ impl Engine {
             let subject = step.subject().clone();
             progress.current = subject.name().map(str::to_owned);
             sink.progress(&progress);
-            match self.run_step(step, &mut policy, sink, &ctx) {
+            match self.run_step(step, &mut policy, sink, &ctx, &mut report) {
                 Ok(Outcome::Done) => {
                     match step {
                         Step::Move { from, to } | Step::Rename { from, to } => {
                             report.undo.moves.push((from.clone(), to.clone()));
                         }
                         Step::Trash { place } => report.undo.trashed.push(place.clone()),
+                        Step::MakeFolder { place } => report.undo.created.push(place.clone()),
                         _ => {}
                     }
                     report.done.push(subject);
@@ -262,6 +541,7 @@ impl Engine {
             progress.items_done += 1;
         }
         progress.current = None;
+        progress.state = JobState::Finished;
         sink.progress(&progress);
         report
     }
@@ -272,6 +552,7 @@ impl Engine {
         policy: &mut ConflictPolicy,
         sink: &dyn JobSink,
         ctx: &OpContext,
+        report: &mut JobReport,
     ) -> Result<Outcome, OpsError> {
         match step {
             Step::Copy { from, to } => {
@@ -279,7 +560,8 @@ impl Engine {
                 if source.stat(from, ctx)?.is_container() {
                     return Err(OpsError::NotBuilt("folder copy".to_owned()));
                 }
-                let Some((to, mode)) = self.settle_conflict(from, to, policy, sink, ctx)? else {
+                let Some((to, mode)) = self.settle_conflict(from, to, false, policy, sink, ctx)?
+                else {
                     return Ok(Outcome::Skipped("the name is taken".to_owned()));
                 };
                 let target = self.registry.resolve(&to)?;
@@ -287,6 +569,7 @@ impl Engine {
                 let mut writer = target.write(&to, mode, ctx)?;
                 io::copy(&mut reader, &mut writer).map_err(VfsError::from)?;
                 writer.commit(false)?;
+                report.undo.created.push(to);
                 Ok(Outcome::Done)
             }
             Step::Move { from, to } | Step::Rename { from, to } => {
@@ -296,14 +579,27 @@ impl Engine {
                         "moving between kinds of place".to_owned(),
                     ));
                 }
-                let Some((to, _)) = self.settle_conflict(from, to, policy, sink, ctx)? else {
+                let Some((to, _)) = self.settle_conflict(from, to, true, policy, sink, ctx)? else {
                     return Ok(Outcome::Skipped("the name is taken".to_owned()));
                 };
                 source.rename(from, &to, ctx)?;
                 Ok(Outcome::Done)
             }
+            Step::RenameHop { from, via, to } => {
+                let source = self.registry.resolve(from)?;
+                source.rename(from, via, ctx)?;
+                source.rename(via, to, ctx)?;
+                Ok(Outcome::Done)
+            }
             Step::MakeFolder { place } => {
                 self.registry.resolve(place)?.create_dir(place, ctx)?;
+                Ok(Outcome::Done)
+            }
+            Step::Link { place, request } => {
+                self.registry
+                    .resolve(place)?
+                    .create_link(place, request, ctx)?;
+                report.undo.created.push(place.clone());
                 Ok(Outcome::Done)
             }
             Step::Trash { place } => {
@@ -313,8 +609,11 @@ impl Engine {
                     Some(problem) => Err(OpsError::TrashNotConfirmed(problem.to_owned())),
                 }
             }
-            Step::Restore { .. } => Err(OpsError::NotBuilt("restore".to_owned())),
-            Step::Remove { place } => {
+            Step::Restore { place } => {
+                self.registry.resolve(place)?.restore(place, ctx)?;
+                Ok(Outcome::Done)
+            }
+            Step::Remove { place } | Step::RemoveEmptyFolder { place } => {
                 self.registry.resolve(place)?.remove(place, ctx)?;
                 Ok(Outcome::Done)
             }
@@ -327,70 +626,111 @@ impl Engine {
         }
     }
 
+    /// Whether two places are the same entry: the same volume and inode
+    /// where the provider knows them, else the same place, ignoring case
+    /// where the place does.
+    fn same_entry(from: &Entry, to: &Entry, from_place: &Place, to_place: &Place) -> bool {
+        match (from.volume.zip(from.inode), to.volume.zip(to.inode)) {
+            (Some(a), Some(b)) => a == b,
+            _ => from_place.is_within(to_place) && to_place.is_within(from_place),
+        }
+    }
+
     /// Where to write, and how, given the conflict policy; `None` to skip.
+    /// For a rename, the same entry under another case or form is no
+    /// conflict; for a copy or a move onto itself there is nothing to do.
     fn settle_conflict(
         &self,
         from: &Place,
         to: &Place,
+        renaming: bool,
         policy: &mut ConflictPolicy,
         sink: &dyn JobSink,
         ctx: &OpContext,
     ) -> Result<Option<(Place, WriteMode)>, OpsError> {
         let target = self.registry.resolve(to)?;
-        match target.stat(to, ctx) {
+        let existing = match target.stat(to, ctx) {
             Err(VfsError::NotFound) => return Ok(Some((to.clone(), WriteMode::CreateNew))),
             Err(other) => return Err(other.into()),
-            Ok(_) => {}
+            Ok(entry) => entry,
+        };
+        let source_entry = self.registry.resolve(from)?.stat(from, ctx)?;
+        if Self::same_entry(&source_entry, &existing, from, to) {
+            return Ok(renaming.then(|| (to.clone(), WriteMode::CreateNew)));
         }
-        if *policy == ConflictPolicy::Ask {
-            let answer = sink.conflict(&Conflict {
-                source: from.clone(),
-                target: to.clone(),
-            });
-            *policy = if answer == ConflictPolicy::Ask {
-                ConflictPolicy::Skip
+        let folder = to.parent().ok_or(OpsError::NoDestination)?;
+        let name = to.name().ok_or(OpsError::NoName)?;
+        let siblings: Vec<String> = target
+            .list(&folder, ctx)
+            .map(|entries| entries.into_iter().map(|e| e.name).collect())
+            .unwrap_or_default();
+        let sibling_names: Vec<&str> = siblings.iter().map(String::as_str).collect();
+        let keep_both = diroxide_vfs::names::unused_name(name, &sibling_names);
+        let mut action = match *policy {
+            ConflictPolicy::Skip => ConflictAction::Skip,
+            ConflictPolicy::Overwrite => ConflictAction::Replace,
+            ConflictPolicy::KeepBoth => ConflictAction::KeepBoth,
+            ConflictPolicy::Newer => ConflictAction::ReplaceIfNewer,
+            ConflictPolicy::Ask | ConflictPolicy::Rename => {
+                let kind = match (source_entry.is_folder_like(), existing.is_folder_like()) {
+                    (true, true) => ConflictKind::FolderOverFolder,
+                    (false, true) => ConflictKind::FileOverFolder,
+                    (true, false) => ConflictKind::FolderOverFile,
+                    (false, false) => ConflictKind::FileOverFile,
+                };
+                let answer = sink.conflict(&Conflict {
+                    kind,
+                    source: from.clone(),
+                    target: to.clone(),
+                    source_entry: source_entry.clone(),
+                    target_entry: existing.clone(),
+                    keep_both_name: keep_both.clone().unwrap_or_default(),
+                });
+                if answer.apply_to_rest {
+                    *policy = match answer.action {
+                        ConflictAction::Skip => ConflictPolicy::Skip,
+                        ConflictAction::Replace => ConflictPolicy::Overwrite,
+                        ConflictAction::KeepBoth => ConflictPolicy::KeepBoth,
+                        ConflictAction::ReplaceIfNewer => ConflictPolicy::Newer,
+                        ConflictAction::Rename(_) | ConflictAction::Cancel => *policy,
+                    };
+                }
+                answer.action
+            }
+        };
+        if action == ConflictAction::ReplaceIfNewer {
+            action = if source_entry.modified > existing.modified {
+                ConflictAction::Replace
             } else {
-                answer
+                ConflictAction::Skip
             };
         }
-        match *policy {
-            ConflictPolicy::Ask | ConflictPolicy::Skip => Ok(None),
-            ConflictPolicy::Overwrite => Ok(Some((to.clone(), WriteMode::Overwrite))),
-            ConflictPolicy::Newer => {
-                let source = self.registry.resolve(from)?.stat(from, ctx)?.modified;
-                let existing = target.stat(to, ctx)?.modified;
-                Ok((source > existing).then(|| (to.clone(), WriteMode::Overwrite)))
-            }
-            ConflictPolicy::KeepBoth | ConflictPolicy::Rename => {
-                let folder = to.parent().ok_or(OpsError::NoDestination)?;
-                let name = to.name().ok_or(OpsError::NoName)?;
-                for n in 2..1000 {
-                    let candidate = folder
-                        .join(&numbered_name(name, n))
-                        .map_err(VfsError::from)?;
-                    if matches!(target.stat(&candidate, ctx), Err(VfsError::NotFound)) {
-                        return Ok(Some((candidate, WriteMode::CreateNew)));
-                    }
-                }
-                Ok(None)
-            }
+        match action {
+            ConflictAction::Skip => Ok(None),
+            ConflictAction::Cancel => Err(VfsError::Cancelled.into()),
+            ConflictAction::Replace => Ok(Some((to.clone(), WriteMode::Overwrite))),
+            ConflictAction::KeepBoth => match keep_both {
+                Some(name) => Ok(Some((
+                    folder.join(&name).map_err(VfsError::from)?,
+                    WriteMode::CreateNew,
+                ))),
+                None => Ok(None),
+            },
+            ConflictAction::Rename(name) if !name.is_empty() => Ok(Some((
+                folder.join(&name).map_err(VfsError::from)?,
+                WriteMode::CreateNew,
+            ))),
+            ConflictAction::Rename(_) | ConflictAction::ReplaceIfNewer => Ok(None),
         }
-    }
-}
-
-/// A numbered name for keeping both: "report (2).pdf", "Makefile (2)",
-/// ".profile (2)".
-pub fn numbered_name(name: &str, n: u32) -> String {
-    match name.rfind('.') {
-        Some(at) if at > 0 => format!("{} ({n}){}", &name[..at], &name[at..]),
-        _ => format!("{name} ({n})"),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diroxide_core::format::within_cells;
     use diroxide_core::place::PathStyle;
+    use diroxide_core::{EntryKind, FixedClock, Timestamp, UtcOffset};
     use std::sync::Mutex;
 
     fn p(text: &str) -> Place {
@@ -405,8 +745,12 @@ mod tests {
             self.0.lock().unwrap().push(progress.describe());
         }
 
-        fn conflict(&self, _conflict: &Conflict) -> ConflictPolicy {
-            ConflictPolicy::Skip
+        fn conflict(&self, _conflict: &Conflict) -> ConflictAnswer {
+            ConflictAnswer::skip()
+        }
+
+        fn error(&self, _error: &ItemError) -> ErrorAction {
+            ErrorAction::Skip
         }
     }
 
@@ -442,10 +786,29 @@ mod tests {
             engine.plan(&folder).unwrap().steps,
             vec![Step::MakeFolder { place: p("/a/new") }]
         );
+        let unknown = JobRequest::new(JobId::new(5), JobKind::Unknown, vec![p("/a/x")]);
+        assert!(matches!(engine.plan(&unknown), Err(OpsError::NotBuilt(_))));
     }
 
     #[test]
-    fn failures_are_reported_per_entry() {
+    fn several_renames_plan_from_their_pairs() {
+        let engine = Engine::new(Arc::new(Registry::new()));
+        let request = JobRequest::new(JobId::new(6), JobKind::Rename, Vec::new()).renaming(vec![
+            (p("/a/1.jpg"), "one.jpg".into()),
+            (p("/a/2.jpg"), "two.jpg".into()),
+        ]);
+        let plan = engine.plan(&request).unwrap();
+        assert_eq!(
+            plan.steps[1],
+            Step::Rename {
+                from: p("/a/2.jpg"),
+                to: p("/a/two.jpg")
+            }
+        );
+    }
+
+    #[test]
+    fn failures_are_reported_per_entry_problems_first() {
         let engine = Engine::new(Arc::new(Registry::new()));
         let request = JobRequest::new(JobId::new(9), JobKind::Trash, vec![p("/a/x")]);
         let plan = engine.plan(&request).unwrap();
@@ -456,13 +819,10 @@ mod tests {
             report.failed[0].1,
             "nothing is set up to open folder places"
         );
-        assert_eq!(
-            report.summary(),
-            "Move to the trash finished: 0 done, 1 failed."
-        );
+        assert_eq!(report.summary(), "Move to the trash had 1 failure: 0 done.");
         let said = sink.0.lock().unwrap();
-        assert_eq!(said.first().unwrap(), "Moving to the trash 0 of 1");
-        assert_eq!(said.last().unwrap(), "Moving to the trash 1 of 1");
+        assert_eq!(said.first().unwrap(), "Moving to the trash 0 percent");
+        assert_eq!(said.last().unwrap(), "Moving to the trash finished");
     }
 
     #[test]
@@ -478,21 +838,127 @@ mod tests {
     }
 
     #[test]
+    fn summaries_put_problems_first_inside_40_cells() {
+        let mut report = JobReport::new(JobId::new(1), JobKind::Copy);
+        report.done = vec![p("/b/x"); 290];
+        report.skipped = vec![(p("/b/y"), "taken".into()); 2];
+        report.failed = vec![(p("/b/z"), "in use".into()); 8];
+        assert_eq!(
+            report.summary(),
+            "Copy had 8 failures: 290 done, 2 skipped."
+        );
+        assert!(report.summary().chars().count() <= 41);
+        report.failed.clear();
+        report.warnings.push((p("/b/x"), "times not kept".into()));
+        assert_eq!(
+            report.summary(),
+            "Copy finished with 1 warning: 290 done, 2 skipped."
+        );
+        report.warnings.clear();
+        report.reconciliation = Some(Reconciliation {
+            planned: vec![p("/b/x"), p("/b/w")],
+            present: vec![p("/b/x")],
+            missing: vec![p("/b/w")],
+        });
+        assert!(report.summary().starts_with("Copy had 1 failure"));
+        assert_eq!(
+            report.reconciliation.as_ref().unwrap().summary(),
+            "Checked 2 of 2: 1 missing"
+        );
+    }
+
+    #[test]
     fn numbered_names_keep_the_extension() {
         assert_eq!(numbered_name("report.pdf", 2), "report (2).pdf");
         assert_eq!(numbered_name("Makefile", 3), "Makefile (3)");
         assert_eq!(numbered_name(".profile", 2), ".profile (2)");
+        assert_eq!(numbered_name("archive.tar.gz", 2), "archive (2).tar.gz");
+    }
+
+    fn conflict(kind: ConflictKind) -> Conflict {
+        let now = Timestamp::from_unix(1_791_000_000, 0);
+        Conflict {
+            kind,
+            source: p("/a/report.pdf"),
+            target: p("/b/report.pdf"),
+            source_entry: Entry::new("report.pdf", EntryKind::File)
+                .with_size(2_300_000)
+                .with_modified(now),
+            target_entry: Entry::new("report.pdf", EntryKind::File)
+                .with_size(2_100_000)
+                .with_modified(now.plus_seconds(-86_400 * 3)),
+            keep_both_name: "report (2).pdf".into(),
+        }
     }
 
     #[test]
-    fn the_conflict_question_ends_with_y_or_n() {
-        let conflict = Conflict {
-            source: p("/a/report.pdf"),
-            target: p("/b/report.pdf"),
-        };
+    fn the_conflict_question_says_the_situation_first() {
+        let clock = FixedClock::new(Timestamp::from_unix(1_791_000_000, 0), UtcOffset::UTC);
+        let lines = conflict(ConflictKind::FileOverFile).lines(&clock);
+        assert_eq!(lines[0], "Name taken: report.pdf");
+        assert_eq!(lines[1], "New is newer and larger");
+        assert!(lines[2].starts_with("Existing: 2.1 MB, "));
+        assert!(lines[3].starts_with("New: 2.3 MB, today"));
+        for line in &lines {
+            assert!(line.chars().count() <= 40, "{line}");
+        }
+        let choices = conflict(ConflictKind::FileOverFile).choices();
+        assert_eq!(choices.len(), 9);
+        assert_eq!(choices[0].label, "Skip this one");
+        assert_eq!(choices[0].answer, ConflictAnswer::skip());
+        assert_eq!(choices[4].label, "Keep both: report (2).pdf");
+        assert_eq!(choices[8].label, "Cancel the job");
+        for choice in &choices {
+            assert!(choice.label.chars().count() <= 40, "{}", choice.label);
+        }
+        let same = conflict(ConflictKind::SameFile);
         assert_eq!(
-            conflict.question().text,
+            same.lines(&clock),
+            vec!["Same file: report.pdf. Nothing to do."]
+        );
+        assert!(same.choices().is_empty());
+        let clash = conflict(ConflictKind::FolderOverFile);
+        assert!(within_cells(
+            &clash.lines(&clock)[0],
+            "Cannot merge: report.pdf"
+        ));
+        assert_eq!(clash.choices().len(), 3);
+        assert_eq!(
+            conflict(ConflictKind::FileOverFile).question().text,
             "report.pdf exists in /b. Replace it? y or n"
         );
+    }
+
+    #[test]
+    fn errors_offer_retry_only_where_it_helps() {
+        let error = |error| ItemError {
+            kind: JobKind::Copy,
+            place: p("/a/report.pdf"),
+            error,
+            attempt: 1,
+        };
+        assert_eq!(
+            error(VfsError::InUse).choices(),
+            vec![
+                ErrorAction::Retry,
+                ErrorAction::Skip,
+                ErrorAction::SkipAllLikeThis,
+                ErrorAction::Cancel
+            ]
+        );
+        assert_eq!(
+            error(VfsError::ReadOnlyFilesystem).choices(),
+            vec![
+                ErrorAction::Skip,
+                ErrorAction::SkipAllLikeThis,
+                ErrorAction::Cancel
+            ]
+        );
+        assert_eq!(
+            error(VfsError::PermissionDenied).choices()[0],
+            ErrorAction::Skip
+        );
+        let message = error(VfsError::InUse).message();
+        assert!(within_cells(&message.text, "Could not copy report.pdf"));
     }
 }

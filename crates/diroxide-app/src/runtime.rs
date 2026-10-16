@@ -9,8 +9,9 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
+use diroxide_core::{ConflictAnswer, ErrorAction};
 use diroxide_core::{Effect, Message};
-use diroxide_ops::{Conflict, Engine, JobControl, JobProgress, JobSink};
+use diroxide_ops::{Conflict, Engine, ItemError, JobControl, JobProgress, JobSink};
 use diroxide_vfs::{OpContext, Registry};
 
 use crate::app::AppEvent;
@@ -28,8 +29,12 @@ struct Quiet;
 impl JobSink for Quiet {
     fn progress(&self, _progress: &JobProgress) {}
 
-    fn conflict(&self, _conflict: &Conflict) -> diroxide_core::ConflictPolicy {
-        diroxide_core::ConflictPolicy::Skip
+    fn conflict(&self, _conflict: &Conflict) -> ConflictAnswer {
+        ConflictAnswer::skip()
+    }
+
+    fn error(&self, _error: &ItemError) -> ErrorAction {
+        ErrorAction::Skip
     }
 }
 

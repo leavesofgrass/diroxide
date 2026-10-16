@@ -287,6 +287,8 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "diroxide-core",
  "diroxide-vfs",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
