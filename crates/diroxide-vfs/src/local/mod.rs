@@ -295,9 +295,8 @@ impl Provider for LocalProvider {
         };
         made.map_err(|error| {
             if sys::needs_privilege(&error) {
-                VfsError::Io {
-                    kind: io::ErrorKind::PermissionDenied,
-                    message: "Windows needs Developer Mode to make symbolic links".to_owned(),
+                VfsError::NeedsPrivilege {
+                    what: "making a symbolic link".to_owned(),
                 }
             } else {
                 error.into()

@@ -103,6 +103,17 @@ pub enum VfsError {
         /// What it uses: "compression method 99".
         what: String,
     },
+    /// The account lacks a privilege the operation needs (a symbolic link
+    /// on Windows without Developer Mode). W1a's contract request 3.
+    #[error("{what} needs a privilege this account does not have")]
+    NeedsPrivilege {
+        /// What needs it: "making a symbolic link".
+        what: String,
+    },
+    /// The entry changed since it was listed, so an expected value did not
+    /// match and nothing was done. W1a's contract request 4.
+    #[error("it changed since it was listed")]
+    Changed,
     /// A safety rule refused it.
     #[error("it was refused: {why}")]
     Unsafe {
@@ -226,7 +237,7 @@ impl VfsError {
             VfsError::Cancelled => ErrorClass::Cancelled,
             VfsError::NotFound | VfsError::NotAFolder => ErrorClass::Missing,
             VfsError::AlreadyExists | VfsError::NotEmpty => ErrorClass::Exists,
-            VfsError::PermissionDenied => ErrorClass::Access,
+            VfsError::PermissionDenied | VfsError::NeedsPrivilege { .. } => ErrorClass::Access,
             VfsError::InUse => ErrorClass::InUse,
             VfsError::StorageFull | VfsError::QuotaExceeded => ErrorClass::Storage,
             VfsError::ReadOnlyFilesystem => ErrorClass::ReadOnly,
@@ -243,9 +254,10 @@ impl VfsError {
             | VfsError::NoProvider(_)
             | VfsError::Unsafe { .. }
             | VfsError::TrashRefused { .. } => ErrorClass::Refused,
-            VfsError::CrossesDevices | VfsError::TooManyLinks | VfsError::Io { .. } => {
-                ErrorClass::Other
-            }
+            VfsError::CrossesDevices
+            | VfsError::TooManyLinks
+            | VfsError::Changed
+            | VfsError::Io { .. } => ErrorClass::Other,
         }
     }
 }
@@ -389,6 +401,10 @@ impl Explain for VfsError {
                 "Open it with a program that reads it.".to_owned()
             }
             VfsError::Unsafe { .. } => "Check what it is before you open it.".to_owned(),
+            VfsError::NeedsPrivilege { .. } => {
+                "Turn on Developer Mode in Windows settings, or make a junction instead.".to_owned()
+            }
+            VfsError::Changed => "Reload the folder, then try again.".to_owned(),
             VfsError::TrashRefused { .. } => {
                 "Delete it for good from its listing, or move it to a fixed drive first.".to_owned()
             }
@@ -492,8 +508,12 @@ mod tests {
             VfsError::PasswordRequired,
             VfsError::WrongPassword,
             VfsError::Unsafe {
-                why: "it changed since it was listed".into(),
+                why: "the name leaves the archive".into(),
             },
+            VfsError::NeedsPrivilege {
+                what: "making a symbolic link".into(),
+            },
+            VfsError::Changed,
             VfsError::TrashRefused {
                 why: "this drive has no trash".into(),
             },

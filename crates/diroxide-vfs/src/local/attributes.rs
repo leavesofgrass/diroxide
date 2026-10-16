@@ -219,9 +219,7 @@ pub(crate) fn set_attributes(
     if let Some(expected) = change.expect
         && !same_attributes(current_attributes(&before), expected)
     {
-        return Err(VfsError::Unsafe {
-            why: "it changed since it was listed".to_owned(),
-        });
+        return Err(VfsError::Changed);
     }
     check_possible(change, is_link)?;
     let mut inverse = AttributeChange::default();

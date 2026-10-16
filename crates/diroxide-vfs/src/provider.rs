@@ -180,6 +180,17 @@ pub trait FileWriter: Write + Send {
     /// [`WriteMode::CreateNew`] the commit fails if the name was taken
     /// meanwhile, and never replaces.
     fn commit(self: Box<Self>, durable: bool) -> Result<(), VfsError>;
+
+    /// Sets times and attributes on the unfinished file before the commit's
+    /// rename, so a copy lands with its dates already right (W1a's contract
+    /// request 2, R8 C1). The default says the writer cannot; the engine
+    /// then sets them through [`Provider::set_attributes`] after the commit.
+    fn set_attributes(&mut self, change: &AttributeChange) -> Result<(), VfsError> {
+        let _ = change;
+        Err(VfsError::UnsupportedFeature {
+            what: "attributes on an unfinished file".to_owned(),
+        })
+    }
 }
 
 /// A listing delivered in batches, for providers whose folders are slow or

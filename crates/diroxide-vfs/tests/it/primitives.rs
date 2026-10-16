@@ -301,11 +301,8 @@ fn a_symbolic_link_is_made_or_its_privilege_is_named() {
             provider.remove(&link, &ctx()).unwrap();
             assert!(folder.path().join("target.txt").exists());
         }
-        Err(VfsError::Io { message, .. }) if cfg!(windows) => {
-            assert_eq!(
-                message,
-                "Windows needs Developer Mode to make symbolic links"
-            );
+        Err(VfsError::NeedsPrivilege { what }) if cfg!(windows) => {
+            assert_eq!(what, "making a symbolic link");
         }
         Err(other) => panic!("{other}"),
     }
@@ -422,7 +419,7 @@ fn an_expected_value_that_moved_changes_nothing() {
     };
     assert!(matches!(
         provider.set_attributes(&place, &change, &ctx()),
-        Err(VfsError::Unsafe { .. })
+        Err(VfsError::Changed)
     ));
     assert_eq!(
         provider.stat(&place, &ctx()).unwrap().modified,
