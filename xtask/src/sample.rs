@@ -11,7 +11,8 @@
 //! - `cargo xtask search-tree PATH [--small]`: the 1 GB, 100,000-file
 //!   tree of alpha.3's search spike, with a known number of content and
 //!   name hits, from `bench/search-tree.toml`.
-//! - The large file the copy scenarios of the bench use.
+//! - The bench's own trees (a flat folder, one large file), written under
+//!   the target folder.
 //!
 //! Every tree is the same on every run: fixed names, contents and
 //! modified times from a seeded generator. Nothing here deletes anything:
@@ -178,6 +179,20 @@ pub fn big_file(path: &Path, bytes: u64, modified: Option<SystemTime>) -> Result
         set_modified(path, modified)?;
     }
     Ok(())
+}
+
+/// Makes `count` empty files in `folder` (which must exist), named
+/// `entry-000001.txt` and on, and returns their names: the bench's
+/// listing.
+pub fn flat_folder(folder: &Path, count: usize) -> Result<Vec<String>> {
+    let mut names = Vec::with_capacity(count);
+    for n in 1..=count {
+        let name = format!("entry-{n:06}.txt");
+        let path = folder.join(&name);
+        File::create(&path).with_context(|| format!("{} could not be made", path.display()))?;
+        names.push(name);
+    }
+    Ok(names)
 }
 
 // ---------------------------------------------------------------------
@@ -1077,5 +1092,10 @@ mod tests {
         let bytes = fs::read(&path).unwrap();
         assert_eq!(bytes.len(), 2 * 1024 * 1024 + 5);
         assert_ne!(bytes[..1024 * 1024], bytes[1024 * 1024..2 * 1024 * 1024]);
+        let names = flat_folder(dir.path(), 3).unwrap();
+        assert_eq!(
+            names,
+            ["entry-000001.txt", "entry-000002.txt", "entry-000003.txt"]
+        );
     }
 }

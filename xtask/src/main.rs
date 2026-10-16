@@ -9,11 +9,14 @@
 //! - `native --check`: the pure-Rust gate: no `cc`, `cmake` or `cxx` build
 //!   dependency in the main workspace but the one allow entry (ring, for
 //!   the `fetch` feature of `diro`).
+//! - `bench [--quick] [--only ID] [--save-baseline] [--gate]`: the bench,
+//!   on trees it writes under the target folder (docs/dev/bench.md).
 //! - `sample-folder PATH [--big-mb N]`: the owner's check folder.
 //! - `search-tree PATH [--small]`: the 1 GB search tree of alpha.3.
 //!
 //! Later waves add `settings-doc`, `notices`, `icons` and `dist`.
 
+mod bench;
 mod deps;
 mod keyboard;
 mod logo;
@@ -25,7 +28,7 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | keyboard [--check] | logo | sample-folder PATH [--big-mb N] | search-tree PATH [--small]";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | keyboard [--check] | logo | bench [--quick] [--only ID] [--save-baseline] [--gate] | sample-folder PATH [--big-mb N] | search-tree PATH [--small]";
 
 fn main() -> ExitCode {
     match run() {
@@ -63,6 +66,7 @@ fn run() -> Result<bool> {
         ["keyboard"] => keyboard::write(&root),
         ["keyboard", "--check"] => keyboard::check(&root),
         ["logo"] => logo::run(&root),
+        ["bench", rest @ ..] => bench::run(&root, rest),
         ["sample-folder", rest @ ..] => sample::sample_folder(rest),
         ["search-tree", rest @ ..] => sample::search_tree(&root, rest),
         _ => {

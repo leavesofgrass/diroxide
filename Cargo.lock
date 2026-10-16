@@ -1673,9 +1673,11 @@ dependencies = [
  "anyhow",
  "diroxide-app",
  "diroxide-core",
+ "diroxide-ops",
  "diroxide-vfs",
  "resvg",
  "serde",
+ "serde_json",
  "tempfile",
  "toml",
 ]
