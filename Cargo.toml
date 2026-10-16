@@ -124,6 +124,9 @@ resvg = "0.47.0"
 # Terminal and window.
 ratatui = "0.30.2"
 crossterm = "0.29.0"
+# Gives the terminal back on a terminate signal or Ctrl+Break (W1d-2's
+# contract request 1); pure Rust.
+ctrlc = { version = "3.5.2", features = ["termination"] }
 accesskit = "0.25.1"
 accesskit_winit = "0.34.1"
 # Command line and logging.
