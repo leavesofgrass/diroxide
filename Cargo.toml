@@ -130,6 +130,10 @@ accesskit_winit = "0.34.1"
 clap = { version = "4.6.1", features = ["derive"] }
 # Shell completion scripts for diro completions SHELL (plan section 5.19).
 clap_complete = "4.6"
+# The local time zone, so dates read in the owner's local time and never in
+# UTC (W1e's contract request, resolved at the pair 2 integration): pure Rust,
+# with the zone database bundled and the Windows zone read from the system.
+jiff = "0.2"
 tracing = "0.1.44"
 # Tests.
 insta = "1.48.0"
