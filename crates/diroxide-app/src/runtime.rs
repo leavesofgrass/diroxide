@@ -1073,8 +1073,12 @@ mod tests {
         assert!(started.elapsed() < Duration::from_millis(200));
         assert!(runtime.is_busy());
         assert!(runtime.poll().is_empty());
-        let events = runtime.settle();
-        assert!(matches!(events.last(), Some(AppEvent::Listed { .. })));
+        // The place's facts may arrive in a batch of their own before the
+        // listing under load, so wait for the listing itself rather than
+        // for the first batch (the full-suite run on main flaked on this).
+        next(&mut runtime, |event| {
+            matches!(event, AppEvent::Listed { .. }).then_some(())
+        });
     }
 
     /// Waits for the first event `pick` takes; fails when the runtime goes
