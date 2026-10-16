@@ -13,8 +13,8 @@
 //! plain path (never with the `\\?\` prefix, which is not shown and not
 //! passed to the shell).
 
-use diroxide_core::Place;
 use diroxide_core::place::strip_extended_prefix;
+use diroxide_core::{Place, catalog};
 
 /// The longest working folder a program can start in, in UTF-16 units
 /// (spike six: 258 started, 259 failed with "The directory name is
@@ -43,6 +43,23 @@ pub fn can_open_with_system(file: &Place) -> bool {
     !cfg!(windows) || utf16_units(&file.to_string()) <= OPENER_MAX_PATH_UNITS
 }
 
+/// The refusal before a program or a shell starts, or `None` when it may:
+/// "Cannot start a program in a folder this deep" when the working folder
+/// is too deep, or when the program itself is stored deeper than the
+/// shell can start it from (spike four).
+pub fn program_refusal(folder: &Place, program: Option<&Place>) -> Option<&'static str> {
+    let deep_folder = !can_start_program_in(folder);
+    let deep_program = program.is_some_and(|program| !can_open_with_system(program));
+    (deep_folder || deep_program).then_some(catalog::PROGRAM_TOO_DEEP)
+}
+
+/// The refusal before the system opener is given a file, or `None` when
+/// it may: "Cannot open a file this deep". The opener's own error text is
+/// never shown (spike four found it unreadable).
+pub fn opener_refusal(file: &Place) -> Option<&'static str> {
+    (!can_open_with_system(file)).then_some(catalog::OPEN_TOO_DEEP)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,5 +84,31 @@ mod tests {
             .unwrap();
         assert_eq!(can_start_program_in(&deep), !cfg!(windows));
         assert_eq!(can_open_with_system(&deep), !cfg!(windows));
+    }
+
+    #[test]
+    fn refusals_use_the_catalog_sentences_at_the_measured_lengths() {
+        let base = if cfg!(windows) { "D:\\" } else { "/" };
+        // A working folder of 258 units starts; 259 does not (spike six).
+        let at = |units: usize| Place::parse(&format!("{base}{}", "f".repeat(units - 3))).unwrap();
+        if cfg!(windows) {
+            assert_eq!(program_refusal(&at(258), None), None);
+            assert_eq!(
+                program_refusal(&at(259), None),
+                Some("Cannot start a program in a folder this deep")
+            );
+            assert_eq!(opener_refusal(&at(259)), None);
+            assert_eq!(
+                opener_refusal(&at(260)),
+                Some("Cannot open a file this deep")
+            );
+            assert_eq!(
+                program_refusal(&at(10), Some(&at(260))),
+                Some("Cannot start a program in a folder this deep")
+            );
+        } else {
+            assert_eq!(program_refusal(&at(259), Some(&at(260))), None);
+            assert_eq!(opener_refusal(&at(260)), None);
+        }
     }
 }

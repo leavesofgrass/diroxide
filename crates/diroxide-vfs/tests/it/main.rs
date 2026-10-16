@@ -8,6 +8,7 @@
 )]
 
 mod local;
+mod long_paths;
 mod names;
 mod primitives;
 mod trash;
