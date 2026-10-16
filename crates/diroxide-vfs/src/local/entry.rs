@@ -23,6 +23,7 @@ pub(crate) struct EntryContext {
     pub(crate) owners: Option<Arc<Owners>>,
     /// The folder's volume, which its entries share (Windows, where the
     /// directory read has no volume per entry).
+    #[cfg_attr(not(windows), allow(dead_code, reason = "Unix reads it per entry"))]
     pub(crate) volume: Option<u64>,
 }
 

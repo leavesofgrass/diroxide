@@ -26,6 +26,10 @@ pub(crate) use windows::*;
 /// (the Unix device and inode, or the Windows volume serial and file id).
 /// Two names with one identity are one entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "compared whole on Unix; read by field on Windows")
+)]
 pub(crate) struct Identity {
     /// The volume: the Unix device number or the Windows serial number.
     pub(crate) volume: u64,
@@ -36,6 +40,7 @@ pub(crate) struct Identity {
 impl Identity {
     /// The id as an [`diroxide_core::Entry::inode`]: the low 64 bits,
     /// which hold the whole id on every file system but ReFS.
+    #[cfg_attr(not(windows), allow(dead_code, reason = "Unix reads the inode itself"))]
     pub(crate) fn inode(self) -> u64 {
         (self.id & u128::from(u64::MAX)) as u64
     }

@@ -514,17 +514,30 @@ fn all_twelve_mode_bits_are_written_and_links_are_refused() {
     let provider = LocalProvider::new();
     let place = child(&folder, "tool");
     let before = provider.stat(&place, &ctx()).unwrap().attributes;
-    for mode in [0o4755, 0o2775, 0o1777, 0o600] {
+    for mode in [0o4755, 0o2775, 0o600] {
         let change = AttributeChange {
             attributes: Some(Attributes::Unix(mode)),
             ..AttributeChange::default()
         };
-        provider.set_attributes(&place, &change, &ctx()).unwrap();
+        let inverse = provider.set_attributes(&place, &change, &ctx()).unwrap();
+        assert!(inverse.attributes.is_some());
         assert_eq!(
             provider.stat(&place, &ctx()).unwrap().attributes,
             Some(Attributes::Unix(mode))
         );
     }
+    // The sticky bit, on a folder, where it means something.
+    fs::create_dir(folder.path().join("shared")).unwrap();
+    let shared = child(&folder, "shared");
+    let sticky = AttributeChange {
+        attributes: Some(Attributes::Unix(0o1777)),
+        ..AttributeChange::default()
+    };
+    provider.set_attributes(&shared, &sticky, &ctx()).unwrap();
+    assert_eq!(
+        provider.stat(&shared, &ctx()).unwrap().attributes,
+        Some(Attributes::Unix(0o1777))
+    );
     let change = AttributeChange {
         attributes: before,
         ..AttributeChange::default()
