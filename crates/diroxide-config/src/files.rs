@@ -141,6 +141,8 @@ pub struct FileTypeConfig {
     pub priority: i32,
     /// The actions, the first being the default.
     pub actions: Vec<ActionConfig>,
+    /// The media type, such as `application/pdf`.
+    pub mime: Option<String>,
 }
 
 /// `filetypes.toml`: user file types, added to the built-in ones.
