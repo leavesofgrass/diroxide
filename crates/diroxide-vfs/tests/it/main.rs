@@ -10,6 +10,7 @@
 mod local;
 mod names;
 mod primitives;
+mod trash;
 mod walk;
 mod writer;
 
@@ -31,7 +32,9 @@ fn the_registry_lists_a_local_folder() {
 }
 
 #[test]
-fn the_local_provider_has_no_trash_yet() {
+fn the_local_provider_trashes_only_what_exists() {
+    // Phase 0 answered "unsupported"; W1a's trash checks the item is there
+    // before the gate and before any call.
     let registry = Registry::with_local();
     let place = Place::parse(env!("CARGO_MANIFEST_DIR"))
         .unwrap()
@@ -40,13 +43,15 @@ fn the_local_provider_has_no_trash_yet() {
     let provider = registry.resolve(&place).unwrap();
     assert!(matches!(
         provider.trash(&place, &OpContext::new()),
-        Err(VfsError::Unsupported { .. })
+        Err(VfsError::NotFound)
     ));
 }
 
 #[test]
 fn roots_are_full_places() {
-    for root in local_roots() {
+    let roots = local_roots();
+    assert!(!roots.is_empty());
+    for root in roots {
         assert!(root.is_root());
     }
 }

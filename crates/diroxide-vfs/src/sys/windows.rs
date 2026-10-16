@@ -14,22 +14,23 @@ use std::io;
 use std::mem::size_of;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-use std::os::windows::io::AsRawHandle;
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use diroxide_core::{Attributes, Entry, Place, Timestamp};
 use windows_sys::Win32::Foundation::{
-    ERROR_PRIVILEGE_NOT_HELD, ERROR_REQUEST_ABORTED, GENERIC_WRITE, HANDLE,
+    ERROR_PRIVILEGE_NOT_HELD, ERROR_REQUEST_ABORTED, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, COPY_FILE_COPY_SYMLINK, COPY_FILE_FAIL_IF_EXISTS, CopyFileExW,
-    FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_INFO, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
-    FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES, FileBasicInfo, FileIdInfo,
-    GetDiskFreeSpaceExW, GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx,
-    GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW, MoveFileExW, PROGRESS_CANCEL,
-    PROGRESS_CONTINUE, SetFileAttributesW,
+    ExtendedFileIdType, FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_128, FILE_ID_DESCRIPTOR, FILE_ID_INFO,
+    FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    FILE_WRITE_ATTRIBUTES, FileBasicInfo, FileIdInfo, FileIdType, GetDiskFreeSpaceExW,
+    GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx,
+    GetFinalPathNameByHandleW, GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW,
+    MoveFileExW, OpenFileById, PROGRESS_CANCEL, PROGRESS_CONTINUE, SetFileAttributesW,
 };
 use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
@@ -468,6 +469,84 @@ pub(crate) fn copy_file(from: &Path, to: &Path, ctx: &OpContext) -> io::Result<(
     } else {
         Err(error)
     }
+}
+
+/// Where an entry is now, found by its identity on the volume of `folder`
+/// (`OpenFileById`, then `GetFinalPathNameByHandleW`). `Ok(None)` when no
+/// entry has that id any more; an error when the volume cannot be asked.
+fn path_of_identity(folder: &Path, identity: Identity) -> io::Result<Option<PathBuf>> {
+    let hint = OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES)
+        .share_mode(SHARE_ALL)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(folder)?;
+    let mut descriptor = FILE_ID_DESCRIPTOR {
+        dwSize: size_of::<FILE_ID_DESCRIPTOR>() as u32,
+        ..FILE_ID_DESCRIPTOR::default()
+    };
+    if identity.id >> 64 == 0 {
+        descriptor.Type = FileIdType;
+        descriptor.Anonymous.FileId = i64::from_le_bytes(identity.inode().to_le_bytes());
+    } else {
+        descriptor.Type = ExtendedFileIdType;
+        descriptor.Anonymous.ExtendedFileId = FILE_ID_128 {
+            Identifier: identity.id.to_le_bytes(),
+        };
+    }
+    // SAFETY: the hint handle is valid while `hint` lives; `descriptor` is
+    // a filled FILE_ID_DESCRIPTOR whose size is in `dwSize`; no security
+    // attributes are passed.
+    let handle = unsafe {
+        OpenFileById(
+            hint.as_raw_handle(),
+            &raw const descriptor,
+            FILE_READ_ATTRIBUTES,
+            SHARE_ALL,
+            std::ptr::null(),
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE || handle.is_null() {
+        // The id names no entry: removed for good, or never there.
+        return Ok(None);
+    }
+    // SAFETY: `handle` was just returned open by OpenFileById and nothing
+    // else owns it; the OwnedHandle closes it exactly once.
+    let owned = unsafe { OwnedHandle::from_raw_handle(handle) };
+    let mut buffer = vec![0u16; 1024];
+    loop {
+        let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+        // SAFETY: the handle is valid while `owned` lives; `buffer` holds
+        // `capacity` units, the length the call is told.
+        let written = unsafe {
+            GetFinalPathNameByHandleW(owned.as_raw_handle(), buffer.as_mut_ptr(), capacity, 0)
+        };
+        let written = usize::try_from(written).unwrap_or(0);
+        if written == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if written < buffer.len() {
+            return Ok(Some(path_from_wide(&buffer)));
+        }
+        buffer.resize(written + 1, 0);
+    }
+}
+
+/// The trash's post-check on Windows: whether the entry with `identity`,
+/// which was in `folder`, now lies inside its volume's `$Recycle.Bin`.
+/// `Some(false)` when it lies elsewhere or nowhere (removed for good);
+/// `None` when the volume cannot be asked.
+pub(crate) fn in_recycle_bin(folder: &Path, identity: Identity) -> Option<bool> {
+    let root = volume_root(folder).ok()?;
+    let Some(now) = path_of_identity(folder, identity).ok()? else {
+        return Some(false);
+    };
+    let first = now
+        .strip_prefix(&root)
+        .ok()
+        .and_then(|rest| rest.components().next())
+        .map(|first| first.as_os_str().to_string_lossy().to_lowercase());
+    Some(first.as_deref() == Some("$recycle.bin"))
 }
 
 /// Whether an error is Windows's "a required privilege is not held":

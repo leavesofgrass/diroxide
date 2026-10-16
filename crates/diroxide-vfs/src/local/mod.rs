@@ -26,6 +26,7 @@ pub(crate) mod copy;
 pub(crate) mod entry;
 pub(crate) mod owners;
 pub(crate) mod probe;
+pub(crate) mod trashing;
 pub(crate) mod volumes;
 pub(crate) mod writer;
 
@@ -43,7 +44,9 @@ use crate::provider::{
     AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Provider, ReadSeek, WriteMode,
 };
 use crate::sys;
+use crate::trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
 use crate::volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
+use crate::{limits, walk};
 use entry::{EntryContext, entry_from};
 
 /// The places for the go-to-place list: the drives on Windows (from the
@@ -360,6 +363,69 @@ impl Provider for LocalProvider {
         attributes::set_attributes(&Self::path_of(place)?, change)
     }
 
+    fn trash_gate(&self, place: &Place, ctx: &OpContext) -> Result<TrashGate, VfsError> {
+        ctx.check()?;
+        let path = Self::path_of(place)?;
+        let metadata = fs::symlink_metadata(&path)?;
+        let shell = shell_path(&path)?;
+        let facts = volumes::facts_at(&shell);
+        let own_units = limits::utf16_units(&shell.to_string_lossy());
+        // A folder is measured by the longest path inside it, as the trash
+        // will see it (spike four): the walk's longest, moved by the
+        // difference between the place's path and the trash's.
+        let longest_path_units = if metadata.is_dir() {
+            let inside = walk::longest_path_units(self, place, ctx)?;
+            let written = limits::utf16_units(&path.to_string_lossy());
+            (inside + own_units).saturating_sub(written).max(own_units)
+        } else {
+            own_units
+        };
+        let network_path = facts.network_path || shell.to_string_lossy().starts_with(r"\\");
+        let gate = trash_gate(
+            &TrashFacts {
+                volume: facts.kind,
+                longest_path_units,
+                network_path,
+            },
+            TrashRules::native(),
+        );
+        // A read-only volume, or anything the capabilities say has no
+        // trash, is refused even where the platform's rules would allow it.
+        if gate.allows() && !volumes::capabilities_at(&shell).trash {
+            return Ok(TrashGate::NoTrashHere(facts.kind));
+        }
+        Ok(gate)
+    }
+
+    fn trash(&self, place: &Place, ctx: &OpContext) -> Result<TrashCheck, VfsError> {
+        ctx.check()?;
+        let path = Self::path_of(place)?;
+        fs::symlink_metadata(&path)?;
+        let gate = self.trash_gate(place, ctx)?;
+        if !gate.allows() {
+            return Err(VfsError::TrashRefused { why: gate.why() });
+        }
+        ctx.check()?;
+        trashing::trash_with(
+            &shell_path(&path)?,
+            &trashing::system_trash,
+            &trashing::system_look,
+        )
+    }
+
+    fn restore(&self, original: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+        ctx.check()?;
+        let path = Self::path_of(original)?;
+        if !self.capabilities(original).restore {
+            return Err(VfsError::unsupported("file", "restore from the trash here"));
+        }
+        if fs::symlink_metadata(&path).is_ok() {
+            return Err(VfsError::AlreadyExists);
+        }
+        let shell = shell_path(&path).unwrap_or(path);
+        trashing::restore_newest(&shell)
+    }
+
     fn copy_hint(&self, from: &Place, to: &Place) -> CopyHint {
         match (Self::path_of(from), Self::path_of(to)) {
             (Ok(from), Ok(to)) => copy::hint(&from, &to),
@@ -374,6 +440,24 @@ impl Provider for LocalProvider {
         Self::refuse_name(to, &target)?;
         copy::copy_within(&source, &target, copy::hint(&source, &target), ctx)
     }
+}
+
+/// The path as the trash sees it: the parent folder with its links and
+/// junctions resolved (the `trash` crate canonicalizes it), the name kept,
+/// and never the extended-length prefix. A folder reached through a
+/// junction is judged by the drive it is really on.
+fn shell_path(path: &Path) -> Result<PathBuf, VfsError> {
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(VfsError::Unsafe {
+            why: "it is the top of a drive".to_owned(),
+        });
+    };
+    let parent = fs::canonicalize(parent)?;
+    let parent = match parent.to_str() {
+        Some(text) => PathBuf::from(diroxide_core::place::strip_extended_prefix(text).as_ref()),
+        None => parent,
+    };
+    Ok(parent.join(name))
 }
 
 /// Makes a symbolic link, a folder link or a file link on Windows.
