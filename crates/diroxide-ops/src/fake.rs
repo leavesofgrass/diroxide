@@ -633,6 +633,51 @@ impl FakeProvider {
     }
 }
 
+/// The slow-place scenario for the bench (R23): a source folder of files
+/// and an empty target folder on a fake whose every call waits and one
+/// call stalls, so the bench (W1e) can time a copy from a slow or stalling
+/// place and check that the stall is said.
+#[derive(Debug, Clone)]
+pub struct SlowPlace {
+    /// The fake, slow from the moment it is returned.
+    pub fake: FakeProvider,
+    /// The files to copy, in order.
+    pub sources: Vec<Place>,
+    /// The empty folder to copy them into.
+    pub target: Place,
+}
+
+impl SlowPlace {
+    /// Builds `files` files of `size` bytes under `root/source`, and an
+    /// empty `root/target`, then makes the fake slow with `latency`. The
+    /// stall counts every call from here on, the plan's included.
+    pub fn new(
+        root: &Place,
+        files: usize,
+        size: usize,
+        latency: Latency,
+    ) -> Result<Self, VfsError> {
+        let fake = FakeProvider::new();
+        let source = root.join("source")?;
+        let target = root.join("target")?;
+        fake.add_folder(&source);
+        fake.add_folder(&target);
+        let data: Vec<u8> = (0..size).map(|i| (i % 251) as u8).collect();
+        let mut sources = Vec::with_capacity(files);
+        for n in 0..files {
+            let place = source.join(&format!("f{n:05}.bin"))?;
+            fake.add_file(&place, &data);
+            sources.push(place);
+        }
+        fake.switches_mut().latency = latency;
+        Ok(Self {
+            fake,
+            sources,
+            target,
+        })
+    }
+}
+
 /// A reader that fails after a number of bytes.
 struct FaultyReader {
     inner: Cursor<Vec<u8>>,

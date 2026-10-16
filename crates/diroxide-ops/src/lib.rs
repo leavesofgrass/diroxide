@@ -41,7 +41,7 @@ pub use engine::{
     numbered_name,
 };
 pub use error::OpsError;
-pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies};
+pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, SlowPlace};
 pub use journal::{Interrupted, Journal};
 pub use options::EngineOptions;
 pub use pace::{FakePacer, Pacer, SystemPacer};

@@ -1441,6 +1441,33 @@ fn a_call_that_hangs_says_stalled_then_goes_on() {
 }
 
 #[test]
+fn the_slow_place_scenario_copies_and_says_its_stall() {
+    let root = p("/slow");
+    let slow = crate::fake::SlowPlace::new(
+        &root,
+        4,
+        3000,
+        crate::fake::Latency {
+            per_call: Duration::from_millis(2),
+            stall_after_calls: Some(14),
+            stall_for: Duration::from_millis(300),
+        },
+    )
+    .unwrap();
+    let engine = engine(&slow.fake).with_options(EngineOptions {
+        stall_after: Duration::from_millis(60),
+        ..EngineOptions::default()
+    });
+    let request = JobRequest::new(JobId::new(30), JobKind::Copy, slow.sources.clone())
+        .to(slow.target.clone());
+    let plan = engine.plan(&request).unwrap();
+    let sink = Script::default();
+    let report = engine.run(&plan, &JobControl::new(), &sink);
+    assert_eq!(report.done.len(), 4);
+    assert!(sink.state_changes().contains(&JobState::Stalled));
+}
+
+#[test]
 fn times_that_cannot_be_kept_are_warnings_not_failures() {
     let fake = tree();
     fake.switches_mut().call_faults.push(CallFault::new(
