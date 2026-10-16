@@ -28,6 +28,7 @@ pub(crate) mod owners;
 pub(crate) mod probe;
 pub(crate) mod trashing;
 pub(crate) mod volumes;
+pub(crate) mod watch;
 pub(crate) mod writer;
 
 use std::fs::{self, File};
@@ -41,7 +42,8 @@ use crate::capabilities::Capabilities;
 use crate::error::VfsError;
 use crate::names;
 use crate::provider::{
-    AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Provider, ReadSeek, WriteMode,
+    AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Provider, ReadSeek, WatchHandle,
+    WatchSink, WriteMode,
 };
 use crate::sys;
 use crate::trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
@@ -424,6 +426,11 @@ impl Provider for LocalProvider {
         }
         let shell = shell_path(&path).unwrap_or(path);
         trashing::restore_newest(&shell)
+    }
+
+    fn watch(&self, place: &Place, sink: WatchSink) -> Result<Option<WatchHandle>, VfsError> {
+        let folder = Self::path_of(place)?;
+        watch::watch(place, &folder, sink)
     }
 
     fn copy_hint(&self, from: &Place, to: &Place) -> CopyHint {

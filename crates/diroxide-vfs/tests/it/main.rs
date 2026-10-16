@@ -12,6 +12,7 @@ mod names;
 mod primitives;
 mod trash;
 mod walk;
+mod watch;
 mod writer;
 
 use diroxide_core::{EntryKind, Place};
