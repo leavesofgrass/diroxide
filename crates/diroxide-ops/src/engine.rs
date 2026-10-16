@@ -5,28 +5,30 @@
 //! removed; a provider's clone is tried before the destination is
 //! touched; a trash failure never falls through to a permanent delete;
 //! every job ends with a reconciliation against a fresh read of what it
-//! made. Phase 0's run is naive (single files, no walk, no verify);
-//! W1b builds the walk, the copy loop and the property test over Skip,
-//! Keep, Retry and Cancel on these types.
+//! made. The planner is in `planner.rs`, the run in `run.rs`; this module
+//! holds the types the app speaks: the sink, the control, the conflict
+//! and error questions, and the report.
 
-use std::io;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::thread;
-use std::time::Duration;
 
 use diroxide_core::clock::describe_time;
 use diroxide_core::format::{count, human_size};
 use diroxide_core::{
-    Clock, ConflictAction, ConflictAnswer, ConflictKind, ConflictPolicy, Entry, ErrorAction, JobId,
-    JobKind, JobRequest, JobState, Message, Place,
+    Clock, ConflictAction, ConflictAnswer, ConflictKind, Entry, ErrorAction, JobId, JobKind,
+    JobState, Message, Place,
 };
-use diroxide_vfs::{CancelToken, OpContext, Registry, VfsError, WriteMode};
+use diroxide_vfs::{CancelToken, Registry, VfsError};
 
 use crate::error::OpsError;
-use crate::plan::{Plan, Step};
+use crate::journal::Journal;
+use crate::options::EngineOptions;
+use crate::pace::{Pacer, SystemPacer};
+use crate::plan::Plan;
 use crate::progress::JobProgress;
-use crate::undo::UndoRecord;
+use crate::run::{Run, Shared, watch_for_stalls};
+use crate::undo::{UndoLog, UndoRecord};
 
 pub use diroxide_vfs::names::numbered_name;
 
@@ -97,6 +99,7 @@ impl Conflict {
     /// and asks nothing.
     pub fn lines(&self, clock: &dyn Clock) -> Vec<String> {
         let name = self.target.name().unwrap_or("the entry");
+        let name = diroxide_core::names::spell_out(name);
         match self.kind {
             ConflictKind::SameFile => vec![format!("Same file: {name}. Nothing to do.")],
             ConflictKind::FileOverFolder => vec![format!("Cannot merge: {name} is a folder here")],
@@ -156,7 +159,10 @@ impl Conflict {
                     ConflictAnswer::for_all(ConflictAction::Replace),
                 ),
                 choice(
-                    format!("Keep both: {}", self.keep_both_name),
+                    format!(
+                        "Keep both: {}",
+                        diroxide_core::names::spell_out(&self.keep_both_name)
+                    ),
                     ConflictAnswer::once(ConflictAction::KeepBoth),
                 ),
                 choice(
@@ -180,11 +186,10 @@ impl Conflict {
     /// line as a yes-or-no question about replacing. W1d moves to
     /// [`Conflict::lines`] and [`Conflict::choices`].
     pub fn question(&self) -> Message {
-        let name = self.target.name().unwrap_or("The entry");
-        let folder = self
-            .target
-            .parent()
-            .map_or_else(String::new, |p| format!(" in {p}"));
+        let name = diroxide_core::names::spell_out(self.target.name().unwrap_or("The entry"));
+        let folder = self.target.parent().map_or_else(String::new, |p| {
+            format!(" in {}", diroxide_core::names::spell_out(&p.to_string()))
+        });
         Message::question(&format!("{name} exists{folder}. Replace it?"))
     }
 }
@@ -205,12 +210,13 @@ pub struct ItemError {
 impl ItemError {
     /// The message in the house style: "Could not copy report.pdf:
     /// another program is using it. Close it in the other program, then
-    /// retry."
+    /// retry." Hidden characters in the name are spelled out.
     pub fn message(&self) -> Message {
         let name = self
             .place
             .name()
             .map_or_else(|| self.place.to_string(), str::to_owned);
+        let name = diroxide_core::names::spell_out(&name);
         Message::from_error(self.kind.verb(), &name, &self.error)
     }
 
@@ -403,9 +409,21 @@ impl JobReport {
     }
 }
 
-enum Outcome {
-    Done,
-    Skipped(String),
+/// A sink that says nothing, skips every conflict and every error: for
+/// planning without a frontend.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Quiet;
+
+impl JobSink for Quiet {
+    fn progress(&self, _progress: &JobProgress) {}
+
+    fn conflict(&self, _conflict: &Conflict) -> ConflictAnswer {
+        ConflictAnswer::skip()
+    }
+
+    fn error(&self, _error: &ItemError) -> ErrorAction {
+        ErrorAction::Skip
+    }
 }
 
 /// The job engine. Planning is quick; running blocks, so the app runs it
@@ -413,12 +431,36 @@ enum Outcome {
 #[derive(Clone, Debug)]
 pub struct Engine {
     registry: Arc<Registry>,
+    options: EngineOptions,
+    pacer: Arc<dyn Pacer>,
+    journal: Option<Journal>,
 }
 
 impl Engine {
-    /// An engine that reaches places through this registry.
+    /// An engine that reaches places through this registry, with the
+    /// default options, the real clock and no journal.
     pub fn new(registry: Arc<Registry>) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            options: EngineOptions::default(),
+            pacer: Arc::new(SystemPacer::new()),
+            journal: None,
+        }
+    }
+
+    /// The same engine with these options.
+    pub fn with_options(mut self, options: EngineOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// The same engine reading time from this pacer (a [`FakePacer`] in
+    /// tests, so waits take no time).
+    ///
+    /// [`FakePacer`]: crate::pace::FakePacer
+    pub fn with_pacer(mut self, pacer: Arc<dyn Pacer>) -> Self {
+        self.pacer = pacer;
+        self
     }
 
     /// The registry the engine uses.
@@ -426,310 +468,96 @@ impl Engine {
         &self.registry
     }
 
-    /// Computes what a job will do, touching nothing. Phase 0: one step per
-    /// source, without walking into folders.
-    pub fn plan(&self, request: &JobRequest) -> Result<Plan, OpsError> {
-        let named = |source: &Place| {
-            source
-                .name()
-                .map(str::to_owned)
-                .ok_or(OpsError::NothingSelected)
-        };
-        let new_name = || request.new_name.clone().ok_or(OpsError::NoName);
-        let destination = || request.destination.clone().ok_or(OpsError::NoDestination);
-        if request.sources.is_empty()
-            && request.renames.is_empty()
-            && request.kind != JobKind::MakeFolder
-        {
-            return Err(OpsError::NothingSelected);
-        }
-        let mut steps = Vec::new();
-        match request.kind {
-            JobKind::Copy | JobKind::Move => {
-                let folder = destination()?;
-                for from in &request.sources {
-                    let to = folder.join(&named(from)?).map_err(VfsError::from)?;
-                    let from = from.clone();
-                    steps.push(if request.kind == JobKind::Copy {
-                        Step::Copy { from, to }
-                    } else {
-                        Step::Move { from, to }
-                    });
-                }
-            }
-            JobKind::Rename if !request.renames.is_empty() => {
-                for (from, name) in &request.renames {
-                    let parent = from.parent().ok_or(OpsError::NothingSelected)?;
-                    let to = parent.join(name).map_err(VfsError::from)?;
-                    steps.push(Step::Rename {
-                        from: from.clone(),
-                        to,
-                    });
-                }
-            }
-            JobKind::Rename | JobKind::Duplicate => {
-                let from = request.sources.first().ok_or(OpsError::NothingSelected)?;
-                let parent = from.parent().ok_or(OpsError::NothingSelected)?;
-                let to = parent.join(&new_name()?).map_err(VfsError::from)?;
-                let from = from.clone();
-                steps.push(if request.kind == JobKind::Rename {
-                    Step::Rename { from, to }
-                } else {
-                    Step::Copy { from, to }
-                });
-            }
-            JobKind::MakeFolder => {
-                let place = destination()?.join(&new_name()?).map_err(VfsError::from)?;
-                steps.push(Step::MakeFolder { place });
-            }
-            JobKind::Trash => steps.extend(request.sources.iter().map(|place| Step::Trash {
-                place: place.clone(),
-            })),
-            JobKind::DeletePermanently => {
-                steps.extend(request.sources.iter().map(|place| Step::Remove {
-                    place: place.clone(),
-                }))
-            }
-            other => return Err(OpsError::NotBuilt(other.verb().to_owned())),
-        }
-        Ok(Plan::new(
-            request.id,
-            request.kind,
-            steps,
-            request.conflicts,
-        ))
+    /// The engine's options.
+    pub fn options(&self) -> &EngineOptions {
+        &self.options
+    }
+
+    /// The engine's clock.
+    pub fn pacer(&self) -> &dyn Pacer {
+        &*self.pacer
+    }
+
+    /// The same engine writing the undo journal into this journal's
+    /// folder, before each job's first step and after every step.
+    pub fn with_journal(mut self, journal: Journal) -> Self {
+        self.journal = Some(journal);
+        self
+    }
+
+    /// The undo journal, when the engine writes one.
+    pub fn journal(&self) -> Option<&Journal> {
+        self.journal.as_ref()
     }
 
     /// Runs a plan to its end, or until cancelled, reporting progress and
-    /// asking about conflicts and errors through the sink.
+    /// asking about conflicts and errors through the sink. Blocking: the
+    /// app runs it on a worker thread. A stall detector watches beside it
+    /// and says "stalled" when nothing moves for a while.
     pub fn run(&self, plan: &Plan, control: &JobControl, sink: &dyn JobSink) -> JobReport {
-        let mut report = JobReport::new(plan.job, plan.kind);
-        let mut policy = plan.conflicts;
-        let mut progress = JobProgress::start(plan.kind, plan.steps.len() as u64, None);
+        let by_bytes = matches!(
+            plan.kind,
+            JobKind::Copy | JobKind::Duplicate | JobKind::Move
+        ) && plan.facts.counted
+            && plan.facts.bytes > 0;
+        let mut progress = JobProgress::start(
+            plan.kind,
+            plan.steps.len() as u64,
+            by_bytes.then_some(plan.facts.bytes),
+        );
         progress.state = JobState::Running;
-        let ctx = OpContext::new().with_cancel(control.cancel.clone());
-        for step in &plan.steps {
-            while control.is_paused() && !control.cancel.is_cancelled() {
-                thread::sleep(Duration::from_millis(50));
+        let shared = Shared::new(progress);
+        let stall = self.options.stall_after;
+        thread::scope(|scope| {
+            let (stop, stopped) = mpsc::channel::<()>();
+            if !stall.is_zero() {
+                let shared = &shared;
+                scope.spawn(move || watch_for_stalls(shared, sink, stall, &stopped));
             }
-            if control.cancel.is_cancelled() {
-                report.cancelled = true;
-                break;
-            }
-            let subject = step.subject().clone();
-            progress.current = subject.name().map(str::to_owned);
-            sink.progress(&progress);
-            match self.run_step(step, &mut policy, sink, &ctx, &mut report) {
-                Ok(Outcome::Done) => {
-                    match step {
-                        Step::Move { from, to } | Step::Rename { from, to } => {
-                            report.undo.moves.push((from.clone(), to.clone()));
-                        }
-                        Step::Trash { place } => report.undo.trashed.push(place.clone()),
-                        Step::MakeFolder { place } => report.undo.created.push(place.clone()),
-                        _ => {}
-                    }
-                    report.done.push(subject);
-                }
-                Ok(Outcome::Skipped(reason)) => report.skipped.push((subject, reason)),
-                Err(OpsError::Vfs(VfsError::Cancelled)) => {
-                    report.cancelled = true;
-                    break;
-                }
-                Err(error) => report.failed.push((subject, error.to_string())),
-            }
-            progress.items_done += 1;
-        }
-        progress.current = None;
-        progress.state = JobState::Finished;
-        sink.progress(&progress);
-        report
+            let mut run = Run::new(self, plan, control, sink, &shared);
+            run.execute();
+            drop(stop);
+            run.into_report()
+        })
     }
 
-    fn run_step(
+    /// Undoes the newest job in the log: plans its undo
+    /// ([`Engine::plan_undo`]), takes it off the log and runs it. The
+    /// report says what could not be undone, each with its reason (an
+    /// entry changed since, a name taken, a place with no trash).
+    pub fn undo_last(
         &self,
-        step: &Step,
-        policy: &mut ConflictPolicy,
+        log: &mut UndoLog,
+        job: JobId,
+        control: &JobControl,
         sink: &dyn JobSink,
-        ctx: &OpContext,
-        report: &mut JobReport,
-    ) -> Result<Outcome, OpsError> {
-        match step {
-            Step::Copy { from, to } => {
-                let source = self.registry.resolve(from)?;
-                if source.stat(from, ctx)?.is_container() {
-                    return Err(OpsError::NotBuilt("folder copy".to_owned()));
-                }
-                let Some((to, mode)) = self.settle_conflict(from, to, false, policy, sink, ctx)?
-                else {
-                    return Ok(Outcome::Skipped("the name is taken".to_owned()));
-                };
-                let target = self.registry.resolve(&to)?;
-                let mut reader = source.read(from, ctx)?;
-                let mut writer = target.write(&to, mode, ctx)?;
-                io::copy(&mut reader, &mut writer).map_err(VfsError::from)?;
-                writer.commit(false)?;
-                report.undo.created.push(to);
-                Ok(Outcome::Done)
-            }
-            Step::Move { from, to } | Step::Rename { from, to } => {
-                let source = self.registry.resolve(from)?;
-                if source.scheme() != self.registry.resolve(to)?.scheme() {
-                    return Err(OpsError::NotBuilt(
-                        "moving between kinds of place".to_owned(),
-                    ));
-                }
-                let Some((to, _)) = self.settle_conflict(from, to, true, policy, sink, ctx)? else {
-                    return Ok(Outcome::Skipped("the name is taken".to_owned()));
-                };
-                source.rename(from, &to, ctx)?;
-                Ok(Outcome::Done)
-            }
-            Step::RenameHop { from, via, to } => {
-                let source = self.registry.resolve(from)?;
-                source.rename(from, via, ctx)?;
-                source.rename(via, to, ctx)?;
-                Ok(Outcome::Done)
-            }
-            Step::MakeFolder { place } => {
-                self.registry.resolve(place)?.create_dir(place, ctx)?;
-                Ok(Outcome::Done)
-            }
-            Step::Link { place, request } => {
-                self.registry
-                    .resolve(place)?
-                    .create_link(place, request, ctx)?;
-                report.undo.created.push(place.clone());
-                Ok(Outcome::Done)
-            }
-            Step::Trash { place } => {
-                let check = self.registry.resolve(place)?.trash(place, ctx)?;
-                match check.problem() {
-                    None => Ok(Outcome::Done),
-                    Some(problem) => Err(OpsError::TrashNotConfirmed(problem.to_owned())),
-                }
-            }
-            Step::Restore { place } => {
-                self.registry.resolve(place)?.restore(place, ctx)?;
-                Ok(Outcome::Done)
-            }
-            Step::Remove { place } | Step::RemoveEmptyFolder { place } => {
-                self.registry.resolve(place)?.remove(place, ctx)?;
-                Ok(Outcome::Done)
-            }
-            Step::SetAttributes { place, change } => {
-                self.registry
-                    .resolve(place)?
-                    .set_attributes(place, change, ctx)?;
-                Ok(Outcome::Done)
-            }
-        }
+    ) -> Result<JobReport, OpsError> {
+        let record = log.last().cloned().ok_or(OpsError::NothingToUndo)?;
+        let plan = self.plan_undo(&record, job)?;
+        log.pop();
+        Ok(self.run(&plan, control, sink))
     }
 
-    /// Whether two places are the same entry: the same volume and inode
-    /// where the provider knows them, else the same place, ignoring case
-    /// where the place does.
-    fn same_entry(from: &Entry, to: &Entry, from_place: &Place, to_place: &Place) -> bool {
-        match (from.volume.zip(from.inode), to.volume.zip(to.inode)) {
-            (Some(a), Some(b)) => a == b,
-            _ => from_place.is_within(to_place) && to_place.is_within(from_place),
-        }
-    }
-
-    /// Where to write, and how, given the conflict policy; `None` to skip.
-    /// For a rename, the same entry under another case or form is no
-    /// conflict; for a copy or a move onto itself there is nothing to do.
-    fn settle_conflict(
-        &self,
-        from: &Place,
-        to: &Place,
-        renaming: bool,
-        policy: &mut ConflictPolicy,
-        sink: &dyn JobSink,
-        ctx: &OpContext,
-    ) -> Result<Option<(Place, WriteMode)>, OpsError> {
-        let target = self.registry.resolve(to)?;
-        let existing = match target.stat(to, ctx) {
-            Err(VfsError::NotFound) => return Ok(Some((to.clone(), WriteMode::CreateNew))),
-            Err(other) => return Err(other.into()),
-            Ok(entry) => entry,
-        };
-        let source_entry = self.registry.resolve(from)?.stat(from, ctx)?;
-        if Self::same_entry(&source_entry, &existing, from, to) {
-            return Ok(renaming.then(|| (to.clone(), WriteMode::CreateNew)));
-        }
-        let folder = to.parent().ok_or(OpsError::NoDestination)?;
-        let name = to.name().ok_or(OpsError::NoName)?;
-        let siblings: Vec<String> = target
-            .list(&folder, ctx)
-            .map(|entries| entries.into_iter().map(|e| e.name).collect())
-            .unwrap_or_default();
-        let sibling_names: Vec<&str> = siblings.iter().map(String::as_str).collect();
-        let keep_both = diroxide_vfs::names::unused_name(name, &sibling_names);
-        let mut action = match *policy {
-            ConflictPolicy::Skip => ConflictAction::Skip,
-            ConflictPolicy::Overwrite => ConflictAction::Replace,
-            ConflictPolicy::KeepBoth => ConflictAction::KeepBoth,
-            ConflictPolicy::Newer => ConflictAction::ReplaceIfNewer,
-            ConflictPolicy::Ask | ConflictPolicy::Rename => {
-                let kind = match (source_entry.is_folder_like(), existing.is_folder_like()) {
-                    (true, true) => ConflictKind::FolderOverFolder,
-                    (false, true) => ConflictKind::FileOverFolder,
-                    (true, false) => ConflictKind::FolderOverFile,
-                    (false, false) => ConflictKind::FileOverFile,
-                };
-                let answer = sink.conflict(&Conflict {
-                    kind,
-                    source: from.clone(),
-                    target: to.clone(),
-                    source_entry: source_entry.clone(),
-                    target_entry: existing.clone(),
-                    keep_both_name: keep_both.clone().unwrap_or_default(),
-                });
-                if answer.apply_to_rest {
-                    *policy = match answer.action {
-                        ConflictAction::Skip => ConflictPolicy::Skip,
-                        ConflictAction::Replace => ConflictPolicy::Overwrite,
-                        ConflictAction::KeepBoth => ConflictPolicy::KeepBoth,
-                        ConflictAction::ReplaceIfNewer => ConflictPolicy::Newer,
-                        ConflictAction::Rename(_) | ConflictAction::Cancel => *policy,
-                    };
-                }
-                answer.action
-            }
-        };
-        if action == ConflictAction::ReplaceIfNewer {
-            action = if source_entry.modified > existing.modified {
-                ConflictAction::Replace
-            } else {
-                ConflictAction::Skip
-            };
-        }
-        match action {
-            ConflictAction::Skip => Ok(None),
-            ConflictAction::Cancel => Err(VfsError::Cancelled.into()),
-            ConflictAction::Replace => Ok(Some((to.clone(), WriteMode::Overwrite))),
-            ConflictAction::KeepBoth => match keep_both {
-                Some(name) => Ok(Some((
-                    folder.join(&name).map_err(VfsError::from)?,
-                    WriteMode::CreateNew,
-                ))),
-                None => Ok(None),
-            },
-            ConflictAction::Rename(name) if !name.is_empty() => Ok(Some((
-                folder.join(&name).map_err(VfsError::from)?,
-                WriteMode::CreateNew,
-            ))),
-            ConflictAction::Rename(_) | ConflictAction::ReplaceIfNewer => Ok(None),
-        }
+    /// Whether replacing at a conflict's target can be undone: the place
+    /// has a trash and the old file goes there first. When it cannot, the
+    /// question says "Replacing cannot be undone."
+    pub fn replace_can_be_undone(&self, conflict: &Conflict) -> bool {
+        self.options.replace_keeps_old_in_trash
+            && self
+                .registry
+                .resolve(&conflict.target)
+                .is_ok_and(|provider| provider.capabilities(&conflict.target).trash)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plan::Step;
+    use crate::testing;
     use diroxide_core::format::within_cells;
     use diroxide_core::place::PathStyle;
+    use diroxide_core::{ConflictPolicy, JobRequest};
     use diroxide_core::{EntryKind, FixedClock, Timestamp, UtcOffset};
     use std::sync::Mutex;
 
@@ -754,25 +582,39 @@ mod tests {
         }
     }
 
+    fn fake_engine() -> Engine {
+        let fake = crate::fake::FakeProvider::new();
+        fake.add_file(&testing::p("/a/x"), b"x");
+        fake.add_file(&testing::p("/a/y"), b"y");
+        fake.add_file(&testing::p("/a/1.jpg"), b"1");
+        fake.add_file(&testing::p("/a/2.jpg"), b"2");
+        fake.add_folder(&testing::p("/b"));
+        testing::engine(&fake)
+    }
+
     #[test]
     fn copy_plans_one_step_per_source() {
-        let engine = Engine::new(Arc::new(Registry::new()));
-        let request =
-            JobRequest::new(JobId::new(7), JobKind::Copy, vec![p("/a/x"), p("/a/y")]).to(p("/b"));
+        let engine = fake_engine();
+        let request = JobRequest::new(
+            JobId::new(7),
+            JobKind::Copy,
+            vec![testing::p("/a/x"), testing::p("/a/y")],
+        )
+        .to(testing::p("/b"));
         let plan = engine.plan(&request).unwrap();
         assert_eq!(plan.steps.len(), 2);
         assert_eq!(
             plan.steps[1],
             Step::Copy {
-                from: p("/a/y"),
-                to: p("/b/y")
+                from: testing::p("/a/y"),
+                to: testing::p("/b/y")
             }
         );
     }
 
     #[test]
     fn plans_refuse_what_is_missing() {
-        let engine = Engine::new(Arc::new(Registry::new()));
+        let engine = fake_engine();
         let copy = JobRequest::new(JobId::new(1), JobKind::Copy, vec![p("/a/x")]);
         assert_eq!(engine.plan(&copy), Err(OpsError::NoDestination));
         let rename = JobRequest::new(JobId::new(2), JobKind::Rename, vec![p("/a/x")]);
@@ -780,29 +622,33 @@ mod tests {
         let none = JobRequest::new(JobId::new(3), JobKind::Trash, Vec::new());
         assert_eq!(engine.plan(&none), Err(OpsError::NothingSelected));
         let folder = JobRequest::new(JobId::new(4), JobKind::MakeFolder, Vec::new())
-            .to(p("/a"))
+            .to(testing::p("/a"))
             .named("new");
         assert_eq!(
             engine.plan(&folder).unwrap().steps,
-            vec![Step::MakeFolder { place: p("/a/new") }]
+            vec![Step::MakeFolder {
+                place: testing::p("/a/new")
+            }]
         );
         let unknown = JobRequest::new(JobId::new(5), JobKind::Unknown, vec![p("/a/x")]);
         assert!(matches!(engine.plan(&unknown), Err(OpsError::NotBuilt(_))));
+        let undo = JobRequest::new(JobId::new(6), JobKind::Undo, vec![p("/a/x")]);
+        assert_eq!(engine.plan(&undo), Err(OpsError::NothingToUndo));
     }
 
     #[test]
     fn several_renames_plan_from_their_pairs() {
-        let engine = Engine::new(Arc::new(Registry::new()));
+        let engine = fake_engine();
         let request = JobRequest::new(JobId::new(6), JobKind::Rename, Vec::new()).renaming(vec![
-            (p("/a/1.jpg"), "one.jpg".into()),
-            (p("/a/2.jpg"), "two.jpg".into()),
+            (testing::p("/a/1.jpg"), "one.jpg".into()),
+            (testing::p("/a/2.jpg"), "two.jpg".into()),
         ]);
         let plan = engine.plan(&request).unwrap();
         assert_eq!(
             plan.steps[1],
             Step::Rename {
-                from: p("/a/2.jpg"),
-                to: p("/a/two.jpg")
+                from: testing::p("/a/2.jpg"),
+                to: testing::p("/a/two.jpg")
             }
         );
     }
@@ -810,8 +656,12 @@ mod tests {
     #[test]
     fn failures_are_reported_per_entry_problems_first() {
         let engine = Engine::new(Arc::new(Registry::new()));
-        let request = JobRequest::new(JobId::new(9), JobKind::Trash, vec![p("/a/x")]);
-        let plan = engine.plan(&request).unwrap();
+        let plan = Plan::new(
+            JobId::new(9),
+            JobKind::Trash,
+            vec![Step::Trash { place: p("/a/x") }],
+            ConflictPolicy::Ask,
+        );
         let sink = Recorder::default();
         let report = engine.run(&plan, &JobControl::new(), &sink);
         assert_eq!(report.failed.len(), 1);
@@ -828,8 +678,12 @@ mod tests {
     #[test]
     fn a_cancelled_job_stops_before_its_steps() {
         let engine = Engine::new(Arc::new(Registry::new()));
-        let request = JobRequest::new(JobId::new(9), JobKind::Trash, vec![p("/a/x")]);
-        let plan = engine.plan(&request).unwrap();
+        let plan = Plan::new(
+            JobId::new(9),
+            JobKind::Trash,
+            vec![Step::Trash { place: p("/a/x") }],
+            ConflictPolicy::Ask,
+        );
         let control = JobControl::new();
         control.cancel.cancel();
         let report = engine.run(&plan, &control, &Recorder::default());
