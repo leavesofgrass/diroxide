@@ -87,9 +87,13 @@ pub enum CoreError {
     /// A command id that is not lowercase words joined by dots.
     #[error("\"{0}\" is not a command id")]
     BadCommandId(String),
-    /// A key or chord that could not be read, such as "ctrl+".
+    /// A key that could not be read, such as "ctrl+".
     #[error("\"{0}\" is not a key")]
     BadKey(String),
+    /// Two keys one after the other, such as "ctrl+x ctrl+f": key
+    /// sequences are not supported.
+    #[error("\"{0}\" is two keys in a row")]
+    KeySequence(String),
 }
 
 impl Explain for CoreError {
@@ -102,6 +106,10 @@ impl Explain for CoreError {
             }
             CoreError::BadKey(_) => {
                 "Write a key as modifiers and a key joined by plus signs, such as ctrl+alt+t."
+                    .to_owned()
+            }
+            CoreError::KeySequence(_) => {
+                "Bind one key with its modifiers, such as ctrl+f5; sequences are not supported."
                     .to_owned()
             }
         }

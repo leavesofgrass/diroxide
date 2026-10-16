@@ -3,73 +3,105 @@
 
 use std::collections::BTreeMap;
 
-use diroxide_core::{CommandId, KeyChord, Layer};
+use diroxide_core::{CommandId, Key, KeyColumn, Layer};
 use serde::{Deserialize, Serialize};
+use toml::{Table, Value};
 
 use crate::error::ConfigError;
 use crate::paths::Paths;
 
-/// One override in `keymap.toml`: a chord in a layer bound to a command,
-/// or unbound.
+/// One line of `keymap.toml`: a command's keys in one column and layer.
+/// The keys replace the command's default keys there; an empty list
+/// ("none") unbinds it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeyOverride {
+    /// The column: the terminal's keys or the window's.
+    pub column: KeyColumn,
     /// The layer the binding applies in.
     pub layer: Layer,
-    /// The key or two-key chord.
-    pub chord: KeyChord,
-    /// The command, or `None` to remove the default binding.
-    pub command: Option<CommandId>,
+    /// The command.
+    pub command: CommandId,
+    /// Its keys, each one key with its modifiers; empty to unbind.
+    pub keys: Vec<Key>,
 }
 
-/// `keymap.toml`: one table per layer, chord to command id; the command
-/// `none` removes a default binding.
+/// `keymap.toml`: command to key, one line per command, in a table per
+/// column and layer (ADR-0005). The value is one key, a list of keys, or
+/// `none` to unbind. Key sequences are refused.
 ///
 /// ```toml
-/// [panel]
-/// "ctrl+x ctrl+f" = "go.find"
-/// "f1" = "none"
+/// [terminal.panel]
+/// "file.copy" = "f5"
+/// "file.trash" = ["delete", "f8"]
+/// "view.sort-list" = "none"
+///
+/// [window.panel]
+/// "view.sort-list" = "ctrl+shift+s"
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KeymapConfig {
-    /// The overrides, in file order within each layer.
+    /// The lines, in file order within each table.
     pub overrides: Vec<KeyOverride>,
 }
 
 impl KeymapConfig {
-    /// The command that removes a binding.
+    /// The value that removes a command's binding.
     pub const UNBIND: &'static str = "none";
 
-    /// Reads `keymap.toml` text.
+    /// Reads `keymap.toml` text. Phase 0 stops at the first mistake; W1c
+    /// reports every unknown command or key in words and drops none.
     pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
-        let tables: BTreeMap<String, BTreeMap<String, String>> =
+        let bad = |what: String| ConfigError::bad_entry(Paths::KEYMAP, what);
+        let table: Table =
             toml::from_str(text).map_err(|e| ConfigError::parse(Paths::KEYMAP, e))?;
         let mut overrides = Vec::new();
-        for (layer_name, bindings) in tables {
-            let layer = Layer::ALL
+        for (column_name, layers) in &table {
+            let column = KeyColumn::ALL
                 .into_iter()
-                .find(|layer| layer.word() == layer_name)
-                .ok_or_else(|| {
-                    ConfigError::bad_entry(Paths::KEYMAP, format!("unknown layer [{layer_name}]"))
-                })?;
-            for (keys, command) in bindings {
-                let chord = KeyChord::parse(&keys).map_err(|e| {
-                    ConfigError::bad_entry(Paths::KEYMAP, format!("[{layer_name}] {e}"))
-                })?;
-                let command = if command == Self::UNBIND {
-                    None
-                } else {
-                    Some(CommandId::new(command).map_err(|e| {
-                        ConfigError::bad_entry(Paths::KEYMAP, format!("[{layer_name}] {e}"))
-                    })?)
-                };
-                overrides.push(KeyOverride {
-                    layer,
-                    chord,
-                    command,
-                });
+                .find(|column| column.word() == column_name)
+                .ok_or_else(|| bad(format!("unknown column [{column_name}]")))?;
+            let layers = layers
+                .as_table()
+                .ok_or_else(|| bad(format!("[{column_name}] is not a table of layers")))?;
+            for (layer_name, lines) in layers {
+                let where_ = format!("[{column_name}.{layer_name}]");
+                let layer = Layer::ALL
+                    .into_iter()
+                    .find(|layer| layer.word() == layer_name)
+                    .ok_or_else(|| bad(format!("unknown layer {where_}")))?;
+                let lines = lines
+                    .as_table()
+                    .ok_or_else(|| bad(format!("{where_} is not a table of commands")))?;
+                for (command, value) in lines {
+                    let command = CommandId::new(command.clone())
+                        .map_err(|e| bad(format!("{where_} {e}")))?;
+                    let texts: Vec<&str> = match value {
+                        Value::String(text) => vec![text.as_str()],
+                        Value::Array(items) => items.iter().filter_map(Value::as_str).collect(),
+                        _ => return Err(bad(format!("{where_} {command} has no key text"))),
+                    };
+                    let mut keys = Vec::new();
+                    for text in texts {
+                        if text.trim() == Self::UNBIND {
+                            continue;
+                        }
+                        keys.push(Key::parse(text).map_err(|e| bad(format!("{where_} {e}")))?);
+                    }
+                    overrides.push(KeyOverride {
+                        column,
+                        layer,
+                        command,
+                        keys,
+                    });
+                }
             }
         }
         Ok(Self { overrides })
+    }
+
+    /// The lines of one column.
+    pub fn column(&self, column: KeyColumn) -> impl Iterator<Item = &KeyOverride> {
+        self.overrides.iter().filter(move |o| o.column == column)
     }
 }
 
@@ -231,33 +263,79 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keymap_overrides_parse_and_unbind() {
-        let config =
-            KeymapConfig::from_toml("[panel]\n\"ctrl+x ctrl+f\" = \"go.find\"\nf1 = \"none\"\n")
-                .unwrap();
-        assert_eq!(config.overrides.len(), 2);
-        let find = config
+    fn keymap_lines_are_command_to_key() {
+        let config = KeymapConfig::from_toml(
+            "[terminal.panel]
+\"file.copy\" = \"f5\"
+\"file.trash\" = [\"delete\", \"f8\"]
+\"app.help\" = \"none\"
+[window.panel]
+\"app.help\" = \"f1\"
+",
+        )
+        .unwrap();
+        assert_eq!(config.overrides.len(), 4);
+        let trash = config
+            .column(KeyColumn::Terminal)
+            .find(|o| o.command.as_str() == "file.trash")
+            .unwrap();
+        assert_eq!(trash.layer, Layer::Panel);
+        assert_eq!(trash.keys.len(), 2);
+        assert_eq!(trash.keys[1].to_string(), "F8");
+        let help: Vec<&KeyOverride> = config
             .overrides
             .iter()
-            .find(|o| o.command.is_some())
-            .unwrap();
-        assert_eq!(find.layer, Layer::Panel);
-        assert_eq!(find.chord.to_string(), "Ctrl+X Ctrl+F");
-        assert!(config.overrides.iter().any(|o| o.command.is_none()));
+            .filter(|o| o.command.as_str() == "app.help")
+            .collect();
+        assert!(
+            help.iter()
+                .any(|o| o.column == KeyColumn::Terminal && o.keys.is_empty())
+        );
+        assert!(
+            help.iter()
+                .any(|o| o.column == KeyColumn::Window && o.keys.len() == 1)
+        );
     }
 
     #[test]
     fn keymap_mistakes_are_named() {
-        let err = KeymapConfig::from_toml("[nowhere]\nf1 = \"app.quit\"\n").unwrap_err();
+        let err = KeymapConfig::from_toml(
+            "[terminal.nowhere]
+\"app.quit\" = \"f1\"
+",
+        )
+        .unwrap_err();
         assert_eq!(
             err.to_string(),
-            "keymap.toml has a bad entry: unknown layer [nowhere]"
+            "keymap.toml has a bad entry: unknown layer [terminal.nowhere]"
         );
-        let err = KeymapConfig::from_toml("[panel]\n\"hyper+q\" = \"app.quit\"\n").unwrap_err();
+        let err = KeymapConfig::from_toml(
+            "[tv.panel]
+\"app.quit\" = \"f1\"
+",
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "keymap.toml has a bad entry: unknown column [tv]"
+        );
+        let err = KeymapConfig::from_toml(
+            "[terminal.panel]
+\"app.quit\" = \"hyper+q\"
+",
+        )
+        .unwrap_err();
         assert!(
             err.to_string()
-                .starts_with("keymap.toml has a bad entry: [panel]")
+                .starts_with("keymap.toml has a bad entry: [terminal.panel]")
         );
+        let err = KeymapConfig::from_toml(
+            "[terminal.panel]
+\"go.find\" = \"ctrl+x ctrl+f\"
+",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("two keys in a row"));
     }
 
     #[test]

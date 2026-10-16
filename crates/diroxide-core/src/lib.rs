@@ -31,7 +31,7 @@ pub use entry::{Attributes, Entry, EntryKind, Link};
 pub use error::{CoreError, Explain, PlaceError};
 pub use ids::{DialogId, IdSource, JobId, RequestId, Side, TabId};
 pub use job::{ConflictPolicy, JobKind, JobRequest};
-pub use keys::{Key, KeyChord, KeyCode, Layer, Modifiers};
+pub use keys::{Key, KeyCode, KeyColumn, Layer, Modifiers};
 pub use list::{FrozenSelection, ListModel, ListRow, Move, RowsReplaced};
 pub use message::{Importance, Message, MessageKind};
 pub use pattern::{Pattern, PatternError};

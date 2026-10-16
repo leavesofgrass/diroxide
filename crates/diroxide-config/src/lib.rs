@@ -2,7 +2,8 @@
 //! diff, in the `diroxide` folder under the platform's config directory.
 //!
 //! - `config.toml`: [`Settings`], including the plugins section.
-//! - `keymap.toml`: [`KeymapConfig`], overrides of the default keys.
+//! - `keymap.toml`: [`KeymapConfig`], the user's keys: command to key, in a
+//!   table per column (terminal, window) and layer.
 //! - `filetypes.toml`: [`FileTypesConfig`].
 //! - `banks.toml`: [`BanksConfig`], the button banks.
 //! - `conversions.toml`: [`ConversionsConfig`], the conversion recipes.

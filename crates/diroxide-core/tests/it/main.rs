@@ -4,7 +4,7 @@ mod props;
 
 use diroxide_core::place::PathStyle;
 use diroxide_core::{
-    ArgValue, Command, CommandId, Effect, Entry, EntryKind, KeyChord, ListModel, ListRow, Message,
+    ArgValue, Command, CommandId, Effect, Entry, EntryKind, Key, ListModel, ListRow, Message,
     Place, Redraw,
 };
 
@@ -54,7 +54,8 @@ fn commands_and_effects_travel_as_json() {
 }
 
 #[test]
-fn chords_read_from_text() {
-    let chord: KeyChord = serde_json::from_str(r#""ctrl+x ctrl+f""#).unwrap();
-    assert_eq!(chord.to_string(), "Ctrl+X Ctrl+F");
+fn keys_read_from_text_and_sequences_are_refused() {
+    let key: Key = serde_json::from_str(r#""ctrl+shift+s""#).unwrap();
+    assert_eq!(key.to_string(), "Ctrl+Shift+S");
+    assert!(serde_json::from_str::<Key>(r#""ctrl+x ctrl+f""#).is_err());
 }
