@@ -710,10 +710,32 @@ impl App {
     pub(super) fn key_test_press(&mut self, key: Key) -> Vec<Effect> {
         let layers = [Layer::Panel, Layer::List, Layer::Global];
         let mut text = keymap::key_test(&self.keymap, &layers, &key);
+        // AltGr on Windows arrives as Control plus Alt (crossterm issue
+        // 820): such a key types its character in a text field.
+        if key.mods.ctrl
+            && key.mods.alt
+            && let Some(c) = super::typed(&key)
+        {
+            text.push_str(&format!(" In a text field it types {c}."));
+        }
         if self.keymap.lookup(&layers, &key) == keymap::Lookup::Command(ids::CANCEL) {
             self.key_test = false;
             text.push_str(" Key test ended.");
         }
+        vec![self.say(Message::info(text))]
+    }
+
+    /// Ends the key test when no key came for a while: the frontend calls
+    /// this after ten seconds without a key (research/alpha3-plan.md, the
+    /// key test), so a key the terminal never sends cannot trap the user.
+    pub fn end_key_test(&mut self, idle_seconds: u64) -> Vec<Effect> {
+        if !self.key_test {
+            return Vec::new();
+        }
+        self.key_test = false;
+        let text = format!(
+            "No key for {idle_seconds} seconds. Key test ended. The terminal may keep the key you tried."
+        );
         vec![self.say(Message::info(text))]
     }
 

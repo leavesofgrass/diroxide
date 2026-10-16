@@ -50,8 +50,34 @@ fn starting_lists_both_panels() {
             .iter()
             .any(|r| r.id == "app.rs")
     );
-    assert!(app.title_line().starts_with("diroxide-app, in "));
-    assert!(app.title_line().ends_with(", left panel"));
+    assert!(
+        app.title_line()
+            .starts_with("diroxide-app, left panel, in "),
+        "{}",
+        app.title_line()
+    );
+    let short = app.title_line_within(40);
+    assert!(
+        short.starts_with("diroxide-app, left panel, in ..."),
+        "{short}"
+    );
+    assert!(short.chars().count() <= 40, "{short}");
+    assert!(short.ends_with("crates"), "{short}");
+}
+
+#[test]
+fn the_title_says_a_filter_and_a_sort_after_the_panel() {
+    let (mut app, mut runtime) = app();
+    let start = app.start();
+    settle(&mut app, &mut runtime, start);
+    let effects = app.handle(AppEvent::Key(key("ctrl+f6")));
+    settle(&mut app, &mut runtime, effects);
+    let title = app.title_line();
+    assert!(
+        title.starts_with("diroxide-app, left panel, in "),
+        "{title}"
+    );
+    assert!(title.ends_with(", sorted by size"), "{title}");
 }
 
 #[test]
