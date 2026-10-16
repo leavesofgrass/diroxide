@@ -126,6 +126,8 @@ accesskit = "0.25.1"
 accesskit_winit = "0.34.1"
 # Command line and logging.
 clap = { version = "4.6.1", features = ["derive"] }
+# Shell completion scripts for diro completions SHELL (plan section 5.19).
+clap_complete = "4.6"
 tracing = "0.1.44"
 # Tests.
 insta = "1.48.0"
