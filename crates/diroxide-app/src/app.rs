@@ -337,6 +337,8 @@ pub struct App {
     jobs: JobTable,
     undo: UndoLog,
     status: String,
+    /// The status lines said since the frontend last took them.
+    status_log: Vec<String>,
     quit: bool,
     requests: Vec<Request>,
     next_job: u64,
@@ -376,6 +378,9 @@ struct Kept {
 
 /// How many folders' replaced selections are kept.
 const KEPT_LIMIT: usize = 16;
+
+/// How many status lines wait for a frontend that does not take them.
+const STATUS_LOG_LIMIT: usize = 16;
 
 impl std::fmt::Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -606,6 +611,7 @@ impl App {
             jobs: JobTable::new(),
             undo,
             status: String::new(),
+            status_log: Vec::new(),
             quit: false,
             requests: Vec::new(),
             next_job: startup.first_job.max(1),
@@ -1038,10 +1044,24 @@ impl App {
         }
     }
 
-    /// Says a message: it becomes the status line and is announced.
+    /// Says a message: it becomes the status line and is announced, and
+    /// the status lines said since the frontend last took them keep it.
     fn say(&mut self, message: Message) -> Effect {
         self.status = message.text.clone();
+        if self.status_log.len() >= STATUS_LOG_LIMIT {
+            self.status_log.remove(0);
+        }
+        self.status_log.push(message.text.clone());
         Effect::Announce(message)
+    }
+
+    /// Takes the status lines said since the last call, oldest first. A
+    /// terminal draws one frame for several messages (a refusal and the
+    /// prompt that opens again, a job's result and the listing after it),
+    /// so it shows them together, the first first, instead of only the
+    /// last. App-side hook for the terminal's status line.
+    pub fn take_status_lines(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.status_log)
     }
 
     /// The written key of a command from the live keymap ("Ctrl+R"), or

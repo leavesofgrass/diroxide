@@ -146,6 +146,10 @@ pub enum Load {
     Reload,
     /// The same place again, because it changed (a watch).
     Refresh,
+    /// The same place again after one of the app's own jobs: its changes
+    /// are the job's, already said by the job's result, so they are not
+    /// said again.
+    AfterJob,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -452,7 +456,7 @@ impl Panel {
                         self.history.push(self.place.clone());
                     }
                 }
-                Load::Open | Load::Reload | Load::Refresh => {
+                Load::Open | Load::Reload | Load::Refresh | Load::AfterJob => {
                     if self.listed && loading.place != self.place {
                         self.history.push(self.place.clone());
                         self.forward.clear();
