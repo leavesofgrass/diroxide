@@ -10,11 +10,14 @@
 //!   never turns it on and never relies on it (R4 section 4.3). crossterm
 //!   reads the answer itself within two seconds, so the reply never shows
 //!   as typed characters.
-//! - **Leaving.** On a normal quit, on an error, and on a panic (a panic
-//!   hook restores the screen before the message prints) the terminal gets
-//!   raw mode off, the main screen back and the cursor shown. A terminate
-//!   signal, Ctrl+Break and the window closing need a signal handler,
-//!   which waits for a contract change (see [`restore`]).
+//! - **Leaving.** On a normal quit, on an error, on a panic (a panic hook
+//!   restores the screen before the message prints) and on a signal (a
+//!   terminate signal, a hang-up and an interrupt on Unix; Ctrl+Break and
+//!   the window closing on Windows, through `ctrlc`) the terminal gets raw
+//!   mode off, the main screen back and the cursor shown; a signal then
+//!   exits with 130. While a program has the terminal (the editor, a
+//!   shell), the signal is the program's: diroxide carries on (see
+//!   [`OnSignal`]).
 //! - **Keys.** A reader thread waits for the terminal's events with a
 //!   short timeout and passes them on; the runtime's waker wakes the same
 //!   loop when a worker has a result. While a program has the terminal
@@ -47,6 +50,83 @@ static ACTIVE: AtomicBool = AtomicBool::new(false);
 static ALTERNATE: AtomicBool = AtomicBool::new(false);
 /// Whether the panic hook is installed.
 static HOOKED: AtomicBool = AtomicBool::new(false);
+/// Whether a program (the editor, a shell, a command) has the terminal.
+static HANDED: AtomicBool = AtomicBool::new(false);
+/// Whether the signal handler is installed (once a process).
+static SIGNALS: AtomicBool = AtomicBool::new(false);
+
+/// The exit code after a signal: 128 plus the interrupt's number, as
+/// shells report a program a signal ended.
+pub const SIGNAL_EXIT: i32 = 130;
+
+/// What a signal does, by who has the terminal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum OnSignal {
+    /// diroxide has the terminal: give it back, then exit with
+    /// [`SIGNAL_EXIT`].
+    RestoreAndExit,
+    /// A program has the terminal: the signal is the program's (an
+    /// interrupt typed to stop the command, for one); diroxide carries on
+    /// and takes the terminal back when the program ends.
+    LeaveToProgram,
+    /// The screen is not open: exit with [`SIGNAL_EXIT`], as the signal
+    /// asks.
+    Exit,
+}
+
+impl OnSignal {
+    /// The answer for a terminal diroxide has (`active`) or has handed to
+    /// a program (`handed`).
+    pub const fn decide(active: bool, handed: bool) -> Self {
+        if handed {
+            OnSignal::LeaveToProgram
+        } else if active {
+            OnSignal::RestoreAndExit
+        } else {
+            OnSignal::Exit
+        }
+    }
+
+    /// The answer now.
+    pub fn now() -> Self {
+        Self::decide(ACTIVE.load(Ordering::SeqCst), HANDED.load(Ordering::SeqCst))
+    }
+}
+
+/// What the signal handler runs, on `ctrlc`'s own thread.
+fn handle_signal() {
+    match OnSignal::now() {
+        OnSignal::RestoreAndExit => {
+            restore();
+            std::process::exit(SIGNAL_EXIT);
+        }
+        OnSignal::Exit => std::process::exit(SIGNAL_EXIT),
+        OnSignal::LeaveToProgram => {}
+    }
+}
+
+/// Runs `install` the first time for `flag` and never again: `Ok(true)`
+/// when this call installed, `Ok(false)` when an earlier one did, the
+/// failure in words otherwise (not tried again, so a refused handler costs
+/// one line in the log, not one a start).
+fn install_once(
+    flag: &AtomicBool,
+    install: impl FnOnce() -> Result<(), String>,
+) -> Result<bool, String> {
+    if flag.swap(true, Ordering::SeqCst) {
+        return Ok(false);
+    }
+    install().map(|()| true)
+}
+
+/// Installs the signal handler that gives the terminal back, once a
+/// process; later calls do nothing. Only the real terminal's loop calls
+/// it: a test on ratatui's test backend never installs it.
+fn install_signal_restore() -> Result<bool, String> {
+    install_once(&SIGNALS, || {
+        ctrlc::set_handler(handle_signal).map_err(|error| error.to_string())
+    })
+}
 
 /// How long the reader waits for an event before it looks again.
 const READ_STEP: Duration = Duration::from_millis(20);
@@ -61,12 +141,8 @@ fn io_error(error: io::Error) -> TuiError {
 
 /// Gives the terminal back: raw mode off, the main screen back, the cursor
 /// shown, bracketed paste off. Safe to call more than once and from any
-/// thread; it does nothing when diroxide does not have the terminal.
-///
-/// A signal handler for the terminate signal, Ctrl+Break and the window
-/// closing would call this; the workspace has no signal crate yet (the
-/// report's contract change request names `ctrlc` with its termination
-/// feature).
+/// thread (the loop's guard, the panic hook, the signal handler); it does
+/// nothing when diroxide does not have the terminal.
 pub fn restore() {
     if !ACTIVE.swap(false, Ordering::SeqCst) {
         return;
@@ -221,10 +297,15 @@ pub(crate) fn run(
     log: Option<PathBuf>,
 ) -> Result<(), TuiError> {
     install_panic_hook();
+    let signals = match install_signal_restore() {
+        Ok(_) => "Signals: a terminate signal, a hang-up, an interrupt, Ctrl+Break or the window closing give the terminal back and exit with 130.".to_owned(),
+        Err(error) => format!("Signals: the handler could not be installed ({error}); quit with Ctrl+Q."),
+    };
     let inline = options.inline;
     // The query reads the terminal's answer in raw mode itself; it runs
     // before the reader thread starts, so nothing else reads the reply.
-    let probe = probe_lines(inline);
+    let mut probe = probe_lines(inline);
+    probe.push(signals);
     write_log(log.as_ref(), &probe);
     // The guard first: a failure halfway through taking the terminal
     // still gives it back.
@@ -293,10 +374,14 @@ fn session_runtime_hook<B: ratatui::backend::Backend>(
     session.set_terminal_hook(Box::new(move |moment| match moment {
         Handover::Suspend => {
             *gate.lock().unwrap_or_else(PoisonError::into_inner) = true;
+            // From here a signal (Ctrl+C typed to stop the command) is the
+            // program's.
+            HANDED.store(true, Ordering::SeqCst);
             restore();
         }
         Handover::Resume => {
             let _ = take(inline);
+            HANDED.store(false, Ordering::SeqCst);
             resumed.store(true, Ordering::SeqCst);
             *gate.lock().unwrap_or_else(PoisonError::into_inner) = false;
         }
@@ -340,5 +425,50 @@ fn event_loop<B: ratatui::backend::Backend>(
             }
             Err(RecvTimeoutError::Disconnected) => return Ok(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    #[test]
+    fn a_signal_gives_the_terminal_back_unless_a_program_has_it() {
+        assert_eq!(OnSignal::decide(true, false), OnSignal::RestoreAndExit);
+        assert_eq!(OnSignal::decide(false, true), OnSignal::LeaveToProgram);
+        // Between giving the terminal to a program and taking it back,
+        // both flags can be set for a moment: the program still has it.
+        assert_eq!(OnSignal::decide(true, true), OnSignal::LeaveToProgram);
+        assert_eq!(OnSignal::decide(false, false), OnSignal::Exit);
+        assert_eq!(SIGNAL_EXIT, 130);
+    }
+
+    #[test]
+    fn the_handler_is_installed_once_and_a_refusal_is_not_tried_again() {
+        let flag = AtomicBool::new(false);
+        let calls = AtomicUsize::new(0);
+        let install = || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        };
+        assert_eq!(install_once(&flag, install), Ok(true));
+        assert_eq!(install_once(&flag, install), Ok(false));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let refused = AtomicBool::new(false);
+        let said = install_once(&refused, || Err("handler already registered".to_owned()));
+        assert_eq!(said, Err("handler already registered".to_owned()));
+        assert_eq!(install_once(&refused, || Ok(())), Ok(false));
+    }
+
+    #[test]
+    fn without_the_terminal_nothing_is_restored_and_no_handler_is_installed() {
+        // A test never takes the terminal: restoring does nothing, a
+        // signal would only exit, and the test backend's sessions install
+        // no handler.
+        restore();
+        assert!(!ACTIVE.load(Ordering::SeqCst));
+        assert_eq!(OnSignal::now(), OnSignal::Exit);
+        assert!(!SIGNALS.load(Ordering::SeqCst));
     }
 }
