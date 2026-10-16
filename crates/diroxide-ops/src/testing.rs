@@ -29,6 +29,9 @@ pub(crate) fn engine(fake: &FakeProvider) -> Engine {
     Engine::new(Arc::new(registry))
 }
 
+/// A hook run on every progress update.
+type Hook = Box<dyn FnMut(&JobProgress) + Send>;
+
 /// A sink that answers conflicts and errors from scripts (Skip when a
 /// script runs out) and records everything it was told.
 #[derive(Default)]
@@ -40,9 +43,9 @@ pub(crate) struct Script {
     pub progress: Mutex<Vec<JobProgress>>,
     pub asked: Mutex<Vec<Conflict>>,
     pub failed: Mutex<Vec<ItemError>>,
+    hook: Mutex<Option<Hook>>,
 }
 
-#[allow(dead_code)] // The executor's tests use the rest (the next commit).
 impl Script {
     /// A sink that answers these conflicts in order.
     pub(crate) fn conflicts(answers: Vec<ConflictAnswer>) -> Self {
@@ -56,6 +59,12 @@ impl Script {
         let script = Self::default();
         *script.errors.lock().unwrap() = answers.into();
         script
+    }
+
+    /// The same sink, running `hook` on every progress update.
+    pub(crate) fn on_progress(self, hook: impl FnMut(&JobProgress) + Send + 'static) -> Self {
+        *self.hook.lock().unwrap() = Some(Box::new(hook));
+        self
     }
 
     /// The states said, with repeats folded.
@@ -75,6 +84,9 @@ impl JobSink for Script {
         self.said.lock().unwrap().push(progress.describe());
         self.states.lock().unwrap().push(progress.state);
         self.progress.lock().unwrap().push(progress.clone());
+        if let Some(hook) = self.hook.lock().unwrap().as_mut() {
+            hook(progress);
+        }
     }
 
     fn conflict(&self, conflict: &Conflict) -> ConflictAnswer {

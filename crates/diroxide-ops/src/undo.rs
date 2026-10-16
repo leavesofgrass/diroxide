@@ -3,10 +3,49 @@
 //! journal in the state folder can write one before the first step and
 //! update it per step, and Undo works after a restart.
 
-use diroxide_core::{ConflictPolicy, JobId, JobKind, JobOrigin, Place};
+use diroxide_core::{
+    ConflictPolicy, Entry, EntryKind, JobId, JobKind, JobOrigin, Place, Timestamp,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::plan::{Plan, Step};
+
+/// What an entry the job made or moved looked like when the job left it:
+/// the undo-time check (research/file-operations.md, "Undo"). An entry
+/// that changed since is kept, and the undo says why.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LeftAs {
+    /// Where the job left it.
+    pub place: Place,
+    /// What it was.
+    pub kind: EntryKind,
+    /// Its size, when known.
+    #[serde(default)]
+    pub size: Option<u64>,
+    /// Its modified time, when known.
+    #[serde(default)]
+    pub modified: Option<Timestamp>,
+}
+
+impl LeftAs {
+    /// The record of an entry at a place.
+    pub fn of(place: &Place, entry: &Entry) -> Self {
+        Self {
+            place: place.clone(),
+            kind: entry.kind,
+            size: entry.size.filter(|_| entry.kind != EntryKind::Folder),
+            modified: entry.modified.filter(|_| entry.kind != EntryKind::Folder),
+        }
+    }
+
+    /// The entry the undo expects to find.
+    pub fn expected(&self) -> Entry {
+        let mut entry = Entry::new(self.place.name().unwrap_or_default(), self.kind);
+        entry.size = self.size;
+        entry.modified = self.modified;
+        entry
+    }
+}
 
 /// What one job did that can be undone.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +68,11 @@ pub struct UndoRecord {
     /// that are unchanged and removes the folders that are still empty,
     /// deepest first.
     pub created: Vec<Place>,
+    /// What the made and moved entries looked like when the job ended,
+    /// for the undo-time check. Older records have none, and undo then
+    /// checks only that each entry is there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub left: Vec<LeftAs>,
 }
 
 impl UndoRecord {
@@ -52,23 +96,38 @@ impl UndoRecord {
     /// restores from the trash. `folders` says which created places were
     /// folders. The undo-time checks (a changed copy is kept, a non-empty
     /// folder stays) are the engine's.
+    ///
+    /// A file that replaced another (made at a place whose old file went
+    /// to the trash) is first renamed out of the way to a temporary name,
+    /// the old file restored, and only then is the new one trashed: the
+    /// trash restores the newest entry for a place, so trashing the new
+    /// one first would bring it straight back.
     pub fn undo_plan(&self, job: JobId, folders: &[Place]) -> Plan {
-        let mut steps: Vec<Step> = self
-            .created
-            .iter()
-            .rev()
-            .map(|place| {
-                if folders.contains(place) {
-                    Step::RemoveEmptyFolder {
-                        place: place.clone(),
-                    }
-                } else {
-                    Step::Trash {
-                        place: place.clone(),
-                    }
-                }
-            })
-            .collect();
+        let mut set_aside: Vec<Place> = Vec::new();
+        let mut steps: Vec<Step> = Vec::new();
+        for place in self.created.iter().rev() {
+            if folders.contains(place) {
+                steps.push(Step::RemoveEmptyFolder {
+                    place: place.clone(),
+                });
+            } else if self.trashed.contains(place)
+                && let Some(aside) = place.parent().and_then(|folder| {
+                    folder
+                        .join(&format!("diro-undo-{}-{}", job.get(), set_aside.len() + 1))
+                        .ok()
+                })
+            {
+                steps.push(Step::Rename {
+                    from: place.clone(),
+                    to: aside.clone(),
+                });
+                set_aside.push(aside);
+            } else {
+                steps.push(Step::Trash {
+                    place: place.clone(),
+                });
+            }
+        }
         steps.extend(self.moves.iter().rev().map(|(from, to)| Step::Move {
             from: to.clone(),
             to: from.clone(),
@@ -76,7 +135,13 @@ impl UndoRecord {
         steps.extend(self.trashed.iter().map(|place| Step::Restore {
             place: place.clone(),
         }));
-        Plan::new(job, JobKind::Undo, steps, ConflictPolicy::Skip)
+        steps.extend(set_aside.into_iter().map(|place| Step::Trash { place }));
+        let mut plan = Plan::new(job, JobKind::Undo, steps, ConflictPolicy::Skip);
+        plan.facts.origin = JobOrigin::Undo;
+        for left in &self.left {
+            plan.expected.insert(left.place.clone(), left.expected());
+        }
+        plan
     }
 }
 

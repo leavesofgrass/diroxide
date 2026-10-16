@@ -96,7 +96,6 @@ impl Pacer for FakePacer {
 
 /// Waits for `duration` in short slices, and returns early, `false`, when
 /// the token is cancelled.
-#[allow(dead_code)] // The executor's retries wait with it (the next commit).
 pub(crate) fn wait(pacer: &dyn Pacer, duration: Duration, cancel: &CancelToken) -> bool {
     const SLICE: Duration = Duration::from_millis(50);
     let end = pacer.now() + duration;

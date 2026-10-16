@@ -746,6 +746,7 @@ impl<'a> Planner<'a> {
     }
 
     fn finish(mut self) -> Plan {
+        self.plan.facts.origin = self.request.origin.clone();
         self.plan.facts.items = self.request.sources.len().max(self.request.renames.len()) as u64;
         self.plan
     }
@@ -1463,7 +1464,10 @@ mod tests {
                 .iter()
                 .all(|s| *s == JobState::Counting)
         );
-        assert_eq!(sink.said.lock().unwrap()[0], "Copying: counting");
+        assert_eq!(
+            sink.said.lock().unwrap()[0],
+            "Copying: counting, 500 so far"
+        );
         let control = JobControl::new();
         control.cancel.cancel();
         assert_eq!(

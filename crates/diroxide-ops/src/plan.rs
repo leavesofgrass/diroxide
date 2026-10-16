@@ -12,7 +12,9 @@ use std::collections::HashMap;
 use diroxide_core::catalog;
 use diroxide_core::format::{count, human_size};
 use diroxide_core::names::spell_out;
-use diroxide_core::{Attributes, ConflictPolicy, Entry, EntryKind, JobId, JobKind, Message, Place};
+use diroxide_core::{
+    Attributes, ConflictPolicy, Entry, EntryKind, JobId, JobKind, JobOrigin, Message, Place,
+};
 use diroxide_vfs::{AttributeChange, LinkRequest, TrashGate};
 
 /// One step of a plan, acting on one entry.
@@ -311,6 +313,8 @@ pub struct PlanFacts {
     /// Step ranges, start and end, that run whole: no pause or cancel
     /// between their steps (a swap of names through a temporary name).
     pub whole: Vec<(usize, usize)>,
+    /// Who asked for the job, for the journal and the undo record.
+    pub origin: JobOrigin,
 }
 
 impl PlanFacts {

@@ -7,8 +7,8 @@
 //! Skip, Skip all like this or Cancel ([`ItemError`]), cancel and pause
 //! through [`JobControl`], a [`JobReport`] of what was done, skipped,
 //! failed and warned about, with a [`Reconciliation`] against a fresh read,
-//! and an [`UndoLog`] of moves, trashings and created entries. Nothing here
-//! runs a shell.
+//! and an [`UndoLog`] of moves, trashings and created entries, kept on
+//! disk by the [`Journal`]. Nothing here runs a shell.
 //!
 //! The order is create, verify, then destroy (plan section 5.4). The
 //! [`fake`] provider has the latency, stall and "lies" switches the tests
@@ -22,11 +22,15 @@
 pub mod engine;
 pub mod error;
 pub mod fake;
+pub mod journal;
 pub mod options;
 pub mod pace;
 pub mod plan;
 mod planner;
 pub mod progress;
+mod run;
+#[cfg(test)]
+mod run_tests;
 #[cfg(test)]
 mod testing;
 pub mod undo;
@@ -38,8 +42,9 @@ pub use engine::{
 };
 pub use error::OpsError;
 pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies};
+pub use journal::{Interrupted, Journal};
 pub use options::EngineOptions;
 pub use pace::{FakePacer, Pacer, SystemPacer};
 pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
-pub use undo::{UndoLog, UndoRecord};
+pub use undo::{LeftAs, UndoLog, UndoRecord};

@@ -953,6 +953,11 @@ impl Provider for FakeProvider {
             return Err(VfsError::InUse);
         }
         let node = self.lookup(place).ok_or(VfsError::NotFound)?;
+        if matches!(node.entry.attributes, Some(Attributes::Windows(flags)) if flags & 0x1 != 0) {
+            // As Windows's own delete call: a read-only file is refused
+            // until its attribute is cleared.
+            return Err(VfsError::PermissionDenied);
+        }
         if node.entry.kind == EntryKind::Folder && !self.children(place).is_empty() {
             return Err(VfsError::NotEmpty);
         }
@@ -1067,7 +1072,9 @@ impl Provider for FakeProvider {
 
     fn copy_within(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         let switches = self.enter(FakeCall::CopyWithin, from, ctx)?;
-        if !switches.clone_copy {
+        if !switches.clone_copy
+            || Self::volume_of(&switches, from) != Self::volume_of(&switches, to)
+        {
             return Err(VfsError::unsupported("file", "copy without streaming"));
         }
         let source = self.lookup(from).ok_or(VfsError::NotFound)?;
