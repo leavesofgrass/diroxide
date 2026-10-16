@@ -15,10 +15,11 @@ use toml::{Table, Value};
 
 /// Each crate and the workspace crates it may depend on. Keep in step with
 /// docs/dev/architecture.md.
-pub const ALLOWED: [(&str, &[&str]); 16] = [
+pub const ALLOWED: [(&str, &[&str]); 17] = [
     ("diroxide-core", &[]),
+    ("diroxide-theme", &[]),
     ("diroxide-vfs", &["diroxide-core"]),
-    ("diroxide-config", &["diroxide-core"]),
+    ("diroxide-config", &["diroxide-core", "diroxide-theme"]),
     ("diroxide-ops", &["diroxide-core", "diroxide-vfs"]),
     (
         "diroxide-archive",
@@ -70,10 +71,17 @@ pub const ALLOWED: [(&str, &[&str]); 16] = [
             "diroxide-plugins",
             "diroxide-tools",
             "diroxide-preview",
+            "diroxide-theme",
         ],
     ),
-    ("diroxide-tui", &["diroxide-core", "diroxide-app"]),
-    ("diroxide-gui", &["diroxide-core", "diroxide-app"]),
+    (
+        "diroxide-tui",
+        &["diroxide-core", "diroxide-app", "diroxide-theme"],
+    ),
+    (
+        "diroxide-gui",
+        &["diroxide-core", "diroxide-app", "diroxide-theme"],
+    ),
     (
         "diroxide-cli",
         &[
@@ -90,6 +98,7 @@ pub const ALLOWED: [(&str, &[&str]); 16] = [
             "diroxide-app",
             "diroxide-tui",
             "diroxide-gui",
+            "diroxide-theme",
         ],
     ),
     ("diro", &["diroxide-cli"]),
@@ -100,6 +109,7 @@ pub const ALLOWED: [(&str, &[&str]); 16] = [
             "diroxide-vfs",
             "diroxide-config",
             "diroxide-app",
+            "diroxide-theme",
         ],
     ),
 ];

@@ -1,0 +1,21 @@
+[package]
+name = "diroxide-theme"
+description = "Themes for diroxide: palettes, custom themes, WCAG contrast checks in words, and the file manager's roles, for the terminal and the window. Ported from textweaver's theme crate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

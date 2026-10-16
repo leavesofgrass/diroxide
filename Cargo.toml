@@ -35,6 +35,7 @@ diroxide-config = { path = "crates/diroxide-config", version = "0.1.0-alpha.1" }
 diroxide-plugins = { path = "crates/diroxide-plugins", version = "0.1.0-alpha.1" }
 diroxide-tools = { path = "crates/diroxide-tools", version = "0.1.0-alpha.1" }
 diroxide-preview = { path = "crates/diroxide-preview", version = "0.1.0-alpha.1" }
+diroxide-theme = { path = "crates/diroxide-theme", version = "0.1.0-alpha.1" }
 diroxide-app = { path = "crates/diroxide-app", version = "0.1.0-alpha.1" }
 diroxide-tui = { path = "crates/diroxide-tui", version = "0.1.0-alpha.1" }
 diroxide-gui = { path = "crates/diroxide-gui", version = "0.1.0-alpha.1" }
