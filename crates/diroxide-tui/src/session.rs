@@ -459,30 +459,37 @@ impl<'a, B: Backend> Session<'a, B> {
                 self.styles.support(),
             );
         }
-        let size = self.terminal.size().map_err(backend_error)?;
-        let look = self.look(size.width, size.height, now);
-        self.memory.freeze = look.screen_reader;
+        // The size comes from the frame: the whole screen, or the inline
+        // viewport's rows.
+        let base = self.look(0, 0, now);
+        self.memory.freeze = base.screen_reader;
         let status = if self.status.is_empty() {
             self.app.status_line()
         } else {
             self.status.clone()
         };
-        let view = view::build(self.app, &look, &status, &mut self.memory);
-        for side in Side::BOTH {
-            self.app.set_page_rows(side, view.page_rows[side.index()]);
-        }
+        let app: &App = self.app;
+        let memory = &mut self.memory;
         let styles = &self.styles;
         let mut origin = (0, 0);
+        let mut built = None;
         let completed = self
             .terminal
             .draw(|frame| {
                 let area = frame.area();
                 origin = (area.x, area.y);
+                let look = Look {
+                    width: area.width,
+                    height: area.height,
+                    ..base
+                };
+                let view = view::build(app, &look, &status, memory);
                 view::paint(&view, styles, frame.buffer_mut());
                 frame.set_cursor_position(Position::new(
                     area.x + view.cursor.0,
                     area.y + view.cursor.1,
                 ));
+                built = Some(view);
             })
             .map_err(backend_error)?;
         let buffer = completed.buffer;
@@ -505,6 +512,12 @@ impl<'a, B: Backend> Session<'a, B> {
                 }
             }
             lines.push(text);
+        }
+        let Some(view) = built else {
+            return Ok(false);
+        };
+        for side in Side::BOTH {
+            self.app.set_page_rows(side, view.page_rows[side.index()]);
         }
         if !again.is_empty() {
             let cursor = Position::new(origin.0 + view.cursor.0, origin.1 + view.cursor.1);

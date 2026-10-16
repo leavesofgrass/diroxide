@@ -480,6 +480,36 @@ fn next_theme_draws_the_screen_in_the_next_themes_colors() {
     assert!(after.modifier.contains(Modifier::BOLD));
 }
 
+#[test]
+fn the_inline_viewport_holds_the_whole_screen_in_its_rows() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    let (mut app, mut runtime) = app(place(&work), place(&work), settings(Layout::Single));
+    let clock = Clock::at_start();
+    let terminal = ratatui::Terminal::with_options(
+        ratatui::backend::TestBackend::new(80, 30),
+        ratatui::TerminalOptions {
+            viewport: ratatui::Viewport::Inline(12),
+        },
+    )
+    .unwrap();
+    let options = TuiOptions {
+        screen_reader: true,
+        inline: true,
+        color: Some(diroxide_theme::ColorSupport::NoColor),
+        ..TuiOptions::default()
+    };
+    let mut s = diroxide_tui::Session::new(&mut app, &mut runtime, terminal, options);
+    start(&mut s, &clock);
+    let screen = s.screen();
+    assert_eq!(screen.lines.len(), 12, "{:#?}", screen.lines);
+    assert!(screen.lines[0].starts_with("work, left panel"));
+    assert_eq!(screen.lines[11], "No jobs");
+    let top = s.terminal_mut().get_frame().area().y;
+    let at = s.terminal().backend().cursor_position();
+    assert_eq!(usize::from(at.y - top), screen.cursor_line.unwrap());
+}
+
 #[derive(Default)]
 struct Recorder {
     programs: Mutex<Vec<Program>>,
