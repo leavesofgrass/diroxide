@@ -411,6 +411,7 @@ impl Provider for LocalProvider {
         trashing::trash_with(
             &shell_path(&path)?,
             &trashing::system_trash,
+            &trashing::system_count,
             &trashing::system_look,
         )
     }

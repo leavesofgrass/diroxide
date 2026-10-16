@@ -456,6 +456,54 @@ fn windows_attributes_change_and_keep_what_they_cannot_set() {
     assert_eq!(back.attributes, Some(Attributes::Windows(before)));
 }
 
+#[cfg(windows)]
+#[test]
+fn read_only_on_a_windows_folder_is_kept_and_said_as_a_mark() {
+    let folder = scratch();
+    fs::create_dir(folder.path().join("marked")).unwrap();
+    let place = child(&folder, "marked");
+    let provider = LocalProvider::new();
+    let Some(Attributes::Windows(before)) = provider.stat(&place, &ctx()).unwrap().attributes
+    else {
+        panic!("Windows attributes");
+    };
+    let change = AttributeChange {
+        attributes: Some(Attributes::Windows(before | 0x1)),
+        ..AttributeChange::default()
+    };
+    let inverse = provider.set_attributes(&place, &change, &ctx()).unwrap();
+    let after = provider.stat(&place, &ctx()).unwrap();
+    let words = after.attributes.unwrap().words(after.kind);
+    assert!(words.contains("a mark only"), "{words}");
+    // Windows ignores it: a file can still be made inside.
+    fs::write(folder.path().join("marked").join("inside.txt"), b"i").unwrap();
+    provider.set_attributes(&place, &inverse, &ctx()).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn a_file_held_open_without_delete_sharing_is_in_use_until_it_closes() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let folder = scratch();
+    let path = folder.path().join("held.txt");
+    fs::write(&path, b"h").unwrap();
+    // Read and write sharing, but no delete sharing.
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0x1 | 0x2)
+        .open(&path)
+        .unwrap();
+    let provider = LocalProvider::new();
+    let place = child(&folder, "held.txt");
+    let error = provider.remove(&place, &ctx()).unwrap_err();
+    // Pins the class of a sharing violation: retry first.
+    assert_eq!(error, VfsError::InUse);
+    assert!(error.class().retry_first());
+    drop(held);
+    provider.remove(&place, &ctx()).unwrap();
+    assert!(!path.exists());
+}
+
 #[cfg(unix)]
 #[test]
 fn all_twelve_mode_bits_are_written_and_links_are_refused() {

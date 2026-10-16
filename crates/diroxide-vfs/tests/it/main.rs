@@ -11,6 +11,7 @@ mod bench;
 mod local;
 mod long_paths;
 mod names;
+mod paths;
 mod primitives;
 mod trash;
 mod walk;

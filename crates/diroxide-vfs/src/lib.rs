@@ -11,12 +11,13 @@
 //! The safety rules of plan section 5.12 have their types here: the trash
 //! gate and its post-check ([`trash`]), the depth limits of the
 //! shell-bound operations ([`limits`]), the volume kind a place is on
-//! ([`volume`]), and the name rules ([`names`]).
+//! ([`volume`]), the name rules ([`names`]), the walk with its boundary
+//! rule ([`mod@walk`]), and the places a recursive removal never takes
+//! whole ([`protected`]). [`facts`] reads online-only, sparse and read-only
+//! entries the same way for every caller.
 //!
-//! Phase 0 and the Wave 1 contract: the trait and types are the contract;
-//! the local provider's bodies are deliberately naive (`std::fs` only, no
-//! attributes, no trash, no watching, no long-path handling). Wave 1 (W1a)
-//! replaces them.
+//! The local provider ([`LocalProvider`], Wave 1, W1a) is complete on the
+//! Wave 1 contract: see its module for what each method does, per place.
 
 pub mod cancel;
 pub mod capabilities;

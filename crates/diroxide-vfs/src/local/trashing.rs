@@ -22,7 +22,6 @@
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 use crate::error::VfsError;
 use crate::sys::{self, Identity};
@@ -35,17 +34,22 @@ pub(crate) struct Before {
     pub(crate) path: PathBuf,
     /// Its identity, when the platform gives one.
     pub(crate) identity: Option<Identity>,
-    /// When the call began (the freedesktop look matches items deleted
-    /// since).
+    /// How many items the trash held from this path before the call, where
+    /// the trash can be listed (freedesktop): one more after the call means
+    /// this one arrived. Counting needs no deletion times, which the
+    /// `trash` crate gives on Linux only with its `chrono` feature.
     #[cfg_attr(
         not(all(unix, not(target_os = "macos"))),
         allow(dead_code, reason = "read by the freedesktop look only")
     )]
-    pub(crate) started: SystemTime,
+    pub(crate) count: Option<usize>,
 }
 
 /// The trash call: moves one item to the trash, or says why not.
 pub(crate) type TrashCall<'a> = &'a (dyn Fn(&Path) -> Result<(), VfsError> + Sync);
+
+/// Counts the items the trash holds from a path, where it can.
+pub(crate) type TrashCount<'a> = &'a dyn Fn(&Path) -> Option<usize>;
 
 /// The post-check's look into the trash: `Some(true)` when the trash holds
 /// the item, `Some(false)` when it does not, `None` when it cannot tell.
@@ -76,12 +80,13 @@ fn call_on_worker(path: &Path, call: TrashCall<'_>) -> Result<(), VfsError> {
 pub(crate) fn trash_with(
     path: &Path,
     call: TrashCall<'_>,
+    count: TrashCount<'_>,
     look: TrashLook<'_>,
 ) -> Result<TrashCheck, VfsError> {
     let before = Before {
         path: path.to_path_buf(),
         identity: sys::identity(path).ok(),
-        started: SystemTime::now(),
+        count: count(path),
     };
     let called = call_on_worker(path, call);
     let still_here = match fs::symlink_metadata(path) {
@@ -132,6 +137,36 @@ pub(crate) fn system_trash(path: &Path) -> Result<(), VfsError> {
     ::trash::delete(path).map_err(from_trash_error)
 }
 
+/// The real count of a path's items in the trash: the freedesktop trash
+/// is listed; elsewhere the look needs no count.
+pub(crate) fn system_count(path: &Path) -> Option<usize> {
+    #[cfg(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    ))]
+    {
+        let items = ::trash::os_limited::list().ok()?;
+        Some(
+            items
+                .iter()
+                .filter(|item| item.original_path() == path)
+                .count(),
+        )
+    }
+    #[cfg(not(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    )))]
+    {
+        let _ = path;
+        None
+    }
+}
+
 /// The real look into the trash, by platform.
 pub(crate) fn system_look(before: &Before) -> Option<bool> {
     #[cfg(windows)]
@@ -147,14 +182,9 @@ pub(crate) fn system_look(before: &Before) -> Option<bool> {
         not(target_os = "android")
     ))]
     {
-        // Two seconds of slack for clocks that round.
-        let since = diroxide_core::Timestamp::from_system_time(before.started).unix_seconds() - 2;
-        let items = ::trash::os_limited::list().ok()?;
-        Some(
-            items
-                .iter()
-                .any(|item| item.original_path() == before.path && item.time_deleted >= since),
-        )
+        let before_count = before.count?;
+        let after_count = system_count(&before.path)?;
+        Some(after_count > before_count)
     }
     #[cfg(target_os = "macos")]
     {
@@ -215,10 +245,34 @@ pub(crate) fn restore_newest(original: &Path) -> Result<(), VfsError> {
             .map_err(from_trash_error)?
             .into_iter()
             .filter(|item| same(&item.original_path(), original))
-            .max_by_key(|item| item.time_deleted)
+            .max_by_key(deleted_at)
             .ok_or(VfsError::NotFound)?;
         ::trash::os_limited::restore_all([newest]).map_err(from_trash_error)
     })
+}
+
+/// When an item was trashed, for choosing the newest: the time the trash
+/// recorded on Windows; on the freedesktop trash the time its
+/// `.trashinfo` file was written (the item's id), since the crate gives
+/// deletion times there only with its `chrono` feature.
+#[cfg(any(
+    windows,
+    all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    )
+))]
+fn deleted_at(item: &::trash::TrashItem) -> i64 {
+    if cfg!(windows) {
+        return item.time_deleted;
+    }
+    fs::metadata(&item.id)
+        .and_then(|metadata| metadata.modified())
+        .map_or(i64::MIN, |time| {
+            diroxide_core::Timestamp::from_system_time(time).unix_seconds()
+        })
 }
 
 /// No restore on this platform (macOS: the Finder's Put Back).
@@ -248,6 +302,11 @@ mod tests {
         bin
     }
 
+    /// The test bin needs no count.
+    fn no_count(_: &Path) -> Option<usize> {
+        None
+    }
+
     fn look_in(bin: &Path) -> impl Fn(&Before) -> Option<bool> + '_ {
         move |before: &Before| {
             let identity = before.identity?;
@@ -268,7 +327,7 @@ mod tests {
         fs::write(&item, b"o").unwrap();
         let call =
             |path: &Path| -> Result<(), VfsError> { Ok(fs::rename(path, bin.join("old.txt"))?) };
-        let check = trash_with(&item, &call, &look_in(&bin)).unwrap();
+        let check = trash_with(&item, &call, &no_count, &look_in(&bin)).unwrap();
         assert_eq!(check, TrashCheck::InTrash);
         assert!(!item.exists());
     }
@@ -282,7 +341,7 @@ mod tests {
         let item = folder.path().join("lost.txt");
         fs::write(&item, b"l").unwrap();
         let call = |path: &Path| -> Result<(), VfsError> { Ok(fs::remove_file(path)?) };
-        let check = trash_with(&item, &call, &look_in(&bin)).unwrap();
+        let check = trash_with(&item, &call, &no_count, &look_in(&bin)).unwrap();
         assert_eq!(check, TrashCheck::GoneNotInTrash);
         assert_eq!(check.problem(), Some("Deleted but not found in the trash."));
     }
@@ -295,12 +354,12 @@ mod tests {
         fs::write(&item, b"s").unwrap();
         let call = |_: &Path| -> Result<(), VfsError> { Ok(()) };
         assert_eq!(
-            trash_with(&item, &call, &look_in(&bin)).unwrap(),
+            trash_with(&item, &call, &no_count, &look_in(&bin)).unwrap(),
             TrashCheck::StillThere
         );
         let refused = |_: &Path| -> Result<(), VfsError> { Err(VfsError::InUse) };
         assert_eq!(
-            trash_with(&item, &refused, &look_in(&bin)),
+            trash_with(&item, &refused, &no_count, &look_in(&bin)),
             Err(VfsError::InUse)
         );
     }
@@ -312,7 +371,7 @@ mod tests {
         let item = folder.path().join("calm.txt");
         fs::write(&item, b"c").unwrap();
         let call = |_: &Path| -> Result<(), VfsError> { panic!("a COM creation failed") };
-        let result = trash_with(&item, &call, &look_in(&bin));
+        let result = trash_with(&item, &call, &no_count, &look_in(&bin));
         assert!(matches!(result, Err(VfsError::Io { .. })));
         assert!(item.exists());
     }
@@ -325,7 +384,7 @@ mod tests {
         let call = |path: &Path| -> Result<(), VfsError> { Ok(fs::remove_file(path)?) };
         let blind = |_: &Before| None;
         assert_eq!(
-            trash_with(&item, &call, &blind).unwrap(),
+            trash_with(&item, &call, &no_count, &blind).unwrap(),
             TrashCheck::NotChecked
         );
     }
