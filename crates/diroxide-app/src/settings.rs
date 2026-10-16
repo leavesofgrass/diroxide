@@ -1,91 +1,157 @@
-//! The settings schema: every setting's key, name, help and default, which
-//! generates the Settings list with F1 help and the reference page.
+//! The Settings list: every setting of the schema as a row, name first and
+//! its value in words after it ("Layout, side by side"), with F1 help that
+//! says what the setting does, its default and what it can hold. The
+//! schema itself lives in the configuration crate, which checks
+//! `config.toml` against it; `cargo xtask regen` writes
+//! `docs/settings-reference.md` from the same table.
 //!
-//! Wave 1 (W1c) owns this module and generates `docs/settings-reference.md`
-//! from it.
+//! The theme's row also says its contrast verdict with the owner's colors
+//! applied: "Theme, Galaxy, meets AA".
 
-/// One setting.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SettingInfo {
-    /// The key in `config.toml`.
-    pub key: &'static str,
-    /// The name in the Settings list.
-    pub name: &'static str,
-    /// One sentence for F1 help.
-    pub help: &'static str,
-    /// The default, as written in TOML.
-    pub default: &'static str,
+pub use diroxide_config::schema::{
+    Choice, SCHEMA, SettingGroup, SettingInfo, SettingKind, list_words, setting,
+};
+pub use diroxide_config::theme::builtin_names as theme_names;
+pub use diroxide_config::{ColumnKind, DRIVE_KINDS};
+pub use diroxide_theme::PanelRole;
+
+use diroxide_config::theme::{self, ColorOverride};
+use diroxide_config::{Paths, Settings};
+use diroxide_core::{ListModel, ListRow};
+
+/// The theme the settings choose, with the owner's colors, and the verdict
+/// in words: "Theme Galaxy, meets AA". An unknown theme name falls back to
+/// the default, as the startup problems already said.
+pub fn theme_line(settings: &Settings, paths: Option<&Paths>) -> String {
+    let registry = match paths {
+        Some(paths) => theme::registry(&paths.themes_dir(), Paths::SETTINGS).0,
+        None => diroxide_theme::Registry::builtin(),
+    };
+    let (chosen, _) = theme::resolve(&registry, &settings.theme, Paths::SETTINGS);
+    let (overrides, _): (Vec<ColorOverride>, _) =
+        theme::read_overrides(&settings.colors, Paths::SETTINGS);
+    theme::chosen_line(chosen, &overrides)
 }
 
-/// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 9] = [
-    SettingInfo {
-        key: "show-hidden",
-        name: "Show hidden files",
-        help: "Lists entries that are hidden by their name or attributes.",
-        default: "false",
-    },
-    SettingInfo {
-        key: "folders-first",
-        name: "Folders first",
-        help: "Lists folders before files.",
-        default: "true",
-    },
-    SettingInfo {
-        key: "sort",
-        name: "Sort by",
-        help: "Sorts new panels by name, size, modified, type or extension.",
-        default: "\"name\"",
-    },
-    SettingInfo {
-        key: "columns",
-        name: "Columns",
-        help: "Says these details after each name, in order.",
-        default: "[\"type\", \"size\", \"modified\"]",
-    },
-    SettingInfo {
-        key: "single-letter-keys",
-        name: "Single-letter keys",
-        help: "Lets keys without Control or Alt run commands.",
-        default: "true",
-    },
-    SettingInfo {
-        key: "screen-reader",
-        name: "Screen reader mode",
-        help: "Behaves for a screen reader: auto, on or off.",
-        default: "\"auto\"",
-    },
-    SettingInfo {
-        key: "quiet-screen",
-        name: "Quiet screen",
-        help: "Draws as little as possible.",
-        default: "false",
-    },
-    SettingInfo {
-        key: "theme",
-        name: "Theme",
-        help: "Plain has no box drawing; lines adds it.",
-        default: "\"plain\"",
-    },
-    SettingInfo {
-        key: "progress-interval-ms",
-        name: "Progress interval",
-        help: "The shortest time between two progress sentences, in milliseconds.",
-        default: "500",
-    },
-];
+/// The value said in the Settings list, with "comes with" for a setting
+/// that is reserved for a later alpha.
+fn value_details(settings: &Settings, info: &SettingInfo, theme_verdict: &str) -> Vec<String> {
+    let mut details = vec![settings.value_words(info.key)];
+    if info.key == "theme" && !theme_verdict.is_empty() {
+        details.push(theme_verdict.to_owned());
+    }
+    if let Some(alpha) = info.arrives {
+        details.push(format!("comes with {alpha}"));
+    }
+    details
+}
+
+/// The Settings list, one row per setting in schema order: the name, then
+/// the value in words. Each row's id is the setting's key, so F1 on it
+/// gives [`setting_help`] and Enter can change it.
+pub fn settings_list(settings: &Settings) -> ListModel {
+    let line = theme_line(settings, None);
+    let verdict = line.split_once(", ").map_or("", |(_, v)| v).to_owned();
+    let rows = SCHEMA
+        .iter()
+        .map(|info| {
+            ListRow::new(info.key, info.name).with_details(value_details(settings, info, &verdict))
+        })
+        .collect();
+    let mut list = ListModel::new("Settings").with_rows(rows);
+    list.set_help("Up and Down choose, Enter changes, F1 says what a setting does, Escape closes.");
+    list
+}
+
+/// F1 help for one setting: its help, its group, its default and what it
+/// can hold, in plain sentences.
+pub fn setting_help(key: &str) -> Option<String> {
+    let info = setting(key)?;
+    let default = match info.kind {
+        SettingKind::Choice(choices) => {
+            let value = info.default.trim_matches('"');
+            choices
+                .iter()
+                .find(|c| c.value == value)
+                .map_or_else(|| value.to_owned(), |c| c.words.to_owned())
+        }
+        SettingKind::Flag if info.default == "true" => "on".to_owned(),
+        SettingKind::Flag => "off".to_owned(),
+        _ if info.default == "\"\"" || info.default == "[]" || info.default == "{}" => {
+            "none".to_owned()
+        }
+        _ => info.default.trim_matches('"').to_owned(),
+    };
+    let mut text = format!(
+        "{}: {} In {}. Default: {default}. Holds {}.",
+        info.name,
+        info.help,
+        info.group.title(),
+        info.kind.words()
+    );
+    if let Some(alpha) = info.arrives {
+        text.push_str(&format!(" Kept now; it comes with {alpha}."));
+    }
+    Some(text)
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diroxide_config::Settings;
+    use diroxide_core::format::within_cells;
 
     #[test]
-    fn every_default_matches_the_config_defaults() {
-        let mut text = String::new();
-        for setting in &SCHEMA {
-            text.push_str(&format!("{} = {}\n", setting.key, setting.default));
+    fn the_list_says_each_setting_and_its_value() {
+        let settings = Settings::default();
+        let list = settings_list(&settings);
+        assert_eq!(list.len(), SCHEMA.len());
+        assert_eq!(
+            list.announce_focus(),
+            format!("Layout, side by side, 1 of {}", SCHEMA.len())
+        );
+        let theme = list.rows().iter().find(|r| r.id == "theme").unwrap();
+        assert_eq!(theme.spoken(), "Theme, galaxy, meets AA");
+        let preset = list.rows().iter().find(|r| r.id == "preset").unwrap();
+        assert_eq!(preset.spoken(), "Key preset, diroxide, comes with alpha.3");
+        for row in list.rows() {
+            assert!(within_cells(&row.spoken(), &row.label), "{}", row.spoken());
         }
-        assert_eq!(Settings::from_toml(&text).unwrap(), Settings::default());
+    }
+
+    #[test]
+    fn f1_says_what_a_setting_does() {
+        assert_eq!(
+            setting_help("progress_interval_seconds").unwrap(),
+            "Progress interval: In screen reader mode, the shortest time between two progress lines. A job's start, its end and its questions are said at once. In Speech and Braille. Default: 10. Holds a number of seconds, 1 to 600."
+        );
+        assert!(
+            setting_help("layout")
+                .unwrap()
+                .contains("Default: side by side.")
+        );
+        assert!(
+            setting_help("filter_case")
+                .unwrap()
+                .ends_with("it comes with alpha.3.")
+        );
+        assert!(setting_help("nothing").is_none());
+        for info in &SCHEMA {
+            let help = setting_help(info.key).unwrap();
+            assert!(within_cells(&help, info.name), "{help}");
+        }
+    }
+
+    #[test]
+    fn the_theme_line_counts_the_owners_colors() {
+        let mut settings = Settings::default();
+        assert_eq!(theme_line(&settings, None), "Theme Galaxy, meets AA");
+        let page = diroxide_theme::builtin::default_theme()
+            .color(diroxide_theme::ColorRole::Background)
+            .hex();
+        settings.colors.insert("folder".to_owned(), page);
+        assert_eq!(
+            theme_line(&settings, None),
+            "Theme Galaxy, below AA: 1 check falls short"
+        );
     }
 }
