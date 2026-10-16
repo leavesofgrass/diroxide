@@ -5,18 +5,17 @@
 //! belongs to the configuration crate, not the app, so the app's core
 //! stays free of I/O.
 //!
-//! Wave 1 (W1c) owns this module: the atomic write on every change worth
-//! keeping, the corrupt-file backup and its sentence, and the injected
-//! folders for tests. Phase 0's bodies read and write the text simply.
-
-use std::fs;
-use std::io;
+//! The file is written atomically on every change worth keeping; a file
+//! that cannot be read is copied to `session.toml.bad`, said in one
+//! sentence, and the start goes on from the defaults. Tests pass their own
+//! state folder through [`Paths::new`].
 
 use diroxide_core::{Place, Side, SortSpec};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ConfigError;
 use crate::paths::Paths;
+use crate::store::{self, ConfigProblem, Loaded, ReadText};
 
 /// How the two panels are laid out (ADR-0007): side by side, the default
 /// and primary layout; stacked, one above the other, the fallback for
@@ -111,24 +110,37 @@ impl SessionState {
     }
 }
 
-/// Reads the session from the state folder; a missing file gives the
-/// defaults.
-pub fn load_session(paths: &Paths) -> Result<SessionState, ConfigError> {
-    match fs::read_to_string(paths.state_file(Paths::SESSION)) {
-        Ok(text) => SessionState::from_toml(&text),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(SessionState::default()),
-        Err(e) => Err(ConfigError::io(Paths::SESSION, &e)),
+/// Reads the session from the state folder. A missing file gives the
+/// defaults and says nothing; a file that cannot be read gives the
+/// defaults, is copied to `session.toml.bad`, and says so in one sentence.
+pub fn load_session(paths: &Paths) -> Loaded<SessionState> {
+    let name = Paths::SESSION;
+    let path = paths.state_file(name);
+    match store::read_text(&path, name) {
+        ReadText::Missing => Loaded::clean(SessionState::default()),
+        ReadText::Failed(problem) => Loaded {
+            value: SessionState::default(),
+            problems: vec![problem],
+        },
+        ReadText::Text(text) => match store::parse_typed::<SessionState>(name, &text) {
+            Ok(session) => Loaded::clean(session),
+            Err(failure) => {
+                let backup = store::back_up(&path, &text);
+                Loaded {
+                    value: SessionState::default(),
+                    problems: vec![ConfigProblem::new(name, failure.sentence(&backup))],
+                }
+            }
+        },
     }
 }
 
 /// Writes the session to the state folder atomically: to a temporary file
-/// beside it, then a rename over the old one.
+/// beside it, flushed, then a rename over the old one.
 pub fn save_session(paths: &Paths, session: &SessionState) -> Result<(), ConfigError> {
     let text = session.to_toml()?;
-    let path = paths.state_file(Paths::SESSION);
-    let temporary = path.with_extension("toml.new");
-    fs::write(&temporary, text).map_err(|e| ConfigError::io(Paths::SESSION, &e))?;
-    fs::rename(&temporary, &path).map_err(|e| ConfigError::io(Paths::SESSION, &e))
+    store::write_atomic(&paths.state_file(Paths::SESSION), &text)
+        .map_err(|e| ConfigError::io(Paths::SESSION, &e))
 }
 
 #[cfg(test)]
@@ -156,5 +168,26 @@ mod tests {
             SessionState::default()
         );
         assert_eq!(Layout::default().word(), "side by side");
+    }
+
+    #[test]
+    fn the_session_survives_a_restart_and_a_bad_file_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+        let empty = load_session(&paths);
+        assert_eq!(empty.value, SessionState::default());
+        assert!(empty.problems.is_empty());
+        let mut session = SessionState::default();
+        session.panel_mut(Side::Right).focused = Some("notes.txt".to_owned());
+        save_session(&paths, &session).unwrap();
+        assert_eq!(load_session(&paths), Loaded::clean(session));
+        std::fs::write(paths.state_file(Paths::SESSION), "version = [\n").unwrap();
+        let bad = load_session(&paths);
+        assert_eq!(bad.value, SessionState::default());
+        assert_eq!(
+            bad.problems[0].text,
+            "session.toml could not be read: line 1 is not valid TOML. A copy is kept as session.toml.bad; the defaults are in use."
+        );
+        assert!(paths.state_file("session.toml.bad").exists());
     }
 }

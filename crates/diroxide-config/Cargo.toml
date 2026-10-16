@@ -1,6 +1,6 @@
 [package]
 name = "diroxide-config"
-description = "The configuration of diroxide in TOML: settings, keymap, file types, banks, conversions, tools and plugins."
+description = "The configuration of diroxide in TOML: settings, keymap, menus, file types, banks, conversions, tools and plugins."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,9 +9,15 @@ publish.workspace = true
 
 [dependencies]
 diroxide-core.workspace = true
+diroxide-theme.workspace = true
+dirs.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true
+toml_edit.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true
