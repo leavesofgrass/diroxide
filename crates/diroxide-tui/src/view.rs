@@ -315,7 +315,10 @@ fn panel_region(
     if frozen_ok {
         let complete = panel.is_listed()
             && (!panel.is_loading()
-                || panel.loading_how() == Some(diroxide_app::panel::Load::Refresh));
+                || matches!(
+                    panel.loading_how(),
+                    Some(diroxide_app::panel::Load::Refresh | diroxide_app::panel::Load::AfterJob)
+                ));
         memory.frozen[side.index()] = Some(Frozen {
             place: shown,
             complete,
@@ -734,14 +737,14 @@ fn minibuffer(
     }
 }
 
-/// Builds the frame for the app's state.
-pub(crate) fn build(app: &App, look: &Look, memory: &mut Memory) -> View {
+/// Builds the frame for the app's state, with the status line's words.
+pub(crate) fn build(app: &App, look: &Look, status: &str, memory: &mut Memory) -> View {
     let width = look.width.max(20);
     let height = usize::from(look.height.max(5));
     let status = if look.status_blank {
         String::new()
     } else {
-        clean(&app.status_line())
+        clean(status)
     };
     let jobs = clean(&app.jobs().line());
     let bar = if look.screen_reader || look.compact {

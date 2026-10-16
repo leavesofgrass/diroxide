@@ -380,6 +380,8 @@ fn the_key_test_ends_after_ten_seconds_without_a_key() {
     let mut s = session(&mut app, &mut runtime, 80, 24, true);
     start(&mut s, &clock);
     s.command(Command::new(ids::KEY_TEST), clock.now());
+    s.draw(clock.now()).unwrap();
+    assert!(s.screen().lines[22].starts_with("Key test: press keys"));
     assert!(s.app().key_test_active());
     assert_eq!(
         s.next_deadline(),

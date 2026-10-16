@@ -70,7 +70,12 @@ pub struct Session<'a, B: Backend> {
     redraw: bool,
     resumed: Arc<AtomicBool>,
     blank_until: Option<Instant>,
-    shown_status: String,
+    /// The status line as drawn: the messages said between two frames,
+    /// the first first; kept until another message comes.
+    status: String,
+    /// The messages said since the last frame, each with whether it is a
+    /// job's start line (which a later message replaces).
+    pending: Vec<(String, bool)>,
     key_test_since: Option<Instant>,
     resize_until: Option<Instant>,
     first_draw_at: Option<Instant>,
@@ -116,7 +121,8 @@ impl<'a, B: Backend> Session<'a, B> {
             redraw: true,
             resumed: Arc::new(AtomicBool::new(false)),
             blank_until: None,
-            shown_status: String::new(),
+            status: String::new(),
+            pending: Vec::new(),
             key_test_since: None,
             resize_until: None,
             first_draw_at: None,
@@ -243,12 +249,6 @@ impl<'a, B: Backend> Session<'a, B> {
         for effect in screen {
             match effect {
                 Effect::Announce(message) => {
-                    if !message.text.is_empty()
-                        && message.text == self.shown_status
-                        && self.app.status_line() == message.text
-                    {
-                        self.blank_until = Some(now + BLANK);
-                    }
                     if message.text.starts_with("Other panel: ") {
                         // Say Other Panel is the demand that redraws the
                         // other panel in screen-reader mode.
@@ -260,6 +260,18 @@ impl<'a, B: Backend> Session<'a, B> {
                 Effect::Quit => self.quit = true,
                 _ => self.redraw = true,
             }
+        }
+        let said = self.app.take_status_lines();
+        if !said.is_empty() {
+            // A job's start line is the jobs line's too; when more comes
+            // before the next frame (a quick job's result), it gives way,
+            // so the result is said first.
+            let jobs = self.app.jobs().line();
+            for text in said {
+                let start = text == jobs;
+                self.pending.push((text, start));
+            }
+            self.redraw = true;
         }
         if self.app.wants_quit() {
             self.quit = true;
@@ -423,6 +435,21 @@ impl<'a, B: Backend> Session<'a, B> {
             return Ok(false);
         }
         self.redraw = false;
+        if !self.pending.is_empty() {
+            let last = self.pending.len() - 1;
+            let mut parts: Vec<String> = Vec::new();
+            for (i, (text, start)) in self.pending.drain(..).enumerate() {
+                if text.is_empty() || (start && i < last) || parts.last() == Some(&text) {
+                    continue;
+                }
+                parts.push(text);
+            }
+            let text = parts.join(" ");
+            // The same line again is blanked first, so a reader that
+            // speaks changes says it again; another line ends a blank.
+            self.blank_until = (!text.is_empty() && text == self.status).then_some(now + BLANK);
+            self.status = text;
+        }
         let settings = self.app.settings();
         if !self.styles.matches(&settings.theme, &settings.colors) {
             self.styles = Styles::new(
@@ -435,7 +462,12 @@ impl<'a, B: Backend> Session<'a, B> {
         let size = self.terminal.size().map_err(backend_error)?;
         let look = self.look(size.width, size.height, now);
         self.memory.freeze = look.screen_reader;
-        let view = view::build(self.app, &look, &mut self.memory);
+        let status = if self.status.is_empty() {
+            self.app.status_line()
+        } else {
+            self.status.clone()
+        };
+        let view = view::build(self.app, &look, &status, &mut self.memory);
         for side in Side::BOTH {
             self.app.set_page_rows(side, view.page_rows[side.index()]);
         }
@@ -484,11 +516,6 @@ impl<'a, B: Backend> Session<'a, B> {
             backend.flush().map_err(backend_error)?;
         }
         self.resent = resent;
-        self.shown_status = if look.status_blank {
-            String::new()
-        } else {
-            view::clean(&self.app.status_line())
-        };
         self.lines = lines;
         self.cursor = view.cursor;
         let active = self.app.active_panel();

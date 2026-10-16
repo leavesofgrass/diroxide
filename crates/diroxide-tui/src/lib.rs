@@ -151,7 +151,7 @@ pub fn render(app: &App, options: &TuiOptions) -> Screen {
         secret_silent: settings.secret_echo == diroxide_app::config::SecretEcho::Silent,
     };
     let mut memory = view::Memory::default();
-    let built = view::build(app, &look, &mut memory);
+    let built = view::build(app, &look, &app.status_line(), &mut memory);
     let styles = Styles::new(
         &settings.theme,
         &settings.colors,
