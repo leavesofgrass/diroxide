@@ -286,6 +286,7 @@ impl Engine {
                 let mut reader = source.read(from, ctx)?;
                 let mut writer = target.write(&to, mode, ctx)?;
                 io::copy(&mut reader, &mut writer).map_err(VfsError::from)?;
+                writer.commit(false)?;
                 Ok(Outcome::Done)
             }
             Step::Move { from, to } | Step::Rename { from, to } => {
@@ -306,8 +307,11 @@ impl Engine {
                 Ok(Outcome::Done)
             }
             Step::Trash { place } => {
-                self.registry.resolve(place)?.trash(place, ctx)?;
-                Ok(Outcome::Done)
+                let check = self.registry.resolve(place)?.trash(place, ctx)?;
+                match check.problem() {
+                    None => Ok(Outcome::Done),
+                    Some(problem) => Err(OpsError::TrashNotConfirmed(problem.to_owned())),
+                }
             }
             Step::Restore { .. } => Err(OpsError::NotBuilt("restore".to_owned())),
             Step::Remove { place } => {

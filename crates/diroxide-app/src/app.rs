@@ -669,7 +669,7 @@ mod tests {
         let said = settle(&mut app, &mut runtime, effects);
         assert!(said[0].starts_with("Could not open "), "{said:?}");
         assert!(
-            said[0].ends_with("it does not exist. Press F5 to reload the folder."),
+            said[0].ends_with("it does not exist. Reload the folder."),
             "{said:?}"
         );
         assert_eq!(app.panel(Side::Left).place(), &here());

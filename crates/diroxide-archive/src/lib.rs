@@ -12,12 +12,12 @@
 //! provider method says "not built yet". Wave 2 (W2a) owns this crate and
 //! brings in `zip`, `sevenz-rust2`, `tar`, `flate2` and `liblzma`.
 
-use std::io::{Read, Write};
+use std::io::Read;
 use std::sync::{Arc, RwLock, Weak};
 
 use diroxide_core::{Entry, Place};
 use diroxide_vfs::{
-    AttributeChange, Capabilities, OpContext, Provider, Registry, VfsError, WriteMode,
+    AttributeChange, Capabilities, FileWriter, OpContext, Provider, Registry, VfsError, WriteMode,
 };
 
 /// The archive formats.
@@ -249,7 +249,7 @@ impl Provider for ArchiveProvider {
         _place: &Place,
         _mode: WriteMode,
         _ctx: &OpContext,
-    ) -> Result<Box<dyn Write + Send>, VfsError> {
+    ) -> Result<Box<dyn FileWriter>, VfsError> {
         Err(self.not_built("write into archives"))
     }
 
@@ -270,7 +270,7 @@ impl Provider for ArchiveProvider {
         _place: &Place,
         _change: &AttributeChange,
         _ctx: &OpContext,
-    ) -> Result<(), VfsError> {
+    ) -> Result<AttributeChange, VfsError> {
         Err(self.not_built("change attributes in archives"))
     }
 }

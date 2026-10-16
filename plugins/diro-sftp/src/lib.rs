@@ -14,11 +14,13 @@
 //! container's OpenSSH server.
 
 use std::fmt;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 
 use diroxide_core::{Entry, Place};
-use diroxide_vfs::{AttributeChange, Capabilities, OpContext, Provider, VfsError, WriteMode};
+use diroxide_vfs::{
+    AttributeChange, Capabilities, FileWriter, OpContext, Provider, VfsError, WriteMode,
+};
 
 /// The default SFTP port.
 pub const DEFAULT_PORT: u16 = 22;
@@ -154,7 +156,7 @@ impl Provider for SftpProvider {
         _place: &Place,
         _mode: WriteMode,
         _ctx: &OpContext,
-    ) -> Result<Box<dyn Write + Send>, VfsError> {
+    ) -> Result<Box<dyn FileWriter>, VfsError> {
         Err(self.not_built())
     }
 
@@ -175,7 +177,7 @@ impl Provider for SftpProvider {
         _place: &Place,
         _change: &AttributeChange,
         _ctx: &OpContext,
-    ) -> Result<(), VfsError> {
+    ) -> Result<AttributeChange, VfsError> {
         Err(self.not_built())
     }
 }
