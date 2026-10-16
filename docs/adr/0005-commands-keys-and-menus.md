@@ -2,6 +2,14 @@
 
 Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0).
 
+Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from the owner's decisions of Saturday, October 10 and Sunday, October 11, 2026, questions 56 and 63, answers 29, 33 and 34, R19 and R21):
+
+- **No sequences.** There are no chords and no leader keys: a binding is one key with its modifiers, and a two-key entry is refused in words (`CoreError::KeySequence`). The decision "Two-key chords work in the Emacs style" above no longer holds; the prefix lookup and the continuations line are gone from the app.
+- **Two columns.** The keymap has a terminal column and a window column (`KeyColumn`), each with the layers above.
+- **`keymap.toml` is command to key**: one line per command, in a table per column and layer (`[terminal.panel]` with `"file.copy" = "f5"`; a list of keys, or `"none"` to unbind). The built-in defaults are written beside it as a read-only reference, and every unknown command or key is reported in words, never dropped.
+- **The defaults change as decided.** F10 no longer quits (Ctrl+Q does); it opens the menus in the window, and the terminal column does not use it. Ctrl+I and Ctrl+H are gone; Ctrl+Shift+S no longer says the status, and in the window it opens the Sort list; Say Status is on Ctrl+D, details on Alt+Enter alone; the palette is on Ctrl+Shift+P, and Ctrl+P too in the terminal; sorting is on Ctrl+F3 to Ctrl+F7. The menus are a data file, `menus.toml`, with the same command ids.
+- W1c applies these to the catalog and writes the terminal-unsafe table; until then the Phase 0 catalog keeps its old keys.
+
 ## Context
 
 Everything in diroxide is a command, and every command has a key, a name in the palette and a place in the menus. If menus, buttons and help each kept their own names and keys, a menu could show a key that is not bound, which a screen reader user would follow and find broken. This follows the design of textweaver's ADR-0043.

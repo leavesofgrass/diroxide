@@ -2,6 +2,15 @@
 
 Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0).
 
+Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from R8 C4 and C5, R20, R23 and plan section 5.4):
+
+- **Create, verify, then destroy.** A replacement is written and committed before anything it replaces is removed; a clone is tried before the destination is touched; a trash failure never falls through to a permanent delete; every job's results are reconciled against a fresh read (`Reconciliation`: planned, present and missing, the count first).
+- **Conflicts one at a time.** `Conflict` carries its kind, both entries and the keep-both name; `lines()` says the situation first, then the difference and a fact line for each; `choices()` gives the nine verb-first choices, Skip first. The sink answers a `ConflictAnswer` with apply-to-rest, which replaces "the answer applies to the rest of the job" above.
+- **Errors.** An error on an item goes to `JobSink::error` as an `ItemError`, answered with Retry, Skip, Skip all like this or Cancel; Retry comes first only where it helps.
+- **Words.** Progress is percent first ("Copying 30 percent, 2 minutes left"), the counts on a detail line, with a `JobState` on every update and `bytes_per_second`. The report puts problems first ("Copy had 8 failures: 290 done, 2 skipped.") and gains warnings.
+- **Undo.** `UndoRecord` gains the job's kind, its origin and the created entries, so a copy, a made folder, a split and a join undo too; it is serializable for the journal W1b writes before the first step.
+- **Tests.** The fake provider has the switches these tests need: place rules, latency and a stall, the lies (a commit that writes nothing, a clone that fails late, a trash that does nothing) and faults after N bytes.
+
 ## Context
 
 Worker's copy runs on a thread, while its dirsize and delete block the interface. diroxide runs every operation that touches more than one entry, or can take more than a moment, as a job, so the interface never blocks and every operation reports, cancels and undoes the same way.

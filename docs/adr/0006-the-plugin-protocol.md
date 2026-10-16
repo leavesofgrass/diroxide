@@ -2,6 +2,8 @@
 
 Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0). Updated the same day with the wire conventions, error codes and shared shapes of R3's review (`research/plugin-protocol.md`, sections 2 and 7, in the planning repository); the full message list of its section 3 is W3a's.
 
+Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b): the in-process Lua tier is retired (the owner, Sunday, October 11, 2026; plan section 5.8, item 3). `lua.rs` and the `lua` feature are gone from `diroxide-plugins`, and Lua scripts run through a Lua runner plugin, a process like any other: the plugin boundary is the language boundary (ADR-0001). The wire entry now carries `extra` both ways and knows the `item` kind.
+
 ## Context
 
 The owner wants to automate file management in bash and Python first, then Lua, and to reach other protocols such as SSH. Worker's scripting is a stack language and a flag language inside its configuration, plus a small Lua hook. diroxide makes plugins a protocol, not a language.

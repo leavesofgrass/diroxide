@@ -12,6 +12,7 @@ Each record keeps one decision: its context, the decision, the alternatives weig
 - [ADR-0006: The plugin protocol](0006-the-plugin-protocol.md)
 - [ADR-0007: Frontends over one core](0007-frontends-over-one-core.md)
 - [ADR-0008: Safety rules](0008-safety-rules.md)
+- [ADR-0009: Secrets and the masked prompt](0009-secrets-and-the-masked-prompt.md)
 
 ## The template
 
