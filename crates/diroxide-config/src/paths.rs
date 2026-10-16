@@ -30,6 +30,8 @@ impl Paths {
     pub const TOOLS: &'static str = "tools.toml";
     /// The folder of plugins, under the config folder.
     pub const PLUGINS: &'static str = "plugins";
+    /// The session restored at the next start, in the state folder.
+    pub const SESSION: &'static str = "session.toml";
 
     /// Paths from two folders, as tests and `--config` give them.
     pub fn new(config_dir: PathBuf, state_dir: PathBuf) -> Self {
