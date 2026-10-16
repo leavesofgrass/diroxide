@@ -9,10 +9,22 @@ publish.workspace = true
 
 [dependencies]
 diroxide-core.workspace = true
+dirs.workspace = true
+notify.workspace = true
+reflink-copy.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+trash.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+sysinfo.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 tempfile.workspace = true
 
 [lints]
