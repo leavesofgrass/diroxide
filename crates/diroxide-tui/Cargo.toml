@@ -8,9 +8,15 @@ homepage.workspace = true
 publish.workspace = true
 
 [dependencies]
+crossterm.workspace = true
 diroxide-app.workspace = true
 diroxide-core.workspace = true
+diroxide-theme.workspace = true
+ratatui.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

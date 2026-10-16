@@ -34,8 +34,9 @@ pub struct ToolSpec {
     pub install_hint: &'static str,
 }
 
-/// The tools diroxide knows about.
-pub const BUILTIN: [ToolSpec; 7] = [
+/// The tools diroxide knows about. A slice, so later alphas add tools
+/// (ExifTool, pdfinfo) without breaking callers.
+pub const BUILTIN: &[ToolSpec] = &[
     ToolSpec {
         id: "magick",
         name: "ImageMagick",
@@ -98,6 +99,46 @@ pub const BUILTIN: [ToolSpec; 7] = [
         purpose: "opening files in their default programs",
         install_hint: "Install xdg-utils from your package manager.",
     },
+    ToolSpec {
+        id: "tw",
+        name: "textweaver",
+        programs: &["tw"],
+        version_args: &["--version"],
+        purpose: "reading a document aloud, from the quick view",
+        install_hint: "Install textweaver from its releases page or with cargo.",
+    },
+    ToolSpec {
+        id: "curl",
+        name: "curl",
+        programs: &["curl"],
+        version_args: &["--version"],
+        purpose: "downloading components when the built-in client is off",
+        install_hint: "curl comes with Windows 10 and later; install it from your package manager.",
+    },
+    ToolSpec {
+        id: "wget",
+        name: "wget",
+        programs: &["wget"],
+        version_args: &["--version"],
+        purpose: "downloading components when curl is missing",
+        install_hint: "Install wget from your package manager.",
+    },
+];
+
+/// The arguments every curl run starts with: `-q` first, so a planted
+/// configuration file cannot switch off certificate checks (plan section
+/// 5.14), then failure on HTTP errors, quiet progress, and redirects
+/// followed only over HTTPS.
+pub const CURL_SAFE_ARGS: &[&str] = &[
+    "-q",
+    "--fail",
+    "--silent",
+    "--show-error",
+    "--location",
+    "--proto",
+    "=https",
+    "--proto-redir",
+    "=https",
 ];
 
 /// Whether a tool can be used.

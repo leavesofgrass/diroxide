@@ -2,6 +2,15 @@
 
 Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0).
 
+Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from spikes four and six, measured on the owner's machine on Sunday, October 11, 2026, and from R8 and R9):
+
+- **The trash crate's Ok never means "in the trash."** A gate decides before every call (`diroxide_vfs::trash::trash_gate`, pure, tested with fake drive kinds and the lengths 259 and 260). On Windows: the trash only on a fixed local drive, for a path of at most 259 UTF-16 units (a folder's longest inner path counts), never a network path, the drive kind asked of the path's own volume root. Everywhere else, the listed permanent delete with the honest question, starting on No: "This drive has no trash. Delete 3 items for good? y or n".
+- **A post-check after every call** answers a `TrashCheck`. Anything but `InTrash` is a problem, and a gone item the trash does not hold is the loud failure "Deleted but not found in the trash." The call runs on a worker thread that catches a panic (W1a).
+- **Long paths** (spike four): the standard library works at any depth; a program or a shell is never started in a folder of 259 characters or more ("Cannot start a program in a folder this deep"); the system opener is refused at depth ("Cannot open a file this deep"); the extended prefix is never shown or spoken.
+- **Names** Windows would change are refused on a Windows-rules place, not only flagged.
+- **Permanent delete** carries the honest sentence "Deleted data may stay on the disk. diroxide cannot erase it for good." There is no secure delete.
+- **Secrets** follow ADR-0009. **Messages** name keys only from the live keymap, never as fixed text.
+
 ## Context
 
 On Saturday, September 26, 2026, the owner lost most of a user profile to a delete that read a hidden character as a drive letter. A file manager's whole job is operations like that one, so the rules the owner keeps for agents become features of the product (plan section 5.12).

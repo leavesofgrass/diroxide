@@ -1,0 +1,31 @@
+# The fuzz targets of diroxide (plan section 6: cargo-fuzz over the name
+# sanitizer, the archive readers and the protocol parser). A workspace of
+# its own, outside the main one: libFuzzer is C++, so it never enters the
+# main workspace's build (the pure-Rust rule), and the nightly workflow
+# runs it with `cargo fuzz run names` on a nightly toolchain.
+
+[package]
+name = "diroxide-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+diroxide-core = { path = "../crates/diroxide-core" }
+diroxide-vfs = { path = "../crates/diroxide-vfs" }
+
+[[bin]]
+name = "names"
+path = "fuzz_targets/names.rs"
+test = false
+doc = false
+bench = false
+
+# Its own workspace, so the main one never builds it.
+[workspace]
+members = ["."]

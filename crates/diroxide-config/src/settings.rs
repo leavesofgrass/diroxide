@@ -1,34 +1,34 @@
 //! `config.toml`: the settings.
+//!
+//! Every setting has a default, so an empty file is valid. Reading never
+//! fails on a value: a value the schema refuses keeps its default and is
+//! said in words ("layout cannot be \"diagonal\": use side_by_side,
+//! stacked or single."); a key this version does not know is kept as it
+//! is, written back untouched, and said once ("Unknown setting: foo. Kept
+//! as it is."). Only a file that is not TOML at all is refused, and then
+//! the store backs it up (see [`crate::store`]).
+//!
+//! Saving writes only the settings that changed, one value at a time,
+//! through `toml_edit`, so the owner's comments and order survive.
 
 use std::collections::BTreeMap;
 
+use diroxide_core::{SortKey, SortSpec};
 use serde::{Deserialize, Serialize};
+use toml::{Table, Value};
 
+use crate::columns::ColumnKind;
 use crate::error::ConfigError;
 use crate::paths::Paths;
+use crate::schema::{SCHEMA, SettingInfo, SettingKind};
+use crate::session::Layout;
+use crate::store::{ConfigProblem, Loaded};
 
-/// How a panel sorts.
+/// Whether the frontends behave for a screen reader.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum SortKey {
-    /// By name, naturally ("file2" before "file10").
-    #[default]
-    Name,
-    /// By size.
-    Size,
-    /// By modification time.
-    Modified,
-    /// By file type.
-    Type,
-    /// By extension.
-    Extension,
-}
-
-/// Whether the terminal frontend behaves for a screen reader.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum ScreenReaderMode {
-    /// Detect a running screen reader.
+    /// On when a running screen reader is detected.
     #[default]
     Auto,
     /// Always behave for a screen reader.
@@ -37,9 +37,127 @@ pub enum ScreenReaderMode {
     Off,
 }
 
+/// What a key without Control, Alt or Command does in a panel (WCAG
+/// 2.1.4 lets the user turn such keys off).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SingleLetters {
+    /// Letters and digits jump to names (type-ahead); the plus, minus,
+    /// star and question mark keys run their commands.
+    #[default]
+    TypeAhead,
+    /// Letters run the commands the keymap gives them (a vim-style
+    /// preset); nothing jumps.
+    Commands,
+    /// No single-character key does anything; Ctrl+S filters.
+    Off,
+}
+
+impl SingleLetters {
+    /// Whether single-character bindings stay in the keymap.
+    pub const fn keeps_bindings(self) -> bool {
+        !matches!(self, SingleLetters::Off)
+    }
+
+    /// Whether letters and digits jump to names.
+    pub const fn types_ahead(self) -> bool {
+        matches!(self, SingleLetters::TypeAhead)
+    }
+}
+
+/// When a text field's candidates are listed (plan section 5.19).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompletionList {
+    /// As you type in the window, on Tab in a terminal.
+    #[default]
+    Auto,
+    /// As you type.
+    AsYouType,
+    /// On Tab.
+    OnTab,
+}
+
+/// What a password field shows for each typed character (ADR-0009).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SecretEcho {
+    /// One asterisk per character.
+    #[default]
+    Asterisks,
+    /// Nothing.
+    Silent,
+}
+
+/// Whether code is colored in the viewer (alpha.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Highlighting {
+    /// Colored, except in screen reader mode.
+    #[default]
+    Auto,
+    /// Colored.
+    On,
+    /// Not colored.
+    Off,
+}
+
+/// Whether case matters in filters and searches (alpha.3).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FilterCase {
+    /// Only when the text has a capital letter.
+    #[default]
+    Smart,
+    /// Never.
+    Ignore,
+    /// Always.
+    Match,
+}
+
+/// The first day of the week, for "this week" and "last week" (alpha.3).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WeekStart {
+    /// Sunday.
+    #[default]
+    Sunday,
+    /// Monday.
+    Monday,
+    /// Saturday.
+    Saturday,
+}
+
+/// The `[confirm]` table: which questions are asked. Every question starts
+/// on No, and deleting for good always asks; neither is a setting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConfirmSettings {
+    /// Before a copy.
+    pub copy: bool,
+    /// Before a move.
+    #[serde(rename = "move")]
+    pub move_items: bool,
+    /// Before moving to the trash.
+    pub trash: bool,
+    /// Before quitting while a job runs.
+    pub quit_with_jobs: bool,
+}
+
+impl Default for ConfirmSettings {
+    fn default() -> Self {
+        Self {
+            copy: true,
+            move_items: true,
+            trash: true,
+            quit_with_jobs: true,
+        }
+    }
+}
+
 /// The plugins section of `config.toml`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(default)]
 pub struct PluginSettings {
     /// Plugins the user enabled, by name. Nothing is enabled by default.
     pub enabled: Vec<String>,
@@ -56,70 +174,398 @@ impl Default for PluginSettings {
     }
 }
 
-/// The settings in `config.toml`. Every field has a default, so an empty
-/// file is valid; keys this version does not know are kept in `unknown`
-/// and written back.
+/// The settings in `config.toml`. The schema ([`SCHEMA`]) gives each one
+/// its name, kind, range and help; keys this version does not know are
+/// kept in `unknown` and written back.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(default)]
 pub struct Settings {
+    /// How the panels share the screen.
+    pub layout: Layout,
     /// Show hidden entries.
     pub show_hidden: bool,
-    /// List folders before files.
-    pub folders_first: bool,
-    /// The sort key for new panels.
-    pub sort: SortKey,
-    /// The columns of a panel row, in order, after the name.
+    /// How a new panel sorts: the key, its direction, where folders go
+    /// and how names compare.
+    pub sort: SortSpec,
+    /// The columns of a panel row, in order, after the name, by
+    /// [`ColumnKind`] name.
     pub columns: Vec<String>,
-    /// Single-letter shortcuts (WCAG 2.1.4 lets them be turned off).
-    pub single_letter_keys: bool,
-    /// Screen reader behavior of the terminal frontend.
-    pub screen_reader: ScreenReaderMode,
-    /// Draw as little as possible, for screen readers that read changes.
+    /// The program the Edit command opens a file with; empty for
+    /// `$VISUAL`, then `$EDITOR`, then the platform's editor.
+    pub editor: String,
+    /// What single-character keys do.
+    pub single_letters: SingleLetters,
+    /// The key preset under `keymap.toml` (alpha.3).
+    pub preset: String,
+    /// Screen reader behavior.
+    pub screen_reader_mode: ScreenReaderMode,
+    /// Draw as little as possible.
     pub quiet_screen: bool,
-    /// The theme: `plain` (no box drawing) or `lines`.
+    /// The shortest time between two progress lines in screen reader mode.
+    pub progress_interval_seconds: u64,
+    /// Park the terminal's cursor on the status line.
+    pub cursor_fallback: bool,
+    /// How long a new dialog waits before it takes keys.
+    pub dialog_settle_ms: u64,
+    /// When completion candidates are listed.
+    pub completion_list: CompletionList,
+    /// What a password field shows per character.
+    pub secret_echo: SecretEcho,
+    /// Whether password fields start with the text shown.
+    pub secret_show_toggle: bool,
+    /// Which questions are asked.
+    pub confirm: ConfirmSettings,
+    /// `system`, or a folder used as the trash.
+    pub trash: String,
+    /// Drive kinds where the system trash is used.
+    pub trash_drives: Vec<String>,
+    /// Send a replaced file to the trash first.
+    pub replace_to_trash: bool,
+    /// Refuse names other systems cannot store.
+    pub portable_names: bool,
+    /// The theme's name.
     pub theme: String,
-    /// The shortest time between two progress sentences, in milliseconds.
-    pub progress_interval_ms: u64,
+    /// Follow the system's light or dark appearance.
+    pub follow_system_appearance: bool,
+    /// The owner's colors by screen role, `#rrggbb`.
+    pub colors: BTreeMap<String, String>,
+    /// Box drawing around the panels in a terminal.
+    pub borders: bool,
+    /// Hide the key bar and the title line in a terminal.
+    pub compact: bool,
+    /// Code colors in the viewer (alpha.2).
+    pub highlighting: Highlighting,
+    /// Thumbnails in the window (alpha.7).
+    pub thumbnails: bool,
+    /// Hide the window's menu bar until Alt or F10 (alpha.6).
+    pub auto_hide_menu: bool,
+    /// Fade the window's bars while the mouse rests (alpha.6).
+    pub focus_mode: bool,
+    /// Whether case matters in filters (alpha.3).
+    pub filter_case: FilterCase,
+    /// The filter's pause before it says the count (alpha.3).
+    pub filter_pause_ms: u64,
+    /// The first day of the week (alpha.3).
+    pub week_starts_on: WeekStart,
+    /// The most rows a search lists (alpha.3).
+    pub search_row_cap: u64,
+    /// Whether searches skip ignored files (alpha.3).
+    pub search_respect_ignore: bool,
+    /// Where the components list is read from; empty for the public list
+    /// (alpha.4).
+    pub components_source: String,
     /// The plugins section.
     pub plugins: PluginSettings,
     /// Keys this version does not know, kept as they were.
     #[serde(flatten)]
-    pub unknown: BTreeMap<String, toml::Value>,
+    pub unknown: BTreeMap<String, Value>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            layout: Layout::SideBySide,
             show_hidden: false,
-            folders_first: true,
-            sort: SortKey::Name,
+            sort: SortSpec::default(),
             columns: vec!["type".to_owned(), "size".to_owned(), "modified".to_owned()],
-            single_letter_keys: true,
-            screen_reader: ScreenReaderMode::Auto,
+            editor: String::new(),
+            single_letters: SingleLetters::TypeAhead,
+            preset: "diroxide".to_owned(),
+            screen_reader_mode: ScreenReaderMode::Auto,
             quiet_screen: false,
-            theme: "plain".to_owned(),
-            progress_interval_ms: 500,
+            progress_interval_seconds: 10,
+            cursor_fallback: false,
+            dialog_settle_ms: 250,
+            completion_list: CompletionList::Auto,
+            secret_echo: SecretEcho::Asterisks,
+            secret_show_toggle: false,
+            confirm: ConfirmSettings::default(),
+            trash: "system".to_owned(),
+            trash_drives: vec!["fixed".to_owned()],
+            replace_to_trash: true,
+            portable_names: true,
+            theme: diroxide_theme::DEFAULT_THEME.to_owned(),
+            follow_system_appearance: false,
+            colors: BTreeMap::new(),
+            borders: false,
+            compact: false,
+            highlighting: Highlighting::Auto,
+            thumbnails: false,
+            auto_hide_menu: true,
+            focus_mode: false,
+            filter_case: FilterCase::Smart,
+            filter_pause_ms: 400,
+            week_starts_on: WeekStart::Sunday,
+            search_row_cap: 100_000,
+            search_respect_ignore: false,
+            components_source: String::new(),
             plugins: PluginSettings::default(),
             unknown: BTreeMap::new(),
         }
     }
 }
 
+/// The drive kinds `trash_drives` may name.
+pub const DRIVE_KINDS: [&str; 3] = ["fixed", "removable", "network"];
+
+/// A value at a dotted key in a table.
+fn get_dotted<'a>(table: &'a Table, key: &str) -> Option<&'a Value> {
+    let mut parts = key.split('.');
+    let first = parts.next()?;
+    let mut value = table.get(first)?;
+    for part in parts {
+        value = value.as_table()?.get(part)?;
+    }
+    Some(value)
+}
+
+/// Removes the value at a dotted key; returns it.
+fn remove_dotted(table: &mut Table, key: &str) -> Option<Value> {
+    match key.split_once('.') {
+        None => table.remove(key),
+        Some((first, rest)) => table
+            .get_mut(first)
+            .and_then(Value::as_table_mut)
+            .and_then(|inner| remove_dotted(inner, rest)),
+    }
+}
+
+/// A value as written in `config.toml`, for messages.
+fn shown(value: &Value) -> String {
+    match value {
+        Value::String(text) => format!("\"{text}\""),
+        other => other.to_string(),
+    }
+}
+
+/// Checks one value against its setting's kind; the error is the reason
+/// in words, after the key ("cannot be 0: use 1 to 600.").
+fn check_value(info: &SettingInfo, value: &Value) -> Result<(), String> {
+    let key = info.key;
+    match info.kind {
+        SettingKind::Flag => match value {
+            Value::Boolean(_) => Ok(()),
+            other => Err(format!("{key} needs true or false, not {}.", shown(other))),
+        },
+        SettingKind::Number { min, max, .. } => match value.as_integer() {
+            Some(n) if (min..=max).contains(&n) => Ok(()),
+            Some(n) => Err(format!("{key} cannot be {n}: use {min} to {max}.")),
+            None => Err(format!("{key} needs a whole number, not {}.", shown(value))),
+        },
+        SettingKind::Choice(choices) => match value.as_str() {
+            Some(text) if choices.iter().any(|c| c.value == text) => Ok(()),
+            _ => {
+                let values: Vec<&str> = choices.iter().map(|c| c.value).collect();
+                Err(format!(
+                    "{key} cannot be {}: use {}.",
+                    shown(value),
+                    crate::schema::list_words(&values, "or")
+                ))
+            }
+        },
+        SettingKind::Text | SettingKind::Theme => match value {
+            Value::String(_) => Ok(()),
+            other => Err(format!("{key} needs text in quotes, not {}.", shown(other))),
+        },
+        SettingKind::Columns => match value.as_array() {
+            Some(items) => {
+                for item in items {
+                    let known = item.as_str().and_then(ColumnKind::from_name);
+                    if known.is_none() {
+                        return Err(format!(
+                            "{key} cannot hold {}: no column has that name.",
+                            shown(item)
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            None => Err(format!("{key} needs a list, not {}.", shown(value))),
+        },
+        SettingKind::DriveKinds => match value.as_array() {
+            Some(items) => {
+                for item in items {
+                    if !item.as_str().is_some_and(|t| DRIVE_KINDS.contains(&t)) {
+                        return Err(format!(
+                            "{key} cannot hold {}: use fixed, removable or network.",
+                            shown(item)
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            None => Err(format!("{key} needs a list, not {}.", shown(value))),
+        },
+        SettingKind::Names => match value.as_array() {
+            Some(items) if items.iter().all(Value::is_str) => Ok(()),
+            _ => Err(format!("{key} needs a list of names in quotes.")),
+        },
+        SettingKind::Colors => match value.as_table() {
+            Some(table) if table.values().all(Value::is_str) => Ok(()),
+            _ => Err(format!("{key} needs a table such as folder = \"#ffaa00\".")),
+        },
+    }
+}
+
+/// Unknown keys in a table, with their dotted paths.
+fn unknown_keys(table: &Table, prefix: &str, out: &mut Vec<String>) {
+    for (key, value) in table {
+        let dotted = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        let known = SCHEMA.iter().any(|s| s.key == dotted);
+        let parent = SCHEMA
+            .iter()
+            .any(|s| s.key.starts_with(&format!("{dotted}.")));
+        if known {
+            continue;
+        }
+        match value.as_table() {
+            Some(inner) if parent => unknown_keys(inner, &dotted, out),
+            _ => out.push(dotted),
+        }
+    }
+}
+
 impl Settings {
-    /// Reads settings from TOML text.
-    pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
-        toml::from_str(text).map_err(|e| ConfigError::parse(Paths::SETTINGS, e))
+    /// Reads settings from TOML text: every value the schema refuses keeps
+    /// its default and is said in words; unknown keys are kept and said.
+    /// Only text that is not TOML is an error.
+    pub fn read(text: &str) -> Result<Loaded<Self>, ConfigError> {
+        let file = Paths::SETTINGS;
+        let mut table: Table = toml::from_str(text).map_err(|e| ConfigError::parse(file, e))?;
+        let mut problems = Vec::new();
+        for parent in ["sort", "confirm", "plugins"] {
+            if table.get(parent).is_some_and(|v| !v.is_table()) {
+                problems.push(ConfigProblem::new(
+                    file,
+                    format!("{parent} needs a table, as [{parent}]. The defaults are in use."),
+                ));
+                table.remove(parent);
+            }
+        }
+        for info in &SCHEMA {
+            let Some(value) = get_dotted(&table, info.key) else {
+                continue;
+            };
+            if let Err(reason) = check_value(info, value) {
+                problems.push(ConfigProblem::new(file, reason));
+                remove_dotted(&mut table, info.key);
+            }
+        }
+        let mut unknown = Vec::new();
+        unknown_keys(&table, "", &mut unknown);
+        for key in unknown {
+            problems.push(ConfigProblem::new(
+                file,
+                format!("Unknown setting: {key}. Kept as it is."),
+            ));
+        }
+        let direction_given = get_dotted(&table, "sort.direction").is_some();
+        let mut settings: Settings = Value::Table(table)
+            .try_into()
+            .map_err(|e: toml::de::Error| ConfigError::parse(file, e))?;
+        if !direction_given {
+            settings.sort.direction = settings.sort.key.first_direction();
+        }
+        Ok(Loaded {
+            value: settings,
+            problems,
+        })
     }
 
-    /// Writes settings as TOML text.
+    /// Reads settings from TOML text, setting aside the problems; see
+    /// [`Settings::read`].
+    pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
+        Self::read(text).map(|loaded| loaded.value)
+    }
+
+    /// Writes every setting as TOML text, for a reference or a test. Saving
+    /// to the owner's file goes through [`crate::save_settings`], which
+    /// writes only what changed.
     pub fn to_toml(&self) -> Result<String, ConfigError> {
         toml::to_string(self).map_err(|e| ConfigError::parse(Paths::SETTINGS, e))
+    }
+
+    /// Every schema setting's value, by dotted key.
+    pub fn values(&self) -> Result<BTreeMap<&'static str, Value>, ConfigError> {
+        let table = Value::try_from(self).map_err(|e| ConfigError::parse(Paths::SETTINGS, e))?;
+        let mut values = BTreeMap::new();
+        if let Value::Table(table) = table {
+            for info in &SCHEMA {
+                if let Some(value) = get_dotted(&table, info.key) {
+                    values.insert(info.key, value.clone());
+                }
+            }
+        }
+        Ok(values)
+    }
+
+    /// The value of one setting in words, for the Settings list: a choice
+    /// in its words ("side by side"), a flag as "on" or "off", a list
+    /// joined with commas.
+    pub fn value_words(&self, key: &str) -> String {
+        let Some(info) = crate::schema::setting(key) else {
+            return String::new();
+        };
+        let Ok(values) = self.values() else {
+            return String::new();
+        };
+        let Some(value) = values.get(info.key) else {
+            return String::new();
+        };
+        match (info.kind, value) {
+            (SettingKind::Flag, Value::Boolean(true)) => "on".to_owned(),
+            (SettingKind::Flag, Value::Boolean(false)) => "off".to_owned(),
+            (SettingKind::Choice(choices), Value::String(text)) => choices
+                .iter()
+                .find(|c| c.value == text)
+                .map_or_else(|| text.clone(), |c| c.words.to_owned()),
+            (SettingKind::Number { unit, .. }, Value::Integer(n)) => format!("{n} {unit}"),
+            (_, Value::String(text)) if text.is_empty() => "none".to_owned(),
+            (_, Value::String(text)) => text.clone(),
+            (_, Value::Array(items)) if items.is_empty() => "none".to_owned(),
+            (_, Value::Array(items)) => items
+                .iter()
+                .map(|i| i.as_str().map_or_else(|| i.to_string(), str::to_owned))
+                .collect::<Vec<_>>()
+                .join(", "),
+            (_, Value::Table(table)) if table.is_empty() => "none".to_owned(),
+            (_, Value::Table(table)) => crate::schema::list_words(
+                &table.keys().map(String::as_str).collect::<Vec<_>>(),
+                "and",
+            ),
+            (_, other) => other.to_string(),
+        }
+    }
+
+    /// The columns as kinds, in order; names the schema refused are already
+    /// gone.
+    pub fn column_kinds(&self) -> Vec<ColumnKind> {
+        self.columns
+            .iter()
+            .filter_map(|c| ColumnKind::from_name(c))
+            .collect()
+    }
+
+    /// The sort for a new panel.
+    pub fn sort_spec(&self) -> SortSpec {
+        self.sort.clone()
+    }
+
+    /// Whether the sort's key is one a panel offers (not a plugin column).
+    pub fn sorts_by_panel_key(&self) -> bool {
+        SortKey::panel_keys().contains(&self.sort.key)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diroxide_core::format::within_cells;
+    use diroxide_core::{FolderOrder, SortDirection};
 
     #[test]
     fn an_empty_file_gives_the_defaults() {
@@ -127,22 +573,113 @@ mod tests {
     }
 
     #[test]
-    fn unknown_keys_survive_a_round_trip() {
-        let text = "show-hidden = true\nfuture-option = 3\n[plugins]\nenabled = [\"thumbs\"]\n";
-        let settings = Settings::from_toml(text).unwrap();
+    fn every_schema_default_is_the_struct_default() {
+        let mut text = String::new();
+        let mut tables: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+        for setting in &SCHEMA {
+            match setting.key.split_once('.') {
+                Some((table, key)) => tables
+                    .entry(table)
+                    .or_default()
+                    .push(format!("{key} = {}", setting.default)),
+                None => text.push_str(&format!("{} = {}\n", setting.key, setting.default)),
+            }
+        }
+        for (table, lines) in tables {
+            text.push_str(&format!("[{table}]\n{}\n", lines.join("\n")));
+        }
+        let loaded = Settings::read(&text).unwrap();
+        assert_eq!(loaded.problems, Vec::new());
+        assert_eq!(loaded.value, Settings::default());
+        let values = Settings::default().values().unwrap();
+        for setting in &SCHEMA {
+            assert_eq!(
+                values.get(setting.key),
+                setting.default_value().as_ref(),
+                "{}",
+                setting.key
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_keys_survive_a_round_trip_and_are_said() {
+        let text = "show_hidden = true\nfuture_option = 3\n[plugins]\nenabled = [\"thumbs\"]\n[sort]\nkey = \"size\"\nshape = \"round\"\n";
+        let loaded = Settings::read(text).unwrap();
+        let settings = loaded.value;
         assert!(settings.show_hidden);
         assert_eq!(settings.plugins.enabled, vec!["thumbs".to_owned()]);
         assert_eq!(
-            settings.unknown.get("future-option"),
-            Some(&toml::Value::Integer(3))
+            settings.unknown.get("future_option"),
+            Some(&Value::Integer(3))
+        );
+        let said: Vec<&str> = loaded.problems.iter().map(|p| p.text.as_str()).collect();
+        assert_eq!(
+            said,
+            [
+                "Unknown setting: future_option. Kept as it is.",
+                "Unknown setting: sort.shape. Kept as it is."
+            ]
         );
         let again = Settings::from_toml(&settings.to_toml().unwrap()).unwrap();
         assert_eq!(again, settings);
     }
 
     #[test]
-    fn a_wrong_type_is_an_error_with_words() {
-        let err = Settings::from_toml("show-hidden = \"yes\"").unwrap_err();
-        assert!(err.to_string().contains("could not be read"));
+    fn a_wrong_value_keeps_its_default_and_is_said_in_words() {
+        let text = "show_hidden = \"yes\"\nlayout = \"diagonal\"\nprogress_interval_seconds = 0\ncolumns = [\"type\", \"colour\"]\ntrash_drives = [\"fixed\", \"floppy\"]\n[confirm]\ncopy = 1\n";
+        let loaded = Settings::read(text).unwrap();
+        assert_eq!(loaded.value, Settings::default());
+        let said: Vec<&str> = loaded.problems.iter().map(|p| p.text.as_str()).collect();
+        assert_eq!(
+            said,
+            [
+                "layout cannot be \"diagonal\": use side_by_side, stacked or single.",
+                "show_hidden needs true or false, not \"yes\".",
+                "columns cannot hold \"colour\": no column has that name.",
+                "progress_interval_seconds cannot be 0: use 1 to 600.",
+                "confirm.copy needs true or false, not 1.",
+                "trash_drives cannot hold \"floppy\": use fixed, removable or network."
+            ]
+        );
+        for problem in &loaded.problems {
+            let key = problem.text.split(' ').next().unwrap();
+            assert!(within_cells(&problem.text, key), "{}", problem.text);
+        }
+        assert!(Settings::from_toml("show_hidden = ").is_err());
+    }
+
+    #[test]
+    fn the_sort_starts_in_its_keys_first_direction() {
+        let settings = Settings::from_toml("[sort]\nkey = \"size\"\nfolders = \"last\"\n").unwrap();
+        assert_eq!(settings.sort.key, SortKey::Size);
+        assert_eq!(settings.sort.direction, SortDirection::Descending);
+        assert_eq!(settings.sort.folders, FolderOrder::Last);
+        let settings =
+            Settings::from_toml("[sort]\nkey = \"size\"\ndirection = \"ascending\"\n").unwrap();
+        assert_eq!(settings.sort.direction, SortDirection::Ascending);
+        assert!(settings.sorts_by_panel_key());
+    }
+
+    #[test]
+    fn values_are_said_in_words() {
+        let settings = Settings::default();
+        assert_eq!(settings.value_words("layout"), "side by side");
+        assert_eq!(settings.value_words("show_hidden"), "off");
+        assert_eq!(
+            settings.value_words("progress_interval_seconds"),
+            "10 seconds"
+        );
+        assert_eq!(settings.value_words("columns"), "type, size, modified");
+        assert_eq!(settings.value_words("colors"), "none");
+        assert_eq!(settings.value_words("components_source"), "none");
+        assert_eq!(settings.value_words("theme"), "galaxy");
+        assert_eq!(settings.value_words("nothing"), "");
+        assert_eq!(
+            settings.column_kinds(),
+            [ColumnKind::Type, ColumnKind::Size, ColumnKind::Modified]
+        );
+        assert!(SingleLetters::TypeAhead.types_ahead());
+        assert!(!SingleLetters::Off.keeps_bindings());
     }
 }

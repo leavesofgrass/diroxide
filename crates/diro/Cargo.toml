@@ -11,8 +11,18 @@ publish.workspace = true
 name = "diro"
 path = "src/main.rs"
 
+[features]
+default = ["fetch"]
+# The optional-components downloader's HTTP client (plan section 5.14):
+# ureq with rustls, whose ring provider compiles C. The owner's one
+# exception to the pure-Rust rule (answer 40). Declared now; nothing uses
+# it until the downloader (W4c). `--no-default-features` builds with no C
+# compiler, and the downloader then uses curl or wget from PATH.
+fetch = ["dep:ureq"]
+
 [dependencies]
 diroxide-cli.workspace = true
+ureq = { workspace = true, optional = true }
 
 [lints]
 workspace = true

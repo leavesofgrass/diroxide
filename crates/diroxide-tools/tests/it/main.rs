@@ -10,3 +10,12 @@ fn every_tool_has_words_for_settings() {
         assert!(tools.describe(spec.id).starts_with(spec.name));
     }
 }
+
+#[test]
+fn the_downloader_fallbacks_and_textweaver_are_known() {
+    let tools = ToolRegistry::builtin();
+    for id in ["tw", "curl", "wget"] {
+        assert!(tools.spec(id).is_some(), "{id}");
+    }
+    assert_eq!(diroxide_tools::CURL_SAFE_ARGS[0], "-q");
+}

@@ -45,6 +45,7 @@ try {
         $env:RUSTDOCFLAGS = $previous
     }
     Invoke-Step 'dependency direction' { cargo xtask deps --check }
+    Invoke-Step 'pure Rust, no C build' { cargo xtask native --check }
     Invoke-Step 'keyboard page' { cargo xtask keyboard --check }
     Invoke-Step 'generated files' { cargo xtask regen --check }
     Write-Output 'Pass: every check.'

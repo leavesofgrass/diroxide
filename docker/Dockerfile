@@ -1,7 +1,11 @@
 # The diroxide development image: Debian trixie with the pinned Rust
 # toolchain, the external tools the tools registry drives, 7-Zip for
 # cross-checking archives (trixie's 7zip package, the successor of
-# p7zip), and an OpenSSH server for the SFTP tests.
+# p7zip: 7-Zip 25.01, with the binaries 7z, 7za and 7zr), the classic
+# archivers for the archive cross-checks (xz-utils, bzip2, zip, unzip and
+# libarchive-tools for bsdtar), curl and wget for the components
+# downloader's fallback tests (approved by the owner on Sunday, October
+# 11, 2026), and an OpenSSH server for the SFTP tests.
 #
 # Built once per toolchain change by the orchestrator:
 #   MSYS_NO_PATHCONV=1 docker compose build dev

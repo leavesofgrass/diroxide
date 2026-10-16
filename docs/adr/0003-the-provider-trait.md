@@ -2,6 +2,15 @@
 
 Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0).
 
+Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from R7, R8 C1 to C8, R9, R10, R11 9.1 to 9.4, R12, R22, R23 and spikes three, four and six):
+
+- **Writing.** `write` returns a committing `FileWriter`: the bytes go to an unfinished `.diro-part-` name beside the target, `commit` makes them its content, and a drop leaves the target as it was.
+- **New defaulted methods.** `open_seekable` (a `ReadSeek`); `create_link` (a `LinkRequest`: symbolic, junction or hard); `restore`; `space` (`SpaceInfo`); `volume` (`VolumeInfo` with a `VolumeKind`: fixed, removable, network or unknown, asked of the path's own volume root); `trash_gate`; `as_streaming`, which finds `StreamingList`, this record's fallback, declared now.
+- **Changed methods.** `set_attributes` returns the inverse change; `AttributeChange` gains `created`, `expect` and owners as a `Principal`. `trash` returns a `TrashCheck`, behind the gate of ADR-0008. `rename` never replaces, lets a case-only or form-only change of the same entry through, and fails across volumes with `CrossesDevices`. `copy_within` is the clone tried before the destination is touched.
+- **Capabilities** is `non_exhaustive` and gains `restore`, an `access` block (`Can`: no, with an administrator, yes), `normalization_insensitive`, `random_read` and `clone_copy`, a capability distinct from `writable`.
+- **Context and errors.** `OpContext` carries a `SecretSource` (ADR-0009). `VfsError` gains R8's classes, R7's and R9's data and password errors, and `TrashRefused`, with next steps that name no key; `class()` gives the retry rules and a scope (file, rule, environment). `WatchEvent::Gone` says the shown folder went away.
+- **Names.** The superscript device names, dot names, the length check by a place's `NameRules`, refused or only flagged, `numbered_name` with compound extensions, `unused_name`, and the shared unfinished-name functions.
+
 ## Context
 
 diroxide shows local folders, archives, SFTP hosts and whatever plugins serve, through the same panels and the same job engine. Each kind of place needs one interface that the engine and the app can use without knowing which kind it is.

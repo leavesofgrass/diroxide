@@ -1,0 +1,361 @@
+# The menus of diroxide. This is the built-in menus.toml: copy it to
+# menus.toml in the config folder and change it there to add, remove or
+# reorder items and submenus. diroxide writes it beside your file as
+# menus-defaults.toml; changes to that copy are not read.
+#
+# Each [[menu]] has an id, a title and an access key (Alt plus the key
+# opens it from anywhere; F9 opens the menu bar). A menu with
+# bar = false is a submenu, opened from an item with menu = "its id".
+# Each [[menu.item]] runs a command by its id, the same ids keymap.toml
+# and banks.toml use. The label is the command's name unless given. The
+# access key is one letter, unique in its menu. when = "trash" shows the
+# item only where the place has a trash; the other conditions are
+# writable, no_trash, restore, links and attributes. Every item shows its
+# key from the live keymap, so a menu never shows a key that is not bound.
+
+[[menu]]
+id = "file"
+title = "File"
+access = "f"
+
+[[menu.item]]
+command = "panel.enter"
+access = "o"
+
+[[menu.item]]
+command = "file.view"
+access = "v"
+
+[[menu.item]]
+command = "file.edit"
+access = "e"
+
+[[menu.item]]
+command = "file.details"
+access = "d"
+
+[[menu.item]]
+command = "file.context-menu"
+access = "c"
+
+[[menu.item]]
+command = "folder.make"
+access = "m"
+when = "writable"
+
+[[menu.item]]
+command = "file.rename"
+access = "r"
+when = "writable"
+
+[[menu.item]]
+command = "file.duplicate"
+access = "u"
+when = "writable"
+
+[[menu.item]]
+command = "file.trash"
+access = "t"
+when = "trash"
+
+[[menu.item]]
+command = "file.delete-permanently"
+access = "g"
+when = "writable"
+
+[[menu.item]]
+command = "file.run-command"
+access = "n"
+
+[[menu.item]]
+command = "file.shell-here"
+access = "s"
+
+[[menu.item]]
+command = "app.quit-to-folder"
+access = "f"
+
+[[menu.item]]
+command = "app.quit-keep-folder"
+access = "k"
+
+[[menu.item]]
+command = "app.quit"
+access = "q"
+
+[[menu]]
+id = "edit"
+title = "Edit"
+access = "e"
+
+[[menu.item]]
+command = "edit.undo"
+access = "u"
+
+[[menu.item]]
+command = "clipboard.cut"
+access = "t"
+when = "writable"
+
+[[menu.item]]
+command = "clipboard.copy"
+access = "c"
+
+[[menu.item]]
+command = "clipboard.paste"
+access = "p"
+when = "writable"
+
+[[menu.item]]
+command = "file.copy"
+access = "o"
+
+[[menu.item]]
+command = "file.move"
+access = "m"
+when = "writable"
+
+[[menu.item]]
+command = "file.copy-to"
+access = "l"
+
+[[menu.item]]
+command = "file.move-to"
+access = "v"
+when = "writable"
+
+[[menu]]
+id = "view"
+title = "View"
+access = "v"
+
+[[menu.item]]
+command = "view.hidden"
+access = "h"
+
+[[menu.item]]
+command = "view.filter"
+access = "f"
+
+[[menu.item]]
+command = "view.filter-clear"
+access = "c"
+
+[[menu.item]]
+menu = "sort"
+access = "s"
+
+[[menu.item]]
+command = "app.layout"
+access = "l"
+
+[[menu.item]]
+command = "app.next-theme"
+access = "t"
+
+[[menu.item]]
+command = "panel.reload"
+access = "r"
+
+[[menu]]
+id = "sort"
+title = "Sort"
+access = "s"
+bar = false
+
+[[menu.item]]
+command = "view.sort-name"
+access = "n"
+
+[[menu.item]]
+command = "view.sort-extension"
+access = "e"
+
+[[menu.item]]
+command = "view.sort-size"
+access = "s"
+
+[[menu.item]]
+command = "view.sort-modified"
+access = "m"
+
+[[menu.item]]
+command = "view.sort-created"
+access = "c"
+
+[[menu.item]]
+command = "view.sort-accessed"
+access = "a"
+
+[[menu.item]]
+command = "view.sort-kind"
+access = "k"
+
+[[menu.item]]
+command = "view.sort-attributes"
+access = "t"
+
+[[menu.item]]
+command = "view.sort-owner"
+access = "o"
+
+[[menu.item]]
+command = "view.sort-label"
+access = "l"
+
+[[menu.item]]
+command = "view.sort-unsorted"
+access = "u"
+
+[[menu.item]]
+command = "view.sort-list"
+access = "i"
+
+[[menu]]
+id = "go"
+title = "Go"
+access = "g"
+
+[[menu.item]]
+command = "panel.up"
+access = "u"
+
+[[menu.item]]
+command = "panel.into"
+access = "i"
+
+[[menu.item]]
+command = "go.back"
+access = "b"
+
+[[menu.item]]
+command = "go.forward"
+access = "f"
+
+[[menu.item]]
+command = "go.home"
+access = "h"
+
+[[menu.item]]
+command = "go.path"
+access = "p"
+
+[[menu.item]]
+command = "go.places"
+access = "l"
+
+[[menu.item]]
+command = "go.history"
+access = "s"
+
+[[menu.item]]
+command = "panel.switch"
+access = "w"
+
+[[menu.item]]
+command = "panel.swap"
+access = "a"
+
+[[menu.item]]
+command = "panel.show-in-other"
+access = "o"
+
+[[menu.item]]
+command = "panel.this-in-other"
+access = "t"
+
+[[menu.item]]
+command = "app.say-other"
+access = "n"
+
+[[menu]]
+id = "select"
+title = "Select"
+access = "s"
+
+[[menu.item]]
+command = "select.toggle"
+access = "s"
+
+[[menu.item]]
+command = "select.all"
+access = "a"
+
+[[menu.item]]
+command = "select.none"
+access = "n"
+
+[[menu.item]]
+command = "select.invert"
+access = "i"
+
+[[menu.item]]
+command = "select.pattern"
+access = "p"
+
+[[menu.item]]
+command = "select.unpattern"
+access = "u"
+
+[[menu.item]]
+command = "select.next"
+access = "x"
+
+[[menu.item]]
+command = "select.previous"
+access = "v"
+
+[[menu.item]]
+command = "select.restore"
+access = "r"
+
+[[menu]]
+id = "tools"
+title = "Tools"
+access = "t"
+
+[[menu.item]]
+command = "app.palette"
+access = "c"
+
+[[menu.item]]
+command = "app.settings"
+access = "s"
+
+[[menu.item]]
+command = "jobs.history"
+access = "j"
+
+[[menu.item]]
+command = "app.key-test"
+access = "k"
+
+[[menu]]
+id = "plugins"
+title = "Plugins"
+access = "p"
+
+[[menu.item]]
+command = "plugins.list"
+access = "p"
+
+[[menu]]
+id = "help"
+title = "Help"
+access = "h"
+
+[[menu.item]]
+command = "app.help"
+access = "h"
+
+[[menu.item]]
+command = "app.say-status"
+access = "s"
+
+[[menu.item]]
+command = "app.say-key-bar"
+access = "k"
+
+[[menu.item]]
+command = "app.problems"
+access = "c"

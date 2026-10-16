@@ -1,0 +1,234 @@
+# The keys a terminal cannot be trusted with, as data, so the list grows
+# without code. The keymap's tests read it: no default in the terminal
+# column uses an "unsafe" key, and a default on a "program" or "differs"
+# key belongs to a command that a menu also reaches (the sure way).
+#
+# kind = "unsafe": the terminal column never uses it; the key cannot reach
+#   diroxide in a terminal, or arrives as another key.
+# kind = "program": a terminal program may keep it before diroxide sees
+#   it. Allowed in the terminal column only with a menu as the sure way.
+# kind = "differs": some terminals send it as another key. Allowed only
+#   with a menu as the sure way.
+#
+# Either "keys" (a list in keymap.toml's syntax) or "pattern" (insert,
+# keypad, ctrl+shift+letter, alt+digit, ctrl+alt+digit, shift+fkey).
+# "why" finishes the sentence said in words: "Ctrl+I cannot reach
+# diroxide in a terminal: terminals send it as Tab."
+#
+# Sources: research/accessibility-stack.md section 4 (R4, crossterm 0.29
+# read from its source); the wiki's dated copy of Microsoft's Windows
+# Terminal actions page (archive/vendor-docs, October 10, 2026) for the
+# Windows Terminal marks; plan section 5.7 and the spikes. Entries marked
+# "memory" were not checked against a page; the key probe and the key
+# test amend them when the owner runs them.
+
+[[key]]
+pattern = "insert"
+kind = "unsafe"
+why = "Insert is the screen reader key"
+source = "plan 5.7; R4 4.2"
+
+[[key]]
+pattern = "keypad"
+kind = "unsafe"
+why = "terminals send the keypad's keys as the main row's characters"
+source = "R4 4.1"
+
+[[key]]
+keys = ["ctrl+i"]
+kind = "unsafe"
+why = "terminals send it as Tab"
+source = "R4 4.1"
+
+[[key]]
+keys = ["ctrl+m"]
+kind = "unsafe"
+why = "terminals send it as Enter"
+source = "R4 4.1"
+
+[[key]]
+keys = ["ctrl+h"]
+kind = "unsafe"
+why = "some terminals send it as Backspace"
+source = "R4 4.1"
+
+[[key]]
+keys = ["ctrl+j"]
+kind = "unsafe"
+why = "terminals send it as a line feed, which many use for Ctrl+Enter"
+source = "R4 4.1"
+
+[[key]]
+keys = ["ctrl+["]
+kind = "unsafe"
+why = "terminals send it as Escape"
+source = "R4 4.1"
+
+[[key]]
+keys = ["ctrl+space"]
+kind = "unsafe"
+why = "Unix terminals send it as a null character, and input methods take it"
+source = "R4 4.1 and 4.2; answer 29"
+
+[[key]]
+keys = ["ctrl+enter"]
+kind = "unsafe"
+why = "terminals send it as Enter or a line feed"
+source = "R4 4.1; answer 29"
+
+[[key]]
+keys = ["shift+enter"]
+kind = "unsafe"
+why = "terminals send it as Enter"
+source = "R4 4.1"
+
+[[key]]
+keys = ["ctrl+tab", "ctrl+shift+tab"]
+kind = "unsafe"
+why = "terminals send it as Tab, and Windows Terminal switches tabs on it"
+source = "R4 4.2; Windows Terminal actions page"
+
+[[key]]
+pattern = "ctrl+shift+letter"
+kind = "unsafe"
+why = "terminals send it as Control and the letter, and Windows Terminal keeps several"
+source = "R4 4.1 and 4.2; Windows Terminal actions page"
+
+[[key]]
+keys = ["f1"]
+kind = "unsafe"
+why = "GNOME Terminal opens its help on it"
+source = "R4 4.2, memory"
+
+[[key]]
+keys = ["f10"]
+kind = "unsafe"
+why = "GNOME Terminal opens its menu on it"
+source = "R4 4.2, memory"
+
+[[key]]
+keys = ["f11"]
+kind = "unsafe"
+why = "Windows Terminal and GNOME Terminal go full screen on it"
+source = "Windows Terminal actions page; R4 4.2"
+
+[[key]]
+keys = ["f12"]
+kind = "unsafe"
+why = "it is kept free for the terminal programs, as the plan decided"
+source = "R4 4.3; decisions settled for Wave 1"
+
+[[key]]
+pattern = "alt+digit"
+kind = "unsafe"
+why = "GNOME Terminal switches tabs on Alt and a digit"
+source = "R4 4.2, memory"
+
+[[key]]
+keys = ["ctrl+pageup", "ctrl+pagedown"]
+kind = "unsafe"
+why = "GNOME Terminal switches tabs on it"
+source = "R4 4.2, memory"
+
+[[key]]
+keys = ["ctrl+backspace"]
+kind = "unsafe"
+why = "many terminals send it as Ctrl+H or as Backspace"
+source = "memory"
+
+[[key]]
+keys = ["ctrl+v"]
+kind = "program"
+program = "Windows Terminal"
+why = "it pastes text, so the key never arrives"
+source = "Windows Terminal actions page; answer 42 keeps Ctrl+V with the Edit menu's Paste as the sure way"
+
+[[key]]
+keys = ["ctrl+c"]
+kind = "program"
+program = "Windows Terminal"
+why = "it copies text when text is selected"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["alt+left", "alt+right", "alt+up", "alt+down"]
+kind = "program"
+program = "Windows Terminal"
+why = "it moves between panes when the window has panes"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["alt+enter"]
+kind = "program"
+program = "Windows Terminal"
+why = "it goes full screen"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["ctrl+plus", "ctrl+-", "ctrl+0"]
+kind = "program"
+program = "Windows Terminal"
+why = "it changes the font size"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["ctrl+,", "ctrl+alt+,"]
+kind = "program"
+program = "Windows Terminal"
+why = "it opens its settings"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["alt+space"]
+kind = "program"
+program = "Windows Terminal"
+why = "it opens the window's system menu"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["alt+f4"]
+kind = "program"
+program = "Windows Terminal"
+why = "it closes the window"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["ctrl+alt+left"]
+kind = "program"
+program = "Windows Terminal"
+why = "it moves to the previous pane"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["alt+shift+d", "alt+shift+-", "alt+shift+plus", "alt+shift+up", "alt+shift+down", "alt+shift+left", "alt+shift+right"]
+kind = "program"
+program = "Windows Terminal"
+why = "it splits or resizes panes"
+source = "Windows Terminal actions page"
+
+[[key]]
+pattern = "ctrl+alt+digit"
+kind = "program"
+program = "Windows Terminal"
+why = "it switches tabs"
+source = "Windows Terminal actions page"
+
+[[key]]
+keys = ["ctrl+f3", "ctrl+f4", "ctrl+f5", "ctrl+f6", "ctrl+f7", "ctrl+f8"]
+kind = "program"
+program = "macOS"
+why = "the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows"
+source = "plan 5.7 (question 55), memory"
+
+[[key]]
+keys = ["ctrl+up", "ctrl+down", "ctrl+left", "ctrl+right"]
+kind = "program"
+program = "macOS"
+why = "Mission Control uses Control with the arrows"
+source = "R4 4.2, memory"
+
+[[key]]
+pattern = "shift+fkey"
+kind = "differs"
+why = "some terminals send Shift with F1 to F12 as F13 to F24"
+source = "R19 spike one, R5, memory"

@@ -8,15 +8,25 @@ homepage.workspace = true
 publish.workspace = true
 
 [dependencies]
+clap.workspace = true
+clap_complete.workspace = true
 diroxide-app.workspace = true
 diroxide-config.workspace = true
 diroxide-core.workspace = true
+diroxide-filetype.workspace = true
 diroxide-plugins.workspace = true
 diroxide-search.workspace = true
 diroxide-tui.workspace = true
 diroxide-vfs.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+diroxide-ops.workspace = true
+diroxide-theme.workspace = true
+ratatui.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

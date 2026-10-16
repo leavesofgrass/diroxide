@@ -116,9 +116,136 @@ pub fn spell_out(name: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
+/// The extensions read as one by [`split_extension_with`] when the
+/// compound setting is on (its default): `archive.tar.gz` has the
+/// extension `.tar.gz`, so keeping both names it `archive (2).tar.gz`.
+pub const COMPOUND_EXTENSIONS: [&str; 4] = ["tar.gz", "tar.xz", "tar.bz2", "tar.zst"];
+
+/// A name's stem and extension, by the one rule every command shares (F2's
+/// pre-selection, keeping both, sorting by extension, rename): the
+/// extension starts at the last dot and keeps the dot, so `stem` followed
+/// by `extension` is the name. A leading dot belongs to the stem
+/// (`.profile` has no extension), and a name ending in a dot has none.
+///
+/// ```
+/// use diroxide_core::names::split_extension;
+/// assert_eq!(split_extension("report.pdf"), ("report", ".pdf"));
+/// assert_eq!(split_extension("archive.tar.gz"), ("archive.tar", ".gz"));
+/// assert_eq!(split_extension(".profile"), (".profile", ""));
+/// ```
+pub fn split_extension(name: &str) -> (&str, &str) {
+    match name.rfind('.') {
+        Some(at) if at > 0 && at + 1 < name.len() && !name[..at].bytes().all(|b| b == b'.') => {
+            (&name[..at], &name[at..])
+        }
+        _ => (name, ""),
+    }
+}
+
+/// [`split_extension`], with a list of compound extensions (without their
+/// leading dot, any case) read as one: with [`COMPOUND_EXTENSIONS`],
+/// `archive.tar.gz` splits as `archive` and `.tar.gz`. A compound applies
+/// only when a stem is left before it.
+pub fn split_extension_with<'a>(name: &'a str, compound: &[&str]) -> (&'a str, &'a str) {
+    let lower = name.to_lowercase();
+    if lower.len() == name.len() {
+        for ext in compound {
+            let dotted_len = ext.len() + 1;
+            if lower.len() > dotted_len
+                && lower.ends_with(&ext.to_lowercase())
+                && lower.as_bytes()[lower.len() - dotted_len] == b'.'
+            {
+                let at = name.len() - dotted_len;
+                let stem = &name[..at];
+                if !stem.is_empty() && !stem.bytes().all(|b| b == b'.') {
+                    return (stem, &name[at..]);
+                }
+            }
+        }
+    }
+    split_extension(name)
+}
+
+/// A numbered part of a split file: `backup.7z.001` is part 1 of
+/// `backup.7z`, written with three digits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SplitPart<'a> {
+    /// The name without the part number: `backup.7z`.
+    pub base: &'a str,
+    /// The part's number: 1 for `.001`. Krusader's sets start at 0.
+    pub number: u32,
+    /// How many digits the number is written with: at least three.
+    pub width: usize,
+}
+
+/// The part number of a split file's name: the name ends with a dot and
+/// at least three digits (`.001`, `.000`, `.1000` past 999), after a base
+/// that is not empty. Order is numeric, never by text. `None` for any
+/// other name, and for numbers too large to count.
+pub fn split_part(name: &str) -> Option<SplitPart<'_>> {
+    let dot = name.rfind('.')?;
+    let digits = &name[dot + 1..];
+    if digits.len() < 3 || !digits.bytes().all(|b| b.is_ascii_digit()) || dot == 0 {
+        return None;
+    }
+    Some(SplitPart {
+        base: &name[..dot],
+        number: digits.parse().ok()?,
+        width: digits.len(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stems_and_extensions() {
+        let table = [
+            ("report.pdf", ("report", ".pdf")),
+            ("a.tar.gz", ("a.tar", ".gz")),
+            (".profile", (".profile", "")),
+            ("trailing.", ("trailing.", "")),
+            ("Makefile", ("Makefile", "")),
+            ("..", ("..", "")),
+            ("...x", ("...x", "")),
+            ("x.", ("x.", "")),
+            ("Report (1).PDF", ("Report (1)", ".PDF")),
+        ];
+        for (name, expected) in table {
+            assert_eq!(split_extension(name), expected, "{name}");
+            let (stem, extension) = split_extension(name);
+            assert_eq!(format!("{stem}{extension}"), name);
+        }
+    }
+
+    #[test]
+    fn compound_extensions_stay_together() {
+        let split = |name| split_extension_with(name, &COMPOUND_EXTENSIONS);
+        assert_eq!(split("archive.tar.gz"), ("archive", ".tar.gz"));
+        assert_eq!(split("Backup.TAR.XZ"), ("Backup", ".TAR.XZ"));
+        assert_eq!(split(".tar.gz"), (".tar", ".gz"));
+        assert_eq!(split("photo.gz"), ("photo", ".gz"));
+        assert_eq!(split("report.pdf"), ("report", ".pdf"));
+    }
+
+    #[test]
+    fn split_parts_are_numbered() {
+        assert_eq!(
+            split_part("backup.7z.001"),
+            Some(SplitPart {
+                base: "backup.7z",
+                number: 1,
+                width: 3
+            })
+        );
+        assert_eq!(split_part("report.pdf.1000").map(|p| p.number), Some(1000));
+        assert_eq!(split_part("x.000").map(|p| p.number), Some(0));
+        assert_eq!(split_part("x.01"), None);
+        assert_eq!(split_part("x.0a1"), None);
+        assert_eq!(split_part(".001"), None);
+        assert_eq!(split_part("x.99999999999999999999"), None);
+    }
 
     #[test]
     fn plain_names_are_borrowed() {

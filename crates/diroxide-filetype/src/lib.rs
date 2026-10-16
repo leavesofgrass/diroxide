@@ -82,7 +82,21 @@ pub struct FileType {
     pub priority: i32,
     /// The actions; the first is the default.
     pub actions: Vec<TypeAction>,
+    /// The media type, such as `application/pdf`, for plugins, previews
+    /// and the details view (research/metadata.md item 5).
+    pub mime: Option<String>,
 }
+
+/// The media types of the built-in types, by id.
+const BUILTIN_MIME: [(&str, &str); 7] = [
+    ("text", "text/plain"),
+    ("pdf", "application/pdf"),
+    ("png", "image/png"),
+    ("jpeg", "image/jpeg"),
+    ("gif", "image/gif"),
+    ("zip", "application/zip"),
+    ("7z", "application/x-7z-compressed"),
+];
 
 impl FileType {
     fn new(
@@ -107,6 +121,10 @@ impl FileType {
                 .collect(),
             priority: 0,
             actions: Vec::new(),
+            mime: BUILTIN_MIME
+                .iter()
+                .find(|(type_id, _)| *type_id == id)
+                .map(|(_, mime)| (*mime).to_owned()),
         }
     }
 
@@ -143,6 +161,7 @@ impl FileType {
             magic: Vec::new(),
             priority: config.priority,
             actions,
+            mime: config.mime.clone(),
         }
     }
 }
@@ -291,6 +310,15 @@ impl TypeRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn built_in_types_carry_their_media_types() {
+        let types = TypeRegistry::builtin();
+        assert_eq!(
+            types.get("pdf").and_then(|t| t.mime.as_deref()),
+            Some("application/pdf")
+        );
+    }
 
     #[test]
     fn extension_first_then_magic() {

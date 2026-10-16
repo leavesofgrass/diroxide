@@ -28,6 +28,7 @@ step "clippy, warnings denied" cargo clippy --workspace --all-targets --all-feat
 step "tests" cargo nextest run --workspace --all-features
 step "rustdoc, warnings denied" env RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 step "dependency direction" cargo xtask deps --check
+step "pure Rust, no C build" cargo xtask native --check
 step "keyboard page" cargo xtask keyboard --check
 step "generated files" cargo xtask regen --check
 

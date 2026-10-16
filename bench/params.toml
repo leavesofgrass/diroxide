@@ -1,0 +1,47 @@
+# The bench's sizes and starting budgets, read by cargo xtask bench
+# (docs/dev/bench.md). Its trees are written under the target folder and
+# removed after the run; only this file, search-tree.toml and
+# baseline.json are ever committed.
+
+# Each scenario runs this many times; the median is reported.
+runs = 3
+# The ratchet's band: a median further than this from the baseline is
+# said, and fails the run under --gate (from Wave 2, once two baselines
+# exist).
+tolerance_percent = 20
+
+# R8's starting budgets (research/file-operations.md, "Large
+# directories"): a warm listing of 100,000 entries in 300 ms on Linux and
+# macOS and 800 ms on Windows. The stat scenario starts from the same
+# numbers. Report-only in Wave 1.
+[budgets_ms]
+list_windows = 800
+list_other = 300
+stat_windows = 800
+stat_other = 300
+
+# The full run.
+[full]
+list_entries = 100000
+copy_bytes = 1000000000
+# The slow-place scenario (R23): a copy from a fake provider whose every
+# call waits and one call stalls, long enough for the stall to be said.
+# The stalled call is counted from the start of the run, after the plan.
+slow_files = 40
+slow_file_bytes = 65536
+slow_per_call_ms = 2
+slow_stall_after_calls = 80
+slow_stall_ms = 400
+stall_after_ms = 150
+
+# The quick run (--quick), for tests and a first look: the same scenarios
+# on small trees.
+[quick]
+list_entries = 2000
+copy_bytes = 8000000
+slow_files = 8
+slow_file_bytes = 4096
+slow_per_call_ms = 1
+slow_stall_after_calls = 20
+slow_stall_ms = 300
+stall_after_ms = 100

@@ -18,7 +18,8 @@ pub enum PluginCommand {
     New {
         /// Its name.
         name: String,
-        /// Its language: `python`, `bash` or `lua`.
+        /// Its language: `python` or `bash` (Lua scripts run through the
+        /// Lua runner plugin, like any other language).
         language: String,
     },
     /// Enable a plugin.

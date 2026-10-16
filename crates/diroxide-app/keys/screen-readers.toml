@@ -1,0 +1,111 @@
+# Keys the screen readers keep for themselves, as data. The keymap's
+# tests read it: no default binding uses a key a reader owns, and a key
+# that works only with Num Lock on is never a command's only key.
+#
+# Every command NVDA, JAWS, Orca and Narrator have that starts with their
+# own modifier key (Insert, or Caps Lock as a setting) is left out on
+# purpose: diroxide never binds Insert, and Caps Lock is not a key it can
+# bind, so none of them can collide. What is listed is every key a reader
+# takes without its modifier, which a program could otherwise bind.
+#
+# kind = "owned": the reader takes the key first; a binding never
+#   reaches diroxide while the reader runs.
+# kind = "num-lock": the reader takes the key only with Num Lock off; it
+#   works under the reader with Num Lock on, so it may be a second key but
+#   never a command's only key.
+# platform = "macos" or "linux" limits an entry to that system; left out,
+#   it holds everywhere.
+# "purpose" finishes the line on the keyboard page: "Ctrl+Alt+N: NVDA,
+# to start NVDA."
+#
+# Sources: research/alpha3-plan.md, "The keymap presets" (NVDA's user
+# guide and Freedom Scientific's keystroke pages, read by R21);
+# research/accessibility-stack.md section 4.2 (R4); the Phase 0 table.
+# Entries marked "memory" were not checked against a page.
+
+[[key]]
+pattern = "insert"
+readers = "NVDA, JAWS, Orca and Narrator"
+purpose = "as their modifier key"
+kind = "owned"
+source = "R4 4.2; R21"
+
+[[key]]
+keys = ["ctrl+alt+n"]
+readers = "NVDA"
+purpose = "to start NVDA"
+kind = "owned"
+source = "R21 (NVDA user guide); Phase 0 table"
+
+[[key]]
+keys = ["ctrl+alt+j"]
+readers = "JAWS"
+purpose = "to start JAWS"
+kind = "owned"
+source = "R21; Phase 0 table"
+
+[[key]]
+keys = ["ctrl+alt+s"]
+readers = "Some screen reader setups"
+purpose = "for their own commands"
+kind = "owned"
+source = "Phase 0 table, memory"
+
+[[key]]
+keys = ["ctrl+alt+left", "ctrl+alt+right", "ctrl+alt+up", "ctrl+alt+down"]
+readers = "NVDA, JAWS and Narrator"
+purpose = "to move between table cells"
+kind = "owned"
+source = "R21 (NVDA user guide, Freedom Scientific keystroke pages)"
+
+[[key]]
+keys = ["ctrl+alt+home", "ctrl+alt+end"]
+readers = "JAWS"
+purpose = "to go to the first or last table cell"
+kind = "owned"
+source = "R21 (Freedom Scientific keystroke pages)"
+
+[[key]]
+keys = ["meta+alt+left", "meta+alt+right", "meta+alt+up", "meta+alt+down"]
+readers = "JAWS"
+purpose = "to move by table rows and columns"
+kind = "owned"
+source = "R21 (Freedom Scientific keystroke pages)"
+
+[[key]]
+pattern = "keypad"
+readers = "NVDA, JAWS and Orca"
+purpose = "to review text when Num Lock is off"
+kind = "num-lock"
+source = "R4 4.2; R21; plan 5.7"
+
+[[key]]
+keys = ["ctrl+meta+enter"]
+readers = "Narrator"
+purpose = "to start and stop Narrator"
+kind = "owned"
+source = "memory"
+
+[[key]]
+keys = ["meta+f5"]
+readers = "VoiceOver"
+purpose = "to turn VoiceOver on and off"
+kind = "owned"
+platform = "macos"
+source = "memory"
+
+[[key]]
+pattern = "ctrl+alt+any"
+readers = "VoiceOver"
+purpose = "as its modifier, Control and Option"
+kind = "owned"
+platform = "macos"
+source = "R4 4.2"
+
+[[key]]
+keys = ["meta+alt+s"]
+readers = "Orca"
+purpose = "to turn Orca on and off in GNOME"
+kind = "owned"
+platform = "linux"
+source = "memory"

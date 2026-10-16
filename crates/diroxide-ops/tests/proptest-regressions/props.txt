@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d6de44f31a0dde9e98b8f492a1a32021ab5ae43cf31ae66ea5aa16010dc1f5ea # shrinks to source = Tree { files: [("a", [115, 48])] }, op = MoveAcross
