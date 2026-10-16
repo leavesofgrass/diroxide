@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "xtask"]
+# Plugins live in workspaces of their own (plan section 5.8, item 3): the
+# main workspace, and so `cargo install diro`, never sees what they build.
+exclude = ["plugins"]
 
 [workspace.package]
 version = "0.1.0-alpha.1"
@@ -13,12 +16,18 @@ publish = false
 # Every dependency is declared once, here. Member crates take what they need
 # with `name.workspace = true`; `cargo xtask deps --check` enforces both that
 # and the direction of the internal dependencies (docs/dev/architecture.md).
+#
+# The pure-Rust rule (plan section 4, principle 5): nothing here may bring a
+# C, C++ or assembly build into the main workspace. `cargo xtask native
+# --check` fails on any `cc`, `cmake` or `cxx` build dependency in the build
+# tree, with one allow entry: `ring` (through `rustls` through `ureq`), the
+# downloader's TLS provider behind the `fetch` feature of `diro`, the
+# owner's one exception (Sunday, October 11, 2026).
 [workspace.dependencies]
 # The workspace's own crates.
 diroxide-core = { path = "crates/diroxide-core", version = "0.1.0-alpha.1" }
 diroxide-vfs = { path = "crates/diroxide-vfs", version = "0.1.0-alpha.1" }
 diroxide-archive = { path = "crates/diroxide-archive", version = "0.1.0-alpha.1" }
-diroxide-sftp = { path = "crates/diroxide-sftp", version = "0.1.0-alpha.1" }
 diroxide-ops = { path = "crates/diroxide-ops", version = "0.1.0-alpha.1" }
 diroxide-search = { path = "crates/diroxide-search", version = "0.1.0-alpha.1" }
 diroxide-filetype = { path = "crates/diroxide-filetype", version = "0.1.0-alpha.1" }
@@ -31,49 +40,84 @@ diroxide-tui = { path = "crates/diroxide-tui", version = "0.1.0-alpha.1" }
 diroxide-gui = { path = "crates/diroxide-gui", version = "0.1.0-alpha.1" }
 diroxide-cli = { path = "crates/diroxide-cli", version = "0.1.0-alpha.1" }
 
-# Used by the Phase 0 stubs.
+# Used by the contract (Phase 0 and the Wave 1 amendments).
 anyhow = "1.0.100"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.146"
 thiserror = "2.0.18"
 toml = "1.1.6"
-
-# Declared for the waves to come (plan section 6), not yet depended on, so the
-# first build stays small. Versions are textweaver's where it uses the crate,
-# so the two projects share a cache. The ones marked "unverified" were not in
-# the local registry cache on the Phase 0 day: check them when first used.
-#
-# Search.
+# The pattern module of diroxide-core (globs and `re:` patterns).
 regex = "1.13.1"
-ignore = "0.4.26"
+# Secrets: a wrapper that zeroizes and redacts (research/encryption.md).
+secrecy = "0.10.3"
+zeroize = "1.8.1"
+
+# Declared for the waves to come (plan section 6), not yet depended on, so
+# the first build stays small. Versions are textweaver's where it uses the
+# crate, so the two projects share a cache.
+#
+# Search: ripgrep's crates (MIT or Unlicense). The `ignore` and
+# `grep-searcher` pins were checked on Friday, October 16, 2026.
+ignore = "0.4.33"
 globset = "0.4.18"
-grep-regex = "0.1" # unverified
-grep-searcher = "0.1" # unverified
-# Archives. xz takes liblzma by default (plan question 6); lzma-rust2 is the
-# pure-Rust alternative to try in the final alpha.
-zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs", "lzma", "xz", "bzip2", "ppmd"] }
-sevenz-rust2 = "0.23.0"
-tar = "0.4.46"
+grep-regex = "0.1.14"
+grep-searcher = "0.1.17"
+# Archives (research/archives.md section 15 F; plan question 6 closed by
+# answer 26). zip 9.0.1 exactly, as decided (9.0.4 exists; a bump is the
+# orchestrator's). lzma-rust2 on the 0.21 line that zip and sevenz-rust2
+# share, so one copy is compiled; `optimization` on (owner question 5's
+# default, hand-written `unsafe` inside the crate). liblzma has left the
+# main workspace under the plugin boundary; there is no `xz-c` feature.
+zip = { version = "=9.0.1", default-features = false, features = ["deflate-flate2-zlib-rs", "bzip2", "aes-crypto", "lzma", "xz", "ppmd", "deflate64"] }
+lzma-rust2 = { version = "0.21.0", default-features = false, features = ["std", "encoder", "xz", "optimization"] }
+sevenz-rust2 = { version = "=0.23.0", default-features = false, features = ["compress", "aes256", "bzip2", "ppmd", "util"] }
+tar = { version = "0.4.46", default-features = false }
 flate2 = { version = "1.1.5", default-features = false, features = ["zlib-rs"] }
-liblzma = "0.4.8"
-# SSH.
-russh = "0.54" # unverified
-russh-sftp = "2.1" # unverified
-# Watching, trash, volumes, folders, hashing.
+# bzip2 0.6 reads and writes through libbz2-rs-sys, a Rust port (no C).
+bzip2 = "0.6.1"
+# The local provider's `sys` module (research/file-operations.md C6):
+# safe Unix wrappers, the Windows calls, and copy-on-write clones.
+rustix = { version = "1.1.5", features = ["fs"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl"] }
+reflink-copy = "0.1.30"
+# Watching, trash, volumes, folders, hashing. trash 5.2.9 is the version
+# spikes four and six measured; it is used only behind the trash gate
+# (plan section 5.12). Keep sysinfo on its default features.
 notify = "8.2.0"
-trash = "5" # unverified
+trash = "=5.2.9"
 sysinfo = "0.36.1"
 dirs = "6.0.0"
-blake3 = "1.8.2"
+# blake3 always builds with `cc` (a non-optional build dependency), so the
+# native gate fails the day a crate depends on it, even with `pure`. Before
+# the duplicate finder (alpha.8) uses it, the owner decides: a second allow
+# entry for blake3 with `pure`, or a pure-Rust hash (sha2 is declared).
+blake3 = { version = "1.8.2", features = ["pure"] }
+# Pins for the components downloader and checksums.
+sha2 = "0.10.9"
+# Comment-preserving writes of the owner's TOML files (plan section 5.11).
+toml_edit = "0.25.15"
+# Opening a file with the system's program, never through a shell; opener,
+# not open, which starts PowerShell for every open (spike four).
+opener = "0.8.5"
+# Process trees: job objects on Windows, process groups elsewhere
+# (research/alpha4-plan.md). No async runtime in the main binary.
+process-wrap = { version = "10.0.1", default-features = false, features = ["std", "creation-flags", "job-object", "kill-on-drop", "process-group", "process-session"] }
+# The downloader's HTTP client, the owner's one exception to the pure-Rust
+# rule (answer 40): textweaver's pin, rustls with the ring provider,
+# behind the default `fetch` feature of `diro` only.
+ureq = { version = "3.4", default-features = false, features = ["rustls"] }
+# Compare (alpha.3, research/diffing.md): std, text and inline only.
+similar = { version = "3.2.0", default-features = false, features = ["std", "text", "inline"] }
+# Highlighting and documents (alpha.2, research/syntax-highlighting.md):
+# the fancy-regex engine, never Oniguruma (C). When syntect enters the
+# build, add `[profile.dev.package.syntect]` with `opt-level = 3` below.
+two-face = { version = "0.5.2", default-features = false, features = ["syntect-fancy"] }
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
 # Detection and images.
 infer = "0.19" # unverified
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
 kamadak-exif = "0.6" # unverified
 resvg = "0.47.0"
-# Async, confined to the plugin host, SFTP and jobs (plan question 8).
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "sync", "process", "io-util", "time", "macros"] }
-# Lua, behind the `lua` feature of diroxide-plugins.
-mlua = { version = "0.11", features = ["lua54", "vendored"] } # unverified
 # Terminal and window.
 ratatui = "0.30.2"
 crossterm = "0.29.0"
