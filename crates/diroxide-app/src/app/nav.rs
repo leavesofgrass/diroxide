@@ -342,7 +342,6 @@ impl App {
     pub(super) fn move_focus(&mut self, movement: Move) -> Vec<Effect> {
         let side = self.active;
         if self.panel_mut(side).list_mut().move_focus(movement) {
-            self.status.clear();
             self.focus_effects(side)
         } else if self.panel(side).list().is_empty() {
             let empty = self.panel(side).list().empty_text().to_owned();

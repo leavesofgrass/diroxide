@@ -869,10 +869,25 @@ impl App {
     }
 
     /// The status line, the key fact first: the last message, or the
-    /// active panel's status.
+    /// active panel's folder and counts ("Documents, 40 items, 2
+    /// selected"). It never follows the focus: the cursor's row says
+    /// where the focus is, so a move changes nothing here and a screen
+    /// reader that speaks changed text says the row once (R4 section
+    /// 5.1). A focus move keeps the last message.
     pub fn status_line(&self) -> String {
         if self.status.is_empty() {
-            self.active_panel().list().status()
+            let panel = self.active_panel();
+            let list = panel.list();
+            let mut line = format!(
+                "{}, {}",
+                crate::panel::place_leaf(panel.place()),
+                diroxide_core::format::count(list.len() as u64, "item", "items")
+            );
+            let selected = list.selected_count();
+            if selected > 0 {
+                line.push_str(&format!(", {selected} selected"));
+            }
+            line
         } else {
             self.status.clone()
         }
@@ -1077,7 +1092,19 @@ impl App {
         ];
         match self.keymap.lookup(&layers, &key) {
             Lookup::Command(id) => {
-                self.status.clear();
+                // A focus move keeps the last message, so the status line
+                // does not change under a screen reader on every move.
+                let moves = [
+                    ids::LIST_UP,
+                    ids::LIST_DOWN,
+                    ids::LIST_PAGE_UP,
+                    ids::LIST_PAGE_DOWN,
+                    ids::LIST_HOME,
+                    ids::LIST_END,
+                ];
+                if !moves.contains(&id) {
+                    self.status.clear();
+                }
                 self.dispatch(&Command::new(id))
             }
             Lookup::NoMatch => match typed(&key) {
