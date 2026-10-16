@@ -14,7 +14,7 @@ diroxide has no voice of its own. Everything it would say is text on the screen,
 Other things you can rely on:
 
 - Meaning comes first. Every row, label and message puts its meaning in the first 40 characters, which is what a 40-cell Braille display shows.
-- Words come before symbols. Status is words such as "selected", "Pass" and "Fail", never a color or a symbol alone. A selected row also starts with an asterisk, but the word is there too.
+- Words come before symbols. Status is words such as "selected", "Pass" and "Fail", never a color or a symbol alone. A selected row says "selected" right after its name. When screen-reader mode is off the screen also starts the row with an asterisk; in screen-reader mode it does not, so the row spends no cells on it.
 - There are no spinners. Progress is a sentence that changes slowly.
 - The default look draws no boxes. Box drawing often comes out as noise on a Braille display.
 - diroxide never uses Insert or Caps Lock, which NVDA, JAWS and Orca use as their own key. Its default keys use no Control plus Alt chords, which VoiceOver uses.
@@ -22,32 +22,34 @@ Other things you can rely on:
 
 ### Screen-reader mode
 
-The `screen_reader_mode` setting turns on the behavior a screen reader needs. diroxide does not try to detect your screen reader, so check this setting yourself in Settings. In screen-reader mode:
+The `screen_reader_mode` setting turns on the behavior a screen reader needs. Its values are `auto`, `on` and `off`, and the default is `auto`. In alpha.1 diroxide does not detect your screen reader, so `auto` behaves as on: you start in screen-reader mode, and `off` is the choice that changes it. Check the setting in Settings (Alt+T, then S). In screen-reader mode:
 
 - the jobs line changes at once when a job changes state, and otherwise at most every ten seconds (`progress_interval_seconds`). Outside screen-reader mode it can change twice a second;
 - the other panel is redrawn only when you ask, so a change there does not interrupt you;
-- the key bar is hidden and outside the order you move through;
-- while you type in a prompt, nothing is announced until you press Tab, which says how many matches there are;
+- the key bar is never drawn. Say key bar, in the Help menu, reads it to you;
+- while you type in a prompt, one line says the count of matches, and the list is drawn only when you move into it;
 - highlights carry an attribute and a text marker, never only color.
+
+The `quiet_screen` setting goes further and draws as little as possible, for a screen reader that reads every change.
 
 ## What you should hear
 
 These lines show what diroxide says for each key. The status line says the same words that a menu or the palette shows.
 
-- Starting: the title line first, "dirocheck, left panel, in D:\", and then the first row. You do not hear the whole screen. The status line names the version and the layout.
-- Down and Up in the stacked or single layout: the cursor moves one row and your screen reader speaks the row: "Photos, folder, modified Tuesday". No message is written for a focus move.
+- Starting: on the very first start the status line says "diroxide alpha 1. Shift+F1 for help." and "Layout: side by side. Ctrl+P, Layout." The title line comes first, "dirocheck, left panel, in D:\", and then the first row. You do not hear the whole screen.
+- Down and Up: the cursor moves one row and your screen reader speaks the row: "Photos, folder, modified Tuesday". No message is written for a focus move, and the status line does not change. At the first or last row diroxide says "Top of the list" or "Bottom of the list".
 - Down in the side by side layout with the left panel active: your screen reader's current line is the whole screen line, which also holds the right panel's row, so it may read the left row and then the right. With the right panel active, the cursor sits near column 41 and a 40-cell display shows the left row first. This is why stacked is recommended.
 - Tab: one message and nothing else, "Right panel: dirocheck, 31 items". Chatter on Tab is the first thing to report.
-- Space: "Selected report.pdf. 1 selected." and then the next row is read. The row you moved onto says "selected" if it is marked.
-- Ctrl+D (Say Status): "3 selected, 4.2 MB. dirocheck, 31 items". With no marks: "dirocheck, 31 items, no selection", then the focus: "on report.pdf, 3 of 31".
-- Alt+O (Say Other Panel): "Other panel: Backup, 12 items", then its focused row.
-- Ctrl+F6 (sort by size): "Sorted by size, largest first". Again: "Sorted by size, smallest first".
-- F5 (copy): "Copy 3 files to Backup? y or n". The question starts on No.
-- A name taken: a list opens, "Name taken: report.pdf", "New is newer and larger", "In Backup, other panel, file 1 of 3", the two fact lines, then "Skip this one, 1 of 9" with the focus on it.
-- A copy running: "Copy started: 1 file to Backup", then "Copying 30 percent, 2 minutes left" at most every ten seconds, and once at the end, "Copy finished: 1 done".
-- F2 (rename): "Rename report.pdf to:" with the name in the field. A name that needs care: "Name needs care: ends with a space".
-- F8 (trash): "Move report-2026.pdf to the trash? y or n". Ctrl+Z: "Undid trash: 1 item is back".
-- Ctrl+Q with a job running: "Quit? 1 job is running. y or n".
+- Space: "Selected report.pdf. 1 selected." and then the next row is read. The row you moved onto says "selected" after its name if it is marked.
+- Ctrl+D (Say Status): "3 selected, 4.2 MB. dirocheck, 31 items, on report.pdf, 3 of 31". With no marks: "dirocheck, 31 items, no selection, on report.pdf, 3 of 31".
+- Alt+O (Say Other Panel): "Other panel: Backup, 12 items, on report.pdf, 3 of 12".
+- Ctrl+F6 (sort by size): "Sorted by size, largest first". Again: "Sorted by size, smallest first". The title line ends ", sorted by size".
+- F5 (copy): "Copy 3 items to Backup, 312 bytes? No is the default. y or n", with the cursor on that line. The question starts on No.
+- A name taken: a list opens, "Name taken: report.pdf", "New is newer and larger", the two fact lines ("Existing: ..." and "New: ..."), then "Skip this one, 1 of 9" with the focus on it.
+- A copy running: "Copy started: 1 item to Backup", then "Copying 30 percent, 2 minutes left" at most every ten seconds, and once at the end, "Copy finished: 1 done."
+- F2 (rename): "Rename report.pdf to: report.pdf", with the cursor before the extension. A name that needs care: "Name needs care: ends in a dot or space. Nothing renamed."
+- F8 (trash): "Move 1 item to the trash, 2.1 KB? No is the default. y or n". Then "Moved 1 item to the trash. It can be restored." Ctrl+Z: "Undid trash: 1 item is back".
+- Ctrl+Q with a job running: "Quit? 1 job is running. No is the default. y or n".
 
 ## Choosing a layout
 
@@ -100,11 +102,11 @@ diroxide draws no braille of its own. A Braille display shows what your screen r
 What each line shows in its first 40 characters:
 
 - The title line: the folder first, then the panel, then the parent. "Documents, left panel, in D:\work".
-- A row: the name, the kind, the size. "report.pdf, PDF, 2.1 MB, modified Tuesday". A selected row: "* report.pdf, selected, PDF, 2.1 MB,".
-- After a move or a mark: "Selected report.pdf. 1 selected." and "At the top already".
+- A row: the name, the kind, the size. "report.pdf, PDF, 2.1 MB, modified Tuesday". A selected row: "report.pdf, selected, PDF, 2.1 MB,".
+- After a mark or at an edge: "Selected report.pdf. 1 selected." and "Top of the list".
 - Say Status: "3 selected, 4.2 MB. Documents, 40 items".
 - A sort: "Sorted by size, largest first".
-- A question: the action, the count and the target before the answer keys. "Move 3 files to Backup? y or n".
+- A question: the action, the count and the target before the answer. "Move 3 items to Backup, 312 bytes? No is the default. y or n".
 - Progress: "Copying 30 percent, 2 minutes left". The percent and the estimate sit inside the first 40 cells.
 
 A line that runs past 40 cells still reads correctly when you pan. Only the start is guaranteed. A test walks a session and checks that each of these lines carries its key fact inside 40 cells.
@@ -129,20 +131,24 @@ If the display does not follow the row, or a screen reader talks too much on eve
 
 ## A check you can run
 
-Run this once with NVDA and once with JAWS, in Windows Terminal and, if you like, the classic console. If you build from source, `cargo xtask sample-folder` writes a folder to try it in, with a conflicting file, a large file and names with accents, Japanese and an emoji.
+Run this once with NVDA and once with JAWS, in Windows Terminal and, if you like, the classic console. If you build from source, `cargo xtask sample-folder` followed by a folder name writes a folder to try it in, with a conflicting file, a large file and names with accents, Japanese and an emoji.
 
 1. Start `diro` on that folder. You should hear the title and the first row, not the whole screen.
 2. Press Down five times. Each row is spoken once, name first. The display shows the row from its first cell.
 3. Press Tab. You hear one message. Press Tab again.
-4. Press Space on three files. You hear "Selected report.pdf. 1 selected." each time. Is the word "selected" heard on the row, or only the asterisk?
+4. Press Space on three files. You hear "Selected report.pdf. 1 selected." each time. Press Up onto a marked row: is the word "selected" heard after the name?
 5. Press Ctrl+D. You hear the count and the size of the selection.
 6. Press Ctrl+F6, then Ctrl+F6 again, then Ctrl+F3. You hear each sort result. If a key does nothing, open the palette, type "sort" and choose the entry. That key is worth reporting.
 7. Copy a file onto one with the same name. Press F5, press y, and walk the conflict list.
 8. Copy a large file. How often does the progress speak? Press Ctrl+D for the sentence on demand. Press Escape partway and check that no half-written file remains.
 9. Press Ctrl+P, type "layout", press Enter, and then Tab and Down. Is stacked quieter? Choose the layout you will keep.
 10. Open the folder with the accented, Japanese and emoji names. Each should read cleanly, one row each.
+11. Press Ctrl+P, type "test keys" and press Enter. Press Ctrl+F5, Alt+Left and Ctrl+V. Each key is said in words with what it sent and what it would run, or nothing is said and the terminal kept it. After ten seconds without a key it says so and ends. Escape ends it sooner.
+12. Start a copy, press Ctrl+Q, answer n, press Escape to cancel the job, and press Ctrl+Q again. The shell prompt should come back with a visible cursor.
 
-Five things to report: whether Tab chattered, whether "selected" was heard, how often progress spoke, which keys did not arrive (`diro keys test` lists them), and which layout you kept.
+Questions to answer: Did Tab chatter? Was "selected" heard after the name? How often did progress speak? Which keys did not arrive (`diro keys test` lists them)? Which layout will you keep? Did your screen reader speak the terminal's window title when the folder changed? Was "Top of the list", pressed twice at the top, spoken twice?
+
+diroxide sets the terminal's title to the active place. Whether NVDA or JAWS speak that title when it changes has not been verified.
 
 ## Keys that may clash
 

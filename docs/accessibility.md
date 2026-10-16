@@ -10,7 +10,7 @@ diroxide is built first for people who use a screen reader or a Braille display,
 
 - A row, a label and a message put their meaning in their first 40 characters, because a 40-cell Braille display shows one line of that length at a time.
 - Status is words, such as "selected", "Pass" and "Fail". It is never a color or a symbol alone. A symbol can be an extra, never the only signal, because symbols often come out as noise on a Braille display.
-- Color never carries meaning alone, above all red against green. Every highlight also has an attribute (bold, underline or reverse) or a text marker, such as the asterisk on a selected row.
+- Color never carries meaning alone, above all red against green. Every highlight also has an attribute (bold, underline or reverse) or a text marker, such as the word "selected" on a marked row.
 - Everything works from the keyboard. The terminal frontend has no mouse. Every command can be reached by name from the command palette and by the menus, so a key that a terminal keeps for itself never costs you a command.
 - Single-letter keys can be turned off, so dictation software and speech recognition do not trigger commands (WCAG success criterion 2.1.4).
 - The hardware cursor is always on the focused row, in every state: a panel, a dialog, a menu, the palette, a prompt and an empty folder. A screen reader or a Braille display that follows the cursor follows the row.
@@ -23,7 +23,7 @@ diroxide is built first for people who use a screen reader or a Braille display,
 
 Automated tests run with every change.
 
-- A walk through a session checks that the lines diroxide writes carry their key fact within 40 cells. The message list is generated from one catalog, and the build fails on a line whose meaning starts after cell 40.
+- A walk through a session, the Braille walk test, checks that the lines diroxide writes carry their key fact within 40 cells. The message catalogs are tested the same way. A catalog of every message, generated with a build failure on a line whose meaning starts after cell 40, is not built yet.
 - A reachability test checks that every command has a terminal key or is palette-only, and that the palette reaches every command.
 - A cursor test reads the cursor's position from a test terminal in every state.
 - A test sends a key press and its release and expects one action.
