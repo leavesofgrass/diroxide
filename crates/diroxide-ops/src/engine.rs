@@ -19,11 +19,13 @@ use diroxide_core::clock::describe_time;
 use diroxide_core::format::{count, human_size};
 use diroxide_core::{
     Clock, ConflictAction, ConflictAnswer, ConflictKind, ConflictPolicy, Entry, ErrorAction, JobId,
-    JobKind, JobRequest, JobState, Message, Place,
+    JobKind, JobState, Message, Place,
 };
 use diroxide_vfs::{CancelToken, OpContext, Registry, VfsError, WriteMode};
 
 use crate::error::OpsError;
+use crate::options::EngineOptions;
+use crate::pace::{Pacer, SystemPacer};
 use crate::plan::{Plan, Step};
 use crate::progress::JobProgress;
 use crate::undo::UndoRecord;
@@ -408,17 +410,56 @@ enum Outcome {
     Skipped(String),
 }
 
+/// A sink that says nothing, skips every conflict and every error: for
+/// planning without a frontend.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Quiet;
+
+impl JobSink for Quiet {
+    fn progress(&self, _progress: &JobProgress) {}
+
+    fn conflict(&self, _conflict: &Conflict) -> ConflictAnswer {
+        ConflictAnswer::skip()
+    }
+
+    fn error(&self, _error: &ItemError) -> ErrorAction {
+        ErrorAction::Skip
+    }
+}
+
 /// The job engine. Planning is quick; running blocks, so the app runs it
 /// on a worker thread.
 #[derive(Clone, Debug)]
 pub struct Engine {
     registry: Arc<Registry>,
+    options: EngineOptions,
+    pacer: Arc<dyn Pacer>,
 }
 
 impl Engine {
-    /// An engine that reaches places through this registry.
+    /// An engine that reaches places through this registry, with the
+    /// default options and the real clock.
     pub fn new(registry: Arc<Registry>) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            options: EngineOptions::default(),
+            pacer: Arc::new(SystemPacer::new()),
+        }
+    }
+
+    /// The same engine with these options.
+    pub fn with_options(mut self, options: EngineOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// The same engine reading time from this pacer (a [`FakePacer`] in
+    /// tests, so waits take no time).
+    ///
+    /// [`FakePacer`]: crate::pace::FakePacer
+    pub fn with_pacer(mut self, pacer: Arc<dyn Pacer>) -> Self {
+        self.pacer = pacer;
+        self
     }
 
     /// The registry the engine uses.
@@ -426,78 +467,14 @@ impl Engine {
         &self.registry
     }
 
-    /// Computes what a job will do, touching nothing. Phase 0: one step per
-    /// source, without walking into folders.
-    pub fn plan(&self, request: &JobRequest) -> Result<Plan, OpsError> {
-        let named = |source: &Place| {
-            source
-                .name()
-                .map(str::to_owned)
-                .ok_or(OpsError::NothingSelected)
-        };
-        let new_name = || request.new_name.clone().ok_or(OpsError::NoName);
-        let destination = || request.destination.clone().ok_or(OpsError::NoDestination);
-        if request.sources.is_empty()
-            && request.renames.is_empty()
-            && request.kind != JobKind::MakeFolder
-        {
-            return Err(OpsError::NothingSelected);
-        }
-        let mut steps = Vec::new();
-        match request.kind {
-            JobKind::Copy | JobKind::Move => {
-                let folder = destination()?;
-                for from in &request.sources {
-                    let to = folder.join(&named(from)?).map_err(VfsError::from)?;
-                    let from = from.clone();
-                    steps.push(if request.kind == JobKind::Copy {
-                        Step::Copy { from, to }
-                    } else {
-                        Step::Move { from, to }
-                    });
-                }
-            }
-            JobKind::Rename if !request.renames.is_empty() => {
-                for (from, name) in &request.renames {
-                    let parent = from.parent().ok_or(OpsError::NothingSelected)?;
-                    let to = parent.join(name).map_err(VfsError::from)?;
-                    steps.push(Step::Rename {
-                        from: from.clone(),
-                        to,
-                    });
-                }
-            }
-            JobKind::Rename | JobKind::Duplicate => {
-                let from = request.sources.first().ok_or(OpsError::NothingSelected)?;
-                let parent = from.parent().ok_or(OpsError::NothingSelected)?;
-                let to = parent.join(&new_name()?).map_err(VfsError::from)?;
-                let from = from.clone();
-                steps.push(if request.kind == JobKind::Rename {
-                    Step::Rename { from, to }
-                } else {
-                    Step::Copy { from, to }
-                });
-            }
-            JobKind::MakeFolder => {
-                let place = destination()?.join(&new_name()?).map_err(VfsError::from)?;
-                steps.push(Step::MakeFolder { place });
-            }
-            JobKind::Trash => steps.extend(request.sources.iter().map(|place| Step::Trash {
-                place: place.clone(),
-            })),
-            JobKind::DeletePermanently => {
-                steps.extend(request.sources.iter().map(|place| Step::Remove {
-                    place: place.clone(),
-                }))
-            }
-            other => return Err(OpsError::NotBuilt(other.verb().to_owned())),
-        }
-        Ok(Plan::new(
-            request.id,
-            request.kind,
-            steps,
-            request.conflicts,
-        ))
+    /// The engine's options.
+    pub fn options(&self) -> &EngineOptions {
+        &self.options
+    }
+
+    /// The engine's clock.
+    pub fn pacer(&self) -> &dyn Pacer {
+        &*self.pacer
     }
 
     /// Runs a plan to its end, or until cancelled, reporting progress and
@@ -728,6 +705,8 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing;
+    use diroxide_core::JobRequest;
     use diroxide_core::format::within_cells;
     use diroxide_core::place::PathStyle;
     use diroxide_core::{EntryKind, FixedClock, Timestamp, UtcOffset};
@@ -754,25 +733,39 @@ mod tests {
         }
     }
 
+    fn fake_engine() -> Engine {
+        let fake = crate::fake::FakeProvider::new();
+        fake.add_file(&testing::p("/a/x"), b"x");
+        fake.add_file(&testing::p("/a/y"), b"y");
+        fake.add_file(&testing::p("/a/1.jpg"), b"1");
+        fake.add_file(&testing::p("/a/2.jpg"), b"2");
+        fake.add_folder(&testing::p("/b"));
+        testing::engine(&fake)
+    }
+
     #[test]
     fn copy_plans_one_step_per_source() {
-        let engine = Engine::new(Arc::new(Registry::new()));
-        let request =
-            JobRequest::new(JobId::new(7), JobKind::Copy, vec![p("/a/x"), p("/a/y")]).to(p("/b"));
+        let engine = fake_engine();
+        let request = JobRequest::new(
+            JobId::new(7),
+            JobKind::Copy,
+            vec![testing::p("/a/x"), testing::p("/a/y")],
+        )
+        .to(testing::p("/b"));
         let plan = engine.plan(&request).unwrap();
         assert_eq!(plan.steps.len(), 2);
         assert_eq!(
             plan.steps[1],
             Step::Copy {
-                from: p("/a/y"),
-                to: p("/b/y")
+                from: testing::p("/a/y"),
+                to: testing::p("/b/y")
             }
         );
     }
 
     #[test]
     fn plans_refuse_what_is_missing() {
-        let engine = Engine::new(Arc::new(Registry::new()));
+        let engine = fake_engine();
         let copy = JobRequest::new(JobId::new(1), JobKind::Copy, vec![p("/a/x")]);
         assert_eq!(engine.plan(&copy), Err(OpsError::NoDestination));
         let rename = JobRequest::new(JobId::new(2), JobKind::Rename, vec![p("/a/x")]);
@@ -780,29 +773,33 @@ mod tests {
         let none = JobRequest::new(JobId::new(3), JobKind::Trash, Vec::new());
         assert_eq!(engine.plan(&none), Err(OpsError::NothingSelected));
         let folder = JobRequest::new(JobId::new(4), JobKind::MakeFolder, Vec::new())
-            .to(p("/a"))
+            .to(testing::p("/a"))
             .named("new");
         assert_eq!(
             engine.plan(&folder).unwrap().steps,
-            vec![Step::MakeFolder { place: p("/a/new") }]
+            vec![Step::MakeFolder {
+                place: testing::p("/a/new")
+            }]
         );
         let unknown = JobRequest::new(JobId::new(5), JobKind::Unknown, vec![p("/a/x")]);
         assert!(matches!(engine.plan(&unknown), Err(OpsError::NotBuilt(_))));
+        let undo = JobRequest::new(JobId::new(6), JobKind::Undo, vec![p("/a/x")]);
+        assert_eq!(engine.plan(&undo), Err(OpsError::NothingToUndo));
     }
 
     #[test]
     fn several_renames_plan_from_their_pairs() {
-        let engine = Engine::new(Arc::new(Registry::new()));
+        let engine = fake_engine();
         let request = JobRequest::new(JobId::new(6), JobKind::Rename, Vec::new()).renaming(vec![
-            (p("/a/1.jpg"), "one.jpg".into()),
-            (p("/a/2.jpg"), "two.jpg".into()),
+            (testing::p("/a/1.jpg"), "one.jpg".into()),
+            (testing::p("/a/2.jpg"), "two.jpg".into()),
         ]);
         let plan = engine.plan(&request).unwrap();
         assert_eq!(
             plan.steps[1],
             Step::Rename {
-                from: p("/a/2.jpg"),
-                to: p("/a/two.jpg")
+                from: testing::p("/a/2.jpg"),
+                to: testing::p("/a/two.jpg")
             }
         );
     }
@@ -810,8 +807,12 @@ mod tests {
     #[test]
     fn failures_are_reported_per_entry_problems_first() {
         let engine = Engine::new(Arc::new(Registry::new()));
-        let request = JobRequest::new(JobId::new(9), JobKind::Trash, vec![p("/a/x")]);
-        let plan = engine.plan(&request).unwrap();
+        let plan = Plan::new(
+            JobId::new(9),
+            JobKind::Trash,
+            vec![Step::Trash { place: p("/a/x") }],
+            ConflictPolicy::Ask,
+        );
         let sink = Recorder::default();
         let report = engine.run(&plan, &JobControl::new(), &sink);
         assert_eq!(report.failed.len(), 1);
@@ -828,8 +829,12 @@ mod tests {
     #[test]
     fn a_cancelled_job_stops_before_its_steps() {
         let engine = Engine::new(Arc::new(Registry::new()));
-        let request = JobRequest::new(JobId::new(9), JobKind::Trash, vec![p("/a/x")]);
-        let plan = engine.plan(&request).unwrap();
+        let plan = Plan::new(
+            JobId::new(9),
+            JobKind::Trash,
+            vec![Step::Trash { place: p("/a/x") }],
+            ConflictPolicy::Ask,
+        );
         let control = JobControl::new();
         control.cancel.cancel();
         let report = engine.run(&plan, &control, &Recorder::default());

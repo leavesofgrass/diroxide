@@ -28,6 +28,24 @@ pub enum OpsError {
     /// item is in the trash; the line says what was found.
     #[error("{0}")]
     TrashNotConfirmed(String),
+    /// A safety rule refused the job before anything was listed: a drive
+    /// root, a mount point, a protected folder. The sentence says which:
+    /// "Refused: this is a drive root, D:\".
+    #[error("{0}")]
+    Refused(String),
+    /// A folder would be copied or moved into itself or a folder inside
+    /// it; the name is the folder's.
+    #[error("{0} cannot go inside itself")]
+    IntoItself(String),
+    /// A new name the place refuses, with the reason in words: "Name needs
+    /// care: ends in a dot or space".
+    #[error("{0}")]
+    NameRefused(String),
+    /// Undo was asked for with nothing to undo. Undo is planned from the
+    /// undo log ([`Engine::plan_undo`](crate::Engine::plan_undo)), never
+    /// from a request.
+    #[error("there is nothing to undo")]
+    NothingToUndo,
 }
 
 impl Explain for OpsError {
@@ -37,10 +55,37 @@ impl Explain for OpsError {
             OpsError::NothingSelected => "Select something first, or move to an entry.".to_owned(),
             OpsError::NoDestination => "Open the destination in the other panel.".to_owned(),
             OpsError::NoName => "Type a name.".to_owned(),
-            OpsError::NotBuilt(_) => String::new(),
+            OpsError::NotBuilt(_) | OpsError::NothingToUndo => String::new(),
             OpsError::TrashNotConfirmed(_) => {
                 "Look for it in the trash, and check the drive.".to_owned()
             }
+            OpsError::Refused(_) => "Choose the entries inside it instead.".to_owned(),
+            OpsError::IntoItself(_) => "Choose a destination outside it.".to_owned(),
+            OpsError::NameRefused(_) => "Type another name.".to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use diroxide_core::format::within_cells;
+
+    #[test]
+    fn refusals_read_as_sentences() {
+        let refused = OpsError::Refused("Refused: this is a drive root, D:\\".into());
+        assert!(within_cells(
+            &refused.to_string(),
+            "Refused: this is a drive root"
+        ));
+        assert_eq!(refused.next_step(), "Choose the entries inside it instead.");
+        assert_eq!(
+            OpsError::IntoItself("photos".into()).to_string(),
+            "photos cannot go inside itself"
+        );
+        assert_eq!(
+            OpsError::NothingToUndo.to_string(),
+            "there is nothing to undo"
+        );
     }
 }

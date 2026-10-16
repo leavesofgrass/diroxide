@@ -14,17 +14,23 @@
 //! [`fake`] provider has the latency, stall and "lies" switches the tests
 //! of that order need.
 //!
-//! Phase 0 and the Wave 1 contract: the types are the contract; planning
-//! does not walk folders and running copies single files only. Wave 1
-//! (W1b) replaces the bodies and adds the property test that a plan equals
-//! what ran.
+//! The planner walks every source through its provider with the boundary
+//! rule (links never followed, other drives and loops left out and said),
+//! refuses the anchors, and asks its preflight questions ([`Preflight`])
+//! before anything is touched.
 
 pub mod engine;
 pub mod error;
 pub mod fake;
+pub mod options;
+pub mod pace;
 pub mod plan;
+mod planner;
 pub mod progress;
+#[cfg(test)]
+mod testing;
 pub mod undo;
+mod walk;
 
 pub use engine::{
     Conflict, ConflictChoice, Engine, ItemError, JobControl, JobReport, JobSink, Reconciliation,
@@ -32,6 +38,8 @@ pub use engine::{
 };
 pub use error::OpsError;
 pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies};
-pub use plan::{Plan, Step};
+pub use options::EngineOptions;
+pub use pace::{FakePacer, Pacer, SystemPacer};
+pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
 pub use undo::{UndoLog, UndoRecord};
