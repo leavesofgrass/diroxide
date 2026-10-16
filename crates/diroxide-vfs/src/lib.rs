@@ -44,10 +44,16 @@ pub use provider::{
 };
 pub use registry::Registry;
 pub use trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
-pub use volume::{SpaceInfo, VolumeInfo, VolumeKind};
+pub use volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
 
 /// The tops of the local file system: the drives on Windows, `/` elsewhere.
 /// Listing them never touches a drive.
 pub fn local_roots() -> Vec<diroxide_core::Place> {
     sys::roots()
+}
+
+/// The places for the go-to-place list, each with its kind and its words:
+/// see [`local::places`].
+pub fn local_places() -> Vec<LocalPlace> {
+    local::places()
 }

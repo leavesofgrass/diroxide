@@ -6,13 +6,20 @@
 use std::fs::Metadata;
 use std::io;
 use std::os::unix::fs::MetadataExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
-use diroxide_core::{Attributes, Entry, Timestamp};
+use diroxide_core::{Attributes, Entry, Place, Timestamp};
 
 use super::Identity;
 use crate::local::entry::EntryContext;
 use crate::local::owners::Owners;
+use crate::local::volumes::{self, Mount, VolumeFacts};
+use crate::volume::VolumeKind;
+
+/// How long a read of the mount table is trusted.
+const MOUNTS_KEEP_FOR: Duration = Duration::from_secs(10);
 
 /// The macOS flag that hides a file from the Finder (`chflags hidden`).
 #[cfg(target_os = "macos")]
@@ -88,8 +95,102 @@ pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 /// The top of the local file system: `/`.
-pub(crate) fn roots() -> Vec<diroxide_core::Place> {
-    diroxide_core::Place::parse("/").into_iter().collect()
+pub(crate) fn roots() -> Vec<Place> {
+    Place::parse("/").into_iter().collect()
+}
+
+/// The mounted file systems, read at most every ten seconds: on Linux the
+/// kernel's own table (`/proc/self/mounts`, which also lists network
+/// mounts), with the removable flag from `sysinfo`; elsewhere `sysinfo`'s
+/// list. Reading the kernel's table never touches a mount; `sysinfo`
+/// skips network mounts, which could hang on a dead server.
+pub(crate) fn mounts() -> Vec<Mount> {
+    /// The last read and when it was made.
+    type Cached = Option<(Instant, Vec<Mount>)>;
+    static CACHE: OnceLock<Mutex<Cached>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(None));
+    let mut slot = match cache.lock() {
+        Ok(slot) => slot,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some((read_at, mounts)) = slot.as_ref()
+        && read_at.elapsed() < MOUNTS_KEEP_FOR
+    {
+        return mounts.clone();
+    }
+    let mounts = read_mounts();
+    *slot = Some((Instant::now(), mounts.clone()));
+    mounts
+}
+
+fn read_mounts() -> Vec<Mount> {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let listed: Vec<Mount> = disks
+        .list()
+        .iter()
+        .map(|disk| Mount {
+            point: disk.mount_point().to_path_buf(),
+            file_system: disk.file_system().to_string_lossy().into_owned(),
+            removable: disk.is_removable(),
+        })
+        .collect();
+    if cfg!(target_os = "linux") {
+        let table = std::fs::read_to_string("/proc/self/mounts").unwrap_or_default();
+        let mut all = volumes::parse_mounts(&table);
+        if !all.is_empty() {
+            for mount in &mut all {
+                mount.removable = listed
+                    .iter()
+                    .any(|disk| disk.removable && disk.point == mount.point);
+            }
+            return all;
+        }
+    }
+    listed
+}
+
+/// The mounts a person keeps files on, with their kinds, for the places
+/// list.
+pub(crate) fn drives() -> Vec<(Place, VolumeKind)> {
+    mounts()
+        .iter()
+        .filter(|mount| volumes::is_user_mount(mount))
+        .filter_map(|mount| {
+            let place = Place::parse(mount.point.to_str()?).ok()?;
+            Some((place, volumes::mount_kind(mount)))
+        })
+        .collect()
+}
+
+/// The facts of the volume a path is on: the mount that holds the
+/// path's real location (links resolved), its kind and file system, and
+/// what `statvfs` says (read only, the longest name).
+pub(crate) fn volume_facts(path: &Path) -> VolumeFacts {
+    let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let mounts = mounts();
+    let mut facts = VolumeFacts::default();
+    match volumes::best_mount(&mounts, &real) {
+        Some(mount) => {
+            facts.root = Some(mount.point.clone());
+            facts.kind = volumes::mount_kind(mount);
+            facts.file_system = Some(mount.file_system.clone());
+        }
+        None => facts.root = Some(PathBuf::from("/")),
+    }
+    if let Ok(stat) = rustix::fs::statvfs(&real) {
+        facts.read_only = stat.f_flag.contains(rustix::fs::StatVfsMountFlags::RDONLY);
+        facts.max_name = usize::try_from(stat.f_namemax).ok().filter(|&n| n > 0);
+    }
+    facts
+}
+
+/// The free space the caller may use and the volume's size, in bytes.
+pub(crate) fn space(path: &Path) -> io::Result<(u64, u64)> {
+    let stat = rustix::fs::statvfs(path)?;
+    Ok((
+        stat.f_bavail.saturating_mul(stat.f_frsize),
+        stat.f_blocks.saturating_mul(stat.f_frsize),
+    ))
 }
 
 fn timestamp(secs: i64, nanos: i64) -> Option<Timestamp> {

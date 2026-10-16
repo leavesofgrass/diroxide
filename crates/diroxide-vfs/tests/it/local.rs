@@ -173,6 +173,56 @@ fn unix_entries_carry_mode_owner_and_links() {
 }
 
 #[test]
+fn capabilities_volume_and_space_are_asked_of_the_place() {
+    let folder = scratch();
+    let place = place_of(&folder);
+    let provider = LocalProvider::new();
+    let caps = provider.capabilities(&place);
+    assert!(caps.writable && caps.random_read && caps.attributes);
+    assert!(caps.max_name_length.is_some());
+    assert!(caps.access.times.is_possible());
+    // A place that is not made yet is asked of its nearest folder.
+    let new = place.join("new").unwrap().join("deeper.txt").unwrap();
+    assert_eq!(provider.capabilities(&new), caps);
+    let volume = provider.volume(&place, &OpContext::new()).unwrap();
+    assert!(place.is_within(&volume.root), "{}", volume.root);
+    assert!(volume.file_system.is_some());
+    let space = provider.space(&new, &OpContext::new()).unwrap();
+    assert!(space.free_to_user.unwrap() > 0);
+    assert!(space.total.unwrap() >= space.free_to_user.unwrap());
+    if cfg!(windows) {
+        // The checkout is on a fixed NTFS drive on the owner's machine and
+        // in CI: the trash, Windows's name rules, watching.
+        assert_eq!(volume.kind, diroxide_vfs::VolumeKind::Fixed);
+        assert!(caps.trash && caps.restore && caps.reserved_names && caps.watch);
+        assert!(!caps.case_sensitive, "NTFS folders ignore case");
+    }
+}
+
+#[test]
+fn the_places_list_has_the_tops_and_home() {
+    use diroxide_vfs::{PlaceRole, local_places};
+    let places = local_places();
+    assert!(places.iter().any(|p| p.role == PlaceRole::Home));
+    let tops = if cfg!(windows) {
+        PlaceRole::Drive
+    } else {
+        PlaceRole::Root
+    };
+    assert!(places.iter().any(|p| p.role == tops));
+    for place in &places {
+        assert!(
+            diroxide_core::format::within_cells(
+                &place.words,
+                place.words.split(',').next().unwrap()
+            ),
+            "{}",
+            place.words
+        );
+    }
+}
+
+#[test]
 fn state_words_read_an_ordinary_file_as_nothing_special() {
     let folder = scratch();
     fs::write(folder.path().join("plain.txt"), b"x").unwrap();

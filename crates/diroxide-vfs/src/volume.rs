@@ -75,6 +75,63 @@ impl VolumeInfo {
     }
 }
 
+/// What a place in the places list is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum PlaceRole {
+    /// A Windows drive.
+    Drive,
+    /// The Unix root, `/`.
+    Root,
+    /// The home folder.
+    Home,
+    /// A mounted file system on Linux or macOS.
+    Mount,
+}
+
+/// A place for the go-to-place list: a drive, the root, the home folder or
+/// a mount, with its kind and its words, meaning first ("Drive E:,
+/// removable drive"; "Home folder, /home/ada"; "My Stick, removable
+/// drive, /media/ada/My Stick"). Listing the places never reads a drive's
+/// media.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct LocalPlace {
+    /// The place itself.
+    pub place: Place,
+    /// What it is.
+    pub role: PlaceRole,
+    /// The kind of drive it is on.
+    pub kind: VolumeKind,
+    /// Its row in words, meaning first.
+    pub words: String,
+}
+
+impl LocalPlace {
+    /// A place with its words made from its role and kind.
+    pub fn new(place: Place, role: PlaceRole, kind: VolumeKind) -> Self {
+        let words = match role {
+            PlaceRole::Drive => {
+                let root = place.to_string();
+                let letter = root.trim_end_matches('\\');
+                format!("Drive {letter}, {}", kind.word())
+            }
+            PlaceRole::Root => "Root folder /".to_owned(),
+            PlaceRole::Home => format!("Home folder, {place}"),
+            PlaceRole::Mount => {
+                let name = place.name().unwrap_or("mount");
+                format!("{name}, {}, {place}", kind.word())
+            }
+        };
+        Self {
+            place,
+            role,
+            kind,
+            words,
+        }
+    }
+}
+
 /// Free space and size limits at a place (research/file-operations.md
 /// C7). `None` means not known.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -92,6 +149,28 @@ pub struct SpaceInfo {
 mod tests {
     use super::*;
     use diroxide_core::place::PathStyle;
+
+    #[test]
+    fn places_say_what_they_are_first() {
+        let drive = Place::parse_with("E:\\", PathStyle::Windows).unwrap();
+        assert_eq!(
+            LocalPlace::new(drive, PlaceRole::Drive, VolumeKind::Removable).words,
+            "Drive E:, removable drive"
+        );
+        let stick = Place::parse_with("/media/ada/My Stick", PathStyle::Unix).unwrap();
+        assert_eq!(
+            LocalPlace::new(stick, PlaceRole::Mount, VolumeKind::Removable).words,
+            "My Stick, removable drive, /media/ada/My Stick"
+        );
+        let home = Place::parse_with("/home/ada", PathStyle::Unix).unwrap();
+        let home = LocalPlace::new(home, PlaceRole::Home, VolumeKind::Fixed);
+        assert_eq!(home.words, "Home folder, /home/ada");
+        let root = Place::parse_with("/", PathStyle::Unix).unwrap();
+        assert_eq!(
+            LocalPlace::new(root, PlaceRole::Root, VolumeKind::Fixed).words,
+            "Root folder /"
+        );
+    }
 
     #[test]
     fn the_top_of_a_place_is_its_drive() {

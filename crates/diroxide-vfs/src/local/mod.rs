@@ -10,9 +10,14 @@
 //! - **Long paths.** The standard library lists, reads, copies, renames
 //!   and removes at any depth; the extended-length prefix is never built
 //!   by hand for it, and never shown.
+//! - **Per place.** Capabilities, the volume and its kind, and free space
+//!   are asked of the volume the place is really on, and the case and
+//!   Unicode-form rule is probed in its folder without writing.
 
 pub(crate) mod entry;
 pub(crate) mod owners;
+pub(crate) mod probe;
+pub(crate) mod volumes;
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -28,7 +33,39 @@ use crate::error::VfsError;
 use crate::names;
 use crate::provider::{AttributeChange, FileWriter, Provider, ReadSeek, WriteMode};
 use crate::sys;
+use crate::volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
 use entry::{EntryContext, entry_from};
+
+/// The places for the go-to-place list: the drives on Windows (from the
+/// drive list and drive types, never touching a drive), the root `/`
+/// elsewhere, the home folder, and on Linux and macOS the mounts a person
+/// keeps files on. Reading the mounts can block on a dead network server,
+/// so this runs off the input thread.
+pub fn places() -> Vec<LocalPlace> {
+    let mut places = Vec::new();
+    if cfg!(windows) {
+        for (place, kind) in sys::drives() {
+            places.push(LocalPlace::new(place, PlaceRole::Drive, kind));
+        }
+    } else {
+        for place in sys::roots() {
+            places.push(LocalPlace::new(place, PlaceRole::Root, VolumeKind::Fixed));
+        }
+    }
+    if let Some(home) = dirs::home_dir()
+        .as_deref()
+        .and_then(Path::to_str)
+        .and_then(|home| Place::parse(home).ok())
+    {
+        places.push(LocalPlace::new(home, PlaceRole::Home, VolumeKind::Fixed));
+    }
+    if !cfg!(windows) {
+        for (place, kind) in sys::drives() {
+            places.push(LocalPlace::new(place, PlaceRole::Mount, kind));
+        }
+    }
+    places
+}
 
 /// How often a listing reports progress, in entries.
 const PROGRESS_EVERY: u64 = 1000;
@@ -119,16 +156,38 @@ impl Provider for LocalProvider {
         "file"
     }
 
-    fn capabilities(&self, _place: &Place) -> Capabilities {
-        let mut capabilities = Capabilities::read_only();
-        capabilities.writable = true;
-        capabilities.links = cfg!(unix);
-        capabilities.case_sensitive = cfg!(target_os = "linux");
-        capabilities.normalization_insensitive = cfg!(target_os = "macos");
-        capabilities.max_name_length = Some(255);
-        capabilities.reserved_names = cfg!(windows);
-        capabilities.random_read = true;
-        capabilities
+    fn capabilities(&self, place: &Place) -> Capabilities {
+        match Self::path_of(place) {
+            Ok(path) => volumes::capabilities_at(&path),
+            Err(_) => Capabilities::read_only(),
+        }
+    }
+
+    fn volume(&self, place: &Place, ctx: &OpContext) -> Result<VolumeInfo, VfsError> {
+        ctx.check()?;
+        let facts = volumes::facts_at(&Self::path_of(place)?);
+        let root = facts
+            .root
+            .as_deref()
+            .and_then(Path::to_str)
+            .and_then(|root| Place::parse(root).ok())
+            .unwrap_or_else(|| VolumeInfo::top_of(place));
+        let mut info = VolumeInfo::unknown(root).with_kind(facts.kind);
+        info.label = facts.label;
+        info.file_system = facts.file_system;
+        Ok(info)
+    }
+
+    fn space(&self, place: &Place, ctx: &OpContext) -> Result<SpaceInfo, VfsError> {
+        ctx.check()?;
+        let folder = volumes::nearest_existing_folder(&Self::path_of(place)?);
+        let (free, total) = sys::space(&folder)?;
+        let facts = volumes::facts_at(&folder);
+        Ok(SpaceInfo {
+            free_to_user: Some(free),
+            total: Some(total),
+            max_file_size: volumes::max_file_size(facts.file_system.as_deref()),
+        })
     }
 
     fn list(&self, place: &Place, ctx: &OpContext) -> Result<Vec<Entry>, VfsError> {
