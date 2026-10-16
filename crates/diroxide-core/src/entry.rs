@@ -382,6 +382,15 @@ pub struct Entry {
     /// where it changes (the boundary rule).
     #[serde(default)]
     pub volume: Option<u64>,
+    /// The bytes an archive member takes inside its archive, compressed,
+    /// for a Packed column (R7 E).
+    #[serde(default)]
+    pub packed_size: Option<u64>,
+    /// The CRC-32 an archive stores for a member (zip, 7z), so a compare
+    /// of an archive against a folder needs no unpacking (R18, with R7's
+    /// list).
+    #[serde(default)]
+    pub crc32: Option<u32>,
     /// The number of hard links.
     pub hard_links: Option<u64>,
     /// The blocks allocated.
@@ -425,6 +434,8 @@ impl Entry {
             link: None,
             inode: None,
             volume: None,
+            packed_size: None,
+            crc32: None,
             hard_links: None,
             blocks: None,
             hidden: false,

@@ -168,10 +168,10 @@ impl Provider for LocalProvider {
     fn rename(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         ctx.check()?;
         let target = Self::path_of(to)?;
-        if fs::symlink_metadata(&target).is_ok() {
-            return Err(VfsError::AlreadyExists);
-        }
-        Ok(fs::rename(Self::path_of(from)?, target)?)
+        Ok(crate::sys::rename_no_replace(
+            &Self::path_of(from)?,
+            &target,
+        )?)
     }
 
     fn remove(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
