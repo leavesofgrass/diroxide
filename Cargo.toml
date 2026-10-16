@@ -156,6 +156,14 @@ incremental = false
 opt-level = 1
 debug = false
 
+# The regex engine at full speed in debug builds and tests (R17, R18): a
+# pattern compiled at opt-level 1 runs several times slower.
+[profile.dev.package.regex-automata]
+opt-level = 3
+
+[profile.dev.package.regex-syntax]
+opt-level = 3
+
 [profile.test]
 debug = "line-tables-only"
 incremental = false

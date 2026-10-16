@@ -1,5 +1,7 @@
 //! Integration tests of the core model's public surface.
 
+mod props;
+
 use diroxide_core::place::PathStyle;
 use diroxide_core::{
     ArgValue, Command, CommandId, Effect, Entry, EntryKind, KeyChord, ListModel, ListRow, Message,

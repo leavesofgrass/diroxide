@@ -20,7 +20,9 @@ pub mod keys;
 pub mod list;
 pub mod message;
 pub mod names;
+pub mod pattern;
 pub mod place;
+pub mod sort;
 
 pub use clock::{CivilTime, Clock, FixedClock, SystemClock, Timestamp, UtcOffset, Weekday};
 pub use command::{ArgValue, Command, CommandId};
@@ -32,4 +34,6 @@ pub use job::{ConflictPolicy, JobKind, JobRequest};
 pub use keys::{Key, KeyChord, KeyCode, Layer, Modifiers};
 pub use list::{ListModel, ListRow, Move};
 pub use message::{Importance, Message, MessageKind};
+pub use pattern::{Pattern, PatternError};
 pub use place::{Place, PlaceKind, Remote};
+pub use sort::{FolderOrder, NameCase, SortDirection, SortKey, SortSpec};
