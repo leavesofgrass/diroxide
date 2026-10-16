@@ -55,6 +55,32 @@ fn a_whole_session_and_the_cursor_restored_after_a_restart() {
     assert_eq!(s.focused(), "\u{65e5}\u{672c}\u{8a9e}.txt");
     s.key("home");
     assert_eq!(s.focused(), "Backup");
+    s.key("down");
+    s.key("right");
+    assert_eq!(s.names(Side::Left), ["crow.jpg"]);
+    s.key("left");
+    assert_eq!(s.focused(), "Photos");
+    s.key("enter");
+    s.key("backspace");
+    assert_eq!(s.focused(), "Photos");
+    s.key("alt+left");
+    s.key("alt+right");
+    assert_eq!(s.app.active_panel().place(), &place(&work));
+    s.key("tab");
+    assert_eq!(s.app.active_side(), Side::Right);
+    s.key("tab");
+
+    // The emoji and the Japanese name read cleanly, one row each, the
+    // name first.
+    for name in [
+        "raccoon \u{1f99d}.txt",
+        "\u{65e5}\u{672c}\u{8a9e}.txt",
+        "R\u{e9}sum\u{e9}.txt",
+    ] {
+        s.focus(name);
+        let row = s.app.active_panel().list().focused().unwrap().spoken();
+        assert!(row.starts_with(&format!("{name}, text, ")), "{row}");
+    }
 
     // Mark three rows.
     s.focus("budget.xlsx");

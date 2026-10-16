@@ -838,4 +838,46 @@ mod tests {
         );
         assert_eq!(row.id, "evil\u{1b}[2Jname.txt");
     }
+
+    /// Spike five's panel half: 100,000 in-memory entries through the
+    /// panel. The budgets (sort within 200 ms, a type-ahead key within 30
+    /// ms) are for release builds; this run prints its numbers and holds
+    /// a debug build to ten times them.
+    #[test]
+    fn a_folder_of_100_000_entries_sorts_and_searches_in_time() {
+        use std::time::Instant;
+        let clock = clock();
+        let types = TypeRegistry::builtin();
+        let entries: Vec<Entry> = (0..100_000u64)
+            .map(|i| {
+                Entry::new(format!("file{i}.txt"), EntryKind::File)
+                    .with_size(i)
+                    .with_modified(Timestamp::from_unix(1_760_000_000 + i as i64, 0))
+            })
+            .collect();
+        let mut panel = panel();
+        let started = Instant::now();
+        panel.set_entries(entries, &types, &clock);
+        let listed = started.elapsed();
+        let started = Instant::now();
+        panel.set_sort(SortSpec::by(SortKey::Size), &clock);
+        let sorted = started.elapsed();
+        let started = Instant::now();
+        let matches = panel.prefix_matches("file9999");
+        let searched = started.elapsed();
+        let started = Instant::now();
+        panel.list_mut().select_all();
+        let selected = started.elapsed();
+        assert_eq!(matches.len(), 11);
+        assert_eq!(panel.list().selected_count(), 100_000);
+        println!(
+            "100,000 entries: rows {listed:?}, sort {sorted:?}, type-ahead {searched:?}, select all {selected:?}"
+        );
+        let slack = if cfg!(debug_assertions) { 10 } else { 1 };
+        assert!(sorted.as_millis() < 200 * slack, "sort took {sorted:?}");
+        assert!(
+            searched.as_millis() < 30 * slack,
+            "type-ahead took {searched:?}"
+        );
+    }
 }
