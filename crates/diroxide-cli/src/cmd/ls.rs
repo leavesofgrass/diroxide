@@ -15,8 +15,8 @@
 //! problems as one story; the exit code says how it went: 0 listed, 1
 //! nothing could be listed, 2 wrong use, 3 partly listed.
 //!
-//! Times are said in UTC, with the word "UTC", until the contract gives
-//! the program the local offset (W1e's contract change request).
+//! Times are said in local time, from the clock at the local offset that
+//! `jiff` reads (W1e's contract change request, resolved for W1d).
 
 use std::borrow::Cow;
 use std::fmt;
@@ -27,7 +27,7 @@ use diroxide_core::format::{count, human_size};
 use diroxide_core::names::display_name;
 use diroxide_core::sort::{SortSpec, sort_entries};
 use diroxide_core::{
-    Attributes, Clock, Entry, EntryKind, Explain, Message, Place, SystemClock, Timestamp, UtcOffset,
+    Attributes, Clock, Entry, EntryKind, Explain, Message, Place, Timestamp, UtcOffset,
 };
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use serde_json::{Value, json};
@@ -193,7 +193,7 @@ pub fn run(args: &LsArgs, input: &mut dyn Read, out: &mut dyn Write) -> Result<i
         writeln!(out, "{}", help_text()).map_err(write_failed)?;
         return Ok(0);
     }
-    let clock = SystemClock::utc();
+    let clock = diroxide_app::startup::local_clock();
     let here = current_place()?;
     let registry = Registry::with_local();
     run_with(args, input, out, &Lister::new(&registry, &clock, &here))
@@ -470,14 +470,9 @@ fn online_only(entry: &Entry) -> bool {
     matches!(entry.attributes, Some(Attributes::Windows(bits)) if bits & ONLINE_ONLY_BITS != 0)
 }
 
-/// A time in words, with "UTC" while the local offset is not known.
+/// A time in words, in the clock's local time.
 fn time_words(time: Timestamp, clock: &dyn Clock) -> String {
-    let words = describe_time(time, clock);
-    if clock.offset() == UtcOffset::UTC {
-        format!("{words} UTC")
-    } else {
-        words
-    }
+    describe_time(time, clock)
 }
 
 /// A byte count with thousands separators: "2,104,331 bytes".
@@ -680,14 +675,20 @@ mod tests {
             .with_modified(at(16, 14));
         assert_eq!(
             entry_line(&file, false, None, &clock),
-            "report.pdf, file, 2.1 MB, modified today, 2:05 PM UTC"
+            "report.pdf, file, 2.1 MB, modified today, 2:05 PM"
         );
         let folder = Entry::new("Photos", EntryKind::Folder)
             .with_size(4096)
             .with_modified(at(13, 9));
         assert_eq!(
             entry_line(&folder, false, None, &clock),
-            "Photos, folder, modified Tuesday UTC"
+            "Photos, folder, modified Tuesday"
+        );
+        let pacific = FixedClock::new(now(), UtcOffset::from_hours(-7));
+        assert_eq!(
+            entry_line(&file, false, None, &pacific),
+            "report.pdf, file, 2.1 MB, modified today, 7:05 AM",
+            "local time, and no UTC"
         );
         let mut cloud = Entry::new("notes.txt", EntryKind::File).with_size(10);
         cloud.attributes = Some(Attributes::Windows(0x20 | 0x400000));
@@ -721,8 +722,8 @@ mod tests {
         });
         assert_eq!(
             entry_line(&entry, true, None, &clock),
-            "run.sh, link, 1.2 MB, modified yesterday, 8:05 AM UTC, 1,234,567 bytes, \
-             created October 1 UTC, permissions: read and run: everyone; write: owner, \
+            "run.sh, link, 1.2 MB, modified yesterday, 8:05 AM, 1,234,567 bytes, \
+             created October 1, permissions: read and run: everyone; write: owner, \
              owner ada, points to ../bin/run.sh"
         );
         assert_eq!(exact_bytes(1), "1 byte");
@@ -897,11 +898,11 @@ mod tests {
         assert_eq!(
             &lines[1..],
             [
-                "file2.txt, file, 2 bytes, modified today, 2:05 PM UTC",
-                "file10.txt, file, 10 bytes, modified today, 2:05 PM UTC",
-                "report.pdf, file, 2.1 MB, modified today, 2:05 PM UTC",
-                "R\u{e9}sum\u{e9}.txt, file, 1 byte, modified today, 2:05 PM UTC",
-                "\u{65e5}\u{672c}\u{8a9e}.txt, file, 3 bytes, modified today, 2:05 PM UTC",
+                "file2.txt, file, 2 bytes, modified today, 2:05 PM",
+                "file10.txt, file, 10 bytes, modified today, 2:05 PM",
+                "report.pdf, file, 2.1 MB, modified today, 2:05 PM",
+                "R\u{e9}sum\u{e9}.txt, file, 1 byte, modified today, 2:05 PM",
+                "\u{65e5}\u{672c}\u{8a9e}.txt, file, 3 bytes, modified today, 2:05 PM",
                 &format!(
                     "6 items in {}.",
                     dir.path().file_name().unwrap().to_str().unwrap()
@@ -916,8 +917,8 @@ mod tests {
         assert_eq!(code, 0, "{text}");
         assert_eq!(
             text,
-            "notes, folder, modified yesterday, 9:05 AM UTC\n\
-             two words.txt, file, 2 bytes, modified today, 2:05 PM UTC\n\
+            "notes, folder, modified yesterday, 9:05 AM\n\
+             two words.txt, file, 2 bytes, modified today, 2:05 PM\n\
              2 items in fix, 1 hidden not shown.\n"
         );
         let (_, all) = fixed(&["--hidden"], b"");
@@ -947,7 +948,7 @@ mod tests {
         let dir = fixture();
         let (code, text) = list(&dir, &["file2.txt"], b"");
         assert_eq!(code, 0);
-        assert!(text.starts_with("file2.txt, file, 2 bytes, modified today, 2:05 PM UTC, in "));
+        assert!(text.starts_with("file2.txt, file, 2 bytes, modified today, 2:05 PM, in "));
         assert!(text.lines().last().unwrap().starts_with("1 item: "));
         let (code, text) = list(&dir, &["no-such-folder"], b"");
         assert_eq!(code, -1);
@@ -963,7 +964,7 @@ mod tests {
         assert_eq!(
             lines[0],
             format!(
-                "two words.txt, file, 2 bytes, modified today, 2:05 PM UTC, in {}",
+                "two words.txt, file, 2 bytes, modified today, 2:05 PM, in {}",
                 fixed_root()
             )
         );

@@ -143,6 +143,9 @@ pub mod ids {
         /// Leave diroxide; the shell that started it moves to the active
         /// folder.
         QUIT_TO_FOLDER = "app.quit-to-folder";
+        /// Leave diroxide; the shell that started it stays in its own
+        /// folder, even with `--cwd-file`.
+        QUIT_KEEP_FOLDER = "app.quit-keep-folder";
         /// Say help for where the focus is.
         HELP = "app.help";
         /// Say where the focus is, and any job's progress.
@@ -243,6 +246,8 @@ pub mod ids {
         SELECT_NEXT = "select.next";
         /// The previous selected row.
         SELECT_PREVIOUS = "select.previous";
+        /// Bring back the selection the last wholesale change replaced.
+        SELECT_RESTORE = "select.restore";
         /// View the focused file.
         VIEW = "file.view";
         /// Edit the focused file.
@@ -342,7 +347,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 89] = [
+pub static CATALOG: [CommandInfo; 91] = [
     command(
         ids::QUIT,
         "Quit",
@@ -355,6 +360,14 @@ pub static CATALOG: [CommandInfo; 89] = [
         ids::QUIT_TO_FOLDER,
         "Quit to this folder",
         "Leaves diroxide, and the shell that started it moves to the active folder.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::QUIT_KEEP_FOLDER,
+        "Quit, shell stays where it was",
+        "Leaves diroxide, and the shell that started it stays in its own folder.",
         Global,
         &[],
         &[],
@@ -758,6 +771,14 @@ pub static CATALOG: [CommandInfo; 89] = [
         Panel,
         &["ctrl+up"],
         &["ctrl+up"],
+    ),
+    command(
+        ids::SELECT_RESTORE,
+        "Restore selection",
+        "Brings back the selection the last select all, none, invert, pattern, finished job or folder change replaced.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::VIEW,

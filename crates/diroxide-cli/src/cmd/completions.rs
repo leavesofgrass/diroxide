@@ -145,6 +145,25 @@ pub fn command() -> Command {
         .disable_help_subcommand(true)
         .arg(flag("portable", "Keep the settings beside the program"))
         .arg(flag("no-plugins", "Start without plugins"))
+        .arg(flag("tui", "Open in the terminal, even with a display"))
+        .arg(flag("gui", "Open the window (it comes with alpha.6)"))
+        .arg(flag(
+            "inline",
+            "Draw below the prompt, not on the whole screen",
+        ))
+        .arg(
+            Arg::new("cwd-file")
+                .long("cwd-file")
+                .value_name("FILE")
+                .value_hint(ValueHint::FilePath)
+                .help("At quit, write the active folder to FILE for the shell"),
+        )
+        .arg(
+            Arg::new("theme")
+                .long("theme")
+                .value_name("NAME")
+                .help("Use this theme for this session"),
+        )
         .arg(
             Arg::new("places")
                 .num_args(0..=2)
@@ -175,6 +194,33 @@ pub fn command() -> Command {
                     Arg::new("shell")
                         .required(true)
                         .value_parser(Shell::ALL.map(Shell::name))
+                        .help("The shell"),
+                ),
+        )
+        .subcommand(
+            Command::new("keys")
+                .about("Check or print the keys, as keymap.toml holds them")
+                .disable_help_subcommand(true)
+                .subcommand(
+                    Command::new("check")
+                        .about("Say each problem in keymap.toml or FILE")
+                        .arg(
+                            Arg::new("file")
+                                .value_hint(ValueHint::FilePath)
+                                .help("The keymap file"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("print").about("Print the current keys as keymap.toml text"),
+                ),
+        )
+        .subcommand(
+            Command::new("init")
+                .about("Print the shell function that moves the shell where diro left it")
+                .arg(
+                    Arg::new("shell")
+                        .required(true)
+                        .value_parser(super::init::InitShell::ALL.map(super::init::InitShell::name))
                         .help("The shell"),
                 ),
         )
