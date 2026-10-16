@@ -240,12 +240,14 @@ pub fn grouped(n: u64) -> String {
     out
 }
 
-/// A time in words: "4.2 ms", "412 ms", "12.5 s".
+/// A time in words: "4.2 ms", "412 ms", "5.08 s", "12.5 s".
 pub fn time_words(ms: f64) -> String {
     if ms < 10.0 {
         format!("{ms:.1} ms")
-    } else if ms < 10_000.0 {
+    } else if ms < 999.5 {
         format!("{ms:.0} ms")
+    } else if ms < 9_995.0 {
+        format!("{:.2} s", ms / 1000.0)
     } else {
         format!("{:.1} s", ms / 1000.0)
     }
@@ -257,8 +259,10 @@ fn today_utc() -> String {
     format!("{:04}-{:02}-{:02}", c.year, c.month, c.day)
 }
 
+/// A duration in milliseconds, to a tenth: finer than that is noise, and
+/// the JSON files stay readable.
 fn millis(elapsed: Duration) -> f64 {
-    elapsed.as_secs_f64() * 1000.0
+    (elapsed.as_secs_f64() * 10_000.0).round() / 10.0
 }
 
 /// Runs a step `runs` times and keeps each time.
@@ -581,8 +585,10 @@ pub fn against_baseline(median_ms: f64, baseline_ms: f64, tolerance: u64) -> (St
         return ("no baseline to compare".to_owned(), true);
     }
     let change = (median_ms - baseline_ms) / baseline_ms * 100.0;
-    let inside = change.abs() <= tolerance as f64;
+    // Judged on the whole percent that is said, so the words and the
+    // verdict agree.
     let rounded = change.abs().round();
+    let inside = rounded <= tolerance as f64;
     let words = if rounded < 1.0 {
         format!("Baseline {}: the same", time_words(baseline_ms))
     } else if change > 0.0 {
@@ -794,6 +800,8 @@ mod tests {
         assert_eq!(median(&[4.0, 1.0]), 1.0);
         assert_eq!(time_words(4.24), "4.2 ms");
         assert_eq!(time_words(412.4), "412 ms");
+        assert_eq!(time_words(999.6), "1.00 s");
+        assert_eq!(time_words(5078.0), "5.08 s");
         assert_eq!(time_words(12_500.0), "12.5 s");
         assert_eq!(grouped(100_000), "100,000");
         assert_eq!(grouped(999), "999");
@@ -816,6 +824,9 @@ mod tests {
             )
         );
         assert!(against_baseline(401.0, 400.0, 20).0.contains("the same"));
+        // 20.4 percent is said as 20, and so is inside a 20 percent band.
+        assert!(against_baseline(481.6, 400.0, 20).1);
+        assert!(!against_baseline(482.0, 400.0, 20).1);
     }
 
     #[test]
