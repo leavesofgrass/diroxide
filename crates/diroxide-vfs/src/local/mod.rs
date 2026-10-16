@@ -13,7 +13,15 @@
 //! - **Per place.** Capabilities, the volume and its kind, and free space
 //!   are asked of the volume the place is really on, and the case and
 //!   Unicode-form rule is probed in its folder without writing.
+//! - **Safe primitives.** A new name the place refuses never reaches the
+//!   disk ([`crate::names::first_refused`]). A rename never replaces: the
+//!   platform's own no-replace rename, with a change of case or Unicode
+//!   form of the same entry let through, in two steps through an
+//!   unfinished name where the file system needs it. A remove takes away a
+//!   link, never what it points to, and a read-only file on Windows.
+//!   Attributes, times and owners change with the inverse returned.
 
+pub(crate) mod attributes;
 pub(crate) mod entry;
 pub(crate) mod owners;
 pub(crate) mod probe;
@@ -25,13 +33,15 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use diroxide_core::{Entry, EntryKind, Place, PlaceError};
+use diroxide_core::{Attributes, Entry, EntryKind, Place, PlaceError};
 
 use crate::cancel::{OpContext, ProgressUpdate};
 use crate::capabilities::Capabilities;
 use crate::error::VfsError;
 use crate::names;
-use crate::provider::{AttributeChange, FileWriter, Provider, ReadSeek, WriteMode};
+use crate::provider::{
+    AttributeChange, FileWriter, LinkKind, LinkRequest, Provider, ReadSeek, WriteMode,
+};
 use crate::sys;
 use crate::volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
 use entry::{EntryContext, entry_from};
@@ -94,6 +104,19 @@ impl LocalProvider {
             return Err(PlaceError::NotAbsolute(path.to_owned()).into());
         }
         Ok(PathBuf::from(path))
+    }
+
+    /// Refuses a new name the place would change or cannot hold, before
+    /// anything is made: `NameInvalid`.
+    fn refuse_name(place: &Place, path: &Path) -> Result<(), VfsError> {
+        let Some(name) = place.name() else {
+            return Ok(());
+        };
+        let rules = names::NameRules::from_capabilities(&volumes::capabilities_at(path));
+        match names::first_refused(name, &rules) {
+            Some(_) => Err(VfsError::NameInvalid),
+            None => Ok(()),
+        }
     }
 
     /// The unfinished files in a folder (`.diro-part-` and eight
@@ -236,33 +259,203 @@ impl Provider for LocalProvider {
 
     fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         ctx.check()?;
-        Ok(fs::create_dir(Self::path_of(place)?)?)
+        let path = Self::path_of(place)?;
+        Self::refuse_name(place, &path)?;
+        Ok(fs::create_dir(path)?)
+    }
+
+    fn create_link(
+        &self,
+        place: &Place,
+        request: &LinkRequest,
+        ctx: &OpContext,
+    ) -> Result<(), VfsError> {
+        ctx.check()?;
+        let path = Self::path_of(place)?;
+        Self::refuse_name(place, &path)?;
+        if request.target.is_empty() {
+            return Err(VfsError::NotFound);
+        }
+        // A relative target is stored as written in a symbolic link; a
+        // junction and a hard link need the real path, read from the
+        // link's own folder.
+        let resolved = || match path.parent() {
+            Some(folder) => folder.join(&request.target),
+            None => PathBuf::from(&request.target),
+        };
+        let made = match request.kind {
+            LinkKind::Symbolic => {
+                make_symbolic_link(&request.target, &path, request.target_is_folder)
+            }
+            LinkKind::Hard => fs::hard_link(resolved(), &path),
+            LinkKind::Junction => make_junction(&path, &resolved()),
+        };
+        made.map_err(|error| {
+            if sys::needs_privilege(&error) {
+                VfsError::Io {
+                    kind: io::ErrorKind::PermissionDenied,
+                    message: "Windows needs Developer Mode to make symbolic links".to_owned(),
+                }
+            } else {
+                error.into()
+            }
+        })
     }
 
     fn rename(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         ctx.check()?;
+        let source = Self::path_of(from)?;
         let target = Self::path_of(to)?;
-        Ok(sys::rename_no_replace(&Self::path_of(from)?, &target)?)
+        if source == target {
+            return Ok(());
+        }
+        Self::refuse_name(to, &target)?;
+        // When the new name already answers with this same entry, it is
+        // either a new spelling (a place that ignores case or form) or a
+        // second name of one file (a hard link). The first is renamed,
+        // through an unfinished name if the platform will not do it in
+        // one step; the second is taken, since one name would vanish.
+        if let Ok(there) = sys::identity(&target)
+            && sys::identity(&source).is_ok_and(|here| here == there)
+        {
+            if !spelled_alike(&source, &target) {
+                return Err(VfsError::AlreadyExists);
+            }
+            return match sys::rename_no_replace(&source, &target) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    rename_through_unfinished(&source, &target)
+                }
+                Err(error) => Err(error.into()),
+            };
+        }
+        Ok(sys::rename_no_replace(&source, &target)?)
     }
 
     fn remove(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         ctx.check()?;
         let path = Self::path_of(place)?;
         let metadata = fs::symlink_metadata(&path)?;
-        if metadata.is_dir() {
-            Ok(fs::remove_dir(&path)?)
-        } else {
-            Ok(fs::remove_file(&path)?)
+        let remove = || {
+            if sys::is_folder_like(&metadata) {
+                fs::remove_dir(&path)
+            } else {
+                fs::remove_file(&path)
+            }
+        };
+        match remove() {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                remove_read_only(&path, &metadata, remove).map_err(|_| error.into())
+            }
+            Err(error) => Err(error.into()),
         }
     }
 
     fn set_attributes(
         &self,
-        _place: &Place,
-        _change: &AttributeChange,
-        _ctx: &OpContext,
+        place: &Place,
+        change: &AttributeChange,
+        ctx: &OpContext,
     ) -> Result<AttributeChange, VfsError> {
-        Err(VfsError::unsupported("file", "change attributes yet"))
+        ctx.check()?;
+        attributes::set_attributes(&Self::path_of(place)?, change)
+    }
+}
+
+/// Makes a symbolic link, a folder link or a file link on Windows.
+fn make_symbolic_link(target: &str, link: &Path, folder: bool) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        if folder {
+            std::os::windows::fs::symlink_dir(target, link)
+        } else {
+            std::os::windows::fs::symlink_file(target, link)
+        }
+    }
+    #[cfg(unix)]
+    {
+        let _ = folder;
+        std::os::unix::fs::symlink(target, link)
+    }
+}
+
+/// Makes a junction on Windows; elsewhere there are none.
+fn make_junction(link: &Path, target: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        sys::create_junction(link, target)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (link, target);
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "junctions are made on Windows only",
+        ))
+    }
+}
+
+/// Whether two paths in one folder differ only by the case or the
+/// Unicode form of the name: a new spelling, not a new name.
+fn spelled_alike(source: &Path, target: &Path) -> bool {
+    if source.parent() != target.parent() {
+        return false;
+    }
+    let (Some(a), Some(b)) = (
+        source.file_name().and_then(|n| n.to_str()),
+        target.file_name().and_then(|n| n.to_str()),
+    ) else {
+        return false;
+    };
+    let (a, b) = (a.to_lowercase(), b.to_lowercase());
+    a == b
+        || probe::other_form(&a).is_some_and(|form| form == b)
+        || probe::other_form(&b).is_some_and(|form| form == a)
+}
+
+/// A rename in two steps through an unfinished name in the same folder,
+/// for a change of case or form the file system will not make in one:
+/// each step never replaces, and a failed second step is taken back.
+fn rename_through_unfinished(source: &Path, target: &Path) -> Result<(), VfsError> {
+    let folder = target.parent().ok_or(VfsError::NotFound)?;
+    let middle = folder.join(names::unfinished_name(unfinished_token()));
+    sys::rename_no_replace(source, &middle)?;
+    if let Err(error) = sys::rename_no_replace(&middle, target) {
+        let _ = sys::rename_no_replace(&middle, source);
+        return Err(error.into());
+    }
+    Ok(())
+}
+
+/// Removes a read-only file on Windows, where the attribute blocks the
+/// delete: the attribute is cleared, the remove tried again, and the
+/// attribute put back if it still fails. Elsewhere read-only is not the
+/// cause, so the first error stands.
+fn remove_read_only(
+    path: &Path,
+    metadata: &fs::Metadata,
+    remove: impl Fn() -> io::Result<()>,
+) -> io::Result<()> {
+    let Attributes::Windows(flags) = attributes::current_attributes(metadata) else {
+        return Err(io::Error::from(io::ErrorKind::PermissionDenied));
+    };
+    if flags & 0x1 == 0 {
+        return Err(io::Error::from(io::ErrorKind::PermissionDenied));
+    }
+    #[cfg(windows)]
+    {
+        sys::set_os_attributes(path, flags & !0x1)?;
+        let removed = remove();
+        if removed.is_err() {
+            let _ = sys::set_os_attributes(path, flags);
+        }
+        removed
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (path, remove);
+        Err(io::Error::from(io::ErrorKind::PermissionDenied))
     }
 }
 

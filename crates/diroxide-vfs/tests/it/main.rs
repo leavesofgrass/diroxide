@@ -9,6 +9,7 @@
 
 mod local;
 mod names;
+mod primitives;
 
 use diroxide_core::{EntryKind, Place};
 use diroxide_vfs::{OpContext, Registry, VfsError, local_roots};

@@ -9,22 +9,26 @@
 //! passed through `strip_extended_prefix` before it becomes a place.
 
 use std::ffi::{OsString, c_void};
-use std::fs::{File, Metadata, OpenOptions};
+use std::fs::{File, FileTimes, Metadata, OpenOptions};
 use std::io;
 use std::mem::size_of;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use diroxide_core::{Attributes, Entry, Place, Timestamp};
+use windows_sys::Win32::Foundation::{ERROR_PRIVILEGE_NOT_HELD, GENERIC_WRITE};
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS,
+    BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS,
     FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_INFO, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
-    FILE_SHARE_READ, FILE_SHARE_WRITE, FileBasicInfo, FileIdInfo, GetDiskFreeSpaceExW,
-    GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx, GetLogicalDrives,
-    GetVolumeInformationW, GetVolumePathNameW,
+    FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES, FileBasicInfo, FileIdInfo,
+    GetDiskFreeSpaceExW, GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx,
+    GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW, MoveFileExW, SetFileAttributesW,
 };
+use windows_sys::Win32::System::IO::DeviceIoControl;
+use windows_sys::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
 
 use super::Identity;
 use crate::local::entry::EntryContext;
@@ -213,13 +217,173 @@ pub(crate) fn fill_from_handle(entry: &mut Entry, path: &Path) {
     }
 }
 
-/// Renames without ever replacing. Phase 0's body, replaced with
-/// `MoveFileExW` below.
+/// Renames without ever replacing: `MoveFileExW` with no flags, which
+/// fails when the target is taken (`AlreadyExists`) and across volumes
+/// (`CrossesDevices`, since copying is not allowed). Atomic on one volume.
 pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
-    if std::fs::symlink_metadata(to).is_ok() {
-        return Err(io::Error::from(io::ErrorKind::AlreadyExists));
+    let (from, to) = (wide(from), wide(to));
+    // SAFETY: both strings are NUL-terminated and live across the call,
+    // which only reads them.
+    let ok = unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) };
+    if ok == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
     }
-    std::fs::rename(from, to)
+}
+
+/// Whether metadata read without following describes something removed
+/// as a folder: a folder, or a link that is a folder (a junction or a
+/// folder symbolic link), which removing deletes as a link only.
+pub(crate) fn is_folder_like(metadata: &Metadata) -> bool {
+    use std::os::windows::fs::FileTypeExt;
+    metadata.is_dir() || metadata.file_type().is_symlink_dir()
+}
+
+/// The attribute bits `SetFileAttributesW` can set: read-only, hidden,
+/// system, archive, temporary, offline and not content indexed. The
+/// others (compressed, encrypted, sparse, reparse point, the cloud bits)
+/// are kept as they are.
+pub(crate) const SETTABLE_ATTRIBUTES: u32 = 0x1 | 0x2 | 0x4 | 0x20 | 0x100 | 0x1000 | 0x2000;
+
+/// Sets an entry's Windows attributes, keeping the bits that cannot be
+/// set. The link itself, never what it points to.
+pub(crate) fn set_os_attributes(path: &Path, attributes: u32) -> io::Result<()> {
+    let mut value = attributes & SETTABLE_ATTRIBUTES;
+    if value == 0 {
+        value = FILE_ATTRIBUTE_NORMAL;
+    }
+    let path = wide(path);
+    // SAFETY: `path` is NUL-terminated and lives across the call.
+    let ok = unsafe { SetFileAttributesW(path.as_ptr(), value) };
+    if ok == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Sets an entry's times through a handle opened for its attributes only
+/// (a folder too, and a link itself rather than its target). `None`
+/// leaves a time as it is.
+pub(crate) fn set_times(
+    path: &Path,
+    created: Option<SystemTime>,
+    modified: Option<SystemTime>,
+    accessed: Option<SystemTime>,
+) -> io::Result<()> {
+    use std::os::windows::fs::FileTimesExt;
+    let file = OpenOptions::new()
+        .access_mode(FILE_WRITE_ATTRIBUTES)
+        .share_mode(SHARE_ALL)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    let mut times = FileTimes::new();
+    if let Some(time) = modified {
+        times = times.set_modified(time);
+    }
+    if let Some(time) = accessed {
+        times = times.set_accessed(time);
+    }
+    if let Some(time) = created {
+        times = times.set_created(time);
+    }
+    file.set_times(times)
+}
+
+/// Makes a directory junction at `link` pointing to the full folder path
+/// `target`: the folder is made, then its reparse data written; if that
+/// fails, the empty folder just made is removed. A junction needs no
+/// privilege and cannot point to a network place.
+pub(crate) fn create_junction(link: &Path, target: &Path) -> io::Result<()> {
+    let target = target.to_string_lossy();
+    let target = diroxide_core::place::strip_extended_prefix(&target);
+    if target.starts_with(r"\\") || target.as_bytes().get(1) != Some(&b':') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a junction needs a full path on a local drive",
+        ));
+    }
+    let buffer = junction_data(&target)?;
+    std::fs::create_dir(link)?;
+    let written = (|| {
+        let folder = OpenOptions::new()
+            .access_mode(GENERIC_WRITE)
+            .share_mode(SHARE_ALL)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(link)?;
+        let mut returned = 0u32;
+        let length = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+        // SAFETY: the handle is valid while `folder` lives; the input
+        // buffer is valid for `length` bytes; there is no output buffer and
+        // no overlapped structure; `returned` is a valid u32.
+        let ok = unsafe {
+            DeviceIoControl(
+                folder.as_raw_handle(),
+                FSCTL_SET_REPARSE_POINT,
+                buffer.as_ptr().cast::<c_void>(),
+                length,
+                std::ptr::null_mut(),
+                0,
+                &raw mut returned,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    })();
+    if written.is_err() {
+        // The folder is the one just made, and empty.
+        let _ = std::fs::remove_dir(link);
+    }
+    written
+}
+
+/// The reparse data of a mount point (a junction) to `target`: the tag,
+/// the lengths, then the NT name (`\??\` and the path) and the name to
+/// print, each followed by a NUL.
+fn junction_data(target: &str) -> io::Result<Vec<u8>> {
+    const IO_REPARSE_TAG_MOUNT_POINT: u32 = 0xA000_0003;
+    const MAXIMUM_REPARSE_DATA_BUFFER_SIZE: usize = 16 * 1024;
+    let substitute: Vec<u16> = r"\??\"
+        .encode_utf16()
+        .chain(target.encode_utf16())
+        .collect();
+    let print: Vec<u16> = target.encode_utf16().collect();
+    let too_long = || io::Error::new(io::ErrorKind::InvalidFilename, "the target is too long");
+    let substitute_bytes = u16::try_from(substitute.len() * 2).map_err(|_| too_long())?;
+    let print_bytes = u16::try_from(print.len() * 2).map_err(|_| too_long())?;
+    let data_length = u16::try_from(8 + substitute.len() * 2 + 2 + print.len() * 2 + 2)
+        .map_err(|_| too_long())?;
+    let mut buffer = Vec::with_capacity(8 + usize::from(data_length));
+    buffer.extend(IO_REPARSE_TAG_MOUNT_POINT.to_le_bytes());
+    buffer.extend(data_length.to_le_bytes());
+    buffer.extend(0u16.to_le_bytes());
+    buffer.extend(0u16.to_le_bytes());
+    buffer.extend(substitute_bytes.to_le_bytes());
+    buffer.extend((substitute_bytes + 2).to_le_bytes());
+    buffer.extend(print_bytes.to_le_bytes());
+    for unit in substitute
+        .iter()
+        .chain([&0u16])
+        .chain(print.iter())
+        .chain([&0u16])
+    {
+        buffer.extend(unit.to_le_bytes());
+    }
+    if buffer.len() > MAXIMUM_REPARSE_DATA_BUFFER_SIZE {
+        return Err(too_long());
+    }
+    Ok(buffer)
+}
+
+/// Whether an error is Windows's "a required privilege is not held":
+/// making a symbolic link without Developer Mode.
+pub(crate) fn needs_privilege(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(ERROR_PRIVILEGE_NOT_HELD as i32)
 }
 
 /// What `GetDriveTypeW` answers, in diroxide's words: a fixed disk, a
