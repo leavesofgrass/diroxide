@@ -7,6 +7,7 @@
     reason = "test helpers: a failure is the test's"
 )]
 
+mod bench;
 mod local;
 mod long_paths;
 mod names;
