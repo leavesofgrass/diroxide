@@ -1673,7 +1673,10 @@ dependencies = [
  "anyhow",
  "diroxide-app",
  "diroxide-core",
+ "diroxide-vfs",
  "resvg",
+ "serde",
+ "tempfile",
  "toml",
 ]
 

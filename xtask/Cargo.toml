@@ -11,7 +11,10 @@ publish.workspace = true
 anyhow.workspace = true
 diroxide-app.workspace = true
 diroxide-core.workspace = true
+diroxide-vfs.workspace = true
 resvg.workspace = true
+serde.workspace = true
+tempfile.workspace = true
 toml.workspace = true
 
 [lints]
