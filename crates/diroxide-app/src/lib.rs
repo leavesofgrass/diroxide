@@ -4,10 +4,16 @@
 //! a feature exists when the core has it. Tests drive the core without a
 //! terminal or a window.
 //!
+//! A frontend's loop is three steps: hand each key to [`App::handle`],
+//! give the effects to [`Runtime::carry_out`] (which does the I/O and
+//! returns what to draw and say), and feed [`Runtime::poll`]'s events back
+//! to [`App::handle`]. [`startup::load`] reads what the app starts with,
+//! and [`startup::local_clock`] gives dates in local time.
+//!
 //! Module owners after Phase 0: W1c owns `commands`, `keymap`, `menu`,
 //! `palette`, `settings`, `entry` and `messages`; W1d owns the rest
-//! (`app`, `panel`, `dialog`, `jobs`, `runtime`); later waves add their
-//! own files.
+//! (`app`, `panel`, `dialog`, `jobs`, `runtime`, `request`, `startup`,
+//! `state`); later waves add their own files.
 //!
 //! [`Effect`]: diroxide_core::Effect
 
@@ -21,13 +27,18 @@ pub mod menu;
 pub mod messages;
 pub mod palette;
 pub mod panel;
+pub mod request;
 pub mod runtime;
 pub mod settings;
+pub mod startup;
+pub mod state;
 
-pub use app::{App, AppEvent, AppOptions};
+pub use app::{App, AppEvent, AppOptions, Clipboard};
 pub use commands::{CATALOG, CommandInfo, Menu};
 pub use dialog::{Answer, Dialog};
 pub use jobs::JobTable;
 pub use keymap::{Binding, Keymap, Lookup};
 pub use panel::{Column, Panel};
-pub use runtime::Runtime;
+pub use request::{AskId, Question, Reply, Request, Spawn, SpawnKind};
+pub use runtime::{Handover, Launcher, Opener, Program, Runtime};
+pub use startup::Startup;
