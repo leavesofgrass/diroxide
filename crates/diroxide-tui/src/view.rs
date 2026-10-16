@@ -678,6 +678,9 @@ fn minibuffer(
                             clean(list.empty_text())
                         } else if list.title().contains("Down arrow") {
                             clean(list.title())
+                        } else if list.help().contains("listing") {
+                            // A typed confirmation's listing, not matches.
+                            format!("{}. Down arrow reads the listing", clean(list.title()))
                         } else {
                             format!(
                                 "{}, Down arrow lists them",

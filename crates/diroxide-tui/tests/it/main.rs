@@ -447,6 +447,39 @@ fn without_color_the_focus_is_reversed_and_a_mark_is_an_asterisk_in_bold() {
     }
 }
 
+#[test]
+fn next_theme_draws_the_screen_in_the_next_themes_colors() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    let (mut app, mut runtime) = app(place(&work), place(&work), settings(Layout::Single));
+    let clock = Clock::at_start();
+    let terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+    let options = TuiOptions {
+        screen_reader: true,
+        color: Some(diroxide_theme::ColorSupport::TrueColor),
+        ..TuiOptions::default()
+    };
+    let mut s = diroxide_tui::Session::new(&mut app, &mut runtime, terminal, options);
+    start(&mut s, &clock);
+    let before = s.terminal().backend().buffer()[(0, 0)].clone();
+    assert_ne!(before.fg, ratatui::style::Color::Reset);
+    s.command(Command::new(ids::NEXT_THEME), clock.now());
+    settle(&mut s, &clock);
+    assert!(
+        s.screen().lines[22].starts_with("Theme Galaxy Light, meets AA"),
+        "{}",
+        s.screen().lines[22]
+    );
+    let after = s.terminal().backend().buffer()[(0, 0)].clone();
+    assert!(
+        before.fg != after.fg || before.bg != after.bg,
+        "the title line kept its colors"
+    );
+    // The words and the attribute stay.
+    assert_eq!(before.symbol(), after.symbol());
+    assert!(after.modifier.contains(Modifier::BOLD));
+}
+
 #[derive(Default)]
 struct Recorder {
     programs: Mutex<Vec<Program>>,

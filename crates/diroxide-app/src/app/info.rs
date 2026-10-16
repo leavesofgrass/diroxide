@@ -621,6 +621,12 @@ impl App {
             .cloned()
             .unwrap_or_default();
         let mut effects = self.apply_setting("theme", Some(toml::Value::String(next.clone())));
+        // One line, not two: the theme's own line with its contrast
+        // replaces "Theme: galaxy-light".
+        if effects.iter().any(|e| matches!(e, Effect::Announce(_))) {
+            effects.retain(|e| !matches!(e, Effect::Announce(_)));
+            self.status_log.pop();
+        }
         let line = settings::theme_line(&self.settings, None);
         effects.push(self.say(Message::info(line)));
         effects
