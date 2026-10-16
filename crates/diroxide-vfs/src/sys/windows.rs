@@ -19,18 +19,23 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use diroxide_core::{Attributes, Entry, Place, Timestamp};
-use windows_sys::Win32::Foundation::{ERROR_PRIVILEGE_NOT_HELD, GENERIC_WRITE};
+use windows_sys::Win32::Foundation::{
+    ERROR_PRIVILEGE_NOT_HELD, ERROR_REQUEST_ABORTED, GENERIC_WRITE, HANDLE,
+};
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS,
+    BY_HANDLE_FILE_INFORMATION, COPY_FILE_COPY_SYMLINK, COPY_FILE_FAIL_IF_EXISTS, CopyFileExW,
+    FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS,
     FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_INFO, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
     FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES, FileBasicInfo, FileIdInfo,
     GetDiskFreeSpaceExW, GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx,
-    GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW, MoveFileExW, SetFileAttributesW,
+    GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW, MoveFileExW, PROGRESS_CANCEL,
+    PROGRESS_CONTINUE, SetFileAttributesW,
 };
 use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
 
 use super::Identity;
+use crate::cancel::{OpContext, ProgressUpdate};
 use crate::local::entry::EntryContext;
 use crate::local::volumes::VolumeFacts;
 use crate::volume::VolumeKind;
@@ -380,6 +385,91 @@ fn junction_data(target: &str) -> io::Result<Vec<u8>> {
     Ok(buffer)
 }
 
+/// What the copy call's progress routine reads: the context to check and
+/// report to, and the name being copied.
+struct CopyState<'a> {
+    ctx: &'a OpContext,
+    name: Option<String>,
+}
+
+/// The copy call's progress routine: cancels when the token says so,
+/// reports the bytes copied otherwise. A panic in a progress sink must
+/// not cross into Windows, so it is caught and cancels the copy.
+unsafe extern "system" fn copy_progress(
+    total: i64,
+    done: i64,
+    _stream_size: i64,
+    _stream_done: i64,
+    _stream: u32,
+    _reason: u32,
+    _source: HANDLE,
+    _destination: HANDLE,
+    data: *const c_void,
+) -> u32 {
+    // SAFETY: `data` is the `CopyState` that `copy_file` passed to
+    // CopyFileExW; it outlives the call, and is only read here.
+    let state = unsafe { &*data.cast::<CopyState<'_>>() };
+    let keep_going = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if state.ctx.cancel.is_cancelled() {
+            return false;
+        }
+        state.ctx.progress.report(ProgressUpdate {
+            bytes_done: u64::try_from(done).unwrap_or(0),
+            bytes_total: u64::try_from(total).ok(),
+            current: state.name.clone(),
+            ..ProgressUpdate::default()
+        });
+        true
+    }))
+    .unwrap_or(false);
+    if keep_going {
+        PROGRESS_CONTINUE
+    } else {
+        PROGRESS_CANCEL
+    }
+}
+
+/// Copies a file with `CopyFileExW`, which keeps the modified time, the
+/// attributes and the alternate data streams, and lets a share's server
+/// copy it without the bytes passing through this computer. Never
+/// replaces (`COPY_FILE_FAIL_IF_EXISTS`); a link is copied as a link. The
+/// token cancels between chunks, and Windows removes the partial copy.
+pub(crate) fn copy_file(from: &Path, to: &Path, ctx: &OpContext) -> io::Result<()> {
+    let state = CopyState {
+        ctx,
+        name: from
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned()),
+    };
+    let (from, to) = (wide(from), wide(to));
+    // SAFETY: both strings are NUL-terminated and live across the call;
+    // `copy_progress` has the signature the call expects; `state` lives
+    // until the call returns and the routine only reads it; no cancel flag
+    // pointer is passed.
+    let ok = unsafe {
+        CopyFileExW(
+            from.as_ptr(),
+            to.as_ptr(),
+            Some(copy_progress),
+            (&raw const state).cast::<c_void>(),
+            std::ptr::null_mut(),
+            COPY_FILE_FAIL_IF_EXISTS | COPY_FILE_COPY_SYMLINK,
+        )
+    };
+    if ok != 0 {
+        return Ok(());
+    }
+    let error = io::Error::last_os_error();
+    if error.raw_os_error() == Some(ERROR_REQUEST_ABORTED as i32) {
+        Err(io::Error::new(
+            io::ErrorKind::Interrupted,
+            "the copy was cancelled",
+        ))
+    } else {
+        Err(error)
+    }
+}
+
 /// Whether an error is Windows's "a required privilege is not held":
 /// making a symbolic link without Developer Mode.
 pub(crate) fn needs_privilege(error: &io::Error) -> bool {
@@ -560,6 +650,59 @@ mod tests {
     fn paths_read_back_lose_the_prefix() {
         let buffer: Vec<u16> = r"\\?\D:\x\y".encode_utf16().chain([0, 65]).collect();
         assert_eq!(path_from_wide(&buffer), PathBuf::from(r"D:\x\y"));
+    }
+
+    #[test]
+    fn the_copy_call_copies_reports_and_cancels() {
+        use std::sync::Mutex;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        struct Counting(AtomicU64, Mutex<Option<String>>);
+        impl crate::cancel::ProgressSink for Counting {
+            fn report(&self, update: ProgressUpdate) {
+                self.0.store(update.bytes_done, Ordering::Relaxed);
+                if let Ok(mut name) = self.1.lock() {
+                    *name = update.current;
+                }
+            }
+        }
+
+        let folder = crate::test_support::scratch();
+        let source = folder.path().join("big.bin");
+        let bytes: Vec<u8> = (0..3_000_000u32).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&source, &bytes).unwrap();
+        let sink = std::sync::Arc::new(Counting(AtomicU64::new(0), Mutex::new(None)));
+        let ctx = OpContext::new().with_progress(sink.clone());
+        let copy = folder.path().join("copy.bin");
+        copy_file(&source, &copy, &ctx).unwrap();
+        assert_eq!(std::fs::read(&copy).unwrap(), bytes);
+        assert_eq!(sink.0.load(Ordering::Relaxed), 3_000_000);
+        assert_eq!(sink.1.lock().unwrap().as_deref(), Some("big.bin"));
+        // Never replaces.
+        assert_eq!(
+            copy_file(&source, &copy, &OpContext::new())
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::AlreadyExists
+        );
+        // A cancelled copy leaves nothing.
+        let cancelled = OpContext::new();
+        cancelled.cancel.cancel();
+        let other = folder.path().join("never.bin");
+        assert!(copy_file(&source, &other, &cancelled).is_err());
+        assert!(!other.exists());
+    }
+
+    #[test]
+    fn junction_data_has_both_names() {
+        let data = junction_data(r"D:\target").unwrap();
+        assert_eq!(&data[..4], &0xA000_0003u32.to_le_bytes());
+        let names: Vec<u16> = data[16..]
+            .chunks(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        let text = String::from_utf16_lossy(&names);
+        assert_eq!(text, "\\??\\D:\\target\0D:\\target\0");
     }
 
     #[test]

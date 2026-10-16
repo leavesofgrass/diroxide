@@ -215,6 +215,15 @@ fn set_created(_path: &Path, _created: SystemTime) -> io::Result<()> {
     ))
 }
 
+/// The server-side copy call is Windows's; nothing on Unix asks for it.
+pub(crate) fn copy_file(
+    _from: &Path,
+    _to: &Path,
+    _ctx: &crate::cancel::OpContext,
+) -> io::Result<()> {
+    Err(io::Error::from(io::ErrorKind::Unsupported))
+}
+
 /// Making a symbolic link needs no privilege on Unix.
 pub(crate) fn needs_privilege(_error: &io::Error) -> bool {
     false

@@ -57,3 +57,27 @@ pub fn local_roots() -> Vec<diroxide_core::Place> {
 pub fn local_places() -> Vec<LocalPlace> {
     local::places()
 }
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    //! Helpers for the unit tests that write.
+
+    use std::path::Path;
+
+    /// A folder for a unit test that writes, under the build's own target
+    /// folder (the test binary lives in `target/<profile>/deps`), never a
+    /// user's folder or the system's temporary folder.
+    pub(crate) fn scratch() -> tempfile::TempDir {
+        let exe = std::env::current_exe().expect("the test's own path");
+        let base = exe
+            .parent()
+            .and_then(Path::parent)
+            .expect("the target folder")
+            .join("vfs-unit-tmp");
+        std::fs::create_dir_all(&base).expect("a scratch folder");
+        tempfile::Builder::new()
+            .prefix("vfs-unit-")
+            .tempdir_in(base)
+            .expect("a scratch folder")
+    }
+}

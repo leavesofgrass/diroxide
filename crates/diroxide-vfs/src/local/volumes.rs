@@ -127,6 +127,11 @@ pub(crate) fn is_network_file_system(file_system: &str) -> bool {
     named(Some(file_system), &NETWORK_FILE_SYSTEMS)
 }
 
+/// Whether a writable volume's file system clones a file in place.
+pub(crate) fn can_clone(facts: &VolumeFacts) -> bool {
+    !facts.read_only && named(facts.file_system.as_deref(), &CLONING_FILE_SYSTEMS)
+}
+
 /// The largest file a file system takes, when it has a limit worth
 /// checking before a copy.
 pub(crate) fn max_file_size(file_system: Option<&str>) -> Option<u64> {

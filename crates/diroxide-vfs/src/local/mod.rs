@@ -22,16 +22,16 @@
 //!   Attributes, times and owners change with the inverse returned.
 
 pub(crate) mod attributes;
+pub(crate) mod copy;
 pub(crate) mod entry;
 pub(crate) mod owners;
 pub(crate) mod probe;
 pub(crate) mod volumes;
+pub(crate) mod writer;
 
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::fs::{self, File};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use diroxide_core::{Attributes, Entry, EntryKind, Place, PlaceError};
 
@@ -40,7 +40,7 @@ use crate::capabilities::Capabilities;
 use crate::error::VfsError;
 use crate::names;
 use crate::provider::{
-    AttributeChange, FileWriter, LinkKind, LinkRequest, Provider, ReadSeek, WriteMode,
+    AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Provider, ReadSeek, WriteMode,
 };
 use crate::sys;
 use crate::volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
@@ -248,13 +248,11 @@ impl Provider for LocalProvider {
     ) -> Result<Box<dyn FileWriter>, VfsError> {
         ctx.check()?;
         let target = Self::path_of(place)?;
+        Self::refuse_name(place, &target)?;
         if mode == WriteMode::CreateNew && fs::symlink_metadata(&target).is_ok() {
             return Err(VfsError::AlreadyExists);
         }
-        let folder = target
-            .parent()
-            .ok_or_else(|| VfsError::unsupported("file", "write at the top of a drive"))?;
-        Ok(Box::new(LocalWriter::start(folder, target.clone(), mode)?))
+        Ok(Box::new(writer::LocalWriter::start(target, mode)?))
     }
 
     fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
@@ -361,6 +359,21 @@ impl Provider for LocalProvider {
         ctx.check()?;
         attributes::set_attributes(&Self::path_of(place)?, change)
     }
+
+    fn copy_hint(&self, from: &Place, to: &Place) -> CopyHint {
+        match (Self::path_of(from), Self::path_of(to)) {
+            (Ok(from), Ok(to)) => copy::hint(&from, &to),
+            _ => CopyHint::Stream,
+        }
+    }
+
+    fn copy_within(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+        ctx.check()?;
+        let source = Self::path_of(from)?;
+        let target = Self::path_of(to)?;
+        Self::refuse_name(to, &target)?;
+        copy::copy_within(&source, &target, copy::hint(&source, &target), ctx)
+    }
 }
 
 /// Makes a symbolic link, a folder link or a file link on Windows.
@@ -419,7 +432,7 @@ fn spelled_alike(source: &Path, target: &Path) -> bool {
 /// each step never replaces, and a failed second step is taken back.
 fn rename_through_unfinished(source: &Path, target: &Path) -> Result<(), VfsError> {
     let folder = target.parent().ok_or(VfsError::NotFound)?;
-    let middle = folder.join(names::unfinished_name(unfinished_token()));
+    let middle = folder.join(names::unfinished_name(writer::unfinished_token()));
     sys::rename_no_replace(source, &middle)?;
     if let Err(error) = sys::rename_no_replace(&middle, target) {
         let _ = sys::rename_no_replace(&middle, source);
@@ -472,95 +485,6 @@ fn stat_context() -> EntryContext {
     #[cfg(not(unix))]
     {
         EntryContext::default()
-    }
-}
-
-/// A token for an unfinished name: the clock's nanoseconds mixed with a
-/// counter, so two writes in the same instant differ.
-fn unfinished_token() -> u32 {
-    static COUNTER: AtomicU32 = AtomicU32::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.subsec_nanos());
-    nanos ^ COUNTER.fetch_add(0x9E37_79B9, Ordering::Relaxed)
-}
-
-/// The local committing writer: the bytes go to an unfinished name in the
-/// target's folder; the commit renames it over the target; a drop without
-/// a commit removes it.
-struct LocalWriter {
-    file: Option<File>,
-    unfinished: PathBuf,
-    target: PathBuf,
-    mode: WriteMode,
-}
-
-impl LocalWriter {
-    fn start(folder: &Path, target: PathBuf, mode: WriteMode) -> Result<Self, VfsError> {
-        let mut last = VfsError::AlreadyExists;
-        for _ in 0..8 {
-            let unfinished = folder.join(names::unfinished_name(unfinished_token()));
-            match OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&unfinished)
-            {
-                Ok(file) => {
-                    return Ok(Self {
-                        file: Some(file),
-                        unfinished,
-                        target,
-                        mode,
-                    });
-                }
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(error) => last = error.into(),
-            }
-        }
-        Err(last)
-    }
-}
-
-impl Write for LocalWriter {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        match &mut self.file {
-            Some(file) => file.write(bytes),
-            None => Err(io::Error::other("the write was already committed")),
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match &mut self.file {
-            Some(file) => file.flush(),
-            None => Ok(()),
-        }
-    }
-}
-
-impl FileWriter for LocalWriter {
-    fn commit(mut self: Box<Self>, durable: bool) -> Result<(), VfsError> {
-        if let Some(mut file) = self.file.take() {
-            file.flush()?;
-            if durable {
-                file.sync_all()?;
-            }
-        }
-        if self.mode == WriteMode::CreateNew && fs::symlink_metadata(&self.target).is_ok() {
-            return Err(VfsError::AlreadyExists);
-        }
-        fs::rename(&self.unfinished, &self.target)?;
-        self.unfinished = PathBuf::new();
-        Ok(())
-    }
-}
-
-impl Drop for LocalWriter {
-    fn drop(&mut self) {
-        self.file.take();
-        if !self.unfinished.as_os_str().is_empty() {
-            // Best effort: the unfinished file is ours alone, by its name.
-            let _ = fs::remove_file(&self.unfinished);
-        }
     }
 }
 
