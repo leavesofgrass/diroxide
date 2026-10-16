@@ -89,12 +89,22 @@ pub fn run_with(
     }
 }
 
+/// Turns raw mode off when dropped, on a panic too.
+struct Raw;
+
+impl Drop for Raw {
+    fn drop(&mut self) {
+        let _ = terminal::disable_raw_mode();
+    }
+}
+
 /// Runs the key test on the real terminal: raw mode on, the lines written
 /// to standard output, raw mode off at the end whatever happens.
 pub fn run(keymap: &Keymap) -> Result<Ended, TuiError> {
     terminal::enable_raw_mode()?;
+    let _raw = Raw;
     let mut out = io::stdout();
-    let result = run_with(
+    run_with(
         keymap,
         |limit| {
             if event::poll(limit)? {
@@ -104,9 +114,7 @@ pub fn run(keymap: &Keymap) -> Result<Ended, TuiError> {
             }
         },
         &mut out,
-    );
-    let _ = terminal::disable_raw_mode();
-    result
+    )
 }
 
 #[cfg(test)]

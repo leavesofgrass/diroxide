@@ -100,13 +100,21 @@ fn take(inline: bool) -> io::Result<()> {
     Ok(())
 }
 
+/// The thread that draws: a panic there gives the terminal back; a panic
+/// on a worker leaves the screen to the loop.
+static DRAWER: Mutex<Option<thread::ThreadId>> = Mutex::new(None);
+
 fn install_panic_hook() {
+    *DRAWER.lock().unwrap_or_else(PoisonError::into_inner) = Some(thread::current().id());
     if HOOKED.swap(true, Ordering::SeqCst) {
         return;
     }
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        restore();
+        let drawer = *DRAWER.lock().unwrap_or_else(PoisonError::into_inner);
+        if drawer.is_none_or(|id| id == thread::current().id()) {
+            restore();
+        }
         previous(info);
     }));
 }
@@ -218,8 +226,10 @@ pub(crate) fn run(
     // before the reader thread starts, so nothing else reads the reply.
     let probe = probe_lines(inline);
     write_log(log.as_ref(), &probe);
-    take(inline).map_err(io_error)?;
+    // The guard first: a failure halfway through taking the terminal
+    // still gives it back.
     let guard = Guard;
+    take(inline).map_err(io_error)?;
     let backend = CrosstermBackend::new(io::stdout());
     let terminal = if inline {
         let rows = terminal::size().map(|(_, h)| h).unwrap_or(INLINE_ROWS);
