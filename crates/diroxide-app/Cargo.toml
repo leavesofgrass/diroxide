@@ -12,7 +12,13 @@ diroxide-config.workspace = true
 diroxide-core.workspace = true
 diroxide-filetype.workspace = true
 diroxide-ops.workspace = true
+diroxide-theme.workspace = true
 diroxide-vfs.workspace = true
+serde.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true
