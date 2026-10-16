@@ -49,7 +49,7 @@ Names are in code type. Defaults are in parentheses.
 - Layout (`layout`): `side_by_side` (default), `stacked` or `single`. [The panels guide](panels.md) says which suits a screen reader.
 - Screen reader mode (`screen_reader_mode`): turn it on when you use a screen reader. It slows the progress line to the interval below, hides the key bar, redraws the other panel only on demand, and keeps the candidate list closed until you press Tab. diroxide does not try to detect your screen reader. Check this setting yourself.
 - Progress interval (`progress_interval_seconds`, 10): in screen-reader mode, how many seconds pass between progress updates. A change of state is always announced at once.
-- Single-letter keys (`single_letters`): what typing a letter does in a panel. `type-ahead` (default) finds a row by name, `commands` runs the single-letter commands such as plus, minus and star, and `off` does nothing. Turn it off if you use dictation software.
+- Single-letter keys (`single_letters`): what typing a letter does in a panel. `type-ahead` (default) finds a row by name, and `off` does nothing. A third value, `commands`, lets single letters run commands, for the key presets that come with alpha.3. Turn it off if you use dictation software.
 - Show hidden files (`show_hidden`, off).
 - Sorting: the key (`sort`), its direction (`sort_direction`), where folders go (`folders`: first by default, or mixed or last), case (`sort_case`, ignored by default) and natural order (`sort_natural`, on, so `file2` comes before `file10`).
 - Confirmations (`confirm`): how each kind of question is asked. Every question starts on No.

@@ -12,7 +12,7 @@ diroxide shows two panels. One is active, and the other is the target of a copy 
 
 Which layout should a screen reader user choose? Try stacked first. In the side by side layout one screen line holds a row of each panel. A screen reader reads the whole line, and a 40-cell Braille display shows its first 40 cells, so the two panels mix. When the right panel is active, its focused row starts near column 41, after the left panel's row. In the stacked layout every line is one row, and Tab changes only the cursor, a marker and a title. This advice comes from how screen readers read a line. It has not yet been confirmed by listening on this project, and this guide will change if the listening checks say otherwise. [Using diroxide with a screen reader](screen-readers.md) has more.
 
-To change the layout, press Ctrl+P, type "layout" and press Enter. Each choice cycles to the next layout and says it: "Layout: stacked". The `layout` setting makes the choice permanent, and diroxide remembers it between sessions.
+To change the layout, press Ctrl+P, type "layout" and press Enter. Each time you choose it, the layout cycles to the next one and diroxide says it: "Layout: stacked". The `layout` setting makes the choice permanent, and diroxide remembers it between sessions.
 
 In screen-reader mode the other panel is redrawn only when you ask, whatever the layout, so a change in the panel you are not using does not interrupt you.
 
@@ -98,7 +98,7 @@ On macOS the system owns Ctrl+F3 to Ctrl+F8. Use the Sort list, the menu or the 
 
 There are two ways to narrow down a long folder.
 
-- Type to find. With single-letter keys on, typing a letter or a digit finds a row by name. The cursor jumps to the first row whose name starts with what you typed, and the status line says "3 of 12 matches". Typing more narrows the match. The `single_letters` setting chooses what typing does: find by name, run commands such as plus and minus, or nothing. Turn it off if you use dictation software, which types letters.
+- Type to find. With single-letter keys on, typing a letter or a digit finds a row by name. The cursor jumps to the first row whose name starts with what you typed, and the status line says "3 of 12 matches". Typing more narrows the match. The `single_letters` setting chooses what typing does: find by name (the default), or nothing at all. A third value, for the key presets that come with alpha.3, lets single letters run commands. Turn typing off if you use dictation software, which types letters.
 - Ctrl+S opens the name filter, whether single-letter keys are on or off. It hides every row that does not match. The title line says the filter in words: "filter: not *.o".
 
 A filter is one pattern or several. The first version understands these, and a later alpha extends them without breaking them:

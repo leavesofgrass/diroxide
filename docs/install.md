@@ -18,7 +18,7 @@ Until then, the way in is to build from source.
 What you need:
 
 - A Rust toolchain from rustup. The repository pins the exact version in `rust-toolchain.toml`, so rustup downloads the right one the first time you build.
-- The linker Rust needs on your system. On Windows that is the Microsoft C++ Build Tools. On Linux it is a package such as build-essential or gcc. On macOS it is the Xcode command line tools. diroxide's own code compiles no C or C++, so no C compiler is needed for it; Rust only asks the system for a linker.
+- The linker Rust needs on your system. On Windows that is the Microsoft C++ Build Tools. On Linux it is a package such as build-essential or gcc. On macOS it is the Xcode command line tools. In alpha.1 diroxide compiles no C or C++ code, so no C compiler is needed for it; Rust only asks the system for a linker.
 
 In the source folder, build the program:
 
