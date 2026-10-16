@@ -614,6 +614,139 @@ fn keep_both_numbers_past_taken_names_and_case_twins() {
 }
 
 #[test]
+fn two_times_closer_than_two_seconds_are_the_same_time() {
+    for (nanos_past, replaced) in [(1_900_000_000u64, false), (2_100_000_000, true)] {
+        let fake = conflict_tree();
+        let old = at(-5);
+        let secs = old.unix_seconds() + (nanos_past / 1_000_000_000) as i64;
+        let nanos = (nanos_past % 1_000_000_000) as u32;
+        fake.set_modified(&p("/b/1.txt"), old);
+        fake.set_modified(&p("/a/1.txt"), Timestamp::from_unix(secs, nanos));
+        run(
+            &engine(&fake),
+            &JobRequest {
+                conflicts: ConflictPolicy::Newer,
+                ..request(JobKind::Copy, &["/a/1.txt"]).to(p("/b"))
+            },
+            &Script::default(),
+        );
+        let now = fake.contents(&p("/b/1.txt")).unwrap();
+        assert_eq!(now == b"new one", replaced, "{nanos_past}");
+    }
+}
+
+#[test]
+fn names_that_fold_to_one_become_a_question_inside_the_job() {
+    let fake = FakeProvider::with_switches(FakeSwitches {
+        case_insensitive: true,
+        ..FakeSwitches::default()
+    });
+    fake.add_file(&p("/a/x/README"), b"upper");
+    fake.add_file(&p("/a/y/readme"), b"lower");
+    fake.add_folder(&p("/b"));
+    let sink = Script::default();
+    let report = run(
+        &engine(&fake),
+        &request(JobKind::Copy, &["/a/x/README", "/a/y/readme"]).to(p("/b")),
+        &sink,
+    );
+    assert_eq!(sink.asked.lock().unwrap().len(), 1);
+    assert_eq!(report.skipped[0].1, "the name is taken");
+    assert_eq!(fake.contents(&p("/b/README")).unwrap(), b"upper");
+}
+
+#[test]
+fn hidden_characters_are_spelled_in_questions_and_errors() {
+    let fake = FakeProvider::new();
+    fake.add_file(&p("/a/C\u{F03A}"), b"new");
+    fake.add_file(&p("/b/C\u{F03A}"), b"old");
+    fake.switches_mut().call_faults.push(CallFault::new(
+        FakeCall::Read,
+        p("/a/C\u{F03A}"),
+        VfsError::InUse,
+    ));
+    let sink = Script::conflicts(vec![ConflictAnswer::once(ConflictAction::Replace)]);
+    let report = run(
+        &engine(&fake),
+        &request(JobKind::Copy, &["/a/C\u{F03A}"]).to(p("/b")),
+        &sink,
+    );
+    let asked = sink.asked.lock().unwrap();
+    let clock = diroxide_core::FixedClock::new(at(0), diroxide_core::UtcOffset::UTC);
+    assert_eq!(asked[0].lines(&clock)[0], "Name taken: C[U+F03A]");
+    let error = &sink.failed.lock().unwrap()[0];
+    assert!(
+        error
+            .message()
+            .text
+            .starts_with("Could not copy C[U+F03A]: ")
+    );
+    assert_eq!(report.failed.len(), 1);
+}
+
+#[test]
+fn a_name_that_is_not_valid_unicode_is_refused_for_every_operation() {
+    let fake = tree();
+    fake.mark_not_unicode(&p("/a/notes.txt"));
+    let engine = engine(&fake);
+    for kind in [
+        JobKind::Copy,
+        JobKind::Move,
+        JobKind::Trash,
+        JobKind::DeletePermanently,
+    ] {
+        let mut request = request(kind, &["/a/notes.txt"]);
+        if matches!(kind, JobKind::Copy | JobKind::Move) {
+            request = request.to(p("/b"));
+        }
+        let plan = engine.plan(&request).unwrap();
+        assert!(plan.steps.is_empty(), "{kind:?}");
+        assert!(
+            plan.facts.left_out[0]
+                .1
+                .starts_with("the name is not valid Unicode")
+        );
+    }
+    let rename = engine
+        .plan(&request(JobKind::Rename, &["/a/notes.txt"]).named("x"))
+        .unwrap();
+    assert!(rename.steps.is_empty());
+    assert!(fake.exists(&p("/a/notes.txt")));
+}
+
+#[test]
+fn a_name_the_destination_refuses_is_never_written_silently() {
+    let fake = tree();
+    fake.add_file(&p("/a/aux.txt"), b"device name");
+    let engine = engine(&fake);
+    let plan = engine
+        .plan(&request(JobKind::Copy, &["/a/aux.txt"]).to(p("/b")))
+        .unwrap();
+    assert!(
+        plan.facts.questions.is_empty(),
+        "allowed on a Unix-rules place"
+    );
+    fake.switches_mut().reserved_names = true;
+    let report = engine.run(&plan, &JobControl::new(), &Script::default());
+    assert_eq!(
+        report.failed[0].1,
+        "the name is not allowed on this drive: is a Windows device"
+    );
+    assert!(!fake.exists(&p("/b/aux.txt")));
+    let long = "x".repeat(256);
+    assert!(matches!(
+        engine.plan(&request(JobKind::Rename, &["/a/notes.txt"]).named(long)),
+        Err(crate::error::OpsError::NameRefused(line)) if line.starts_with("Name needs care: is over 255")
+    ));
+    let fits = "x".repeat(255);
+    assert!(
+        engine
+            .plan(&request(JobKind::Rename, &["/a/notes.txt"]).named(fits))
+            .is_ok()
+    );
+}
+
+#[test]
 fn replace_where_there_is_no_trash_says_it_cannot_be_undone() {
     let fake = conflict_tree();
     fake.switches_mut().no_trash = true;
@@ -956,6 +1089,27 @@ fn a_trash_that_fails_or_lies_never_falls_through_to_a_delete() {
             assert_eq!(report.failed[0].1, "Still there after the trash.");
         }
     }
+}
+
+#[test]
+fn a_trash_that_lost_the_item_is_the_loud_failure() {
+    let fake = tree();
+    fake.switches_mut().trash_check = Some(diroxide_vfs::TrashCheck::GoneNotInTrash);
+    let report = run(
+        &engine(&fake),
+        &request(JobKind::Trash, &["/a/notes.txt"]),
+        &Script::default(),
+    );
+    assert_eq!(report.failed[0].1, "Deleted but not found in the trash.");
+    assert!(report.undo.trashed.is_empty(), "nothing to restore from");
+    fake.switches_mut().trash_check = Some(diroxide_vfs::TrashCheck::NotChecked);
+    let unchecked = run(
+        &engine(&fake),
+        &request(JobKind::Trash, &["/a/photos"]),
+        &Script::default(),
+    );
+    assert_eq!(unchecked.done.len(), 1);
+    assert_eq!(unchecked.warnings[0].1, "Moved to the trash; not checked.");
 }
 
 #[test]

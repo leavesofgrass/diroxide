@@ -182,6 +182,10 @@ pub struct FakeSwitches {
     pub corrupt: Vec<Place>,
     /// The place cannot keep a created time, as on Linux.
     pub no_created_time: bool,
+    /// What the trash's own post-check answers after it has taken an
+    /// item: `GoneNotInTrash` is a trash that lost it, `NotChecked` a
+    /// plugin's trash that cannot tell. `None` answers `InTrash`.
+    pub trash_check: Option<TrashCheck>,
 }
 
 #[derive(Clone, Debug)]
@@ -501,6 +505,15 @@ impl FakeProvider {
         let key = self.node_key(place);
         if let Some(node) = self.state().nodes.get_mut(&key) {
             node.entry.modified = Some(modified);
+        }
+    }
+
+    /// Marks an entry's name as one the place could not read as Unicode,
+    /// as a provider does for such a name (the name kept is a lossy copy).
+    pub fn mark_not_unicode(&self, place: &Place) {
+        let key = self.node_key(place);
+        if let Some(node) = self.state().nodes.get_mut(&key) {
+            node.entry.name_not_unicode = true;
         }
     }
 
@@ -1011,8 +1024,11 @@ impl Provider for FakeProvider {
         let subtree = self.take_subtree(place);
         let mut state = self.state();
         state.aliases.retain(|(alias, _)| *alias != key);
-        state.trash.push((key, subtree));
-        Ok(TrashCheck::InTrash)
+        let check = switches.trash_check.unwrap_or(TrashCheck::InTrash);
+        if check != TrashCheck::GoneNotInTrash {
+            state.trash.push((key, subtree));
+        }
+        Ok(check)
     }
 
     fn restore(&self, original: &Place, ctx: &OpContext) -> Result<(), VfsError> {

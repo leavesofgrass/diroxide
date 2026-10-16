@@ -99,6 +99,7 @@ impl Conflict {
     /// and asks nothing.
     pub fn lines(&self, clock: &dyn Clock) -> Vec<String> {
         let name = self.target.name().unwrap_or("the entry");
+        let name = diroxide_core::names::spell_out(name);
         match self.kind {
             ConflictKind::SameFile => vec![format!("Same file: {name}. Nothing to do.")],
             ConflictKind::FileOverFolder => vec![format!("Cannot merge: {name} is a folder here")],
@@ -158,7 +159,10 @@ impl Conflict {
                     ConflictAnswer::for_all(ConflictAction::Replace),
                 ),
                 choice(
-                    format!("Keep both: {}", self.keep_both_name),
+                    format!(
+                        "Keep both: {}",
+                        diroxide_core::names::spell_out(&self.keep_both_name)
+                    ),
                     ConflictAnswer::once(ConflictAction::KeepBoth),
                 ),
                 choice(
@@ -182,11 +186,10 @@ impl Conflict {
     /// line as a yes-or-no question about replacing. W1d moves to
     /// [`Conflict::lines`] and [`Conflict::choices`].
     pub fn question(&self) -> Message {
-        let name = self.target.name().unwrap_or("The entry");
-        let folder = self
-            .target
-            .parent()
-            .map_or_else(String::new, |p| format!(" in {p}"));
+        let name = diroxide_core::names::spell_out(self.target.name().unwrap_or("The entry"));
+        let folder = self.target.parent().map_or_else(String::new, |p| {
+            format!(" in {}", diroxide_core::names::spell_out(&p.to_string()))
+        });
         Message::question(&format!("{name} exists{folder}. Replace it?"))
     }
 }
@@ -207,12 +210,13 @@ pub struct ItemError {
 impl ItemError {
     /// The message in the house style: "Could not copy report.pdf:
     /// another program is using it. Close it in the other program, then
-    /// retry."
+    /// retry." Hidden characters in the name are spelled out.
     pub fn message(&self) -> Message {
         let name = self
             .place
             .name()
             .map_or_else(|| self.place.to_string(), str::to_owned);
+        let name = diroxide_core::names::spell_out(&name);
         Message::from_error(self.kind.verb(), &name, &self.error)
     }
 

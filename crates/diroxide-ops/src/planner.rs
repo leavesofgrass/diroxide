@@ -196,6 +196,18 @@ impl<'a> Planner<'a> {
         }
     }
 
+    /// Leaves out a source whose name the place could not read as
+    /// Unicode: every operation on it is refused, with its words.
+    fn unreadable(&mut self, source: &Place, entry: &Entry) -> bool {
+        if entry.name_not_unicode {
+            self.plan.facts.left_out.push((
+                source.clone(),
+                "the name is not valid Unicode; rename it with another program first".to_owned(),
+            ));
+        }
+        entry.name_not_unicode
+    }
+
     fn same_file_line(name: &str) -> String {
         format!(
             "Same file: {}. Nothing to do.",
@@ -285,6 +297,9 @@ impl<'a> Planner<'a> {
             let name = Self::name_of(source)?;
             let source_provider = self.provider(source)?;
             let entry = source_provider.stat(source, &self.ctx)?;
+            if self.unreadable(source, &entry) {
+                continue;
+            }
             let dest_folder = match &folder {
                 Some(folder) => folder.clone(),
                 None => source.parent().ok_or(OpsError::NothingSelected)?,
@@ -395,6 +410,9 @@ impl<'a> Planner<'a> {
             let name = Self::name_of(source)?;
             let source_provider = self.provider(source)?;
             let entry = source_provider.stat(source, &self.ctx)?;
+            if self.unreadable(source, &entry) {
+                continue;
+            }
             let target = folder.join(&name).map_err(VfsError::from)?;
             if entry.kind == EntryKind::Folder && target.is_within(source) {
                 return Err(OpsError::IntoItself(name));
@@ -484,6 +502,9 @@ impl<'a> Planner<'a> {
             Self::name_of(source)?;
             let provider = self.provider(source)?;
             let entry = provider.stat(source, &self.ctx)?;
+            if self.unreadable(source, &entry) {
+                continue;
+            }
             let mut gate = provider.trash_gate(source, &self.ctx)?;
             let found = self.walk(&*provider, source, entry.clone())?;
             for item in &found {
@@ -541,6 +562,9 @@ impl<'a> Planner<'a> {
             Self::name_of(source)?;
             let provider = self.provider(source)?;
             let entry = provider.stat(source, &self.ctx)?;
+            if self.unreadable(source, &entry) {
+                continue;
+            }
             let found = self.walk(&*provider, source, entry)?;
             let mut folders = Vec::new();
             for item in found {
@@ -609,6 +633,9 @@ impl<'a> Planner<'a> {
                 OpsError::NameRefused(format!("A name cannot hold a slash: {name}"))
             })?;
             let entry = self.stat(&from)?;
+            if self.unreadable(&from, &entry) {
+                continue;
+            }
             if from.to_string() == to.to_string() {
                 self.plan
                     .facts
