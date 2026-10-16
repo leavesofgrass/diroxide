@@ -10,15 +10,17 @@
 //! owner's answer 74); `diro PATH` and `diro LEFT RIGHT` open those.
 //!
 //! `--tui` and `--gui` are accepted (the window comes with alpha.6, so
-//! `--gui` says so and opens the terminal); `--cwd-file FILE` writes the
+//! `--gui` says so and opens the terminal); `--inline` draws below the
+//! prompt instead of on the alternate screen; `--cwd-file FILE` writes the
 //! active panel's last local folder at quit for the shell wrapper of
 //! `diro init`; `--theme NAME` sets the theme for this session.
 //!
-//! Until W1d-2's terminal loop, the frontend prints one screen and
-//! returns.
+//! On a terminal the full screen runs until the app quits; when standard
+//! input or output is not a terminal (a pipe, a file), one screen is
+//! printed as plain lines instead.
 
 use std::env;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::Path;
 
 use diroxide_app::keymap::Platform;
@@ -26,7 +28,10 @@ use diroxide_app::{App, AppOptions, Runtime};
 use diroxide_config::Paths;
 use diroxide_core::{Message, Place, PlaceKind};
 use diroxide_filetype::TypeRegistry;
-use diroxide_tui::{Tui, TuiOptions};
+use diroxide_tui::{Files, Tui, TuiOptions};
+
+/// The terminal's log in the state folder: what it found at start.
+pub const TERMINAL_LOG: &str = "terminal.log";
 
 use crate::CliError;
 
@@ -133,11 +138,85 @@ pub fn write_cwd_file(file: &Path, folder: Option<&Place>) -> Result<Option<Stri
     Ok(why)
 }
 
-/// Opens the panels with the platform's config and state folders.
+/// Opens the panels with the platform's config and state folders: the
+/// full screen on a terminal, one screen of plain lines otherwise.
 pub fn run(options: &OpenOptions, out: &mut dyn Write) -> Result<i32, CliError> {
     let here = current_place()?;
     let paths = paths(options.portable);
-    run_with(options, paths.as_ref(), &here, out)
+    if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+        run_terminal(options, paths.as_ref(), &here, out)
+    } else {
+        run_with(options, paths.as_ref(), &here, out)
+    }
+}
+
+/// Says what the options cannot do before the screen opens: the window
+/// comes with alpha.6; an unknown theme gives the default.
+fn notices(options: &OpenOptions, out: &mut dyn Write) -> Result<(), CliError> {
+    let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
+    if options.gui {
+        writeln!(
+            out,
+            "The window comes with alpha.6; the terminal opens instead."
+        )
+        .map_err(write_failed)?;
+    }
+    if let Some(theme) = &options.theme
+        && !diroxide_app::settings::theme_names().contains(theme)
+    {
+        writeln!(out, "Unknown theme: {theme}. Galaxy is in use.").map_err(write_failed)?;
+    }
+    Ok(())
+}
+
+/// The terminal's options for an app as built.
+fn tui_options(app: &App, options: &OpenOptions) -> TuiOptions {
+    TuiOptions {
+        screen_reader: app.screen_reader(),
+        inline: options.inline,
+        ..TuiOptions::default()
+    }
+}
+
+/// Runs the full screen on the terminal with these folders until the app
+/// quits, then writes the `--cwd-file`.
+pub fn run_terminal(
+    options: &OpenOptions,
+    paths: Option<&Paths>,
+    here: &Place,
+    out: &mut dyn Write,
+) -> Result<i32, CliError> {
+    notices(options, out)?;
+    out.flush().map_err(|e| CliError::Failed(e.to_string()))?;
+    let (mut app, mut runtime) = build(options, paths, here)?;
+    let files = Files {
+        themes: paths.map(Paths::themes_dir),
+        log: paths.map(|p| p.state_file(TERMINAL_LOG)),
+    };
+    Tui::new(tui_options(&app, options))
+        .run_terminal(&mut app, &mut runtime, &files)
+        .map_err(|e| CliError::Failed(Message::from_error("run", "the screen", &e).text))?;
+    finish(&app, options, out)
+}
+
+/// After the screen: the `--cwd-file` for the shell wrapper, empty when
+/// the shell keeps its own folder.
+fn finish(app: &App, options: &OpenOptions, out: &mut dyn Write) -> Result<i32, CliError> {
+    if let Some(file) = &options.cwd_file {
+        if app.keeps_shell_folder() {
+            // Empty: the wrapper leaves the shell where it was.
+            write_cwd_file(Path::new(file), None)?;
+            return Ok(0);
+        }
+        let folder = app
+            .quit_folder()
+            .cloned()
+            .unwrap_or_else(|| app.active_panel().place().clone());
+        if let Some(why) = write_cwd_file(Path::new(file), Some(&folder))? {
+            writeln!(out, "{why}").map_err(|e| CliError::Failed(e.to_string()))?;
+        }
+    }
+    Ok(0)
 }
 
 /// The app as `diro` starts it: config, keys, startup, session and clock.
@@ -190,56 +269,30 @@ pub fn build(
     app_options.clock = std::sync::Arc::new(diroxide_app::startup::local_clock());
     app_options.startup = startup;
     let app = App::new(app_options);
+    let editor = app.settings().editor.clone();
     let mut runtime = Runtime::with_local().with_engine_options(engine);
+    runtime.set_editor(&editor);
     if let Some(paths) = paths {
         runtime = runtime.with_paths(paths.clone());
     }
     Ok((app, runtime))
 }
 
-/// Opens the panels with these folders.
+/// Opens the panels with these folders and prints one screen of plain
+/// lines: the way out when standard output is not a terminal, and the
+/// tests' way in.
 pub fn run_with(
     options: &OpenOptions,
     paths: Option<&Paths>,
     here: &Place,
     out: &mut dyn Write,
 ) -> Result<i32, CliError> {
-    let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
-    if options.gui {
-        writeln!(
-            out,
-            "The window comes with alpha.6; the terminal opens instead."
-        )
-        .map_err(write_failed)?;
-    }
-    if let Some(theme) = &options.theme
-        && !diroxide_app::settings::theme_names().contains(theme)
-    {
-        writeln!(out, "Unknown theme: {theme}. Galaxy is in use.").map_err(write_failed)?;
-    }
+    notices(options, out)?;
     let (mut app, mut runtime) = build(options, paths, here)?;
-    let tui_options = TuiOptions {
-        screen_reader: app.screen_reader(),
-        ..TuiOptions::default()
-    };
-    Tui::new(tui_options)
+    Tui::new(tui_options(&app, options))
         .run(&mut app, &mut runtime, out)
         .map_err(|e| CliError::Failed(e.to_string()))?;
-    if let Some(file) = &options.cwd_file {
-        if app.keeps_shell_folder() {
-            // Empty: the wrapper leaves the shell where it was.
-            write_cwd_file(Path::new(file), None)?;
-            return Ok(0);
-        }
-        let folder = app
-            .quit_folder()
-            .cloned()
-            .unwrap_or_else(|| app.active_panel().place().clone());
-        if let Some(why) = write_cwd_file(Path::new(file), Some(&folder))? {
-            writeln!(out, "{why}").map_err(write_failed)?;
-        }
-    }
-    Ok(0)
+    finish(&app, options, out)
 }
 
 #[cfg(test)]
@@ -263,7 +316,7 @@ mod tests {
         let code = run_with(&options, Some(&paths), &here, &mut out).unwrap();
         assert_eq!(code, 0);
         let text = String::from_utf8(out).unwrap();
-        assert!(text.starts_with("diroxide-cli, in "), "{text}");
+        assert!(text.starts_with("diroxide-cli, left panel, in "), "{text}");
         assert!(text.contains("src, folder"));
         assert!(paths.config_file(Paths::KEYMAP_DEFAULTS).exists());
     }
