@@ -8,14 +8,19 @@
 //!   standard input, one entry a line, the name first.
 //! - `diro completions SHELL`: the completion script for bash, zsh, fish
 //!   or PowerShell.
+//! - `diro keys check [FILE]` and `diro keys print`: the keymap, checked or
+//!   printed.
+//! - `diro init SHELL`: the shell function that moves the shell where diro
+//!   left it, through `--cwd-file`.
 //! - `diro plugin list|new|enable|disable|run|log`: plugin tooling.
 //! - `diro --version`, `diro --help`.
 //!
 //! Every argument must be valid Unicode: a name that is not is refused
 //! with a message, never changed silently.
 //!
-//! Owners after Phase 0: W1d owns this file, `open.rs` and `serve.rs`;
-//! W1e owns `cmd/` (W3b owns `cmd/plugin.rs`).
+//! Owners after Phase 0: W1d owns this file, `open.rs` and `serve.rs`, and
+//! `cmd/keys.rs` and `cmd/init.rs`; W1e owns the rest of `cmd/` (W3b owns
+//! `cmd/plugin.rs`).
 
 pub mod cmd;
 pub mod open;
@@ -27,18 +32,13 @@ use std::io::{BufRead, Write};
 use diroxide_core::{Explain, Message};
 use thiserror::Error;
 
+pub use open::OpenOptions;
+
 /// What was asked for on the command line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Invocation {
     /// Open the panels.
-    Open {
-        /// Up to two places, as typed.
-        places: Vec<String>,
-        /// Keep the configuration beside the program.
-        portable: bool,
-        /// Start without plugins.
-        no_plugins: bool,
-    },
+    Open(OpenOptions),
     /// Serve the app core over JSON-RPC.
     Serve,
     /// Search names.
@@ -54,6 +54,10 @@ pub enum Invocation {
     Ls(cmd::ls::LsArgs),
     /// Print a shell's completion script.
     Completions(cmd::completions::CompletionsArgs),
+    /// Check or print the keys.
+    Keys(cmd::keys::KeysArgs),
+    /// Print a shell's wrapper for `--cwd-file`.
+    Init(cmd::init::InitArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -112,6 +116,9 @@ pub fn help_text() -> String {
         "diro ls [PLACE]           list a folder, one entry a line, the name first",
         "diro ls -                 list the NUL-separated paths on standard input",
         "diro completions SHELL    print the completion script for bash, zsh, fish or powershell",
+        "diro keys check [FILE]    say each problem in keymap.toml or FILE",
+        "diro keys print           print the current keys as keymap.toml text",
+        "diro init SHELL           print the shell function that moves the shell where diro left it",
         "diro plugin list          list the plugins",
         "diro --version            print the version",
         "diro --help               print this help",
@@ -119,6 +126,11 @@ pub fn help_text() -> String {
         "Options for opening:",
         "--portable                keep the settings beside the program",
         "--no-plugins              start without plugins",
+        "--tui                     open in the terminal, even with a display",
+        "--gui                     open the window (it comes with alpha.6)",
+        "--inline                  draw below the prompt, not on the whole screen",
+        "--cwd-file FILE           at quit, write the active folder to FILE for the shell",
+        "--theme NAME              use this theme for this session",
         "",
         "Exit codes:",
         "0  done",
@@ -131,6 +143,56 @@ pub fn help_text() -> String {
     .join("\n")
 }
 
+/// Reads the options and places of `diro [PATH] [OTHER]`.
+fn parse_open(args: &[String]) -> Result<OpenOptions, CliError> {
+    let mut options = OpenOptions::default();
+    let mut only_places = false;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        if only_places {
+            options.places.push(arg.clone());
+            continue;
+        }
+        let (name, inline_value) = match arg.split_once('=') {
+            Some((name, value)) if name.starts_with("--") => (name, Some(value.to_owned())),
+            _ => (arg.as_str(), None),
+        };
+        let mut value = |flag: &str| -> Result<String, CliError> {
+            match inline_value.clone().or_else(|| rest.next().cloned()) {
+                Some(value) if !value.is_empty() => Ok(value),
+                _ => Err(CliError::Missing(flag.to_owned())),
+            }
+        };
+        match name {
+            "--" => only_places = true,
+            "--portable" => options.portable = true,
+            "--no-plugins" => options.no_plugins = true,
+            "--tui" => options.tui = true,
+            "--gui" => options.gui = true,
+            "--inline" => options.inline = true,
+            "--cwd-file" => {
+                let file = value("--cwd-file")?;
+                if file.chars().any(char::is_control) {
+                    return Err(CliError::Failed(
+                        "the --cwd-file name has control characters; choose a plain name"
+                            .to_owned(),
+                    ));
+                }
+                options.cwd_file = Some(file);
+            }
+            "--theme" => options.theme = Some(value("--theme")?),
+            option if option.starts_with("--") => {
+                return Err(CliError::UnknownOption(option.to_owned()));
+            }
+            place => options.places.push(place.to_owned()),
+        }
+    }
+    if options.places.len() > 2 {
+        return Err(CliError::TooMany(options.places[1].clone()));
+    }
+    Ok(options)
+}
+
 /// Reads the arguments after the program's name.
 pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
     let args: Vec<String> = args
@@ -141,11 +203,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         })
         .collect::<Result<_, _>>()?;
     let Some(first) = args.first() else {
-        return Ok(Invocation::Open {
-            places: Vec::new(),
-            portable: false,
-            no_plugins: false,
-        });
+        return Ok(Invocation::Open(OpenOptions::default()));
     };
     match first.as_str() {
         "--version" | "-V" => Ok(Invocation::Version),
@@ -167,31 +225,9 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "plugin" => cmd::plugin::parse(&args[1..]).map(Invocation::Plugin),
         "ls" => cmd::ls::parse(&args[1..]).map(Invocation::Ls),
         "completions" => cmd::completions::parse(&args[1..]).map(Invocation::Completions),
-        _ => {
-            let mut places = Vec::new();
-            let mut portable = false;
-            let mut no_plugins = false;
-            let mut only_places = false;
-            for arg in &args {
-                match arg.as_str() {
-                    "--" if !only_places => only_places = true,
-                    "--portable" if !only_places => portable = true,
-                    "--no-plugins" if !only_places => no_plugins = true,
-                    option if option.starts_with("--") && !only_places => {
-                        return Err(CliError::UnknownOption(option.to_owned()));
-                    }
-                    place => places.push(place.to_owned()),
-                }
-            }
-            if places.len() > 2 {
-                return Err(CliError::TooMany(places[1].clone()));
-            }
-            Ok(Invocation::Open {
-                places,
-                portable,
-                no_plugins,
-            })
-        }
+        "keys" => cmd::keys::parse(&args[1..]).map(Invocation::Keys),
+        "init" => cmd::init::parse(&args[1..]).map(Invocation::Init),
+        _ => parse_open(&args).map(Invocation::Open),
     }
 }
 
@@ -212,18 +248,23 @@ pub fn run(
             writeln!(out, "{}", help_text()).map_err(write_error)?;
             Ok(0)
         }
-        Invocation::Open { places, .. } => open::run(&places, out),
+        Invocation::Open(options) => open::run(&options, out),
         Invocation::Serve => serve::run(input, out),
         Invocation::Search { root, pattern } => cmd::search::run(&root, &pattern, out),
         Invocation::Plugin(command) => cmd::plugin::run(&command, out),
         Invocation::Ls(args) => cmd::ls::run(&args, input, out),
         Invocation::Completions(args) => cmd::completions::run(args, out),
+        Invocation::Keys(args) => cmd::keys::run(&args, open::paths(false).as_ref(), out),
+        Invocation::Init(args) => cmd::init::run(args, out),
     }
 }
 
 /// The whole program: parse, run, and turn errors into the house style on
 /// `err`. Returns the exit code: 0 for success, 1 for failure, 2 for a
-/// usage mistake, 3 when a subcommand was partly done.
+/// usage mistake, 3 when a subcommand was partly done. A `Failed` error
+/// that is already a sentence ("Could not list D:\nope: it does not
+/// exist. Check the path.") is written as it is; a bare cause is written
+/// as "Could not finish: CAUSE.".
 pub fn main_with(
     args: Vec<OsString>,
     input: &mut dyn BufRead,
@@ -239,6 +280,12 @@ pub fn main_with(
     };
     match run(invocation, input, out) {
         Ok(code) => code,
+        Err(CliError::Failed(sentence))
+            if sentence.chars().next().is_some_and(char::is_uppercase) =>
+        {
+            let _ = writeln!(err, "{sentence}");
+            1
+        }
         Err(error) => {
             let _ = writeln!(err, "{}", Message::from_error("finish", "", &error));
             1
@@ -254,25 +301,27 @@ mod tests {
         list.iter().map(OsString::from).collect()
     }
 
+    fn open(places: &[&str]) -> OpenOptions {
+        OpenOptions {
+            places: places.iter().map(|p| (*p).to_owned()).collect(),
+            ..OpenOptions::default()
+        }
+    }
+
     #[test]
     fn arguments_are_read() {
         assert_eq!(parse(args(&["--version"])), Ok(Invocation::Version));
         assert_eq!(parse(args(&["serve", "--stdio"])), Ok(Invocation::Serve));
         assert_eq!(
             parse(args(&["--portable", "a", "b"])),
-            Ok(Invocation::Open {
-                places: vec!["a".into(), "b".into()],
+            Ok(Invocation::Open(OpenOptions {
                 portable: true,
-                no_plugins: false
-            })
+                ..open(&["a", "b"])
+            }))
         );
         assert_eq!(
             parse(args(&["--", "--weird-name"])),
-            Ok(Invocation::Open {
-                places: vec!["--weird-name".into()],
-                portable: false,
-                no_plugins: false
-            })
+            Ok(Invocation::Open(open(&["--weird-name"])))
         );
         assert_eq!(
             parse(args(&["--bogus"])),
@@ -286,6 +335,45 @@ mod tests {
             parse(args(&["search", "x"])),
             Err(CliError::Missing("search".into()))
         );
+    }
+
+    #[test]
+    fn the_opening_options_are_read() {
+        assert_eq!(
+            parse(args(&[
+                "--tui",
+                "--cwd-file",
+                "cwd.txt",
+                "--theme=nord",
+                "--inline",
+                "--gui",
+                "left",
+            ])),
+            Ok(Invocation::Open(OpenOptions {
+                tui: true,
+                gui: true,
+                inline: true,
+                cwd_file: Some("cwd.txt".into()),
+                theme: Some("nord".into()),
+                ..open(&["left"])
+            }))
+        );
+        assert_eq!(
+            parse(args(&["--cwd-file"])),
+            Err(CliError::Missing("--cwd-file".into()))
+        );
+        assert!(matches!(
+            parse(args(&["--cwd-file", "a\u{7}b"])),
+            Err(CliError::Failed(_))
+        ));
+        assert!(matches!(
+            parse(args(&["keys", "print"])),
+            Ok(Invocation::Keys(cmd::keys::KeysArgs::Print))
+        ));
+        assert!(matches!(
+            parse(args(&["init", "bash"])),
+            Ok(Invocation::Init(_))
+        ));
     }
 
     #[test]

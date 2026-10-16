@@ -3,6 +3,8 @@
 //! `keys.rs` and `init.rs`.
 
 pub mod completions;
+pub mod init;
+pub mod keys;
 pub mod ls;
 pub mod plugin;
 pub mod search;

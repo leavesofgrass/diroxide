@@ -1,8 +1,7 @@
 //! The app: two panels, one active; keys become commands through the
 //! keymap; commands change state and return effects. The app never does
-//! I/O: what needs the disk goes out as an [`Effect`] or a
-//! [`Request`](crate::Request) for the runtime, and the answers come back
-//! as [`AppEvent`]s.
+//! I/O: what needs the disk goes out as an [`Effect`] or a [`Request`] for
+//! the runtime, and the answers come back as [`AppEvent`]s.
 //!
 //! Every alpha.1 command is wired here (plan section 8): moving, the
 //! panels, the history, selection, sorting and the filter, the file
@@ -736,6 +735,39 @@ impl App {
     /// [`Runtime::carry_out`](crate::Runtime::carry_out) calls it.
     pub fn take_requests(&mut self) -> Vec<Request> {
         std::mem::take(&mut self.requests)
+    }
+
+    /// Lists a place into a panel, as Go to a path does. App-side hook for
+    /// the server's `panel/set` and the window's address bar.
+    pub fn open_place(&mut self, side: Side, place: Place) -> Vec<Effect> {
+        self.open(side, place, None)
+    }
+
+    /// Puts a panel's focus on the row with this name (its real name);
+    /// whether it was found. App-side hook for the server and the window.
+    pub fn focus_name(&mut self, side: Side, name: &str) -> bool {
+        self.panel_mut(side).list_mut().focus_id(name)
+    }
+
+    /// Marks or unmarks the rows with these names; returns how many
+    /// changed. App-side hook for the server and the window.
+    pub fn mark_names(&mut self, side: Side, names: &[String], mark: bool) -> usize {
+        let list = self.panel_mut(side).list_mut();
+        let before = list.selected_count();
+        if mark {
+            list.select_matching(|row| names.contains(&row.id));
+            list.selected_count() - before
+        } else {
+            let keep: Vec<String> = list
+                .selected_ids()
+                .into_iter()
+                .filter(|id| !names.iter().any(|n| n == id))
+                .map(str::to_owned)
+                .collect();
+            list.select_none();
+            list.select_matching(|row| keep.contains(&row.id));
+            before - list.selected_count()
+        }
     }
 
     /// The title line, the active place first: "photos, in D:\, left
