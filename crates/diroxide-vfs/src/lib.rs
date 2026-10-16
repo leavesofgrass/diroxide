@@ -36,7 +36,7 @@ pub use cancel::{
 pub use capabilities::{AccessCapabilities, Can, Capabilities};
 pub use error::{ErrorClass, ErrorScope, VfsError};
 pub use local::LocalProvider;
-pub use names::{NameIssue, NameRules, check_name, check_name_with};
+pub use names::{NameIssue, NameRules, check_name, check_name_with, first_refused};
 pub use provider::{
     AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Principal, Provider, ReadSeek,
     StreamingList, WatchEvent, WatchHandle, WatchSink, WriteMode,

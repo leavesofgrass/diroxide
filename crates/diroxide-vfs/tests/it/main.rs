@@ -1,5 +1,7 @@
 //! Integration tests of the provider contract, through the registry.
 
+mod names;
+
 use diroxide_core::{EntryKind, Place};
 use diroxide_vfs::{OpContext, Registry, VfsError, local_roots};
 

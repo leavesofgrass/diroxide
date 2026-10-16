@@ -3,8 +3,19 @@
 //! would change or cannot hold, which are refused (plan section 5.12;
 //! research/file-operations.md and bulk-rename.md).
 //!
-//! Wave 1 (W1a) owns this module, adds the property tests and the fuzz
-//! target, and settles which shell characters to flag.
+//! The local provider refuses, before it touches the disk, a new name that
+//! [`first_refused`] answers for: a name Windows would change or reject on
+//! a Windows-rules place, a dot name, a name too long for the place. Every
+//! other issue is only flagged, on the row.
+//!
+//! The shell characters are settled as `$` and the backtick: the two a
+//! shell expands inside a plain word, so a name holding them silently
+//! changes, or comes out empty, when typed at a prompt (the owner's rule
+//! 1a names them "above all"). The other characters of that rule (`!`,
+//! `&`, `;`, `#`, `~`, `'`, parentheses, brackets, braces and the space)
+//! are not flagged: they are common in ordinary names ("Report (1).pdf",
+//! "My Documents"), a flag on every such row would teach the owner to
+//! ignore the flag, and diroxide never passes a name through a shell.
 
 use diroxide_core::names::{COMPOUND_EXTENSIONS, has_hidden, split_extension_with};
 
@@ -13,8 +24,9 @@ use crate::capabilities::Capabilities;
 /// Characters Windows does not allow in names, plus the separators.
 pub const RESERVED_CHARACTERS: [char; 9] = [':', '*', '?', '"', '<', '>', '|', '\\', '/'];
 
-/// Characters a shell expands, so a name with them changes when typed at a
-/// prompt.
+/// Characters a shell expands inside a plain word, so a name with them
+/// changes when typed at a prompt: `$` and the backtick (settled in the
+/// module documentation).
 pub const SHELL_SPECIAL: [char; 2] = ['$', '`'];
 
 /// Windows device names, reserved with or without an extension, the
@@ -194,7 +206,14 @@ pub fn check_name_with(name: &str, siblings: &[&str], rules: &NameRules) -> Vec<
     if has_hidden(name) {
         issues.push(NameIssue::HiddenCharacters);
     }
-    if let Some(c) = name.chars().find(|c| RESERVED_CHARACTERS.contains(c)) {
+    // The separator comes first when present: it is refused everywhere,
+    // so a name such as "a:b/c" must not be answered by its colon alone.
+    let reserved = if name.contains('/') {
+        Some('/')
+    } else {
+        name.chars().find(|c| RESERVED_CHARACTERS.contains(c))
+    };
+    if let Some(c) = reserved {
         issues.push(NameIssue::ReservedCharacter(c));
     }
     if name.ends_with(['.', ' ']) {
@@ -238,6 +257,16 @@ pub fn check_name_with(name: &str, siblings: &[&str], rules: &NameRules) -> Vec<
 /// Whether a name, on its own, needs care.
 pub fn needs_care(name: &str) -> bool {
     !check_name(name, &[]).is_empty()
+}
+
+/// The first issue that a place with these rules refuses for a new name,
+/// or `None` when the name may be made (perhaps flagged). The local
+/// provider asks this before it creates or renames anything, so a name
+/// Windows would silently change never reaches the disk.
+pub fn first_refused(name: &str, rules: &NameRules) -> Option<NameIssue> {
+    check_name_with(name, &[], rules)
+        .into_iter()
+        .find(|issue| issue.refused(rules))
 }
 
 /// A numbered name for keeping both: "report (2).pdf", "Makefile (2)",
@@ -377,6 +406,67 @@ mod tests {
             unused_name("report.pdf", &["REPORT (2).PDF", "report.pdf"]).as_deref(),
             Some("report (3).pdf")
         );
+    }
+
+    #[test]
+    fn hostile_names_are_refused_on_windows_rules_and_flagged_on_unix_rules() {
+        // R8's edge-case list; these names live only in strings here.
+        for name in [
+            "a:b",
+            "a*b",
+            "what?",
+            "a\"b",
+            "a<b",
+            "a>b",
+            "a|b",
+            "a\\b",
+            "notes.",
+            "notes ",
+            "CON",
+            "aux.txt",
+            "NUL.tar.gz",
+            "COM\u{B9}",
+            "LPT\u{B2}",
+        ] {
+            assert!(first_refused(name, &WINDOWS).is_some(), "{name}");
+            assert!(first_refused(name, &UNIX).is_none(), "{name}");
+            assert!(!check_name_with(name, &[], &UNIX).is_empty(), "{name}");
+        }
+        assert!(first_refused("a/b", &UNIX).is_some());
+        assert_eq!(first_refused(" lead", &WINDOWS), None);
+        assert_eq!(first_refused("$HOME", &WINDOWS), None);
+        assert_eq!(first_refused("C\u{F03A}", &WINDOWS), None);
+    }
+
+    #[test]
+    fn dot_names_are_refused_everywhere() {
+        for name in [".", ".."] {
+            assert_eq!(first_refused(name, &WINDOWS), Some(NameIssue::DotName));
+            assert_eq!(first_refused(name, &UNIX), Some(NameIssue::DotName));
+        }
+        assert_eq!(first_refused("", &UNIX), Some(NameIssue::Empty));
+    }
+
+    #[test]
+    fn the_length_limit_is_exact_per_rule() {
+        let units = |n| "a".repeat(n);
+        assert_eq!(first_refused(&units(255), &WINDOWS), None);
+        assert_eq!(
+            first_refused(&units(256), &WINDOWS),
+            Some(NameIssue::TooLong { max: 255 })
+        );
+        assert_eq!(first_refused(&units(255), &UNIX), None);
+        assert!(first_refused(&units(256), &UNIX).is_some());
+        let cjk = "\u{65E5}".repeat(100);
+        assert_eq!(first_refused(&cjk, &WINDOWS), None);
+        assert_eq!(
+            first_refused(&cjk, &UNIX),
+            Some(NameIssue::TooLong { max: 255 })
+        );
+        // An emoji is two UTF-16 units and four bytes.
+        let crabs = "\u{1F980}".repeat(64);
+        assert_eq!(first_refused(&crabs, &WINDOWS), None);
+        assert!(first_refused(&crabs, &UNIX).is_some());
     }
 
     #[test]
