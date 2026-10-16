@@ -6,9 +6,11 @@
 
 use std::cmp::Ordering;
 
-use diroxide_config::{Settings, SortKey};
+use diroxide_config::Settings;
 use diroxide_core::format::human_size;
-use diroxide_core::{Clock, Entry, EntryKind, ListModel, ListRow, Place, RequestId, Side, clock};
+use diroxide_core::{
+    Clock, Entry, EntryKind, ListModel, ListRow, Place, RequestId, Side, SortSpec, clock,
+};
 use diroxide_filetype::TypeRegistry;
 
 /// A detail said after an entry's name.
@@ -138,8 +140,7 @@ pub struct Panel {
     all_entries: Vec<Entry>,
     entries: Vec<Entry>,
     list: ListModel,
-    sort: SortKey,
-    folders_first: bool,
+    sort: SortSpec,
     show_hidden: bool,
     columns: Vec<Column>,
     history: Vec<Place>,
@@ -160,8 +161,7 @@ impl Panel {
             all_entries: Vec::new(),
             entries: Vec::new(),
             list,
-            sort: settings.sort,
-            folders_first: settings.folders_first,
+            sort: settings.sort_spec(),
             show_hidden: settings.show_hidden,
             columns: settings
                 .columns
@@ -310,25 +310,7 @@ impl Panel {
             .filter(|e| self.show_hidden || !e.hidden)
             .cloned()
             .collect();
-        let sort = self.sort;
-        let folders_first = self.folders_first;
-        shown.sort_by(|a, b| {
-            let folder_order = if folders_first {
-                b.is_container().cmp(&a.is_container())
-            } else {
-                Ordering::Equal
-            };
-            folder_order.then_with(|| {
-                match sort {
-                    SortKey::Name => natural_cmp(&a.name, &b.name),
-                    SortKey::Size => a.size.cmp(&b.size),
-                    SortKey::Modified => b.modified.cmp(&a.modified),
-                    SortKey::Type => a.type_name.cmp(&b.type_name),
-                    SortKey::Extension => a.extension().cmp(&b.extension()),
-                }
-                .then_with(|| natural_cmp(&a.name, &b.name))
-            })
-        });
+        diroxide_core::sort::sort_entries(&mut shown, &self.sort);
         let rows = shown
             .iter()
             .map(|e| {
