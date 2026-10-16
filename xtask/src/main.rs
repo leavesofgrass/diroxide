@@ -22,8 +22,7 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str =
-    "Usage: cargo xtask deps --check | native --check | regen [--check] | keyboard [--check] | logo";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | keyboard [--check] | logo";
 
 fn main() -> ExitCode {
     match run() {

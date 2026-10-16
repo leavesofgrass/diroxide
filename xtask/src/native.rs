@@ -176,7 +176,10 @@ mod tests {
 
     #[test]
     fn ring_through_ureq_is_the_one_allowed_path() {
-        assert_eq!(problems_in_tree("cc", RING_UNDER_UREQ), Vec::<String>::new());
+        assert_eq!(
+            problems_in_tree("cc", RING_UNDER_UREQ),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
