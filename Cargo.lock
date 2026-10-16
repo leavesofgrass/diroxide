@@ -368,7 +368,11 @@ dependencies = [
  "diroxide-core",
  "diroxide-filetype",
  "diroxide-ops",
+ "diroxide-theme",
  "diroxide-vfs",
+ "serde",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -402,9 +406,13 @@ name = "diroxide-config"
 version = "0.1.0-alpha.1"
 dependencies = [
  "diroxide-core",
+ "diroxide-theme",
+ "dirs",
  "serde",
+ "tempfile",
  "thiserror",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]
@@ -1619,6 +1627,7 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 

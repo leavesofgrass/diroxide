@@ -152,11 +152,9 @@ impl App {
     /// An app with two panels, the left one active. Call [`App::start`]
     /// for the first listings.
     pub fn new(options: AppOptions) -> Self {
-        let keymap = if options.settings.single_letter_keys {
-            options.keymap
-        } else {
-            options.keymap.without_single_characters()
-        };
+        let keymap = options
+            .keymap
+            .with_single_letters(options.settings.single_letters);
         Self {
             panels: [
                 Panel::new(Side::Left, options.left, &options.settings),

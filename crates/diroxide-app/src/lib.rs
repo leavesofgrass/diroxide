@@ -5,17 +5,20 @@
 //! terminal or a window.
 //!
 //! Module owners after Phase 0: W1c owns `commands`, `keymap`, `menu`,
-//! `palette` and `settings`; W1d owns the rest (`app`, `panel`, `dialog`,
-//! `jobs`, `runtime`); later waves add their own files.
+//! `palette`, `settings`, `entry` and `messages`; W1d owns the rest
+//! (`app`, `panel`, `dialog`, `jobs`, `runtime`); later waves add their
+//! own files.
 //!
 //! [`Effect`]: diroxide_core::Effect
 
 pub mod app;
 pub mod commands;
 pub mod dialog;
+pub mod entry;
 pub mod jobs;
 pub mod keymap;
 pub mod menu;
+pub mod messages;
 pub mod palette;
 pub mod panel;
 pub mod runtime;
