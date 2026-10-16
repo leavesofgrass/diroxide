@@ -2,11 +2,14 @@
 //! diff, in the `diroxide` folder under the platform's config directory.
 //!
 //! - `config.toml`: [`Settings`], including the plugins section.
-//! - `keymap.toml`: [`KeymapConfig`], overrides of the default keys.
+//! - `keymap.toml`: [`KeymapConfig`], the user's keys: command to key, in a
+//!   table per column (terminal, window) and layer.
 //! - `filetypes.toml`: [`FileTypesConfig`].
 //! - `banks.toml`: [`BanksConfig`], the button banks.
 //! - `conversions.toml`: [`ConversionsConfig`], the conversion recipes.
 //! - `tools.toml`: [`ToolsConfig`], overrides for external tools.
+//! - `session.toml`, in the state folder: [`SessionState`], what the next
+//!   start restores.
 //!
 //! Missing files mean defaults. Unknown keys in `config.toml` are kept and
 //! written back. Writes are atomic and happen only on an explicit change.
@@ -18,6 +21,7 @@
 pub mod error;
 pub mod files;
 pub mod paths;
+pub mod session;
 pub mod settings;
 
 pub use error::ConfigError;
@@ -26,6 +30,7 @@ pub use files::{
     FileTypesConfig, KeyOverride, KeymapConfig, RecipeConfig, ToolOverride, ToolsConfig,
 };
 pub use paths::Paths;
+pub use session::{Layout, PanelState, SessionState, load_session, save_session};
 pub use settings::{PluginSettings, ScreenReaderMode, Settings, SortKey};
 
 use std::fs;

@@ -11,8 +11,8 @@ use std::sync::Arc;
 use diroxide_config::Settings;
 use diroxide_core::format::count;
 use diroxide_core::{
-    Clock, Command, CommandId, DialogId, Effect, Entry, EntryKind, IdSource, JobId, Key, KeyChord,
-    Layer, Message, Move, Place, Redraw, RequestId, Side, SystemClock,
+    Clock, Command, CommandId, DialogId, Effect, Entry, EntryKind, IdSource, JobId, Key, Layer,
+    Message, Move, Place, Redraw, RequestId, Side, SystemClock,
 };
 use diroxide_filetype::TypeRegistry;
 use diroxide_ops::{JobProgress, JobReport, UndoLog};
@@ -141,7 +141,6 @@ pub struct App {
     types: TypeRegistry,
     clock: Arc<dyn Clock>,
     ids: IdSource,
-    pending: Vec<Key>,
     dialogs: Vec<(DialogId, Dialog)>,
     jobs: JobTable,
     undo: UndoLog,
@@ -169,7 +168,6 @@ impl App {
             types: options.types,
             clock: options.clock,
             ids: IdSource::new(),
-            pending: Vec::new(),
             dialogs: Vec::new(),
             jobs: JobTable::new(),
             undo: UndoLog::default(),
@@ -249,8 +247,8 @@ impl App {
         )
     }
 
-    /// The status line, the key fact first: a chord's continuations, the
-    /// last message, or the active panel's status.
+    /// The status line, the key fact first: the last message, or the
+    /// active panel's status.
     pub fn status_line(&self) -> String {
         if self.status.is_empty() {
             self.active_panel().list().status()
@@ -434,44 +432,23 @@ impl App {
             self.dialogs.pop();
             return vec![Effect::CloseDialog(id), Effect::Redraw(Redraw::All)];
         }
-        self.pending.push(key);
-        match self.keymap.lookup(&self.layers(), &self.pending) {
+        match self.keymap.lookup(&self.layers(), &key) {
             Lookup::Command(id) => {
-                self.pending.clear();
                 self.status.clear();
                 self.dispatch(&Command::new(id))
             }
-            Lookup::Prefix(next) => {
-                let first = chord_text(&self.pending);
-                let options: Vec<String> = next
-                    .iter()
-                    .map(|(key, command)| format!("{key} {}", commands::name_of(command)))
-                    .collect();
-                let text = format!("{first}, then: {}", options.join(", "));
-                vec![
-                    Effect::Redraw(Redraw::StatusLine),
-                    self.say(Message::info(text)),
-                ]
-            }
-            Lookup::NoMatch => {
-                let pressed = std::mem::take(&mut self.pending);
-                if pressed.len() > 1 {
-                    let text = format!("{} is not bound", chord_text(&pressed));
-                    return vec![self.say(Message::info(text))];
-                }
-                match key.typed_char() {
-                    Some(letter) => {
-                        let side = self.active;
-                        if self.panel_mut(side).list_mut().letter_jump(letter) {
-                            self.status.clear();
-                            self.focus_effects(side)
-                        } else {
-                            vec![self.say(Message::status(format!("No name starts with {letter}")))]
-                        }
+            Lookup::NoMatch => match key.typed_char() {
+                Some(letter) => {
+                    let side = self.active;
+                    if self.panel_mut(side).list_mut().letter_jump(letter) {
+                        self.status.clear();
+                        self.focus_effects(side)
+                    } else {
+                        vec![self.say(Message::status(format!("No name starts with {letter}")))]
                     }
-                    None => Vec::new(),
                 }
-            }
+                None => Vec::new(),
+            },
         }
     }
 
@@ -566,14 +543,6 @@ impl App {
                 ]
             }
         }
-    }
-}
-
-fn chord_text(keys: &[Key]) -> String {
-    match keys {
-        [one] => KeyChord::single(*one).to_string(),
-        [first, second, ..] => KeyChord::pair(*first, *second).to_string(),
-        [] => String::new(),
     }
 }
 
@@ -700,7 +669,7 @@ mod tests {
         let said = settle(&mut app, &mut runtime, effects);
         assert!(said[0].starts_with("Could not open "), "{said:?}");
         assert!(
-            said[0].ends_with("it does not exist. Press F5 to reload the folder."),
+            said[0].ends_with("it does not exist. Reload the folder."),
             "{said:?}"
         );
         assert_eq!(app.panel(Side::Left).place(), &here());

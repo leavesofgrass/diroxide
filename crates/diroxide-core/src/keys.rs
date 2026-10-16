@@ -1,10 +1,27 @@
-//! Keys, chords and keymap layers, the same for every frontend. A frontend
-//! turns its own key events into [`Key`]s; the keymap turns [`KeyChord`]s
-//! into commands.
+//! Keys, keymap layers and keymap columns, the same for every frontend. A
+//! frontend turns its own key events into [`Key`]s; the keymap turns a key
+//! into a command.
 //!
 //! Keys are written as modifiers and a key joined by plus signs:
-//! `ctrl+alt+t`, `shift+f10`, `space`, `ctrl+plus`. A chord is one or two
-//! keys separated by a space, in the Emacs style: `ctrl+x ctrl+f`.
+//! `ctrl+alt+t`, `shift+f10`, `space`, `ctrl+plus`. A binding is one key
+//! with its modifiers. There are no sequences and no leader keys (the
+//! owner's decision; plan question 56): two keys written one after the
+//! other, such as `ctrl+x ctrl+f`, are refused with
+//! [`CoreError::KeySequence`], so a keymap file that holds one says so in
+//! words.
+//!
+//! `keymap.toml` is command to key, one line per command, in a table per
+//! column and layer (ADR-0005):
+//!
+//! ```toml
+//! [terminal.panel]
+//! "file.copy" = "f5"
+//! "file.trash" = ["delete", "f8"]
+//! "view.sort-list" = "none"
+//!
+//! [window.panel]
+//! "view.sort-list" = "ctrl+shift+s"
+//! ```
 
 use std::fmt;
 
@@ -181,10 +198,18 @@ impl Key {
         Self::new(code, Modifiers::CTRL)
     }
 
-    /// Reads a key such as `ctrl+alt+t`, `F5` or `shift+tab`.
+    /// Reads a key such as `ctrl+alt+t`, `F5` or `shift+tab`. Two keys one
+    /// after the other (`ctrl+x ctrl+f`) are refused as a sequence.
     pub fn parse(text: &str) -> Result<Self, CoreError> {
         let bad = || CoreError::BadKey(text.to_owned());
         let trimmed = text.trim();
+        if trimmed.contains(char::is_whitespace) {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() > 1 && parts.iter().all(|part| Self::parse(part).is_ok()) {
+                return Err(CoreError::KeySequence(text.to_owned()));
+            }
+            return Err(bad());
+        }
         let (mods_text, key_text) = match trimmed.rsplit_once('+') {
             Some((mods, "")) if mods.ends_with('+') || mods.is_empty() => {
                 (mods.strip_suffix('+').unwrap_or(mods), "+")
@@ -299,78 +324,35 @@ impl From<Key> for String {
     }
 }
 
-/// One key, or two keys pressed one after the other.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct KeyChord(Vec<Key>);
+/// The two columns of the keymap: the keys a terminal can deliver, and the
+/// keys of the window. Each command has a binding in each column (plan
+/// section 5.7); the window column uses Command for Control on macOS.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KeyColumn {
+    /// The terminal frontend, which never uses keys a terminal cannot
+    /// deliver (the unsafe-key table).
+    Terminal,
+    /// The window frontend.
+    Window,
+}
 
-impl KeyChord {
-    /// The longest chord: two keys.
-    pub const MAX_KEYS: usize = 2;
+impl KeyColumn {
+    /// Both columns, the terminal first.
+    pub const ALL: [KeyColumn; 2] = [KeyColumn::Terminal, KeyColumn::Window];
 
-    /// A chord of one key.
-    pub fn single(key: Key) -> Self {
-        Self(vec![key])
-    }
-
-    /// A chord of two keys.
-    pub fn pair(first: Key, second: Key) -> Self {
-        Self(vec![first, second])
-    }
-
-    /// Reads a chord such as `f5` or `ctrl+x ctrl+f`.
-    pub fn parse(text: &str) -> Result<Self, CoreError> {
-        let keys = text
-            .split_whitespace()
-            .map(Key::parse)
-            .collect::<Result<Vec<_>, _>>()?;
-        if keys.is_empty() || keys.len() > Self::MAX_KEYS {
-            return Err(CoreError::BadKey(text.to_owned()));
+    /// The column's name, as written in `keymap.toml`.
+    pub const fn word(self) -> &'static str {
+        match self {
+            KeyColumn::Terminal => "terminal",
+            KeyColumn::Window => "window",
         }
-        Ok(Self(keys))
-    }
-
-    /// The keys, in order.
-    pub fn keys(&self) -> &[Key] {
-        &self.0
-    }
-
-    /// Whether `pressed` is the start of this chord but not all of it.
-    pub fn starts_with(&self, pressed: &[Key]) -> bool {
-        pressed.len() < self.0.len() && self.0.starts_with(pressed)
     }
 }
 
-impl fmt::Display for KeyChord {
-    /// Writes the chord as it is said: "Ctrl+X Ctrl+F".
+impl fmt::Display for KeyColumn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, key) in self.0.iter().enumerate() {
-            if i > 0 {
-                f.write_str(" ")?;
-            }
-            key.fmt(f)?;
-        }
-        Ok(())
-    }
-}
-
-impl TryFrom<String> for KeyChord {
-    type Error = CoreError;
-
-    fn try_from(text: String) -> Result<Self, Self::Error> {
-        Self::parse(&text)
-    }
-}
-
-impl From<KeyChord> for String {
-    fn from(chord: KeyChord) -> Self {
-        chord.to_string()
-    }
-}
-
-impl From<Key> for KeyChord {
-    fn from(key: Key) -> Self {
-        Self::single(key)
+        f.write_str(self.word())
     }
 }
 
@@ -475,14 +457,24 @@ mod tests {
     }
 
     #[test]
-    fn chords_of_one_or_two_keys() {
-        let chord = KeyChord::parse("ctrl+x ctrl+f").unwrap();
-        assert_eq!(chord.to_string(), "Ctrl+X Ctrl+F");
-        assert!(chord.starts_with(&[key("ctrl+x")]));
-        assert!(!chord.starts_with(&[key("ctrl+x"), key("ctrl+f")]));
-        assert!(KeyChord::parse("a b c").is_err());
-        assert!(KeyChord::parse("  ").is_err());
-        let text: String = chord.clone().into();
-        assert_eq!(KeyChord::try_from(text).unwrap(), chord);
+    fn sequences_are_refused_in_words() {
+        assert_eq!(
+            Key::parse("ctrl+x ctrl+f"),
+            Err(CoreError::KeySequence("ctrl+x ctrl+f".into()))
+        );
+        assert_eq!(
+            Key::parse("ctrl+x nonsense"),
+            Err(CoreError::BadKey("ctrl+x nonsense".into()))
+        );
+        assert_eq!(Key::parse("  f5  ").unwrap(), key("f5"));
+        assert!(Key::parse("  ").is_err());
+        let text: String = key("ctrl+shift+s").into();
+        assert_eq!(Key::try_from(text).unwrap(), key("ctrl+shift+s"));
+    }
+
+    #[test]
+    fn columns_are_named() {
+        assert_eq!(KeyColumn::Terminal.word(), "terminal");
+        assert_eq!(KeyColumn::ALL[1].to_string(), "window");
     }
 }

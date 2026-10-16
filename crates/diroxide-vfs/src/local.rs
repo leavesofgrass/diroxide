@@ -1,12 +1,16 @@
 //! The local provider: the disks of this machine through `std::fs`.
 //!
 //! Phase 0 bodies are deliberately naive: no Windows attributes, no long
-//! paths, no owners, no trash, no watching. Wave 1 (W1a) replaces them,
-//! with platform calls in the `sys` module.
+//! paths, no owners, no trash, no watching, and a committing writer that
+//! checks the target name and then renames, where W1a's renames without
+//! replacing. Wave 1 (W1a) replaces them, with platform calls in the `sys`
+//! module.
 
 use std::fs::{self, File, Metadata, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use diroxide_core::place::ARCHIVE_EXTENSIONS;
 use diroxide_core::{Entry, EntryKind, Place, PlaceError, Timestamp};
@@ -15,7 +19,7 @@ use crate::cancel::{OpContext, ProgressUpdate};
 use crate::capabilities::Capabilities;
 use crate::error::VfsError;
 use crate::names;
-use crate::provider::{AttributeChange, Provider, WriteMode};
+use crate::provider::{AttributeChange, FileWriter, Provider, ReadSeek, WriteMode};
 
 /// How often a listing reports progress, in entries.
 const PROGRESS_EVERY: u64 = 1000;
@@ -68,6 +72,7 @@ impl LocalProvider {
         }
         entry.modified = metadata.modified().ok().map(Timestamp::from_system_time);
         entry.accessed = metadata.accessed().ok().map(Timestamp::from_system_time);
+        entry.created = metadata.created().ok().map(Timestamp::from_system_time);
         entry.hidden = entry.name.starts_with('.');
         entry.needs_care = names::needs_care(&entry.name);
         entry
@@ -80,16 +85,15 @@ impl Provider for LocalProvider {
     }
 
     fn capabilities(&self, _place: &Place) -> Capabilities {
-        Capabilities {
-            writable: true,
-            trash: false,
-            links: cfg!(unix),
-            attributes: false,
-            case_sensitive: cfg!(target_os = "linux"),
-            max_name_length: Some(255),
-            reserved_names: cfg!(windows),
-            watch: false,
-        }
+        let mut capabilities = Capabilities::read_only();
+        capabilities.writable = true;
+        capabilities.links = cfg!(unix);
+        capabilities.case_sensitive = cfg!(target_os = "linux");
+        capabilities.normalization_insensitive = cfg!(target_os = "macos");
+        capabilities.max_name_length = Some(255);
+        capabilities.reserved_names = cfg!(windows);
+        capabilities.random_read = true;
+        capabilities
     }
 
     fn list(&self, place: &Place, ctx: &OpContext) -> Result<Vec<Entry>, VfsError> {
@@ -134,20 +138,26 @@ impl Provider for LocalProvider {
         Ok(Box::new(File::open(Self::path_of(place)?)?))
     }
 
+    fn open_seekable(&self, place: &Place, ctx: &OpContext) -> Result<Box<dyn ReadSeek>, VfsError> {
+        ctx.check()?;
+        Ok(Box::new(File::open(Self::path_of(place)?)?))
+    }
+
     fn write(
         &self,
         place: &Place,
         mode: WriteMode,
         ctx: &OpContext,
-    ) -> Result<Box<dyn Write + Send>, VfsError> {
+    ) -> Result<Box<dyn FileWriter>, VfsError> {
         ctx.check()?;
-        let mut options = OpenOptions::new();
-        options.write(true);
-        match mode {
-            WriteMode::CreateNew => options.create_new(true),
-            WriteMode::Overwrite => options.create(true).truncate(true),
-        };
-        Ok(Box::new(options.open(Self::path_of(place)?)?))
+        let target = Self::path_of(place)?;
+        if mode == WriteMode::CreateNew && fs::symlink_metadata(&target).is_ok() {
+            return Err(VfsError::AlreadyExists);
+        }
+        let folder = target
+            .parent()
+            .ok_or_else(|| VfsError::unsupported("file", "write at the top of a drive"))?;
+        Ok(Box::new(LocalWriter::start(folder, target.clone(), mode)?))
     }
 
     fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
@@ -158,10 +168,10 @@ impl Provider for LocalProvider {
     fn rename(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         ctx.check()?;
         let target = Self::path_of(to)?;
-        if fs::symlink_metadata(&target).is_ok() {
-            return Err(VfsError::AlreadyExists);
-        }
-        Ok(fs::rename(Self::path_of(from)?, target)?)
+        Ok(crate::sys::rename_no_replace(
+            &Self::path_of(from)?,
+            &target,
+        )?)
     }
 
     fn remove(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
@@ -180,8 +190,97 @@ impl Provider for LocalProvider {
         _place: &Place,
         _change: &AttributeChange,
         _ctx: &OpContext,
-    ) -> Result<(), VfsError> {
+    ) -> Result<AttributeChange, VfsError> {
         Err(VfsError::unsupported("file", "change attributes yet"))
+    }
+}
+
+/// A token for an unfinished name: the clock's nanoseconds mixed with a
+/// counter, so two writes in the same instant differ.
+fn unfinished_token() -> u32 {
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos());
+    nanos ^ COUNTER.fetch_add(0x9E37_79B9, Ordering::Relaxed)
+}
+
+/// The local committing writer: the bytes go to an unfinished name in the
+/// target's folder; the commit renames it over the target; a drop without
+/// a commit removes it.
+struct LocalWriter {
+    file: Option<File>,
+    unfinished: PathBuf,
+    target: PathBuf,
+    mode: WriteMode,
+}
+
+impl LocalWriter {
+    fn start(folder: &std::path::Path, target: PathBuf, mode: WriteMode) -> Result<Self, VfsError> {
+        let mut last = VfsError::AlreadyExists;
+        for _ in 0..8 {
+            let unfinished = folder.join(names::unfinished_name(unfinished_token()));
+            match OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&unfinished)
+            {
+                Ok(file) => {
+                    return Ok(Self {
+                        file: Some(file),
+                        unfinished,
+                        target,
+                        mode,
+                    });
+                }
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => last = error.into(),
+            }
+        }
+        Err(last)
+    }
+}
+
+impl Write for LocalWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        match &mut self.file {
+            Some(file) => file.write(bytes),
+            None => Err(io::Error::other("the write was already committed")),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match &mut self.file {
+            Some(file) => file.flush(),
+            None => Ok(()),
+        }
+    }
+}
+
+impl FileWriter for LocalWriter {
+    fn commit(mut self: Box<Self>, durable: bool) -> Result<(), VfsError> {
+        if let Some(mut file) = self.file.take() {
+            file.flush()?;
+            if durable {
+                file.sync_all()?;
+            }
+        }
+        if self.mode == WriteMode::CreateNew && fs::symlink_metadata(&self.target).is_ok() {
+            return Err(VfsError::AlreadyExists);
+        }
+        fs::rename(&self.unfinished, &self.target)?;
+        self.unfinished = PathBuf::new();
+        Ok(())
+    }
+}
+
+impl Drop for LocalWriter {
+    fn drop(&mut self) {
+        self.file.take();
+        if !self.unfinished.as_os_str().is_empty() {
+            // Best effort: the unfinished file is ours alone, by its name.
+            let _ = fs::remove_file(&self.unfinished);
+        }
     }
 }
 

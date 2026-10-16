@@ -17,14 +17,14 @@ use toml::{Table, Value};
 /// docs/dev/architecture.md.
 pub const ALLOWED: [(&str, &[&str]); 17] = [
     ("diroxide-core", &[]),
+    ("diroxide-theme", &[]),
     ("diroxide-vfs", &["diroxide-core"]),
-    ("diroxide-config", &["diroxide-core"]),
+    ("diroxide-config", &["diroxide-core", "diroxide-theme"]),
     ("diroxide-ops", &["diroxide-core", "diroxide-vfs"]),
     (
         "diroxide-archive",
         &["diroxide-core", "diroxide-vfs", "diroxide-ops"],
     ),
-    ("diroxide-sftp", &["diroxide-core", "diroxide-vfs"]),
     ("diroxide-search", &["diroxide-core", "diroxide-vfs"]),
     (
         "diroxide-tools",
@@ -64,7 +64,6 @@ pub const ALLOWED: [(&str, &[&str]); 17] = [
             "diroxide-core",
             "diroxide-vfs",
             "diroxide-archive",
-            "diroxide-sftp",
             "diroxide-ops",
             "diroxide-search",
             "diroxide-filetype",
@@ -72,17 +71,23 @@ pub const ALLOWED: [(&str, &[&str]); 17] = [
             "diroxide-plugins",
             "diroxide-tools",
             "diroxide-preview",
+            "diroxide-theme",
         ],
     ),
-    ("diroxide-tui", &["diroxide-core", "diroxide-app"]),
-    ("diroxide-gui", &["diroxide-core", "diroxide-app"]),
+    (
+        "diroxide-tui",
+        &["diroxide-core", "diroxide-app", "diroxide-theme"],
+    ),
+    (
+        "diroxide-gui",
+        &["diroxide-core", "diroxide-app", "diroxide-theme"],
+    ),
     (
         "diroxide-cli",
         &[
             "diroxide-core",
             "diroxide-vfs",
             "diroxide-archive",
-            "diroxide-sftp",
             "diroxide-ops",
             "diroxide-search",
             "diroxide-filetype",
@@ -93,6 +98,7 @@ pub const ALLOWED: [(&str, &[&str]); 17] = [
             "diroxide-app",
             "diroxide-tui",
             "diroxide-gui",
+            "diroxide-theme",
         ],
     ),
     ("diro", &["diroxide-cli"]),
@@ -103,6 +109,7 @@ pub const ALLOWED: [(&str, &[&str]); 17] = [
             "diroxide-vfs",
             "diroxide-config",
             "diroxide-app",
+            "diroxide-theme",
         ],
     ),
 ];

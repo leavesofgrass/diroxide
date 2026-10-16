@@ -10,18 +10,26 @@ all-features = true
 feature-depth = 1
 
 [advisories]
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz is unmaintained: text shaping inside usvg, through resvg, used only by `cargo xtask logo` to render the logo. Never in the diro binary. Move when resvg does." },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained: font parsing inside usvg and rustybuzz, through resvg, used only by `cargo xtask logo`, as above." },
+    { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained: syntect 5.3, through two-face (code highlighting, alpha.2), loads two-face's bundled syntax dumps with bincode 1.3. Only data built into the program is decoded, never a user's file. Remove when syntect moves (R17, research/syntax-highlighting.md)." },
+]
 
 [licenses]
 # Permissive licenses compatible with shipping diroxide as Apache-2.0 OR MIT.
 # MPL-2.0 is file-level copyleft and fine as a dependency (dirs uses
-# option-ext). Add a license here only with the orchestrator's review.
+# option-ext). CDLA-Permissive-2.0 is the license of webpki-roots, the
+# root certificates of ureq's rustls (the `fetch` feature of `diro`; a
+# permissive data license, reviewed for the Wave 1 contract step). Add a
+# license here only with the orchestrator's review.
 allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "MIT",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
     "ISC",
     "Zlib",
     "BSL-1.0",
@@ -31,7 +39,11 @@ allow = [
     "MPL-2.0",
 ]
 confidence-threshold = 0.9
-exceptions = []
+# libbz2-rs-sys, the Rust port of bzip2 that the bzip2 crate (through zip
+# and sevenz-rust2) uses, keeps bzip2's own permissive license text.
+exceptions = [
+    { crate = "libbz2-rs-sys", allow = ["bzip2-1.0.6"] },
+]
 # The list anticipates the crates of later waves.
 unused-allowed-license = "allow"
 

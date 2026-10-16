@@ -46,6 +46,10 @@ pub enum PlaceError {
     /// A remote address that could not be read, such as a missing host.
     #[error("the address \"{0}\" could not be read")]
     BadRemote(String),
+    /// A name inside an archive with a `!` after an archive extension,
+    /// which would read back as a nested archive.
+    #[error("\"{0}\" contains an archive marker")]
+    ArchiveMarker(String),
 }
 
 impl Explain for PlaceError {
@@ -66,6 +70,9 @@ impl Explain for PlaceError {
             }
             PlaceError::BadName(_) => "Use one name without slashes.".to_owned(),
             PlaceError::BadRemote(_) => "Write it as sftp://host/path.".to_owned(),
+            PlaceError::ArchiveMarker(_) => {
+                "Unpack the archive to reach this member by its name.".to_owned()
+            }
         }
     }
 }
@@ -80,9 +87,13 @@ pub enum CoreError {
     /// A command id that is not lowercase words joined by dots.
     #[error("\"{0}\" is not a command id")]
     BadCommandId(String),
-    /// A key or chord that could not be read, such as "ctrl+".
+    /// A key that could not be read, such as "ctrl+".
     #[error("\"{0}\" is not a key")]
     BadKey(String),
+    /// Two keys one after the other, such as "ctrl+x ctrl+f": key
+    /// sequences are not supported.
+    #[error("\"{0}\" is two keys in a row")]
+    KeySequence(String),
 }
 
 impl Explain for CoreError {
@@ -95,6 +106,10 @@ impl Explain for CoreError {
             }
             CoreError::BadKey(_) => {
                 "Write a key as modifiers and a key joined by plus signs, such as ctrl+alt+t."
+                    .to_owned()
+            }
+            CoreError::KeySequence(_) => {
+                "Bind one key with its modifiers, such as ctrl+f5; sequences are not supported."
                     .to_owned()
             }
         }

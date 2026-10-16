@@ -68,7 +68,9 @@ pub struct WireEntry {
     /// host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<WirePlace>,
-    /// `folder`, `file`, `link`, `archive` or `special`.
+    /// `folder`, `file`, `link`, `archive`, `item` (a row that is not a
+    /// file) or `special`; a kind this version does not know reads as
+    /// `special`.
     pub kind: EntryKind,
     /// The size in bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -129,7 +131,7 @@ impl WireEntry {
             link_target: entry.link.as_ref().map(|l| l.target.clone()),
             mime: None,
             revision: None,
-            extra: BTreeMap::new(),
+            extra: entry.extra.clone(),
         }
     }
 
@@ -140,6 +142,7 @@ impl WireEntry {
         entry.size = self.size;
         entry.modified = self.modified.as_deref().and_then(parse_time);
         entry.owner = self.owner.clone();
+        entry.extra = self.extra.clone();
         entry.link = self.link_target.as_ref().map(|target| Link {
             target: target.clone(),
             points_to: None,

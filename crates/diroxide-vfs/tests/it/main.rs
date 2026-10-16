@@ -37,3 +37,52 @@ fn roots_are_full_places() {
         assert!(root.is_root());
     }
 }
+
+/// A folder for a test that writes, under the build's own temporary
+/// folder, never the user's.
+#[allow(clippy::unwrap_used, reason = "a test helper: a failure is the test's")]
+fn scratch() -> tempfile::TempDir {
+    tempfile::Builder::new()
+        .prefix("vfs-it-")
+        .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
+        .unwrap()
+}
+
+#[test]
+fn a_committed_write_appears_and_a_dropped_one_leaves_nothing() {
+    use diroxide_vfs::{LocalProvider, Provider, WriteMode};
+    use std::io::Write;
+
+    let folder = scratch();
+    let place = Place::parse(folder.path().to_str().unwrap()).unwrap();
+    let provider = LocalProvider::new();
+    let ctx = OpContext::new();
+    let target = place.join("report.txt").unwrap();
+
+    let mut writer = provider.write(&target, WriteMode::CreateNew, &ctx).unwrap();
+    writer.write_all(b"hello").unwrap();
+    drop(writer);
+    assert!(provider.list(&place, &ctx).unwrap().is_empty());
+
+    let mut writer = provider.write(&target, WriteMode::CreateNew, &ctx).unwrap();
+    writer.write_all(b"hello").unwrap();
+    writer.commit(false).unwrap();
+    let names: Vec<String> = provider
+        .list(&place, &ctx)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    assert_eq!(names, vec!["report.txt".to_owned()]);
+
+    assert!(matches!(
+        provider.write(&target, WriteMode::CreateNew, &ctx),
+        Err(VfsError::AlreadyExists)
+    ));
+    let mut writer = provider.write(&target, WriteMode::Overwrite, &ctx).unwrap();
+    writer.write_all(b"again").unwrap();
+    writer.commit(true).unwrap();
+    let mut text = String::new();
+    std::io::Read::read_to_string(&mut provider.read(&target, &ctx).unwrap(), &mut text).unwrap();
+    assert_eq!(text, "again");
+}

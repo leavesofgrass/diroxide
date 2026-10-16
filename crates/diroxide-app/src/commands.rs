@@ -401,7 +401,7 @@ pub fn name_of(id: &CommandId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diroxide_core::{KeyChord, KeyCode};
+    use diroxide_core::{Key, KeyCode};
     use std::collections::HashSet;
 
     #[test]
@@ -422,12 +422,8 @@ mod tests {
     fn default_keys_parse_and_never_use_insert() {
         for info in &CATALOG {
             for (_, keys) in info.keys {
-                let chord = KeyChord::parse(keys).unwrap_or_else(|e| panic!("{}: {e}", info.id));
-                assert!(
-                    chord.keys().iter().all(|k| k.code != KeyCode::Insert),
-                    "{}",
-                    info.id
-                );
+                let key = Key::parse(keys).unwrap_or_else(|e| panic!("{}: {e}", info.id));
+                assert!(key.code != KeyCode::Insert, "{}", info.id);
             }
         }
     }

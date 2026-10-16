@@ -1,19 +1,25 @@
-//! The SFTP provider: places such as `sftp://user@host:22/path`, with key
-//! and agent authentication, known hosts checked, one connection per host
-//! kept open, listings and transfers streamed. A password is asked through
-//! the frontend's prompt, never taken from a command line.
+//! The SFTP provider plugin: places such as `sftp://user@host:22/path`,
+//! with key and agent authentication, known hosts checked, one connection
+//! per host kept open, listings and transfers streamed. A password is asked
+//! through the frontend's prompt, never taken from a command line.
+//!
+//! This crate is a plugin in a workspace of its own (`plugins/diro-sftp`),
+//! outside the main workspace, because russh's cryptography carries C and
+//! assembly and the `diro` binary links none (plan section 5.8, item 3).
+//! It reaches the app through the plugin protocol, as a separate process.
 //!
 //! Phase 0: the provider's shape, host settings and the known-hosts answer;
 //! every provider method says "not built yet". Wave 3 (W3c) owns this
 //! crate and brings in `russh` and `russh-sftp`, tested against the
 //! container's OpenSSH server.
 
-use std::fmt;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 
-use diroxide_core::{Entry, Place};
-use diroxide_vfs::{AttributeChange, Capabilities, OpContext, Provider, VfsError, WriteMode};
+use diroxide_core::{Entry, Place, SecretKind, SecretRequest};
+use diroxide_vfs::{
+    AttributeChange, Capabilities, FileWriter, OpContext, Provider, VfsError, WriteMode,
+};
 
 /// The default SFTP port.
 pub const DEFAULT_PORT: u16 = 22;
@@ -56,32 +62,17 @@ impl HostSettings {
     }
 }
 
-/// A password, kept out of logs and debug output.
-#[derive(Clone, PartialEq, Eq)]
-pub struct Secret(String);
-
-impl Secret {
-    /// Wraps a password.
-    pub fn new(text: String) -> Self {
-        Self(text)
+/// A host password is asked through the operation's secret source
+/// ([`OpContext::ask_secret`]), with a [`SecretRequest`] of kind
+/// [`SecretKind::HostPassword`], and held as a core
+/// [`Secret`](diroxide_core::Secret): the one
+/// secret type of the workspace, which redacts itself and is wiped when
+/// dropped (ADR-0009). This builds the request for a host.
+pub fn password_request(settings: &HostSettings) -> SecretRequest {
+    SecretRequest {
+        user: settings.user.clone(),
+        ..SecretRequest::new(SecretKind::HostPassword, settings.host.clone())
     }
-
-    /// The password, for the SSH library only.
-    pub fn expose(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for Secret {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Secret(hidden)")
-    }
-}
-
-/// Asks the user for a password, through a frontend's accessible prompt.
-pub trait PasswordPrompt: Send + Sync {
-    /// Asks for the password of `user` at `host`; `None` when cancelled.
-    fn ask(&self, host: &str, user: &str) -> Option<Secret>;
 }
 
 /// What the known-hosts file says about a host's key.
@@ -149,7 +140,7 @@ impl Provider for SftpProvider {
         _place: &Place,
         _mode: WriteMode,
         _ctx: &OpContext,
-    ) -> Result<Box<dyn Write + Send>, VfsError> {
+    ) -> Result<Box<dyn FileWriter>, VfsError> {
         Err(self.not_built())
     }
 
@@ -170,7 +161,7 @@ impl Provider for SftpProvider {
         _place: &Place,
         _change: &AttributeChange,
         _ctx: &OpContext,
-    ) -> Result<(), VfsError> {
+    ) -> Result<AttributeChange, VfsError> {
         Err(self.not_built())
     }
 }
@@ -178,6 +169,7 @@ impl Provider for SftpProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diroxide_core::Secret;
 
     #[test]
     fn host_settings_come_from_the_place() {
@@ -199,6 +191,10 @@ mod tests {
         let secret = Secret::new("hunter2".to_owned());
         assert_eq!(format!("{secret:?}"), "Secret(hidden)");
         assert_eq!(secret.expose(), "hunter2");
+        let place = Place::parse("sftp://ada@example.org/x").unwrap();
+        let request = password_request(&HostSettings::for_place(&place).unwrap());
+        assert_eq!(request.title(), "Password for ada@example.org");
+        assert!(OpContext::new().ask_secret(&request).is_none());
     }
 
     #[test]

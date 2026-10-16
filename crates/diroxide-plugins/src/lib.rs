@@ -9,8 +9,10 @@
 //! - **Script commands:** one-file scripts with a header comment, run with
 //!   the context in environment variables and `diro:` directives on their
 //!   output ([`script`]).
-//! - **Lua:** an in-process tier behind the `lua` feature, with the same
-//!   API names.
+//! - **No in-process tier.** The plugin boundary is the language boundary
+//!   (plan section 5.8, item 3): Lua scripts run through the Lua runner
+//!   plugin, a process like any other, and the column formatters and row
+//!   filters the old Lua tier was meant for use the batched column request.
 //!
 //! A plugin runs with the user's rights, so nothing is enabled by default
 //! and the manifest's capabilities are shown on first enable. A crash or a
@@ -22,8 +24,6 @@
 
 pub mod error;
 pub mod host;
-#[cfg(feature = "lua")]
-pub mod lua;
 pub mod manifest;
 pub mod protocol;
 pub mod script;

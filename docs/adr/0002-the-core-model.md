@@ -2,6 +2,16 @@
 
 Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0).
 
+Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from R8 to R12, R19 to R23 and the owner's answers 29 to 44). Core gains these, and closes again:
+
+- **Entries.** `Entry` gains `created`, `volume` and `extra` (a string map for plugin columns and item rows); `changed` means the status-change time, never the creation time. `EntryKind` gains `Item`, a row that is not a file; an unknown kind reads as `Special`. `Attributes` say themselves in words: `octal`, `words(kind)` and `short_words(kind)`; `describe` writes `s`, `S`, `t` and `T`; the Windows words gain sparse, compressed, offline, encrypted and online only.
+- **Names and places.** `split_extension` is the one stem and extension rule, with compound extensions; `split_part` reads `.001` parts. `ARCHIVE_EXTENSIONS` is a slice; zip-based documents open as archives without being listed as archives; `!` after a numbered part starts a member path, so a split archive opens as one place; `join` inside an archive refuses an archive marker; `strip_extended_prefix` keeps the extended-length prefix out of anything shown or spoken.
+- **The list model.** Marks travel by row id; `set_rows` returns `RowsReplaced`, which says whether the focus moved to another row and how many marks were lost; `freeze` gives the `FrozenSelection` a confirmation acts on, whose note says when the focused row is left out. This replaces "replacing the rows keeps the focus on the same id" above, which kept the old index when the id was gone.
+- **Keys.** A binding is one key with its modifiers; there are no sequences (`CoreError::KeySequence`), and `KeyChord` is gone. `KeyColumn` names the keymap's terminal and window columns (ADR-0005).
+- **New modules.** `sort`: every panel key, a direction per key, folders first, mixed or last, and one total-order comparer with the name in natural order last. `pattern`: words, globs, commas, `not`, a trailing slash for folders, and `re:`. `secret`: ADR-0009. `details`: `DetailRow` and `DetailGroup`. `catalog`: the safety sentences, among them "Deleted but not found in the trash."
+- **Jobs.** `JobKind` gains `Split`, `Join`, `Download` and `PluginCommand`; an unknown kind reads as `Unknown`, never planned. `ConflictPolicy` gains `Newer`; `ConflictKind`, `ConflictAction`, `ConflictAnswer`, `JobState`, `ErrorAction` and `JobOrigin` arrive; `JobRequest` gains `renames` and `origin`, both defaulted so older requests still read.
+- Core now depends on `regex` and `zeroize`, both pure Rust.
+
 ## Context
 
 Every crate speaks about places, entries, lists, commands, effects, messages, keys and time. If each defined its own, the frontends would read differently and the owner's screen readers would hear different words for the same thing. `diroxide-core` holds these types once, does no I/O, and is finished in Phase 0, so later waves build on it without changing it.

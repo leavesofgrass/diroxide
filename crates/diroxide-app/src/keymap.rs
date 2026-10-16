@@ -1,13 +1,15 @@
-//! The keymap: chords bound to commands in layers, from the catalog's
-//! defaults and `keymap.toml`'s overrides. A key is looked up in the most
-//! specific layer first. Two-key chords work in the Emacs style: after the
-//! first key, the status line says the continuations.
+//! The keymap: keys bound to commands in layers, from the catalog's
+//! defaults and `keymap.toml`'s lines. A key is looked up in the most
+//! specific layer first. A binding is one key with its modifiers; there
+//! are no sequences (plan question 56).
 //!
-//! Wave 1 (W1c) owns this module, and completes the check against NVDA's
-//! and JAWS's default keys.
+//! Wave 1 (W1c) owns this module: it builds the two columns (terminal and
+//! window), completes the check against NVDA's and JAWS's default keys,
+//! and reports every problem in `keymap.toml` in words. Phase 0 keeps one
+//! column, the terminal's, which is the frontend alpha.1 ships.
 
 use diroxide_config::KeymapConfig;
-use diroxide_core::{CommandId, Key, KeyChord, KeyCode, Layer};
+use diroxide_core::{CommandId, Key, KeyCode, KeyColumn, Layer};
 
 use crate::commands::{self, CATALOG};
 
@@ -16,21 +18,18 @@ use crate::commands::{self, CATALOG};
 pub struct Binding {
     /// Where it applies.
     pub layer: Layer,
-    /// The key or chord.
-    pub chord: KeyChord,
+    /// The key, with its modifiers.
+    pub key: Key,
     /// The command it runs.
     pub command: CommandId,
 }
 
-/// What the keys pressed so far mean.
+/// What a key press means.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Lookup {
-    /// A whole chord: run this command.
+    /// Run this command.
     Command(CommandId),
-    /// The start of one or more chords: wait for the next key. Lists each
-    /// next key with the command it would run.
-    Prefix(Vec<(Key, CommandId)>),
-    /// Nothing is bound to these keys.
+    /// Nothing is bound to the key.
     NoMatch,
 }
 
@@ -55,10 +54,10 @@ impl Keymap {
         let mut bindings = Vec::new();
         for info in &CATALOG {
             for (layer, keys) in info.keys {
-                if let Ok(chord) = KeyChord::parse(keys) {
+                if let Ok(key) = Key::parse(keys) {
                     bindings.push(Binding {
                         layer: *layer,
-                        chord,
+                        key,
                         command: info.id.clone(),
                     });
                 }
@@ -67,18 +66,21 @@ impl Keymap {
         Self { bindings }
     }
 
-    /// The same keymap with `keymap.toml`'s overrides applied: each
-    /// override first removes what the chord had in its layer, then binds
-    /// the new command, if any.
+    /// The same keymap with `keymap.toml`'s terminal column applied: each
+    /// line replaces its command's keys in its layer, and takes each of its
+    /// keys from whatever command had it there. A line with no keys
+    /// unbinds the command.
     pub fn with_overrides(mut self, config: &KeymapConfig) -> Self {
-        for change in &config.overrides {
-            self.bindings
-                .retain(|b| !(b.layer == change.layer && b.chord == change.chord));
-            if let Some(command) = &change.command {
+        for line in config.column(KeyColumn::Terminal) {
+            self.bindings.retain(|b| {
+                !(b.layer == line.layer
+                    && (b.command == line.command || line.keys.contains(&b.key)))
+            });
+            for key in &line.keys {
                 self.bindings.push(Binding {
-                    layer: change.layer,
-                    chord: change.chord.clone(),
-                    command: command.clone(),
+                    layer: line.layer,
+                    key: *key,
+                    command: line.command.clone(),
                 });
             }
         }
@@ -88,8 +90,7 @@ impl Keymap {
     /// The same keymap without single-character shortcuts, as WCAG 2.1.4
     /// lets the user choose.
     pub fn without_single_characters(mut self) -> Self {
-        self.bindings
-            .retain(|b| !(b.chord.keys().len() == 1 && b.chord.keys()[0].is_single_character()));
+        self.bindings.retain(|b| !b.key.is_single_character());
         self
     }
 
@@ -98,31 +99,26 @@ impl Keymap {
         &self.bindings
     }
 
-    /// What the keys pressed so far mean, looking in `layers` in order,
-    /// most specific first.
-    pub fn lookup(&self, layers: &[Layer], pressed: &[Key]) -> Lookup {
+    /// What a key means, looking in `layers` in order, most specific first.
+    pub fn lookup(&self, layers: &[Layer], key: &Key) -> Lookup {
         for layer in layers {
-            let in_layer = self.bindings.iter().filter(|b| b.layer == *layer);
-            if let Some(exact) = in_layer.clone().find(|b| b.chord.keys() == pressed) {
-                return Lookup::Command(exact.command.clone());
-            }
-            let continuations: Vec<(Key, CommandId)> = in_layer
-                .filter(|b| b.chord.starts_with(pressed))
-                .map(|b| (b.chord.keys()[pressed.len()], b.command.clone()))
-                .collect();
-            if !continuations.is_empty() {
-                return Lookup::Prefix(continuations);
+            if let Some(found) = self
+                .bindings
+                .iter()
+                .find(|b| b.layer == *layer && b.key == *key)
+            {
+                return Lookup::Command(found.command.clone());
             }
         }
         Lookup::NoMatch
     }
 
-    /// The chords bound to a command, in any layer.
-    pub fn keys_for(&self, command: &CommandId) -> Vec<&KeyChord> {
+    /// The keys bound to a command, in any layer.
+    pub fn keys_for(&self, command: &CommandId) -> Vec<&Key> {
         self.bindings
             .iter()
             .filter(|b| &b.command == command)
-            .map(|b| &b.chord)
+            .map(|b| &b.key)
             .collect()
     }
 
@@ -134,15 +130,15 @@ impl Keymap {
             .unwrap_or_default()
     }
 
-    /// Chords bound twice in one layer, in words.
+    /// Keys bound twice in one layer, in words.
     pub fn conflicts(&self) -> Vec<String> {
         let mut found = Vec::new();
         for (i, a) in self.bindings.iter().enumerate() {
             for b in &self.bindings[i + 1..] {
-                if a.layer == b.layer && a.chord == b.chord && a.command != b.command {
+                if a.layer == b.layer && a.key == b.key && a.command != b.command {
                     found.push(format!(
                         "{} in the {} layer runs both {} and {}",
-                        a.chord,
+                        a.key,
                         a.layer,
                         commands::name_of(&a.command),
                         commands::name_of(&b.command)
@@ -156,25 +152,20 @@ impl Keymap {
     /// Bindings that a screen reader would take first, in words. Insert is
     /// always one, because it is the NVDA and JAWS key.
     pub fn screen_reader_conflicts(&self) -> Vec<String> {
-        let taken: Vec<(KeyChord, &str)> = SCREEN_READER_KEYS
+        let taken: Vec<(Key, &str)> = SCREEN_READER_KEYS
             .iter()
-            .filter_map(|(keys, why)| KeyChord::parse(keys).ok().map(|c| (c, *why)))
+            .filter_map(|(keys, why)| Key::parse(keys).ok().map(|k| (k, *why)))
             .collect();
         let mut found = Vec::new();
         for binding in &self.bindings {
-            if binding
-                .chord
-                .keys()
-                .iter()
-                .any(|k| k.code == KeyCode::Insert)
-            {
+            if binding.key.code == KeyCode::Insert {
                 found.push(format!(
                     "{} uses Insert, the screen reader key",
-                    binding.chord
+                    binding.key
                 ));
             }
-            if let Some((_, why)) = taken.iter().find(|(chord, _)| *chord == binding.chord) {
-                found.push(format!("{} {why}", binding.chord));
+            if let Some((_, why)) = taken.iter().find(|(key, _)| *key == binding.key) {
+                found.push(format!("{} {why}", binding.key));
             }
         }
         found
@@ -193,6 +184,15 @@ mod tests {
 
     const PANEL: [Layer; 3] = [Layer::Panel, Layer::List, Layer::Global];
 
+    fn line(layer: Layer, command: CommandId, keys: &[&str]) -> KeyOverride {
+        KeyOverride {
+            column: KeyColumn::Terminal,
+            layer,
+            command,
+            keys: keys.iter().map(|k| key(k)).collect(),
+        }
+    }
+
     #[test]
     fn the_defaults_are_clean() {
         let keymap = Keymap::defaults();
@@ -205,69 +205,62 @@ mod tests {
     fn keys_are_found_in_the_most_specific_layer() {
         let keymap = Keymap::defaults();
         assert_eq!(
-            keymap.lookup(&PANEL, &[key("f5")]),
+            keymap.lookup(&PANEL, &key("f5")),
             Lookup::Command(ids::COPY)
         );
         assert_eq!(
-            keymap.lookup(&PANEL, &[key("down")]),
+            keymap.lookup(&PANEL, &key("down")),
             Lookup::Command(ids::LIST_DOWN)
         );
         assert_eq!(
-            keymap.lookup(&PANEL, &[key("ctrl+q")]),
+            keymap.lookup(&PANEL, &key("ctrl+q")),
             Lookup::Command(ids::QUIT)
         );
-        assert_eq!(
-            keymap.lookup(&[Layer::Global], &[key("f5")]),
-            Lookup::NoMatch
-        );
+        assert_eq!(keymap.lookup(&[Layer::Global], &key("f5")), Lookup::NoMatch);
     }
 
     #[test]
-    fn chords_wait_for_their_second_key() {
+    fn a_line_moves_a_command_to_new_keys() {
         let config = KeymapConfig {
-            overrides: vec![KeyOverride {
-                layer: Layer::Global,
-                chord: KeyChord::parse("ctrl+x ctrl+f").unwrap(),
-                command: Some(ids::FIND),
-            }],
+            overrides: vec![line(Layer::Panel, ids::FIND, &["ctrl+f"])],
         };
         let keymap = Keymap::defaults().with_overrides(&config);
         assert_eq!(
-            keymap.lookup(&PANEL, &[key("ctrl+x")]),
-            Lookup::Prefix(vec![(key("ctrl+f"), ids::FIND)])
-        );
-        assert_eq!(
-            keymap.lookup(&PANEL, &[key("ctrl+x"), key("ctrl+f")]),
+            keymap.lookup(&PANEL, &key("ctrl+f")),
             Lookup::Command(ids::FIND)
+        );
+        assert_eq!(keymap.keys_for(&ids::FIND), vec![&key("ctrl+f")]);
+        let window_only = KeymapConfig {
+            overrides: vec![KeyOverride {
+                column: KeyColumn::Window,
+                ..line(Layer::Panel, ids::COPY, &[])
+            }],
+        };
+        let keymap = Keymap::defaults().with_overrides(&window_only);
+        assert_eq!(
+            keymap.lookup(&PANEL, &key("f5")),
+            Lookup::Command(ids::COPY)
         );
     }
 
     #[test]
     fn overrides_unbind_and_single_characters_can_go() {
         let config = KeymapConfig {
-            overrides: vec![KeyOverride {
-                layer: Layer::Panel,
-                chord: KeyChord::parse("f5").unwrap(),
-                command: None,
-            }],
+            overrides: vec![line(Layer::Panel, ids::COPY, &[])],
         };
         let keymap = Keymap::defaults().with_overrides(&config);
-        assert_eq!(keymap.lookup(&PANEL, &[key("f5")]), Lookup::NoMatch);
+        assert_eq!(keymap.lookup(&PANEL, &key("f5")), Lookup::NoMatch);
         let with_letter = Keymap::defaults().with_overrides(&KeymapConfig {
-            overrides: vec![KeyOverride {
-                layer: Layer::Panel,
-                chord: KeyChord::parse("q").unwrap(),
-                command: Some(ids::QUIT),
-            }],
+            overrides: vec![line(Layer::Panel, ids::QUIT, &["q"])],
         });
         assert_eq!(
-            with_letter.lookup(&PANEL, &[key("q")]),
+            with_letter.lookup(&PANEL, &key("q")),
             Lookup::Command(ids::QUIT)
         );
         let without = with_letter.without_single_characters();
-        assert_eq!(without.lookup(&PANEL, &[key("q")]), Lookup::NoMatch);
+        assert_eq!(without.lookup(&PANEL, &key("q")), Lookup::NoMatch);
         assert_eq!(
-            without.lookup(&PANEL, &[key("space")]),
+            without.lookup(&PANEL, &key("space")),
             Lookup::Command(ids::SELECT_TOGGLE)
         );
     }

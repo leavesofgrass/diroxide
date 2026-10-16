@@ -12,7 +12,7 @@ use std::io::Read;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use diroxide_core::format::human_size;
-use diroxide_core::{Entry, EntryKind, Explain, Place};
+use diroxide_core::{DetailRow, Entry, EntryKind, Explain, Place};
 use diroxide_filetype::FileType;
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
@@ -42,6 +42,9 @@ pub struct Preview {
     pub summary: String,
     /// The lines to show and read.
     pub lines: Vec<String>,
+    /// The facts about the entry, as detail rows in their groups' order:
+    /// what alpha.2's item information and alpha.7's details view list.
+    pub details: Vec<DetailRow>,
 }
 
 /// A preview to make.
@@ -211,6 +214,7 @@ impl Previewer for TextPreviewer {
                 .take(request.max_lines)
                 .map(str::to_owned)
                 .collect(),
+            details: Vec::new(),
         })
     }
 }
@@ -242,6 +246,7 @@ impl Previewer for HexPreviewer {
             kind: PreviewKind::Hex,
             summary: format!("{}, shown as hex", details(&request.entry, file_type)),
             lines,
+            details: Vec::new(),
         })
     }
 }
@@ -291,6 +296,7 @@ impl Previews {
                 },
                 summary: details(&request.entry, file_type),
                 lines: Vec::new(),
+                details: Vec::new(),
             }),
         }
     }

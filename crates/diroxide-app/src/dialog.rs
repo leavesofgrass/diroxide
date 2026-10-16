@@ -2,9 +2,15 @@
 //! was. The app holds a dialog's state; frontends draw it and send back an
 //! [`Answer`]. Confirmations start on No.
 //!
-//! Wave 1 (W1d) owns this module.
+//! The secret dialog (ADR-0009) is its own shape: its typed text is a
+//! [`Secret`], which wipes itself, never shows in `Debug`, and never
+//! becomes a command argument; the answer goes straight to the job that
+//! asked, through the operation's secret source.
+//!
+//! Wave 1 (W1d) owns this module; the secret dialog's shape is the Wave 1
+//! contract's.
 
-use diroxide_core::{Command, ListModel, Message};
+use diroxide_core::{Command, ListModel, Message, Secret, SecretRequest};
 
 /// An open dialog.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,6 +49,19 @@ pub enum Dialog {
         /// The lines.
         lines: Vec<String>,
     },
+    /// A password or passphrase, typed into a masked field: the terminal
+    /// prompt "Password for course.zip (hidden): ", one asterisk per
+    /// character (or silence, a setting), and a Show toggle that is off by
+    /// default and says what it does when turned on.
+    Secret {
+        /// What is asked, whose and which try; its title is the dialog's
+        /// name.
+        request: SecretRequest,
+        /// What has been typed, wiped when the dialog closes.
+        typed: Secret,
+        /// Whether the typed text is shown (the Show toggle).
+        shown: bool,
+    },
 }
 
 impl Dialog {
@@ -53,6 +72,16 @@ impl Dialog {
             Dialog::Prompt { label, .. } => label.clone(),
             Dialog::Choose { list, .. } => list.title().to_owned(),
             Dialog::Read { title, .. } => title.clone(),
+            Dialog::Secret { request, .. } => request.title(),
+        }
+    }
+
+    /// A masked prompt for a request, nothing typed, the Show toggle off.
+    pub fn secret(request: SecretRequest) -> Self {
+        Dialog::Secret {
+            request,
+            typed: Secret::default(),
+            shown: false,
         }
     }
 }
@@ -68,6 +97,9 @@ pub enum Answer {
     Text(String),
     /// A chosen row's id.
     Chosen(String),
+    /// A typed secret, on Enter. It goes to the job that asked, never into
+    /// a command.
+    Secret(Secret),
     /// Escape.
     Cancel,
 }
@@ -76,6 +108,25 @@ pub enum Answer {
 mod tests {
     use super::*;
     use diroxide_core::CommandId;
+
+    #[test]
+    fn a_secret_dialog_never_shows_what_was_typed() {
+        use diroxide_core::SecretKind;
+        let mut dialog = Dialog::secret(SecretRequest::new(
+            SecretKind::ArchivePassword,
+            "course.zip",
+        ));
+        if let Dialog::Secret { typed, .. } = &mut dialog {
+            for c in "canary-7f3a".chars() {
+                typed.push(c);
+            }
+        }
+        assert_eq!(dialog.title(), "Password for course.zip");
+        let shown = format!("{dialog:?}");
+        assert!(!shown.contains("canary"), "{shown}");
+        let answer = Answer::Secret(Secret::new("canary-7f3a".to_owned()));
+        assert!(!format!("{answer:?}").contains("canary"));
+    }
 
     #[test]
     fn a_dialog_is_named_by_its_question() {

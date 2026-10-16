@@ -69,6 +69,45 @@ impl ListRow {
     }
 }
 
+/// What replacing a list's rows did to the focus and the marks, so the app
+/// can say it: "Focus moved: report.pdf is gone", "2 marks lost".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct RowsReplaced {
+    /// The focused row's id is gone, and the focus is now on another row.
+    pub focus_moved: bool,
+    /// How many marked rows are gone.
+    pub marks_lost: usize,
+}
+
+/// A selection frozen at the moment of confirmation: the plan acts on
+/// these ids, by id, never on whatever row later sits where they were.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct FrozenSelection {
+    /// The ids acted on: the marked rows, or the focused row when nothing
+    /// was marked.
+    pub ids: Vec<String>,
+    /// The focused row's id when frozen.
+    pub focused_id: Option<String>,
+    /// The focused row's label when frozen, for the note.
+    pub focused_label: Option<String>,
+    /// Whether the focused row is among the ids.
+    pub focused_included: bool,
+}
+
+impl FrozenSelection {
+    /// The plan's first line when the focused row is not part of the
+    /// action, inside 40 cells where the name allows: "Not the focused
+    /// row: report.pdf". `None` when it is part of it.
+    pub fn focus_note(&self) -> Option<String> {
+        if self.focused_included {
+            return None;
+        }
+        self.focused_label
+            .as_ref()
+            .map(|label| format!("Not the focused row: {label}"))
+    }
+}
+
 /// A move of the focus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Move {
@@ -178,14 +217,76 @@ impl ListModel {
         self.rows.is_empty()
     }
 
-    /// Replaces the rows. The focus stays on the row with the same id when
-    /// there is one, and otherwise keeps its index, clamped to the list.
-    pub fn set_rows(&mut self, rows: Vec<ListRow>) {
+    /// Replaces the rows. The listed row must never lie (plan section
+    /// 5.2): marks travel by row id, never by position, so a new row is
+    /// marked when the row with its id was marked (or it comes marked); the
+    /// focus stays on the row with the same id. When that id is gone, the
+    /// focus keeps its index, clamped to the list, and the result says the
+    /// focus moved to a different row, so the app announces it. The result
+    /// also counts the marks whose rows are gone.
+    pub fn set_rows(&mut self, mut rows: Vec<ListRow>) -> RowsReplaced {
         let focused_id = self.focused().map(|row| row.id.clone());
+        let marked: std::collections::HashSet<String> = self
+            .rows
+            .drain(..)
+            .filter(|row| row.selected)
+            .map(|row| row.id)
+            .collect();
+        let mut kept = 0;
+        for row in &mut rows {
+            if marked.contains(&row.id) {
+                row.selected = true;
+                kept += 1;
+            }
+        }
         self.rows = rows;
-        match focused_id.and_then(|id| self.rows.iter().position(|row| row.id == id)) {
-            Some(index) => self.focus = index,
-            None => self.focus = self.focus.min(self.rows.len().saturating_sub(1)),
+        let focus_moved = match focused_id {
+            Some(id) => match self.rows.iter().position(|row| row.id == id) {
+                Some(index) => {
+                    self.focus = index;
+                    false
+                }
+                None => {
+                    self.focus = self.focus.min(self.rows.len().saturating_sub(1));
+                    true
+                }
+            },
+            None => {
+                self.focus = 0;
+                false
+            }
+        };
+        RowsReplaced {
+            focus_moved,
+            marks_lost: marked.len().saturating_sub(kept),
+        }
+    }
+
+    /// The marked rows' ids frozen with the focus, as a confirmation shows
+    /// them: the plan acts on exactly these ids, whatever happens to the
+    /// list after (plan section 5.2). With no marks, the focused row alone
+    /// is the selection.
+    pub fn freeze(&self) -> FrozenSelection {
+        let marked: Vec<String> = self
+            .rows
+            .iter()
+            .filter(|row| row.selected)
+            .map(|row| row.id.clone())
+            .collect();
+        let focused = self
+            .focused()
+            .map(|row| (row.id.clone(), row.label.clone()));
+        let ids = if marked.is_empty() {
+            focused.iter().map(|(id, _)| id.clone()).collect()
+        } else {
+            marked
+        };
+        let (focused_id, focused_label) = focused.unzip();
+        FrozenSelection {
+            focused_included: focused_id.as_ref().is_none_or(|id| ids.contains(id)),
+            ids,
+            focused_id,
+            focused_label,
         }
     }
 
@@ -431,16 +532,56 @@ mod tests {
     fn replacing_rows_keeps_the_focus_on_the_same_id() {
         let mut l = list(&["a", "b", "c"]);
         l.move_focus(Move::To(1));
-        l.set_rows(vec![
+        let replaced = l.set_rows(vec![
             ListRow::new("x", "x"),
             ListRow::new("a", "a"),
             ListRow::new("b", "b"),
         ]);
         assert_eq!(l.focused().unwrap().id, "b");
-        l.set_rows(vec![ListRow::new("y", "y")]);
+        assert!(!replaced.focus_moved);
+        let replaced = l.set_rows(vec![ListRow::new("y", "y")]);
         assert_eq!(l.focus_index(), Some(0));
+        assert!(replaced.focus_moved);
         l.set_rows(Vec::new());
         assert_eq!(l.focus_index(), None);
+    }
+
+    #[test]
+    fn marks_travel_by_id_and_lost_ones_are_counted() {
+        let mut l = list(&["a", "b", "c", "d"]);
+        l.move_focus(Move::To(1));
+        l.toggle_selected();
+        l.move_focus(Move::To(3));
+        l.toggle_selected();
+        // A refresh: "a" is gone, so every row moves up one place.
+        let replaced = l.set_rows(vec![
+            ListRow::new("b", "b"),
+            ListRow::new("c", "c"),
+            ListRow::new("e", "e"),
+        ]);
+        assert_eq!(l.selected_ids(), vec!["b"]);
+        assert_eq!(replaced.marks_lost, 1);
+        assert!(replaced.focus_moved);
+        assert_eq!(l.focused().unwrap().id, "e");
+    }
+
+    #[test]
+    fn a_frozen_selection_says_when_the_focus_is_left_out() {
+        let mut l = list(&["a.txt", "b.txt", "report.pdf"]);
+        l.toggle_selected();
+        l.move_focus(Move::To(2));
+        let frozen = l.freeze();
+        assert_eq!(frozen.ids, vec!["a.txt"]);
+        assert!(!frozen.focused_included);
+        assert_eq!(
+            frozen.focus_note().as_deref(),
+            Some("Not the focused row: report.pdf")
+        );
+        l.select_none();
+        let alone = l.freeze();
+        assert_eq!(alone.ids, vec!["report.pdf"]);
+        assert_eq!(alone.focus_note(), None);
+        assert_eq!(ListModel::new("x").freeze().ids, Vec::<String>::new());
     }
 
     #[test]

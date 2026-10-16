@@ -24,6 +24,10 @@ pub enum OpsError {
     /// The job's kind is not built yet.
     #[error("{0} jobs are not built yet")]
     NotBuilt(String),
+    /// The trash call returned, but the post-check could not confirm the
+    /// item is in the trash; the line says what was found.
+    #[error("{0}")]
+    TrashNotConfirmed(String),
 }
 
 impl Explain for OpsError {
@@ -34,6 +38,9 @@ impl Explain for OpsError {
             OpsError::NoDestination => "Open the destination in the other panel.".to_owned(),
             OpsError::NoName => "Type a name.".to_owned(),
             OpsError::NotBuilt(_) => String::new(),
+            OpsError::TrashNotConfirmed(_) => {
+                "Look for it in the trash, and check the drive.".to_owned()
+            }
         }
     }
 }

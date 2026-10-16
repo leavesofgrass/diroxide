@@ -2,6 +2,15 @@
 
 Status: Accepted, Saturday, October 10, 2026 (Phase 0, P0).
 
+Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b): the plugin boundary is the language boundary (the owner, Sunday, October 11, 2026; plan section 5.8, item 3). The `diro` binary and every crate of the main workspace are pure Rust and build with no C compiler, with one exception, the owner's (answer 40): the optional-components downloader's client, `ureq` 3.4 with rustls, whose `ring` provider compiles C, behind the default `fetch` feature of `diro`; `--no-default-features` builds with no C compiler, and the downloader then uses `curl` or `wget` from PATH.
+
+- `crates/diroxide-sftp` moved to `plugins/diro-sftp/`, a workspace of its own that the root's `exclude` keeps out. The `lua` module and feature left `diroxide-plugins`. `liblzma`, `mlua`, `russh`, `russh-sftp` and `tokio` left `[workspace.dependencies]`. There are no `sftp`, `lua` or `xz-c` features.
+- A new gate, `cargo xtask native --check`, runs `cargo tree` inverted on `cc`, `cmake`, `cxx` and `cxx-build` over every feature, target and edge, and fails on any path into the workspace but its one allow entry: `cc` under `ring`, reached through `rustls` and `ureq`. CI runs it beside `deps --check`.
+- The theme crate ported from textweaver joins as `diroxide-theme`, the seventeenth crate of the plan's count, depending on no workspace crate. The main workspace has 17 packages (15 `diroxide-*` crates, `diro` and `xtask`); the compare crate of plan section 6, `diroxide-diff`, will be the eighteenth when alpha.3 adds it.
+- Declared for Wave 1 and after: `zip` repinned to 9.0.1 exactly (9.0.4 exists; a bump is the orchestrator's); `lzma-rust2` on the 0.21 line that `zip` and `sevenz-rust2` share; `sevenz-rust2`, `tar` and `bzip2` without C; `rustix`, `windows-sys` and `reflink-copy`; `trash` pinned to 5.2.9; `toml_edit`, `opener`, `sha2`, `process-wrap`, `secrecy`, `zeroize` and `regex`; `ignore` 0.4.33 and `grep-searcher` 0.1.17; `similar`, `two-face` with the fancy-regex engine, and `pulldown-cmark`.
+- `blake3` always has `cc` as a build dependency, even with its `pure` feature, so the gate fails the day a crate uses it. Before the duplicate finder (alpha.8) uses it, the owner decides: a second allow entry, or a pure-Rust hash in its place.
+- `deny.toml` gains `CDLA-Permissive-2.0` (webpki-roots, under `fetch`), the `libbz2-rs-sys` exception, and three advisory ignores with their reasons. The regex crates build at `opt-level = 3` in debug builds.
+
 ## Context
 
 diroxide is built by waves of agents, one or two at a time, each owning crates. The workspace has to keep their work apart, keep builds lean on the owner's machine (shared with textweaver), and make the license and dependency rules checkable by a machine rather than by memory.

@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
+use diro_sftp::{HostKeyStatus, SftpProvider};
 use diroxide_core::Place;
-use diroxide_sftp::{HostKeyStatus, SftpProvider};
 use diroxide_vfs::Registry;
 
 #[test]

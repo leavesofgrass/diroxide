@@ -10,7 +10,11 @@ publish.workspace = true
 [dependencies]
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
+serde.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

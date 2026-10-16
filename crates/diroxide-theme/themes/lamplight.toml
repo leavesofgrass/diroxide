@@ -1,0 +1,86 @@
+# Lamplight: a soft, warm dark theme for long reading with low glare.
+#
+# Written for textweaver, not ported from star. Body text meets WCAG AAA
+# (7.38 to 1 on the page) at about 60 percent of Galaxy's text contrast;
+# muted text sits near 5 to 1 so it still looks different. The spoken word
+# and sentence bands are an orange and blue pair, which stay distinct with
+# red-green color blindness. The sentence band is faint by design: its
+# underline marks it.
+#
+# Hand-written; not generated. To make your own theme, copy this file into
+# your themes folder under a new name and change theme.name; see
+# docs/themes.md.
+
+# From textweaver's theme files, relicensed by its author (Apache-2.0 OR
+# MIT) for diroxide.
+
+[theme]
+name = "lamplight"
+display_name = "Lamplight"
+kind = "dark"
+description = "Soft, warm dark theme with low glare; AAA body text."
+author = "textweaver"
+origin = "textweaver"
+tags = ["soft"]
+
+[colors]
+background = "#1d1a16"
+surface = "#24201b"
+text = "#b3a893"
+dim_text = "#968b78"
+heading1 = "#d6ab6e"
+heading2 = "#cf9a76"
+heading3 = "#9fb491"
+heading4 = "#94b2b6"
+heading5 = "#94b2b6"
+heading6 = "#94b2b6"
+link = "#95b3cf"
+code = "#cdae86"
+code_background = "#29241d"
+quote = "#968b78"
+error = "#dc958a"
+
+[styles.selection]
+foreground = "#b3a893"
+background = "#3d372c"
+attributes = ["reverse"]
+
+[styles.spoken_word]
+foreground = "#1d1a16"
+background = "#d6ab6e"
+attributes = ["bold"]
+
+[styles.spoken_sentence]
+foreground = "#b3a893"
+background = "#2b3240"
+attributes = ["underline"]
+
+[styles.find_hit]
+foreground = "#1d1a16"
+background = "#94b2b6"
+attributes = ["underline"]
+
+[styles.current_find_hit]
+foreground = "#1d1a16"
+background = "#cf9a76"
+attributes = ["bold", "underline"]
+
+[styles.bookmark]
+foreground = "#94b2b6"
+background = "none"
+attributes = ["bold", "underline"]
+
+[styles.note]
+foreground = "#cdae86"
+background = "none"
+attributes = ["italic", "underline"]
+
+[styles.status_bar]
+foreground = "#1d1a16"
+background = "#c49a5f"
+attributes = ["bold"]
+
+[styles.focus]
+foreground = "#1d1a16"
+background = "#95b3cf"
+attributes = ["bold"]
