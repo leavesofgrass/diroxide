@@ -6,6 +6,8 @@
 //! - `diro search ROOT PATTERN`: search names, printing one place a line.
 //! - `diro ls [PLACE]` and `diro ls -`: list a place, or the paths on
 //!   standard input, one entry a line, the name first.
+//! - `diro completions SHELL`: the completion script for bash, zsh, fish
+//!   or PowerShell.
 //! - `diro plugin list|new|enable|disable|run|log`: plugin tooling.
 //! - `diro --version`, `diro --help`.
 //!
@@ -50,6 +52,8 @@ pub enum Invocation {
     Plugin(cmd::plugin::PluginCommand),
     /// List a place, or the paths on standard input.
     Ls(cmd::ls::LsArgs),
+    /// Print a shell's completion script.
+    Completions(cmd::completions::CompletionsArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -107,6 +111,7 @@ pub fn help_text() -> String {
         "diro search ROOT PATTERN  print the places under ROOT whose names match PATTERN",
         "diro ls [PLACE]           list a folder, one entry a line, the name first",
         "diro ls -                 list the NUL-separated paths on standard input",
+        "diro completions SHELL    print the completion script for bash, zsh, fish or powershell",
         "diro plugin list          list the plugins",
         "diro --version            print the version",
         "diro --help               print this help",
@@ -161,6 +166,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         },
         "plugin" => cmd::plugin::parse(&args[1..]).map(Invocation::Plugin),
         "ls" => cmd::ls::parse(&args[1..]).map(Invocation::Ls),
+        "completions" => cmd::completions::parse(&args[1..]).map(Invocation::Completions),
         _ => {
             let mut places = Vec::new();
             let mut portable = false;
@@ -211,6 +217,7 @@ pub fn run(
         Invocation::Search { root, pattern } => cmd::search::run(&root, &pattern, out),
         Invocation::Plugin(command) => cmd::plugin::run(&command, out),
         Invocation::Ls(args) => cmd::ls::run(&args, input, out),
+        Invocation::Completions(args) => cmd::completions::run(args, out),
     }
 }
 
