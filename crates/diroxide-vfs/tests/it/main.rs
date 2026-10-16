@@ -10,6 +10,7 @@
 mod local;
 mod names;
 mod primitives;
+mod walk;
 mod writer;
 
 use diroxide_core::{EntryKind, Place};

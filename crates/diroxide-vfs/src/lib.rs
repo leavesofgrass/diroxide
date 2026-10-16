@@ -25,11 +25,13 @@ pub mod facts;
 pub mod limits;
 pub mod local;
 pub mod names;
+pub mod protected;
 pub mod provider;
 pub mod registry;
 mod sys;
 pub mod trash;
 pub mod volume;
+pub mod walk;
 
 pub use cancel::{
     CancelToken, NoProgress, NoSecrets, OpContext, ProgressSink, ProgressUpdate, SecretSource,
@@ -38,6 +40,7 @@ pub use capabilities::{AccessCapabilities, Can, Capabilities};
 pub use error::{ErrorClass, ErrorScope, VfsError};
 pub use local::LocalProvider;
 pub use names::{NameIssue, NameRules, check_name, check_name_with, first_refused};
+pub use protected::{Protection, protection};
 pub use provider::{
     AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Principal, Provider, ReadSeek,
     StreamingList, WatchEvent, WatchHandle, WatchSink, WriteMode,
@@ -45,6 +48,7 @@ pub use provider::{
 pub use registry::Registry;
 pub use trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
 pub use volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
+pub use walk::{SkipReason, WalkEvent, WalkOptions, WalkSummary, walk};
 
 /// The tops of the local file system: the drives on Windows, `/` elsewhere.
 /// Listing them never touches a drive.
