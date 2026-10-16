@@ -1,0 +1,85 @@
+{
+  "about": "The bench's baseline per platform, written by cargo xtask bench --save-baseline (docs/dev/bench.md).",
+  "platforms": {
+    "windows": {
+      "platform": "windows",
+      "recorded_utc": "2026-10-16",
+      "quick": false,
+      "optimized": true,
+      "scenarios": [
+        {
+          "id": "list",
+          "label": "List 100,000 entries",
+          "runs_ms": [
+            93.5,
+            94.9,
+            95.2
+          ],
+          "median_ms": 94.9,
+          "budget_ms": 800,
+          "note": "warm, through the local provider"
+        },
+        {
+          "id": "stat",
+          "label": "Stat 100,000 entries",
+          "runs_ms": [
+            5078.0,
+            4788.9,
+            8328.2
+          ],
+          "median_ms": 5078.0,
+          "budget_ms": 800,
+          "note": "each by its place, without a listing"
+        },
+        {
+          "id": "list-stat",
+          "label": "List, then stat each of 100,000",
+          "runs_ms": [
+            7255.0,
+            7871.6,
+            6862.2
+          ],
+          "median_ms": 7255.0,
+          "budget_ms": null,
+          "note": "as a panel that fills its columns late"
+        },
+        {
+          "id": "copy",
+          "label": "Copy 1.0 GB through the engine",
+          "runs_ms": [
+            696.3,
+            781.3,
+            736.7
+          ],
+          "median_ms": 736.7,
+          "budget_ms": null,
+          "note": "1.4 GB a second"
+        },
+        {
+          "id": "copy-system",
+          "label": "Copy 1.0 GB with the system call",
+          "runs_ms": [
+            502.8,
+            401.9,
+            416.4
+          ],
+          "median_ms": 416.4,
+          "budget_ms": null,
+          "note": "2.4 GB a second"
+        },
+        {
+          "id": "slow-place",
+          "label": "Copy 40 files from a slow place",
+          "runs_ms": [
+            1601.7,
+            1560.1,
+            1462.1
+          ],
+          "median_ms": 1560.1,
+          "budget_ms": null,
+          "note": "stall said in 3 of 3 runs"
+        }
+      ]
+    }
+  }
+}

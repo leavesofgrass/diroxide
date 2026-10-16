@@ -1,0 +1,37 @@
+# The search tree of alpha.3's speed spike (research/alpha3-plan.md,
+# "Search speed on a 1 GB tree"), written by
+# cargo xtask search-tree PATH [--small] on a drive other than C.
+# Mostly small text, some code, a few large binaries, about 5,000 folders
+# about six deep, and three words with known counts: hit_word in
+# hit_files files (once each, and in their names), every_word in every
+# file, missing_word in none. The binaries hold every_word at their start;
+# the rest of them is random bytes.
+
+[full]
+files = 100000
+folders = 5000
+depth = 6
+text_bytes = 500000000
+binary_files = 100
+binary_bytes = 500000000
+code_percent = 10
+hit_word = "quokkaline"
+hit_files = 1000
+every_word = "marmotfield"
+missing_word = "zebracrumb"
+seed = 20261016
+
+# For tests and a first look: the same shape, small.
+[small]
+files = 300
+folders = 20
+depth = 3
+text_bytes = 300000
+binary_files = 3
+binary_bytes = 30000
+code_percent = 10
+hit_word = "quokkaline"
+hit_files = 10
+every_word = "marmotfield"
+missing_word = "zebracrumb"
+seed = 20261016
