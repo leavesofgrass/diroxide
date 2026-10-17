@@ -87,7 +87,7 @@ Undo checks that an entry is as the job left it. If you changed the entry since,
 
 ## An archive refuses my password
 
-- A zip says "Wrong password for course.zip. Try again? y or n". A 7z cannot tell a wrong password from damaged data, so it says "Wrong password or damaged data. Try again? y or n". Answer y to get the prompt again. You have three tries. Answer n or press Escape to skip the locked members.
+- A zip says "Wrong password for course.zip. Try again? No is the default. y or n". A 7z cannot tell a wrong password from damaged data, so it says "Wrong password or damaged data. Try again? No is the default. y or n". Answer y to get the prompt again. You have three tries. Answer n or press Escape to skip the locked members.
 - The prompt hides what you type. If you are not sure a key registered, the default shows one asterisk for each key (`secret_echo`). Check Caps Lock and the keyboard layout. Passwords are case sensitive.
 - An archive with a locked header, a 7z with encrypted names, cannot be listed at all without the password: "Could not open a.7z: a password is needed. Enter the password and try again."
 - Test archive says what it could not check: "Not checked: 3 of 4 members."
@@ -96,7 +96,7 @@ Undo checks that an entry is as the job left it. If you changed the entry since,
 
 ## An archive asks a question about its size
 
-A question such as "Expands to 40 GB from 40 KB. Read huge.bin? y or n" means a member or the whole job would write far more than the archive's size suggests. Real archives that squeeze well, such as a log or a disk image, can do this, and so can an archive made to fill your drive. The question starts on No. Answer n unless you trust where the archive came from. Test archive reads every member without writing anything, so it is a safe way to look. Other questions are "big.bin is 9.1 GB. Read it? y or n", "Needs 400 MB of memory for a.7z. Go on? y or n" and "Read 3.2 GB first to open note.txt? y or n". [Archives](archives.md) explains each one and the settings that move its limit, such as `archives.ask_total_gib` and `archives.max_ratio`.
+A question such as "Expands to 40 GB from 40 KB. Read huge.bin? No is the default. y or n" means a member or the whole job would write far more than the archive's size suggests. Real archives that squeeze well, such as a log or a disk image, can do this, and so can an archive made to fill your drive. The question starts on No. Answer n unless you trust where the archive came from. Test archive reads every member without writing anything, so it is a safe way to look. Other questions are "big.bin is 9.1 GB. Read it? No is the default. y or n", "Needs 400 MB of memory for a.7z. Go on? No is the default. y or n" and "Read 3.2 GB first to open note.txt? No is the default. y or n". [Archives](archives.md) explains each one and the settings that move its limit, such as `archives.ask_total_gib` and `archives.max_ratio`.
 
 A refusal that says "it passes the limit for" something has no question: the archive is past what diroxide will read. Raise the setting in [the reference](settings-reference.md) if you are sure.
 
@@ -126,15 +126,13 @@ The joined file's checksum is not the one in the `.crc` file. A part was damaged
 
 ## "Cannot link: needs developer mode."
 
-Windows lets only a program with the right to make symbolic links do so. Turn on Developer Mode in Windows Settings (System, then For developers), or start diroxide as an administrator. For a folder, diroxide offers "Make a junction instead? y or n". A junction needs no right and points by the full path. On a FAT or exFAT drive no link is possible: "Cannot link here: this place holds no links".
+Windows lets only a program with the right to make symbolic links do so. Turn on Developer Mode in Windows Settings (System, then For developers), or start diroxide as an administrator. For a folder, diroxide offers "Make a junction instead? No is the default. y or n". A junction needs no right and points by the full path. On a FAT or exFAT drive no link is possible: "Cannot link here: this place holds no links".
 
-## The viewer or the quick view does not start
+## F3, or another new key, does nothing
 
-- F3 or Shift+F3 may not reach diroxide. Run the key test, or use the palette: View, and Quick view. [Terminals](terminals.md) lists the keys terminals keep.
-- Windows Terminal keeps Alt+Enter, which is the details list in diroxide. Use Details in the File menu. It also keeps Ctrl+V and Alt with the arrow keys; Paste, Back and Forward are in the Edit and Go menus.
-- A terminal built into another program, such as a desktop app's terminal pane or an editor's, may keep other keys for itself, for example Alt+F for its own menu or Ctrl+Q. Run `diro keys test` in it and see what arrives. If Ctrl+Q does nothing, File, then Quit, in the menu bar (F9) quits. diroxide's key tables do not list such terminals yet.
-
-<!-- to confirm with the wiring and the owner's probe: the keys that the desktop app's built-in terminal keeps, the menu path to Quit, and the exact palette names for View and Quick view (the View menu may also hold Quick view). -->
+- F3 may not reach diroxide. Run the key test, or use View in the File menu (Alt+F, then V) or the palette. The viewer's own keys are in the View menu's Viewer submenu (Alt+V, then V) and in the palette. [Terminals](terminals.md) lists the keys terminals keep. If Shift+F3 does nothing, [the quick view](quick-view.md) says how to reach it.
+- Windows Terminal keeps Alt+Enter, which is the details list in diroxide. Use Details in the File menu (Alt+F, then D). It also keeps Ctrl+V and Alt with the arrow keys; Paste, Back and Forward are in the Edit and Go menus. Pack, Unpack and Test archive are Alt+F5, Alt+F9 and Alt+Shift+F9 in the desktop window only; in a terminal they are in the File menu under Archive (Alt+F, then A).
+- A terminal built into another program, such as the terminal pane of a desktop app or an editor, may keep other keys for itself. In the one in some desktop apps, Alt+F and Ctrl+Q never arrive. Press F9 to open the menus, and quit from the File menu or the palette. Run `diro keys test` in such a terminal and see what arrives. diroxide's key tables do not list these terminals yet.
 
 ## Code has no colors in the viewer
 

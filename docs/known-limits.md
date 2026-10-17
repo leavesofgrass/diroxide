@@ -11,7 +11,7 @@ Each item says which alpha brings it.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for alpha.7, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come with alpha.7; until then the quick view says "No preview" and names the kind and size.
 - A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes with alpha.7.
-- Changing the owner and group of a file, and a dialog for typing a file time, come with alpha.7. <!-- to confirm with the wiring: whether alpha.2 has a Change times command (the engine is built). -->
+- Changing the owner and group of a file, and a dialog for typing a file time, come with alpha.7. There is no Change times command in alpha.2, although copies keep dates.
 - Full search by name and content, the full filter language, saved searches, labels and bookmarks, and the Keys list inside the program: alpha.3. `diro search ROOT PATTERN` already prints names that match a list of globs. You can already change keys by editing `keymap.toml`.
 - Plugins, script commands and the downloader for optional components: alpha.4. The Plugins menu only says "Plugins come with alpha.4."
 - SSH and other remote places, and the trash browser: alpha.5.
@@ -57,8 +57,13 @@ The trash is the default way to delete, and the places where it cannot be truste
 ## Archives
 
 - Limits: [the archives guide](archives.md) lists them with the questions they ask. A listing shows at most 500,000 entries of one folder and says so. An archive with more than a million members is refused unless you raise `archives.max_entries`.
-- The command-line `diro archive` commands use the built-in limits, not the `[archives]` table in your settings. <!-- to confirm with the wiring: that the app maps the table and the CLI still does not. -->
-- 7z passwords: diroxide wipes its own copy of a typed password when the job ends. The library that reads and writes 7z keeps a copy in memory in a form diroxide cannot wipe, for as long as it needs it: one read, or the whole time a 7z is being packed. A zip password is only borrowed by its library and does not have this limit. A locked 7z also keeps its password in the list it caches while the archive stays open. <!-- to confirm with the wiring: that leaving a locked archive makes the app forget it. -->
+- The command-line `diro archive` commands use the built-in limits, not the `[archives]` table in your settings. Only the program in the terminal or the window reads the table.
+- 7z passwords: diroxide wipes its own copy of a typed password when the job ends, and leaving a locked 7z makes it forget the password. The library that reads and writes 7z keeps a copy in memory in a form diroxide cannot wipe, for as long as it needs it: one read, or the whole time a 7z is being packed. A zip password is only borrowed by its library and does not have this limit.
+- In `diro archive`, one wrong password may use up all three tries, because the password source is wrapped twice there. The panels count correctly.
+- A tar.gz, tar.xz or solid 7z is listed with no progress line. A "Reading logs.tar.xz: 3.2 of 14.0 GB" line is planned and not wired, so a big one shows nothing until the list is ready.
+- Junk entries such as `__MACOSX` are marked hidden by the archive reader. Whether Show hidden files lists them in the panel has not been checked.
+- F5 out of an archive always unpacks with the default settings. There is no "copy with options" yet. To choose the folder rule, the name policy or links, use Unpack from the File menu. Shift+F5 is Duplicate.
+- Leftover temporary files from packing (a pack that was killed) are cleaned up only in folders diroxide remembers, and only when they are older than a day.
 - 7z and tar links: a link inside a 7z is listed without its target, and unpacks as "link not followed". A hard link in a tar is left out with the line "device or special entry", which is the wrong word for it.
 - Names in older zips that are not UTF-8 are not converted. A zip written in Shift-JIS, GBK or Big5 on an older system may show wrong characters. Choosing a name encoding for an archive comes with a later alpha.
 - When diroxide opens a zip it compares each member's local header with the central list for up to 100,000 members. Past that, it checks each member when you read it.
@@ -77,7 +82,6 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The outline, the bracket jump, skip comment and context need the file read whole, within the highlight caps. Past them they say "Needs a file under 512 KiB".
 - Colors cover nine languages: Markdown, JSON, TOML, YAML, shell, Rust, Python, HTML and CSS. YAML is colored but not checked for errors.
 - A slim `diro` built without the syntax set says "Highlighting off: not in this build" and keeps the commands that need no grammar.
-- The quick view's first draft was written before its own notes were in. <!-- to confirm with W2e's notes: the quick view's gaps, and whether anything is off by default. -->
 
 ## Split and join
 
@@ -92,9 +96,10 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 - Windows needs Developer Mode or an administrator to make a symbolic link, and a FAT or exFAT drive holds no links at all. The words for the missing right are tested on the error itself; the test machine had the right, so the real refusal has not been seen yet.
 - A folder link on Windows cannot be changed in one step, so changing its target uses the trash. On a drive with no trash, changing a folder link's target fails in words.
-- Not built yet from the permissions plan: typing a symbolic mode such as `u=rw,g=r`, Make runnable, the list of permission presets, a list of protected places that refuse changes in administrator mode, extra checks for private-key names, changing a file with several hard links once, and a "why can't I?" explanation. <!-- to confirm with the wiring: which of these W2f's dialogs add. -->
+- Not built yet from the permissions plan: typing an octal number or a symbolic mode such as `u=rw,g=r`, Make runnable, the list of permission presets, a list of protected places that refuse changes in administrator mode, extra checks for private-key names, changing a file with several hard links once, and a "why can't I?" explanation. The permissions dialog steps each of owner, group and others through six choices instead.
+- The end-of-job line for a permissions change is built from the job's verb and may read "Change the attributes of finished: 1 done." This was worked out from the code and has not been heard.
 - Access lists, flags such as immutable and locked, and extended attributes are neither shown nor edited. They come with alpha.7, shown first. Changing the owner comes with alpha.7.
-- The rows alpha.2 adds to the details list (type, size with its exact bytes, a link's target) have no dates of their own, because the preview code has no time zone. The times are in the details list as before. <!-- to confirm with the wiring: how the new rows and the alpha.1 details list fit together. -->
+- The rows alpha.2 adds to the details list (type, size with its exact bytes, a link's target) have no dates of their own, because the preview code has no time zone. The times are in the details list as before.
 - The Unix half of the atomic link swap is covered by the project's Linux container check. It has not been run natively on a Unix machine outside it.
 
 ## Terminals and keys
@@ -111,6 +116,7 @@ The table of keys each terminal can send waits for a key probe run by hand on ea
 - A program that has the terminal, such as your editor or a shell from Shell here, is waited for without a time limit. Every other wait in the screen has one.
 - A move of the cursor keeps the last message on the status line, so a sighted user may see a message that is no longer news. The cursor row is what a screen reader speaks.
 - The inline view (`--inline`) is at most 24 rows tall, and a terminal narrower than 20 columns is drawn as 20.
+- In the terminal built into some desktop apps, Alt+F and Ctrl+Q never arrive. F9 opens the menus, and Quit is in the File menu and the palette. Other terminals built into programs may keep keys too; `diro keys test` says what arrives.
 - Terminals not yet tried: the classic console, Konsole, Alacritty, kitty, WezTerm, Ghostty, iTerm2 and macOS Terminal with VoiceOver.
 
 ## Screen readers and Braille
@@ -118,7 +124,7 @@ The table of keys each terminal can send waits for a key probe run by hand on ea
 - NVDA in Windows Terminal is the main target. Nothing in alpha.2 had been heard on a screen reader when this page was written; the first listening check comes after the build is complete. [The accessibility statement](accessibility.md) records what has been checked.
 - JAWS in Windows Terminal is untested.
 - Orca and VoiceOver are best effort. Terminals that draw with the graphics card, such as Alacritty and kitty, give Orca nothing to read.
-- The key bar is drawn on the last line in every mode, screen-reader mode included, and the `key_bar` setting turns it off. Say key bar in the Help menu reads it. diroxide does not detect a screen reader in alpha.2, so the default `auto` setting counts as on. <!-- to confirm with the wiring (W2f): the key_bar setting, its default, and that the key bar is drawn in screen-reader mode. -->
+- The key bar is drawn on the last line in every mode, screen-reader mode included, since alpha.2, and the `key_bar` setting turns it off. Say key bar, in the Help menu (Alt+H, then K) and the palette, reads it. At 80 columns the bar uses one space between pairs so that all nine fit. diroxide does not detect a screen reader in alpha.2, so the default `auto` setting counts as on.
 - Whether eight bytes a row is the right width for hex on a screen reader and a 40-cell display is decided by listening. The `viewer.hex_row` setting changes it.
 - The by-kind code commands, the quick view's one-line announcement and the spoken sentences of the archive, split and join dialogs have been checked against 40 characters in tests, not heard. Braille cells in contracted braille take more room than characters.
 - Whether NVDA or JAWS speak the terminal's window title on each folder change has not been verified.
@@ -137,6 +143,7 @@ The table of keys each terminal can send waits for a key probe run by hand on ea
 - Cut, copy and paste of files (Ctrl+X, Ctrl+C, Ctrl+V) work between diroxide's own panels. They do not use the system clipboard, so Explorer and the Finder cannot paste what diroxide copied.
 - Cloud files that are only online are named "online only". diroxide asks before it reads their contents.
 - The terminal frontend has no mouse.
+- Each job announces its end twice: "Unpacking finished" from the jobs line, then the result line, "Unpack finished: 4 done." A follow-up drops the first.
 - How many times a copy retries a lost network, how long before it calls a copy stalled, and whether it keeps dates or checks a move are built into the job engine. They are not settings.
 
 ## See also
