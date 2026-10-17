@@ -22,7 +22,7 @@ In screen-reader mode the other panel is redrawn only when you ask, whatever the
 - The rows of the panel follow. There is no ".." row; Left, Backspace and Alt+Up go to the parent. At the top of a drive, diroxide says "At the top already".
 - The status line gives the latest message with its key fact first. A move of the cursor does not change it. Between messages, Ctrl+D tells you where you are.
 - The jobs line says what jobs are doing, or "No jobs".
-- The key bar is a line that names the function keys in words. It is drawn only when screen-reader mode is off, and the compact setting hides it. In screen-reader mode it is never drawn, and the Say key bar command in the Help menu (Alt+H, then K) reads it to you.
+- The key bar is the last line. It names the function keys in words: "F2 Rename  F3 View  F4 Edit  F5 Copy". Since alpha.2 it is drawn in every mode, screen-reader mode included. The `key_bar` setting turns it off, and the compact setting hides it. The Say key bar command in the Help menu (Alt+H, then K) reads it to you.
 - Prompts and their candidate lists appear at the bottom of the screen, in the minibuffer. In screen-reader mode a candidate list is drawn only when you move into it, and while you type one line says the count.
 
 The hardware cursor always sits on the focused row's first cell, so a screen reader and a Braille display follow it. In a prompt it sits where the next character will go. In an empty folder it sits on the line that says "Empty folder".
@@ -40,7 +40,7 @@ A row puts its meaning first: the name, then the kind, the size and the modified
 
 By default the columns are type, size and modified time. The `columns` setting lists the details said after each name and their order: type, size, modified, created, accessed, changed, permissions, mode, octal, owner, group, attributes, link and extension.
 
-Permissions are read in words first. On Linux and macOS the permissions column says who can do what: "read: everyone; write: owner". A folder says "list and enter: everyone; change: owner". The octal number is a separate column, never the first thing said. On Windows the column uses words such as read-only, hidden, system, compressed, encrypted and online only. You can see permissions in alpha.1, but you cannot change them until alpha.2.
+Permissions are read in words first. On Linux and macOS the permissions column says who can do what: "read: everyone; write: owner". A folder says "list and enter: everyone; change: owner". The octal number is a separate column, never the first thing said. On Windows the column uses words such as read-only, hidden, system, compressed, encrypted and online only. You can change permissions with Change permissions in the File menu; [links, permissions and times](links-permissions.md) describes it.
 
 ## Moving around
 
@@ -53,7 +53,7 @@ Permissions are read in words first. On Linux and macOS the permissions column s
 
 When you go to the parent with Left or Backspace, the cursor lands on the folder you just left. Back and forward return you to the row you were on, with the marks you had, folder by folder.
 
-Enter on a folder goes in. Enter on a file hands it to your system's program for that kind of file: "Opening report.pdf". Enter on a program asks first, and the question starts on No: "Run setup.exe? No is the default. y or n". F4 hands the file to your editor instead, with the screen suspended; when you come back diroxide says "Back in diroxide, Documents". The editor is the `editor` setting, or else the VISUAL or EDITOR variable, or else the system's text editor. Archives are listed as archives, but they cannot be opened until alpha.2.
+Enter on a folder goes in. Enter on a file hands it to your system's program for that kind of file: "Opening report.pdf". Enter on a program asks first, and the question starts on No: "Run setup.exe? No is the default. y or n". F4 hands the file to your editor instead, with the screen suspended; when you come back diroxide says "Back in diroxide, Documents". The editor is the `editor` setting, or else the VISUAL or EDITOR variable, or else the system's text editor. Enter or Right on an archive opens it like a folder; [archives](archives.md) describes it. F3 reads a file in the viewer ([the viewer](viewer.md)).
 
 ## Go to a path
 
@@ -131,7 +131,7 @@ In a terminal the keypad's plus, minus and star arrive as the main row's charact
 
 ## Details and the context menu
 
-- Alt+Enter lists the details of the focused entry, one fact a row: name, kind, size (a folder says "folder size not computed"), the modified, created and accessed times in words, attributes, owner, group, link target, whether it is hidden, and the full path. A name that needs care adds the reason and the name spelled out. Windows Terminal keeps Alt+Enter; the File menu has Details.
+- Alt+Enter lists the details of the focused entry, one fact a row: the type, then the size in words with the exact bytes (a folder says "folder size not computed", and an archive adds "Entries: 10 items"), the modified, created and accessed times in words, attributes, owner, group, link target, whether it is hidden, and the full path. A name that needs care adds the reason and the name spelled out. Windows Terminal keeps Alt+Enter; the File menu has Details.
 - Shift+F10 or the Menu key opens the context menu: "Actions for report.pdf", a list of what the File menu offers here plus copy, cut, copy to the other panel and move to the other panel, each with its key. On Windows the Menu key never reaches a terminal program, so Shift+F10 is the way there.
 
 ## Refresh and watching
