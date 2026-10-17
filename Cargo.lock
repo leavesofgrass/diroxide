@@ -956,6 +956,7 @@ dependencies = [
  "serde_json",
  "syntect",
  "thiserror 2.0.21",
+ "toml",
  "two-face",
 ]
 

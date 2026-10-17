@@ -25,12 +25,16 @@
 mod engine;
 mod language;
 mod scopes;
+mod structured;
+mod symbols;
 mod worker;
 
 use std::time::{Duration, Instant};
 
 pub use language::Language;
 pub use scopes::{class_of_scopes, rule_of};
+pub use structured::{Validity, validity};
+pub use symbols::{Symbol, SymbolKind, markdown_headings, structure_symbols};
 pub use worker::{Job, Session};
 
 use crate::classes::ClassRun;
@@ -152,11 +156,14 @@ fn kib_words(bytes: u64) -> String {
     }
 }
 
-/// A file's lines in token classes.
+/// A file's lines in token classes, and its symbols from the same parse.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Highlighted {
     /// For each line, its runs, in order; empty for a plain line.
     pub runs: Vec<Vec<ClassRun>>,
+    /// The file's symbols in file order: from the grammar's names for
+    /// code, from [`structure_symbols`] for structured text.
+    pub symbols: Vec<Symbol>,
 }
 
 /// Whether this build has the syntax set.
@@ -218,8 +225,10 @@ pub(crate) fn highlight_with(
     #[cfg(feature = "syntax-set")]
     {
         let mut parser = engine::LineParser::new(language, false).ok_or(Refusal::NoGrammar)?;
+        let structure = structure_symbols(language, lines);
         let mut out = Highlighted {
             runs: Vec::with_capacity(lines.len()),
+            symbols: Vec::new(),
         };
         let mut failed = false;
         for chunk in lines.chunks(CHUNK_LINES) {
@@ -230,15 +239,24 @@ pub(crate) fn highlight_with(
                 return Err(Refusal::TookTooLong);
             }
             for line in chunk {
+                let n = out.runs.len();
                 let parsed = if failed { None } else { parser.line(line) };
                 match parsed {
-                    Some(parsed) => out.runs.push(parsed.runs),
+                    Some(parsed) => {
+                        if structure.is_none() {
+                            out.symbols.extend(code_symbols(line, n, &parsed.names));
+                        }
+                        out.runs.push(parsed.runs);
+                    }
                     None => {
                         failed = true;
                         out.runs.push(Vec::new());
                     }
                 }
             }
+        }
+        if let Some(structure) = structure {
+            out.symbols = structure;
         }
         Ok(out)
     }
@@ -247,6 +265,26 @@ pub(crate) fn highlight_with(
         let _ = (language, lines, deadline, cancelled);
         Err(Refusal::NotInBuild)
     }
+}
+
+/// The symbols the grammar named on one line of code.
+#[cfg(feature = "syntax-set")]
+fn code_symbols<'a>(
+    line: &'a str,
+    n: usize,
+    names: &'a [engine::Named],
+) -> impl Iterator<Item = Symbol> + 'a {
+    names.iter().filter_map(move |named| {
+        let kind = match named.kind {
+            engine::NameKind::Function => SymbolKind::Function,
+            engine::NameKind::Type => SymbolKind::Type,
+            engine::NameKind::Impl => SymbolKind::Impl,
+            engine::NameKind::Module => SymbolKind::Module,
+            engine::NameKind::Section => return None,
+        };
+        let name = line.get(named.start as usize..named.end as usize)?.trim();
+        (!name.is_empty()).then(|| Symbol::new(kind, name, n))
+    })
 }
 
 /// Every scope the grammar pushes on these lines, by name: for the tests

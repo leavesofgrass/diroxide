@@ -18,6 +18,9 @@ diroxide-vfs.workspace = true
 encoding_rs.workspace = true
 pulldown-cmark.workspace = true
 serde.workspace = true
+# The highlight module's validity lines: JSON and TOML (W2d).
+serde_json.workspace = true
+toml.workspace = true
 # The highlight module (W2d): syntect as a tokenizer, bat's grammars,
 # behind the default syntax-set feature.
 syntect = { workspace = true, optional = true }
@@ -26,7 +29,6 @@ two-face = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest.workspace = true
-serde_json.workspace = true
 
 [features]
 default = ["syntax-set"]

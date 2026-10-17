@@ -252,3 +252,206 @@ fn the_default_build_brings_no_c_regex_engine_and_no_yaml_or_plist_loader() {
         );
     }
 }
+
+#[cfg(feature = "syntax-set")]
+#[test]
+fn each_sample_has_the_scopes_the_mapper_depends_on() {
+    let expected: [(&str, &[&str]); 9] = [
+        (
+            "report.md",
+            &[
+                "markup.heading",
+                "entity.name.section",
+                "markup.bold",
+                "markup.raw",
+                "markup.underline.link",
+            ],
+        ),
+        (
+            "data.json",
+            &[
+                "meta.mapping.key",
+                "string.quoted",
+                "constant.numeric",
+                "constant.language",
+            ],
+        ),
+        (
+            "config.toml",
+            &[
+                "comment",
+                "entity.name.table",
+                "entity.name.tag.toml",
+                "string.quoted",
+                "constant.numeric",
+            ],
+        ),
+        (
+            "ci.yaml",
+            &["comment", "entity.name.tag.yaml", "string.unquoted"],
+        ),
+        (
+            "build.sh",
+            &[
+                "comment",
+                "entity.name.function",
+                "keyword.control",
+                "string.quoted",
+                "variable.function",
+            ],
+        ),
+        (
+            "main.rs",
+            &[
+                "comment",
+                "entity.name.function",
+                "entity.name.struct",
+                "entity.name.enum",
+                "entity.name.impl",
+                "entity.name.module",
+                "storage.type",
+                "keyword",
+                "string.quoted",
+                "constant.numeric",
+                "punctuation.section.block",
+            ],
+        ),
+        (
+            "sample.py",
+            &[
+                "comment",
+                "entity.name.function",
+                "entity.name.class",
+                "keyword",
+                "string.quoted",
+            ],
+        ),
+        (
+            "page.html",
+            &[
+                "comment",
+                "entity.name.tag",
+                "entity.other.attribute-name",
+                "string.quoted",
+            ],
+        ),
+        (
+            "site.css",
+            &[
+                "comment",
+                "entity.name.tag",
+                "entity.other.attribute-name",
+                "support.type.property-name",
+                "constant.numeric",
+            ],
+        ),
+    ];
+    for ((language, name), (sample, wanted)) in SAMPLES.into_iter().zip(expected) {
+        assert_eq!(name, sample);
+        let scopes = scopes_of(language, &sample_lines(name));
+        for prefix in wanted {
+            assert!(
+                scopes
+                    .iter()
+                    .any(|s| s == prefix || s.starts_with(&format!("{prefix}."))),
+                "{name} has no {prefix} scope"
+            );
+        }
+    }
+}
+
+#[cfg(feature = "syntax-set")]
+#[test]
+fn each_sample_yields_the_kinds_it_holds() {
+    use crate::classes::TokenClass as C;
+    let expected: [&[C]; 9] = [
+        &[C::Heading, C::Emphasis, C::Code, C::Link, C::Comment],
+        &[
+            C::Attribute,
+            C::String,
+            C::Number,
+            C::Constant,
+            C::Punctuation,
+        ],
+        &[C::Comment, C::Attribute, C::Heading, C::String, C::Number],
+        &[C::Comment, C::Attribute, C::String],
+        &[
+            C::Comment,
+            C::FunctionName,
+            C::Keyword,
+            C::String,
+            C::Variable,
+        ],
+        &[
+            C::Comment,
+            C::Keyword,
+            C::FunctionName,
+            C::TypeName,
+            C::String,
+            C::Number,
+            C::Operator,
+            C::Punctuation,
+        ],
+        &[
+            C::Comment,
+            C::Keyword,
+            C::FunctionName,
+            C::TypeName,
+            C::String,
+            C::Number,
+        ],
+        &[C::Comment, C::Tag, C::Attribute, C::String],
+        &[C::Comment, C::Tag, C::Attribute, C::Number],
+    ];
+    for ((language, name), kinds) in SAMPLES.into_iter().zip(expected) {
+        let lines = sample_lines(name);
+        let done = highlight_lines(language, &lines, None).unwrap();
+        let seen: Vec<C> = done.runs.iter().flatten().map(|r| r.class).collect();
+        for kind in kinds {
+            assert!(seen.contains(kind), "{name} has no {}", kind.word());
+        }
+    }
+}
+
+#[cfg(feature = "syntax-set")]
+#[test]
+fn code_symbols_come_from_the_grammar_in_file_order() {
+    let rows = |language, name| -> Vec<String> {
+        highlight_lines(language, &sample_lines(name), None)
+            .unwrap()
+            .symbols
+            .iter()
+            .map(Symbol::row)
+            .collect()
+    };
+    assert_eq!(
+        rows(Language::Rust, "main.rs"),
+        [
+            "type Config, line 8",
+            "type Problem, line 14",
+            "impl Config, line 19",
+            "function parse_args, line 21",
+            "module greeting, line 37",
+            "function hello, line 39",
+            "function main, line 47",
+        ]
+    );
+    assert_eq!(
+        rows(Language::Python, "sample.py"),
+        [
+            "type Counter, line 9",
+            "function __init__, line 12",
+            "function add, line 15",
+            "function main, line 21",
+        ]
+    );
+    assert_eq!(
+        rows(Language::Shell, "build.sh"),
+        ["function greet, line 5", "function clean_up, line 10"]
+    );
+    assert_eq!(
+        rows(Language::Markdown, "report.md").len(),
+        5,
+        "from pulldown-cmark"
+    );
+}
