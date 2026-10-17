@@ -227,7 +227,8 @@ impl Lookup for Facts<'_> {
             self.skip(|skips| skips.unreadable_files += 1);
             return Truth::Unknown(Unknown::Unreadable);
         };
-        match reader.search(file, self.contents.keep) {
+        let stop = || self.contents.control.checkpoint();
+        match reader.search(file, self.contents.keep, &stop) {
             Ok((found, bytes)) => {
                 {
                     let mut read = self.read.borrow_mut();

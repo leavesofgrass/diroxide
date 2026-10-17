@@ -83,12 +83,22 @@ impl Reader {
     }
 
     /// Reads a file and says what it found, keeping at most `keep`
-    /// matching lines, with the bytes read.
-    pub(crate) fn search(&self, reader: impl Read, keep: usize) -> io::Result<(Found, u64)> {
+    /// matching lines, with the bytes read. `stop` is asked before each
+    /// piece, so a cancel (or a pause, which `stop` waits out) reaches
+    /// inside a large file; a stopped read finds nothing.
+    pub(crate) fn search(
+        &self,
+        reader: impl Read,
+        keep: usize,
+        stop: &dyn Fn() -> bool,
+    ) -> io::Result<(Found, u64)> {
         let mut source = Source::new(reader.take(self.limit.unwrap_or(u64::MAX)))?;
         let mut lines = Lines::new(&self.regex, keep.max(1));
         let mut buffer = Vec::with_capacity(CHUNK * 2);
         loop {
+            if stop() {
+                return Ok((Found::Nothing, source.read));
+            }
             let more = source.fill(&mut buffer)?;
             if buffer.contains(&0) {
                 return Ok((Found::Binary, source.read));
@@ -368,7 +378,7 @@ mod tests {
     fn lines_are_numbered_and_case_is_smart() {
         let text = "first line\ntotal due here\nnothing\nTOTAL DUE caps\n";
         let (found, read) = reader("content \"total due\"")
-            .search(text.as_bytes(), 100)
+            .search(text.as_bytes(), 100, &|| false)
             .unwrap();
         assert_eq!(read, text.len() as u64);
         assert_eq!(
@@ -376,11 +386,11 @@ mod tests {
             [(2, "total due here".into()), (4, "TOTAL DUE caps".into())]
         );
         let (found, _) = reader("content \"TOTAL DUE\"")
-            .search(text.as_bytes(), 100)
+            .search(text.as_bytes(), 100, &|| false)
             .unwrap();
         assert_eq!(lines(&found), [(4, "TOTAL DUE caps".into())]);
         let (found, _) = reader("content \"total due\"")
-            .search(text.as_bytes(), 1)
+            .search(text.as_bytes(), 1, &|| false)
             .unwrap();
         assert_eq!(
             found,
@@ -400,25 +410,27 @@ mod tests {
         for little in [true, false] {
             let bytes = utf16("alpha\ntotal due in utf16\n", little, true);
             let (found, _) = reader("content \"total due\"")
-                .search(bytes.as_slice(), 10)
+                .search(bytes.as_slice(), 10, &|| false)
                 .unwrap();
             assert_eq!(lines(&found), [(2, "total due in utf16".into())]);
         }
         let bytes = utf16("total due without a mark\n", true, false);
         let (found, _) = reader("content \"total due\"")
-            .search(bytes.as_slice(), 10)
+            .search(bytes.as_slice(), 10, &|| false)
             .unwrap();
         assert_eq!(found, Found::Binary);
         let (found, _) = reader("content \"total due\"")
-            .search(&b"total due\0\x01\x02"[..], 10)
+            .search(&b"total due\0\x01\x02"[..], 10, &|| false)
             .unwrap();
         assert_eq!(found, Found::Binary);
-        let (found, _) = reader("content \"x\"").search(&b""[..], 10).unwrap();
+        let (found, _) = reader("content \"x\"")
+            .search(&b""[..], 10, &|| false)
+            .unwrap();
         assert_eq!(found, Found::Nothing);
         let mut marked = vec![0xEF, 0xBB, 0xBF];
         marked.extend(b"total due\n");
         let (found, _) = reader("content regex \"^total\"")
-            .search(marked.as_slice(), 10)
+            .search(marked.as_slice(), 10, &|| false)
             .unwrap();
         assert_eq!(lines(&found), [(1, "total due".into())]);
     }
@@ -427,7 +439,7 @@ mod tests {
     fn crlf_lines_long_lines_and_the_byte_limit() {
         let crlf = b"one\r\ntotal due\r\nthree\r\n";
         let (found, _) = reader("content regex \"due$\"")
-            .search(&crlf[..], 10)
+            .search(&crlf[..], 10, &|| false)
             .unwrap();
         assert_eq!(lines(&found), [(2, "total due".into())]);
         let long = format!(
@@ -436,7 +448,7 @@ mod tests {
             "y".repeat(300_000)
         );
         let (found, _) = reader("content \"total due\"")
-            .search(long.as_bytes(), 10)
+            .search(long.as_bytes(), 10, &|| false)
             .unwrap();
         let Found::Lines { lines: kept, count } = found else {
             panic!("no match in the long line");
@@ -448,25 +460,39 @@ mod tests {
         assert_eq!(kept[0].column, 300_002);
         let text = b"first line\ntotal due\n";
         let (found, read) = reader("content \"total due\" first 10 B")
-            .search(&text[..], 10)
+            .search(&text[..], 10, &|| false)
             .unwrap();
         assert_eq!((found, read), (Found::Nothing, 10));
         let (found, _) = reader("content \"total due\" first 20 B")
-            .search(&text[..], 10)
+            .search(&text[..], 10, &|| false)
             .unwrap();
         assert_eq!(lines(&found), [(2, "total due".into())]);
+    }
+
+    #[test]
+    fn a_stop_reaches_inside_a_large_file() {
+        let big = "x".repeat(CHUNK * 8);
+        let asked = std::cell::Cell::new(0);
+        let (found, read) = reader("content \"y\"")
+            .search(big.as_bytes(), 10, &|| {
+                asked.set(asked.get() + 1);
+                asked.get() > 1
+            })
+            .unwrap();
+        assert_eq!(found, Found::Nothing);
+        assert!(read <= (CHUNK * 2) as u64, "{read}");
     }
 
     #[test]
     fn a_match_across_a_line_feed_needs_its_line() {
         let text = b"total\ndue\ntotal due\n";
         let (found, _) = reader("content regex \"total\\sdue\"")
-            .search(&text[..], 10)
+            .search(&text[..], 10, &|| false)
             .unwrap();
         assert_eq!(lines(&found), [(3, "total due".into())]);
         let many: String = (1..=5000).map(|n| format!("line {n}\n")).collect();
         let (found, _) = reader("content regex \"^line 4999$\"")
-            .search(many.as_bytes(), 10)
+            .search(many.as_bytes(), 10, &|| false)
             .unwrap();
         assert_eq!(lines(&found), [(4999, "line 4999".into())]);
     }
