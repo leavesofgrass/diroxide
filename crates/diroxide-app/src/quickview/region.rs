@@ -138,58 +138,16 @@ impl Default for Region {
     }
 }
 
-/// The cells a row of text gets at least when wrapped.
-const MIN_ROOM: usize = 8;
-
-/// The byte ranges `text` wraps into at `width` characters, after a
-/// space where one fits; a word longer than a row is cut. An empty text
-/// is one empty row; a width of 0 does not wrap.
-fn wrap(text: &str, width: usize) -> Vec<Range<usize>> {
-    if width == 0 || text.chars().count() <= width {
-        return std::iter::once(0..text.len()).collect();
-    }
-    let room = width.max(MIN_ROOM);
-    let mut rows = Vec::new();
-    let mut start = 0;
-    let mut used = 0;
-    let mut after_space = None;
-    for (at, c) in text.char_indices() {
-        if used == room {
-            let cut = after_space.filter(|&s| s > start).unwrap_or(at);
-            rows.push(start..cut);
-            start = cut;
-            used = text[cut..at].chars().count();
-            after_space = None;
-        }
-        used += 1;
-        if c == ' ' {
-            after_space = Some(at + 1);
-        }
-    }
-    rows.push(start..text.len());
-    rows
-}
-
-/// A row's label split at `width`: the first part at the full width, the
-/// rest at the width less the "continued: " cue they start with.
+/// A row's label split at `width` terminal cells (0: not split), with the
+/// viewer's wrap (W2e's request 2): a wide character takes two cells, a
+/// row breaks after a space where one fits, and the rows after the first
+/// keep room for the "continued: " cue they start with.
 fn split(label: &str, width: usize) -> Vec<Range<usize>> {
-    let first = wrap(label, width);
-    if first.len() <= 1 {
-        return first;
+    if width == 0 || crate::viewer::wrap::cells(label) <= width {
+        return std::iter::once(0..label.len()).collect();
     }
-    let head = first[0].clone();
-    let after = &label[head.end..];
-    let tail = head.end + (after.len() - after.trim_start().len());
-    let room = width
-        .saturating_sub(CONTINUED.chars().count())
-        .max(MIN_ROOM);
-    let mut out = vec![head];
-    out.extend(
-        wrap(&label[tail..], room)
-            .into_iter()
-            .map(|r| tail + r.start..tail + r.end),
-    );
-    out
+    let rest = width.saturating_sub(CONTINUED.chars().count());
+    crate::viewer::wrap::wrap(label, width, rest)
 }
 
 impl Region {
@@ -221,9 +179,10 @@ impl Region {
         let mut list = ListModel::new("Preview").with_rows(rows);
         list.set_empty_text("Empty preview");
         list.set_help(
-            "Up and Down move by line; H and Shift+H by heading; P and N to the previous and next \
-             file; T by table, then the arrows by cell; L lists the links; slash finds; Escape \
-             returns to the panel.",
+            "Up and Down move by line; H and Shift+H by heading; Alt+P and Alt+N to the previous \
+             and next file; T by table, then the arrows by cell; L lists the links, Enter opens \
+             one; slash finds, n and p go to the next and previous match; Escape returns to the \
+             panel.",
         );
         let mut region = Self {
             list,
@@ -560,7 +519,9 @@ impl QuickView {
             .collect();
         let mut list = ListModel::new(title).with_rows(rows);
         list.set_empty_text("No links");
-        list.set_help("Enter goes to the link; O opens a web or mail address, asked first.");
+        list.set_help(
+            "Enter goes to the link; Enter there opens a web or mail address, asked first.",
+        );
         list
     }
 
@@ -619,6 +580,22 @@ impl QuickView {
                 "No link above"
             })],
         }
+    }
+
+    /// The link on the cursor's row, by id for [`QuickView::open_link`]:
+    /// the one the last link move landed on when it is on this row, else
+    /// the row's first.
+    pub fn link_here(&self) -> Option<String> {
+        let view = self.view()?;
+        let here = self.region.row()?;
+        let links = view.links();
+        let landed = self
+            .region
+            .link_at
+            .filter(|&n| links.get(n).is_some_and(|l| l.row == here));
+        landed
+            .or_else(|| links.iter().position(|l| l.row == here))
+            .map(|n| n.to_string())
     }
 
     /// Asks before opening a link: "Open `https://example.org` in the
@@ -827,5 +804,24 @@ impl QuickView {
             said,
             request: Some(QuickViewRequest::FocusEntry(entry.name.clone())),
         }
+    }
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::split;
+
+    #[test]
+    fn the_region_wraps_by_cells_as_the_viewer_does() {
+        // Ten Japanese characters take twenty cells: six fit the first
+        // row of twelve, the rest the next.
+        let label =
+            "\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{30c6}\u{30ad}\u{30b9}\u{30c8}\u{3067}\u{3059}";
+        assert_eq!(split(label, 12), [0..18, 18..30]);
+        assert_eq!(split("short", 40).len(), 1, "one row when it fits");
+        assert_eq!(split("no wrap at width zero", 0).len(), 1);
+        let text = "the quick brown fox jumps over the lazy dog";
+        let rows = split(text, 16);
+        assert_eq!(&text[rows[0].clone()], "the quick brown ");
     }
 }

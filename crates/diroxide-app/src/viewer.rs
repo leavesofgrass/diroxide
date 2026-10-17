@@ -35,7 +35,7 @@ mod rows;
 mod search;
 mod source;
 mod text;
-mod wrap;
+pub(crate) mod wrap;
 
 use std::collections::BTreeMap;
 use std::fmt;

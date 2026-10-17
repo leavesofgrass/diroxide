@@ -357,7 +357,8 @@ impl fmt::Display for KeyColumn {
 }
 
 /// Where a binding applies. A key is looked up in the most specific layer
-/// first: a dialog, then the viewer or a list, then a panel, then global.
+/// first: a dialog, then the viewer, the preview or a list, then a panel,
+/// then global.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Layer {
@@ -369,17 +370,22 @@ pub enum Layer {
     List,
     /// In the viewer.
     Viewer,
+    /// In the quick view's preview region, which Tab enters (its own keys
+    /// for headings, tables, cells and links; the viewer's where they mean
+    /// the same).
+    Preview,
     /// In a dialog.
     Dialog,
 }
 
 impl Layer {
     /// Every layer, from the most general.
-    pub const ALL: [Layer; 5] = [
+    pub const ALL: [Layer; 6] = [
         Layer::Global,
         Layer::Panel,
         Layer::List,
         Layer::Viewer,
+        Layer::Preview,
         Layer::Dialog,
     ];
 
@@ -390,6 +396,7 @@ impl Layer {
             Layer::Panel => "panel",
             Layer::List => "list",
             Layer::Viewer => "viewer",
+            Layer::Preview => "preview",
             Layer::Dialog => "dialog",
         }
     }

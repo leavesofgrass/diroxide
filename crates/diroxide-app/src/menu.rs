@@ -563,6 +563,31 @@ pub fn viewer_bank() -> Bank {
     }
 }
 
+/// The key bar in the quick view's preview region (plan commit 64): its
+/// own keys, Escape first.
+pub fn preview_bank() -> Bank {
+    let buttons = [
+        ("Back", ids::PREVIEW_LEAVE),
+        ("Heading", ids::PREVIEW_NEXT_HEADING),
+        ("Table", ids::PREVIEW_NEXT_TABLE),
+        ("Links", ids::PREVIEW_LINKS),
+        ("Find", ids::PREVIEW_FIND),
+        ("Next", ids::PREVIEW_NEXT_MATCH),
+        ("File", ids::PREVIEW_NEXT_FILE),
+        ("Status", ids::SAY_STATUS),
+    ];
+    Bank {
+        name: "Preview".to_owned(),
+        buttons: buttons
+            .into_iter()
+            .map(|(label, id)| Button {
+                label: label.to_owned(),
+                commands: vec![Command::new(id)],
+            })
+            .collect(),
+    }
+}
+
 /// The banks from `banks.toml`, each button's commands read in the command
 /// text form, with the problems in words; a command that cannot be read is
 /// left out of its button. With no banks configured, the default bank.
@@ -658,10 +683,12 @@ mod tests {
             ids::PERMISSIONS,
             ids::COPY_PATH,
             ids::COPY_NAME,
+            ids::QUICK_VIEW,
+            ids::OPEN_IN_TEXTWEAVER,
         ];
         let viewer = commands::CATALOG
             .iter()
-            .filter(|i| i.layer == Layer::Viewer)
+            .filter(|i| matches!(i.layer, Layer::Viewer | Layer::Preview))
             .map(|i| i.id.clone());
         let palette = crate::palette::palette("", &Keymap::defaults());
         for id in alpha2.into_iter().chain(viewer) {

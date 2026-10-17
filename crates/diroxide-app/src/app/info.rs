@@ -128,6 +128,9 @@ impl App {
     /// Say Other Panel: "Other panel: Backup, 12 items, on report.pdf, 3
     /// of 12".
     pub(super) fn say_other(&mut self) -> Vec<Effect> {
+        if let Some(effects) = self.say_other_preview() {
+            return effects;
+        }
         let panel = self.panel(self.active.other());
         let list = panel.list();
         let mut text = format!(
@@ -145,8 +148,11 @@ impl App {
     /// bar: F2 Rename, F3 View, ... Control plus Q Quit."
     pub(super) fn say_key_bar(&mut self) -> Vec<Effect> {
         let viewer_bank = crate::menu::viewer_bank();
+        let preview_bank = crate::menu::preview_bank();
         let bank = if self.viewer_open() {
             Some(&viewer_bank)
+        } else if self.in_preview() {
+            Some(&preview_bank)
         } else {
             self.active_bank()
         };
@@ -242,6 +248,7 @@ impl App {
             (Layer::Panel, "In a panel"),
             (Layer::List, "In any list"),
             (Layer::Viewer, "In the viewer"),
+            (Layer::Preview, "In the preview"),
             (Layer::Dialog, "In a question"),
         ];
         let mut keyless: Vec<&commands::CommandInfo> = Vec::new();

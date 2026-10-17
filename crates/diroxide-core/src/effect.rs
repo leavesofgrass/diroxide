@@ -69,6 +69,12 @@ pub enum Effect {
     RunPlugin(PluginCall),
     /// Open a place with the system's default program.
     OpenExternally(Place),
+    /// Open a web or mail address (`https://`, `http://` or `mailto:`)
+    /// with the system's browser or mail program, after the user said yes:
+    /// a link followed from the quick view (W2e's request 1). Never a file
+    /// and never through a shell; the runtime checks the address again and
+    /// refuses anything else.
+    OpenAddress(String),
     /// Put places on the clipboard, for other file managers.
     SetClipboard(Vec<Place>),
     /// Put text on the system clipboard: a path or a name from the

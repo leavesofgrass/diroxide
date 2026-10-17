@@ -108,6 +108,11 @@ pub struct Session<'a, B: Backend> {
     code: CodeStyles,
     /// When the viewer gets its next slice of time.
     viewer_tick_at: Option<Instant>,
+    /// When the quick view gets its next slice of time.
+    quick_tick_at: Option<Instant>,
+    /// Whether the quick view was on and the focus in its region, at the
+    /// last frame.
+    quick_state: (bool, bool),
     memory: Memory,
     redraw: bool,
     resumed: Arc<AtomicBool>,
@@ -152,6 +157,9 @@ impl<'a, B: Backend> Session<'a, B> {
         options: TuiOptions,
     ) -> Self {
         app.set_screen_reader(options.screen_reader);
+        // The quick view reads through the runtime's providers, archives
+        // among them.
+        app.set_quick_view_registry(runtime.registry().clone());
         let support = options.color.unwrap_or_else(ColorSupport::detect);
         let styles = Styles::new(&app.settings().theme, &app.settings().colors, None, support);
         let code =
@@ -165,6 +173,8 @@ impl<'a, B: Backend> Session<'a, B> {
             styles,
             code,
             viewer_tick_at: None,
+            quick_tick_at: None,
+            quick_state: (false, false),
             memory: Memory::default(),
             redraw: true,
             resumed: Arc::new(AtomicBool::new(false)),
@@ -466,6 +476,18 @@ impl<'a, B: Backend> Session<'a, B> {
             self.first_draw_at = None;
             self.redraw = true;
         }
+        // The quick view's time: the wait after the cursor stops, a read,
+        // the colors.
+        match self.app.quick_view_wants_tick() {
+            Some(ms) => {
+                if self.quick_tick_at.is_none_or(|at| now >= at) {
+                    let effects = self.app.quick_view_tick();
+                    self.carry(effects, now);
+                    self.quick_tick_at = Some(now + Duration::from_millis(ms));
+                }
+            }
+            None => self.quick_tick_at = None,
+        }
         // The viewer's time: a long scan, the highlighter, Follow.
         match self.app.viewer_wants_tick() {
             Some(ms) => {
@@ -488,6 +510,7 @@ impl<'a, B: Backend> Session<'a, B> {
             self.resize_until,
             self.first_draw_at,
             self.viewer_tick_at,
+            self.quick_tick_at,
         ]
         .into_iter()
         .flatten()
@@ -568,6 +591,13 @@ impl<'a, B: Backend> Session<'a, B> {
         // viewport's rows.
         let base = self.look(0, 0, now);
         self.memory.freeze = base.screen_reader;
+        // The quick view turned on or off, or the focus went into its
+        // region or out: both sides are drawn as they are now, once.
+        let quick = (self.app.quick_view_on(), self.app.in_preview());
+        if quick != self.quick_state {
+            self.quick_state = quick;
+            self.memory.thaw_all();
+        }
         let status = if self.status.is_empty() {
             self.app.status_line()
         } else {
@@ -588,6 +618,9 @@ impl<'a, B: Backend> Session<'a, B> {
                     height: area.height,
                     ..base
                 };
+                if let Some(columns) = view::preview_columns(app, area.width) {
+                    app.set_preview_width(columns);
+                }
                 let mut view = view::build(app, &look, &status, memory);
                 if view.viewer_body
                     && let Some(viewer) = app.viewer_mut()

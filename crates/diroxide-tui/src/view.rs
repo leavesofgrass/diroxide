@@ -122,6 +122,7 @@ pub(crate) struct View {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum ScrollKey {
     Panel(Side),
+    Preview,
     Dialog(DialogId),
     Candidates(DialogId),
 }
@@ -346,6 +347,140 @@ fn panel_region(
     Region { lines, focus }
 }
 
+/// The quick view's preview region in a panel's place: its title line
+/// when asked for ("Preview, report.md"), then its rows, the hardware
+/// cursor on the focused row's first cell while the focus is in it.
+///
+/// In screen-reader mode, while the focus is in the panel, the region
+/// stays as it is: "Preview" and how to go in, never the document. A
+/// screen reader speaks text that appears in a terminal, so drawing each
+/// new preview would read it in full; the one line on the status line
+/// says what is shown instead (plan section 5.9; spike Q2). Tab draws it.
+#[allow(clippy::too_many_arguments)]
+fn preview_region(
+    app: &App,
+    x: u16,
+    width: u16,
+    height: usize,
+    header: bool,
+    focused: bool,
+    memory: &mut Memory,
+) -> Region {
+    let Some(view) = app.quick_view() else {
+        return Region {
+            lines: Vec::new(),
+            focus: None,
+        };
+    };
+    if memory.freeze && !focused {
+        let mut lines: Vec<Line> = Vec::new();
+        if header && height > 0 {
+            lines.push(vec![Run::new(
+                x,
+                width,
+                "Preview",
+                PanelRole::InactiveTitle,
+            )]);
+        }
+        if lines.len() < height {
+            let words = clean(&app.preview_placeholder());
+            lines.push(vec![Run::new(x, width, words, PanelRole::Text)]);
+        }
+        return Region { lines, focus: None };
+    }
+    let mut lines: Vec<Line> = Vec::new();
+    if header && height > 0 {
+        let role = if focused {
+            PanelRole::ActiveTitle
+        } else {
+            PanelRole::InactiveTitle
+        };
+        lines.push(vec![Run::new(x, width, clean(&view.region_title()), role)]);
+    }
+    let rows = height.saturating_sub(lines.len());
+    let list = view.region();
+    let mut focus = None;
+    if rows > 0 {
+        if list.is_empty() {
+            if focused {
+                focus = Some((x, lines.len()));
+            }
+            lines.push(vec![Run::new(
+                x,
+                width,
+                clean(list.empty_text()),
+                PanelRole::Text,
+            )]);
+        } else {
+            let focused_at = list.focus_index();
+            let start = memory.start(ScrollKey::Preview, None, focused_at, rows, list.len());
+            for (i, row) in list.rows().iter().enumerate().skip(start).take(rows) {
+                let is_focus = focused && Some(i) == focused_at;
+                if is_focus {
+                    focus = Some((x, lines.len()));
+                }
+                let role = if is_focus {
+                    PanelRole::FocusedRow
+                } else {
+                    PanelRole::Text
+                };
+                let mut run = Run::new(x, width, clean(&row.spoken()), role);
+                if is_focus {
+                    run = run.filled();
+                }
+                lines.push(vec![run]);
+            }
+        }
+    }
+    Region { lines, focus }
+}
+
+/// The columns the quick view's region is drawn in at this width, for
+/// its wrap; `None` while the quick view is off.
+pub(crate) fn preview_columns(app: &App, width: u16) -> Option<usize> {
+    app.quick_view()?;
+    let width = width.max(20);
+    Some(usize::from(match app.settings().layout {
+        Layout::SideBySide => {
+            let left_w = width.saturating_sub(1) / 2;
+            match app.active_side().other() {
+                Side::Left => left_w,
+                Side::Right => width.saturating_sub(left_w + 1),
+            }
+        }
+        Layout::Stacked | Layout::Single => width,
+    }))
+}
+
+/// A side of the panels: the panel, or the preview in the other panel's
+/// place while the quick view is on.
+#[allow(clippy::too_many_arguments)]
+fn side_region(
+    app: &App,
+    side: Side,
+    x: u16,
+    width: u16,
+    height: usize,
+    look: &Look,
+    memory: &mut Memory,
+) -> Region {
+    let active = app.active_side();
+    if app.quick_view_on() && side == active.other() {
+        return preview_region(app, x, width, height, true, app.in_preview(), memory);
+    }
+    panel_region(
+        app,
+        side,
+        x,
+        width,
+        height,
+        true,
+        side == active && !app.in_preview(),
+        look,
+        memory,
+    )
+}
+
 /// The panels in the layout the settings name.
 fn panels_body(
     app: &App,
@@ -359,6 +494,10 @@ fn panels_body(
     let layout = app.settings().layout;
     let mut pages = [height.max(1); 2];
     match layout {
+        Layout::Single if app.in_preview() => {
+            let region = preview_region(app, 0, width, height, false, true, memory);
+            (region, pages)
+        }
         Layout::Single => {
             let region = panel_region(app, active, 0, width, height, false, true, look, memory);
             (region, pages)
@@ -367,28 +506,8 @@ fn panels_body(
             let left_w = width.saturating_sub(1) / 2;
             let right_x = left_w + 1;
             let right_w = width.saturating_sub(right_x);
-            let left = panel_region(
-                app,
-                Side::Left,
-                0,
-                left_w,
-                height,
-                true,
-                active == Side::Left,
-                look,
-                memory,
-            );
-            let right = panel_region(
-                app,
-                Side::Right,
-                right_x,
-                right_w,
-                height,
-                true,
-                active == Side::Right,
-                look,
-                memory,
-            );
+            let left = side_region(app, Side::Left, 0, left_w, height, look, memory);
+            let right = side_region(app, Side::Right, right_x, right_w, height, look, memory);
             pages = [height.saturating_sub(1).max(1); 2];
             let mut lines: Vec<Line> = Vec::new();
             for i in 0..height {
@@ -399,7 +518,12 @@ fn panels_body(
                 line.extend(right.lines.get(i).cloned().unwrap_or_default());
                 lines.push(line);
             }
-            let focus = if active == Side::Left {
+            let focused = if app.in_preview() {
+                active.other()
+            } else {
+                active
+            };
+            let focus = if focused == Side::Left {
                 left.focus
             } else {
                 right.focus
@@ -409,35 +533,20 @@ fn panels_body(
         Layout::Stacked => {
             let top_h = (height / 2).max(1).min(height);
             let bottom_h = height - top_h;
-            let top = panel_region(
-                app,
-                Side::Left,
-                0,
-                width,
-                top_h,
-                true,
-                active == Side::Left,
-                look,
-                memory,
-            );
-            let bottom = panel_region(
-                app,
-                Side::Right,
-                0,
-                width,
-                bottom_h,
-                true,
-                active == Side::Right,
-                look,
-                memory,
-            );
+            let top = side_region(app, Side::Left, 0, width, top_h, look, memory);
+            let bottom = side_region(app, Side::Right, 0, width, bottom_h, look, memory);
             pages = [
                 top_h.saturating_sub(1).max(1),
                 bottom_h.saturating_sub(1).max(1),
             ];
             let mut lines = top.lines;
             lines.resize(top_h, Vec::new());
-            let focus = match active {
+            let focused = if app.in_preview() {
+                active.other()
+            } else {
+                active
+            };
+            let focus = match focused {
                 Side::Left => top.focus,
                 Side::Right => bottom.focus.map(|(x, line)| (x, line + top_h)),
             };

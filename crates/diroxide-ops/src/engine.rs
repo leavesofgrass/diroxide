@@ -384,12 +384,7 @@ impl JobReport {
     /// finished with 1 warning: 3 done."; "Copy finished: 3 done, 1
     /// skipped." A missing result counts as a failure.
     pub fn summary(&self) -> String {
-        let verb = self.kind.verb();
-        let mut chars = verb.chars();
-        let verb: String = match chars.next() {
-            Some(c) => c.to_uppercase().chain(chars).collect(),
-            None => String::new(),
-        };
+        let verb = summary_word(self.kind);
         let mut counts = vec![format!("{} done", self.done.len())];
         if !self.skipped.is_empty() {
             counts.push(format!("{} skipped", self.skipped.len()));
@@ -412,6 +407,27 @@ impl JobReport {
             format!("{verb} finished")
         };
         format!("{head}: {}.", counts.join(", "))
+    }
+}
+
+/// The word a report's line starts with: the job's verb, capitalized
+/// ("Copy", "Move to the trash"), except where the verb needs its object
+/// and would read wrong before "finished": "Permissions finished: 1
+/// done.", not "Change the attributes of finished".
+fn summary_word(kind: JobKind) -> String {
+    match kind {
+        JobKind::SetAttributes => "Permissions".to_owned(),
+        JobKind::SetTimes => "Times".to_owned(),
+        JobKind::MakeFolder => "Make folder".to_owned(),
+        JobKind::Unknown => "Job".to_owned(),
+        _ => {
+            let verb = kind.verb();
+            let mut chars = verb.chars();
+            match chars.next() {
+                Some(c) => c.to_uppercase().chain(chars).collect(),
+                None => String::new(),
+            }
+        }
     }
 }
 
@@ -822,5 +838,31 @@ mod tests {
         );
         let message = error(VfsError::InUse).message();
         assert!(within_cells(&message.text, "Could not copy report.pdf"));
+    }
+
+    #[test]
+    fn every_report_line_starts_with_a_word_that_reads_before_finished() {
+        let report = |kind| {
+            let mut report = JobReport::new(JobId::new(1), kind);
+            report.done.push(p("/a"));
+            report.summary()
+        };
+        assert_eq!(
+            report(JobKind::SetAttributes),
+            "Permissions finished: 1 done."
+        );
+        assert_eq!(report(JobKind::SetTimes), "Times finished: 1 done.");
+        assert_eq!(report(JobKind::MakeFolder), "Make folder finished: 1 done.");
+        assert_eq!(report(JobKind::Copy), "Copy finished: 1 done.");
+        assert_eq!(
+            report(JobKind::Trash),
+            "Move to the trash finished: 1 done."
+        );
+        for &kind in JobKind::ALL {
+            let line = report(kind);
+            assert!(!line.contains(" of finished"), "{line}");
+            assert!(!line.contains(" on finished"), "{line}");
+            assert!(!line.contains(" the folder finished"), "{line}");
+        }
     }
 }

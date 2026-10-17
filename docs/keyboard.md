@@ -26,6 +26,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Alt+T: Tools menu. Opens the Tools menu. (menu.tools)
 - Alt+P: Plugins menu. Opens the Plugins menu. (menu.plugins)
 - Alt+H: Help menu. Opens the Help menu. (menu.help)
+- Shift+F3: Quick view. Turns the other panel into a live preview of the file under the cursor, or back to its files. (view.quick-view)
 
 ### In a panel
 
@@ -109,6 +110,29 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - I: Say indent. Says the indent level of the cursor's line. (viewer.indent)
 - X: Say context. Says the function and the blocks the cursor is in. (viewer.context)
 
+### In the preview
+
+- Escape or Tab: Leave the preview. Goes back to the file panel, the cursor on its row. (preview.leave)
+- H: Next heading. Goes to the next heading below, its level said. (preview.next-heading)
+- Shift+H: Previous heading. Goes to the heading above, its level said. (preview.previous-heading)
+- Ctrl+Down: Next paragraph. Goes to the next paragraph; a table or a code block is one. (preview.next-paragraph)
+- Ctrl+Up: Previous paragraph. Goes to the paragraph above, or the start of this one. (preview.previous-paragraph)
+- T: Next table. Goes to the next table, its rows and columns said; the cell moves start on its first cell. (preview.next-table)
+- Shift+T: Previous table. Goes to the table above, its rows and columns said. (preview.previous-table)
+- Left: Cell to the left. In a table, the cell to the left, said with its header. (preview.cell-left)
+- Right: Cell to the right. In a table, the cell to the right, said with its header. (preview.cell-right)
+- Shift+Up: Cell above. In a table, the cell above, said with its header. (preview.cell-up)
+- Shift+Down: Cell below. In a table, the cell below, said with its header. (preview.cell-down)
+- L: Links in the preview. Lists the preview's links, its text first and where it goes after, to go to one. (preview.links)
+- Shift+L: Next link. Goes to the next link, said with where it goes. (preview.next-link)
+- Ctrl+L: Previous link. Goes to the link before, said with where it goes. (preview.previous-link)
+- Enter: Open link. Opens the web or mail address of the link on this line in the browser or the mail program, asked first; never a file. (preview.open-link)
+- /: Find in the preview. Asks for text and finds it in the preview, ignoring case, the count said. (preview.find)
+- N: Next match in the preview. Goes to the next match of the last find in the preview. (preview.next-match)
+- P: Previous match in the preview. Goes to the match before, of the last find in the preview. (preview.previous-match)
+- Alt+N: Next file in the preview. Shows the panel's next file in the preview without leaving it; the panel's cursor follows. (preview.next-file)
+- Alt+P: Previous file in the preview. Shows the panel's file before in the preview without leaving it; the panel's cursor follows. (preview.previous-file)
+
 ### In a question
 
 - Y: Yes. Answers yes to the question. (dialog.yes)
@@ -160,6 +184,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Previous at this indent. Goes to the line before at the same indent, within the block. (viewer.indent-previous)
 - Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
 - Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
+- Open in textweaver. Hands the quick view's file to textweaver for full reading with speech, when it is installed. (preview.textweaver)
 - Plugins. Lists the plugins and what they may do. Plugins come with alpha.4. (plugins.list)
 
 ## In the window
@@ -185,6 +210,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Alt+T: Tools menu. Opens the Tools menu. (menu.tools)
 - Alt+P: Plugins menu. Opens the Plugins menu. (menu.plugins)
 - Alt+H: Help menu. Opens the Help menu. (menu.help)
+- Shift+F3: Quick view. Turns the other panel into a live preview of the file under the cursor, or back to its files. (view.quick-view)
 
 ### In a panel
 
@@ -273,6 +299,29 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - I: Say indent. Says the indent level of the cursor's line. (viewer.indent)
 - X: Say context. Says the function and the blocks the cursor is in. (viewer.context)
 
+### In the preview
+
+- Escape or Tab: Leave the preview. Goes back to the file panel, the cursor on its row. (preview.leave)
+- H: Next heading. Goes to the next heading below, its level said. (preview.next-heading)
+- Shift+H: Previous heading. Goes to the heading above, its level said. (preview.previous-heading)
+- Ctrl+Down: Next paragraph. Goes to the next paragraph; a table or a code block is one. (preview.next-paragraph)
+- Ctrl+Up: Previous paragraph. Goes to the paragraph above, or the start of this one. (preview.previous-paragraph)
+- T: Next table. Goes to the next table, its rows and columns said; the cell moves start on its first cell. (preview.next-table)
+- Shift+T: Previous table. Goes to the table above, its rows and columns said. (preview.previous-table)
+- Left: Cell to the left. In a table, the cell to the left, said with its header. (preview.cell-left)
+- Right: Cell to the right. In a table, the cell to the right, said with its header. (preview.cell-right)
+- Shift+Up: Cell above. In a table, the cell above, said with its header. (preview.cell-up)
+- Shift+Down: Cell below. In a table, the cell below, said with its header. (preview.cell-down)
+- L: Links in the preview. Lists the preview's links, its text first and where it goes after, to go to one. (preview.links)
+- Shift+L: Next link. Goes to the next link, said with where it goes. (preview.next-link)
+- Ctrl+L: Previous link. Goes to the link before, said with where it goes. (preview.previous-link)
+- Enter: Open link. Opens the web or mail address of the link on this line in the browser or the mail program, asked first; never a file. (preview.open-link)
+- /: Find in the preview. Asks for text and finds it in the preview, ignoring case, the count said. (preview.find)
+- N: Next match in the preview. Goes to the next match of the last find in the preview. (preview.next-match)
+- P: Previous match in the preview. Goes to the match before, of the last find in the preview. (preview.previous-match)
+- Alt+N: Next file in the preview. Shows the panel's next file in the preview without leaving it; the panel's cursor follows. (preview.next-file)
+- Alt+P: Previous file in the preview. Shows the panel's file before in the preview without leaving it; the panel's cursor follows. (preview.previous-file)
+
 ### In a question
 
 - Y: Yes. Answers yes to the question. (dialog.yes)
@@ -318,6 +367,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Previous at this indent. Goes to the line before at the same indent, within the block. (viewer.indent-previous)
 - Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
 - Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
+- Open in textweaver. Hands the quick view's file to textweaver for full reading with speech, when it is installed. (preview.textweaver)
 - Plugins. Lists the plugins and what they may do. Plugins come with alpha.4. (plugins.list)
 
 ## Keys a terminal may keep
@@ -344,6 +394,9 @@ These keys of the terminal list work in most terminals, but a terminal program m
 - Ctrl+F5 for Sort by modified: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by modified.
 - Ctrl+F6 for Sort by size: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by size.
 - Ctrl+F7 for Unsorted: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Unsorted.
+- Shift+F3 for Quick view: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: View menu, Quick view.
+- Ctrl+Down for Next paragraph: macOS keeps it; Mission Control uses Control with the arrows. Sure way: View menu, Preview submenu, Next paragraph.
+- Ctrl+Up for Previous paragraph: macOS keeps it; Mission Control uses Control with the arrows. Sure way: View menu, Preview submenu, Previous paragraph.
 
 ## Keys never used in a terminal
 

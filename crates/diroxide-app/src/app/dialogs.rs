@@ -321,6 +321,7 @@ impl App {
             Purpose::TrashParts(_) => {
                 effects.push(self.say(Message::info("The parts stay where they are.")));
             }
+            Purpose::PreviewLink => effects.extend(self.preview_link_answered(false)),
             Purpose::WrongPassword { ask, .. } => {
                 self.request(Request::Answer {
                     ask,
@@ -389,6 +390,7 @@ impl App {
             Purpose::Quit => effects.extend(self.quit_now()),
             Purpose::Limit { ask } => self.answer_limit(ask, true),
             Purpose::TrashParts(parts) => effects.extend(self.trash_parts(parts)),
+            Purpose::PreviewLink => effects.extend(self.preview_link_answered(true)),
             Purpose::JunctionInstead { targets, folder } => {
                 effects.extend(self.make_junctions(targets, folder));
             }
@@ -680,6 +682,19 @@ impl App {
                 }
                 None => Vec::new(),
             },
+            Purpose::PreviewFind => {
+                let mut effects = self.close_top();
+                effects.extend(self.preview_find(&text));
+                effects
+            }
+            Purpose::PreviewLinks => match row {
+                Some(row) => {
+                    let mut effects = self.close_top();
+                    effects.extend(self.preview_link_chosen(&row));
+                    effects
+                }
+                None => Vec::new(),
+            },
             Purpose::UnpackForm(form) => match row {
                 Some(row) => self.unpack_row(*form, &row),
                 None => Vec::new(),
@@ -773,6 +788,7 @@ impl App {
             | Purpose::PlanQuestion { .. }
             | Purpose::TrashParts(_)
             | Purpose::JunctionInstead { .. }
+            | Purpose::PreviewLink
             | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }

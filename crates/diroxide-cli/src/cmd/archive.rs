@@ -1421,7 +1421,17 @@ fn unpack(args: &UnpackArgs, out: &mut dyn Write, session: &Session<'_>) -> Resu
     }
     let mut unanswered = Unanswered::default();
     let outcome = session.drive(&relay, &mut unanswered, || {
-        let shared: Arc<dyn SecretSource> = secrets.clone();
+        // The plan's secrets hold a password only when the plan needed one
+        // and it worked (a 7z with hidden names): the run reuses it, so the
+        // job asks once. Otherwise the run asks through the relay itself:
+        // wrapping the plan's secrets again would hand a wrong password
+        // back to the runner's own tries, so one wrong password used up
+        // all three.
+        let shared: Arc<dyn SecretSource> = if secrets.holds_a_password() {
+            secrets.clone()
+        } else {
+            relay.clone()
+        };
         let env = JobEnv::new(&engine, archives, job, &control, relay.as_ref())
             .with_questions(relay.as_ref())
             .with_secrets(shared);
@@ -1998,9 +2008,10 @@ pub(crate) mod tests {
         for said in [&text, &listing] {
             assert!(!said.contains(CANARY));
         }
-        // Unpacked with the password, the bytes are the same.
+        // Unpacked with the password after a wrong one, the bytes are the
+        // same: the wrong one costs one try, not all three.
         fs::create_dir(fixture.path("out")).unwrap();
-        let unpacker = Script::answering(&[], &[Some(CANARY)]);
+        let unpacker = Script::answering(&[true], &[Some("wrong-one"), Some(CANARY)]);
         let (code, text) = run_in(
             &fixture,
             &unpacker,
@@ -2009,6 +2020,14 @@ pub(crate) mod tests {
         );
         assert_eq!(code, 0, "{text}");
         assert!(!text.contains(CANARY));
+        assert_eq!(
+            unpacker.asked(),
+            [
+                "Password for locked.zip (hidden): ",
+                "Wrong password for locked.zip. Try again? y or n",
+                "Password for locked.zip (hidden): ",
+            ]
+        );
         assert_eq!(
             fs::read_to_string(fixture.path("out").join("locked").join("notes.txt")).unwrap(),
             "notes here\n"

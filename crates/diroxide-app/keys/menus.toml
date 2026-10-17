@@ -222,6 +222,87 @@ access = "r"
 menu = "viewer"
 access = "v"
 
+[[menu.item]]
+command = "view.quick-view"
+access = "q"
+
+[[menu.item]]
+command = "preview.textweaver"
+access = "o"
+
+[[menu.item]]
+menu = "preview"
+access = "p"
+
+[[menu]]
+id = "preview"
+title = "Preview"
+access = "p"
+bar = false
+
+[[menu.item]]
+command = "preview.leave"
+
+[[menu.item]]
+command = "preview.next-heading"
+
+[[menu.item]]
+command = "preview.previous-heading"
+
+[[menu.item]]
+command = "preview.next-paragraph"
+
+[[menu.item]]
+command = "preview.previous-paragraph"
+
+[[menu.item]]
+command = "preview.next-table"
+
+[[menu.item]]
+command = "preview.previous-table"
+
+[[menu.item]]
+command = "preview.cell-left"
+
+[[menu.item]]
+command = "preview.cell-right"
+
+[[menu.item]]
+command = "preview.cell-up"
+
+[[menu.item]]
+command = "preview.cell-down"
+
+[[menu.item]]
+command = "preview.links"
+
+[[menu.item]]
+command = "preview.next-link"
+
+[[menu.item]]
+command = "preview.previous-link"
+
+[[menu.item]]
+command = "preview.open-link"
+
+[[menu.item]]
+command = "preview.find"
+
+[[menu.item]]
+command = "preview.next-match"
+
+[[menu.item]]
+command = "preview.previous-match"
+
+[[menu.item]]
+command = "preview.next-file"
+
+[[menu.item]]
+command = "preview.previous-file"
+
+[[menu.item]]
+command = "preview.textweaver"
+
 [[menu]]
 id = "viewer"
 title = "Viewer"
