@@ -17,6 +17,10 @@ Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2): pure Ru
 - **Depended on, not only declared.** So the license, duplicate and native gates read them, the crates that will use the alpha.2 dependencies now name them: `diroxide-archive` takes `zip` 9.0.1 (with `aes-crypto`), `sevenz-rust2`, `tar`, `flate2`, `lzma-rust2` and `bzip2`; `diroxide-ops` takes `crc32fast`; `diroxide-preview` takes `encoding_rs`, `syntect` (parsing with the fancy-regex engine), `two-face`, `pulldown-cmark`, `carta` (five readers, default features off) and `serde`. `cargo tree -d` shows one `lzma-rust2`, 0.21.0. `scraper` waits for spike C1's path A. `syntect` and `fancy-regex` build at `opt-level = 3` in debug builds.
 - **The container** installs the archivers its header already named (`xz-utils`, `bzip2`, `zip`, `unzip`, `libarchive-tools`) and `curl` and `wget`, for W2b's cross-checks and the downloader's fallback tests.
 
+Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, from the requests pairs 1 to 3 held at their integrations):
+
+- **A slim `diro`.** The root manifest declares `diroxide-preview` with `default-features = false`, and the syntax set (syntect with bat's grammars, about 3 MB) is a `syntax-set` feature at each layer: `diro`'s, on by default beside `fetch`, turns on the CLI's, the CLI's the app's, the app's the preview crate's. The app and the CLI leave it off by default, so `cargo build -p diro --no-default-features` builds without it (`cargo check -p diro --no-default-features` is the check); the app's and the terminal's tests turn it on through their dev-dependencies. `docs/dev/building.md` says how (W2d's request 2).
+
 ## Context
 
 diroxide is built by waves of agents, one or two at a time, each owning crates. The workspace has to keep their work apart, keep builds lean on the owner's machine (shared with textweaver), and make the license and dependency rules checkable by a machine rather than by memory.

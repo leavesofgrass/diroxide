@@ -38,7 +38,10 @@ diroxide-filetype = { path = "crates/diroxide-filetype", version = "0.1.0-alpha.
 diroxide-config = { path = "crates/diroxide-config", version = "0.1.0-alpha.1" }
 diroxide-plugins = { path = "crates/diroxide-plugins", version = "0.1.0-alpha.1" }
 diroxide-tools = { path = "crates/diroxide-tools", version = "0.1.0-alpha.1" }
-diroxide-preview = { path = "crates/diroxide-preview", version = "0.1.0-alpha.1" }
+# Without its default syntax set, which each member that wants it turns on
+# through its own `syntax-set` feature: the app, the CLI, and `diro`, whose
+# default has it (W2d's request 2, P2b), so a slim `diro` can leave it out.
+diroxide-preview = { path = "crates/diroxide-preview", version = "0.1.0-alpha.1", default-features = false }
 diroxide-theme = { path = "crates/diroxide-theme", version = "0.1.0-alpha.1" }
 diroxide-app = { path = "crates/diroxide-app", version = "0.1.0-alpha.1" }
 diroxide-tui = { path = "crates/diroxide-tui", version = "0.1.0-alpha.1" }

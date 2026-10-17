@@ -64,6 +64,33 @@ CARGO_HOME=D:/rust/cargo cargo install cargo-nextest --locked
 - `release`: optimized, without LTO, for contributors.
 - `dist`: fat LTO, one codegen unit, stripped, for packages. Build it with `cargo build --profile dist -p diro`.
 
+## A slim `diro`
+
+`diro` has two default features, and both can be left out:
+
+- `syntax-set`: the viewer's syntax set, syntect with bat's grammars, about 3 MB of the binary. Without it the viewer says "Highlighting off: not in this build", and the commands that need no grammar keep working.
+- `fetch`: the optional-components downloader's HTTP client, whose `ring` compiles C. Without it the downloader uses `curl` or `wget` from PATH. (carta's stack growth still compiles a little C and assembly, so a C compiler is needed either way; see the inventory in `xtask/src/native.rs`.)
+
+The syntax set reaches the preview crate through each layer's own `syntax-set` feature: `diro` turns on the CLI's, the CLI the app's, the app the preview crate's. The root manifest declares `diroxide-preview` with `default-features = false`, and the app and the CLI leave the feature off by default, so only `diro`'s default turns it on. The app's and the terminal's tests turn it on through their dev-dependencies, since they read highlighted code.
+
+A build with neither:
+
+```bash
+cargo build --profile dist -p diro --no-default-features
+```
+
+A build without the syntax set that keeps the downloader's client:
+
+```bash
+cargo build --profile dist -p diro --no-default-features --features fetch
+```
+
+The check every agent runs after touching these features:
+
+```bash
+cargo check -p diro --no-default-features
+```
+
 ## The tasks
 
 `cargo xtask` runs the workspace's own tasks (the alias is in `.cargo/config.toml`, so run it from the repository folder):
