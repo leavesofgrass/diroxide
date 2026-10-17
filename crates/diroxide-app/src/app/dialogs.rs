@@ -108,7 +108,7 @@ impl App {
 
     /// Whether the top dialog opened less than the settle time ago, so a
     /// confirming key is ignored.
-    fn settling(&self) -> bool {
+    pub(super) fn settling(&self) -> bool {
         self.opens.last().is_some_and(|open| {
             millis_between(open.opened, self.now()) < self.settings.dialog_settle_ms
         })
@@ -418,6 +418,7 @@ impl App {
                 effects.push(self.say(Message::info(format!("Running {name}"))));
                 effects.push(Effect::OpenExternally(place));
             }
+            Purpose::Keys(purpose) => effects.extend(self.keys_yes(*purpose)),
             _ => {}
         }
         effects
@@ -780,7 +781,7 @@ impl App {
                 effects.extend(self.run_line(side, &text));
                 effects
             }
-            Purpose::Keys(purpose) => self.keys_accept(*purpose, &text),
+            Purpose::Keys(purpose) => self.keys_accept(*purpose, row.as_deref(), &text),
             Purpose::RunPlan(_)
             | Purpose::Quit
             | Purpose::RunProgram(_)

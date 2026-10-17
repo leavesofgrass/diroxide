@@ -8,14 +8,17 @@
 //!
 //! W3k owns this module.
 
-use diroxide_core::{Command, CommandId, Effect, Key, KeyColumn, Message, Redraw};
+use diroxide_core::{
+    Command, CommandId, Effect, Key, KeyColumn, Layer, ListModel, ListRow, Message, Redraw,
+};
 
 use super::{App, Purpose};
 use crate::commands::{self, ids};
-use crate::dialog::Dialog;
+use crate::dialog::{Dialog, with_default_no};
 use crate::entry::{CompletionSource, EntryField};
-use crate::keymap::KeyChoice;
 use crate::keymap::capture::{self, Capture, Captured, KeyReports};
+use crate::keymap::conflicts::{self, AskKind, Finding, Taken};
+use crate::keymap::{KeyChoice, Keymap, written};
 
 /// A change asked for: a command's key in one column, replaced or added
 /// to.
@@ -37,6 +40,49 @@ pub(crate) enum KeysPurpose {
     Capture(Change),
     /// The typed name's field.
     TypedName(Change),
+    /// A yes-or-no question of the checks, starting on No; the findings
+    /// after it wait.
+    Check {
+        /// The change.
+        change: Change,
+        /// The key.
+        key: Key,
+        /// What it asks.
+        kind: AskKind,
+        /// The findings still to say.
+        rest: Vec<Finding>,
+        /// The choice made at a "Take it, swap, or cancel?" before it.
+        choice: Choice,
+    },
+    /// "Take it, swap, or cancel?"; the findings after it wait.
+    Taken {
+        /// The change.
+        change: Change,
+        /// The key.
+        key: Key,
+        /// Who holds it.
+        taken: Taken,
+        /// The findings still to say.
+        rest: Vec<Finding>,
+    },
+}
+
+/// What was chosen about a key another command holds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Choice {
+    /// Take or swap; take when no command held the key.
+    pub(crate) choice: KeyChoice,
+    /// The binding the key comes from, when another command held it.
+    pub(crate) from: Option<(Layer, CommandId)>,
+}
+
+impl Default for Choice {
+    fn default() -> Self {
+        Self {
+            choice: KeyChoice::Take,
+            from: None,
+        }
+    }
 }
 
 /// What the app keeps for keys between events.
@@ -214,42 +260,238 @@ impl App {
         }
     }
 
-    /// A key was chosen, by a press or by its name: it is said back, and
-    /// the change is made in this column's keymap.
-    fn key_chosen(&mut self, change: Change, key: Key, said: String) -> Vec<Effect> {
-        let mut effects = vec![self.say(Message::info(said))];
-        effects.extend(self.make_change(&change, key, KeyChoice::Take));
-        effects
+    /// The keymap of a column as the checks see it.
+    pub(super) fn column_keymap(&self, column: KeyColumn) -> Keymap {
+        if column == self.keymap.column() {
+            return self.keymap.clone();
+        }
+        Keymap::defaults_for(column).for_platform(self.keymap.platform())
     }
 
-    /// Makes a change in the keymap the app runs on, and says it.
-    fn make_change(&mut self, change: &Change, key: Key, choice: KeyChoice) -> Vec<Effect> {
+    /// What the checks find for a change.
+    fn findings(&self, change: &Change, key: &Key) -> Vec<Finding> {
         let Some(info) = commands::info(&change.command) else {
             return Vec::new();
         };
-        if change.column != self.keymap.column() {
-            return Vec::new();
+        conflicts::analyze(
+            &self.column_keymap(change.column),
+            info.layer,
+            key,
+            &change.command,
+            self.settings.single_letters,
+        )
+    }
+
+    /// A key was chosen, by a press or by its name: it is said back, then
+    /// the checks run, one sentence each, a question where one is needed.
+    fn key_chosen(&mut self, change: Change, key: Key, said: String) -> Vec<Effect> {
+        let mut effects = vec![self.say(Message::info(said))];
+        let findings = self.findings(&change, &key);
+        effects.extend(self.run_checks(change, key, findings, Choice::default()));
+        effects
+    }
+
+    /// Says the findings in order until one asks a question, which opens a
+    /// dialog starting on No with the rest waiting; with none left, the
+    /// change is made.
+    fn run_checks(
+        &mut self,
+        change: Change,
+        key: Key,
+        mut findings: Vec<Finding>,
+        choice: Choice,
+    ) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        while !findings.is_empty() {
+            let finding = findings.remove(0);
+            match finding {
+                Finding::Refused(line) => {
+                    effects.push(self.say(Message::error(line)));
+                    return effects;
+                }
+                Finding::Note(line) => effects.push(self.say(Message::info(line))),
+                Finding::Ask { line, kind } => {
+                    let asked = format!("{line} {}", kind.words());
+                    let question = with_default_no(Message::question(&asked));
+                    effects.extend(self.open_dialog(
+                        Dialog::Confirm {
+                            question,
+                            listing: Vec::new(),
+                            on_yes: Command::new(ids::KEYS_CHANGE),
+                        },
+                        Purpose::Keys(Box::new(KeysPurpose::Check {
+                            change,
+                            key,
+                            kind,
+                            rest: findings,
+                            choice,
+                        })),
+                    ));
+                    return effects;
+                }
+                Finding::Taken(taken) => {
+                    if !taken.take && taken.swap.is_none() {
+                        let line = Finding::Taken(taken).said();
+                        effects.push(self.say(Message::error(line)));
+                        return effects;
+                    }
+                    effects.extend(self.taken_question(change, key, taken, findings));
+                    return effects;
+                }
+            }
         }
-        let said = self.keymap.assign(info.layer, key, &change.command, choice);
+        effects.extend(self.make_change(&change, key, &choice));
+        effects
+    }
+
+    /// "Take it, swap, or cancel?", the focus on Cancel.
+    fn taken_question(
+        &mut self,
+        change: Change,
+        key: Key,
+        taken: Taken,
+        rest: Vec<Finding>,
+    ) -> Vec<Effect> {
+        let platform = self.keymap.platform();
+        let other = commands::name_of(&taken.other);
+        let mut rows = Vec::new();
+        if taken.take {
+            rows.push(
+                ListRow::new("take", "Take it")
+                    .with_details([format!("{other} loses {}", written(&key, platform))]),
+            );
+        }
+        if let Some(old) = taken.swap {
+            rows.push(
+                ListRow::new("swap", "Swap")
+                    .with_details([format!("{other} gets {}", written(&old, platform))]),
+            );
+        }
+        rows.push(ListRow::new("cancel", "Cancel").with_details(["nothing changes"]));
+        let mut choices = ListModel::new(taken.question()).with_rows(rows);
+        choices.focus_id("cancel");
+        choices.set_help("Up and Down choose, Enter answers, Escape cancels.");
+        let line = Finding::Taken(taken.clone()).said();
+        self.open_dialog(
+            Dialog::Question {
+                lines: vec![line],
+                choices,
+            },
+            Purpose::Keys(Box::new(KeysPurpose::Taken {
+                change,
+                key,
+                taken,
+                rest,
+            })),
+        )
+    }
+
+    /// Yes to a check's question: the next findings follow. "Use it for
+    /// the window column only?" moves the change to the window column and
+    /// checks it there again.
+    pub(super) fn keys_yes(&mut self, purpose: KeysPurpose) -> Vec<Effect> {
+        let KeysPurpose::Check {
+            mut change,
+            key,
+            kind,
+            rest,
+            choice,
+        } = purpose
+        else {
+            return Vec::new();
+        };
+        if kind == AskKind::WindowOnly {
+            change.column = KeyColumn::Window;
+            let again = self.findings(&change, &key);
+            return self.run_checks(change, key, again, Choice::default());
+        }
+        self.run_checks(change, key, rest, choice)
+    }
+
+    /// Makes a change in the keymap of its column, and says it: "Ctrl+F9
+    /// now runs Sort by size."
+    fn make_change(&mut self, change: &Change, key: Key, choice: &Choice) -> Vec<Effect> {
+        let Some(info) = commands::info(&change.command) else {
+            return Vec::new();
+        };
+        let platform = self.keymap.platform();
+        let k = written(&key, platform);
+        let name = info.name;
+        let mut keymap = self.column_keymap(change.column);
+        keymap.bind(
+            info.layer,
+            key,
+            &change.command,
+            change.add,
+            choice.from.clone(),
+            choice.choice,
+        );
+        let mut said = if change.column == self.keymap.column() {
+            format!("{k} now runs {name}.")
+        } else {
+            format!("{k} now runs {name} in the {} column.", change.column)
+        };
+        if let Some((layer, other)) = &choice.from {
+            let left = keymap.keys_in(*layer, other);
+            let other_name = commands::name_of(other);
+            let tail = match (choice.choice, left.first()) {
+                (KeyChoice::Swap, Some(moved)) => {
+                    format!("{other_name} moved to {}.", written(moved, platform))
+                }
+                (_, None) => format!("{other_name} has no key now."),
+                (_, Some(_)) => {
+                    let keys: Vec<String> = left.iter().map(|k| written(k, platform)).collect();
+                    format!("{other_name} keeps {}.", keys.join(" or "))
+                }
+            };
+            said.push(' ');
+            said.push_str(&tail);
+        }
+        if change.column == self.keymap.column() {
+            self.keymap = keymap;
+        }
         vec![Effect::Redraw(Redraw::All), self.say(Message::info(said))]
     }
 
     /// Enter on a keys dialog.
-    pub(super) fn keys_accept(&mut self, purpose: KeysPurpose, text: &str) -> Vec<Effect> {
+    pub(super) fn keys_accept(
+        &mut self,
+        purpose: KeysPurpose,
+        row: Option<&str>,
+        text: &str,
+    ) -> Vec<Effect> {
         match purpose {
             KeysPurpose::Capture(_) => Vec::new(),
             KeysPurpose::TypedName(change) => self.typed_name_entered(change, text),
+            // Enter on a yes-or-no question answers No.
+            KeysPurpose::Check { .. } => self.dialog_escape(),
+            KeysPurpose::Taken {
+                change,
+                key,
+                taken,
+                rest,
+            } => {
+                if self.settling() {
+                    return Vec::new();
+                }
+                let choice = match row {
+                    Some("take") => KeyChoice::Take,
+                    Some("swap") => KeyChoice::Swap,
+                    _ => return self.dialog_escape(),
+                };
+                let mut effects = self.close_top();
+                let from = Some((taken.layer, taken.other.clone()));
+                effects.extend(self.run_checks(change, key, rest, Choice { choice, from }));
+                effects
+            }
         }
     }
 
     /// Escape on a keys dialog: nothing changes.
     pub(super) fn keys_escape(&mut self, purpose: KeysPurpose) -> Vec<Effect> {
-        match purpose {
-            KeysPurpose::Capture(_) => {
-                self.keys.capture = None;
-                vec![self.say(Message::info(capture::CANCELLED))]
-            }
-            KeysPurpose::TypedName(_) => vec![self.say(Message::info(capture::CANCELLED))],
+        if let KeysPurpose::Capture(_) = purpose {
+            self.keys.capture = None;
         }
+        vec![self.say(Message::info(capture::CANCELLED))]
     }
 }

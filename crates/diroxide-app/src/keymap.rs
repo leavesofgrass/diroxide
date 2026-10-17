@@ -14,6 +14,7 @@
 //! the Keys list offers as "take it, swap, or cancel".
 
 pub mod capture;
+pub mod conflicts;
 pub mod names;
 pub mod tables;
 
@@ -545,6 +546,71 @@ impl Keymap {
                 commands::name_of(&other)
             ),
         }
+    }
+
+    /// Binds `key` to `command` in `layer` after the owner's choice, as
+    /// Change key does, and returns the lines that changed, each a layer
+    /// and a command, for `keymap.toml`. `add` keeps the command's other
+    /// keys; otherwise the key replaces them in the layer. `taken` is the
+    /// binding the conflict analysis found holding the key, in any layer
+    /// that meets this one ([`conflicts::holder`]): taking removes the key
+    /// from it; swapping also gives it this command's old first key in the
+    /// layer. Cancel and Insert change nothing.
+    pub fn bind(
+        &mut self,
+        layer: Layer,
+        key: Key,
+        command: &CommandId,
+        add: bool,
+        taken: Option<(Layer, CommandId)>,
+        choice: KeyChoice,
+    ) -> Vec<(Layer, CommandId)> {
+        if choice == KeyChoice::Cancel || key.code == KeyCode::Insert {
+            return Vec::new();
+        }
+        let old = self
+            .bindings
+            .iter()
+            .find(|b| b.layer == layer && &b.command == command && b.key != key)
+            .map(|b| b.key);
+        let mut changed = vec![(layer, command.clone())];
+        self.bindings.retain(|b| {
+            let replaced = !add && b.layer == layer && &b.command == command;
+            let same_layer_holder = b.layer == layer && b.key == key;
+            !(replaced || same_layer_holder)
+        });
+        if let Some((other_layer, other)) = taken {
+            self.bindings
+                .retain(|b| !(b.layer == other_layer && b.key == key && b.command == other));
+            if choice == KeyChoice::Swap
+                && !add
+                && let Some(old) = old
+            {
+                self.bindings
+                    .retain(|b| !(b.layer == other_layer && b.key == old));
+                self.bindings.push(Binding {
+                    layer: other_layer,
+                    key: old,
+                    command: other.clone(),
+                });
+            }
+            changed.push((other_layer, other));
+        }
+        self.bindings.push(Binding {
+            layer,
+            key,
+            command: command.clone(),
+        });
+        changed
+    }
+
+    /// The keys of a command in one layer, in order.
+    pub fn keys_in(&self, layer: Layer, command: &CommandId) -> Vec<Key> {
+        self.bindings
+            .iter()
+            .filter(|b| b.layer == layer && &b.command == command)
+            .map(|b| b.key)
+            .collect()
     }
 
     /// The keymap as `keymap.toml` lines: every catalog command, with
