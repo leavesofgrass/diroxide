@@ -1042,6 +1042,7 @@ dependencies = [
  "diroxide-vfs",
  "ignore",
  "regex",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 

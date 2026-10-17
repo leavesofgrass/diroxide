@@ -15,9 +15,19 @@
 //! hash, then a full comparison (alpha.8).
 
 mod hit;
+#[allow(
+    dead_code,
+    reason = "the search runs through the walkers from the next commit"
+)]
+mod local_entry;
 mod query;
 mod sink;
 mod summary;
+#[allow(
+    dead_code,
+    reason = "the search runs through the walkers from the next commit"
+)]
+mod walk;
 
 use diroxide_core::filter::{Evaluator, Lookup, Truth};
 use diroxide_core::format::{count, human_size};
@@ -277,6 +287,30 @@ pub fn results_list_under(title: &str, root: Option<&Place>, hits: &[SearchHit])
     let mut list = ListModel::new(title).with_rows(rows);
     list.set_empty_text("Nothing found");
     list
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    //! Helpers for the unit tests that write.
+
+    use std::path::Path;
+
+    /// A folder for a unit test that writes, under the build's own target
+    /// folder (the test binary lives in `target/<profile>/deps`), never a
+    /// user's folder or the system's temporary folder.
+    pub(crate) fn scratch() -> tempfile::TempDir {
+        let exe = std::env::current_exe().expect("the test's own path");
+        let base = exe
+            .parent()
+            .and_then(Path::parent)
+            .expect("the target folder")
+            .join("search-unit-tmp");
+        std::fs::create_dir_all(&base).expect("a scratch folder");
+        tempfile::Builder::new()
+            .prefix("search-unit-")
+            .tempdir_in(base)
+            .expect("a scratch folder")
+    }
 }
 
 #[cfg(test)]

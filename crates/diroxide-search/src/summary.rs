@@ -54,6 +54,30 @@ pub struct Skips {
     pub odd_names: u64,
 }
 
+impl Skips {
+    /// Adds another thread's counts.
+    #[allow(
+        dead_code,
+        reason = "the search runs through the walkers from the next commit"
+    )]
+    pub(crate) fn add(&mut self, other: &Skips) {
+        self.hidden += other.hidden;
+        self.ignore_files |= other.ignore_files;
+        self.links_not_followed += other.links_not_followed;
+        self.links_outside += other.links_outside;
+        self.loops += other.loops;
+        self.other_drives += other.other_drives;
+        self.snapshots += other.snapshots;
+        self.too_deep += other.too_deep;
+        self.marked += other.marked;
+        self.binary += other.binary;
+        self.online_only += other.online_only;
+        self.online_only_bytes += other.online_only_bytes;
+        self.unreadable_files += other.unreadable_files;
+        self.odd_names += other.odd_names;
+    }
+}
+
 /// How a search went.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
