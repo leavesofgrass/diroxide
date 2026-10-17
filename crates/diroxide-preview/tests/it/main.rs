@@ -3,6 +3,7 @@
 // Test helpers may unwrap: a failure is the test's.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod carta;
 mod carta_paths;
 mod encoding;
 mod markdown;

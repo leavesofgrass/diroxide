@@ -31,6 +31,9 @@ two-face = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest.workspace = true
+# A harmless sibling file the include test makes, to show what carta does
+# with an include left in.
+tempfile.workspace = true
 
 [features]
 default = ["syntax-set"]

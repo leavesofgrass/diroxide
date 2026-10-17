@@ -53,6 +53,13 @@ pub fn read(name: &str, bytes: &[u8], hex_row: usize) -> DocView {
     b.finish()
 }
 
+/// Reads text bytes as plain text, whatever the name says: the fallback
+/// when a format's reader could not read a file. Bytes that are not text
+/// are hex.
+pub fn read_plain(bytes: &[u8], hex_row: usize) -> DocView {
+    read("", bytes, hex_row)
+}
+
 /// Bytes as hex rows: an offset, the bytes, the printable characters.
 pub fn read_hex(bytes: &[u8], hex_row: usize) -> DocView {
     let layout = HexLayout::for_len(bytes.len() as u64, hex_row.max(1));

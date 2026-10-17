@@ -31,9 +31,19 @@
 //! where the names allow: "Heading 2: Installation, 3 of 12", "Table 1 of
 //! 2, 5 rows, 3 columns", "Age: 36, row 2 of 5, column 2", "Link 2 of 5:
 //! docs, to docs/index.md".
+//!
+//! The readers ([`read`]): Markdown ([`markdown`]), carta's five formats
+//! ([`carta`], through the HTML-fragment reader [`html`]), and plain text
+//! and code ([`text`]), with bytes that are not text refused to hex. A
+//! reader takes bytes and a name, never a path, so it cannot read another
+//! file; Markdown and carta run under the [`guard`], on a thread with an
+//! 8 MiB stack, with a catch and a deadline.
 
 mod build;
 pub mod callout;
+pub mod carta;
+pub mod guard;
+pub mod html;
 pub mod markdown;
 #[cfg(test)]
 mod tests;
@@ -41,12 +51,127 @@ pub mod text;
 
 use std::ops::Range;
 
+use diroxide_core::Explain;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::classes::ClassRun;
+use crate::encoding::{binary_kind, decode};
 use crate::highlight::{Language, Symbol, SymbolKind};
 
 pub use build::DocBuilder;
+pub use carta::CartaFormat;
+pub use guard::Guard;
+
+/// Why a document could not be read as its format. The quick view then
+/// shows its text: "Could not read notes.org: not valid Org." then
+/// "Showing the text."
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum DocError {
+    /// The format's reader refused it.
+    #[error("not valid {0}")]
+    NotValid(String),
+    /// The reader ran past its deadline.
+    #[error("took too long")]
+    TookTooLong,
+    /// The reader stopped on it.
+    #[error("the reader stopped on it")]
+    Failed,
+    /// Too many readers are still running, those left past their
+    /// deadline among them.
+    #[error("an earlier document is still being read")]
+    Busy,
+}
+
+impl Explain for DocError {
+    fn next_step(&self) -> String {
+        String::new()
+    }
+}
+
+/// What the quick view says after a reader could not read a file, as the
+/// next step, when it shows the text instead.
+pub const SHOWING_THE_TEXT: &str = "Showing the text.";
+
+/// Which reader takes a file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Reader {
+    /// The Markdown reader.
+    Markdown,
+    /// carta, in one of its formats.
+    Carta(CartaFormat),
+    /// Plain text and code, or hex for bytes that are not text.
+    Text,
+}
+
+impl Reader {
+    /// The reader a file name says, by its extension.
+    pub fn for_name(name: &str) -> Self {
+        if markdown::is_markdown(name) {
+            Reader::Markdown
+        } else if let Some(format) = CartaFormat::from_name(name) {
+            Reader::Carta(format)
+        } else {
+            Reader::Text
+        }
+    }
+}
+
+/// How a document is read.
+#[derive(Clone, Debug)]
+pub struct ReadOptions {
+    /// The guard Markdown and carta run under, with its deadline.
+    pub guard: Guard,
+    /// The bytes a hex row shows: [`text::HEX_ROW_SCREEN_READER`] or
+    /// [`text::HEX_ROW`].
+    pub hex_row: usize,
+}
+
+impl Default for ReadOptions {
+    fn default() -> Self {
+        Self {
+            guard: Guard::default(),
+            hex_row: text::HEX_ROW_SCREEN_READER,
+        }
+    }
+}
+
+/// Reads a file's bytes into a view by the reader its name says: bytes
+/// that are not text as hex, Markdown and carta's formats under the
+/// guard, anything else as plain text or code.
+pub fn read(name: &str, bytes: Vec<u8>, options: &ReadOptions) -> Result<DocView, DocError> {
+    if binary_kind(&bytes).is_some() {
+        return Ok(text::read_hex(&bytes, options.hex_row));
+    }
+    match Reader::for_name(name) {
+        Reader::Markdown => options
+            .guard
+            .run(move || markdown::read(&decode(&bytes, None).text)),
+        Reader::Carta(format) => options.guard.run(move || carta::read(format, &bytes))?,
+        Reader::Text => Ok(text::read(name, &bytes, options.hex_row)),
+    }
+}
+
+/// Reads as [`read`] does, and when the format's reader could not, the
+/// bytes as plain text, with why.
+pub fn read_or_text(
+    name: &str,
+    bytes: Vec<u8>,
+    options: &ReadOptions,
+) -> (DocView, Option<DocError>) {
+    let fallback = match Reader::for_name(name) {
+        Reader::Text => None,
+        _ => Some(bytes.clone()),
+    };
+    match read(name, bytes, options) {
+        Ok(view) => (view, None),
+        Err(error) => {
+            let bytes = fallback.unwrap_or_default();
+            (text::read_plain(&bytes, options.hex_row), Some(error))
+        }
+    }
+}
 
 /// What the words between a table row's cells are.
 pub const CELL_SEPARATOR: &str = " | ";
@@ -442,9 +567,18 @@ impl DocView {
     }
 
     /// What the reader said about the file in its own words, once each:
-    /// "An include was left out, so the file it names is not read."
+    /// "An include directive was left out, so the file it names is not
+    /// read."
     pub fn notes(&self) -> &[String] {
         &self.notes
+    }
+
+    /// Adds a note in the reader's own words, once.
+    pub fn add_note(&mut self, note: impl Into<String>) {
+        let note = note.into();
+        if !self.notes.contains(&note) {
+            self.notes.push(note);
+        }
     }
 
     /// The same view with highlight runs on its rows: one list per row,

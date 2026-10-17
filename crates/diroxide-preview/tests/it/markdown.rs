@@ -289,7 +289,7 @@ mod properties {
     use proptest::test_runner::Config;
 
     use diroxide_preview::doc::markdown;
-    use diroxide_preview::doc::{DocView, RowKind};
+    use diroxide_preview::doc::{CELL_SEPARATOR, DocView, RowKind};
     use diroxide_preview::highlight::SymbolKind;
 
     /// Markdown-ish text: the pieces the reader cares about, mixed.
@@ -328,7 +328,14 @@ mod properties {
         for row in view.rows() {
             match row.kind {
                 RowKind::Code { .. } | RowKind::Line | RowKind::Hex => {}
-                RowKind::TableRow { .. } => assert!(!row.text.starts_with(char::is_whitespace)),
+                // A table row is its cells, as written, between the
+                // separators; an empty first cell leaves the row's start
+                // blank.
+                RowKind::TableRow { table, row: n, .. } => assert_eq!(
+                    row.text,
+                    view.tables()[table].cells[n].join(CELL_SEPARATOR),
+                    "{row:?}"
+                ),
                 _ => {
                     assert!(!row.text.is_empty(), "{row:?}");
                     assert_eq!(row.text.trim(), row.text, "{row:?}");

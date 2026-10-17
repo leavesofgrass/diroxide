@@ -196,27 +196,10 @@ pub fn nested_list(from: &str, depth: usize) -> String {
     let mut text = String::new();
     for level in 0..depth {
         let line = match from {
-            "org" => format!(
-                "{}- level {level}
-",
-                " ".repeat(level * 2)
-            ),
-            "rst" => format!(
-                "{}- level {level}
-
-",
-                " ".repeat(level * 2)
-            ),
-            "dokuwiki" => format!(
-                "{}* level {level}
-",
-                " ".repeat(level * 2 + 2)
-            ),
-            _ => format!(
-                "{} level {level}
-",
-                "*".repeat(level + 1)
-            ),
+            "org" => format!("{}- level {level}\n", " ".repeat(level * 2)),
+            "rst" => format!("{}- level {level}\n\n", " ".repeat(level * 2)),
+            "dokuwiki" => format!("{}* level {level}\n", " ".repeat(level * 2 + 2)),
+            _ => format!("{} level {level}\n", "*".repeat(level + 1)),
         };
         text.push_str(&line);
     }
