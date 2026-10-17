@@ -133,9 +133,9 @@ impl App {
             let palette = self.key(&ids::PALETTE);
             let quit = self.key(&ids::QUIT);
             let mut welcome = if help.is_empty() {
-                "diroxide alpha 1. Help is in the Help menu.".to_owned()
+                format!("diroxide {}. Help is in the Help menu.", release_words())
             } else {
-                format!("diroxide alpha 1. {help} for help.")
+                format!("diroxide {}. {help} for help.", release_words())
             };
             // The owner's finding from the alpha.1 terminal: say how to
             // quit beside the help key, and name the key bar.
@@ -672,4 +672,31 @@ fn history_row(place: &Place, when: &str) -> diroxide_core::ListRow {
         .unwrap_or_default();
     diroxide_core::ListRow::new(place.to_string(), place_leaf(place))
         .with_details([when.to_owned(), parent])
+}
+
+/// The release as said on the first run, from the build's version:
+/// "0.1.0-alpha.2" is "alpha 2", "0.1.0-beta.1" is "beta 1", and a
+/// version without a pre-release is said as it is ("1.0.0").
+fn release_words() -> String {
+    words_for_version(env!("CARGO_PKG_VERSION"))
+}
+
+fn words_for_version(version: &str) -> String {
+    match version.split_once('-') {
+        Some((_, pre)) => pre.replacen('.', " ", 1),
+        None => version.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod release_tests {
+    use super::words_for_version;
+
+    #[test]
+    fn the_release_is_said_in_words() {
+        assert_eq!(words_for_version("0.1.0-alpha.1"), "alpha 1");
+        assert_eq!(words_for_version("0.1.0-alpha.12"), "alpha 12");
+        assert_eq!(words_for_version("0.2.0-beta.1"), "beta 1");
+        assert_eq!(words_for_version("1.0.0"), "1.0.0");
+    }
 }
