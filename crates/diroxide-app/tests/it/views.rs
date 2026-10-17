@@ -147,11 +147,15 @@ fn labels_and_bookmarks_complete_in_their_fields() {
     assert_eq!(last(&said), "completed to Keep");
     f.s.key("escape");
     assert_eq!(f.s.dialog(), None);
-    // A bookmark completes to its place in the Go to place field.
+    // A bookmark completes to its place in the Go to place field. The
+    // terms name the test's own folder, since "wor" alone also matches
+    // other places on some machines (the container's repository is
+    // mounted at /work, and mounts are Go to place candidates on Linux).
     f.s.command(ids::BOOKMARK_ADD);
     f.s.key("backspace");
     f.s.key("ctrl+g");
-    f.s.type_text("wor");
+    let root = f.root.file_name().unwrap().to_string_lossy().into_owned();
+    f.s.type_text(&format!("{root}{}wor", std::path::MAIN_SEPARATOR));
     let said = f.s.key("tab");
     assert!(last(&said).starts_with("completed to "), "{said:?}");
     assert!(last(&said).ends_with("work"), "{said:?}");
