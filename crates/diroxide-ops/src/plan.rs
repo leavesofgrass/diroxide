@@ -285,6 +285,16 @@ pub enum Preflight {
         /// The items left out of the trash job.
         places: Vec<Place>,
     },
+    /// The trash would take these items by copying them to another
+    /// drive's trash (a Linux drive whose own trash cannot be made), and
+    /// they are large: "Trashing copies 3.2 GB to another drive. Go on? y
+    /// or n". No leaves them where they are.
+    TrashCopies {
+        /// The items the trash would copy.
+        places: Vec<Place>,
+        /// Their bytes.
+        bytes: u64,
+    },
     /// A split makes more than 999 parts, more than three digits number;
     /// No leaves the file out.
     ManyParts {
@@ -372,6 +382,14 @@ impl Preflight {
                 if let Some(question) = gate.question(items) {
                     lines.insert(0, question.text);
                 }
+                lines
+            }
+            Preflight::TrashCopies { places, bytes } => {
+                let mut lines = vec![catalog::trash_copies_across(*bytes).text];
+                lines.push(format!(
+                    "It takes as long as copying {}.",
+                    count(places.len() as u64, "item", "items")
+                ));
                 lines
             }
             Preflight::ManyParts { place, parts } => vec![
@@ -801,9 +819,11 @@ impl Plan {
         if self.steps.len() != before {
             self.facts.left_out.push((place.clone(), reason.to_owned()));
             self.facts.questions.retain(|question| match question {
-                Preflight::TooLarge { place: p, .. } | Preflight::NameRefused { place: p, .. } => {
-                    !p.is_within(place)
-                }
+                Preflight::TooLarge { place: p, .. }
+                | Preflight::NameRefused { place: p, .. }
+                | Preflight::ManyParts { place: p, .. }
+                | Preflight::RunsAsOwner { place: p } => !p.is_within(place),
+                Preflight::TrashCopies { places, .. } => !places.iter().all(|p| p.is_within(place)),
                 _ => true,
             });
             self.facts.whole.clear();

@@ -502,6 +502,8 @@ impl<'a> Planner<'a> {
     /// question offers the listed permanent delete as its own job.
     fn trash(&mut self) -> Result<(), OpsError> {
         let mut refused: Vec<(TrashGate, Place)> = Vec::new();
+        let mut copies: Vec<Place> = Vec::new();
+        let mut copied_bytes: u64 = 0;
         let request = self.request;
         for source in &request.sources {
             self.anchor(source, Removal::Recoverable)?;
@@ -541,6 +543,17 @@ impl<'a> Planner<'a> {
                 }
             }
             if gate.allows() {
+                // The trash takes it by copying it to another drive: a big
+                // item asks first (P2's open point; TrashGate::asks_first).
+                let bytes: u64 = found
+                    .iter()
+                    .filter(|item| item.entry.kind != EntryKind::Folder)
+                    .filter_map(|item| item.entry.size)
+                    .sum();
+                if gate.asks_first(bytes) {
+                    copies.push(source.clone());
+                    copied_bytes += bytes;
+                }
                 self.plan.expected.insert(source.clone(), entry);
                 self.plan.steps.push(Step::Trash {
                     place: source.clone(),
@@ -551,6 +564,12 @@ impl<'a> Planner<'a> {
             }
         }
         self.plan.facts.counted = true;
+        if !copies.is_empty() {
+            self.plan.facts.questions.push(Preflight::TrashCopies {
+                places: copies,
+                bytes: copied_bytes,
+            });
+        }
         if let Some((gate, _)) = refused.first() {
             let gate = *gate;
             self.plan.facts.questions.push(Preflight::NoTrash {
@@ -1220,6 +1239,51 @@ mod tests {
         assert_eq!(
             refused.facts.left_out[0].1,
             "this removable drive has no trash"
+        );
+    }
+
+    #[test]
+    fn a_trash_that_copies_across_drives_asks_first_for_a_big_item() {
+        let fake = tree();
+        fake.add_file(&p("/a/big.iso"), b"pretend");
+        fake.set_listed_size(&p("/a/big.iso"), 3_200_000_000);
+        fake.switches_mut().trash_copies_across = true;
+        let engine = engine(&fake);
+        let plan = engine
+            .plan(&request(JobKind::Trash, &["/a/big.iso", "/a/notes.txt"]))
+            .unwrap();
+        assert_eq!(plan.steps.len(), 2, "both go to the trash after a yes");
+        let Some(Preflight::TrashCopies { places, bytes }) = plan.facts.questions.first() else {
+            panic!("{:?}", plan.facts.questions);
+        };
+        assert_eq!(
+            places,
+            &vec![p("/a/big.iso")],
+            "the small item does not ask"
+        );
+        assert_eq!(*bytes, 3_200_000_000);
+        let lines = plan.facts.questions[0].lines();
+        assert_eq!(
+            lines[0],
+            "Trashing copies 3.2 GB to another drive. Go on? y or n"
+        );
+        assert!(within_cells(&lines[0], "Trashing copies 3.2 GB"));
+        let mut answered = plan.clone();
+        answered.leave_out(&p("/a/big.iso"), "kept: the trash would copy it");
+        assert_eq!(
+            answered.steps,
+            vec![Step::Trash {
+                place: p("/a/notes.txt")
+            }],
+            "No leaves it where it is"
+        );
+        fake.switches_mut().trash_copies_across = false;
+        let plain = engine
+            .plan(&request(JobKind::Trash, &["/a/big.iso"]))
+            .unwrap();
+        assert!(
+            plain.facts.questions.is_empty(),
+            "a trash on the same drive asks nothing"
         );
     }
 
