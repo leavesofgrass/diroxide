@@ -26,6 +26,8 @@ zip.workspace = true
 # The fake provider, so hostile names live in memory, never on disk.
 diroxide-ops.workspace = true
 proptest.workspace = true
+# The canary test reads serialized requests (ADR-0009).
+serde_json.workspace = true
 # Resident memory for the spikes (research/alpha2-plan.md 4.1 and 4.2).
 sysinfo.workspace = true
 tempfile.workspace = true

@@ -5,9 +5,10 @@
 //! member rows in [`crate::index::member_row`].
 
 use diroxide_core::format::human_size;
-use diroxide_core::{Message, Place};
+use diroxide_core::{Message, Place, SecretRequest};
 use diroxide_vfs::VfsError;
 
+use crate::format::ArchiveFormat;
 use crate::sniff::Sniffed;
 
 /// The refusal for any change inside an archive in this alpha.
@@ -73,6 +74,39 @@ pub fn title(place: &Place, sniffed: Option<&Sniffed>) -> String {
     }
 }
 
+/// The question before the next try of a password (the request's
+/// `attempt` is 2 or more), the fact first: "Wrong password for
+/// course.zip. Try again? y or n". A 7z cannot tell a wrong password from
+/// damaged data, so its question says both: "Wrong password or damaged
+/// data. Try again? y or n". Yes shows the masked prompt again; No skips
+/// the locked members. The answer starts on No.
+pub fn wrong_password(request: &SecretRequest) -> Message {
+    let both = request.subject.to_lowercase().ends_with(".7z")
+        || ArchiveFormat::from_name(&request.subject) == Some(ArchiveFormat::SevenZ);
+    if both {
+        Message::question("Wrong password or damaged data. Try again")
+    } else {
+        Message::question(&format!(
+            "Wrong password for {}. Try again",
+            request.subject
+        ))
+    }
+}
+
+/// The title line of a split archive's root, the kind and the count
+/// first: "backup.7z.001, archive of 12 parts".
+pub fn set_title(place: &Place, parts: usize) -> String {
+    let name = place
+        .archive()
+        .and_then(|(container, _)| container.name())
+        .or_else(|| place.name())
+        .unwrap_or("archive");
+    format!(
+        "{name}, archive of {}",
+        diroxide_core::format::count(parts as u64, "part", "parts")
+    )
+}
+
 /// The progress line of a sequential archive being read, at most every
 /// ten seconds in screen-reader mode: "Reading backup.tar.xz: 3.2 of 14.0
 /// GB", or the bytes alone when the size is not known.
@@ -97,7 +131,6 @@ pub fn reading_line(name: &str, done: u64, total: Option<u64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::format::ArchiveFormat;
     use crate::sniff::Signature;
     use diroxide_core::format::within_cells;
     use diroxide_core::place::PathStyle;

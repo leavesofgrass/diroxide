@@ -28,6 +28,7 @@ mod read_tar;
 mod read_xz;
 mod read_zip;
 pub mod request;
+pub mod secrets;
 pub mod sniff;
 mod source;
 pub mod spool;
@@ -46,8 +47,9 @@ pub use names::{
 };
 pub use provider::{ArchiveProvider, Listing, Opened, Visitor, capabilities_for};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
+pub use secrets::{JobSecrets, new_password_request};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};
-pub use words::{READ_ONLY, read_only_refusal};
+pub use words::{READ_ONLY, read_only_refusal, wrong_password};
 
 #[cfg(test)]
 mod tests {
