@@ -994,6 +994,29 @@ impl Runtime {
                     )));
                 }
             }
+            Request::CheckPlaces { request, places } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let ctx = OpContext::new();
+                    let mut missing = Vec::new();
+                    let mut unreadable = 0;
+                    for place in places {
+                        match registry
+                            .resolve(&place)
+                            .and_then(|provider| provider.stat(&place, &ctx))
+                        {
+                            Ok(_) => {}
+                            Err(diroxide_vfs::VfsError::NotFound) => missing.push(place),
+                            Err(_) => unreadable += 1,
+                        }
+                    }
+                    shared.send(AppEvent::PlacesChecked {
+                        request,
+                        missing,
+                        unreadable,
+                    });
+                });
+            }
         }
     }
 

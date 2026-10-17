@@ -344,6 +344,8 @@ pub mod ids {
         LABEL_TOGGLE = "label.toggle";
         /// Take every label off the marked items, or the focused one.
         LABEL_CLEAR = "label.clear";
+        /// The Labels list.
+        LABELS = "label.list";
         /// Toggle the first label of the Labels list.
         LABEL_FAVORITE_1 = "label.favorite-1";
         /// Toggle the second label of the Labels list.
@@ -501,7 +503,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 168] = [
+pub static CATALOG: [CommandInfo; 169] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1314,6 +1316,14 @@ pub static CATALOG: [CommandInfo; 168] = [
         ids::LABEL_CLEAR,
         "Clear labels",
         "Takes every label off the marked items, or the focused one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABELS,
+        "Labels list",
+        "Lists the labels with how many items carry each; choosing one lists its items.",
         Panel,
         &[],
         &[],

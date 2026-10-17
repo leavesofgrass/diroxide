@@ -1,5 +1,5 @@
 //! The labels in the app (W3l,
-//! plan commit 22): what the app holds for them, their commands'
+//! plan commits 22 and 23): what the app holds for them, their commands'
 //! routes, what their dialogs are for, and the hooks the app's dispatch,
 //! keys, dialogs and undo call. The behavior is in `labeling`.
 //!
@@ -9,11 +9,16 @@
 //! per change; nothing is written but through the runtime, atomically, in
 //! the state folder.
 
-use diroxide_core::{Command, CommandId, Effect, ListModel, Message, Place, Side};
+use std::collections::HashSet;
+
+use diroxide_core::{
+    Command, CommandId, Effect, Key, Layer, ListModel, Message, Place, RequestId, Side,
+};
 
 use super::{App, Purpose};
 use crate::commands::ids;
 use crate::dialog::Dialog;
+use crate::keymap::Lookup;
 use crate::labels::{LabelStore, LabelUndo};
 
 /// What the app holds for the labels.
@@ -25,6 +30,8 @@ pub(super) struct Organize {
     /// in the undo log when it was made, so Undo takes whichever came
     /// last.
     pub(super) label_undo: Vec<(u64, LabelUndo)>,
+    /// The Labels list's check for missing items.
+    pub(super) check: Option<Check>,
 }
 
 impl Organize {
@@ -35,6 +42,17 @@ impl Organize {
             ..Self::default()
         }
     }
+}
+
+/// The Labels list's check for labeled items that are gone.
+#[derive(Clone, Debug)]
+pub(super) struct Check {
+    /// The request the runtime answers.
+    pub(super) request: RequestId,
+    /// The keys of the places found gone, once the answer came.
+    pub(super) missing: Option<HashSet<String>>,
+    /// How many places could not be looked at.
+    pub(super) unreadable: usize,
 }
 
 /// What a dialog of these lists is for.
@@ -49,6 +67,10 @@ pub(super) enum Wants {
         one: Option<String>,
         toggle: bool,
     },
+    /// The Labels list.
+    Labels,
+    /// One label's items.
+    Labeled { label: String },
 }
 
 impl Wants {
@@ -65,13 +87,15 @@ enum Do {
     SetLabel,
     ToggleLabel,
     ClearLabels,
+    Labels,
     Favorite(usize),
 }
 
-const ROUTES: [(CommandId, Do); 10] = [
+const ROUTES: [(CommandId, Do); 11] = [
     (ids::LABEL_SET, Do::SetLabel),
     (ids::LABEL_TOGGLE, Do::ToggleLabel),
     (ids::LABEL_CLEAR, Do::ClearLabels),
+    (ids::LABELS, Do::Labels),
     (ids::LABEL_FAVORITE_1, Do::Favorite(1)),
     (ids::LABEL_FAVORITE_2, Do::Favorite(2)),
     (ids::LABEL_FAVORITE_3, Do::Favorite(3)),
@@ -111,13 +135,56 @@ impl App {
             Do::SetLabel => self.label_prompt(side, false, command),
             Do::ToggleLabel => self.label_prompt(side, true, command),
             Do::ClearLabels => self.clear_labels(side),
+            Do::Labels => self.labels_list(),
             Do::Favorite(number) => self.favorite_label(side, number),
         })
+    }
+
+    /// The purpose of the dialog on top, when it is one of these lists'.
+    pub(super) fn organize_top(&self) -> Option<Wants> {
+        match self.opens.last().map(|o| &o.purpose) {
+            Some(Purpose::Organize(wants)) => Some((**wants).clone()),
+            _ => None,
+        }
     }
 
     /// Opens a dialog of these lists.
     pub(super) fn open_organize(&mut self, dialog: Dialog, wants: Wants) -> Vec<Effect> {
         self.open_dialog(dialog, Purpose::Organize(Box::new(wants)))
+    }
+
+    /// A key in one of these lists before the dialog's own keys: the keys
+    /// that trash a file take the label off the focused item of a label's
+    /// items. `None` when the key is the dialog's.
+    pub(super) fn organize_key(&mut self, key: &Key) -> Option<Vec<Effect>> {
+        let wants = self.organize_top()?;
+        let in_choose = matches!(self.dialogs.last(), Some((_, Dialog::Choose { .. })));
+        if !in_choose {
+            return None;
+        }
+        let file_command = match self.keymap.lookup(&[Layer::Panel], key) {
+            Lookup::Command(id) => Some(id),
+            Lookup::NoMatch => None,
+        };
+        let removes = file_command
+            .as_ref()
+            .is_some_and(|id| *id == ids::TRASH || *id == ids::DELETE_PERMANENTLY);
+        let row = self.top_row_id();
+        match wants {
+            Wants::Labeled { label } if removes => {
+                let place = row.and_then(|r| Place::parse(&r).ok())?;
+                Some(self.unlabel_one(&label, place))
+            }
+            _ => None,
+        }
+    }
+
+    /// The focused row's id of the dialog on top.
+    pub(super) fn top_row_id(&self) -> Option<String> {
+        match self.dialogs.last() {
+            Some((_, Dialog::Choose { list, .. })) => list.focused().map(|r| r.id.clone()),
+            _ => None,
+        }
     }
 
     /// Enter in one of these dialogs.
@@ -135,6 +202,14 @@ impl App {
                 one,
                 toggle,
             } => self.label_chosen(side, places, one, toggle, row, &text, in_list),
+            Wants::Labels => match row {
+                Some(label) => self.labeled_items(&label),
+                None => Vec::new(),
+            },
+            Wants::Labeled { .. } => match row.and_then(|r| Place::parse(&r).ok()) {
+                Some(place) => self.show_labeled(place),
+                None => Vec::new(),
+            },
         }
     }
 
@@ -143,7 +218,36 @@ impl App {
     pub(super) fn organize_candidates(&self, wants: &Wants, text: &str) -> Option<ListModel> {
         match wants {
             Wants::Label { places, .. } => Some(self.label_choices(places, text)),
+            _ => None,
         }
+    }
+
+    /// Replaces the list of the open dialog of these lists that `pick`
+    /// chooses, where it is in the stack, keeping its focus by row id.
+    pub(super) fn replace_open_list(
+        &mut self,
+        pick: impl Fn(&Wants) -> bool,
+        list: ListModel,
+    ) -> bool {
+        let index = self.opens.iter().rposition(|open| match &open.purpose {
+            Purpose::Organize(wants) => pick(wants),
+            _ => false,
+        });
+        let Some(index) = index else {
+            return false;
+        };
+        if let Some((_, Dialog::Choose { list: open, .. })) = self.dialogs.get_mut(index) {
+            let focus = open.focused().map(|r| r.id.clone());
+            let position = open.focus_index();
+            *open = list;
+            let kept = focus.is_some_and(|id| open.focus_id(&id));
+            if !kept && let Some(position) = position {
+                let last = open.len().saturating_sub(1);
+                open.move_focus(diroxide_core::Move::To(position.min(last)));
+            }
+            return true;
+        }
+        false
     }
 
     /// Saves the labels through the runtime.

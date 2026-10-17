@@ -1,7 +1,9 @@
 //! Labels through the app (plan commits 22 and 23): Set label on the
 //! marked items, the favorite keys, Clear labels, one undo step taken in
-//! turn with the jobs, and the store through an injected state folder.
+//! turn with the jobs, the store through an injected state folder, and
+//! the Labels list with its missing counts and its items.
 
+use std::fs;
 use std::path::PathBuf;
 
 use diroxide_app::commands::ids;
@@ -180,4 +182,71 @@ fn the_store_round_trips_through_the_state_folder() {
             .labels_of(&place(&f.work.join("report.pdf"))),
         ["Keep"]
     );
+}
+
+#[test]
+fn the_labels_list_counts_missing_items_and_lists_a_labels_items() {
+    let mut f = open();
+    for name in ["budget.xlsx", "notes.txt", "report.pdf"] {
+        f.s.focus(name);
+        f.s.key("ctrl+1");
+    }
+    // Two of the three move away: their labels stay, now missing.
+    fs::rename(
+        f.work.join("budget.xlsx"),
+        f.work.join("Backup").join("budget.xlsx"),
+    )
+    .unwrap();
+    fs::rename(
+        f.work.join("notes.txt"),
+        f.work.join("Photos").join("notes.txt"),
+    )
+    .unwrap();
+    let said = f.s.command(ids::LABELS);
+    assert_eq!(f.s.dialog_title().as_deref(), Some("Labels, 6 labels"));
+    assert!(
+        said[0].starts_with("Labels, 6 labels, Urgent, label, 3 items, checking"),
+        "{said:?}"
+    );
+    let focus = f.s.dialog().unwrap().focus_line();
+    assert_eq!(
+        focus,
+        "Urgent, label, 3 items, 2 missing, orange, Ctrl+1, 1 of 6"
+    );
+    assert!(diroxide_core::format::within_cells(
+        &focus,
+        "Urgent, label, 3 items, 2 missing"
+    ));
+    assert!(
+        f.s.said
+            .iter()
+            .any(|m| m.text == "Checked 3 labeled items: 2 missing"),
+        "{:?}",
+        f.s.said
+    );
+    let rows = f.s.app.dialog().map(|(_, d)| d.focus_line());
+    assert!(rows.is_some());
+    // Enter lists the label's items, the missing ones said so.
+    f.s.key("enter");
+    assert_eq!(f.s.dialog_title().as_deref(), Some("Urgent, 3 items"));
+    let line = f.s.dialog().unwrap().focus_line();
+    assert!(line.starts_with("budget.xlsx, missing, in work"), "{line}");
+    let said = f.s.key("enter");
+    assert!(last(&said).starts_with("Missing: budget.xlsx."), "{said:?}");
+    f.s.key("end");
+    let line = f.s.dialog().unwrap().focus_line();
+    assert!(line.starts_with("report.pdf, in work"), "{line}");
+    f.s.key("enter");
+    assert_eq!(f.s.dialog(), None);
+    assert_eq!(f.s.focused(), "report.pdf");
+    // The trash key in a label's items takes the label off that item.
+    f.s.command(ids::LABELS);
+    f.s.key("enter");
+    let said = f.s.key("delete");
+    assert_eq!(last(&said), "Label urgent removed from budget.xlsx");
+    assert_eq!(f.s.dialog_title().as_deref(), Some("Urgent, 2 items"));
+    f.s.key("escape");
+    assert_eq!(f.s.dialog_title().as_deref(), Some("Labels, 6 labels"));
+    f.s.key("escape");
+    assert_eq!(f.s.dialog(), None);
 }

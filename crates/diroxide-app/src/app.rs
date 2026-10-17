@@ -222,6 +222,17 @@ pub enum AppEvent {
         /// The facts.
         facts: Box<crate::archives::ArchiveFacts>,
     },
+    /// The places a [`Request::CheckPlaces`] asked about were looked for
+    /// (W3l): the ones gone, and how many could not be read.
+    PlacesChecked {
+        /// The request it answers.
+        request: RequestId,
+        /// The places that are gone.
+        missing: Vec<Place>,
+        /// How many could not be looked at (a drive that is not there, no
+        /// permission).
+        unreadable: usize,
+    },
     /// A dialog was answered.
     Answer {
         /// The dialog.
@@ -520,7 +531,7 @@ pub struct App {
     highlighter: Option<crate::viewer::highlight::Session>,
     /// The quick view and the focus in its region.
     preview: preview::Preview,
-    /// The labels (W3l).
+    /// The labels, and what their lists wait for (W3l).
     organize: organize::Organize,
 }
 
@@ -1246,6 +1257,11 @@ impl App {
                 result,
             } => self.viewer_source(request, place, result),
             AppEvent::ArchiveFinished { report, lines } => self.archive_finished(*report, lines),
+            AppEvent::PlacesChecked {
+                request,
+                missing,
+                unreadable,
+            } => self.places_checked(request, missing, unreadable),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }

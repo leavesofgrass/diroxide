@@ -144,6 +144,10 @@ impl App {
 
     /// A key with a dialog open.
     pub(super) fn dialog_key(&mut self, key: Key) -> Vec<Effect> {
+        // The labels' lists' own keys (W3l).
+        if let Some(effects) = self.organize_key(&key) {
+            return effects;
+        }
         let Some((_, dialog)) = self.dialogs.last() else {
             return Vec::new();
         };

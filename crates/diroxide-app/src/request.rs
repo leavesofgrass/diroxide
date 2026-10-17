@@ -321,6 +321,15 @@ pub enum Request {
     },
     /// Write the labels to `labels.toml` in the state folder (W3l).
     SaveLabels(Box<crate::labels::LabelStore>),
+    /// Find which of these places are gone, on a worker, for the Labels
+    /// list's missing counts (W3l); answered as
+    /// [`AppEvent::PlacesChecked`](crate::AppEvent::PlacesChecked).
+    CheckPlaces {
+        /// The request, so a late answer to an old one is dropped.
+        request: diroxide_core::RequestId,
+        /// The places to look for.
+        places: Vec<Place>,
+    },
 }
 
 #[cfg(test)]

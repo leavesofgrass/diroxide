@@ -204,6 +204,10 @@ command = "label.clear"
 access = "c"
 
 [[menu.item]]
+command = "label.list"
+access = "l"
+
+[[menu.item]]
 command = "label.favorite-1"
 access = "1"
 
