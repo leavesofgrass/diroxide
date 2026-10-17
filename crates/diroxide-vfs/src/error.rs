@@ -56,6 +56,18 @@ pub enum VfsError {
     /// The drive or file system is read only.
     #[error("the drive is read only")]
     ReadOnlyFilesystem,
+    /// The place is read only in this program, whatever the drive allows:
+    /// inside an archive in this alpha, or a provider that only reads. The
+    /// text says what, in the plural ("archives are read only here"), and
+    /// the next step how to get a changed copy. W2a's contract request 1.
+    #[error("{what} are read only here")]
+    ReadOnlyHere {
+        /// What is read only, in the plural and lowercase: "archives".
+        what: String,
+        /// How to get a changed copy instead, as one sentence: "Use Pack
+        /// to make a new one."
+        instead: String,
+    },
     /// A rename cannot cross to another drive or volume; the engine copies
     /// and removes instead.
     #[error("it is on another drive")]
@@ -157,6 +169,9 @@ pub enum ErrorClass {
     Storage,
     /// The drive is read only.
     ReadOnly,
+    /// The place is read only in this program (inside an archive):
+    /// retrying cannot help, and a rule, not the drive, is the cause.
+    ReadOnlyHere,
     /// The name is not allowed, or too long.
     Name,
     /// The file is too large for the drive.
@@ -204,6 +219,7 @@ impl ErrorClass {
             self,
             ErrorClass::Cancelled
                 | ErrorClass::ReadOnly
+                | ErrorClass::ReadOnlyHere
                 | ErrorClass::Refused
                 | ErrorClass::TooLarge
                 | ErrorClass::Data
@@ -216,7 +232,10 @@ impl ErrorClass {
             ErrorClass::Storage | ErrorClass::ReadOnly | ErrorClass::Network => {
                 ErrorScope::Environment
             }
-            ErrorClass::Name | ErrorClass::TooLarge | ErrorClass::Refused => ErrorScope::Rule,
+            ErrorClass::Name
+            | ErrorClass::TooLarge
+            | ErrorClass::ReadOnlyHere
+            | ErrorClass::Refused => ErrorScope::Rule,
             _ => ErrorScope::File,
         }
     }
@@ -231,6 +250,37 @@ impl VfsError {
         }
     }
 
+    /// The read-only refusal of a place this program only reads: `what`
+    /// in the plural ("archives") and the way to a changed copy ("Use
+    /// Pack to make a new one."). Said whole by [`VfsError::sentence`].
+    pub fn read_only_here(what: &str, instead: &str) -> Self {
+        Self::ReadOnlyHere {
+            what: what.to_owned(),
+            instead: instead.to_owned(),
+        }
+    }
+
+    /// The error as a sentence of its own, when it reads better that way
+    /// than inside "Could not VERB OBJECT: CAUSE.": the read-only refusal
+    /// gives "Archives are read only here. Use Pack to make a new one."
+    /// Every other error gives `None`, and the app says the usual line.
+    pub fn sentence(&self) -> Option<String> {
+        match self {
+            VfsError::ReadOnlyHere { .. } => {
+                let cause = self.to_string();
+                let mut chars = cause.chars();
+                let first = chars.next()?;
+                let cause: String = first.to_uppercase().chain(chars).collect();
+                Some(
+                    format!("{cause}. {}", self.next_step())
+                        .trim_end()
+                        .to_owned(),
+                )
+            }
+            _ => None,
+        }
+    }
+
     /// The error's class, for the engine's choice of recovery.
     pub fn class(&self) -> ErrorClass {
         match self {
@@ -241,6 +291,7 @@ impl VfsError {
             VfsError::InUse => ErrorClass::InUse,
             VfsError::StorageFull | VfsError::QuotaExceeded => ErrorClass::Storage,
             VfsError::ReadOnlyFilesystem => ErrorClass::ReadOnly,
+            VfsError::ReadOnlyHere { .. } => ErrorClass::ReadOnlyHere,
             VfsError::NameInvalid | VfsError::NameNotUnicode | VfsError::Place(_) => {
                 ErrorClass::Name
             }
@@ -385,6 +436,7 @@ impl Explain for VfsError {
             VfsError::StorageFull => "Free some space, then retry.".to_owned(),
             VfsError::QuotaExceeded => "Free some of your space, then retry.".to_owned(),
             VfsError::ReadOnlyFilesystem => "Choose a drive you can write to.".to_owned(),
+            VfsError::ReadOnlyHere { instead, .. } => instead.clone(),
             VfsError::CrossesDevices => "Copy it, then remove the original.".to_owned(),
             VfsError::InUse => "Close it in the other program, then retry.".to_owned(),
             VfsError::NetworkLost => "Check the connection, then retry.".to_owned(),
@@ -454,6 +506,27 @@ mod tests {
     }
 
     #[test]
+    fn the_read_only_refusal_has_its_own_class_and_sentence() {
+        let error = VfsError::read_only_here("archives", "Use Pack to make a new one.");
+        assert_eq!(error.class(), ErrorClass::ReadOnlyHere);
+        assert!(!error.class().can_retry());
+        assert!(!error.class().retry_first());
+        assert_eq!(error.class().scope(), ErrorScope::Rule);
+        assert_ne!(error.class(), VfsError::ReadOnlyFilesystem.class());
+        assert_eq!(
+            error.sentence().as_deref(),
+            Some("Archives are read only here. Use Pack to make a new one.")
+        );
+        let m = Message::from_error("rename", "notes.txt", &error);
+        assert_eq!(
+            m.text,
+            "Could not rename notes.txt: archives are read only here. Use Pack to make a new one."
+        );
+        assert!(VfsError::NotFound.sentence().is_none());
+        assert!(VfsError::ReadOnlyFilesystem.sentence().is_none());
+    }
+
+    #[test]
     fn platform_codes_map_to_their_classes() {
         let raw = |code| VfsError::from(io::Error::from_raw_os_error(code));
         if cfg!(windows) {
@@ -499,6 +572,7 @@ mod tests {
             VfsError::StorageFull,
             VfsError::QuotaExceeded,
             VfsError::ReadOnlyFilesystem,
+            VfsError::read_only_here("archives", "Use Pack to make a new one."),
             VfsError::CrossesDevices,
             VfsError::InUse,
             VfsError::NetworkLost,

@@ -572,6 +572,22 @@ Archives inside archives. How many archives deep a place may go, such as a zip i
 - Default: `4`.
 - Comes with alpha.2.
 
+### archives.ask_read_ahead_mib
+
+Ask before reading ahead. Asks before one member of a tar.gz, a tar.xz or a solid 7z is read on its own when more than this must be read first, since those archives are read from the start.
+
+- Holds: a number of MiB, 1 to 1048576.
+- Default: `256`.
+- Comes with alpha.2.
+
+### archives.spool_folder
+
+Spool folder. Where an archive inside an archive is kept while it is open, when it is too large for memory: a full path. Empty uses the spool folder in the state folder, never the system's temporary folder.
+
+- Holds: text.
+- Default: `""`.
+- Comes with alpha.2.
+
 ### split_presets
 
 Split presets. The sizes Split offers, each a use and its size in bytes. Presets you add as [[split_presets]] tables follow these, and one with a built-in name replaces it. Email attachment: 18,000,000 bytes, a 25 MB mail limit after base64 adds about 37 percent (RFC 2045). GitHub file limit: 104,857,600 bytes, its 100 MiB limit. CD: 737,280,000 bytes, an 80-minute CD-R. FAT32's largest file: 4,294,967,295 bytes, 4 GiB less one byte. DVD: 4,700,372,992 bytes, a single-layer DVD+R. Blu-ray: 25,025,314,816 bytes, a single layer. Floppy: 1,457,664 bytes, the data area of a formatted 1.44 MB disk. The disc sizes keep 1 percent free for the file system.
@@ -727,6 +743,23 @@ The roles the `[colors]` table can color, each as `role = "#rrggbb"`. Every role
 - `diff_removed`: removed line.
 - `progress`: progress.
 - `will_be_removed`: will be removed.
+- `token_keyword`: keyword in code.
+- `token_string`: string in code.
+- `token_comment`: comment in code.
+- `token_number`: number in code.
+- `token_constant`: constant in code.
+- `token_function`: function name in code.
+- `token_type`: type name in code.
+- `token_variable`: variable in code.
+- `token_operator`: operator in code.
+- `token_punctuation`: punctuation in code.
+- `token_heading`: heading in markup.
+- `token_link`: link in markup.
+- `token_emphasis`: emphasis in markup.
+- `token_code`: code in markup.
+- `token_tag`: tag in markup.
+- `token_attribute`: attribute in markup.
+- `token_problem`: problem in code.
 
 ## Columns
 

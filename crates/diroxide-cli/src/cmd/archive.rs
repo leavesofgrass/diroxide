@@ -1926,6 +1926,19 @@ pub(crate) mod tests {
         // archive, so the archive is named after the file.
         let (code, text) = run(&fixture, &["pack", "../notes.txt.xz", "notes.txt"]);
         assert_eq!(code, 0, "{text}");
+        // W2g's finding (P2b): an xz named otherwise holds the file as its
+        // stem, says so in its plan, and passes its own test.
+        let (code, text) = run(&fixture, &["pack", "../one.xz", "notes.txt"]);
+        assert_eq!(code, 0, "{text}");
+        assert!(
+            text.lines()
+                .any(|l| l == "Unpacks as one: xz keeps no name"),
+            "{text}"
+        );
+        assert!(text.contains("Checked 1 of 1 entries, all good."), "{text}");
+        let (code, text) = run(&fixture, &["list", "../one.xz"]);
+        assert_eq!(code, 0, "{text}");
+        assert!(text.lines().any(|l| l.starts_with("one, file")), "{text}");
         let (code, text) = run(&fixture, &["pack", "../bad.xz", "week1"]);
         assert_eq!(code, -1, "xz holds one file: {text}");
         let (code, text) = run(&fixture, &["pack", "../plain.txt", "week1"]);

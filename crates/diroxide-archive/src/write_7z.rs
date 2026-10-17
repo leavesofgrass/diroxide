@@ -5,9 +5,11 @@
 //! when asked; LZMA2's own threads, as many as fit in 1 GiB.
 //!
 //! sevenz-rust2's writer seeks twice: past the 32-byte start header when
-//! it starts, and back to it when it ends. [`HeadHolder`] lets it write to
-//! a sink that cannot seek: the body streams through, and the start
-//! header is held back, for the runner to put in front.
+//! it starts, and back to it when it ends. A committing writer that seeks
+//! (`FileWriter::seek_to`, the local one since P2b) takes it straight,
+//! through [`Seeking`]; [`HeadHolder`] lets it write to a sink that cannot
+//! seek: the body streams through, and the start header is held back, for
+//! the runner to put in front.
 //!
 //! The crate copies the password into its own `Password` (UTF-16 bytes in
 //! a plain vector, not wiped) for as long as the writer lives; diroxide's
@@ -16,7 +18,7 @@
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::sync::Mutex;
 
-use diroxide_vfs::VfsError;
+use diroxide_vfs::{FileWriter, VfsError};
 use sevenz_rust2::encoder_options::{AesEncoderOptions, EncoderOptions, Lzma2Options};
 use sevenz_rust2::{
     ArchiveEntry, ArchiveWriter, EncoderConfiguration, EncoderMethod, NtTime, Password,
@@ -88,6 +90,26 @@ impl<W: Write> Seek for HeadHolder<W> {
             }
             _ => Err(io::Error::from(io::ErrorKind::Unsupported)),
         }
+    }
+}
+
+/// A committing writer that seeks, as the 7z writer wants its sink: the
+/// whole archive goes straight into the unfinished file, header last.
+pub(crate) struct Seeking(pub(crate) Box<dyn FileWriter>);
+
+impl Write for Seeking {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
+impl Seek for Seeking {
+    fn seek(&mut self, to: SeekFrom) -> io::Result<u64> {
+        self.0.seek_to(to).map_err(crate::guard::to_io)
     }
 }
 

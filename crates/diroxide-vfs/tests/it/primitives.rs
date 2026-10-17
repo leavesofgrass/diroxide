@@ -41,6 +41,68 @@ fn a_rename_never_replaces() {
     provider.rename(&same, &same, &ctx()).unwrap();
 }
 
+/// W2c's request 2: a file or link renamed over another in one step, a
+/// folder never replaced, and plain rename still refusing.
+#[test]
+fn a_replacing_rename_takes_the_name_in_one_step() {
+    let folder = scratch();
+    fs::write(folder.path().join("new.txt"), b"NEW").unwrap();
+    fs::write(folder.path().join("old.txt"), b"OLD").unwrap();
+    fs::create_dir(folder.path().join("box")).unwrap();
+    let provider = LocalProvider::new();
+    assert!(provider.capabilities(&place_of(&folder)).replace_rename);
+    let (new, old) = (child(&folder, "new.txt"), child(&folder, "old.txt"));
+    assert_eq!(
+        provider.rename(&new, &old, &ctx()),
+        Err(VfsError::AlreadyExists)
+    );
+    provider.rename_replacing(&new, &old, &ctx()).unwrap();
+    assert_eq!(fs::read(folder.path().join("old.txt")).unwrap(), b"NEW");
+    assert!(!folder.path().join("new.txt").exists());
+    // A folder is never replaced, nor moved over a name.
+    fs::write(folder.path().join("again.txt"), b"A").unwrap();
+    assert_eq!(
+        provider.rename_replacing(&child(&folder, "again.txt"), &child(&folder, "box"), &ctx()),
+        Err(VfsError::AlreadyExists)
+    );
+    assert!(matches!(
+        provider.rename_replacing(&child(&folder, "box"), &old, &ctx()),
+        Err(VfsError::Unsupported { .. })
+    ));
+    assert!(folder.path().join("box").is_dir());
+    assert_eq!(fs::read(folder.path().join("again.txt")).unwrap(), b"A");
+    // A link over a link: the name answers with the new target.
+    fs::write(folder.path().join("one.txt"), b"1").unwrap();
+    fs::write(folder.path().join("two.txt"), b"2").unwrap();
+    let link = |name: &str, target: &str| {
+        provider.create_link(
+            &child(&folder, name),
+            &LinkRequest {
+                kind: LinkKind::Symbolic,
+                target: target.to_owned(),
+                target_is_folder: false,
+            },
+            &ctx(),
+        )
+    };
+    match link("latest", "one.txt") {
+        Ok(()) => {
+            link("next", "two.txt").unwrap();
+            provider
+                .rename_replacing(&child(&folder, "next"), &child(&folder, "latest"), &ctx())
+                .unwrap();
+            let entry = provider.stat(&child(&folder, "latest"), &ctx()).unwrap();
+            assert_eq!(entry.kind, EntryKind::Link);
+            assert_eq!(entry.link.unwrap().target, "two.txt");
+            assert_eq!(fs::read(folder.path().join("latest")).unwrap(), b"2");
+            assert!(!folder.path().join("next").exists());
+            assert_eq!(fs::read(folder.path().join("one.txt")).unwrap(), b"1");
+        }
+        Err(VfsError::NeedsPrivilege { .. }) if cfg!(windows) => {}
+        Err(other) => panic!("{other}"),
+    }
+}
+
 #[test]
 fn a_rename_racing_a_new_file_loses_nothing() {
     let folder = scratch();

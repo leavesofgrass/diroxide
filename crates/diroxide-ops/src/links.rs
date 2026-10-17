@@ -26,27 +26,9 @@ use diroxide_core::{Message, Place};
 /// The failure of a symbolic link on Windows without the privilege.
 pub const NEEDS_DEVELOPER_MODE: &str = "Cannot link: needs developer mode.";
 
-/// How a new link writes its target.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum LinkForm {
-    /// The full path: the link keeps working wherever it is moved, as long
-    /// as the target stays.
-    #[default]
-    Absolute,
-    /// The way from the link's folder: the link keeps working when a
-    /// folder holding both moves.
-    Relative,
-}
-
-impl LinkForm {
-    /// The form in words, for the plan's rows: "relative", "absolute".
-    pub const fn word(self) -> &'static str {
-        match self {
-            LinkForm::Absolute => "absolute",
-            LinkForm::Relative => "relative",
-        }
-    }
-}
+// How a new link writes its target: moved into core with P2b (W2c's
+// request 3), so a job request carries it; re-exported under its old path.
+pub use diroxide_core::access::LinkForm;
 
 /// The question after a folder link failed for the privilege: "Make a
 /// junction instead? y or n". A junction needs no privilege, holds a

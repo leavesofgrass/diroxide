@@ -65,6 +65,9 @@ impl Paths {
     pub const HOT: &'static str = "hot";
     /// Optional components, in the state folder (reserved now; alpha.4).
     pub const COMPONENTS: &'static str = "components";
+    /// The archive provider's spool for inner archives too large for
+    /// memory, in the state folder (alpha.2; `archives.spool_folder`).
+    pub const SPOOL: &'static str = "spool";
     /// The config folder's name in the `--portable` layout.
     pub const PORTABLE_CONFIG: &'static str = "config";
     /// The state folder's name in the `--portable` layout.
@@ -148,6 +151,12 @@ impl Paths {
     pub fn components_dir(&self) -> PathBuf {
         self.state_dir.join(Self::COMPONENTS)
     }
+
+    /// The archive provider's default spool folder, the state folder's
+    /// `spool`: never the system's temporary folder (W2a's request 3).
+    pub fn spool_dir(&self) -> PathBuf {
+        self.state_dir.join(Self::SPOOL)
+    }
 }
 
 #[cfg(test)]
@@ -208,6 +217,7 @@ mod tests {
             Paths::HISTORY,
             Paths::HOT,
             Paths::COMPONENTS,
+            Paths::SPOOL,
         ] {
             assert!(
                 name.chars()

@@ -11,6 +11,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::access::{AttributeEdit, LinkEdit, Recursion};
 use crate::ids::JobId;
 use crate::place::Place;
 
@@ -426,6 +427,17 @@ pub struct JobRequest {
     /// How a split sizes its parts; `None` for every other job.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parts: Option<PartSize>,
+    /// What a `SetAttributes` or `SetTimes` job changes and where, its
+    /// recursion included ([`AttributeEdit`]); `None` for every other job
+    /// (R11 9.5; W2c's request 3). Boxed, so a request stays small in the
+    /// effects that carry it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<Box<AttributeEdit>>,
+    /// How a `Link` job makes its links, their kind and form, or that it
+    /// changes where its one source link points ([`LinkEdit`]); `None`
+    /// reads as new symbolic links with absolute targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<LinkEdit>,
 }
 
 impl JobRequest {
@@ -442,7 +454,37 @@ impl JobRequest {
             conflicts: ConflictPolicy::default(),
             origin: JobOrigin::default(),
             parts: None,
+            attributes: None,
+            link: None,
         }
+    }
+
+    /// The same request changing permissions, attributes or times as the
+    /// edit says, inside folders as its recursion says.
+    pub fn changing(mut self, edit: AttributeEdit) -> Self {
+        self.attributes = Some(Box::new(edit));
+        self
+    }
+
+    /// The same request making links, or changing where one points, as
+    /// the edit says.
+    pub fn linking(mut self, edit: LinkEdit) -> Self {
+        self.link = Some(edit);
+        self
+    }
+
+    /// Which entries an attribute job changes: its edit's recursion, or
+    /// this item only.
+    pub fn recursion(&self) -> Recursion {
+        self.attributes
+            .as_ref()
+            .map_or(Recursion::ThisItem, |edit| edit.recursion)
+    }
+
+    /// How a link job makes its links: the request's own, or new symbolic
+    /// links with absolute targets.
+    pub fn link_edit(&self) -> LinkEdit {
+        self.link.unwrap_or_default()
     }
 
     /// The same request splitting into parts of this size.
@@ -505,6 +547,40 @@ mod tests {
             serde_json::to_string(&ConflictPolicy::Newer).unwrap(),
             "\"newer\""
         );
+    }
+
+    /// W2c's request 3 (P2b): an attribute job and a link job carry their
+    /// edits, so the request alone travels in a script or the journal, and
+    /// a request written before them still reads.
+    #[test]
+    fn requests_carry_their_attribute_and_link_edits() {
+        use crate::access::{LinkForm, LinkKind, ModeChange};
+        let edit = AttributeEdit::new(Recursion::FilesAndFolders)
+            .with_mode(ModeChange::Bits { on: 0o44, off: 0 });
+        let request = JobRequest::new(JobId::new(5), JobKind::SetAttributes, Vec::new())
+            .changing(edit.clone());
+        assert_eq!(request.recursion(), Recursion::FilesAndFolders);
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(
+            json.contains(r#""attributes":{"recursion":"files_and_folders""#),
+            "{json}"
+        );
+        let read: JobRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(read, request);
+        assert_eq!(read.attributes.as_deref(), Some(&edit));
+        let link = JobRequest::new(JobId::new(6), JobKind::Link, Vec::new())
+            .linking(LinkEdit::new(LinkKind::Hard, LinkForm::Absolute));
+        let read: JobRequest =
+            serde_json::from_str(&serde_json::to_string(&link).unwrap()).unwrap();
+        assert_eq!(read.link_edit().kind, LinkKind::Hard);
+        let old = r#"{"id":3,"kind":"link","sources":[],"destination":null,"new_name":null,"conflicts":"ask"}"#;
+        let old: JobRequest = serde_json::from_str(old).unwrap();
+        assert_eq!(old.attributes, None);
+        assert_eq!(old.link_edit(), LinkEdit::default());
+        assert_eq!(old.recursion(), Recursion::ThisItem);
+        let written = serde_json::to_string(&old).unwrap();
+        assert!(!written.contains(r#""link":"#), "{written}");
+        assert!(!written.contains(r#""attributes":"#), "{written}");
     }
 
     /// The position of a kind in [`JobKind::ALL`]. The match has no

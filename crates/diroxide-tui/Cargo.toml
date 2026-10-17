@@ -17,6 +17,9 @@ ratatui.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+# The viewer's tests draw highlighted code, so they turn on the syntax set
+# the app leaves off by default (P2b).
+diroxide-app = { workspace = true, features = ["syntax-set"] }
 tempfile.workspace = true
 
 [lints]

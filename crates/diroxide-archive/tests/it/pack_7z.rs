@@ -101,6 +101,45 @@ fn a_folder_packs_to_a_solid_7z() {
     assert!(!world.fake.exists(&plan.temp));
 }
 
+/// W2b's request 1 (P2b): a committing writer that seeks takes the 7z
+/// straight, its start header written last over the front of the file,
+/// with no body held in memory or in a body file; a writer that cannot
+/// seek still gets the same archive by the old way.
+#[test]
+fn a_writer_that_seeks_takes_the_7z_straight() {
+    let mut archives = Vec::new();
+    for seekable in [true, false] {
+        let world = World::plain();
+        world.fake.switches_mut().seekable_writes = seekable;
+        let docs = sources(&world);
+        let destination = out(&world).join("docs.7z").unwrap();
+        let request = PackRequest::new(vec![docs], destination.clone(), ArchiveFormat::SevenZ);
+        let plan = plan_of(&world, &request);
+        let outcome = run_plan(&world, &plan, &Sink::skipping());
+        assert!(outcome.report.failed.is_empty(), "{:?}", outcome.lines);
+        assert_eq!(
+            world.fake.seeks() > 0,
+            seekable,
+            "seeks: {}",
+            world.fake.seeks()
+        );
+        let bytes = world.fake.contents(&destination).unwrap();
+        let (blocks, solid, files) = read_7z(&bytes, "");
+        assert_eq!((blocks, solid, files.len()), (1, true, 4));
+        assert!(world.fake.unfinished().is_empty());
+        assert!(
+            !world
+                .fake
+                .snapshot()
+                .keys()
+                .any(|place| place.contains("-body")),
+            "no body file is left"
+        );
+        archives.push(files);
+    }
+    assert_eq!(archives[0], archives[1], "the same archive either way");
+}
+
 #[test]
 fn the_block_limit_and_the_non_solid_option() {
     let world = World::plain();

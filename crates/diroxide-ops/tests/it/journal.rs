@@ -232,8 +232,11 @@ fn a_permissions_change_journals_its_inverses() {
     let engine = engine(&fake).with_journal(journal.clone());
     let edit =
         AttributeEdit::new(Recursion::ThisItem).with_mode(ModeChange::Bits { on: 0o044, off: 0 });
-    let request = JobRequest::new(JobId::new(40), JobKind::SetAttributes, vec![p("/a/x.txt")]);
-    let plan = engine.plan_attributes(&request, &edit).unwrap();
+    let request =
+        JobRequest::new(JobId::new(40), JobKind::SetAttributes, vec![p("/a/x.txt")]).changing(edit);
+    // The edit travels in the request (P2b), so the plain plan reads it.
+    let plan = engine.plan(&request).unwrap();
+    assert_eq!(plan, engine.plan_attributes(&request).unwrap());
     let report = engine.run(&plan, &JobControl::new(), &Answers::default());
     assert_eq!(report.undo.attributes.len(), 1);
     let records = journal.records();

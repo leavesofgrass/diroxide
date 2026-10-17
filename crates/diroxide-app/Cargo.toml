@@ -26,7 +26,16 @@ thiserror.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
+# The app's own tests read code through the highlighter.
+diroxide-preview = { workspace = true, features = ["syntax-set"] }
 tempfile.workspace = true
+
+[features]
+# The viewer's syntax set (W2d's request 2, P2b): the preview crate's
+# syntect grammars, forwarded from `diro`'s default through the CLI. Off
+# here, so the CLI's dependency on the app can leave it out; without it the
+# viewer says "Highlighting off: not in this build".
+syntax-set = ["diroxide-preview/syntax-set"]
 
 [lints]
 workspace = true

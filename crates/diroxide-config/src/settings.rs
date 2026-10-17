@@ -12,6 +12,7 @@
 //! through `toml_edit`, so the owner's comments and order survive.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use diroxide_core::{SortKey, SortSpec};
 use serde::{Deserialize, Serialize};
@@ -272,7 +273,15 @@ pub const GIB: u64 = 1 << 30;
 /// [`ArchiveSettings::mib`] and [`ArchiveSettings::gib`].
 /// "Ask" limits are questions asked once per job; the others refuse with
 /// the reason in words.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Beside the seventeen limits sit two settings of the provider itself
+/// (W2a's request 3, P2b), which the app passes to its builder rather than
+/// to `Limits`: [`ArchiveSettings::ask_read_ahead_mib`] for
+/// `with_cost_question`, through [`ArchiveSettings::read_ahead_ask_bytes`],
+/// and [`ArchiveSettings::spool_folder`] for `with_spool_dir`, through
+/// [`ArchiveSettings::spool_dir`]. Since the folder is text the table is
+/// `Clone` but no longer `Copy`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ArchiveSettings {
     /// Ask before one member larger than this, in GiB.
@@ -309,6 +318,15 @@ pub struct ArchiveSettings {
     pub spool_disk_gib: u64,
     /// How many archives deep a place may go.
     pub max_nesting: u64,
+    /// Ask before one member of a tar.gz, a tar.xz or a solid 7z is read
+    /// on its own when more than this must be read first, in MiB: the
+    /// provider's read-ahead question ("Read 3.2 GB first to open
+    /// note.txt? y or n").
+    pub ask_read_ahead_mib: u64,
+    /// The folder inner archives too large for memory are spooled into, as
+    /// a full path; empty, the default, means the state folder's `spool`
+    /// ([`Paths::spool_dir`]), never the system's temporary folder.
+    pub spool_folder: String,
 }
 
 impl Default for ArchiveSettings {
@@ -331,6 +349,8 @@ impl Default for ArchiveSettings {
             spool_memory_mib: 64,
             spool_disk_gib: 4,
             max_nesting: 4,
+            ask_read_ahead_mib: 256,
+            spool_folder: String::new(),
         }
     }
 }
@@ -344,6 +364,25 @@ impl ArchiveSettings {
     /// A count of GiB in bytes, saturating.
     pub const fn gib(units: u64) -> u64 {
         units.saturating_mul(GIB)
+    }
+
+    /// The read-ahead question's threshold in bytes, for the archive
+    /// provider's `with_cost_question`: 256 MiB by default.
+    pub const fn read_ahead_ask_bytes(&self) -> u64 {
+        Self::mib(self.ask_read_ahead_mib)
+    }
+
+    /// The spool folder for the archive provider's `with_spool_dir`: the
+    /// folder written in `spool_folder` when it is a full path, else the
+    /// state folder's `spool` (an empty or relative value reads as the
+    /// default, so a typo never spools into the working folder).
+    pub fn spool_dir(&self, paths: &Paths) -> PathBuf {
+        let written = Path::new(self.spool_folder.trim());
+        if !self.spool_folder.trim().is_empty() && written.is_absolute() {
+            written.to_path_buf()
+        } else {
+            paths.spool_dir()
+        }
     }
 }
 
@@ -999,6 +1038,37 @@ mod tests {
         assert_eq!(archives.max_entries, 1_000_000);
         assert_eq!(archives.max_nesting, 4);
         assert_eq!(ArchiveSettings::gib(u64::MAX), u64::MAX, "saturates");
+        // The provider's own two settings (P2b): the read-ahead question at
+        // 256 MiB, and the spool in the state folder unless a full path is
+        // written.
+        assert_eq!(archives.read_ahead_ask_bytes(), 256 << 20);
+        let paths = Paths::new(PathBuf::from("config-here"), PathBuf::from("state-here"));
+        assert_eq!(
+            archives.spool_dir(&paths),
+            PathBuf::from("state-here").join("spool")
+        );
+        assert_eq!(archives.spool_dir(&paths), paths.spool_dir());
+        let full = if cfg!(windows) {
+            r"D:\spool-here"
+        } else {
+            "/spool-here"
+        };
+        let written = Settings::read(&format!(
+            "[archives]\nask_read_ahead_mib = 64\nspool_folder = '{full}'\n"
+        ))
+        .unwrap();
+        assert_eq!(written.problems, Vec::new());
+        assert_eq!(written.value.archives.read_ahead_ask_bytes(), 64 << 20);
+        assert_eq!(
+            written.value.archives.spool_dir(&paths),
+            PathBuf::from(full)
+        );
+        let relative = Settings::read("[archives]\nspool_folder = 'spool-here'\n").unwrap();
+        assert_eq!(
+            relative.value.archives.spool_dir(&paths),
+            paths.spool_dir(),
+            "a relative folder reads as the default"
+        );
         let loaded = Settings::read(
             "[archives]\nmax_entries = 500000\nmax_size = 3\n[viewer]\nwrap = false\n",
         )

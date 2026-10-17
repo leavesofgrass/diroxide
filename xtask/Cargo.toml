@@ -10,6 +10,9 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 diroxide-app.workspace = true
+# The bench's archive scenarios and the demo's locked.zip go through the
+# archive provider and its runners (P2b, W2g's request 1).
+diroxide-archive.workspace = true
 diroxide-core.workspace = true
 diroxide-ops.workspace = true
 diroxide-vfs.workspace = true
@@ -18,8 +21,8 @@ serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 toml.workspace = true
-# cargo xtask demo writes locked.zip with AES-256 directly, since diro
-# takes a password only from its terminal.
+# cargo xtask demo reads locked.zip back with its password through the
+# zip crate, a reader of its own beside diroxide's.
 zip.workspace = true
 
 [lints]

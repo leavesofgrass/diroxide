@@ -280,7 +280,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 77] = [
+pub const SCHEMA: [SettingInfo; 79] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -1010,6 +1010,30 @@ pub const SCHEMA: [SettingInfo; 77] = [
         },
         default: "4",
         help: "How many archives deep a place may go, such as a zip inside a zip. A level past this is refused in words.",
+        arrives: Some("alpha.2"),
+    },
+    // The archive provider's own settings beside the limits (P2b, W2a's
+    // request 3): the app passes them to the provider's builder.
+    SettingInfo {
+        key: "archives.ask_read_ahead_mib",
+        name: "Ask before reading ahead",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1_048_576,
+            unit: "MiB",
+        },
+        default: "256",
+        help: "Asks before one member of a tar.gz, a tar.xz or a solid 7z is read on its own when more than this must be read first, since those archives are read from the start.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.spool_folder",
+        name: "Spool folder",
+        group: G::Archives,
+        kind: K::Text,
+        default: "\"\"",
+        help: "Where an archive inside an archive is kept while it is open, when it is too large for memory: a full path. Empty uses the spool folder in the state folder, never the system's temporary folder.",
         arrives: Some("alpha.2"),
     },
     // Split and join (alpha.2, W2c; plan section 5.4, research/alpha2-plan.md

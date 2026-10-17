@@ -44,7 +44,9 @@ fn one_file_says_the_new_permissions_in_words_with_the_octal_second() {
     let edit =
         AttributeEdit::new(Recursion::ThisItem).with_mode(ModeChange::Bits { on: 0o044, off: 0 });
     let plan = engine
-        .plan_attributes(&request(JobKind::SetAttributes, &["/a/report.pdf"]), &edit)
+        .plan_attributes(
+            &request(JobKind::SetAttributes, &["/a/report.pdf"]).changing(edit.clone()),
+        )
         .unwrap();
     assert_eq!(
         rows(&plan),
@@ -60,7 +62,9 @@ fn one_file_says_the_new_permissions_in_words_with_the_octal_second() {
     assert_eq!(unix(&fake, "/a/report.pdf"), 0o644);
     // A second run of the same edit has nothing to do.
     let again = engine
-        .plan_attributes(&request(JobKind::SetAttributes, &["/a/report.pdf"]), &edit)
+        .plan_attributes(
+            &request(JobKind::SetAttributes, &["/a/report.pdf"]).changing(edit.clone()),
+        )
         .unwrap();
     assert!(again.steps.is_empty());
     assert_eq!(
@@ -92,7 +96,7 @@ fn a_change_inside_folders_lists_the_recursion_first_and_groups_the_changes() {
     let edit = AttributeEdit::new(Recursion::FilesAndFolders)
         .with_mode(ModeChange::Bits { on: 0o040, off: 0 });
     let plan = engine
-        .plan_attributes(&request(JobKind::SetAttributes, &["/p"]), &edit)
+        .plan_attributes(&request(JobKind::SetAttributes, &["/p"]).changing(edit.clone()))
         .unwrap();
     assert_eq!(
         rows(&plan),
@@ -132,7 +136,7 @@ fn a_folder_that_loses_its_owners_enter_is_changed_after_its_contents() {
         folders: 0o200,
     });
     let plan = engine(&fake)
-        .plan_attributes(&request(JobKind::SetAttributes, &["/q"]), &edit)
+        .plan_attributes(&request(JobKind::SetAttributes, &["/q"]).changing(edit.clone()))
         .unwrap();
     let order: Vec<_> = plan.steps.iter().map(|s| s.subject().clone()).collect();
     assert_eq!(order, vec![p("/q/inner.txt"), p("/q")]);
@@ -155,7 +159,7 @@ fn an_entry_changed_after_the_plan_is_skipped_never_overwritten() {
     let edit =
         AttributeEdit::new(Recursion::ThisItem).with_mode(ModeChange::Bits { on: 0o040, off: 0 });
     let plan = engine
-        .plan_attributes(&request(JobKind::SetAttributes, &["/a/x"]), &edit)
+        .plan_attributes(&request(JobKind::SetAttributes, &["/a/x"]).changing(edit.clone()))
         .unwrap();
     set(&fake, "/a/x", 0o666);
     let report = engine.run(&plan, &JobControl::new(), &Script::default());
@@ -172,11 +176,13 @@ fn links_are_never_changed_and_dangers_ask_first() {
     let edit =
         AttributeEdit::new(Recursion::ThisItem).with_mode(ModeChange::Bits { on: 0o002, off: 0 });
     assert_eq!(
-        engine.plan_attributes(&request(JobKind::SetAttributes, &["/p/latest"]), &edit),
+        engine.plan_attributes(
+            &request(JobKind::SetAttributes, &["/p/latest"]).changing(edit.clone())
+        ),
         Err(OpsError::LinkSelected("latest".into()))
     );
     let open = engine
-        .plan_attributes(&request(JobKind::SetAttributes, &["/p/a.txt"]), &edit)
+        .plan_attributes(&request(JobKind::SetAttributes, &["/p/a.txt"]).changing(edit.clone()))
         .unwrap();
     assert_eq!(
         open.facts.questions[0].lines()[0],
@@ -184,9 +190,10 @@ fn links_are_never_changed_and_dangers_ask_first() {
     );
     let inside = engine
         .plan_attributes(
-            &request(JobKind::SetAttributes, &["/p"]),
-            &AttributeEdit::new(Recursion::FilesAndFolders)
-                .with_mode(ModeChange::Bits { on: 0o004, off: 0 }),
+            &request(JobKind::SetAttributes, &["/p"]).changing(
+                AttributeEdit::new(Recursion::FilesAndFolders)
+                    .with_mode(ModeChange::Bits { on: 0o004, off: 0 }),
+            ),
         )
         .unwrap();
     assert!(
@@ -200,9 +207,10 @@ fn links_are_never_changed_and_dangers_ask_first() {
     );
     let setuid = engine
         .plan_attributes(
-            &request(JobKind::SetAttributes, &["/p/a.txt"]),
-            &AttributeEdit::new(Recursion::ThisItem)
-                .with_mode(ModeChange::Bits { on: 0o4000, off: 0 }),
+            &request(JobKind::SetAttributes, &["/p/a.txt"]).changing(
+                AttributeEdit::new(Recursion::ThisItem)
+                    .with_mode(ModeChange::Bits { on: 0o4000, off: 0 }),
+            ),
         )
         .unwrap();
     assert!(matches!(
@@ -230,7 +238,7 @@ fn times_are_set_for_a_folder_after_its_contents_and_undone() {
         .with_modified(t(3600))
         .at_offset(UtcOffset::UTC);
     let plan = engine
-        .plan_attributes(&request(JobKind::SetTimes, &["/t"]), &edit)
+        .plan_attributes(&request(JobKind::SetTimes, &["/t"]).changing(edit.clone()))
         .unwrap();
     assert_eq!(plan.kind, JobKind::SetTimes);
     assert_eq!(plan.summary(), "Change the times of 4 items");
@@ -257,10 +265,11 @@ fn times_are_set_for_a_folder_after_its_contents_and_undone() {
     fake.switches_mut().no_created_time = true;
     let created = engine
         .plan_attributes(
-            &request(JobKind::SetTimes, &["/t/one.txt"]),
-            &AttributeEdit::new(Recursion::ThisItem)
-                .with_created(t(7))
-                .with_modified(t(9)),
+            &request(JobKind::SetTimes, &["/t/one.txt"]).changing(
+                AttributeEdit::new(Recursion::ThisItem)
+                    .with_created(t(7))
+                    .with_modified(t(9)),
+            ),
         )
         .unwrap();
     assert!(
@@ -283,7 +292,9 @@ fn windows_attributes_change_in_words() {
         off: 0,
     });
     let plan = engine
-        .plan_attributes(&request(JobKind::SetAttributes, &["/w/report.pdf"]), &edit)
+        .plan_attributes(
+            &request(JobKind::SetAttributes, &["/w/report.pdf"]).changing(edit.clone()),
+        )
         .unwrap();
     assert_eq!(rows(&plan)[1], "Turns on hidden");
     engine.run(&plan, &JobControl::new(), &Script::default());

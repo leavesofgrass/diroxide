@@ -12,7 +12,11 @@ name = "diro"
 path = "src/main.rs"
 
 [features]
-default = ["fetch"]
+default = ["fetch", "syntax-set"]
+# The viewer's syntax set: syntect with bat's grammars, about 3 MB of the
+# binary (W2d's request 2, P2b). `--no-default-features` leaves it out with
+# the downloader's client; add `--features fetch` to keep that one.
+syntax-set = ["diroxide-cli/syntax-set"]
 # The optional-components downloader's HTTP client (plan section 5.14):
 # ureq with rustls, whose ring provider compiles C. The owner's one
 # exception to the pure-Rust rule (answer 40). Declared now; nothing uses

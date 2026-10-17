@@ -50,6 +50,11 @@ pub enum PlaceError {
     /// which would read back as a nested archive.
     #[error("\"{0}\" contains an archive marker")]
     ArchiveMarker(String),
+    /// A local or remote name with a `!` after an archive extension
+    /// (`a.zip!b.txt`), which a place's text would read back as a member
+    /// of an archive, so no place can hold it (W2b's finding).
+    #[error("\"{0}\" reads as a place inside an archive")]
+    ReadsAsArchive(String),
 }
 
 impl Explain for PlaceError {
@@ -73,6 +78,7 @@ impl Explain for PlaceError {
             PlaceError::ArchiveMarker(_) => {
                 "Unpack the archive to reach this member by its name.".to_owned()
             }
+            PlaceError::ReadsAsArchive(_) => "Rename it with another program first.".to_owned(),
         }
     }
 }

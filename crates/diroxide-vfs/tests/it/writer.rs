@@ -66,6 +66,36 @@ fn the_writer_says_its_unfinished_place() {
     assert_eq!(everything_in(&folder), ["report.txt"]);
 }
 
+/// W2b's request 1 (P2b): the local writer seeks in its unfinished file,
+/// so a header written last lands in front, and nothing reaches the
+/// target before the commit.
+#[test]
+fn the_local_writer_seeks_in_its_unfinished_file() {
+    use std::io::SeekFrom;
+    let folder = scratch();
+    let provider = LocalProvider::new();
+    let target = child(&folder, "archive.7z");
+    let mut writer = provider
+        .write(&target, WriteMode::CreateNew, &OpContext::new())
+        .unwrap();
+    assert_eq!(writer.seek_to(SeekFrom::Start(4)), Ok(4));
+    writer.write_all(b"BODY").unwrap();
+    assert_eq!(writer.seek_to(SeekFrom::Current(0)), Ok(8));
+    assert_eq!(writer.seek_to(SeekFrom::Start(0)), Ok(0));
+    writer.write_all(b"HEAD").unwrap();
+    assert_eq!(writer.seek_to(SeekFrom::End(0)), Ok(8));
+    assert!(
+        !folder.path().join("archive.7z").exists(),
+        "not before the commit"
+    );
+    writer.commit(false).unwrap();
+    assert_eq!(
+        fs::read(folder.path().join("archive.7z")).unwrap(),
+        b"HEADBODY"
+    );
+    assert_eq!(everything_in(&folder), ["archive.7z"]);
+}
+
 #[test]
 fn a_new_file_never_replaces_one_that_appeared_meanwhile() {
     let folder = scratch();

@@ -3,11 +3,15 @@
 
 use std::cmp::Ordering;
 
+use diroxide_core::access::{
+    AttributeEdit, LinkEdit, LinkForm, LinkKind, ModeChange, Recursion, WindowsChange,
+};
 use diroxide_core::names::{display_name, split_extension, split_part};
 use diroxide_core::place::PathStyle;
 use diroxide_core::sort::{compare, compare_names, sort_entries};
 use diroxide_core::{
-    Entry, EntryKind, FolderOrder, NameCase, Pattern, Place, SortDirection, SortKey, SortSpec,
+    Command, CommandId, Entry, EntryKind, FolderOrder, NameCase, Pattern, Place, SortDirection,
+    SortKey, SortSpec, Timestamp, UtcOffset,
 };
 use proptest::prelude::*;
 
@@ -124,7 +128,7 @@ proptest! {
         stem in "[a-z][a-z0-9_-]{0,7}",
         extension in prop::sample::select(vec![
             ".zip", ".7z", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".xz",
-            ".ZIP", ".7Z", ".Tar.Gz", ".docx",
+            ".ZIP", ".7Z", ".Tar.Gz", ".docx", ".gz", ".GZ",
         ]),
         number in 0u32..100_000,
         width in 3usize..6,
@@ -176,6 +180,83 @@ proptest! {
             if let Ok(place) = Place::parse_with(&text, style) {
                 let again = Place::parse_with(&place.to_string(), style);
                 prop_assert_eq!(again.as_ref(), Ok(&place));
+            }
+        }
+    }
+
+    /// W2c's request 3 (P2b): any attribute or link edit written into a
+    /// command's text form reads back as the same edit.
+    #[test]
+    fn edits_round_trip_through_the_command_text_form(
+        recursion in 0usize..4,
+        bits in proptest::option::of((0u32..0o10000, 0u32..0o10000)),
+        exact in proptest::option::of((0u32..0o10000, 0u32..0o10000)),
+        windows in proptest::option::of((any::<u32>(), any::<u32>())),
+        modified in proptest::option::of((-4_000_000_000i64..8_000_000_000, 0u32..1_000_000_000)),
+        offset in -86_399i32..86_400,
+        kind in 0usize..3,
+        relative in any::<bool>(),
+        retarget in any::<bool>(),
+    ) {
+        let mut edit = AttributeEdit::new(Recursion::ALL[recursion]);
+        if let Some((on, off)) = bits {
+            edit = edit.with_mode(ModeChange::Bits { on, off });
+        } else if let Some((files, folders)) = exact {
+            edit = edit.with_mode(ModeChange::Exact { files, folders });
+        }
+        if let Some((on, off)) = windows {
+            edit = edit.with_windows(WindowsChange { on, off });
+        }
+        if let Some((secs, nanos)) = modified {
+            edit = edit.with_modified(Timestamp::from_unix(secs, nanos));
+        }
+        edit = edit.at_offset(UtcOffset::from_seconds(offset));
+        let link = LinkEdit {
+            kind: [LinkKind::Symbolic, LinkKind::Junction, LinkKind::Hard][kind],
+            form: if relative { LinkForm::Relative } else { LinkForm::Absolute },
+            retarget,
+        };
+        let command = link.add_to(edit.add_to(Command::new(CommandId::from_static("file.permissions"))));
+        let text = command.to_string();
+        let read = Command::parse_text(&text).unwrap();
+        prop_assert_eq!(AttributeEdit::from_command(&read), Ok(Some(edit)), "{}", text);
+        prop_assert_eq!(LinkEdit::from_command(&read), Ok(Some(link)), "{}", text);
+    }
+
+    /// W2b's fuzzing finding, held for every name: a name joined into a
+    /// local, archive or remote folder reads back from the place's text as
+    /// the same place, or the join refuses it. Names come from an
+    /// alphabet heavy in archive extensions, markers and dots.
+    #[test]
+    fn joined_names_read_back_as_themselves(
+        parts in prop::collection::vec(
+            prop::sample::select(vec![
+                "a", "b", ".", "!", ".zip", ".zip!", ".xz", ".gz", ".7z", ".001", "wow", " ",
+                ".docx", "!x", ".tar",
+            ]),
+            1..7,
+        ),
+    ) {
+        let name = parts.concat();
+        let folders = [
+            ("/fuzz", PathStyle::Unix),
+            ("D:\\fuzz", PathStyle::Windows),
+            ("/fuzz/a.zip!week1", PathStyle::Unix),
+            ("D:\\fuzz\\a.7z!", PathStyle::Windows),
+            ("sftp://host/srv", PathStyle::Unix),
+        ];
+        for (folder, style) in folders {
+            let folder = Place::parse_with(folder, style).unwrap();
+            if let Ok(place) = folder.join(&name) {
+                let again = Place::parse_with(&place.to_string(), style);
+                prop_assert_eq!(again.as_ref(), Ok(&place), "{} in {}", name, folder);
+                prop_assert_eq!(place.name(), Some(name.as_str()));
+            } else {
+                prop_assert!(
+                    diroxide_core::place::holds_archive_marker(&name)
+                        || matches!(name.as_str(), "." | ".."),
+                    "{} refused in {}", name, folder
+                );
             }
         }
     }

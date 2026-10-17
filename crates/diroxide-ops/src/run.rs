@@ -546,13 +546,14 @@ impl<'a> Run<'a> {
     }
 
     /// The lengths of the undo record, before a step.
-    fn mark(&self) -> (usize, usize, usize, usize) {
+    fn mark(&self) -> (usize, usize, usize, usize, usize) {
         let undo = &self.report.undo;
         (
             undo.moves.len(),
             undo.trashed.len(),
             undo.created.len(),
             undo.attributes.len(),
+            undo.relinked.len(),
         )
     }
 
@@ -561,7 +562,7 @@ impl<'a> Run<'a> {
         index: usize,
         subject: &Place,
         outcome: &Outcome,
-        before: (usize, usize, usize, usize),
+        before: (usize, usize, usize, usize, usize),
     ) {
         let word = match outcome {
             Outcome::Done => {
@@ -586,6 +587,7 @@ impl<'a> Run<'a> {
                 trashed: tail(&undo.trashed, before.1),
                 created: tail(&undo.created, before.2),
                 attributes: undo.attributes.get(before.3..).unwrap_or_default().to_vec(),
+                relinked: undo.relinked.get(before.4..).unwrap_or_default().to_vec(),
                 ..UndoRecord::default()
             };
             let _ = journal.step(index as u64, word, &delta);

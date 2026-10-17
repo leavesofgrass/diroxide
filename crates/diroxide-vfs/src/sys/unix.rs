@@ -134,6 +134,14 @@ fn rename_without_the_flag(from: &Path, to: &Path, errno: rustix::io::Errno) -> 
     std::fs::rename(from, to)
 }
 
+/// Renames over a file or link the target holds: `rename(2)`, which
+/// replaces in one step on one volume, so the target name is never empty,
+/// and fails across volumes (`CrossesDevices`). The provider refuses a
+/// folder target before the call.
+pub(crate) fn rename_replacing(from: &Path, to: &Path) -> io::Result<()> {
+    std::fs::rename(from, to)
+}
+
 /// Whether metadata read without following describes a folder (a link to
 /// a folder is a link, removed as a file).
 pub(crate) fn is_folder_like(metadata: &Metadata) -> bool {

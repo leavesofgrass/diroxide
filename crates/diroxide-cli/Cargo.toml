@@ -35,5 +35,10 @@ diroxide-theme.workspace = true
 ratatui.workspace = true
 tempfile.workspace = true
 
+[features]
+# The viewer's syntax set, forwarded to the app (W2d's request 2, P2b);
+# `diro` turns it on by default.
+syntax-set = ["diroxide-app/syntax-set"]
+
 [lints]
 workspace = true

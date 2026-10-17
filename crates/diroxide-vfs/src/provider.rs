@@ -1,7 +1,7 @@
 //! The provider trait: everything a kind of place can do.
 
 use std::fmt;
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::ops::ControlFlow;
 
 use diroxide_core::{Attributes, Entry, Place, Timestamp};
@@ -86,18 +86,9 @@ pub enum CopyHint {
     ServerSide,
 }
 
-/// What kind of link to make.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum LinkKind {
-    /// A symbolic link, absolute or relative as its target is written. On
-    /// Windows it may need Developer Mode, which the error says in words.
-    Symbolic,
-    /// A Windows directory junction: needs no privilege, folders only, an
-    /// absolute target.
-    Junction,
-    /// A hard link: a second name for the same file, on one volume.
-    Hard,
-}
+// What kind of link to make: moved into core with P2b (W2c's request 3),
+// so a job request carries it; re-exported under its old path.
+pub use diroxide_core::access::LinkKind;
 
 /// A link to make: its kind, and its target as it will be stored.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -201,6 +192,19 @@ pub trait FileWriter: Write + Send {
     fn unfinished_place(&self) -> Option<Place> {
         None
     }
+
+    /// Moves where the next bytes go in the unfinished file and returns
+    /// the new position from its start, so a format that writes its header
+    /// last (7z) can be written straight into the committing writer (W2b's
+    /// request 1, P2b). Nothing reaches the target before the commit
+    /// either way. The default says this writer cannot seek; a caller then
+    /// writes in order, through a spool of its own.
+    fn seek_to(&mut self, to: SeekFrom) -> Result<u64, VfsError> {
+        let _ = to;
+        Err(VfsError::UnsupportedFeature {
+            what: "seeking in an unfinished file".to_owned(),
+        })
+    }
 }
 
 /// A listing delivered in batches, for providers whose folders are slow or
@@ -289,6 +293,22 @@ pub trait Provider: Send + Sync + fmt::Debug {
     /// case or form. Across volumes it fails with `CrossesDevices`, and
     /// the engine copies, verifies, then removes.
     fn rename(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError>;
+
+    /// Renames one file or link within this provider over whatever file or
+    /// link `to` holds, in one step, so the name always answers with the
+    /// old entry or the new one and is never empty (W2c's request 2: a
+    /// link's target changed atomically). A folder at `to` is never
+    /// replaced (`AlreadyExists`); across volumes it fails with
+    /// `CrossesDevices`; on any failure both names are as they were. The
+    /// default is unsupported; [`Capabilities::replace_rename`] says
+    /// where it works. Plain [`Provider::rename`] still never replaces.
+    fn rename_replacing(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+        let _ = (from, to, ctx);
+        Err(VfsError::unsupported(
+            self.scheme(),
+            "rename over another entry",
+        ))
+    }
 
     /// Removes one file, link or empty folder for good. A link is removed,
     /// never what it points to. The job engine lists everything first and
@@ -414,9 +434,41 @@ mod tests {
         let boxed: Box<dyn ReadSeek> = Box::new(Cursor::new(vec![1u8, 2, 3]));
         let mut boxed = boxed;
         let mut byte = [0u8; 1];
-        boxed.seek(std::io::SeekFrom::End(-1)).unwrap();
+        boxed.seek(SeekFrom::End(-1)).unwrap();
         boxed.read_exact(&mut byte).unwrap();
         assert_eq!(byte, [3]);
+    }
+
+    /// A writer with only the required methods, for the defaults.
+    struct InOrder(Vec<u8>);
+
+    impl Write for InOrder {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl FileWriter for InOrder {
+        fn commit(self: Box<Self>, _durable: bool) -> Result<(), VfsError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_writer_seeks_only_when_it_says_it_can() {
+        let mut writer: Box<dyn FileWriter> = Box::new(InOrder(Vec::new()));
+        assert!(matches!(
+            writer.seek_to(SeekFrom::Start(0)),
+            Err(VfsError::UnsupportedFeature { .. })
+        ));
+        assert!(writer.unfinished_place().is_none());
+        writer.write_all(b"in order").unwrap();
+        writer.commit(false).unwrap();
     }
 
     #[test]
@@ -490,6 +542,11 @@ mod tests {
             provider.restore(&place, &ctx),
             Err(VfsError::Unsupported { .. })
         ));
+        assert!(matches!(
+            provider.rename_replacing(&place, &place, &ctx),
+            Err(VfsError::Unsupported { .. })
+        ));
+        assert!(!provider.capabilities(&place).replace_rename);
         assert!(matches!(
             provider.trash(&place, &ctx),
             Err(VfsError::Unsupported { .. })

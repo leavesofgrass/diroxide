@@ -34,11 +34,11 @@ Each line of the output starts with the scenario and its median, then the budget
 - `copy`: copy a 1 GB file through the job engine, planned and run, with the default options. The second line gives the rate.
 - `copy-system`: copy the same file with the system's own copy call, for reference. The gap between the two is the engine's cost.
 - `slow-place`: copy 40 files from the slow place on the fake provider: every call waits 2 ms and one call, 80 calls into the run, stalls for 400 ms. The second line says in how many runs the job said it had stalled; it should be every run.
-- `archive-zip`, `archive-tar` and `archive-7z`: list a zip, a tar and a 7z of 100,000 empty members with `diro archive list -0`, timed from the process's start to its last path, so the time is what a user waits for at a shell: starting `diro`, opening the archive, building its index and writing every path. The archives are packed first with `diro archive pack`, outside the timing.
-- `unpack`: unpack a zip holding one 200 MB file with `diro archive unpack`, into a new folder each run. The second line gives the rate.
+- `archive-zip`, `archive-tar` and `archive-7z`: list a zip, a tar and a 7z of 100,000 empty members through the archive provider, timed from the open to the last entry: opening the archive, building its index and listing every member. Each run opens a new provider, so no run reads another's cached index. The archives are packed first by diroxide's own pack runner, outside the timing.
+- `unpack`: unpack a zip holding one 200 MB file through the unpack runner, planned and run, into a new folder each run. The second line gives the rate.
 - `viewer`: open a 256 MB text log in the viewer and draw its first screen of 24 rows, in screen-reader mode, through the app's viewer itself.
 
-The archive scenarios run the `diro` binary, which the bench builds first with its own profile (`cargo build --release -p diro` for an optimized bench), because xtask may not depend on the archive crate yet; once it may, they can call the provider and the runners directly.
+The archive scenarios call the archive provider and its runners directly, since xtask may depend on the archive crate (P2b, W2g's request 1); before that they ran the `diro` binary, so the first figures below include starting `diro` and writing every path, and the next baseline is the one to compare with.
 
 The sizes and budgets are in `bench/params.toml`; `--quick` uses its small sizes. The new scenarios have no budgets yet: they report, and the ratchet compares them with the baseline once one is saved.
 
@@ -100,7 +100,7 @@ The demo set of the alpha.2 check goes in a new or empty folder on drive D: with
 cargo xtask demo D:/demo
 ```
 
-It writes `course.zip`, `backup.7z` (solid), `logs.tar.xz`, `locked.zip` (AES-256, with a password made up as it runs and said once on its output), `hostile.zip` (one name in it would leave the archive; it is built in memory), `big.bin` (60 MB), `main.rs`, `report.md`, `notes.org`, `big.log` and an empty `out` folder, then lists each with its size and reads every archive back with `diro archive test` and with the unzip, xz, tar and 7z programs it finds on PATH.
+It writes `course.zip`, `backup.7z` (solid), `logs.tar.xz`, `locked.zip` (AES-256, written by diroxide's own pack runner with a password made up as it runs and said once on its output), `hostile.zip` (one name in it would leave the archive; it is built in memory), `big.bin` (60 MB), `main.rs`, `report.md`, `notes.org`, `big.log` and an empty `out` folder, then lists each with its size and reads every archive back with `diro archive test` and with the unzip, xz, tar and 7z programs it finds on PATH.
 
 ## See also
 

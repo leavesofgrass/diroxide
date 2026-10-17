@@ -11,7 +11,7 @@
 //! Progress counts the bytes read from the sources, in the engine's
 //! words: "Packing 30 percent, 2 minutes left".
 
-use std::io::{self, Read, Write};
+use std::io::{self, Read, SeekFrom, Write};
 use std::sync::Mutex;
 
 use diroxide_core::{Entry, EntryKind, JobKind, JobState, Place, Secret, Timestamp};
@@ -285,12 +285,13 @@ fn write_temp(
 /// beside the destination.
 const BODY_IN_MEMORY: usize = 64 << 20;
 
-/// A 7z's body on its way: in memory while it is small, then in a body
-/// file beside the destination through the committing writer. The 7z
-/// writer must put its start header in front once it knows it, which a
-/// committing writer cannot seek back to; the body is copied behind the
-/// header into the temporary archive when it is whole. (A seek on the
-/// committing writer, a contract change request, would save the copy.)
+/// A 7z's body on its way, for a committing writer that cannot seek: in
+/// memory while it is small, then in a body file beside the destination.
+/// The 7z writer must put its start header in front once it knows it,
+/// which such a writer cannot seek back to; the body is copied behind the
+/// header into the temporary archive when it is whole. A writer that
+/// seeks (`FileWriter::seek_to`, the local one) takes the 7z straight,
+/// with no body file and no copy (P2b, W2b's request 1).
 enum Spill<'p> {
     Memory {
         bytes: Vec<u8>,
@@ -386,8 +387,9 @@ impl Spill<'_> {
     }
 }
 
-/// Writes a 7z under its temporary name: the body through [`Spill`],
-/// then the start header and the body into the temporary archive.
+/// Writes a 7z under its temporary name: straight into the committing
+/// writer when it seeks, else the body through [`Spill`], then the start
+/// header and the body into the temporary archive.
 #[allow(clippy::too_many_arguments)]
 fn write_temp_7z(
     provider: &dyn Provider,
@@ -399,6 +401,20 @@ fn write_temp_7z(
     records: &Records,
     ctx: &OpContext,
 ) -> Result<(), PackFailure> {
+    let mut out = provider
+        .write(temp, WriteMode::CreateNew, ctx)
+        .map_err(PackFailure::Write)?;
+    if out.seek_to(SeekFrom::Current(0)).is_ok() {
+        let crate::write_7z::Seeking(out) = crate::write_7z::write_7z(
+            crate::write_7z::Seeking(out),
+            &plan.write_items,
+            contents,
+            settings,
+            watch,
+            records,
+        )?;
+        return out.commit(true).map_err(PackFailure::Write);
+    }
     let folder = temp
         .parent()
         .ok_or(PackFailure::Write(VfsError::NotFound))?;
@@ -428,9 +444,6 @@ fn write_temp_7z(
         records,
     )?;
     let (head, spill) = holder.into_parts();
-    let mut out = provider
-        .write(temp, WriteMode::CreateNew, ctx)
-        .map_err(PackFailure::Write)?;
     out.write_all(&head).map_err(PackFailure::from_io)?;
     spill.finish_into(&mut out, watch)?;
     out.commit(true).map_err(PackFailure::Write)
