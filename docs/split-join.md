@@ -4,11 +4,9 @@ This guide covers splitting a big file into numbered parts and putting the parts
 
 What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha.2 had been heard on a screen reader when this guide was written.
 
-<!-- to confirm with the wiring (W2f): the names of Split file and Join files in the palette and the File menu, their keys, the order of the rows in the size list, how custom size and equal parts are entered, and which of the two questions about taken names comes up. -->
-
 ## What split does
 
-Split file cuts the focused file, or each marked file in turn, into numbered parts, and writes them to the other panel. A file called `report.pdf` becomes:
+Split file has no key of its own. It is in the File menu (Alt+F, then P) and in the palette. It cuts the focused file, or each marked file in turn, into numbered parts, and writes them to the other panel. With no file chosen it says "Split works on files. No file is chosen." A file called `report.pdf` becomes:
 
 - `report.pdf.001`, `report.pdf.002`, and so on: the parts. The name keeps its extension, so a lost checksum file costs nothing.
 - `report.pdf.crc`: the checksum file, written last. When it is there, the split finished.
@@ -29,12 +27,14 @@ Split asks for a size in a list. Each row says the use first and the size after 
 
 Each count is tied to its source by a test, so a number cannot drift from the page it came from.
 
-Two more choices are in the same list:
+The list is titled "Split into", and each row is read with its details and its position: "Split into, Email attachment, 18 MB, Parts of 18,000,000 bytes, 1 of 9". The seven presets come first, in the order above. Two more rows follow:
 
-- Into equal parts: you say how many, and diroxide divides the file.
-- A custom size: a number and a unit, said in words.
+- "Equal parts, a number you choose": a prompt, "Number of parts", then diroxide divides the file. Type a whole number, 2 or more.
+- "Custom size, with its unit": a prompt, "Part size, such as 20MB or 100MiB".
 
-On the command line a custom size takes a unit: KB, MB, GB and TB are powers of 1000, and K, M, G, KiB, MiB and GiB are powers of 1024. `20MB` is 20,000,000 bytes and `100MiB` is 104,857,600.
+Enter on a row plans the split. Something that cannot be read is explained, and nothing is split: "Type a whole number of parts, 2 or more. Nothing was split." and "Type a size with its unit, such as 20MB. Nothing was split."
+
+A custom size takes a unit, in the prompt and on the command line: KB, MB, GB and TB are powers of 1000, and K, M, G, KiB, MiB and GiB are powers of 1024. `20MB` is 20,000,000 bytes and `100MiB` is 104,857,600.
 
 ### Adding your own size
 
@@ -53,7 +53,7 @@ bytes = 4700372992
 headroom_percent = 2
 ```
 
-Your presets follow the built-in ones. One with a built-in name replaces that preset, in any letter case, so you do not have to copy the whole table. `headroom_percent` is from 0 to 50. The setting is `split_presets` in [the settings reference](settings-reference.md).
+Your presets follow the built-in ones. One with a built-in name replaces that preset, in any letter case, so you do not have to copy the whole table. `headroom_percent` is from 0 to 50. The setting is `split_presets` in [the settings reference](settings-reference.md). In the Settings list the row opens a list that you can read, "Split presets, 7 presets, Email attachment, 18 MB, ...", and it says to add your own to `config.toml`; the row does not take typed text.
 
 ## What the plan says first
 
@@ -63,11 +63,11 @@ Before anything is written, the plan says the outcome, the use first:
 - "223 MB in all"
 - "Enough space: 12 GB free on D:"
 
-Then the question, starting on No: "Split report.pdf into 12 parts, 223 MB? y or n". The details line gives the exact bytes: "Parts of 20,000,000 bytes, the last 3,100,000; 223,100,000 bytes in all". A file that divides exactly has no empty last part.
+Then the question, starting on No: "Split report.pdf into 12 parts, 223 MB? No is the default. y or n". Answer y and the job says "Split started: 1 item to out". The details line gives the exact bytes: "Parts of 20,000,000 bytes, the last 3,100,000; 223,100,000 bytes in all". A file that divides exactly has no empty last part.
 
-If the other panel's drive does not have room, the plan says so first: "Not enough room on D:", then the numbers, then "Go on anyway? y or n".
+If the other panel's drive does not have room, the plan says so first: "Not enough room on D:", then the numbers, then "Go on anyway? No is the default. y or n".
 
-- More than 999 parts asks first: "This makes 1,500 parts. Go on? y or n", and a second line says "Splitting report.pdf: past 999, parts are 1000 and up." Past 999 the numbers just grow: `.1000`, `.1001`. Answer no and the file is left out.
+- More than 999 parts asks first: "This makes 1,500 parts. Go on? No is the default. y or n", and a second line says "Splitting report.pdf: past 999, parts are 1000 and up." Past 999 the numbers just grow: `.1000`, `.1001`. Answer no and the file is left out.
 - More than 99,999 parts is refused, with the size to use instead: "Too many parts: 150,000. Use parts of 6.1 MB or more."
 - An empty file has nothing to split: "it is empty: nothing to split".
 
@@ -76,6 +76,7 @@ If the other panel's drive does not have room, the plan says so first: "Not enou
 - Progress is by part, in the job engine's words: "Splitting 4 of 12 parts, 1.4 of 4.0 GB", and for a join "Joining 4 of 12 parts, 1.4 of 4.0 GB". In screen-reader mode it changes at most every ten seconds. The estimate of time left is added only where the line still fits in 40 characters.
 - Each part is written under an unfinished name and given its name when it is whole. Cancel with Escape and no part and no checksum file is left behind.
 - If the file changes while it is split, the split fails: "report.pdf changed while it was split". Nothing is trashed.
+- The end counts the checksum file with the parts: "Split finished: 5 done." for four parts and their `.crc` file.
 - Ctrl+Z undoes a split: the parts go to the trash.
 
 ## The checksum file
@@ -96,11 +97,11 @@ Whether Total Commander finds `report.pdf.crc` from `report.pdf.001` has not bee
 
 ## What join does
 
-Join files starts from any part. Focus part 5 of 12 and run it: diroxide finds the rest by name and number, in numeric order, never as text, so `.1000` comes after `.999`. It writes the whole to the other panel.
+Join files has no key of its own. It is in the File menu (Alt+F, then J) and in the palette. It starts from any part. Focus part 5 of 12 and run it: diroxide finds the rest by name and number, in numeric order, never as text, so `.1000` comes after `.999`. It writes the whole to the other panel. It has no dialog: there is only the question, with the listing under it. On a file that is not a numbered part it says "Not a part: report.pdf. Join starts from a numbered part, such as report.pdf.001."
 
 Before it writes anything, it lists what it found, so you can check:
 
-- The first line: "Join 12 parts into report.pdf, 223 MB".
+- The question, first, starting on No: "Join 12 parts into report.pdf, 223 MB? No is the default. y or n".
 - Each part in order, with its size: "Part 001, 20 MB".
 - Whether it can check the result: "Checked against report.pdf.crc", or "No checksum file: the join is not checked."
 - The room: "Enough space: 12 GB free on D:".
@@ -111,9 +112,9 @@ A problem is named first, and a join that would be wrong does not start.
 
 - A gap: "Part 004 is missing. Nothing was joined." With more than one: "Part 003 is missing, and 1 more. Nothing was joined." Nothing partial is ever offered.
 - An empty part: "Part 002 is empty. Nothing was joined."
-- A part of the wrong size: "Part 007 is 18 KB, expected 20 MB." Every part but the last should be as long as the first. diroxide asks "Join anyway? y or n", starting on No, and No cancels the whole join. It never leaves a part out to make the rest fit.
-- Parts that start at 000, as Krusader numbers them: "Parts start at 000." If `.000` and `.001` are both there: "Part 000 is there too. Join from 000? y or n". Yes joins the set that starts at 000.
-- Two widths of number, such as `.001` and `.0001`: "Parts are numbered two ways, 001 and 0001. Join the 001 set? y or n".
+- A part of the wrong size: "Part 007 is 18 KB, expected 20 MB." Every part but the last should be as long as the first. diroxide asks "Join anyway? No is the default. y or n", starting on No, and No cancels the whole join. It never leaves a part out to make the rest fit.
+- Parts that start at 000, as Krusader numbers them: "Parts start at 000." If `.000` and `.001` are both there: "Part 000 is there too. Join from 000? No is the default. y or n". Yes joins the set that starts at 000.
+- Two widths of number, such as `.001` and `.0001`: "Parts are numbered two ways, 001 and 0001. Join the 001 set? No is the default. y or n".
 - A file that is not a numbered part: "Not a numbered part: report.pdf. Nothing was joined."
 - A spanned zip (`.z01`, `.z02`, then `.zip`) or a RAR volume is not a byte split and cannot be joined by putting the parts end to end: "Spanned zip sets need the 7z tool. Nothing was joined."
 - A part that changes while it is read stops the join and leaves nothing: "Part 004 changed while it was joined".
@@ -129,15 +130,13 @@ When the join is done, diroxide says whether the whole is right, the fact first:
 - "Joined report.pdf: size matches, no checksum to check." The checksum file holds no CRC.
 - "Joined report.pdf. No checksum file found."
 
-After a join whose checksum matches, diroxide offers to move the parts to the trash: "Move the 12 parts to the trash? y or n". It starts on No. After any other verdict the parts stay.
+After a join whose checksum matches, diroxide offers to move the parts to the trash: "Move the 12 parts to the trash? No is the default. y or n". It starts on No. Answer n and it says "The parts stay where they are." After any other verdict the parts stay without a question.
 
 Ctrl+Z undoes a join: the whole goes to the trash and the parts are where they were.
 
 ## Split archives
 
-A set whose name ends in an archive extension and a part number, such as `backup.7z.001` with its parts beside it, opens as one archive without being joined: diroxide reads the parts in order as if they were one file. Enter on `backup.7z.001` opens it as an archive, and the title says "backup.7z.001, archive of 12 parts". A numbered part of anything else, such as `photo.jpg.001`, is not an archive. [Archives](archives.md) has the rest.
-
-<!-- to confirm with the wiring: what Enter on a numbered part that is not an archive does (the plan says it opens as a plain file or offers Join), and whether Join is in that file's context menu. -->
+A set whose name ends in an archive extension and a part number, such as `backup.7z.001` with its parts beside it, opens as one archive without being joined: diroxide reads the parts in order as if they were one file. Enter on `backup.7z.001` opens it as an archive, and the title says "backup.7z.001, archive of 12 parts". A numbered part of anything else, such as `photo.jpg.001`, is not an archive; join it with Join files. [Archives](archives.md) has the rest.
 
 A part that changes while the archive is open stops the read with the words "part changed", and no other bytes are given.
 
