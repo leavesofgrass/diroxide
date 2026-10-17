@@ -453,6 +453,15 @@ impl DocBuilder {
         self.end_link();
         self.end_table();
         self.end();
+        // A separator with nothing after it separates nothing.
+        if self
+            .view
+            .rows
+            .last()
+            .is_some_and(|r| r.kind == RowKind::Separator)
+        {
+            self.view.rows.pop();
+        }
         self.view
     }
 

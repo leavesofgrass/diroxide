@@ -225,7 +225,7 @@ fn empty_rows_and_doubled_separators_are_dropped() {
     b.end_table();
     let view = b.finish();
     let shown: Vec<String> = view.rows().iter().map(DocRow::shown).collect();
-    assert_eq!(shown, ["Kept", "Separator"]);
+    assert_eq!(shown, ["Kept"], "a separator with nothing after it");
     assert!(view.outline().is_empty() && view.tables().is_empty());
     assert!(view.code_blocks().is_empty());
 }

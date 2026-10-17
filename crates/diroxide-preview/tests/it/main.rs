@@ -5,6 +5,7 @@
 
 mod carta_paths;
 mod encoding;
+mod markdown;
 
 use diroxide_core::{Entry, EntryKind, Place};
 use diroxide_filetype::TypeRegistry;
