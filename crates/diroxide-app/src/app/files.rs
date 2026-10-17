@@ -954,11 +954,17 @@ impl App {
         } else {
             SIGHTED_INTERVAL_MS
         };
+        use diroxide_core::JobState;
+        // A job's end is said once, by its result line ("Unpack finished:
+        // 4 done."), which always follows; the progress line's "Unpacking
+        // finished" is neither shown nor said, as in the CLI.
+        if progress.state == JobState::Finished {
+            return Vec::new();
+        }
         let now = self.now();
         let Some((line, changed)) = self.jobs.progress(job, progress, now, interval) else {
             return Vec::new();
         };
-        use diroxide_core::JobState;
         let message = match progress.state {
             JobState::Paused | JobState::Stalled | JobState::Verifying if changed => {
                 Message::info(line)

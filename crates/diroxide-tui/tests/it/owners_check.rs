@@ -433,6 +433,9 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
     );
     let said = c.key("y");
     assert!(any_starts(&said, "Unpack finished: 4 done"), "{said:?}");
+    // The end is said once: the result, not also "Unpacking finished".
+    let ends = said.iter().filter(|l| l.contains("finished")).count();
+    assert_eq!(ends, 1, "{said:?}");
     assert!(out.join("week1").join("a.txt").exists());
     // 7. backup.7z, one file out: the same words.
     c.key("left");
@@ -844,6 +847,11 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
     let said = c.key("enter");
     assert!(last_is(&said, "Match 1 of 1, line 2"), "{said:?}");
     c.key("escape");
+    // No job's end was said twice, as "Splitting finished" before its
+    // result.
+    for message in c.s.said() {
+        assert!(!message.text.ends_with("ing finished"), "{}", message.text);
+    }
     // 39. Ctrl+Q quits.
     c.s.key(Key::parse("ctrl+q").unwrap(), c.clock.now());
     assert!(c.s.wants_quit());
