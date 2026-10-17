@@ -30,18 +30,15 @@ The `screen_reader_mode` setting turns on the behavior a screen reader needs. It
 - highlights carry an attribute and a text marker, never only color;
 - code in the viewer is not colored, and a hex row is eight bytes, so it fits 40 cells.
 
-The key bar is the same in every mode. It is the last line of the screen, and it names the function keys in words: "F2 Rename  F3 View  F4 Edit  F5 Copy  F6 Move  F7 Folder  F8 Trash  F9 Menu  Ctrl+Q Quit". It is on by default, in screen-reader mode too, and the `key_bar` setting turns it off. The width of the terminal decides how many pairs fit, with the most common operations first. Say key bar, in the Help menu, reads the line to you whether it is drawn or not.
+The key bar is the same in every mode. It is the last line of the screen, and it names the function keys in words: "F2 Rename  F3 View  F4 Edit  F5 Copy  F6 Move  F7 Folder  F8 Trash  F9 Menu  Ctrl+Q Quit". It is on by default, in screen-reader mode too, and the `key_bar` setting (Key bar, a switch in the Look group) turns it off. The width of the terminal decides how many pairs fit, with the most common operations first; at 80 columns the pairs have one space between them so that all nine fit. Say key bar, in the Help menu (Alt+H, then K) and the palette, reads the line to you whether it is drawn or not. Switch bank, in the View menu and the palette, shows the next bank of buttons. While the viewer is open, the key bar shows the viewer's own keys.
 
-<!-- to confirm with the wiring (W2f): the key bar is drawn in screen-reader mode, the setting's name and default, and the exact order of the pairs. -->
 The `quiet_screen` setting goes further and draws as little as possible, for a screen reader that reads every change.
 
 ## What you should hear
 
 These lines show what diroxide says for each key. The status line says the same words that a menu or the palette shows.
 
-<!-- to confirm with the wiring (W2f): the first-run status line now says "Ctrl+Q quits" beside the help key and names the key bar; update the Starting line below, and the first-start lines of the quick start, to match. -->
-
-- Starting: on the very first start the status line says "diroxide alpha 1. Shift+F1 for help." and "Layout: side by side. Ctrl+P, Layout." The title line comes first, "dirocheck, left panel, in D:\", and then the first row. You do not hear the whole screen.
+- Starting: on the very first start the status line says "diroxide alpha 1. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", then "Layout: side by side. Ctrl+P, Layout." The alpha number is the build's own. The title line comes first, "dirocheck, left panel, in D:\", and then the first row. You do not hear the whole screen.
 - Down and Up: the cursor moves one row and your screen reader speaks the row: "Photos, folder, modified Tuesday". No message is written for a focus move, and the status line does not change. At the first or last row diroxide says "Top of the list" or "Bottom of the list".
 - Down in the side by side layout with the left panel active: your screen reader's current line is the whole screen line, which also holds the right panel's row, so it may read the left row and then the right. With the right panel active, the cursor sits near column 41 and a 40-cell display shows the left row first. This is why stacked is recommended.
 - Tab: one message and nothing else, "Right panel: dirocheck, 31 items". Chatter on Tab is the first thing to report.
@@ -58,22 +55,22 @@ These lines show what diroxide says for each key. The status line says the same 
 
 ### Archives
 
-- Enter on an archive: the title puts the kind first, "course.zip, archive, in D:\docs", and the status line says "Opened course.zip: 10 items, 48 KB." A row inside says its name, then its kind, size and position: "notes.txt, text file, 3 KB, 5 of 10". A flag comes right after the name: "secret.docx, locked, Word, 40 KB".
-- A big tar.gz or tar.xz: "Reading logs.tar.xz: 3.2 of 14.0 GB" at most every ten seconds.
-- A locked archive: the prompt "Password for course.zip (hidden):", with an asterisk for each key you type or nothing, as `secret_echo` says. A wrong password: "Wrong password for course.zip. Try again? y or n".
-- A limit: "Expands to 40 GB from 40 KB. Read huge.bin? y or n". The fact is first and the question starts on No.
-- Unpack: "Unpack 10 members into course? y or n", then the job lines, then "Unpack finished: 118 done, 2 skipped." and a line for each skip, the name first: "Skipped ../x: name leaves the archive."
-- Pack: "Pack 12 items into reports.zip? y or n", the progress, "Pack finished: 300 done, 2 skipped." and "Checked 300 of 300 entries, all good."
-- Test archive: "Archive is sound: 10 members."
+- Enter on an archive: the title puts the kind first, "course.zip, archive, in D:\diro-demo", and the status line says "Opened course.zip: 10 items, 1.8 KB." A row inside says its name, then its kind, size and position: "notes.txt, text file, 3 KB, 5 of 10". A flag comes right after the name: "secret.docx, locked, Word, 40 KB". Enter on a folder inside: "week1, 3 items, in course.zip".
+- A big tar.gz or tar.xz: nothing is said while it is listed, and then "Opened logs.tar.xz: 3 items, 8.5 KB." There is no progress line for this yet.
+- A locked zip lists without asking. F3 or F5 on a locked member brings the prompt "Password for locked.zip (hidden):", with an asterisk for each key you type or nothing, as `secret_echo` says. A wrong password: "Wrong password for locked.zip. Try again? No is the default. y or n".
+- A limit: "Expands to 40 GB from 40 KB. Read huge.bin? No is the default. y or n". The fact is first and the question starts on No.
+- F5 out of an archive: "Unpack 4 members into out? No is the default. y or n", then the job lines, then "Unpack finished: 4 done." A skipped member has a line, the name first: "Skipped ../escape.txt: name leaves the archive."
+- Pack, from the palette or File, Archive, Pack: a list, "Pack, Pack 2 items into demo.zip, 1 of 9", then the question "Pack 2 items into demo.zip? No is the default. y or n", the job lines, and "Pack finished: 2 done. Checked 2 of 2 entries, all good."
+- Test archive: "Test started: demo.zip", then "Archive is sound: 2 members."
 - A change inside an archive: "Archives are read only here. Use Pack to make a new one."
 
 ### The viewer
 
-- F3: the title names the file, "notes.txt, in course.zip", and the cursor is on the first line. Ctrl+D says "Line 120 of 4,000, 3 percent".
-- Search: "Match 3 of 12, line 120", and n and p step through them. Nothing found: "No match for zebra."
-- Hex mode: eight bytes a row, `000010: 48 65 6c 6c 6f 20 77 6f Hello wo`. That is 40 characters, so a 40-cell display shows a whole row, and a screen reader reads it slowly. Say byte speaks one byte: "Byte 16 is 48 hex, the letter H". Whether eight bytes is the right width is for the listening check to decide, and the `viewer.hex_row` setting changes it.
-- Code is silent: no color is spoken. Ask for what the colors would show. Token kind: "Function name: parse_args, line 21". The line by kind: "Line 21: keyword, function name, variable, operator and 1 more". The outline: "Outline: 7 symbols in main.rs", then rows that put the kind first, "function main, line 40". [The viewer](viewer.md) lists the commands.
-- A large file: "Showing the first 64 MB of 800 MB." and "report.bin looks binary; hex mode".
+- F3: the title names the file, "notes.txt, in D:\diro-demo", or for a member "a.txt, in course.zip!week1", and the cursor is on the first line. Ctrl+D says "Line 1 of 3, 33 percent". Escape says "Viewer closed: notes.txt".
+- Search: the slash key opens "Search for", then "Match 1 of 2, line 1", and N steps to "Match 2 of 2, line 2". Nothing found: "No match for zebra."
+- Hex mode, H: "Hex mode, 8 bytes a row", then eight bytes a row, `000010: 48 65 6c 6c 6f 20 77 6f Hello wo`. That is 40 characters, so a 40-cell display shows a whole row, and a screen reader reads it slowly. B (Say byte) speaks one byte: "Byte 0 is 32 hex, the digit 2". Whether eight bytes is the right width is for the listening check to decide, and the `viewer.hex_row` setting changes it.
+- Code is silent: no color is spoken. Right on a word says it: "main". Ask for what the colors would show. K (token kind): "Function name: main, line 4". Shift+K (the line by kind): "Line 4: keyword, function name". O (the outline): "Outline: 2 symbols in main.rs", then rows that put the kind first, "function main, line 4, 1 of 2". [The viewer](viewer.md) lists the commands.
+- A large file: "Showing the first 64 MB of 800 MB." A binary file: "big.bin looks binary; hex mode".
 
 ### The quick view
 
@@ -83,12 +80,12 @@ These lines show what diroxide says for each key. The status line says the same 
 
 ### Split, join, links and permissions
 
-- Split: "12 parts of 20 MB, the last 3.1 MB", "223 MB in all", "Enough space: 12 GB free on D:", then the question. Progress: "Splitting 4 of 12 parts, 1.4 of 4.0 GB".
-- Join: "Join 12 parts into report.pdf, 223 MB", a gap named first, "Part 004 is missing. Nothing was joined.", and the verdict, "Joined report.pdf: checksum matches." Then "Move the 12 parts to the trash? y or n", starting on No.
-- A link without the right on Windows: "Cannot link: needs developer mode."
-- Permissions in words first: "Owner can read and write, group can read, others can read (644)". The octal number is second.
-
-<!-- to confirm with the wiring (W2f) and W2e: every line in this section is the design's text; the final pass checks each against the merged messages and the 40-cell test. -->
+- Split, from File, Split file: a list, "Split into, Email attachment, 18 MB, Parts of 18,000,000 bytes, 1 of 9". The plan says "4 parts of 18 MB, the last 6 MB", "60 MB in all" and "Enough space: 12 GB free on D:", then the question. The job says "Split started: 1 item to out", then "Splitting 4 of 4 parts, 60.0 of 60.0 MB", then "Split finished: 5 done."
+- Join, from any part: "Join 4 parts into big.bin, 60.0 MB? No is the default. y or n". A gap is named first, "Part 003 is missing. Nothing was joined." The verdict: "Joined big.bin: checksum matches." Then "Move the 4 parts to the trash? No is the default. y or n". Answer n and it says "The parts stay where they are."
+- Details, Alt+Enter on an archive: "Details of course.zip, Type: zip archive, 1 of 8", then the size, then "Entries: 10 items".
+- Change permissions, from File: "Permissions, Change permissions of main.rs, 1 of 4". Permissions in words first: "Owner can read and write, group can read, others can read (644)". The octal number is second.
+- Make symbolic link, from File: "Make link, Make a link to main.rs in out, 1 of 4". The job says "Link finished: 1 done." On Windows without Developer Mode: "Cannot link: needs developer mode."
+- Shift+F5 (Duplicate): "Duplicate main.rs as: main (2).rs".
 
 ## Choosing a layout
 
@@ -148,7 +145,7 @@ What each line shows in its first 40 characters:
 - A question: the action, the count and the target before the answer. "Move 3 items to Backup, 312 bytes? No is the default. y or n".
 - Progress: "Copying 30 percent, 2 minutes left". The percent and the estimate sit inside the first 40 cells.
 - An archive's title: "course.zip, archive, in D:\docs". A member: "notes.txt, text file, 3 KB, 5 of 10". A locked one: "secret.docx, locked, Word, 40 KB".
-- A password prompt: "Password for course.zip (hidden):". A wrong one: "Wrong password for course.zip. Try again? y or n".
+- A password prompt: "Password for course.zip (hidden):". A wrong one: "Wrong password for course.zip. Try again? No is the default. y or n".
 - A hex row, eight bytes: `000010: 48 65 6c 6c 6f 20 77 6f Hello wo`, exactly 40 characters.
 - The quick view's line: "Preview: report.md, 12 headings".
 - A split plan: "12 parts of 20 MB, the last 3.1 MB". A gap: "Part 004 is missing. Nothing was joined."
@@ -199,23 +196,31 @@ diroxide sets the terminal's title to the active place. Whether NVDA or JAWS spe
 
 If you build from source, `cargo xtask demo` followed by a new or empty folder on your own drive writes a demo set into it. It holds `course.zip` (ten entries), `backup.7z`, `logs.tar.xz`, `locked.zip` (its password is printed once when the demo is made), `hostile.zip` (one member named `../escape.txt`), `big.bin` (60 MB), `main.rs`, `report.md`, `notes.org`, `big.log` and an empty folder, `out`. Put the left panel on the demo folder and the right panel on `out`, with screen-reader mode on. Where a key is not named, use the command's name in the palette. Run it with NVDA, then JAWS, then the Braille display, and on the display read the first 40 cells of each line.
 
-1. Open `course.zip` with Enter. You hear "course.zip, archive, in" and the folder, then "Opened course.zip: 10 items". Press Down through the list: each row starts with the name, then "folder" or "text file", then a size, with the position last.
-2. Press Enter on `week1`: "week1, in course.zip". Press F3 on `a.txt`: the viewer's title names the file and the archive. Press Escape. The cursor is back on the row.
-3. Press Left until you are back in the demo folder. Open `locked.zip`. You hear "Password for locked.zip (hidden):". Type a wrong password: "Wrong password for locked.zip. Try again? y or n". Is anything you typed spoken?
-4. Open `hostile.zip`. The listing has no `../escape.txt`. Unpack it into `out`: "Skipped ../escape.txt: name leaves the archive."
-5. Mark `week1` inside `course.zip` and press F5. You hear the plan and a copy into `out` ending in "finished". Press Ctrl+Z: the copy goes to the trash.
-6. Put the right panel inside `course.zip`, mark a file in the left panel and press F5: "Archives are read only here. Use Pack to make a new one."
-7. Mark two files and run Pack. You hear "Pack 2 items into" and the format, level and place rows, then a question that starts on No. Answer y: "Pack finished" and "Checked ... all good". Run Test archive on the new zip: "Archive is sound".
-8. Press F3 on `report.md`. Press Ctrl+D: "Line 1 of ...". Search for a word that occurs more than once: "Match 1 of ...". Press n. Search for a word that is not there: "No match for".
-9. Press F3 on `big.bin`: "big.bin looks binary; hex mode". Read a hex row and ask for one byte with Say byte. Is eight bytes a row comfortable by ear?
-10. Press F3 on `main.rs`. Nothing about color is spoken. Ask for Token kind at a function name, then Line by kind, then Outline.
-11. Press Shift+F3 on `report.md`: "Quick view on" and one line, "Preview: report.md, 12 headings". Move quickly down and up through five files. Is it quiet, with about one "Preview:" line when you stop?
-12. Press Tab. You hear "Preview, report.md". Move by heading, then to the table, and step through a cell: the header, a value and the row and column. Press Escape. Move to `notes.org`: "Preview: notes.org, Org".
-13. Cursor on `big.bin`: run Split file and choose Email attachment. You hear the parts, the total and the free space, then a question. Answer y. Open `out`: `big.bin.001` and the other parts, then `big.bin.crc`.
-14. Rename `big.bin.003` and run Join files from `big.bin.001`: "Part 003 is missing. Nothing was joined." Rename it back. Join from `big.bin.002`: "Joined big.bin: checksum matches." and the offer to trash the parts, which starts on No. Answer n.
-15. Run Make symbolic link on `main.rs`. On Windows without Developer Mode: "Cannot link: needs developer mode."
+1. Open `course.zip` with Enter. You hear the title, "course.zip, archive, in" and the folder, then "Opened course.zip: 10 items, 1.8 KB." Press Down through the list: each row starts with the name, then "folder" or "text file", then a size, with the position last.
+2. Press Left. The title starts with the demo folder's name and "left panel". Press Right on `course.zip` to enter it again. Press Enter on `week1`: "week1, 3 items, in course.zip".
+3. Press F3 on `a.txt`: the title is "a.txt, in course.zip!week1". Press Escape: "Viewer closed: a.txt", and the cursor is back on the row.
+4. Go back to the demo folder. Mark `week1` inside `course.zip` and press F5. You hear "Unpack 4 members into out? No is the default. y or n". Answer y: "Unpack finished: 4 done." Press Ctrl+Z: the files go to the trash.
+5. Open `backup.7z`: "Opened backup.7z: 6 items". Open `logs.tar.xz`: "Opened logs.tar.xz: 3 items". There is no "Reading" line yet.
+6. Open `locked.zip`. It lists at once. Press F3 on a member: "Password for locked.zip (hidden):". Type a wrong password: "Wrong password for locked.zip. Try again? No is the default. y or n". Answer y and type the right one. Is anything you typed spoken?
+7. Open `hostile.zip`. It lists two items, without `../escape.txt`. Unpack it into `out` with Unpack from the File menu, Archive: "Unpack finished: 2 done, 1 skipped. Skipped ../escape.txt: name leaves the archive."
+8. Mark two files and run Pack from the palette. You hear "Pack, Pack 2 items into" and the folder's name, "1 of 9". Press Enter on the first row: "Pack 2 items into" and the name, "? No is the default. y or n". Answer y: "Pack finished: 2 done. Checked 2 of 2 entries, all good." Run Test archive on the new zip: "Test started" and the name, then "Archive is sound: 2 members."
+9. Put the right panel inside `course.zip`, mark a file in the left panel and press F5: "Archives are read only here. Use Pack to make a new one."
+10. Press F3 on `report.md`. Press Ctrl+D: "Line 1 of ...". Press the slash key, type a word that occurs more than once and press Enter: "Match 1 of ...". Press N. Search for a word that is not there: "No match for".
+11. Press F3 on `big.bin`: "big.bin looks binary; hex mode". Press B to hear one byte: "Byte 0 is" and a value. Is eight bytes a row comfortable by ear?
+12. Press F3 on `main.rs`. Nothing about color is spoken. Press Right on a word, then K, Shift+K and O: the token, "Function name:", "Line 4:" and "Outline:".
+13. Press Shift+F3 on `report.md`: "Quick view on" and one line, "Preview: report.md, 12 headings". Move quickly down and up through five files. Is it quiet, with about one "Preview:" line when you stop?
+14. Press Tab. You hear "Preview, report.md". Move by heading, then to the table, and step through a cell: the header, a value and the row and column. Press Escape. Move to `notes.org`: "Preview: notes.org, Org".
+15. Put the cursor on `big.bin`, with the right panel on `out`. Run Split file from the File menu. You hear "Split into, Email attachment, 18 MB, Parts of 18,000,000 bytes, 1 of 9". Press Enter: the plan lists "4 parts of 18 MB, the last 6 MB" and "Enough space", and the question starts on No. Answer y: "Split started: 1 item to out", then "Split finished: 5 done." In `out` are the four parts, then `big.bin.crc`. Press F3 on the `.crc` file: three lines, "filename=big.bin", "size=60000000" and a "crc32=" line.
+16. Rename `big.bin.003` and run Join files from `big.bin.001`: "Part 003 is missing. Nothing was joined." Rename it back. Join from `big.bin.002`: "Join 4 parts into big.bin, 60.0 MB? No is the default. y or n". Answer y: "Joined big.bin: checksum matches." and "Move the 4 parts to the trash? No is the default. y or n". Answer n: "The parts stay where they are."
+17. Press Alt+Enter on `course.zip`: "Details of course.zip, Type: zip archive", then the size, then "Entries: 10 items".
+18. Run Change permissions on `main.rs`: "Permissions, Change permissions of main.rs, 1 of 4".
+19. Run Make symbolic link on `main.rs`: "Make link, Make a link to main.rs in out, 1 of 4". Answer y: "Link finished: 1 done." On Windows without Developer Mode: "Cannot link: needs developer mode."
+20. Press Shift+F5 on `main.rs`: "Duplicate main.rs as: main (2).rs". Press Escape.
+21. Press F9, then Enter for File, then A for Archive, then P for Pack: "Pack, Pack 1 item into" and a name. Press Escape. Is the last line of the screen the key bar, "F2 Rename  F3 View ..."?
+22. In Settings, turn Single letters off: "Single letters: single keys do nothing". Press F3 on a text file, then H: nothing is said. Run Search in file from the palette: "Search for, empty". Type a word and press Enter: "Match 1 of ...". The viewer commands are also in the View menu's Viewer submenu.
+23. Press Ctrl+Q. The program quits and the shell is where you left it.
 
-Questions to answer: Was every line's meaning inside the first 40 cells? Did anything speak a password? Did the quick view chatter? Was eight bytes of hex right? Which command did you need the palette for?
+Questions to answer: Was every line's meaning inside the first 40 cells? Did anything speak a password? Did the quick view chatter? Was eight bytes of hex right? Did the job end lines come twice? Which command did you need the palette for?
 
 ## Keys that may clash
 

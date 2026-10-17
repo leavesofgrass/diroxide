@@ -95,7 +95,7 @@ Shift+F5 makes a copy of the focused or marked entries in the same folder. It as
 
 ## Archives: pack, unpack and test
 
-Pack makes a new archive from the marked rows, Unpack writes an archive's members to a folder, and Test archive reads every member and checks it. They are jobs, with a plan, a question that starts on No, progress, a result list and Undo. F5 from inside an open archive is an ordinary copy that reads the archive once. Copying, moving, renaming or deleting inside an archive is not possible, and says "Archives are read only here. Use Pack to make a new one." [Archives](archives.md) has the dialogs, the passwords and the limits.
+Pack makes a new archive from the marked rows, Unpack writes an archive's members to a folder, and Test archive reads every member and checks it. They are jobs, with a plan, a question that starts on No, progress, a result list and Undo. In a terminal they are in the File menu under Archive (Alt+F, then A) and in the palette; in the desktop window they are Alt+F5, Alt+F9 and Alt+Shift+F9. F5 from inside an open archive unpacks the marked members, reading the archive once, with the default settings. Copying, moving, renaming or deleting inside an archive is not possible, and says "Archives are read only here. Use Pack to make a new one." [Archives](archives.md) has the dialogs, the passwords and the limits.
 
 ## Split and join
 
@@ -103,13 +103,11 @@ Split file cuts a file into numbered parts (`report.pdf.001`, `report.pdf.002`) 
 
 ## Links
 
-Make symbolic link makes a link to the focused entry, relative or absolute. Change link target swaps in a new target as one step that Undo reverses. On Windows a link needs Developer Mode or an administrator, and diroxide says so in words: "Cannot link: needs developer mode." [Links, permissions and times](links-permissions.md) has the rest.
+Make symbolic link makes a link to each marked entry in the other panel's folder, absolute or relative, symbolic, hard or junction (File menu, Alt+F then L). Change link target swaps in a new target as one step that Undo reverses (Alt+F then I). Neither has a key of its own. On Windows a link needs Developer Mode or an administrator, and diroxide says so in words: "Cannot link: needs developer mode." [Links, permissions and times](links-permissions.md) has the rest.
 
 ## Permissions and times
 
-Change permissions says the result in words first and the octal number second: "Owner can read and write, group can read, others can read (644)". On Windows it changes the attributes. A change can go inside folders, with "Apply to:" as the plan's first row. The plan lists what will change and asks first, and Ctrl+Z reverses it. Times are changed by the same kind of job. A copy keeps the modified time of files and folders; see [links, permissions and times](links-permissions.md).
-
-<!-- to confirm with the wiring (W2f): the names and keys of Make symbolic link, Change link target, Change permissions and Change times, and whether alpha.2 has a Change times command. -->
+Change permissions (File menu, Alt+F then W; no key of its own) says the result in words first and the octal number second: "Owner can read and write, group can read, others can read (644)". Its dialog steps owner, group and others through read and write, read only, read, write and run, read and run, and no access. On Windows it changes the attributes. A change can go inside folders, with "Apply to:" as the plan's first row. The plan lists what will change and asks first, and Ctrl+Z reverses it. There is no Change times command in alpha.2. A copy keeps the modified time of files and folders; see [links, permissions and times](links-permissions.md).
 
 ## Delete to the trash: F8 and Delete
 
@@ -163,6 +161,10 @@ Ctrl+C and Ctrl+X put the marked rows, or the focused row, on diroxide's own cli
 - Pasting into the folder the items are already in says so: "These items are already here. Duplicate makes copies here."
 - The clipboard is internal. It does not use the system clipboard, so Explorer and the Finder cannot paste what diroxide copied.
 - Windows Terminal keeps Ctrl+V for pasting text, and Ctrl+C when text is selected. Use Paste in the Edit menu (Alt+E, then P), or unbind the key as [Terminals](terminals.md) shows.
+
+## Copy a path or a name
+
+Copy path and Copy name, in the palette, put the focused entry's full path or its name on the system clipboard, and say it: "Path copied: D:\docs\report.pdf", "Name copied: report.pdf". This is text for other programs, not the file clipboard of Ctrl+C. In a terminal diroxide asks the terminal to set its clipboard (OSC 52), so a terminal that does not allow that will not receive the text. The viewer has the same two commands for the file it shows.
 
 ## Open, edit and run
 

@@ -23,8 +23,6 @@ What you need:
   - Linux: a C compiler and make. On Debian and Ubuntu that is the `build-essential` package, on Fedora the `gcc` and `make` packages, and on Arch the `base-devel` group. `clang` works in place of gcc.
   - macOS: the Xcode command line tools, installed with `xcode-select --install`. They hold clang.
 
-<!-- to confirm on a clean machine: that the Windows workload and the Linux packages named here are enough to build the workspace, and the Fedora package names. -->
-
 Everything else diroxide uses is pure Rust. A C compiler is needed only for those crates, and `cargo xtask native --check` checks that nothing else in the build asks for one.
 
 In the source folder, build the program:
