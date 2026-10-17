@@ -334,6 +334,30 @@ impl Provider for LocalProvider {
         Ok(sys::rename_no_replace(&source, &target)?)
     }
 
+    fn rename_replacing(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+        ctx.check()?;
+        let source = Self::path_of(from)?;
+        let target = Self::path_of(to)?;
+        if source == target {
+            return Ok(());
+        }
+        Self::refuse_name(to, &target)?;
+        // Only a file or a link moves over another, and a real folder at
+        // the name is taken (a link to a folder is a link).
+        if fs::symlink_metadata(&source)?.is_dir() {
+            return Err(VfsError::unsupported(
+                self.scheme(),
+                "rename a folder over another entry",
+            ));
+        }
+        if let Ok(there) = fs::symlink_metadata(&target)
+            && there.is_dir()
+        {
+            return Err(VfsError::AlreadyExists);
+        }
+        Ok(sys::rename_replacing(&source, &target)?)
+    }
+
     fn remove(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         ctx.check()?;
         let path = Self::path_of(place)?;

@@ -61,4 +61,4 @@ pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
 pub use sidecar::{Sidecar, SidecarRead};
 pub use split::{SplitFacts, SplitFile};
-pub use undo::{LeftAs, UndoLog, UndoRecord};
+pub use undo::{LeftAs, Relinked, UndoLog, UndoRecord};

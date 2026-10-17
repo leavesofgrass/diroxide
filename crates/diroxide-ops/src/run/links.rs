@@ -7,6 +7,7 @@ use diroxide_vfs::{LinkRequest, OpContext, TrashCheck, VfsError};
 
 use super::{Check, Outcome, Run};
 use crate::links::NEEDS_DEVELOPER_MODE;
+use crate::undo::Relinked;
 
 impl Run<'_> {
     /// Makes one link, with the usual recovery; a missing privilege is
@@ -33,8 +34,13 @@ impl Run<'_> {
     }
 
     /// Changes where a link points: the new link beside it under a
-    /// temporary name, the old one to the trash (checked), the new one
-    /// given the name; any failure puts the old link back.
+    /// temporary name, then, where the place can rename over a link in
+    /// one step ([`diroxide_vfs::Capabilities::replace_rename`]), the new
+    /// one renamed over the old, so the name is never empty and undo
+    /// points it back ([`Relinked`]). Elsewhere, or when that rename is
+    /// refused (a folder link on Windows), the fallback: the old one to
+    /// the trash (checked), the new one given the name, any failure
+    /// putting the old link back.
     pub(super) fn relink(&mut self, place: &Place, request: &LinkRequest) -> Outcome {
         let entry = match self.recheck(place, Check::Removal) {
             Ok(entry) => entry,
@@ -62,6 +68,28 @@ impl Run<'_> {
             return outcome;
         }
         let ctx = self.ctx.clone();
+        let old = entry.link.as_ref().map(|link| Relinked {
+            place: place.clone(),
+            target: link.target.clone(),
+            target_is_folder: link.points_to == Some(EntryKind::Folder),
+        });
+        if let Some(old) = old
+            && provider.capabilities(&folder).replace_rename
+        {
+            match provider.rename_replacing(&temporary, place, &ctx) {
+                Ok(()) => {
+                    self.report.undo.relinked.push(old);
+                    self.made(place, EntryKind::Link, None);
+                    return Outcome::Done;
+                }
+                Err(VfsError::Cancelled) => {
+                    let _ = provider.remove(&temporary, &quiet);
+                    return Outcome::Cancelled;
+                }
+                // Refused, with both names as they were: the trash's way.
+                Err(_) => {}
+            }
+        }
         let check = match provider.trash(place, &ctx) {
             Ok(check) => check,
             Err(error) => {

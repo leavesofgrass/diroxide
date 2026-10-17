@@ -195,6 +195,9 @@ pub(crate) fn capabilities_for(facts: &VolumeFacts, rule: NameRule) -> Capabilit
         capabilities.clone_copy = writable && named(fs, &CLONING_FILE_SYSTEMS);
     }
     capabilities.attributes = capabilities.access.any();
+    // A file or link renamed over another in one step: `rename(2)`, or
+    // `MoveFileExW` replacing, wherever the place takes changes.
+    capabilities.replace_rename = writable;
     capabilities
 }
 

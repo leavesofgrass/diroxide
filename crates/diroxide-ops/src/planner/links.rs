@@ -70,10 +70,12 @@ impl Engine {
     }
 
     /// Plans changing where the link at `link` points, to `target`, in the
-    /// form asked: one step that makes the new link beside the old, sends
-    /// the old one to the trash and gives the new one its name; Undo brings
-    /// the old link back. Refused where the place holds no links, has no
-    /// trash to keep the old one, or `link` is not a link.
+    /// form asked: one step that makes the new link beside the old and
+    /// renames it over the old one in one step where the place can
+    /// (`replace_rename`), or else sends the old one to the trash and gives
+    /// the new one its name; Undo brings the old link back either way.
+    /// Refused where the place holds no links, can neither replace in one
+    /// step nor keep the old one in a trash, or `link` is not a link.
     pub fn plan_relink(
         &self,
         job: JobId,
@@ -98,7 +100,7 @@ impl Engine {
                 capabilities.links_in_words().to_owned(),
             ));
         }
-        if !capabilities.trash {
+        if !capabilities.trash && !capabilities.replace_rename {
             return Err(OpsError::CannotLink(
                 "Cannot change a link here: no trash keeps the old one".to_owned(),
             ));

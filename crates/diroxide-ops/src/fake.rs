@@ -95,7 +95,7 @@ pub enum FakeCall {
     CreateDir,
     /// `create_link`.
     CreateLink,
-    /// `rename`, at its source.
+    /// `rename` and `rename_replacing`, at its source.
     Rename,
     /// `remove`.
     Remove,
@@ -167,6 +167,10 @@ pub struct FakeSwitches {
     pub free_space: Option<u64>,
     /// Clones are possible (`copy_within`).
     pub clone_copy: bool,
+    /// A file or link can be renamed over another in one step
+    /// (`rename_replacing`), as on a local drive; off by default, so the
+    /// engine's fallbacks are what most tests see.
+    pub replace_rename: bool,
     /// The time new entries get.
     pub now: Option<Timestamp>,
     /// Slowness.
@@ -647,6 +651,30 @@ impl FakeProvider {
             .filter_map(|k| state.nodes.remove(&k).map(|node| (k, node)))
             .collect()
     }
+
+    /// Moves an entry and everything inside it to `to`, whose name must be
+    /// free: the body of `rename` and `rename_replacing`, after their
+    /// checks.
+    fn move_node(&self, from: &Place, to: &Place) {
+        let moved = self.take_subtree(from);
+        let mut nodes = Vec::with_capacity(moved.len());
+        for (_, mut node) in moved {
+            let place = self
+                .rebase(&node.place, from, to)
+                .unwrap_or(node.place.clone());
+            if self.key(&node.place) == self.key(from) {
+                node.entry.name = to.name().unwrap_or_default().to_owned();
+            }
+            node.parent = place.parent().map(|p| self.node_key(&p));
+            node.place = place;
+            nodes.push(node);
+        }
+        let mut keyed = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            keyed.push((self.node_key(&node.place), node));
+        }
+        self.state().nodes.extend(keyed);
+    }
 }
 
 /// The slow-place scenario for the bench (R23): a source folder of files
@@ -835,6 +863,7 @@ impl Provider for FakeProvider {
         capabilities.max_name_length = Some(255);
         capabilities.random_read = true;
         capabilities.clone_copy = switches.clone_copy;
+        capabilities.replace_rename = switches.replace_rename;
         capabilities
     }
 
@@ -1017,24 +1046,52 @@ impl Provider for FakeProvider {
                 why: "a folder cannot go inside itself".to_owned(),
             });
         }
-        let moved = self.take_subtree(from);
-        let mut nodes = Vec::with_capacity(moved.len());
-        for (_, mut node) in moved {
-            let place = self
-                .rebase(&node.place, from, to)
-                .unwrap_or(node.place.clone());
-            if self.key(&node.place) == self.key(from) {
-                node.entry.name = to.name().unwrap_or_default().to_owned();
+        self.move_node(from, to);
+        Ok(())
+    }
+
+    fn rename_replacing(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+        let switches = self.enter(FakeCall::Rename, from, ctx)?;
+        if !switches.replace_rename {
+            return Err(VfsError::unsupported(
+                self.scheme(),
+                "rename over another entry",
+            ));
+        }
+        for place in [from, to] {
+            if switches.read_only.contains(place) {
+                return Err(VfsError::PermissionDenied);
             }
-            node.parent = place.parent().map(|p| self.node_key(&p));
-            node.place = place;
-            nodes.push(node);
+            if switches.locked.contains(place) {
+                return Err(VfsError::InUse);
+            }
         }
-        let mut keyed = Vec::with_capacity(nodes.len());
-        for node in nodes {
-            keyed.push((self.node_key(&node.place), node));
+        if Self::volume_of(&switches, from) != Self::volume_of(&switches, to) {
+            return Err(VfsError::CrossesDevices);
         }
-        self.state().nodes.extend(keyed);
+        let source = self.lookup(from).ok_or(VfsError::NotFound)?;
+        if source.entry.kind == EntryKind::Folder {
+            return Err(VfsError::unsupported(
+                self.scheme(),
+                "rename a folder over another entry",
+            ));
+        }
+        if !to.parent().is_some_and(|parent| self.exists(&parent)) {
+            return Err(VfsError::NotFound);
+        }
+        let (from_key, to_key) = (self.node_key(from), self.node_key(to));
+        if from_key == to_key {
+            return Ok(());
+        }
+        if let Some(there) = self.lookup(to) {
+            if there.entry.kind == EntryKind::Folder {
+                return Err(VfsError::AlreadyExists);
+            }
+            let mut state = self.state();
+            state.nodes.remove(&to_key);
+            state.aliases.retain(|(alias, _)| *alias != to_key);
+        }
+        self.move_node(from, to);
         Ok(())
     }
 

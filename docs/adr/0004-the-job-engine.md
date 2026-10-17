@@ -19,6 +19,10 @@ Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2, from `re
 - **Words.** The interrupted-job sentence names a pack, an unpack, an archive test, a split and a join; the jobs-line estimate test covers Testing.
 - **Dependencies.** The ops crate takes `crc32fast` for the split sidecar (W2c).
 
+Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, from the requests pairs 1 to 3 held at their integrations):
+
+- **Changing a link's target atomically.** Where the place says `replace_rename`, the relink runner makes the new link beside the old one and renames it over the old one in one step, so the name is never empty; nothing goes to the trash, and the undo record's new `relinked` list (`Relinked`: the link, its old target, whether that was a folder) lets undo point it back the same way, first among the undo steps. The journal carries the list per step. Where the place cannot, or the one-step rename is refused (a folder link on Windows), the runner keeps its fallback: the old link to the trash, checked, then the new one given the name. `plan_relink` now refuses only a place that can neither replace in one step nor keep the old link in a trash. The fake provider gains a `replace_rename` switch, off by default (W2c's request 2).
+
 ## Context
 
 Worker's copy runs on a thread, while its dirsize and delete block the interface. diroxide runs every operation that touches more than one entry, or can take more than a moment, as a job, so the interface never blocks and every operation reports, cancels and undoes the same way.

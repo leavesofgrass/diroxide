@@ -64,6 +64,8 @@ enum Line {
         created: Vec<diroxide_core::Place>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attributes: Vec<(diroxide_core::Place, diroxide_vfs::AttributeChange)>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        relinked: Vec<crate::undo::Relinked>,
     },
     /// A write begun: its target and the unfinished name its bytes go to
     /// until the commit (`FileWriter::unfinished_place`).
@@ -146,6 +148,7 @@ impl JournalWriter {
             trashed: delta.trashed.clone(),
             created: delta.created.clone(),
             attributes: delta.attributes.clone(),
+            relinked: delta.relinked.clone(),
         })
     }
 
@@ -267,6 +270,7 @@ impl Journal {
                     trashed,
                     created,
                     attributes,
+                    relinked,
                     ..
                 }) => {
                     job.finished += 1;
@@ -278,6 +282,7 @@ impl Journal {
                     job.record.trashed.extend(trashed);
                     job.record.created.extend(created);
                     job.record.attributes.extend(attributes);
+                    job.record.relinked.extend(relinked);
                 }
                 Ok(Line::End { left, .. }) => {
                     job.record.left = left;

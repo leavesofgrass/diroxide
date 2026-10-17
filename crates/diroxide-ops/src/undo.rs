@@ -6,7 +6,7 @@
 use diroxide_core::{
     ConflictPolicy, Entry, EntryKind, JobId, JobKind, JobOrigin, Place, Timestamp,
 };
-use diroxide_vfs::AttributeChange;
+use diroxide_vfs::{AttributeChange, LinkKind, LinkRequest};
 use serde::{Deserialize, Serialize};
 
 use crate::plan::{Plan, Step};
@@ -48,6 +48,31 @@ impl LeftAs {
     }
 }
 
+/// A link whose target a job changed in one step, by a replacing rename
+/// (P2b, W2c's request 2), with what it pointed to before: nothing went to
+/// the trash, so undo points it back the same way.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Relinked {
+    /// The link.
+    pub place: Place,
+    /// Its old target, as the link stored it.
+    pub target: String,
+    /// Whether the old target was a folder.
+    #[serde(default)]
+    pub target_is_folder: bool,
+}
+
+impl Relinked {
+    /// The request that points the link back at its old target.
+    pub fn back(&self) -> LinkRequest {
+        LinkRequest {
+            kind: LinkKind::Symbolic,
+            target: self.target.clone(),
+            target_is_folder: self.target_is_folder,
+        }
+    }
+}
+
 /// What one job did that can be undone.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -79,6 +104,10 @@ pub struct UndoRecord {
     /// applies them backwards, and skips an entry changed since.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<(Place, AttributeChange)>,
+    /// Links whose target was changed in one step, each with its old
+    /// target, in the order done. Undo points them back, newest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relinked: Vec<Relinked>,
 }
 
 impl UndoRecord {
@@ -97,14 +126,16 @@ impl UndoRecord {
             && self.trashed.is_empty()
             && self.created.is_empty()
             && self.attributes.is_empty()
+            && self.relinked.is_empty()
     }
 
-    /// The plan that undoes this record: the files it made go first,
-    /// newest first, to the trash; then its moves backwards, in reverse
-    /// order; then the folders it made, removed if still empty, deepest
-    /// first; then restores from the trash. `folders` says which created
-    /// places were folders. The undo-time checks (a changed copy is kept,
-    /// a non-empty folder stays) are the engine's.
+    /// The plan that undoes this record: attribute changes put back and
+    /// links changed in one step pointed back, newest first; then the
+    /// files it made go, newest first, to the trash; then its moves
+    /// backwards, in reverse order; then the folders it made, removed if
+    /// still empty, deepest first; then restores from the trash. `folders`
+    /// says which created places were folders. The undo-time checks (a
+    /// changed copy is kept, a non-empty folder stays) are the engine's.
     ///
     /// A file that replaced another (made at a place whose old file went
     /// to the trash) is first renamed out of the way to a temporary name,
@@ -122,6 +153,10 @@ impl UndoRecord {
                 change: change.clone(),
             })
             .collect();
+        steps.extend(self.relinked.iter().rev().map(|relinked| Step::Relink {
+            place: relinked.place.clone(),
+            request: relinked.back(),
+        }));
         let mut emptied: Vec<Step> = Vec::new();
         for place in self.created.iter().rev() {
             if folders.contains(place) {

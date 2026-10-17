@@ -122,6 +122,11 @@ pub struct Capabilities {
     /// destination is touched. Distinct from `writable`: a place may take
     /// new files and still have no clone.
     pub clone_copy: bool,
+    /// A file or link can be renamed over another in one step
+    /// ([`crate::Provider::rename_replacing`]), so the name is never
+    /// empty: what makes changing a link's target atomic (W2c's request
+    /// 2). A folder is never replaced.
+    pub replace_rename: bool,
 }
 
 impl Capabilities {
@@ -151,6 +156,7 @@ impl Capabilities {
             watch: false,
             random_read: false,
             clone_copy: false,
+            replace_rename: false,
         }
     }
 

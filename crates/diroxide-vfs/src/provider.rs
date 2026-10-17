@@ -290,6 +290,22 @@ pub trait Provider: Send + Sync + fmt::Debug {
     /// the engine copies, verifies, then removes.
     fn rename(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError>;
 
+    /// Renames one file or link within this provider over whatever file or
+    /// link `to` holds, in one step, so the name always answers with the
+    /// old entry or the new one and is never empty (W2c's request 2: a
+    /// link's target changed atomically). A folder at `to` is never
+    /// replaced (`AlreadyExists`); across volumes it fails with
+    /// `CrossesDevices`; on any failure both names are as they were. The
+    /// default is unsupported; [`Capabilities::replace_rename`] says
+    /// where it works. Plain [`Provider::rename`] still never replaces.
+    fn rename_replacing(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+        let _ = (from, to, ctx);
+        Err(VfsError::unsupported(
+            self.scheme(),
+            "rename over another entry",
+        ))
+    }
+
     /// Removes one file, link or empty folder for good. A link is removed,
     /// never what it points to. The job engine lists everything first and
     /// uses the trash by default.
@@ -490,6 +506,11 @@ mod tests {
             provider.restore(&place, &ctx),
             Err(VfsError::Unsupported { .. })
         ));
+        assert!(matches!(
+            provider.rename_replacing(&place, &place, &ctx),
+            Err(VfsError::Unsupported { .. })
+        ));
+        assert!(!provider.capabilities(&place).replace_rename);
         assert!(matches!(
             provider.trash(&place, &ctx),
             Err(VfsError::Unsupported { .. })

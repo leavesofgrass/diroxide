@@ -20,6 +20,7 @@ Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2, with W1b
 Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, from the requests pairs 1 to 3 held at their integrations):
 
 - **Read only here.** `VfsError::ReadOnlyHere { what, instead }` (built with `read_only_here`) is the refusal of a place this program only reads, with its own class, `ErrorClass::ReadOnlyHere` (no retry, a rule's scope, apart from a read-only drive), and its own next step, the `instead` sentence. `VfsError::sentence` says it whole: "Archives are read only here. Use Pack to make a new one." Every change inside an archive gives it, and the archive crate's `read_only_refusal` reads it (W2a's request 1).
+- **Renaming over a link in one step.** `Provider::rename_replacing`, defaulted to unsupported, renames a file or link over the file or link a name holds, so the name always answers with the old entry or the new one; a folder is never replaced (`AlreadyExists`), never moved over a name, and on any failure both names are as they were. `Capabilities::replace_rename` says where it works. The local provider implements it through the `sys` module: `rename(2)` on Unix, `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING` alone on Windows (no copy across volumes; the system refuses a folder link, and the engine falls back). Plain `rename` still never replaces (W2c's request 2).
 
 ## Context
 

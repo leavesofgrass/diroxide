@@ -128,6 +128,102 @@ fn changing_a_links_target_is_one_step_and_undo_brings_the_old_one_back() {
     assert_eq!(back.link.unwrap().target, "old-target");
 }
 
+/// W2c's request 2 (P2b): where the place renames over a link in one
+/// step, the new link takes the name at once, nothing goes to the trash,
+/// and undo points the link back the same way; a place with no trash may
+/// then change a link too.
+#[test]
+fn a_place_that_replaces_in_one_step_changes_a_link_atomically() {
+    let fake = tree();
+    fake.switches_mut().replace_rename = true;
+    fake.switches_mut().no_trash = true;
+    fake.add_link(&p("/proj/links/latest"), "old-target", false);
+    let engine = engine(&fake);
+    let plan = engine
+        .plan_relink(
+            JobId::new(29),
+            &p("/proj/links/latest"),
+            &p("/proj/data/x.txt"),
+            LinkForm::Absolute,
+        )
+        .unwrap();
+    assert_eq!(plan.steps.len(), 1);
+    let report = engine.run(&plan, &JobControl::new(), &Script::default());
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    let now = fake.entry(&p("/proj/links/latest")).unwrap();
+    assert_eq!(now.link.unwrap().target, p("/proj/data/x.txt").to_string());
+    assert!(!fake.in_trash(&p("/proj/links/latest")), "nothing trashed");
+    assert!(report.undo.trashed.is_empty());
+    assert!(report.undo.created.is_empty());
+    assert_eq!(report.undo.relinked.len(), 1);
+    assert_eq!(report.undo.relinked[0].target, "old-target");
+    let leftovers: Vec<String> = fake
+        .snapshot()
+        .keys()
+        .filter(|key| key.contains("diro-link"))
+        .cloned()
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+    // The record travels as JSON, as the journal writes it.
+    let text = serde_json::to_string(&report.undo).unwrap();
+    let read: crate::UndoRecord = serde_json::from_str(&text).unwrap();
+    assert_eq!(read, report.undo);
+    let undo = engine.plan_undo(&report.undo, JobId::new(30)).unwrap();
+    assert!(matches!(undo.steps[0], Step::Relink { .. }));
+    let undone = engine.run(&undo, &JobControl::new(), &Script::default());
+    assert!(undone.failed.is_empty(), "{:?}", undone.failed);
+    let back = fake.entry(&p("/proj/links/latest")).unwrap();
+    assert_eq!(back.link.unwrap().target, "old-target");
+    // Neither a trash nor a one-step rename: refused before planning.
+    fake.switches_mut().replace_rename = false;
+    assert_eq!(
+        engine.plan_relink(
+            JobId::new(31),
+            &p("/proj/links/latest"),
+            &p("/proj/data/x.txt"),
+            LinkForm::Absolute
+        ),
+        Err(OpsError::CannotLink(
+            "Cannot change a link here: no trash keeps the old one".into()
+        ))
+    );
+}
+
+/// A refused one-step rename (a folder link on Windows) falls back to the
+/// trash's way, and the old link is kept there.
+#[test]
+fn a_refused_one_step_rename_falls_back_to_the_trash() {
+    let fake = tree();
+    fake.switches_mut().replace_rename = true;
+    fake.add_link(&p("/proj/links/latest"), "old-target", false);
+    let engine = engine(&fake);
+    let plan = engine
+        .plan_relink(
+            JobId::new(32),
+            &p("/proj/links/latest"),
+            &p("/proj/data/x.txt"),
+            LinkForm::Absolute,
+        )
+        .unwrap();
+    fake.switches_mut().call_faults.push(
+        CallFault::new(
+            FakeCall::Rename,
+            p("/proj/links/diro-link-32-1"),
+            VfsError::PermissionDenied,
+        )
+        .times(1),
+    );
+    let report = engine.run(&plan, &JobControl::new(), &Script::default());
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    assert!(
+        fake.in_trash(&p("/proj/links/latest")),
+        "the old link is kept"
+    );
+    assert!(report.undo.relinked.is_empty());
+    let now = fake.entry(&p("/proj/links/latest")).unwrap();
+    assert_eq!(now.link.unwrap().target, p("/proj/data/x.txt").to_string());
+}
+
 #[test]
 fn a_missing_privilege_is_said_as_the_catalogs_sentence() {
     let fake = tree();

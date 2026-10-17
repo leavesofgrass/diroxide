@@ -30,7 +30,8 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_WRITE_ATTRIBUTES, FileBasicInfo, FileIdInfo, FileIdType, GetDiskFreeSpaceExW,
     GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx,
     GetFinalPathNameByHandleW, GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW,
-    MoveFileExW, OpenFileById, PROGRESS_CANCEL, PROGRESS_CONTINUE, SetFileAttributesW,
+    MOVEFILE_REPLACE_EXISTING, MoveFileExW, OpenFileById, PROGRESS_CANCEL, PROGRESS_CONTINUE,
+    SetFileAttributesW,
 };
 use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
@@ -231,6 +232,23 @@ pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
     // SAFETY: both strings are NUL-terminated and live across the call,
     // which only reads them.
     let ok = unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) };
+    if ok == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Renames over a file or file link the target holds: `MoveFileExW` with
+/// `MOVEFILE_REPLACE_EXISTING` alone, so it never copies across volumes
+/// (`CrossesDevices`) and the target name is never empty, one step on one
+/// volume. The system refuses to replace a folder, a junction or a folder
+/// link (access is denied), and then both names are as they were.
+pub(crate) fn rename_replacing(from: &Path, to: &Path) -> io::Result<()> {
+    let (from, to) = (wide(from), wide(to));
+    // SAFETY: both strings are NUL-terminated and live across the call,
+    // which only reads them.
+    let ok = unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), MOVEFILE_REPLACE_EXISTING) };
     if ok == 0 {
         Err(io::Error::last_os_error())
     } else {
