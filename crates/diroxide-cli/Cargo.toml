@@ -31,6 +31,8 @@ diroxide-vfs.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# diro watch (W3t): Ctrl+C ends the watch with its last line.
+ctrlc.workspace = true
 
 [dev-dependencies]
 diroxide-theme.workspace = true

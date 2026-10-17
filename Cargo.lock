@@ -922,6 +922,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "crossterm",
+ "ctrlc",
  "diroxide-app",
  "diroxide-archive",
  "diroxide-config",

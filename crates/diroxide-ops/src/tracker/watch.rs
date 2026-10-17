@@ -103,10 +103,10 @@ impl std::fmt::Debug for ArrivalWatch {
 /// The name a line uses for a folder: its last name, or the whole place
 /// at a top ("D:\").
 fn folder_name(place: &Place) -> String {
-    place
-        .name()
-        .map(str::to_owned)
-        .unwrap_or_else(|| place.to_string())
+    place.name().map_or_else(
+        || place.to_string(),
+        |name| diroxide_core::names::display_name(name).into_owned(),
+    )
 }
 
 impl ArrivalWatch {

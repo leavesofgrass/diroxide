@@ -414,6 +414,8 @@ pub struct Runtime {
     archive_settings: Option<ArchiveSettings>,
     /// The passwords of archive jobs between their plan and their run.
     archive_secrets: archive_jobs::JobSecretsMap,
+    /// The arrival watch of Watch this folder (W3t): dropping it stops it.
+    arrivals: Option<diroxide_ops::tracker::WatchRun>,
 }
 
 impl fmt::Debug for Runtime {
@@ -466,6 +468,7 @@ impl Runtime {
             archives,
             archive_settings,
             archive_secrets: Arc::new(Mutex::new(HashMap::new())),
+            arrivals: None,
         }
     }
 
@@ -1040,6 +1043,46 @@ impl Runtime {
                         unreadable,
                     });
                 });
+            }
+            Request::WatchArrivals { watch, place, pace } => {
+                self.watch_arrivals(watch, place, pace);
+            }
+            Request::StopArrivals => self.arrivals = None,
+        }
+    }
+
+    /// Starts the arrival watch of Watch this folder on its own thread,
+    /// replacing the one before (W3t). Its notes come back tagged with
+    /// `watch`; it never counts as busy, so waiting for the workers never
+    /// waits for it.
+    fn watch_arrivals(&mut self, watch: u64, place: Place, pace: Duration) {
+        use diroxide_ops::tracker::{WatchNote, WatchOptions, spawn_watch};
+        self.arrivals = None;
+        let failed = |line: String| AppEvent::Arrivals {
+            watch,
+            note: WatchNote::Failed { line },
+        };
+        let folder = crate::panel::place_leaf(&place);
+        let provider = match self.registry.resolve(&place) {
+            Ok(provider) => provider,
+            Err(error) => {
+                let line = Message::from_error("watch", &folder, &error).text;
+                self.queue.push_back(failed(line));
+                return;
+            }
+        };
+        let shared = Arc::clone(&self.shared);
+        let sink = Box::new(move |note| shared.send(AppEvent::Arrivals { watch, note }));
+        let options = WatchOptions {
+            quiet: None,
+            pace: Some(pace),
+        };
+        let clock = Arc::new(diroxide_core::SystemClock::utc());
+        match spawn_watch(provider, place, options, clock, sink) {
+            Ok(run) => self.arrivals = Some(run),
+            Err(error) => {
+                let line = Message::from_error("watch", &folder, &error).text;
+                self.queue.push_back(failed(line));
             }
         }
     }

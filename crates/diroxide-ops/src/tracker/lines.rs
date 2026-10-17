@@ -1,12 +1,15 @@
 //! What a watch says, and how often: every line puts its meaning in its
 //! first 40 cells, words before symbols, the name of the file or folder
 //! after the fact ("Arrived: scan-004.pdf, 1.2 MB", 29 cells); the
-//! [`Teller`] says at most one line an interval.
+//! [`Teller`] says at most one line an interval. A file name's hidden
+//! characters are said as a question mark, as the panels show them; the
+//! real name stays in [`Arrival::name`] for scripts.
 
 use std::time::Duration;
 
 use diroxide_core::Timestamp;
 use diroxide_core::format::{count, human_size};
+use diroxide_core::names::display_name;
 
 use super::between;
 use super::machine::{Arrival, SkipReason};
@@ -20,8 +23,12 @@ pub fn arrived_line(arrival: &Arrival) -> String {
         "Arrived"
     };
     match arrival.size {
-        Some(size) => format!("{word}: {}, {}", arrival.name, human_size(size)),
-        None => format!("{word}: {}", arrival.name),
+        Some(size) => format!(
+            "{word}: {}, {}",
+            display_name(&arrival.name),
+            human_size(size)
+        ),
+        None => format!("{word}: {}", display_name(&arrival.name)),
     }
 }
 
@@ -37,7 +44,7 @@ pub fn summary_line(folder: &str, arrived: usize) -> String {
 pub fn waiting_line(names: &[String]) -> Option<String> {
     match names {
         [] => None,
-        [one] => Some(format!("Waiting for {one} to settle")),
+        [one] => Some(format!("Waiting for {} to settle", display_name(one))),
         many => Some(format!(
             "Waiting for {} to settle",
             count(many.len() as u64, "file", "files")
@@ -47,12 +54,12 @@ pub fn waiting_line(names: &[String]) -> Option<String> {
 
 /// A skipped file, said: "Skipped scan-004.pdf: online only".
 pub fn skipped_line(name: &str, reason: SkipReason) -> String {
-    format!("Skipped {name}: {}", reason.words())
+    format!("Skipped {}: {}", display_name(name), reason.words())
 }
 
 /// A file that kept changing too long: "Gave up waiting for app.log".
 pub fn gave_up_line(name: &str) -> String {
-    format!("Gave up waiting for {name}")
+    format!("Gave up waiting for {}", display_name(name))
 }
 
 /// The first line of a watch: "Watching Downloads for new files. Escape
@@ -235,6 +242,16 @@ mod tests {
             "Watching share for new files, checking every 5 seconds. Ctrl+C stops."
         );
         assert_eq!(start_line("in", None, ""), "Watching in for new files.");
+        // A hidden character is said as a question mark.
+        let bell = Arrival {
+            name: "scan\u{7}.pdf".to_owned(),
+            ..arrival("x", 5)
+        };
+        assert_eq!(arrived_line(&bell), "Arrived: scan?.pdf, 5 bytes");
+        assert_eq!(
+            waiting_line(std::slice::from_ref(&bell.name)).unwrap(),
+            "Waiting for scan?.pdf to settle"
+        );
         // The fact comes before the folder's or the file's name, so the
         // first 40 cells carry it for any name.
         let long = "a-very-long-file-name-from-a-scanner-0001.pdf";

@@ -335,6 +335,20 @@ pub enum Request {
         /// The places to look for.
         places: Vec<Place>,
     },
+    /// Watch a folder for arriving files, on a thread of the runtime,
+    /// replacing an earlier watch (W3t); its notes come back as
+    /// [`AppEvent::Arrivals`](crate::AppEvent::Arrivals) tagged with
+    /// `watch`.
+    WatchArrivals {
+        /// The watch's number.
+        watch: u64,
+        /// The folder.
+        place: Place,
+        /// The least time between two paced lines.
+        pace: std::time::Duration,
+    },
+    /// Stop watching for arriving files (W3t).
+    StopArrivals,
 }
 
 #[cfg(test)]
