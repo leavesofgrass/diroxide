@@ -6,7 +6,9 @@ Status update, Saturday, October 10, 2026: amended at the owner's decision after
 
 Status update, Saturday, October 10, 2026, later the same evening: the owner decided that the two-panel side-by-side layout is the primary layout of the program, for screen-reader users too, and that the stacked layout is the fallback for screen-reader users and for narrow or limited terminal sessions. The terminal bullet and the fallback paragraph below say so; the sentence "side by side is not offered in screen-reader mode" no longer holds.
 
-## Context
+Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, from the requests pairs 1 to 3 held at their integrations):
+
+- **Token classes are theme roles.** The theme's `PanelRole` gains seventeen token-class roles, `token_keyword` to `token_problem` (`PanelRole::TOKENS`), one for each class the preview crate's tokenizer gives, each a text color on the page with the attribute the class has by nature (bold keywords and headings, underlined links, a reversed problem, never italic). So `[colors]` overrides a class by its key, the contrast check covers it, and the verdict counts a weak pair once; no built-in theme's verdict changed. The terminal's viewer maps classes onto these roles (`diroxide_tui::viewer::class_role`) instead of borrowing the heading, link, code, quote, error and dim text colors, and `CodeStyles::with_colors` takes the `[colors]` table; classes the theme draws as plain text keep the row's own color unless the owner colors them (W2d's request 1).
 
 diroxide has three frontends: the terminal, the window, and a headless server. A feature should exist once, in the core, and every frontend should read the same words for it. The input thread must never block, and tests must drive the app without a terminal or a window.
 

@@ -21,6 +21,13 @@
 //! link", "hidden", "selected"; a diff line says "added" or "removed"; a
 //! plan row says "will be removed". These roles are the extra, never the
 //! only signal.
+//!
+//! The token-class roles (`token_keyword` to `token_problem`, P2b, W2d's
+//! request 1) color the viewer's and the quick view's highlighted text, one
+//! for each class the preview crate's tokenizer gives (R17), so `[colors]`
+//! can override a class and the contrast check covers it: each is its text
+//! color on the page. A class is said in words by Say Token Kind and Say
+//! Line by Kind, so these too are never the only signal.
 
 use std::fmt;
 
@@ -81,11 +88,67 @@ pub enum PanelRole {
     Progress,
     /// A plan listing's row that will be removed (it also says so).
     WillBeRemoved,
+    /// A keyword in code (`fn`, `if`, `return`): bold.
+    TokenKeyword,
+    /// A string or character literal in code.
+    TokenString,
+    /// A comment in code.
+    TokenComment,
+    /// A number in code.
+    TokenNumber,
+    /// A named constant or a literal such as `true`.
+    TokenConstant,
+    /// A function's name in code.
+    TokenFunction,
+    /// A type's name in code.
+    TokenType,
+    /// A variable or parameter in code: plain text unless colored.
+    TokenVariable,
+    /// An operator in code: plain text unless colored.
+    TokenOperator,
+    /// Punctuation in code: plain text unless colored.
+    TokenPunctuation,
+    /// A heading in markup: bold.
+    TokenHeading,
+    /// A link or its address in markup: underlined.
+    TokenLink,
+    /// Emphasized or strong text in markup: bold.
+    TokenEmphasis,
+    /// Code inside markup.
+    TokenCode,
+    /// A tag in HTML or XML.
+    TokenTag,
+    /// An attribute of a tag, or a key in structured text.
+    TokenAttribute,
+    /// Something the grammar marks as invalid: reversed.
+    TokenProblem,
 }
 
 impl PanelRole {
-    /// Every role, in the order of the list in plan section 5.10.
-    pub const ALL: [PanelRole; 25] = [
+    /// The token-class roles, in the order of R17's table of classes.
+    pub const TOKENS: [PanelRole; 17] = [
+        PanelRole::TokenKeyword,
+        PanelRole::TokenString,
+        PanelRole::TokenComment,
+        PanelRole::TokenNumber,
+        PanelRole::TokenConstant,
+        PanelRole::TokenFunction,
+        PanelRole::TokenType,
+        PanelRole::TokenVariable,
+        PanelRole::TokenOperator,
+        PanelRole::TokenPunctuation,
+        PanelRole::TokenHeading,
+        PanelRole::TokenLink,
+        PanelRole::TokenEmphasis,
+        PanelRole::TokenCode,
+        PanelRole::TokenTag,
+        PanelRole::TokenAttribute,
+        PanelRole::TokenProblem,
+    ];
+
+    /// Every role: the list in plan section 5.10, then the token-class
+    /// roles.
+    pub const ALL: [PanelRole; 42] = [
         PanelRole::Page,
         PanelRole::Text,
         PanelRole::FocusedRow,
@@ -111,7 +174,29 @@ impl PanelRole {
         PanelRole::DiffRemoved,
         PanelRole::Progress,
         PanelRole::WillBeRemoved,
+        PanelRole::TokenKeyword,
+        PanelRole::TokenString,
+        PanelRole::TokenComment,
+        PanelRole::TokenNumber,
+        PanelRole::TokenConstant,
+        PanelRole::TokenFunction,
+        PanelRole::TokenType,
+        PanelRole::TokenVariable,
+        PanelRole::TokenOperator,
+        PanelRole::TokenPunctuation,
+        PanelRole::TokenHeading,
+        PanelRole::TokenLink,
+        PanelRole::TokenEmphasis,
+        PanelRole::TokenCode,
+        PanelRole::TokenTag,
+        PanelRole::TokenAttribute,
+        PanelRole::TokenProblem,
     ];
+
+    /// Whether this is a token-class role, which colors highlighted text.
+    pub fn is_token(self) -> bool {
+        Self::TOKENS.contains(&self)
+    }
 
     /// The key for a setting that overrides the role, `snake_case`.
     pub const fn key(self) -> &'static str {
@@ -141,6 +226,23 @@ impl PanelRole {
             PanelRole::DiffRemoved => "diff_removed",
             PanelRole::Progress => "progress",
             PanelRole::WillBeRemoved => "will_be_removed",
+            PanelRole::TokenKeyword => "token_keyword",
+            PanelRole::TokenString => "token_string",
+            PanelRole::TokenComment => "token_comment",
+            PanelRole::TokenNumber => "token_number",
+            PanelRole::TokenConstant => "token_constant",
+            PanelRole::TokenFunction => "token_function",
+            PanelRole::TokenType => "token_type",
+            PanelRole::TokenVariable => "token_variable",
+            PanelRole::TokenOperator => "token_operator",
+            PanelRole::TokenPunctuation => "token_punctuation",
+            PanelRole::TokenHeading => "token_heading",
+            PanelRole::TokenLink => "token_link",
+            PanelRole::TokenEmphasis => "token_emphasis",
+            PanelRole::TokenCode => "token_code",
+            PanelRole::TokenTag => "token_tag",
+            PanelRole::TokenAttribute => "token_attribute",
+            PanelRole::TokenProblem => "token_problem",
         }
     }
 
@@ -172,6 +274,23 @@ impl PanelRole {
             PanelRole::DiffRemoved => "removed line",
             PanelRole::Progress => "progress",
             PanelRole::WillBeRemoved => "will be removed",
+            PanelRole::TokenKeyword => "keyword in code",
+            PanelRole::TokenString => "string in code",
+            PanelRole::TokenComment => "comment in code",
+            PanelRole::TokenNumber => "number in code",
+            PanelRole::TokenConstant => "constant in code",
+            PanelRole::TokenFunction => "function name in code",
+            PanelRole::TokenType => "type name in code",
+            PanelRole::TokenVariable => "variable in code",
+            PanelRole::TokenOperator => "operator in code",
+            PanelRole::TokenPunctuation => "punctuation in code",
+            PanelRole::TokenHeading => "heading in markup",
+            PanelRole::TokenLink => "link in markup",
+            PanelRole::TokenEmphasis => "emphasis in markup",
+            PanelRole::TokenCode => "code in markup",
+            PanelRole::TokenTag => "tag in markup",
+            PanelRole::TokenAttribute => "attribute in markup",
+            PanelRole::TokenProblem => "problem in code",
         }
     }
 
@@ -252,6 +371,23 @@ pub fn role_style(theme: &Theme, role: PanelRole) -> RoleStyle {
         P::DiffRemoved => on_page(C::Error, Attrs::ITALIC),
         P::Progress => on_page(C::Text, Attrs::BOLD),
         P::WillBeRemoved => on_page(C::Error, Attrs::BOLD),
+        // The token classes (R17), with the looks the viewer gave them:
+        // each a text color on the page; italic is never used, since many
+        // terminals draw it poorly.
+        P::TokenKeyword => on_page(C::Heading2, Attrs::BOLD),
+        P::TokenTag => on_page(C::Heading2, Attrs::NONE),
+        P::TokenString => on_page(C::Heading3, Attrs::NONE),
+        P::TokenComment => on_page(C::DimText, Attrs::NONE),
+        P::TokenNumber | P::TokenConstant => on_page(C::Heading4, Attrs::NONE),
+        P::TokenFunction => on_page(C::Heading5, Attrs::NONE),
+        P::TokenType => on_page(C::Heading6, Attrs::NONE),
+        P::TokenVariable | P::TokenOperator | P::TokenPunctuation => on_page(C::Text, Attrs::NONE),
+        P::TokenHeading => on_page(C::Heading1, Attrs::BOLD),
+        P::TokenLink => on_page(C::Link, Attrs::UNDERLINE),
+        P::TokenEmphasis => on_page(C::Text, Attrs::BOLD),
+        P::TokenCode => on_page(C::Code, Attrs::NONE),
+        P::TokenAttribute => on_page(C::Quote, Attrs::NONE),
+        P::TokenProblem => on_page(C::Error, Attrs::REVERSE),
     }
 }
 
@@ -354,6 +490,52 @@ mod tests {
         let added = role_style(theme, PanelRole::DiffAdded);
         let removed = role_style(theme, PanelRole::DiffRemoved);
         assert_ne!(added.attributes, removed.attributes);
+    }
+
+    /// W2d's request 1 (P2b): every token class has a role with a key the
+    /// `[colors]` table can name, a label that says what it is first, and
+    /// a contrast check.
+    #[test]
+    fn token_classes_have_roles_that_are_checked() {
+        assert_eq!(PanelRole::TOKENS.len(), 17);
+        for role in PanelRole::TOKENS {
+            assert!(role.is_token());
+            assert!(PanelRole::ALL.contains(&role));
+            assert!(role.key().starts_with("token_"), "{}", role.key());
+            assert!(
+                role.label().ends_with(" in code") || role.label().ends_with(" in markup"),
+                "{role}"
+            );
+            assert!(!role_style(builtin::default_theme(), role).attributes.italic);
+        }
+        assert!(!PanelRole::Folder.is_token());
+        let checks = panel_checks(builtin::default_theme());
+        assert!(checks.iter().any(|c| c.key == "panel.token_keyword"));
+        assert_eq!(
+            checks.len(),
+            PanelRole::ALL.len() - 1,
+            "every role but the page"
+        );
+        let theme = builtin::default_theme();
+        assert!(role_style(theme, PanelRole::TokenKeyword).attributes.bold);
+        assert!(role_style(theme, PanelRole::TokenLink).attributes.underline);
+        assert!(
+            role_style(theme, PanelRole::TokenProblem)
+                .attributes
+                .reverse
+        );
+        let mut weak = theme.clone();
+        let page = weak.color(ColorRole::Background);
+        weak.set_color(ColorRole::Heading5, page);
+        let failing: Vec<String> = panel_checks(&weak)
+            .into_iter()
+            .filter(|c| !c.passed)
+            .map(|c| c.key)
+            .collect();
+        assert!(
+            failing.contains(&"panel.token_function".to_owned()),
+            "{failing:?}"
+        );
     }
 
     #[test]

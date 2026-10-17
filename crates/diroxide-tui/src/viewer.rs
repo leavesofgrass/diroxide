@@ -18,11 +18,12 @@
 //! places it); [`render`] draws a whole frame of its own, the title, the
 //! rows and the status line, for tests and as the reference layout.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use diroxide_app::viewer::{ClassRun, HighlightSetting, TokenClass, Viewer};
 use diroxide_theme::{
-    Attrs, ColorRole, ColorSupport, PanelRole, Registry, Rgb, TermColor, term_color,
+    Attrs, ColorSupport, PanelRole, Registry, Rgb, TermColor, role_style, term_color,
 };
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -63,27 +64,36 @@ pub struct CodeStyles {
     classes: Vec<(TokenClass, Style)>,
 }
 
-/// The theme color and the attribute of each class. Attributes are kept
-/// for the classes that have a natural one; italic is never used, since
-/// many terminals draw it poorly (R17).
-fn class_look(class: TokenClass) -> (Option<ColorRole>, Attrs) {
+/// The theme's token-class role of each class (P2b, W2d's request 1), so
+/// `[colors]` can override a class and the contrast check covers it; a
+/// plain run has none. The roles keep the attributes the classes have by
+/// nature (bold keywords and headings, underlined links, a reversed
+/// problem); italic is never used, since many terminals draw it poorly
+/// (R17).
+pub fn class_role(class: TokenClass) -> Option<PanelRole> {
     use TokenClass as C;
-    match class {
-        C::Keyword => (Some(ColorRole::Heading2), Attrs::BOLD),
-        C::String => (Some(ColorRole::Heading3), Attrs::NONE),
-        C::Comment => (Some(ColorRole::DimText), Attrs::NONE),
-        C::Number | C::Constant => (Some(ColorRole::Heading4), Attrs::NONE),
-        C::FunctionName => (Some(ColorRole::Heading5), Attrs::NONE),
-        C::TypeName => (Some(ColorRole::Heading6), Attrs::NONE),
-        C::Heading => (Some(ColorRole::Heading1), Attrs::BOLD),
-        C::Link => (Some(ColorRole::Link), Attrs::UNDERLINE),
-        C::Emphasis => (None, Attrs::BOLD),
-        C::Code => (Some(ColorRole::Code), Attrs::NONE),
-        C::Tag => (Some(ColorRole::Heading2), Attrs::NONE),
-        C::Attribute => (Some(ColorRole::Quote), Attrs::NONE),
-        C::Problem => (Some(ColorRole::Error), Attrs::REVERSE),
-        _ => (None, Attrs::NONE),
-    }
+    Some(match class {
+        C::Plain => return None,
+        C::Keyword => PanelRole::TokenKeyword,
+        C::String => PanelRole::TokenString,
+        C::Comment => PanelRole::TokenComment,
+        C::Number => PanelRole::TokenNumber,
+        C::Constant => PanelRole::TokenConstant,
+        C::FunctionName => PanelRole::TokenFunction,
+        C::TypeName => PanelRole::TokenType,
+        C::Variable => PanelRole::TokenVariable,
+        C::Operator => PanelRole::TokenOperator,
+        C::Punctuation => PanelRole::TokenPunctuation,
+        C::Heading => PanelRole::TokenHeading,
+        C::Link => PanelRole::TokenLink,
+        C::Emphasis => PanelRole::TokenEmphasis,
+        C::Code => PanelRole::TokenCode,
+        C::Tag => PanelRole::TokenTag,
+        C::Attribute => PanelRole::TokenAttribute,
+        C::Problem => PanelRole::TokenProblem,
+        // A class a later preview crate adds draws plain until it has a role.
+        _ => return None,
+    })
 }
 
 fn modifiers(attrs: Attrs) -> Modifier {
@@ -110,21 +120,44 @@ fn color(rgb: Rgb, support: ColorSupport) -> Option<Color> {
 impl CodeStyles {
     /// The classes' styles of the theme named `theme` (a built-in one, or a
     /// file in `themes_dir`) at a color level: colors and attributes at
-    /// 256 colors and true color, attributes alone below.
+    /// 256 colors and true color, attributes alone below. The same as
+    /// [`CodeStyles::with_colors`] with no `[colors]` overrides.
     pub fn new(theme: &str, themes_dir: Option<&Path>, support: ColorSupport) -> Self {
+        Self::with_colors(theme, &BTreeMap::new(), themes_dir, support)
+    }
+
+    /// The classes' styles through the theme's token-class roles
+    /// ([`class_role`]), with the owner's `[colors]` overrides by role key
+    /// (`token_keyword = "#ffaa00"`), which replace a class's text color
+    /// and keep its attribute. Only the text color is set, so a run keeps
+    /// its row's background; a class the theme draws as plain text
+    /// (variables, operators, punctuation) keeps the row's own color unless
+    /// the owner colors it.
+    pub fn with_colors(
+        theme: &str,
+        colors: &BTreeMap<String, String>,
+        themes_dir: Option<&Path>,
+        support: ColorSupport,
+    ) -> Self {
         let mut registry = Registry::builtin();
         if let Some(dir) = themes_dir {
             let _ = registry.load_dir(dir);
         }
         let (chosen, _) = registry.resolve(theme);
+        let text = role_style(chosen, PanelRole::Text);
         let classes = TokenClass::ALL
             .into_iter()
             .map(|class| {
-                let (role, attrs) = class_look(class);
-                let mut style = Style::default().add_modifier(modifiers(attrs));
-                if let Some(role) = role
-                    && let Some(fg) = color(chosen.color(role), support)
-                {
+                let Some(role) = class_role(class) else {
+                    return (class, Style::default());
+                };
+                let theirs = role_style(chosen, role);
+                let owners = colors.get(role.key()).and_then(|c| Rgb::parse(c).ok());
+                let mut style = Style::default().add_modifier(modifiers(theirs.attributes));
+                let plain =
+                    theirs.foreground == text.foreground && theirs.attributes == Attrs::NONE;
+                let foreground = owners.or((!plain).then_some(theirs.foreground));
+                if let Some(fg) = foreground.and_then(|rgb| color(rgb, support)) {
                     style = style.fg(fg);
                 }
                 (class, style)
@@ -474,6 +507,58 @@ mod tests {
         assert!(
             focused.contains(Modifier::REVERSED),
             "the focus has an attribute"
+        );
+    }
+
+    /// W2d's request 1 (P2b): classes map onto the theme's token-class
+    /// roles, and `[colors]` overrides a class by its role's key.
+    #[test]
+    fn classes_take_their_roles_and_the_owners_colors() {
+        for class in TokenClass::ALL {
+            match class_role(class) {
+                Some(role) => assert!(role.is_token(), "{}", class.word()),
+                None => assert_eq!(class, TokenClass::Plain),
+            }
+        }
+        let theme = Registry::builtin();
+        let (galaxy, _) = theme.resolve("galaxy");
+        let truecolor = CodeStyles::new("galaxy", None, ColorSupport::TrueColor);
+        let keyword = role_style(galaxy, PanelRole::TokenKeyword).foreground;
+        assert_eq!(
+            truecolor.get(TokenClass::Keyword).fg,
+            Some(Color::Rgb(keyword.r, keyword.g, keyword.b))
+        );
+        assert_eq!(
+            truecolor.get(TokenClass::Variable).fg,
+            None,
+            "plain by default"
+        );
+        let colors: BTreeMap<String, String> = [
+            ("token_keyword".to_owned(), "#ffaa00".to_owned()),
+            ("token_variable".to_owned(), "#00aaff".to_owned()),
+        ]
+        .into_iter()
+        .collect();
+        let owners = CodeStyles::with_colors("galaxy", &colors, None, ColorSupport::TrueColor);
+        assert_eq!(
+            owners.get(TokenClass::Keyword).fg,
+            Some(Color::Rgb(0xff, 0xaa, 0))
+        );
+        assert!(
+            owners
+                .get(TokenClass::Keyword)
+                .add_modifier
+                .contains(Modifier::BOLD)
+        );
+        assert_eq!(
+            owners.get(TokenClass::Variable).fg,
+            Some(Color::Rgb(0, 0xaa, 0xff))
+        );
+        let none = CodeStyles::with_colors("galaxy", &colors, None, ColorSupport::NoColor);
+        assert_eq!(
+            none.get(TokenClass::Keyword).fg,
+            None,
+            "no color, no override"
         );
     }
 

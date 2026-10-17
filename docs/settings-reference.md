@@ -743,6 +743,23 @@ The roles the `[colors]` table can color, each as `role = "#rrggbb"`. Every role
 - `diff_removed`: removed line.
 - `progress`: progress.
 - `will_be_removed`: will be removed.
+- `token_keyword`: keyword in code.
+- `token_string`: string in code.
+- `token_comment`: comment in code.
+- `token_number`: number in code.
+- `token_constant`: constant in code.
+- `token_function`: function name in code.
+- `token_type`: type name in code.
+- `token_variable`: variable in code.
+- `token_operator`: operator in code.
+- `token_punctuation`: punctuation in code.
+- `token_heading`: heading in markup.
+- `token_link`: link in markup.
+- `token_emphasis`: emphasis in markup.
+- `token_code`: code in markup.
+- `token_tag`: tag in markup.
+- `token_attribute`: attribute in markup.
+- `token_problem`: problem in code.
 
 ## Columns
 
