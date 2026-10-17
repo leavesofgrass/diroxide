@@ -117,7 +117,8 @@ fn tabs_and_hidden_characters_never_reach_the_screen() {
     let (mut viewer, _) = open("text/notes.txt");
     viewer.set_size(80, 20);
     let rows = viewer.rows();
-    assert_eq!(rows[12].text, "Tabs    are turned  into    spaces.");
+    let tabs = rows.iter().find(|r| r.pos.line == 12).unwrap();
+    assert_eq!(tabs.text, "Tabs    are turned  into    spaces.");
     let mut viewer = memory(b"bad\x1b[2Jname\nnext\x07\n");
     let rows = viewer.rows();
     assert_eq!(rows[0].text, "bad?[2Jname");
@@ -278,4 +279,148 @@ fn spike_v1_a_gibibyte_log() {
     );
     drop(viewer);
     dir.close().unwrap();
+}
+
+#[test]
+fn wrapped_rows_say_continued_first_and_fit_a_braille_line() {
+    let (mut viewer, _) = open("text/notes.txt");
+    viewer.set_size(80, 40);
+    viewer.set_wrap_width(40);
+    let rows = viewer.rows();
+    let long: Vec<&ViewerRow> = rows.iter().filter(|r| r.pos.line == 9).collect();
+    assert!(long.len() > 3, "{long:?}");
+    assert!(long[0].text.starts_with("A long line follows"));
+    for row in &rows {
+        assert!(row.text.chars().count() <= 40, "{:?}", row.text);
+    }
+    for row in &long[1..] {
+        assert!(row.text.starts_with(CONTINUED), "{:?}", row.text);
+        let first = row.text[row.prefix..].chars().next().unwrap();
+        assert!(
+            first.is_alphanumeric(),
+            "a word starts the row: {:?}",
+            row.text
+        );
+    }
+    let whole: String = long.iter().map(|r| &r.text[r.prefix..]).collect();
+    assert_eq!(Some(whole), viewer.line_text(9));
+    // The cursor walks the parts, and the status stays on the line.
+    viewer.jump("10");
+    viewer.down();
+    assert_eq!(viewer.cursor(), RowPos { line: 9, part: 1 });
+    assert_eq!(viewer.status(), "Line 10 of 14, 71 percent");
+    viewer.up();
+    viewer.up();
+    assert_eq!(viewer.cursor(), RowPos { line: 8, part: 0 });
+    assert_eq!(texts(&viewer.toggle_wrap()), ["Wrap off"]);
+    assert_eq!(viewer.rows().iter().filter(|r| r.pos.line == 9).count(), 1);
+    assert_eq!(
+        texts(&viewer.set_wrap_width(0)),
+        ["Wrap at the screen's width"]
+    );
+}
+
+#[test]
+fn line_numbers_start_each_line_and_not_its_continued_rows() {
+    let (mut viewer, _) = open("text/notes.txt");
+    viewer.set_size(40, 30);
+    assert_eq!(texts(&viewer.toggle_line_numbers()), ["Line numbers on"]);
+    let rows = viewer.rows();
+    assert_eq!(rows[0].text, "1: Notes for the week, kept by Ada ");
+    assert_eq!(rows[0].prefix, 3);
+    assert!(rows[1].text.starts_with("continued: Example."));
+    let tenth = rows.iter().find(|r| r.pos.line == 9).unwrap();
+    assert!(tenth.text.starts_with("10: A long line"));
+    assert_eq!(texts(&viewer.toggle_line_numbers()), ["Line numbers off"]);
+}
+
+#[test]
+fn a_jump_says_where_it_landed() {
+    let (mut viewer, _) = open("text/notes.txt");
+    viewer.set_size(80, 5);
+    assert_eq!(texts(&viewer.jump("5")), ["At line 5 of 14"]);
+    assert_eq!(viewer.cursor().line, 4);
+    assert_eq!(viewer.rows().iter().position(|r| r.focused), Some(4));
+    assert_eq!(texts(&viewer.jump("50%")), ["At line 7 of 14, 50 percent"]);
+    assert_eq!(
+        texts(&viewer.jump("line 999")),
+        ["Past the end: at line 14, the last"]
+    );
+    assert_eq!(texts(&viewer.jump("@41")), ["At line 2, offset 41"]);
+    assert_eq!(texts(&viewer.jump("0x0")), ["At line 1, offset 0"]);
+    assert_eq!(
+        texts(&viewer.jump("offset 99999")),
+        ["Past the end: at line 14, the last"]
+    );
+    assert_eq!(texts(&viewer.jump("top")), ["At line 1 of 14"]);
+    assert_eq!(texts(&viewer.jump("end")), ["Line 14 of 14, the last"]);
+    let said = viewer.jump("seven");
+    assert_eq!(texts(&said), ["Not a line, offset or percent: seven"]);
+    assert_eq!(said[0].kind, diroxide_core::MessageKind::Warning);
+}
+
+#[test]
+fn a_far_jump_in_a_large_file_lands_after_the_scan() {
+    let mut viewer = memory(&numbered(2_000_000));
+    assert!(viewer.jump("1,500,000").is_empty());
+    assert!(viewer.is_busy());
+    let said = texts(&viewer.finish());
+    assert_eq!(said, ["At line 1,500,000"], "the total is not known yet");
+    assert_eq!(
+        viewer.rows().iter().find(|r| r.focused).unwrap().text,
+        "line 1500000"
+    );
+    assert_eq!(texts(&viewer.jump("50%")).len(), 1);
+}
+
+#[test]
+fn reload_reads_the_file_again_and_keeps_the_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("growing.log");
+    std::fs::write(&path, "one\ntwo\nthree\n").unwrap();
+    let place = Place::parse(&path.to_string_lossy()).unwrap();
+    let registry = Registry::with_local();
+    let (mut viewer, _) = Viewer::open(&registry, &place, None, ViewerOptions::default()).unwrap();
+    viewer.jump("2");
+    std::fs::write(&path, "one\ntwo\nthree\nfour\n").unwrap();
+    assert_eq!(
+        texts(&viewer.reload(&registry)),
+        ["Reloaded growing.log, 4 lines"]
+    );
+    assert_eq!(viewer.cursor().line, 1);
+    assert_eq!(viewer.rows()[3].text, "four");
+    std::fs::write(&path, "only\n").unwrap();
+    viewer.reload(&registry);
+    assert_eq!(
+        viewer.cursor().line,
+        0,
+        "the line is gone: the last there is"
+    );
+}
+
+#[test]
+fn follow_says_how_many_lines_arrived() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("server.log");
+    std::fs::write(&path, "start\n").unwrap();
+    let place = Place::parse(&path.to_string_lossy()).unwrap();
+    let registry = Registry::with_local();
+    let (mut viewer, _) = Viewer::open(&registry, &place, None, ViewerOptions::default()).unwrap();
+    assert_eq!(texts(&viewer.toggle_follow()), ["Follow on"]);
+    assert!(viewer.follow_tick().is_empty(), "nothing new");
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .unwrap();
+    file.write_all(b"a\nb\n").unwrap();
+    drop(file);
+    assert_eq!(texts(&viewer.follow_tick()), ["2 new lines"]);
+    assert_eq!(viewer.cursor().line, 2);
+    assert_eq!(texts(&viewer.toggle_follow()), ["Follow off"]);
+    let mut stream = memory(b"x\n");
+    assert_eq!(
+        texts(&stream.toggle_follow()),
+        ["Follow works on files on disk only"]
+    );
 }

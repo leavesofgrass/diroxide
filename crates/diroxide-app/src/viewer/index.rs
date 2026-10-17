@@ -157,10 +157,6 @@ impl LineIndex {
 
     /// The line that holds byte `offset`, scanning at most `budget` bytes
     /// more; `None` when the budget ran out first.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "jump by offset, the next commit")
-    )]
     pub(crate) fn line_of(
         &mut self,
         source: &mut ViewerSource,

@@ -9,7 +9,10 @@
 //! as far as needed and in slices ([`Viewer::work`]), so the input thread
 //! never waits on a whole file; the large-file policy for a stream, whose
 //! decoded bytes are kept up to the `member_cache_mib` cap and said beyond
-//! it ("Showing the first 64 MB of 800 MB.").
+//! it ("Showing the first 64 MB of 800 MB."); wrapping at the screen's
+//! width or a fixed width, each continued row saying "continued" first;
+//! line numbers; jumps to a line, an offset or a percent, each saying
+//! where it landed; reload and follow.
 //!
 //! How a frontend drives it: [`Viewer::open`] (or [`Viewer::from_source`])
 //! returns the viewer and what to say; [`Viewer::set_size`] gives the
@@ -24,9 +27,13 @@
 //! The viewer is `Send`, so a frontend may keep it on a worker thread.
 
 mod index;
+mod jump;
+mod rows;
 mod source;
 mod text;
+mod wrap;
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use diroxide_config::{Highlighting, Settings, ViewerSettings};
@@ -37,10 +44,12 @@ use diroxide_preview::encoding::{SNIFF_BYTES, binary_kind};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
+pub use jump::Jump;
 pub use source::ViewerSource;
+pub use wrap::CONTINUED;
 
 use index::{Found, LineIndex};
-use text::{TextForm, neutralize, read_line};
+use text::TextForm;
 
 /// How many bytes of one line are shown at most; the rest of a longer
 /// line is cut, and the row says so.
@@ -163,8 +172,15 @@ pub struct RowPos {
 pub struct ViewerRow {
     /// Where it is.
     pub pos: RowPos,
-    /// The text as drawn and read: the line, or its part.
+    /// The text as drawn and read: the line number when they are on, or
+    /// "continued: " on a continued row, then the line's text or its part.
     pub text: String,
+    /// The bytes of [`ViewerRow::text`] before the line's own text: the
+    /// number or the "continued" cue.
+    pub prefix: usize,
+    /// Where the row's part starts in the line's shown text, in bytes, so a
+    /// frontend can place the line's class runs on the row.
+    pub from: usize,
     /// Whether the cursor is on this row.
     pub focused: bool,
 }
@@ -192,18 +208,22 @@ struct ShownLine {
 /// What a scan was started for, finished by [`Viewer::work`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Task {
-    /// Land on a line: 0-based, with the words to say when there.
+    /// Land on a line: 0-based, `u64::MAX` for the last, with the words
+    /// to say when there.
     Line { line: u64, landing: Landing },
+    /// Land on the line that holds a byte.
+    Offset { offset: u64, landing: Landing },
 }
 
 /// What to say on landing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Landing {
     /// Nothing: a move the screen reader follows by itself.
-    #[cfg_attr(not(test), expect(dead_code, reason = "jump, the next commit"))]
     Quiet,
     /// "Line 4,000 of 4,000, the last".
     End,
+    /// Where a jump landed: "At line 120 of 4,000".
+    Jump(Jump),
 }
 
 /// The viewer. See the module documentation.
@@ -221,7 +241,11 @@ pub struct Viewer {
     top: RowPos,
     width: usize,
     height: usize,
-    lines: std::collections::BTreeMap<u64, ShownLine>,
+    wrap: bool,
+    wrap_width: usize,
+    line_numbers: bool,
+    follow: bool,
+    lines: BTreeMap<u64, ShownLine>,
     task: Option<Task>,
 }
 
@@ -252,44 +276,61 @@ impl Viewer {
     /// A viewer over a source already open.
     pub fn from_source(
         place: Place,
-        mut source: ViewerSource,
+        source: ViewerSource,
         options: ViewerOptions,
     ) -> Result<(Self, Vec<Message>), ViewerError> {
-        let head = source.chunk(0, SNIFF_BYTES)?.to_vec();
-        let more_follows = source.total().is_none_or(|t| t > head.len() as u64);
-        let form = TextForm::from_head(&head, more_follows);
-        let binary = binary_kind(&head);
         let name = place
             .name()
             .map_or_else(|| place.title(), |n| display_name(n).into_owned());
+        let settings = options.settings;
         let mut viewer = Self {
             title: crate::panel::place_title(&place),
             place,
             name,
             options,
-            index: LineIndex::new(form.start(), form.newline),
+            index: LineIndex::new(0, text::Newline::Byte),
             source,
-            form,
+            form: TextForm::from_head(b"", false),
             mode: ViewerMode::Text,
-            binary,
+            binary: None,
             cursor: RowPos::default(),
             top: RowPos::default(),
             width: 80,
             height: 24,
-            lines: std::collections::BTreeMap::new(),
+            wrap: settings.wrap,
+            wrap_width: usize::try_from(settings.wrap_width).unwrap_or(usize::MAX),
+            line_numbers: settings.line_numbers,
+            follow: settings.follow,
+            lines: BTreeMap::new(),
             task: None,
         };
-        if viewer.binary.is_some() {
-            viewer.mode = ViewerMode::Hex;
-        }
-        let available = viewer.source.available();
-        if viewer.source.is_complete() && available <= INDEX_AT_OPEN {
-            viewer.index.scan(&mut viewer.source, u64::MAX)?;
-        } else {
-            viewer.index.scan(&mut viewer.source, COMMAND_BUDGET)?;
-        }
+        viewer.load()?;
         let said = viewer.opening_lines();
         Ok((viewer, said))
+    }
+
+    /// Reads the start of the source: the text form, the binary check and
+    /// the first slice of the index.
+    fn load(&mut self) -> Result<(), ViewerError> {
+        let head = self.source.chunk(0, SNIFF_BYTES)?.to_vec();
+        let more_follows = self.source.total().is_none_or(|t| t > head.len() as u64);
+        self.form = TextForm::from_head(&head, more_follows);
+        self.binary = binary_kind(&head);
+        self.mode = if self.binary.is_some() {
+            ViewerMode::Hex
+        } else {
+            ViewerMode::Text
+        };
+        self.index = LineIndex::new(self.form.start(), self.form.newline);
+        self.lines.clear();
+        self.task = None;
+        let budget = if self.source.is_complete() && self.source.available() <= INDEX_AT_OPEN {
+            u64::MAX
+        } else {
+            COMMAND_BUDGET
+        };
+        self.index.scan(&mut self.source, budget)?;
+        Ok(())
     }
 
     /// What is said when the file opens: the title, then each policy line.
@@ -360,6 +401,11 @@ impl Viewer {
     /// The file's lines, once the index has reached its end.
     pub fn line_count(&self) -> Option<u64> {
         self.index.total()
+    }
+
+    /// How many lines are known so far, for a status that has no total.
+    pub fn lines_known(&self) -> u64 {
+        self.index.lines_known()
     }
 
     /// The memory the line index takes, in bytes.
@@ -448,206 +494,55 @@ impl Viewer {
         }
     }
 
-    /// The row the cursor is on, counted from the first row drawn.
-    pub fn cursor_row(&mut self) -> usize {
-        self.rows()
-            .iter()
-            .position(|row| row.focused)
-            .unwrap_or_default()
-    }
-
-    /// The rows to draw now, top to bottom.
-    pub fn rows(&mut self) -> Vec<ViewerRow> {
-        let mut rows = Vec::with_capacity(self.height);
-        let mut line = self.top.line;
-        while rows.len() < self.height {
-            let Some(shown) = self.shown(line) else {
-                break;
-            };
-            let mut text = shown.text.clone();
-            if shown.cut {
-                text.push_str(" (line cut)");
-            }
-            let pos = RowPos { line, part: 0 };
-            rows.push(ViewerRow {
-                focused: pos == self.cursor,
-                pos,
-                text,
-            });
-            if shown.last {
-                break;
-            }
-            line += 1;
-        }
-        rows
-    }
-
-    /// The line as shown, read and kept when it is not yet.
-    fn shown(&mut self, line: u64) -> Option<ShownLine> {
-        if let Some(shown) = self.lines.get(&line) {
-            return Some(shown.clone());
-        }
-        let offset = match line
-            .checked_sub(1)
-            .and_then(|before| self.lines.get(&before))
-        {
-            Some(before) if !before.last => before.next,
-            Some(_) => return None,
-            None => match self
-                .index
-                .line_start(&mut self.source, line, COMMAND_BUDGET)
-            {
-                Ok(Found::At(at)) => at,
-                _ => return None,
-            },
-        };
-        let raw = read_line(&mut self.source, self.form.newline, offset, MAX_LINE_BYTES).ok()?;
-        if raw.last && raw.bytes.is_empty() && line > 0 {
-            // After a final line end there is no line.
-            if let Some(before) = self.lines.get_mut(&(line - 1)) {
-                before.last = true;
-            }
-            return None;
-        }
-        let shown = ShownLine {
-            offset,
-            next: raw.next,
-            text: neutralize(&self.form.decode_line(&raw.bytes)),
-            cut: raw.cut,
-            last: raw.last,
-        };
-        self.keep(line, shown.clone());
-        Some(shown)
-    }
-
-    /// Keeps a shown line, dropping the ones far from the screen.
-    fn keep(&mut self, line: u64, shown: ShownLine) {
-        self.lines.insert(line, shown);
-        let room = (self.height * 8).max(256);
-        if self.lines.len() > room {
-            let near = self.cursor.line;
-            let far: Vec<u64> = self
-                .lines
-                .keys()
-                .copied()
-                .filter(|l| l.abs_diff(near) > room as u64 / 2)
-                .collect();
-            for l in far {
-                self.lines.remove(&l);
-            }
-        }
-    }
-
-    /// Whether line `line` exists.
-    fn has_line(&mut self, line: u64) -> bool {
-        self.shown(line).is_some()
-    }
-
-    /// Down one row: the screen reader reads the new row itself.
-    pub fn down(&mut self) -> Vec<Message> {
-        let next = self.cursor.line + 1;
-        if self.has_line(next) {
-            self.cursor = RowPos {
-                line: next,
-                part: 0,
-            };
-            self.keep_cursor_visible();
-        }
-        Vec::new()
-    }
-
-    /// Up one row.
-    pub fn up(&mut self) -> Vec<Message> {
-        if self.cursor.line > 0 {
-            self.cursor = RowPos {
-                line: self.cursor.line - 1,
-                part: 0,
-            };
-            self.keep_cursor_visible();
-        }
-        Vec::new()
-    }
-
-    /// Down one screen.
-    pub fn page_down(&mut self) -> Vec<Message> {
-        for _ in 0..self.height.saturating_sub(1).max(1) {
-            let before = self.cursor;
-            self.down();
-            if self.cursor == before {
-                break;
-            }
-        }
-        Vec::new()
-    }
-
-    /// Up one screen.
-    pub fn page_up(&mut self) -> Vec<Message> {
-        for _ in 0..self.height.saturating_sub(1).max(1) {
-            if self.cursor.line == 0 {
-                break;
-            }
-            self.up();
-        }
-        Vec::new()
-    }
-
-    /// The first line.
-    pub fn home(&mut self) -> Vec<Message> {
-        self.cursor = RowPos::default();
-        self.keep_cursor_visible();
-        Vec::new()
-    }
-
-    /// The last line: at once when the index has reached the end, after a
-    /// scan otherwise ([`Viewer::work`]); says "Line 4,000 of 4,000, the
-    /// last" when it lands.
-    pub fn end(&mut self) -> Vec<Message> {
-        self.start_task(Task::Line {
-            line: u64::MAX,
-            landing: Landing::End,
-        })
-    }
-
     fn start_task(&mut self, task: Task) -> Vec<Message> {
         self.task = Some(task.clone());
         self.run_task(task, COMMAND_BUDGET)
     }
 
     fn run_task(&mut self, task: Task, budget: u64) -> Vec<Message> {
-        match task {
-            Task::Line { line, landing } => {
-                let target = if line == u64::MAX {
-                    match self.index.scan(&mut self.source, budget) {
-                        Ok(true) => self.index.lines_known().saturating_sub(1),
-                        Ok(false) => return Vec::new(),
-                        Err(error) => {
-                            self.task = None;
-                            return vec![ViewerError::from(error).message(&self.name)];
-                        }
-                    }
-                } else {
-                    line
-                };
-                match self.index.line_start(&mut self.source, target, budget) {
-                    Ok(Found::Pending) => Vec::new(),
-                    Ok(Found::At(_)) => {
-                        self.task = None;
-                        self.land(target, landing)
-                    }
-                    Ok(Found::PastEnd { last }) => {
-                        self.task = None;
-                        self.land(last, landing)
-                    }
-                    Err(error) => {
-                        self.task = None;
-                        vec![ViewerError::from(error).message(&self.name)]
-                    }
-                }
+        let result = match task {
+            Task::Line { line, landing } => self
+                .find_line(line, budget)
+                .map(|found| found.map(|(line, past)| (line, past, landing))),
+            Task::Offset { offset, landing } => self
+                .index
+                .line_of(&mut self.source, offset, budget)
+                .map(|found| found.map(|line| (line, false, landing))),
+        };
+        match result {
+            Ok(None) => Vec::new(),
+            Ok(Some((line, past, landing))) => {
+                self.task = None;
+                self.land(line, past, landing)
+            }
+            Err(error) => {
+                self.task = None;
+                vec![ViewerError::from(error).message(&self.name)]
             }
         }
     }
 
-    fn land(&mut self, line: u64, landing: Landing) -> Vec<Message> {
+    /// Where line `line` is (`u64::MAX` for the last), within the budget:
+    /// the line found and whether the one asked for was past the end.
+    fn find_line(&mut self, line: u64, budget: u64) -> std::io::Result<Option<(u64, bool)>> {
+        let target = if line == u64::MAX {
+            if !self.index.scan(&mut self.source, budget)? {
+                return Ok(None);
+            }
+            self.index.lines_known().saturating_sub(1)
+        } else {
+            line
+        };
+        Ok(
+            match self.index.line_start(&mut self.source, target, budget)? {
+                Found::Pending => None,
+                Found::At(_) => Some((target, false)),
+                Found::PastEnd { last } => Some((last, line != u64::MAX)),
+            },
+        )
+    }
+
+    fn land(&mut self, line: u64, past: bool, landing: Landing) -> Vec<Message> {
         self.cursor = RowPos { line, part: 0 };
         self.keep_cursor_visible();
         match landing {
@@ -660,21 +555,7 @@ impl Viewer {
                     grouped(total)
                 ))]
             }
-        }
-    }
-
-    /// Scrolls so the cursor's row is on the screen, as little as needed.
-    fn keep_cursor_visible(&mut self) {
-        if self.cursor < self.top {
-            self.top = self.cursor;
-            return;
-        }
-        let span = self.cursor.line.saturating_sub(self.top.line);
-        if span >= self.height as u64 {
-            self.top = RowPos {
-                line: self.cursor.line + 1 - self.height as u64,
-                part: 0,
-            };
+            Landing::Jump(jump) => vec![Message::info(self.landed(jump, line, past))],
         }
     }
 
@@ -701,11 +582,6 @@ impl Viewer {
             Some(line) => vec![Message::info(line)],
             None => vec![Message::info(format!("Showing all of {}.", self.name))],
         }
-    }
-
-    /// How many lines are known so far, for a status that has no total.
-    pub fn lines_known(&self) -> u64 {
-        self.index.lines_known()
     }
 
     /// The words for a count of lines: "4,000 lines".
