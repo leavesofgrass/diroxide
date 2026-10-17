@@ -144,6 +144,10 @@ impl App {
 
     /// A key with a dialog open.
     pub(super) fn dialog_key(&mut self, key: Key) -> Vec<Effect> {
+        // The labels', bookmarks' and History lists' own keys (W3l).
+        if let Some(effects) = self.organize_key(&key) {
+            return effects;
+        }
         let Some((_, dialog)) = self.dialogs.last() else {
             return Vec::new();
         };
@@ -280,7 +284,7 @@ impl App {
                     | Purpose::Places(_)
                     | Purpose::PickDestination { .. }
                     | Purpose::TypedPlan(..)
-            );
+            ) || matches!(&purpose, Purpose::Organize(w) if w.list_always());
             if candidates.is_some() && !list_always {
                 *candidates = None;
                 *in_list = false;
@@ -374,6 +378,7 @@ impl App {
                     effects.extend(self.duplicate_prompt(side, next.clone(), more.to_vec()));
                 }
             }
+            Purpose::Organize(wants) => effects.extend(self.organize_escape(*wants)),
             _ => {}
         }
         effects
@@ -417,6 +422,7 @@ impl App {
                 effects.push(self.say(Message::info(format!("Running {name}"))));
                 effects.push(Effect::OpenExternally(place));
             }
+            Purpose::Organize(wants) => effects.extend(self.organize_yes(*wants)),
             _ => {}
         }
         effects
@@ -723,6 +729,7 @@ impl App {
                 match self.typed_place(side, &chosen) {
                     Ok(place) => {
                         self.remember(state::keys::PLACES, &text);
+                        self.bookmark_chosen(&place);
                         let mut effects = self.close_top();
                         effects.extend(self.open(side, place, None));
                         effects
@@ -779,6 +786,7 @@ impl App {
                 effects.extend(self.run_line(side, &text));
                 effects
             }
+            Purpose::Organize(wants) => self.organize_accept(*wants, row, text, in_list),
             Purpose::RunPlan(_)
             | Purpose::Quit
             | Purpose::RunProgram(_)
@@ -1089,6 +1097,7 @@ impl App {
             Some(Purpose::Palette | Purpose::Places(_) | Purpose::PickDestination { .. }) => {
                 self.refresh_candidates()
             }
+            Some(Purpose::Organize(wants)) if wants.list_always() => self.refresh_candidates(),
             _ => {
                 if let Some((
                     _,
@@ -1130,7 +1139,10 @@ impl App {
                     .into_iter()
                     .filter(|c| terms_in_order(&text, &c.text) || terms_in_order(&text, &c.kind))
                     .collect();
-                candidate_list("Places", &found)
+                let mut list = candidate_list("Places", &found);
+                // Bookmarks say their kind first (W3l).
+                self.bookmark_rows_first(&mut list);
+                list
             }
             Some(Purpose::PickDestination { side, .. }) => {
                 let all = self.place_candidates(side, true);
@@ -1140,6 +1152,10 @@ impl App {
                     .collect();
                 candidate_list("Destinations", &found)
             }
+            Some(Purpose::Organize(wants)) => match self.organize_candidates(&wants, &text) {
+                Some(list) => list,
+                None => return Vec::new(),
+            },
             _ => return Vec::new(),
         };
         let shown = list.len() as u64;
@@ -1241,6 +1257,10 @@ impl App {
                     .unwrap_or_default()
             }
             CompletionSource::Values(values) => crate::entry::value_candidates(&values),
+            CompletionSource::Labels => crate::entry::label_candidates(&self.organize.labels),
+            CompletionSource::Bookmarks => {
+                crate::entry::bookmark_candidates(&self.organize.bookmarks)
+            }
             CompletionSource::None => {
                 return vec![self.say(Message::status("No completion here"))];
             }

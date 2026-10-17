@@ -96,11 +96,15 @@ pub fn row_for(entry: &Entry, columns: &[Column], clock: &dyn Clock) -> ListRow 
 }
 
 /// The row for an entry: its display name, then "name needs care" when it
-/// does, then each column's words; empty cells are left out.
+/// does, then its labels ("label: urgent"), then each column's words;
+/// empty cells are left out.
 pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> ListRow {
     let mut details = Vec::new();
     if entry.needs_care || entry.name_not_unicode {
         details.push("name needs care".to_owned());
+    }
+    if let Some(labels) = labels_words(&entry.labels) {
+        details.push(labels);
     }
     for column in columns {
         let detail = column.cell(entry, clock);
@@ -109,6 +113,20 @@ pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> Lis
         }
     }
     ListRow::new(entry.name.clone(), entry.display_name()).with_details(details)
+}
+
+/// An entry's labels as its row says them, the names first and their
+/// colors never: "label: urgent", "labels: urgent, review" (W3l).
+pub fn labels_words(labels: &[String]) -> Option<String> {
+    let said: Vec<String> = labels
+        .iter()
+        .map(|l| crate::labels::in_sentence(&display_name(l)))
+        .collect();
+    match said.as_slice() {
+        [] => None,
+        [one] => Some(format!("label: {one}")),
+        many => Some(format!("labels: {}", many.join(", "))),
+    }
 }
 
 /// Compares names the way people count: "file2" before "file10", ignoring
@@ -568,6 +586,18 @@ impl Panel {
     /// Sets or clears the filter.
     pub fn set_filter(&mut self, filter: Option<Pattern>, clock: &dyn Clock) -> RowsReplaced {
         self.filter = filter;
+        self.refresh(clock)
+    }
+
+    /// The details each row says after its name.
+    pub fn columns(&self) -> &[ColumnKind] {
+        &self.columns
+    }
+
+    /// Changes the details each row says after its name (a folder's own
+    /// view, W3l); the focus and the marks stay by id.
+    pub fn set_columns(&mut self, columns: Vec<ColumnKind>, clock: &dyn Clock) -> RowsReplaced {
+        self.columns = columns;
         self.refresh(clock)
     }
 

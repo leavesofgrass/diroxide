@@ -327,7 +327,7 @@ fn sorting_by_the_keys_the_list_and_the_palette() {
     let said = f.s.command(ids::SORT_LABEL);
     assert_eq!(
         said,
-        ["Sorted by label, A to Z. No labels yet; labels come with alpha.3."]
+        ["Sorted by label, A to Z. No entry here has a label; Alt+L sets one."]
     );
     let said = f.s.command(ids::SORT_LIST);
     assert!(

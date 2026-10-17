@@ -292,6 +292,10 @@ impl App {
                 out.push(Candidate::new(text, kind));
             }
         };
+        // Bookmarks first (W3l), so a place that is one keeps that kind.
+        for candidate in self.bookmark_place_candidates() {
+            push(candidate.text, candidate.kind);
+        }
         if destinations {
             for entry in self.history_of(state::keys::DESTINATIONS) {
                 push(entry, "recent destination".to_owned());
@@ -557,6 +561,10 @@ impl App {
     }
 
     pub(super) fn undo(&mut self) -> Vec<Effect> {
+        // A label change newer than the last job is undone first (W3l).
+        if let Some(effects) = self.undo_label_change() {
+            return effects;
+        }
         let Some(record) = self.undo.last().cloned() else {
             return vec![self.say(Message::info("Nothing to undo"))];
         };

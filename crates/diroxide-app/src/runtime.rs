@@ -982,6 +982,65 @@ impl Runtime {
                     crate::archives::sweep(&registry, spool.as_deref(), &folders);
                 });
             }
+            Request::SaveLabels(store) => {
+                if let Some(paths) = &self.paths
+                    && let Err(error) = crate::labels::save(paths, &store)
+                {
+                    self.queue.push_back(AppEvent::Problem(Message::could_not(
+                        "save",
+                        "the labels",
+                        &error,
+                        "",
+                    )));
+                }
+            }
+            Request::SaveBookmarks(bookmarks) => {
+                if let Some(paths) = &self.paths
+                    && let Err(error) = crate::bookmarks::save(paths, &bookmarks)
+                {
+                    self.queue.push_back(AppEvent::Problem(Message::could_not(
+                        "save",
+                        "the bookmarks",
+                        &error,
+                        "",
+                    )));
+                }
+            }
+            Request::SaveViews(views) => {
+                if let Some(paths) = &self.paths
+                    && let Err(error) = crate::views::save(paths, &views)
+                {
+                    self.queue.push_back(AppEvent::Problem(Message::could_not(
+                        "save",
+                        "the folder views",
+                        &error,
+                        "",
+                    )));
+                }
+            }
+            Request::CheckPlaces { request, places } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let ctx = OpContext::new();
+                    let mut missing = Vec::new();
+                    let mut unreadable = 0;
+                    for place in places {
+                        match registry
+                            .resolve(&place)
+                            .and_then(|provider| provider.stat(&place, &ctx))
+                        {
+                            Ok(_) => {}
+                            Err(diroxide_vfs::VfsError::NotFound) => missing.push(place),
+                            Err(_) => unreadable += 1,
+                        }
+                    }
+                    shared.send(AppEvent::PlacesChecked {
+                        request,
+                        missing,
+                        unreadable,
+                    });
+                });
+            }
         }
     }
 
