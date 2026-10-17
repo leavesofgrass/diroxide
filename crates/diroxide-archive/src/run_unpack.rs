@@ -677,7 +677,6 @@ fn state_done(done: &[bool], skipped: &HashSet<usize>, n: usize) -> bool {
     done.get(n).copied().unwrap_or(true) || skipped.contains(&n)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

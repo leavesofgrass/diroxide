@@ -34,6 +34,7 @@ pub mod secrets;
 pub mod sniff;
 mod source;
 pub mod spool;
+pub mod test_archive;
 pub mod unpack;
 pub mod words;
 
@@ -54,6 +55,7 @@ pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackR
 pub use run_unpack::{UnpackOutcome, run_unpack, safe_mode};
 pub use secrets::{JobSecrets, new_password_request};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};
+pub use test_archive::{TestOutcome, check_written, test_archive};
 pub use unpack::{
     LeftOut, PlannedMember, Room, UnpackFacts, UnpackPlan, archive_stem, destination_name,
     plan_unpack,
