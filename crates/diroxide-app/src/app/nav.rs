@@ -131,12 +131,24 @@ impl App {
         } else if self.first_run {
             let help = self.key(&ids::HELP);
             let palette = self.key(&ids::PALETTE);
-            let welcome = if help.is_empty() {
+            let quit = self.key(&ids::QUIT);
+            let mut welcome = if help.is_empty() {
                 "diroxide alpha 1. Help is in the Help menu.".to_owned()
             } else {
                 format!("diroxide alpha 1. {help} for help.")
             };
+            // The owner's finding from the alpha.1 terminal: say how to
+            // quit beside the help key, and name the key bar.
+            if quit.is_empty() {
+                welcome.push_str(" Quit is in the File menu.");
+            } else {
+                welcome.push_str(&format!(" {quit} quits."));
+            }
             effects.push(self.say(Message::info(welcome)));
+            if self.settings.key_bar && !self.settings.compact {
+                let bar = Message::info("The key bar on the last line names the keys.");
+                effects.push(self.say(bar));
+            }
             let layout = self.settings.layout.word();
             let line = if palette.is_empty() {
                 format!("Layout: {layout}. Change it in the View menu.")

@@ -50,6 +50,14 @@ fn the_ten_minute_check_reads_on_a_40_cell_line() {
         line(&start, "diroxide alpha 1."),
         "diroxide alpha 1. Shift+F1 for help.",
     );
+    assert_eq!(
+        line(&start, "diroxide alpha 1."),
+        "diroxide alpha 1. Shift+F1 for help. Ctrl+Q quits."
+    );
+    fact(
+        line(&start, "The key bar"),
+        "The key bar on the last line names",
+    );
     fact(
         line(&start, "Layout:"),
         "Layout: side by side. Ctrl+P, Layout.",
