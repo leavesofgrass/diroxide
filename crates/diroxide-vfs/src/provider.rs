@@ -308,6 +308,8 @@ pub trait Provider: Send + Sync + fmt::Debug {
             volume: volume.kind,
             longest_path_units: crate::limits::utf16_units(&place.to_string()),
             network_path: place.remote().is_some(),
+            // A provider that copies across drives says so in its own gate.
+            copies_across_drives: false,
         };
         Ok(trash_gate(&facts, TrashRules::native()))
     }

@@ -524,6 +524,9 @@ impl<'a> Planner<'a> {
                         volume,
                         longest_path_units: longest,
                         network_path: source.remote().is_some(),
+                        // Only the inner paths' length is checked here; the
+                        // provider's own gate said whether it copies.
+                        copies_across_drives: false,
                     },
                     TrashRules::native(),
                 );

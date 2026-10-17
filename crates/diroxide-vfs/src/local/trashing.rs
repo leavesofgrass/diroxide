@@ -55,6 +55,41 @@ pub(crate) type TrashCount<'a> = &'a dyn Fn(&Path) -> Option<usize>;
 /// the item, `Some(false)` when it does not, `None` when it cannot tell.
 pub(crate) type TrashLook<'a> = &'a dyn Fn(&Before) -> Option<bool>;
 
+/// Whether the freedesktop trash would copy an item on the volume at
+/// `root` to another drive (R8; [`crate::trash::copies_across_drives`]):
+/// the volume is not the home folder's, and it has no trash of its own the
+/// `trash` crate can use or make (`.Trash/UID` or `.Trash-UID` at its top,
+/// or a top it may write to). The user's id is read from the home folder's
+/// owner, which needs no system call beyond a stat.
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) fn copies_across_drives(root: Option<&Path>) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let (Some(root), Some(home)) = (root, dirs::home_dir()) else {
+        return false;
+    };
+    let home_root = super::volumes::facts_at(&home).root;
+    let own_trash_usable = match fs::metadata(&home).map(|m| m.uid()) {
+        Ok(uid) => {
+            root.join(".Trash").join(uid.to_string()).is_dir()
+                || root.join(format!(".Trash-{uid}")).is_dir()
+                || rustix::fs::access(root, rustix::fs::Access::WRITE_OK).is_ok()
+        }
+        // The id is unknown: take the volume's trash as usable, so nothing
+        // asks without cause.
+        Err(_) => true,
+    };
+    crate::trash::copies_across_drives(root, home_root.as_deref(), own_trash_usable)
+}
+
+/// Whether the trash would copy an item to another drive: never on Windows
+/// (the gate refuses drives without a recycle bin) or macOS (each volume
+/// keeps its own `.Trashes`).
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+pub(crate) fn copies_across_drives(root: Option<&Path>) -> bool {
+    let _ = root;
+    false
+}
+
 /// Runs the trash call on a worker thread; a panic inside becomes an
 /// error, never a crash of the job.
 fn call_on_worker(path: &Path, call: TrashCall<'_>) -> Result<(), VfsError> {
