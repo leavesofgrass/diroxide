@@ -7,6 +7,7 @@ mod build;
 mod cross_check;
 mod hostile;
 mod memory;
+mod nested;
 mod odd_names;
 mod registration;
 mod seeds;

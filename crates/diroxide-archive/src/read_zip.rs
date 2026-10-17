@@ -510,6 +510,42 @@ pub(crate) fn open(
 }
 
 impl ZipBackend {
+    /// A stored, unencrypted member as a window of the archive's bytes:
+    /// the shortcut a nested archive takes, with no spool and no copy.
+    /// `None` for any other member, and for every member of an archive
+    /// whose members overlap or whose local header disagrees.
+    pub(crate) fn stored_window(&self, index: &Index, id: u32) -> Option<Source> {
+        let record = index.record(id)?;
+        let Locator::Zip(i) = record.locator else {
+            return None;
+        };
+        if self.overlap
+            || record.flags.contains(RecordFlags::ENCRYPTED)
+            || record.flags.contains(RecordFlags::MISMATCH)
+        {
+            return None;
+        }
+        let entry = self.archive.by_index_data(i as usize).ok()?;
+        if entry.compression() != CompressionMethod::Stored
+            || entry.size() != entry.compressed_size()
+        {
+            return None;
+        }
+        let mut fixed = [0u8; 30];
+        self.source
+            .read_exact_at(entry.header_start(), &mut fixed)
+            .ok()?;
+        if fixed[..4] != [0x50, 0x4B, 0x03, 0x04] {
+            return None;
+        }
+        let data = entry.header_start() + 30 + le16(&fixed, 26) + le16(&fixed, 28);
+        let end = data.checked_add(entry.size())?;
+        if end > self.source.len() {
+            return None;
+        }
+        Some(self.source.window(data, entry.size()))
+    }
+
     /// Reads one member on a thread of its own, through the crate.
     pub(crate) fn read(
         &self,

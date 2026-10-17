@@ -596,6 +596,24 @@ impl TarBackend {
         data - pos
     }
 
+    /// A member of a plain tar as a window of the archive's bytes, for a
+    /// random-access read; `None` in a compressed tar.
+    pub(crate) fn window(&self, index: &Index, id: u32) -> Option<Source> {
+        if !self.random_read() {
+            return None;
+        }
+        let record = index.record(id)?;
+        let Locator::Tar(data) = record.locator else {
+            return None;
+        };
+        if record.flags.contains(RecordFlags::UNREADABLE)
+            || data.checked_add(record.size)? > self.source.len()
+        {
+            return None;
+        }
+        Some(self.source.window(data, record.size))
+    }
+
     /// Opens a member: a window of a plain tar, or the forward cursor moved
     /// to it in a compressed one, after the cost question.
     pub(crate) fn read(

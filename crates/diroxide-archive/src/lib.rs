@@ -30,6 +30,7 @@ mod read_zip;
 pub mod request;
 pub mod sniff;
 mod source;
+pub mod spool;
 pub mod words;
 
 pub use error::ArchiveError;

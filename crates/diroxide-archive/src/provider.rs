@@ -10,13 +10,14 @@
 //! the answer.
 
 use std::io::Read;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock, Weak};
 
 use diroxide_core::format::{count, human_size};
 use diroxide_core::{Entry, EntryKind, Place, SecretKind, SecretRequest};
 use diroxide_vfs::{
-    AttributeChange, Capabilities, FileWriter, LinkRequest, OpContext, Provider, Registry,
-    TrashCheck, VfsError, WriteMode,
+    AttributeChange, Capabilities, FileWriter, LinkRequest, OpContext, Provider, ReadSeek,
+    Registry, TrashCheck, VfsError, WriteMode,
 };
 
 use crate::error::ArchiveError;
@@ -33,6 +34,7 @@ use crate::read_xz;
 use crate::read_zip::{self, ZipBackend};
 use crate::sniff::{SNIFF_LEN, Sniffed, decide};
 use crate::source::Source;
+use crate::spool::{self, SpoolBudget};
 
 /// How many indexes the provider keeps (research/archives.md 5.2).
 pub const CACHED_INDEXES: usize = 8;
@@ -133,6 +135,8 @@ pub struct ArchiveProvider {
     registry: RwLock<Weak<Registry>>,
     cache: IndexCache<Opened>,
     cost_ask_bytes: u64,
+    spool_dir: RwLock<Option<PathBuf>>,
+    spool_budget: SpoolBudget,
 }
 
 impl Default for ArchiveProvider {
@@ -149,6 +153,8 @@ impl ArchiveProvider {
             registry: RwLock::new(Weak::new()),
             cache: IndexCache::new(CACHED_INDEXES, limits.max_index_bytes),
             cost_ask_bytes: read_tar::COST_ASK_BYTES,
+            spool_dir: RwLock::new(None),
+            spool_budget: SpoolBudget::default(),
         }
     }
 
@@ -213,15 +219,26 @@ impl ArchiveProvider {
     }
 
     /// The container's bytes and its identity for the cache.
-    fn source_of(
+    /// What identifies a container, without reading it: a local one by its
+    /// stat, a nested one by its record and its outer archive's identity.
+    fn key_of(
         &self,
         container: &Place,
         ctx: &OpContext,
-    ) -> Result<(Source, ContainerKey), ArchiveError> {
-        if container.archive().is_some() {
-            return Err(
-                VfsError::unsupported("archive", "open an archive inside another yet").into(),
-            );
+        allow: Allowances,
+    ) -> Result<ContainerKey, ArchiveError> {
+        if let Some((outer, member)) = container.archive() {
+            let opened = self.open_archive(outer, ctx, allow)?;
+            let id = opened.index.find(member).ok_or(VfsError::NotFound)?;
+            let record = opened.index.record(id).ok_or(VfsError::NotFound)?;
+            if record.kind == RecordKind::Folder {
+                return Err(VfsError::NotAFolder.into());
+            }
+            return Ok(ContainerKey {
+                place: container.to_string(),
+                size: record.size,
+                modified: opened.key.modified,
+            });
         }
         let registry = self.registry()?;
         let provider = registry.resolve(container)?;
@@ -229,14 +246,75 @@ impl ArchiveProvider {
         if entry.kind == EntryKind::Folder {
             return Err(VfsError::NotAFolder.into());
         }
-        let key = ContainerKey {
+        Ok(ContainerKey {
             place: container.to_string(),
             size: entry.size.unwrap_or(0),
             modified: entry.modified.map(|t| (t.unix_seconds(), t.subsec_nanos())),
-        };
+        })
+    }
+
+    /// A container's bytes: a local file opened for random reads, a stored
+    /// zip member as a window of its outer archive, any other member read
+    /// out into the spool.
+    fn source_of(
+        &self,
+        container: &Place,
+        ctx: &OpContext,
+        allow: Allowances,
+    ) -> Result<Source, ArchiveError> {
+        if let Some((outer, member)) = container.archive() {
+            let opened = self.open_archive(outer, ctx, allow)?;
+            let id = opened.index.find(member).ok_or(VfsError::NotFound)?;
+            if let Backend::Zip(zip) = &opened.backend
+                && let Some(window) = zip.stored_window(&opened.index, id)
+            {
+                return Ok(window);
+            }
+            let reader = self.read_member(container, ctx, allow, None)?;
+            let dir = self.spool_dir.read().ok().and_then(|d| d.clone());
+            let free = dir.as_deref().and_then(|dir| self.free_space(dir, ctx));
+            return spool::spool(
+                reader,
+                &self.limits,
+                dir.as_deref(),
+                &self.spool_budget,
+                free,
+                &ctx.cancel,
+            );
+        }
+        let registry = self.registry()?;
+        let provider = registry.resolve(container)?;
         let reader = provider.open_seekable(container, ctx)?;
-        let source = Source::new(reader).map_err(VfsError::from)?;
-        Ok((source, key))
+        Ok(Source::new(reader).map_err(VfsError::from)?)
+    }
+
+    /// The bytes free on the spool folder's drive, when the registry can
+    /// say.
+    fn free_space(&self, dir: &std::path::Path, ctx: &OpContext) -> Option<u64> {
+        let place = Place::parse(&dir.to_string_lossy()).ok()?;
+        let registry = self.registry().ok()?;
+        let provider = registry.resolve(&place).ok()?;
+        provider.space(&place, ctx).ok()?.free_to_user
+    }
+
+    /// The same provider spooling nested archives too large for memory into
+    /// `dir`: the state folder's `spool`, never the platform's temporary
+    /// folder. Without one, such an archive is refused in words.
+    pub fn with_spool_dir(self, dir: PathBuf) -> Self {
+        self.set_spool_dir(Some(dir));
+        self
+    }
+
+    /// Sets or clears the spool folder.
+    pub fn set_spool_dir(&self, dir: Option<PathBuf>) {
+        if let Ok(mut held) = self.spool_dir.write() {
+            *held = dir;
+        }
+    }
+
+    /// The spool bytes on disk now, for every nested archive open.
+    pub fn spool_in_use(&self) -> u64 {
+        self.spool_budget.in_use()
     }
 
     /// Opens an archive: its index, from the cache when the container is
@@ -255,10 +333,11 @@ impl ArchiveProvider {
             )
             .into());
         }
-        let (source, key) = self.source_of(container, ctx)?;
+        let key = self.key_of(container, ctx, allow)?;
         if let Some(opened) = self.cache.get(&key) {
             return Ok(opened);
         }
+        let source = self.source_of(container, ctx, allow)?;
         let name = container.name().unwrap_or("archive").to_owned();
         let mut head = vec![0u8; SNIFF_LEN];
         let got = source.read_at(0, &mut head).map_err(VfsError::from)?;
@@ -597,6 +676,22 @@ impl Provider for ArchiveProvider {
 
     fn read(&self, place: &Place, ctx: &OpContext) -> Result<Box<dyn Read + Send>, VfsError> {
         Ok(self.read_member(place, ctx, Allowances::default(), None)?)
+    }
+
+    fn open_seekable(&self, place: &Place, ctx: &OpContext) -> Result<Box<dyn ReadSeek>, VfsError> {
+        let (opened, id) = self.locate(place, ctx, Allowances::default())?;
+        let window = match &opened.backend {
+            Backend::Zip(zip) => zip.stored_window(&opened.index, id),
+            Backend::Tar(tar) => tar.window(&opened.index, id),
+            Backend::Single(_) | Backend::SevenZ(_) => None,
+        };
+        match window {
+            Some(window) => Ok(Box::new(window)),
+            None => Err(VfsError::unsupported(
+                "archive",
+                "read a compressed member with random access",
+            )),
+        }
     }
 
     fn write(

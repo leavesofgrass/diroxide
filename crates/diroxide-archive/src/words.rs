@@ -46,16 +46,30 @@ pub fn title(place: &Place, sniffed: Option<&Sniffed>) -> String {
     let Some((container, member)) = place.archive() else {
         return plain;
     };
-    match sniffed {
-        Some(sniffed) if member.is_empty() && sniffed.disagrees() => {
-            let name = container.name().unwrap_or("archive");
-            let kind = sniffed.format.spoken_name();
-            match container.parent() {
-                Some(folder) => format!("{name}, {kind}, in {folder}"),
-                None => format!("{name}, {kind}"),
-            }
+    if !member.is_empty() {
+        return plain;
+    }
+    let name = container.name().unwrap_or("archive");
+    let kind = match sniffed {
+        Some(sniffed) if sniffed.disagrees() => sniffed.format.spoken_name(),
+        _ => "archive",
+    };
+    // A nested archive is in its outer archive, said by name ("inner.zip,
+    // archive, in course.zip"), not by its whole place.
+    let within = container.parent().map(|folder| match folder.archive() {
+        Some((outer, "")) => outer.name().unwrap_or("archive").to_owned(),
+        Some(_) => {
+            let outer = folder
+                .archive()
+                .and_then(|(outer, _)| outer.name())
+                .unwrap_or("archive");
+            format!("{}, in {outer}", folder.name().unwrap_or(outer))
         }
-        _ => plain,
+        None => folder.to_string(),
+    });
+    match within {
+        Some(within) => format!("{name}, {kind}, in {within}"),
+        None => format!("{name}, {kind}"),
     }
 }
 
