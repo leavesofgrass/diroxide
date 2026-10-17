@@ -1015,6 +1015,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "diroxide-core",
  "diroxide-vfs",
+ "regex",
  "thiserror 2.0.21",
 ]
 
