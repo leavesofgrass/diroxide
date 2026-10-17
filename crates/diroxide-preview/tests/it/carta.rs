@@ -191,8 +191,8 @@ fn deeply_nested_lists_read_on_the_guards_stack() {
     }
     // The guard's count comes down on the reader's thread after its result
     // is delivered, so under load the caller can see it a moment later.
-    let settled = std::time::Instant::now() + Duration::from_secs(5);
-    while options.guard.running() != 0 && std::time::Instant::now() < settled {
+    let settled = Instant::now() + Duration::from_secs(5);
+    while options.guard.running() != 0 && Instant::now() < settled {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(options.guard.running(), 0);
