@@ -1,0 +1,28 @@
+# The search spike of alpha.3: what crates/diroxide-search/examples/spike.rs
+# measured (docs/dev/bench.md, "The search spike"). Medians of three warm
+# runs in milliseconds unless a line says otherwise. Each [[run]] is one
+# machine, one build and one state of the search engine; the orchestrator
+# adds the container's run. The bench's own search scenarios and their
+# budgets are in params.toml.
+
+[[run]]
+platform = "windows"
+day = "2026-10-17"
+build = "optimized"
+engine = "Phase 0 provider walk, one thread, through the new query types"
+tree = "cargo xtask search-tree: 100,000 files in 5,000 folders, 995 MB"
+defender = "default settings, unchanged"
+walk_ignore_ms = 45.4
+walk_provider_ms = 348.3
+search_name_ms = 382.3
+search_attributes_ms = 410.6
+first_hit_under_ms = 1
+rg = "not on PATH: not compared"
+slow_place_1_threads_items_a_second = 3859
+slow_place_2_threads_items_a_second = 7732
+slow_place_4_threads_items_a_second = 15423
+slow_place_8_threads_items_a_second = 30646
+slow_place_delay_ms = 5
+slow_place_stop_ms = 2.5
+rows_100000_ms = 171.4
+rows_1000000_ms = 1800.7

@@ -102,6 +102,31 @@ cargo xtask demo D:/demo
 
 It writes `course.zip`, `backup.7z` (solid), `logs.tar.xz`, `locked.zip` (AES-256, written by diroxide's own pack runner with a password made up as it runs and said once on its output), `hostile.zip` (one name in it would leave the archive; it is built in memory), `big.bin` (60 MB), `main.rs`, `report.md`, `notes.org`, `big.log` and an empty `out` folder, then lists each with its size and reads every archive back with `diro archive test` and with the unzip, xz, tar and 7z programs it finds on PATH.
 
+## The search spike
+
+The search lane's spike (alpha.3) times the walkers and the search on the 1 GB search tree, compares them with `rg` when `rg` is on PATH, and lists a slow place, a stand-in for a network share, at 1, 2, 4 and 8 threads. Write the tree once, then run the spike on it in an optimized build:
+
+```bash
+cargo xtask search-tree D:\searchtree
+```
+
+```bash
+cargo run --release -p diroxide-search --example spike -- D:\searchtree --json target/bench/search-spike.json
+```
+
+The slow place is the local provider with a pause before every call (5 ms by default, `--delay-ms` to change it); no network share was reachable, and its lines say "a fake network place". The spike reads the tree and writes only the JSON file it is given.
+
+Its figures are kept in `bench/search-spike.toml`, one `[[run]]` for each machine and each state of the search engine. The first, measured on the owner's Windows machine on Saturday, October 17, 2026, in an optimized build, warm, with nothing changed in Windows Security:
+
+- Walk the 105,000 entries with `ignore`'s parallel walker, filters off: 45 ms, about 2.3 million a second.
+- Walk them through the local provider on one thread: 348 ms.
+- Search names for `*quokkaline*` through Phase 0's walk and the new query types: 382 ms, 1,000 found, the first in under a millisecond.
+- Search `ext txt and size over 1 KB and modified within 3 years` the same way: 411 ms, 90,000 found.
+- A slow place with 5 ms before every call: 3,859 items a second on 1 thread, 7,732 on 2, 15,423 on 4 and 30,646 on 8; a stop answered in 2.5 ms.
+- Make 100,000 hits into a results list: 171 ms; 1,000,000: 1.8 seconds.
+
+`rg` was not on PATH, so nothing was compared with it. The plan's starting budgets (a warm name search in 0.6 seconds on Linux and 2.5 times that on Windows, the first hit within 100 ms, 100,000 rows in under a second, the stop answered within a second) already hold; the parallel walker is the one to compare with them next.
+
 ## See also
 
 - [Building](building.md)

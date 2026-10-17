@@ -1,7 +1,7 @@
 # The bench's sizes and starting budgets, read by cargo xtask bench
 # (docs/dev/bench.md). Its trees are written under the target folder and
-# removed after the run; only this file, search-tree.toml and
-# baseline.json are ever committed.
+# removed after the run; only this file, search-tree.toml,
+# search-spike.toml and baseline.json are ever committed.
 
 # Each scenario runs this many times; the median is reported.
 runs = 3

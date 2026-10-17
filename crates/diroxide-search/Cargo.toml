@@ -10,6 +10,9 @@ publish.workspace = true
 [dependencies]
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
+# ripgrep's parallel walker, with its standard filters off (the plan's
+# section 5.5 and R14): diroxide decides hidden entries itself.
+ignore.workspace = true
 regex.workspace = true
 thiserror.workspace = true
 
