@@ -52,7 +52,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The created time is kept on Windows and macOS. Linux cannot set a created time, so it is not kept there.
 - The accessed time is never kept.
 - An unpack keeps each member's modified time. A zip stores a time in the old DOS form, which has no time zone and only two-second steps, and diroxide reads and writes it as UTC. Programs that read it as local time, such as Info-ZIP's `unzip`, show the times of a zip diroxide wrote shifted by your offset from UTC, and a zip written by such a program shows shifted in diroxide. The extended time field that zip also allows is not read or written yet.
-- Keep dates is built into the job engine and is on. It is not a setting yet.
+- Copies and moves keep dates, and there is no setting to turn that off in this alpha.
 
 ## Archives
 

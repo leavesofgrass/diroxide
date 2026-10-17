@@ -191,7 +191,7 @@ The exit codes are the family's: 0 when done, 1 when nothing was done because th
 
 ## Settings
 
-The Archives and split group of [the settings reference](settings-reference.md) holds nineteen settings: the seventeen limits above plus `archives.ask_read_ahead_mib` and `archives.spool_folder`. The `split_presets` setting is in the same group and is described in [split and join](split-join.md). Keep dates is built into the job engine and is on: an unpack keeps each member's modified time.
+The Archives and split group of [the settings reference](settings-reference.md) holds nineteen settings: the seventeen limits above plus `archives.ask_read_ahead_mib` and `archives.spool_folder`. The `split_presets` setting is in the same group and is described in [split and join](split-join.md). An unpack keeps each member's modified time, as every copy and move keeps dates; there is no setting to turn that off in this alpha.
 
 ## Known gaps
 

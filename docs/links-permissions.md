@@ -111,7 +111,7 @@ Change times sets the modified time and, where the system allows, the created an
 
 ### Copying keeps dates
 
-Copy, move and unpack keep the modified time of files and folders. This is the job engine's Keep dates behavior, and it is on. A folder's time is set after its contents, so the copy itself never replaces it. The created time is kept on Windows and macOS, where the system can set one. The accessed time is never kept. Keep dates is not a setting in alpha.2; it is on for every copy.
+Copies, moves and unpacks keep the modified time of files and folders. A folder's time is set after its contents, so the copy itself never replaces it. The created time is kept on Windows and macOS, where the system can set one. The accessed time is never kept. There is no setting to turn this off in this alpha.
 
 ## Details: the information list
 
