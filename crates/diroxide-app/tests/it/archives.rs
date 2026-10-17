@@ -133,3 +133,71 @@ fn open_as_archive_reads_a_file_by_its_bytes() {
     );
     assert_eq!(s.app.panel(Side::Left).list().len(), 4);
 }
+
+/// A session over a provider whose trash is a test folder.
+fn trash_session(dir: &Path, demo: &Path) -> Session {
+    let bin = dir.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let (registry, _trash) = crate::support::registry_with_trash(&bin);
+    Session::open(
+        place(demo),
+        place(&demo.join("out")),
+        registry,
+        Setup::default(),
+    )
+}
+
+#[test]
+fn a_copy_out_of_an_archive_is_one_unpack_and_undo_trashes_it() {
+    let dir = temp();
+    let demo = demo(dir.path());
+    let mut s = trash_session(dir.path(), &demo);
+    s.focus("course.zip");
+    s.key("enter");
+    s.focus("week1");
+    let said = s.key("f5");
+    let question = said.last().cloned().unwrap_or_default();
+    assert!(
+        question.starts_with("Unpack 4 members into out? No is the default. y or n"),
+        "{said:?}"
+    );
+    let listing = match s.dialog() {
+        Some(diroxide_app::Dialog::Confirm { listing, .. }) => listing.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        listing.iter().any(|l| l.starts_with("Where: ")),
+        "{listing:?}"
+    );
+    let said = s.key("y");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Unpack finished: 4 done")),
+        "{said:?}"
+    );
+    assert!(demo.join("out").join("week1").join("a.txt").exists());
+    let said = s.key("ctrl+z");
+    assert!(
+        said.iter().any(|l| l.starts_with("Undid unpack: ")),
+        "{said:?}"
+    );
+    assert!(!demo.join("out").join("week1").exists());
+}
+
+#[test]
+fn a_copy_into_an_archive_says_it_is_read_only() {
+    let dir = temp();
+    let demo = demo(dir.path());
+    fs::write(demo.join("out").join("new.txt"), "new").unwrap();
+    let mut s = Session::open(
+        place(&demo.join("out")),
+        place(&demo.join("course.zip")).into_archive(),
+        Registry::with_local(),
+        Setup::default(),
+    );
+    s.focus("new.txt");
+    assert_eq!(
+        s.key("f5"),
+        ["Archives are read only here. Use Pack to make a new one."]
+    );
+}

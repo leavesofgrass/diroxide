@@ -109,6 +109,64 @@ pub enum Reply {
     Confirm(bool),
 }
 
+/// An archive job planned and waiting to run: what the pack, unpack and
+/// test dialogs confirm (plan commits 60 and 61). A pack's password,
+/// typed twice in its dialog, travels with its plan to the runner and is
+/// dropped with the job; it is never serialized or shown.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ArchivePlan {
+    /// An unpack, or a copy out of an archive, with the answers given to
+    /// its limit questions while it was planned.
+    Unpack {
+        /// The plan.
+        plan: Box<diroxide_archive::UnpackPlan>,
+        /// The limits the user let pass.
+        allow: diroxide_archive::Allowances,
+    },
+    /// A pack.
+    Pack {
+        /// The plan.
+        plan: Box<diroxide_archive::PackPlan>,
+        /// The new archive's password, when one was set.
+        password: Option<Secret>,
+    },
+}
+
+impl ArchivePlan {
+    /// The job.
+    pub fn job(&self) -> JobId {
+        match self {
+            ArchivePlan::Unpack { plan, .. } => plan.job,
+            ArchivePlan::Pack { plan, .. } => plan.job,
+        }
+    }
+
+    /// The question before it runs, starting on No: "Unpack 4 members
+    /// into out? y or n", "Pack 2 items into reports.zip? y or n".
+    pub fn question(&self) -> diroxide_core::Message {
+        match self {
+            ArchivePlan::Unpack { plan, .. } => plan.question(),
+            ArchivePlan::Pack { plan, .. } => plan.question(),
+        }
+    }
+
+    /// The plan's rows, each a labeled setting with its meaning first.
+    pub fn rows(&self, other_panel: bool) -> Vec<String> {
+        match self {
+            ArchivePlan::Unpack { plan, .. } => plan.rows(),
+            ArchivePlan::Pack { plan, .. } => plan.rows_for(other_panel),
+        }
+    }
+
+    /// The job request kept in the jobs list: no password in it.
+    pub fn job_request(&self) -> JobRequest {
+        match self {
+            ArchivePlan::Unpack { plan, .. } => plan.job_request(),
+            ArchivePlan::Pack { plan, .. } => plan.job_request(),
+        }
+    }
+}
+
 /// What the program that runs is.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SpawnKind {
@@ -193,6 +251,36 @@ pub enum Request {
     Settle(JobId),
     /// Run a program with the screen handed over.
     Spawn(Box<Spawn>),
+    /// Plan an unpack, or a copy out of an archive, on a worker: the
+    /// archive opened (its password asked through the app, three tries)
+    /// and each limit's question asked once; answered as
+    /// [`AppEvent::ArchivePlanned`](crate::AppEvent::ArchivePlanned).
+    PlanUnpack {
+        /// The job.
+        job: JobId,
+        /// What to unpack and where.
+        request: Box<diroxide_archive::UnpackRequest>,
+    },
+    /// Plan a pack on a worker; answered like [`Request::PlanUnpack`].
+    PlanPack {
+        /// The job.
+        job: JobId,
+        /// What to pack and where, with its password.
+        request: Box<diroxide_archive::PackRequest>,
+    },
+    /// Run an archive job the user confirmed, exactly as planned; its end
+    /// comes as [`AppEvent::ArchiveFinished`](crate::AppEvent::ArchiveFinished).
+    RunArchive(Box<ArchivePlan>),
+    /// Test an archive: read every member and check it, writing nothing.
+    TestArchive {
+        /// The job.
+        job: JobId,
+        /// The archive file.
+        archive: Place,
+    },
+    /// Drop the passwords an archive job's plan holds: its confirmation
+    /// said no, or it was never run.
+    DropArchiveJob(JobId),
     /// Make the archive provider forget an archive's cached index, and
     /// with it a password a locked 7z keeps while it is open: the panel
     /// left it (W2b's notes).

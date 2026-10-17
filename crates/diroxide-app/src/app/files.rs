@@ -203,6 +203,18 @@ impl App {
         note: Option<String>,
         destination: Place,
     ) -> Vec<Effect> {
+        // Nothing is written into an archive here (copying in is alpha.8):
+        // say so, and name Pack (plan commit 60).
+        if destination.kind() == diroxide_core::PlaceKind::Archive {
+            return vec![self.say(Message::error(super::archive::READ_ONLY))];
+        }
+        // Out of an archive, a copy is an unpack of those members: one pass
+        // over a sequential archive, whatever the count.
+        if kind == JobKind::Copy
+            && self.panel(side).place().kind() == diroxide_core::PlaceKind::Archive
+        {
+            return self.copy_out(side, sources, note, destination);
+        }
         if destination == *self.panel(side).place() && kind == JobKind::Move {
             let text = format!(
                 "Move needs another folder: both panels show {}.",
@@ -570,6 +582,23 @@ impl App {
         };
         let side = self.active;
         let destination = self.panel(side).place().clone();
+        if destination.kind() == diroxide_core::PlaceKind::Archive {
+            return vec![self.say(Message::error(super::archive::READ_ONLY))];
+        }
+        if !clipboard.cut
+            && let Some(first) = clipboard.places.first()
+            && let Some((container, _)) = first.archive()
+        {
+            // Copies out of one archive: an unpack of those members.
+            let container = container.clone();
+            let request = clipboard
+                .places
+                .iter()
+                .all(|p| p.archive().is_some_and(|(c, _)| *c == container));
+            if request {
+                return self.copy_out(side, clipboard.places, None, destination);
+            }
+        }
         if clipboard
             .places
             .iter()
@@ -827,11 +856,18 @@ impl App {
                     Some(JobKind::Copy) => "copy",
                     Some(JobKind::Duplicate) => "duplicate",
                     Some(JobKind::MakeFolder) => "make folder",
+                    Some(JobKind::Unpack) => "unpack",
+                    Some(JobKind::Pack) => "pack",
+                    Some(JobKind::Split) => "split",
+                    Some(JobKind::Join) => "join",
                     _ => "job",
                 };
                 let how = match kind {
                     Some(JobKind::Copy | JobKind::Duplicate) => {
                         format!("{} in the trash", count(done, "copy is", "copies are"))
+                    }
+                    Some(JobKind::Unpack | JobKind::Pack | JobKind::Split | JobKind::Join) => {
+                        format!("{} in the trash", count(done, "item is", "items are"))
                     }
                     Some(JobKind::MakeFolder) => {
                         format!("{} removed", count(done, "folder", "folders"))
@@ -841,6 +877,9 @@ impl App {
                 format!("Undid {noun}: {how}")
             }
             _ if clean && report.kind == JobKind::Trash => catalog::moved_to_trash(done).text,
+            _ if self.finish_lines.is_some() => {
+                self.finish_lines.take().unwrap_or_default().join(" ")
+            }
             _ => {
                 let mut text = report.summary();
                 if let Some(reconciliation) = report.reconciliation.as_ref().filter(|_| missing) {

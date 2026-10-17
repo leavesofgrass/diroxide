@@ -16,6 +16,7 @@
 //! Wave 1 (W1d) owns this module.
 
 mod archive;
+mod archive_jobs;
 mod dialogs;
 mod files;
 mod info;
@@ -172,6 +173,23 @@ pub enum AppEvent {
         /// Its exit code, or why it could not start.
         result: Result<Option<i32>, String>,
     },
+    /// An archive job was planned, or could not be (the sentence says
+    /// why).
+    ArchivePlanned {
+        /// The job.
+        job: JobId,
+        /// The plan, or why not.
+        result: Result<Box<crate::request::ArchivePlan>, Message>,
+    },
+    /// An archive job ended: its report, and the runner's lines, the
+    /// summary first ("Unpack finished: 4 done.", "Checked 300 of 300
+    /// entries, all good.").
+    ArchiveFinished {
+        /// The report.
+        report: Box<JobReport>,
+        /// The runner's lines.
+        lines: Vec<String>,
+    },
     /// What a listed place inside an archive is: its title's words and
     /// the opening line (sent before its listing).
     ArchiveOpened {
@@ -263,6 +281,14 @@ enum Purpose {
     SortList,
     /// An archive limit's question.
     Limit { ask: AskId },
+    /// One of an archive plan's limit questions, before its confirmation.
+    ArchiveQuestion {
+        plan: Box<crate::request::ArchivePlan>,
+        question: diroxide_archive::Question,
+        rest: Vec<diroxide_archive::Question>,
+    },
+    /// Run an archive job on Yes.
+    RunArchive(Box<crate::request::ArchivePlan>),
     /// The settings list.
     Settings,
     /// A setting's choices.
@@ -385,6 +411,9 @@ pub struct App {
     pending_archive: Vec<(RequestId, crate::archives::ArchiveFacts)>,
     /// Whether each panel's last listing entered its archive from outside.
     archive_entered: [bool; 2],
+    /// The runner's lines of the archive job ending now, which its result
+    /// says instead of the report's summary.
+    finish_lines: Option<Vec<String>>,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -664,6 +693,7 @@ impl App {
             archive_facts: [None, None],
             pending_archive: Vec::new(),
             archive_entered: [false, false],
+            finish_lines: None,
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1039,6 +1069,8 @@ impl App {
                 result,
             } => self.program_ended(&what, &folder, result),
             AppEvent::ArchiveOpened { request, facts } => self.archive_opened(request, *facts),
+            AppEvent::ArchivePlanned { job, result } => self.archive_planned(job, result),
+            AppEvent::ArchiveFinished { report, lines } => self.archive_finished(*report, lines),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }

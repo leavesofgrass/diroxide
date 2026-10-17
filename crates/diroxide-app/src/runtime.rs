@@ -47,6 +47,8 @@ use diroxide_vfs::{
     limits,
 };
 
+mod archive_jobs;
+
 use crate::app::{App, AppEvent};
 use crate::request::{AskId, Question, Reply, Request, Spawn, SpawnKind};
 
@@ -397,6 +399,8 @@ pub struct Runtime {
     /// The `[archives]` settings the provider was made from, when this
     /// runtime made it: a changed table makes it again.
     archive_settings: Option<ArchiveSettings>,
+    /// The passwords of archive jobs between their plan and their run.
+    archive_secrets: archive_jobs::JobSecretsMap,
 }
 
 impl fmt::Debug for Runtime {
@@ -448,6 +452,7 @@ impl Runtime {
             editor: None,
             archives,
             archive_settings,
+            archive_secrets: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -805,6 +810,66 @@ impl Runtime {
                 }
             }
             Request::Spawn(spawn) => self.spawn(&spawn),
+            Request::PlanUnpack { job, request } => {
+                let Some(archives) = self.archives.clone() else {
+                    self.queue.push_back(AppEvent::ArchivePlanned {
+                        job,
+                        result: Err(archive_jobs::no_archives("unpack")),
+                    });
+                    return;
+                };
+                let registry = Arc::clone(&self.registry);
+                let map = Arc::clone(&self.archive_secrets);
+                self.worker(move |shared| {
+                    archive_jobs::plan_unpack_job(
+                        shared, &registry, &archives, &map, job, &request,
+                    );
+                });
+            }
+            Request::PlanPack { job, request } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    archive_jobs::plan_pack_job(shared, &registry, job, &request);
+                });
+            }
+            Request::RunArchive(plan) => {
+                let Some(archives) = self.archives.clone() else {
+                    self.queue
+                        .push_back(AppEvent::Problem(archive_jobs::no_archives("run")));
+                    return;
+                };
+                let engine = self.engine.clone();
+                let map = Arc::clone(&self.archive_secrets);
+                let job = plan.job();
+                let control = self.register(job);
+                let jobs = Arc::clone(&self.jobs);
+                self.worker(move |shared| {
+                    archive_jobs::run_archive_job(
+                        shared, &engine, &archives, &map, &control, &plan,
+                    );
+                    lock(&jobs).remove(&job);
+                });
+            }
+            Request::TestArchive { job, archive } => {
+                let Some(archives) = self.archives.clone() else {
+                    self.queue
+                        .push_back(AppEvent::Problem(archive_jobs::no_archives("test")));
+                    return;
+                };
+                let engine = self.engine.clone();
+                let control = self.register(job);
+                let jobs = Arc::clone(&self.jobs);
+                self.worker(move |shared| {
+                    archive_jobs::test_archive_job(
+                        shared, &engine, &archives, &control, job, &archive,
+                    );
+                    lock(&jobs).remove(&job);
+                });
+            }
+            Request::DropArchiveJob(job) => {
+                // Dropping the job's secrets wipes its password.
+                lock(&self.archive_secrets).remove(&job);
+            }
             Request::ForgetArchive(container) => {
                 if let Some(archives) = &self.archives {
                     archives.forget(&container);
@@ -823,6 +888,18 @@ impl Runtime {
                 });
             }
         }
+    }
+
+    /// Notes a running job's control, so Cancel reaches it.
+    fn register(&self, job: JobId) -> JobControl {
+        let control = JobControl::new();
+        lock(&self.jobs).insert(
+            job,
+            RunningJob {
+                control: control.clone(),
+            },
+        );
+        control
     }
 
     fn run(&mut self, plan: Plan) {

@@ -318,6 +318,12 @@ impl App {
                 effects.push(self.say(Message::info("No password given.")));
             }
             Purpose::Limit { ask } => self.answer_limit(ask, false),
+            Purpose::ArchiveQuestion {
+                plan,
+                question,
+                rest,
+            } => effects.extend(self.plan_question_answered(plan, &question, rest, false)),
+            Purpose::RunArchive(plan) => effects.extend(self.archive_declined(&plan)),
             Purpose::Filter(side, previous) => {
                 let clock = std::sync::Arc::clone(&self.clock);
                 self.panels[side.index()].set_filter(previous, clock.as_ref());
@@ -351,6 +357,12 @@ impl App {
             Purpose::RunPlan(plan) => effects.extend(self.run_plan(*plan)),
             Purpose::Quit => effects.extend(self.quit_now()),
             Purpose::Limit { ask } => self.answer_limit(ask, true),
+            Purpose::ArchiveQuestion {
+                plan,
+                question,
+                rest,
+            } => effects.extend(self.plan_question_answered(plan, &question, rest, true)),
+            Purpose::RunArchive(plan) => effects.extend(self.run_archive(*plan)),
             Purpose::RunProgram(place) => {
                 let name = place
                     .name()
@@ -641,7 +653,9 @@ impl App {
             Purpose::RunPlan(_)
             | Purpose::Quit
             | Purpose::RunProgram(_)
-            | Purpose::Limit { .. } => self.dialog_escape(),
+            | Purpose::Limit { .. }
+            | Purpose::ArchiveQuestion { .. }
+            | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }
 
