@@ -90,22 +90,21 @@ These lines show what diroxide says for each key. The status line says the same 
 
 ### Search, filters and select by pattern
 
-- Ctrl+S and typing: nothing is spoken for each key. About 400 milliseconds after you stop, one line says the count and the first match: "37 matches, first report.pdf". With none: "No matches". A filter you clear says "Filter off, 120 shown".
-- A problem is said once, after the same pause: "Filter problem: size needs a number", then "Word 3. Try size over 10 MB." It is not said on every key.
-- Say filter, in the palette: the filter in one sentence with the real days, "modified last week, October 4 to 10".
-- Plus (select by pattern), then a filter and Enter: "12 entries will be selected? No is the default. y or n", and after y, "12 selected".
-- Search from the palette: a dialog with labeled fields. Enter starts it: "Searching Documents for *.txt". Then at the progress interval, not on every change: "Searching: 214 found, 3,120 folders". At the end: "Done: 214 found in 3,120 folders", then the skips: "214 found. Hidden files skipped." Escape: "Stopped at 214 found." Pause: "Paused at 214 found."
-- A result row: "notes.txt, in Documents/q3, 4 KB". A content hit: "report.txt, line 42: total due, 3 more, in Documents/q3". A folder: "q3, folder, in Documents". The position comes last. The cursor never moves while results arrive.
-- F3 on a content hit opens the viewer at the match: "line 42 of 900". A file that has gone since the list was made: "report.txt, gone since this list was made".
-- The Space list: first "Total 66.4 GB. Largest 3 hold 81 percent", then rows such as "Videos, folder, 41.2 GB, 62 percent", ending "And 340 smaller items, 2.1 GB, 3 percent".
-
-<!-- to confirm: every line in this subsection but the diro search lines waits for the wiring lane (W3a, commits 35 to 38). The final pass runs each key on the merged build. -->
+- Ctrl+S and typing: nothing is spoken for each key. About 400 milliseconds after you stop, one line says the count and the first match: "37 matches, first report.pdf", or "1 match, big.log". With none: "No matches". Enter keeps the filter: "Filter on, 4 of 9 shown", and the title line reads it: "filter: size over 1 KB and name matches *.log". Escape in the panel: "Filter off, 9 shown".
+- A problem is said in two parts, each once: after the pause, "Filter problem: size needs a number", and after one more pause, "Word 3. Try size over 10 MB." It is not said on every key.
+- Say filter, in the View menu (Alt+V, then Y) and the palette: the filter in one sentence with the real days, "modified last week, October 4 to 10".
+- Plus (select by pattern): "Select by pattern: *". Enter on a pattern: "4 entries will be selected. No is the default. y or n", and after y, "4 selected".
+- Ctrl+F opens the Search dialog: "Search, Name or filter: every entry, 2 of 11". Type a letter, give the words, and press Enter: "Searching work for *.txt", or "Searching work for *.txt, containing total due". Then at the progress interval, not on every change: "Searching: 214 found, 3,120 folders". At the end: "Done: 4 found in 3 folders." and then the skips, such as "Hidden files skipped." Escape: "Stopped at 214 found." F2 pauses: "Paused at 214 found."
+- A result row: "notes.txt, in work, 4 KB". A content hit: "invoice.txt, line 3: total due now". A folder: "q3, folder, in Documents". The position comes last. The cursor never moves while results arrive.
+- F3 on a content hit opens the viewer at the match: "At line 3 of 4". Escape: "Back in the results, invoice.txt". A file that has gone since the list was made: "notes.txt, gone since this list was made". Escape once the search has ended: "Results closed. Search results opens them again."
+- The Search menu (F9, then R): Save this search, "Search saved as Text files. Saved searches runs it." Saved searches: "Saved searches, 1 search, Text files, saved search, runs on open, 1 of 1". Enter: "Running Text files: Searching work for *.txt", then "Done: 4 found in 3 folders."
+- The Space list: "Counting the space in work", then "Total 66.4 GB. Largest 3 hold 81 percent", then rows such as "Videos, folder, 41.2 GB, 62 percent", ending "And 340 smaller items, 2.1 GB, 3 percent".
 
 ### Labels, bookmarks and views
 
 - Alt+L: "Set label on 3 items, empty", with the labels listed under the field. Type `urg` and one line says how many labels match. Enter: "Label urgent added to 3 items". Ctrl+Z: "Undid label urgent on 3 items".
-- A labeled row: "report.pdf, label: urgent, 2.1 MB".
-- Labels list, from the palette: "Labels, 6 labels", then rows such as "Urgent, label, 14 items, checking, orange, Ctrl+1". When the count is ready the row says "2 missing" and the status line says "Checked 14 labeled items: 2 missing". The row's change is not spoken. Enter: "Urgent, 14 items", then the files.
+- A labeled row: "report.pdf, label: urgent, 2.1 MB". The label's word is drawn in its color too; speech and Braille say the word only.
+- Labels list, from the palette: "Labels, 6 labels", then rows such as "Urgent, label, 14 items, checking, orange, Ctrl+1". When the count is ready the row says "0 missing" and the status line says "Checked 14 labeled items: 0 missing". The row's change is not spoken. Enter: "Looking for 14 items labeled urgent", then "Done: 14 items labeled urgent."
 - Ctrl+B: "Bookmarks, no bookmarks, Add this folder, sample, in Drive D:\, 1 of 1". Enter on the first row: "Bookmarked sample, in Drive D:\". Ctrl+B again: the first row says "Remove this folder", and the bookmark's row says "sample, bookmark, in Drive D:\, not used yet".
 - Delete on a bookmark: "Remove bookmark Reports? No is the default. y or n", then "Removed bookmark Reports".
 - History list, in the Go menu (Alt+G, then R): rows such as "reports, in work, used 12 times, today". Delete: "Forgot Backup. 2 places left."
@@ -113,21 +112,18 @@ These lines show what diroxide says for each key. The status line says the same 
 
 ### Compare files
 
-- Compare files from the palette: first "Comparing report.txt here with report.txt there". Then the verdict, exactly 40 cells for short names: "5 changes between old.txt and report.txt". Then "Changed 3, added 1, removed 1." Then the direction, "From the other panel to this panel." Then, when it applies, "Ignoring changes in spaces."
-- N and P, or F7 and Shift+F7, move between changes and say each row: "Changed line 39, was: total due, now: total owed". Enter on a row: "Change 4 of 5, line 40 before, line 39 after", "Before, line 40: total due", "After, line 39: total owed", "Differs: due became owed".
-- Two files that are the same: "Same: report.txt and old.txt". The same file on both sides: "Same file: report.txt". Swap changes the direction sentence.
+- Compare files, from the palette: first "Comparing old.txt with report.txt", or "Comparing report.txt here with old.txt there" for one file in each panel. Then the report in one message: "5 changes between old.txt and report.txt. Changed 3, added 1, removed 1." and the direction, "From old.txt to report.txt." Then "Ignoring changes in spaces." when it applies.
+- F7 and Shift+F7, or N and P, move between changes and say each row with its position: "Changed line 39, was: total due, now: total owed, 2 of 5". Enter on a row: "Change 1 of 5, line 12 before, none after", then "Before, line 12: Copyright 2025." S swaps: "Swapped. From report.txt to old.txt."
+- Two files that are the same: "Same: report.txt and old.txt". The same file on both sides: "Same file: report.txt".
 - A difference you cannot hear says its reason: "Changed line 3, hidden character U+200B added".
-
-<!-- to confirm: the app lines wait for the wiring lane (W3a, commit 40). The `diro diff` lines are real and are in the check below. -->
 
 ### The Keys list and presets
 
-- Settings, then Keys: "Keys, preset diroxide defaults, 0 changed", then rows such as "Copy to other panel, F5 in both". Type `copy` to narrow the list.
-- Change key on a row: "Press the new key now. Escape cancels." Press a key: "Got Control plus F9". After 10 seconds with no key: "No key heard. The terminal may keep it." A key that is taken: "Ctrl+F5 already sorts by modified time.", then "Take it, swap, or cancel?" The screen reader key: "Insert is the screen reader key." A saved key: "Ctrl+F9 saved for Sort by size".
-- Choose a preset: "Apply Total Commander keys? No is the default. y or n". The row title then says "Keys, preset Total Commander, 3 changed".
-- Test keys: "Got Control plus F5. Runs Sort by modified."
-
-<!-- to confirm: all of this subsection waits for the keys lane (W3k) and the wiring lane (W3a, commit 41). -->
+- Settings, then Keys list: "Keys list, every command and its key, ...". Enter: "Keys, preset diroxide defaults, 0 changed". Type `copy` to narrow the list: "Copy path, no key. 4 matches" or a row such as "Copy to other panel, F5 in both".
+- Change key on a row: "Press the new key now. Escape cancels." Press a key: "Got Control plus F9", then "Ctrl+F9 saved for Sort by size." A key that is taken: "F5 already copies to the other panel. Take it, swap, or cancel?" with the focus on Cancel. Escape: "Nothing changed." The screen reader key: "Insert is the screen reader key."
+- After 10 seconds with no key: "No key heard. The terminal may keep it." and then "Type the key's name, such as ctrl+f5, empty".
+- Choose a preset, then Enter on one: "Apply Total Commander keys? No is the default. y or n". After y: "Total Commander keys applied." The defaults again: "The diroxide default keys applied."
+- Test keys: "Got Control plus F5. Runs Sort by modified. Sent F5 with Control, a press."
 
 ### Watching a folder
 
@@ -281,31 +277,33 @@ Questions to answer: Was every line's meaning inside the first 40 cells? Did any
 
 ## A check for search, labels, compare, keys and watching
 
-Run this once with NVDA, once with JAWS, and then read the first 40 cells of each line on the Braille display. It uses the demo set from the check above (`cargo xtask demo` followed by a new or empty folder on your own drive). For the compare steps, copy `old.txt` and `report.txt` from `fixtures\diff\report` in the source folder into the demo folder. Use its empty folder, `out`, to watch. Steps 1 to 3 run in a shell and work in any build of alpha.3. The others use the program, and a step that waits for a key says so.
-
-<!-- to confirm: the demo set may gain these files (the orchestrator's sample generator), which would remove the copy step. Steps 4 to 18 wait for the wiring lane (W3a) and the keys lane (W3k). Run them on the merged build and correct the words. -->
+Run this once with NVDA, once with JAWS, and then read the first 40 cells of each line on the Braille display. It uses the demo set from the check above (`cargo xtask demo` followed by a new or empty folder on your own drive). For the compare steps, copy `old.txt` and `report.txt` from `fixtures\diff\report` in the source folder into the demo folder. Use its empty folder, `out`, to watch. For a search with thousands of results, `cargo xtask search-tree` followed by a folder name and `--small` writes a tree. Steps 1 to 3 run in a shell. The others use the program. The words below are the ones the project's scripted run of this check expects; your reader may say them slightly differently.
 
 1. In a shell, run `diro search` on the demo folder with `ext md`. You hear "Searching diro-demo for ext md", then "report.md, in diro-demo, 649 bytes", then "1 found." Run it again with `modified last week --explain`. You hear "Reads as: modified last week" and the real days. Run it with `size over`. You hear "Filter problem: size needs a number", then "Word 3. Try size over 10 MB.", and the exit code is 2.
 2. Run `diro search` with `--content crow --extension md`. You hear a row such as "report.md, line 7: The crow count rose again this quarter., 4 more, in diro-demo". Is the line number easy to find in the first 40 cells?
 3. Run `diro diff old.txt report.txt`. You hear "5 changes between old.txt and report.txt", the counts, "From old.txt to report.txt.", then five rows. Does the long line's window, "...in Portland opened early and the crows...", read well? Run it with `--format unified` and listen to "Same", "Added" and "Removed" rows and "9 same lines left out". Then run `diro watch out`, copy a file into `out` slowly, and listen for "Arrived:" about 2 seconds after the copy stops. Press Ctrl+C: "Stopped watching out: 1 arrived".
 4. Start `diro` on the demo folder. The title starts with the folder's name.
-5. Press Ctrl+S and type `size over 1 KB and name *.log` slowly. Is it silent while you type? About a second after you stop, do you hear one line with a count and the first match? Is the title line the filter?
-6. Type `size over` and stop. You should hear "Filter problem: size needs a number" once, after the pause, not on every key.
-7. Type `modified last week`. Run Say filter from the palette. You hear the real days. On Saturday, October 17, 2026, with weeks that start on Sunday, it is "modified last week, October 4 to 10".
-8. Clear the filter. You hear "Filter off" and the count.
-9. Press Plus and type `*.md`. You hear "N entries will be selected? No is the default. y or n". Press y: "N selected".
-10. Press Alt+L, pick Urgent: "Label urgent added to N items". Press Ctrl+Z: "Undid label urgent on N items". Label again. Open the Labels list. Is the row change from "checking" to "0 missing" noticed? Press Enter on a label, then on an item: you land on the file in its folder.
-11. Press Ctrl+B. The first row says "Add this folder". Press Enter, then Ctrl+B again. The first row says "Remove this folder", and the new bookmark's row starts with its name and "bookmark".
-12. Run Search from the palette. Type `*.md` and press Enter. You hear "Searching diro-demo for *.md", then "Done:" and a count, then what was skipped. Press Down through the results: each row starts with the name. Search for the text `crow` in contents, press F3 on a hit, and hear the viewer open at that line.
-13. Start a search that matches many files and press Escape while it runs. You hear "Stopped at" and a count. The cursor must not have moved while results arrived.
-14. Mark `old.txt` and `report.txt`. Run Compare files. You hear the status line, the verdict, the counts and the direction. Press N and P: each change is one row. Press Enter on one: the lines before and after, and "Differs:". Press Escape. Run Swap: the direction sentence changes. Compare a file with itself: "Same file:".
-15. Open Settings, then Keys. You hear "Keys, preset diroxide defaults, 0 changed". Type `copy` to narrow the list. Choose Sort by size, then Change key, then press Ctrl+F9: "Got Control plus F9". Repeat with F5: "F5 already copies to the other panel", then the choice.
-16. Choose Change key and wait 10 seconds. You hear "No key heard. The terminal may keep it." and the offer to type the name.
-17. Run Test keys. Press Ctrl+V and Ctrl+Enter. In Windows Terminal, Ctrl+V pastes text and does not arrive. Tell the project which keys did not arrive.
-18. Choose the Total Commander preset: "Apply Total Commander keys? No is the default. y or n". Answer y. Press Shift+F6 on a file: the rename prompt. Press Escape. Choose the diroxide preset again. In a shell, run `diro keys check`.
-19. In the panel on `out`, run Watch this folder from the palette: "Watching out for new files. Escape stops." Copy a file in slowly. Nothing while it grows, then "Arrived: name, size". Press Escape: "Stopped watching out: 1 arrived".
+5. Press Ctrl+F. You hear "Search, Name or filter: every entry, 2 of 11". The dialog is a list of labeled settings. Type `*.md` and press Enter. You hear "Searching diro-demo for *.md", then "Done:" and a count. Press Down: the row starts with the name, then "in" and the folder, and ends with its position.
+6. Press Ctrl+F, Down to the "Contains text" row, type `crow` and press Enter. You hear "Searching diro-demo for *.md, containing crow" and a row "report.md, line 7: ...". Press F3. The viewer opens at that line: "At line 7 of". Press Escape: "Back in the results, report.md".
+7. Start a search that matches thousands of files in the tree from `search-tree`, and press Escape while it runs. You hear "Stopped at" and a count, or "Done:" if the walk was faster than your key. The cursor must not have moved while results arrived. Press Escape again: "Results closed. Search results opens them again."
+8. Press Ctrl+S and type `size over 1 KB and name *.log` slowly. Is it silent while you type? About a second after you stop, do you hear one line with a count, such as "1 match, big.log"? Does the title line read "filter: size over 1 KB and name matches *.log"?
+9. Clear the field and type `size over`. You should hear "Filter problem: size needs a number" once, after the pause, and the second sentence after a second pause.
+10. Clear the field and type `modified last week`. Run Say filter from the View menu (Alt+V, then Y). You hear the real days. On Saturday, October 17, 2026, with weeks that start on Sunday, it is "modified last week, October 4 to 10". Press Enter: "Filter on". Press Escape: "Filter off, N shown".
+11. Press Plus and type `*.md`. You hear "Select by pattern: *", then after Enter "N entries will be selected. No is the default. y or n". Press y: "N selected".
+12. Press Alt+L, type `urg` and press Enter: "Label urgent added to N items". Press Ctrl+Z: "Undid label urgent on N items". Label again. Open the Labels list from the palette. You hear "Labels, 6 labels, Urgent, label, N items". Is the row change from "checking" to "0 missing" noticed? Press Enter: "Looking for N items labeled urgent", then "Done: N items labeled urgent."
+13. Press Ctrl+B. The list says "Add this folder". Press Enter: "Bookmarked diro-demo, in" and the drive. Press Ctrl+B again: the first row says "Remove this folder", and the new bookmark's row starts with its name and "bookmark".
+14. Run Save this search from the Search menu (F9, then R, then S). Type a name, `Text files`, and press Enter: "Search saved as Text files. Saved searches runs it." Run Saved searches (F9, then R, then V): "Saved searches, 1 search, Text files, saved search, runs on open, 1 of 1". Press Enter: "Running Text files:" and the search.
+15. Run Space list from the Search menu (F9, then R, then C). You hear "Total", a size and "Largest 3 hold" and a percent. Rows follow: "big.bin" with its size and percent. The last row begins "And".
+16. Mark `old.txt` and `report.txt`. Run Compare files. You hear "Comparing old.txt with report.txt", then the verdict, the counts and the direction. Press F7 and Shift+F7, or N and P: each change is one row ending with its position, such as "2 of 5". Press Enter on one: "Change 1 of 5, line" and the lines before and after. Press Escape. Press S: "Swapped. From report.txt to old.txt." Compare a file with itself: "Same file: report.txt".
+17. Open Settings and press K, then Enter on "Keys list, every command and its key". You hear "Keys, preset diroxide defaults, 0 changed". Type `copy` to narrow the list.
+18. Choose Sort by size, then Enter, then Change key, then press Ctrl+F9: "Got Control plus F9", then "Ctrl+F9 saved for Sort by size." Repeat with F5: "F5 already copies to the other panel. Take it, swap, or cancel?" Press Escape: "Nothing changed."
+19. Choose Change key and wait 10 seconds. You hear "No key heard. The terminal may keep it." and "Type the key's name, such as ctrl+f5".
+20. Run Test keys. Press Ctrl+V and Ctrl+Enter. In Windows Terminal, Ctrl+V pastes text and does not arrive, and the Paste row of the Keys list says "check terminal". Tell the project which keys did not arrive.
+21. In the Keys list, choose Choose a preset, then Total Commander: "Apply Total Commander keys? No is the default. y or n". Answer y: "Total Commander keys applied." Press Shift+F6 on a file: the rename prompt. Press Escape. Choose the diroxide defaults again: "The diroxide default keys applied."
+22. In a shell, run `diro keys check`. You hear "Preset diroxide defaults: OK." and one line like it for each preset, then a line about `keymap.toml`.
+23. In the panel on `out`, run Watch this folder from the palette: "Watching out for new files. Escape stops." Copy a file in slowly. Nothing while it grows, then "Arrived: name, size". Press Escape: "Stopped watching out: 1 arrived".
 
-Questions to answer: Was the meaning of every line inside the first 40 cells? Did the count after the filter pause help, or interrupt? Is 400 milliseconds too short? Did "Waiting for ... to settle" get read aloud even though diroxide does not say it? Was the compare verdict and its counts enough before the change list? Did a key in the Keys list do nothing? Which keys does your terminal not deliver?
+Questions to answer: Was the meaning of every line inside the first 40 cells? Did the count after the filter pause help, or interrupt? Is 400 milliseconds too short? Did "Waiting for ... to settle" get read aloud even though diroxide does not say it? Was the compare verdict and its counts enough before the change list? Does "check terminal" on every Shift plus function key row help or only add noise? Did the label's color help when someone sighted was nearby, and did the row read the same without it? Which keys does your terminal not deliver?
 
 ## Keys that may clash
 
@@ -313,6 +311,8 @@ Questions to answer: Was the meaning of every line inside the first 40 cells? Di
 - Single-letter keys. Typing a letter finds a row by name. Screen readers do not use their browse mode in a terminal, so these letters reach diroxide. Dictation software types letters; turn single-letter keys off with the `single_letters` setting, and every command stays reachable by the keys that are not letters, by the menus and by the palette. The viewer has single-letter keys too, such as w, l, q, n and p; with single-letter keys off, every viewer command, search included, is still in the palette, and Escape closes the viewer.
 - The keypad and Num Lock, described above. Some key presets use the keypad's plus, minus, star and slash for the selection. They work under NVDA and JAWS only with Num Lock on.
 - Ctrl with a digit. The favorite labels are on Ctrl+1 to Ctrl+7, and many Unix terminals do not send them. The Edit menu's Labels submenu (Alt+E, then B) is the sure way.
+- Ctrl+B for the bookmarks. Inside tmux it is tmux's own prefix key and arrives only when pressed twice. Alt+B and the Go menu (Alt+G, then K) open the same list.
+- Shift with a function key. Some terminals send Shift plus a function key, Shift+F7 among them, as F13 to F24. The Keys list marks each of them "check terminal". Inside a compare, P and the actions list (Shift+F10) are the sure way back.
 - The vim-style key preset runs letters as commands, so it turns type-ahead off. Dictation software types letters, so use Single letters, off, with dictation.
 - Windows Terminal keeps some keys for itself. [Terminals](terminals.md) lists them and says how to give them back or avoid them.
 
