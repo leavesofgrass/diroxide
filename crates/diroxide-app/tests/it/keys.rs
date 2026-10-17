@@ -463,6 +463,85 @@ fn the_preset_chooser_says_the_preset_in_use() {
 }
 
 #[test]
+fn applying_a_preset_changes_the_keys_and_keeps_the_owners_lines() {
+    let (_dir, mut s, paths) = session_with_file();
+    // 21. Choose the Total Commander preset from the Keys list.
+    s.command(ids::KEYS_LIST);
+    assert_eq!(s.key("enter")[0].split(", ").next(), Some("Key presets"));
+    s.key("down");
+    assert_eq!(
+        s.key("enter"),
+        ["Apply Total Commander keys? No is the default. y or n"]
+    );
+    assert_eq!(
+        s.key("y"),
+        ["Total Commander keys applied. Your 1 change still applies."]
+    );
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Keys, preset Total Commander, 1 changed")
+    );
+    s.key("escape");
+    assert_eq!(s.app.settings().preset, "total-commander");
+    assert_eq!(s.app.keymap().key_text(&ids::RENAME), "Shift+F6");
+    // The owner's own line stays on top of the preset.
+    assert_eq!(s.app.keymap().key_text(&ids::SORT_NAME), "F12");
+    assert_eq!(
+        file_text(&paths),
+        GOLDEN,
+        "applying a preset clears nothing"
+    );
+    let settings = std::fs::read_to_string(paths.config_file(Paths::SETTINGS)).unwrap();
+    assert!(
+        settings.contains("preset = \"total-commander\""),
+        "{settings}"
+    );
+    // Shift+F6 on a file opens the rename prompt.
+    s.focus("notes.txt");
+    let said = s.key("shift+f6");
+    assert!(said[0].starts_with("Rename notes.txt to: "), "{said:?}");
+    s.key("escape");
+    // A Keys list row says the preset's line.
+    s.command(ids::KEYS_LIST);
+    s.type_text("rename");
+    let said = s.key("down");
+    assert!(
+        said[0].starts_with("Rename, Shift+F6 in both, preset"),
+        "{said:?}"
+    );
+    s.key("escape");
+
+    // vim-style turns single letters to commands; the defaults turn them
+    // back.
+    s.command(ids::KEYS_PRESET);
+    s.key("end");
+    let said = s.key("enter");
+    assert_eq!(said, ["Apply vim-style keys? No is the default. y or n"]);
+    assert_eq!(
+        s.key("y"),
+        [
+            "vim-style keys applied. Your 1 change still applies. Single letters: letters run commands."
+        ]
+    );
+    assert_eq!(
+        s.app.settings().single_letters,
+        diroxide_config::SingleLetters::Commands
+    );
+    assert_eq!(s.app.keymap().keys_text(&ids::LIST_DOWN), "Down or J");
+    s.command(ids::KEYS_PRESET);
+    s.key("home");
+    s.key("enter");
+    let said = s.key("y");
+    assert_eq!(
+        said,
+        [
+            "The diroxide default keys applied. Your 1 change still applies. Single letters: letters jump to names."
+        ]
+    );
+    assert_eq!(s.app.keymap().key_text(&ids::RENAME), "F2");
+}
+
+#[test]
 fn an_unknown_preset_setting_is_a_startup_problem_and_the_defaults_apply() {
     let dir = temp();
     let work = fixture(dir.path());

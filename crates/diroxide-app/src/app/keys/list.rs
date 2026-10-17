@@ -458,8 +458,9 @@ impl App {
         let mut said = format!("{} applied.", preset.keys_name());
         let mine = self.changed_commands();
         if mine > 0 {
+            let verb = if mine == 1 { "applies" } else { "apply" };
             said.push_str(&format!(
-                " Your {} still apply.",
+                " Your {} still {verb}.",
                 count(mine as u64, "change", "changes")
             ));
         }

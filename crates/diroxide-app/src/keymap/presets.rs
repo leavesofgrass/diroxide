@@ -39,8 +39,26 @@ use crate::menu::Menus;
 pub const DEFAULT_ID: &str = "diroxide";
 
 /// The built-in presets' files, by id, in the chooser's order.
-pub const FILES: [(&str, &str); 1] =
-    [(DEFAULT_ID, include_str!("../../keys/presets/diroxide.toml"))];
+pub const FILES: [(&str, &str); 6] = [
+    (DEFAULT_ID, include_str!("../../keys/presets/diroxide.toml")),
+    (
+        "total-commander",
+        include_str!("../../keys/presets/total-commander.toml"),
+    ),
+    (
+        "midnight-commander",
+        include_str!("../../keys/presets/midnight-commander.toml"),
+    ),
+    (
+        "explorer-finder",
+        include_str!("../../keys/presets/explorer-finder.toml"),
+    ),
+    ("worker", include_str!("../../keys/presets/worker.toml")),
+    (
+        "vim-style",
+        include_str!("../../keys/presets/vim-style.toml"),
+    ),
+];
 
 /// A key sequence a source manager uses, held back.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -88,14 +106,68 @@ pub struct Preset {
     pub letters: SingleLetters,
     /// Its key lines, as `keymap.toml` reads them.
     pub lines: KeymapConfig,
+    /// The lines that hold on macOS only, from its `[macos.*]` tables,
+    /// applied after [`Preset::lines`]: the Finder's Command keys. In them
+    /// `meta` is Command.
+    pub macos: KeymapConfig,
     /// The sequences held back.
     pub held_back: Vec<HeldBack>,
     /// What could not be read, in words; empty in a correct build.
     pub problems: Vec<String>,
 }
 
-/// The tables of a preset file that are not key lines.
-const OWN_TABLES: [&str; 2] = ["preset", "held_back"];
+/// The tables of a preset file that are not key lines for every system.
+const OWN_TABLES: [&str; 3] = ["preset", "held_back", "macos"];
+
+/// Reads key lines from text, keeping the problems that are not about a
+/// preset's own tables, each with where it came from, and every line of
+/// a command the catalog does not have as a problem too.
+fn key_lines(text: &str, place: &str, problems: &mut Vec<String>) -> KeymapConfig {
+    match KeymapConfig::from_toml(text) {
+        Ok(mut lines) => {
+            lines.problems.retain(|p| {
+                !OWN_TABLES
+                    .iter()
+                    .any(|own| p.text.starts_with(&format!("Unknown column: [{own}]")))
+            });
+            problems.extend(
+                lines
+                    .problems
+                    .iter()
+                    .map(|p| format!("{place}: {}", p.text)),
+            );
+            for line in &lines.overrides {
+                if commands::info(&line.command).is_none() {
+                    problems.push(format!(
+                        "{place}: unknown command {}, line {}",
+                        line.command, line.line
+                    ));
+                }
+            }
+            lines
+        }
+        Err(e) => {
+            problems.push(format!("{place}: {e}"));
+            KeymapConfig::default()
+        }
+    }
+}
+
+/// The `[macos]` table's own tables as a document of their own, so the
+/// keymap reader reads them as it reads any key lines.
+fn macos_text(text: &str) -> String {
+    let Ok(document) = text.parse::<toml_edit::DocumentMut>() else {
+        return String::new();
+    };
+    let Some(macos) = document.get("macos").and_then(toml_edit::Item::as_table) else {
+        return String::new();
+    };
+    let mut own = toml_edit::DocumentMut::new();
+    for (name, item) in macos.iter() {
+        own.insert(name, item.clone());
+    }
+    own.to_string()
+}
 
 impl Preset {
     /// Reads a preset file. Every mistake is collected in words; the
@@ -135,29 +207,12 @@ impl Preset {
                     )
                 }
             };
-        let lines = match KeymapConfig::from_toml(text) {
-            Ok(mut lines) => {
-                lines.problems.retain(|p| {
-                    !OWN_TABLES
-                        .iter()
-                        .any(|own| p.text.starts_with(&format!("Unknown column: [{own}]")))
-                });
-                problems.extend(lines.problems.iter().map(|p| format!("{file}: {}", p.text)));
-                for line in &lines.overrides {
-                    if commands::info(&line.command).is_none() {
-                        problems.push(format!(
-                            "{file}: unknown command {}, line {}",
-                            line.command, line.line
-                        ));
-                    }
-                }
-                lines
-            }
-            Err(e) => {
-                problems.push(format!("{file}: {e}"));
-                KeymapConfig::default()
-            }
-        };
+        let lines = key_lines(text, &file, &mut problems);
+        let macos = key_lines(
+            &macos_text(text),
+            &format!("{file}, [macos]"),
+            &mut problems,
+        );
         Self {
             id: id.to_owned(),
             name,
@@ -165,6 +220,7 @@ impl Preset {
             source,
             letters,
             lines,
+            macos,
             held_back,
             problems,
         }
@@ -198,9 +254,14 @@ impl Preset {
     /// One column's keys with this preset applied over the defaults for a
     /// system, before the owner's lines.
     pub fn keymap(&self, column: KeyColumn, platform: Platform) -> Keymap {
-        Keymap::defaults_for(column)
+        let keymap = Keymap::defaults_for(column)
             .for_platform(platform)
-            .with_overrides(&self.lines)
+            .with_overrides(&self.lines);
+        if platform == Platform::MacOs {
+            keymap.with_overrides(&self.macos)
+        } else {
+            keymap
+        }
     }
 }
 
@@ -450,6 +511,100 @@ mod tests {
         assert!(defaults.lines.overrides.is_empty());
         assert_eq!(preset("DIROXIDE DEFAULTS").unwrap().id, "diroxide");
         assert_eq!(chosen("nothing").id, "diroxide");
+    }
+
+    #[test]
+    fn each_preset_changes_what_its_source_does() {
+        let keys = |id: &str, column: KeyColumn, platform: Platform, command| {
+            preset(id)
+                .unwrap()
+                .keymap(column, platform)
+                .keys_text(&command)
+        };
+        let (t, w, win, mac) = (
+            KeyColumn::Terminal,
+            KeyColumn::Window,
+            Platform::Windows,
+            Platform::MacOs,
+        );
+        let ids = [
+            "diroxide",
+            "total-commander",
+            "midnight-commander",
+            "explorer-finder",
+            "worker",
+            "vim-style",
+        ];
+        let listed: Vec<&str> = presets().iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(listed, ids);
+        // Total Commander: Shift+F6 renames, F2 reloads; the window quits
+        // on Alt+F4 and Ctrl+Q is its quick view.
+        assert_eq!(keys("total-commander", t, win, ids::RENAME), "Shift+F6");
+        assert_eq!(keys("total-commander", t, win, ids::RELOAD), "F2 or Ctrl+R");
+        assert_eq!(keys("total-commander", t, win, ids::QUIT), "Ctrl+Q");
+        assert_eq!(keys("total-commander", w, win, ids::QUIT), "Alt+F4");
+        assert_eq!(
+            keys("total-commander", w, win, ids::QUICK_VIEW),
+            "Ctrl+Q or Shift+F3"
+        );
+        assert_eq!(keys("total-commander", t, win, ids::PACK), "Alt+F5");
+        // Midnight Commander: F10 quits in the window, its Alt keys.
+        assert_eq!(
+            keys("midnight-commander", w, win, ids::QUIT),
+            "F10 or Ctrl+Q"
+        );
+        assert_eq!(keys("midnight-commander", w, win, ids::MENU), "F9");
+        assert_eq!(
+            keys("midnight-commander", t, win, ids::BACK),
+            "Alt+Left or Alt+Y"
+        );
+        // Explorer and the Finder: Backspace goes back; the Finder's
+        // Command keys on macOS only.
+        assert_eq!(
+            keys("explorer-finder", t, win, ids::BACK),
+            "Alt+Left or Backspace"
+        );
+        assert_eq!(
+            keys("explorer-finder", w, mac, ids::BACK),
+            "Option+Left or Cmd+["
+        );
+        assert_eq!(keys("explorer-finder", w, win, ids::DETAILS), "Alt+Enter");
+        assert_eq!(
+            keys("explorer-finder", w, mac, ids::DETAILS),
+            "Option+Enter or Cmd+I"
+        );
+        assert_eq!(keys("explorer-finder", t, win, ids::MENU_PLUGINS), "Alt+U");
+        // Worker: plus selects all in a terminal; F1 is the palette in
+        // the window, help moves to Shift+F1.
+        assert_eq!(keys("worker", t, win, ids::SELECT_ALL), "Ctrl+A or Plus");
+        assert_eq!(keys("worker", t, win, ids::SELECT_PATTERN), "");
+        assert_eq!(keys("worker", w, win, ids::HELP), "Shift+F1");
+        assert_eq!(
+            keys("worker", w, win, ids::PALETTE),
+            "Ctrl+Shift+P or Ctrl+P or F1"
+        );
+        // vim-style: h, j, k and l, letters running commands.
+        assert_eq!(keys("vim-style", t, win, ids::LIST_DOWN), "Down or J");
+        assert_eq!(
+            keys("vim-style", t, win, ids::UP),
+            "Left or Backspace or Alt+Up or H"
+        );
+        assert_eq!(
+            preset("vim-style").unwrap().letters,
+            SingleLetters::Commands
+        );
+        assert_eq!(keys("vim-style", t, win, ids::LIST_PAGE_UP), "Page Up");
+        assert_eq!(
+            keys("vim-style", w, win, ids::LIST_PAGE_UP),
+            "Page Up or Ctrl+B"
+        );
+        for id in &ids[1..] {
+            let p = preset(id).unwrap();
+            assert!(!p.lines.overrides.is_empty(), "{id}");
+            assert!(p.description.starts_with("For people who "), "{id}");
+        }
+        assert!(preset("midnight-commander").unwrap().held_back.len() >= 10);
+        assert!(preset("worker").unwrap().held_back.len() >= 8);
     }
 
     #[test]

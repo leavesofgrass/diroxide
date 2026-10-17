@@ -3,7 +3,8 @@
 //! keys or the catalog, run it and commit what it writes; the check is part
 //! of every agent's checks from Wave 1 on.
 //!
-//! Today it writes `docs/keyboard.md` and `docs/settings-reference.md`.
+//! Today it writes `docs/keyboard.md`, the keymap presets' sheets
+//! (`docs/keyboard-NAME.md`) and `docs/settings-reference.md`.
 //! `THIRD-PARTY-NOTICES.md` joins it when the notices task arrives.
 
 use std::fs;
@@ -13,22 +14,17 @@ use anyhow::{Context, Result};
 
 use crate::{keyboard, settings_doc};
 
-/// A generated page: its path from the root, and its generator.
-type Page = (&'static str, fn() -> String);
-
-/// Each generated page with its generator.
-fn pages() -> [Page; 2] {
-    [
-        (keyboard::PAGE, keyboard::generate),
-        (settings_doc::PAGE, settings_doc::generate),
-    ]
+/// Each generated page: its path from the root, and its text.
+fn pages() -> Vec<(String, String)> {
+    let mut pages = keyboard::all_pages();
+    pages.push((settings_doc::PAGE.to_owned(), settings_doc::generate()));
+    pages
 }
 
 /// Writes every page whose text changed; says which.
 pub fn write(root: &Path) -> Result<bool> {
-    for (page, generate) in pages() {
-        let path = root.join(page);
-        let text = generate();
+    for (page, text) in pages() {
+        let path = root.join(&page);
         if fs::read_to_string(&path).is_ok_and(|on_disk| on_disk == text) {
             println!("regen: {page} is current.");
             continue;
@@ -42,9 +38,9 @@ pub fn write(root: &Path) -> Result<bool> {
 /// Checks every page; fails when any is out of date.
 pub fn check(root: &Path) -> Result<bool> {
     let mut stale = Vec::new();
-    for (page, generate) in pages() {
-        let on_disk = fs::read_to_string(root.join(page)).unwrap_or_default();
-        if on_disk != generate() {
+    for (page, text) in pages() {
+        let on_disk = fs::read_to_string(root.join(&page)).unwrap_or_default();
+        if on_disk != text {
             stale.push(page);
         }
     }

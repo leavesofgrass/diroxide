@@ -233,8 +233,9 @@ fn run_preset(
         .count();
     let mut said = format!("{} applied.", preset.keys_name());
     if mine > 0 {
+        let verb = if mine == 1 { "applies" } else { "apply" };
         said.push_str(&format!(
-            " Your {} in keymap.toml still apply.",
+            " Your {} in keymap.toml still {verb}.",
             count(mine as u64, "line", "lines")
         ));
     }

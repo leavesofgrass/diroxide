@@ -8,5 +8,5 @@
 [preset]
 name = "diroxide defaults"
 description = "The keys most people know: the CUA keys, Explorer's and the Finder's, and the Norton row."
-source = "plan section 5.7; research/alpha3-plan.md, the command list and the diroxide defaults"
+source = "diroxide's own command catalog, with the keys most people know (the plan's section on keys)"
 letters = "type-ahead"

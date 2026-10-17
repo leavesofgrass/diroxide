@@ -1,0 +1,110 @@
+# Midnight Commander: for people who know Midnight Commander's keys
+# (research/alpha3-plan.md, "Preset: Midnight Commander"; R5 section 3,
+# the mc manual 4.8.33 and its keymap file). Its single keys are the
+# diroxide defaults already (Tab, F3 to F9, Ctrl+R, Ctrl+U, Ctrl+S,
+# Alt+Period); what the preset adds is its Alt keys, and what it holds
+# back is the whole Ctrl+X family, since a key here is one key.
+#
+# Kept despite the source: Ctrl+Right shows the folder in the other panel
+# (Midnight Commander's Alt+O is Say other panel here); Ctrl+S filters,
+# where Midnight Commander's quick search jumps; F2 renames, where it is
+# Midnight Commander's user menu (the Actions palette of alpha.4). Insert
+# and Ctrl+T for tagging are not carried: Insert is the screen readers'
+# key, and Ctrl+T is tabs. F1 and F10 are never terminal keys, so the
+# terminal keeps Ctrl+Q to quit.
+#
+# Not carried: Ctrl+Page Up and Ctrl+Page Down (a terminal keeps them),
+# Ctrl+N and Ctrl+P as moves (Ctrl+P is the palette), Alt+G, Alt+R and
+# Alt+J (jumps on the screen, which mean nothing by ear), Alt+T (the
+# listing format), Ctrl+O (the subshell), Escape then a digit for a
+# function key (Escape cancels here).
+#
+# Waiting for their commands (alpha.3, then these lines join the preset):
+#   search.find = ["ctrl+f", "alt+?"]            find file
+#   go.bookmarks, window = ["ctrl+b", "alt+b", "ctrl+\\"]
+#   dir.sizes, window = "ctrl+space"             directory size
+
+[preset]
+name = "Midnight Commander"
+description = "For people who know Midnight Commander's keys: the Norton row, with its Alt keys for history and paths."
+source = "Midnight Commander's manual, version 4.8.33, and its keymap file, read for the project's research"
+letters = "type-ahead"
+
+[terminal.panel]
+"select.unpattern" = ["\\", "-"]
+"go.back" = ["alt+left", "alt+y"]
+"go.forward" = ["alt+right", "alt+u"]
+"go.history" = "alt+shift+h"
+"go.path" = ["ctrl+l", "alt+d", "alt+c"]
+"panel.this-in-other" = ["ctrl+left", "alt+i"]
+
+[window.global]
+"app.quit" = ["f10", "ctrl+q"]
+"app.menu" = "f9"
+
+[window.panel]
+"select.unpattern" = ["\\", "-"]
+"go.back" = ["alt+left", "alt+y"]
+"go.forward" = ["alt+right", "alt+u"]
+"go.history" = "alt+shift+h"
+"go.path" = ["ctrl+l", "alt+d", "alt+c", "ctrl+enter"]
+"panel.this-in-other" = ["ctrl+left", "alt+i"]
+
+[[held_back]]
+keys = "ctrl+x c"
+command = "Change permissions, and the owner in its dialog"
+id = "file.permissions"
+
+[[held_back]]
+keys = "ctrl+x s"
+command = "Make a symbolic link"
+id = "file.link"
+
+[[held_back]]
+keys = "ctrl+x ctrl+s"
+command = "Change a link's target"
+id = "file.relink"
+
+[[held_back]]
+keys = "ctrl+x l"
+command = "Make a hard link"
+id = "file.link"
+
+[[held_back]]
+keys = "ctrl+x i"
+command = "Details"
+id = "file.details"
+
+[[held_back]]
+keys = "ctrl+x q"
+command = "Quick view"
+id = "view.quick-view"
+
+[[held_back]]
+keys = "ctrl+x d"
+command = "Compare folders, select the differences"
+
+[[held_back]]
+keys = "ctrl+x ctrl+d"
+command = "Compare files"
+
+[[held_back]]
+keys = "ctrl+x h"
+command = "Add a bookmark"
+
+[[held_back]]
+keys = "ctrl+x j"
+command = "Job history"
+id = "jobs.history"
+
+[[held_back]]
+keys = "ctrl+x !"
+command = "External panelize, with alpha.4"
+
+[[held_back]]
+keys = "ctrl+x t"
+command = "Paste the marked names into the run prompt"
+
+[[held_back]]
+keys = "ctrl+x p"
+command = "Paste the other panel's names into the run prompt"

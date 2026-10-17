@@ -462,5 +462,10 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 
 ## See also
 
+- [The Total Commander preset](keyboard-total-commander.md)
+- [The Midnight Commander preset](keyboard-midnight-commander.md)
+- [The Explorer and Finder preset](keyboard-explorer-finder.md)
+- [The Worker preset](keyboard-worker.md)
+- [The vim-style preset](keyboard-vim-style.md)
 - [Settings reference](settings-reference.md)
 - [The documentation index](README.md)

@@ -1,0 +1,61 @@
+# Total Commander: for people who know Total Commander's keys
+# (research/alpha3-plan.md, "Preset: Total Commander"). The window column
+# follows Total Commander closely; the terminal column keeps Ctrl+Q for
+# quit, because Alt+F4 would close the terminal. Already Total
+# Commander's and unchanged: Tab, F3 to F8, Delete, Shift+F5, Ctrl+U,
+# Ctrl+Left and Ctrl+Right, Backspace, Ctrl+C, Ctrl+X, Ctrl+V, the sorts on
+# Ctrl+F3 to Ctrl+F7, Shift+F10, Alt+Enter, Space, Alt+Left and Alt+Right.
+#
+# Kept despite the source: Ctrl+D is Say status here (Total Commander's
+# hotlist key); Ctrl+Z is Undo (Total Commander edits a file comment on
+# it); Ctrl+S is the filter, as Total Commander's quick filter is. F1 is
+# never a terminal key, so help stays on Shift+F1 and the question mark.
+#
+# Waiting for their commands (alpha.3, then these lines join the preset):
+#   search.find = ["alt+f7", "ctrl+f"]          find files
+#   dir.sizes = "ctrl+l"                         calculate occupied space
+#   select.same-extension, window = "alt+kp-plus"
+#   select.differences = "shift+f2"              compare directories
+# Later alphas: Ctrl+M multi-rename, Ctrl+T and Ctrl+W tabs, Ctrl+F8 and
+# Alt+F10 trees.
+
+[preset]
+name = "Total Commander"
+description = "For people who know Total Commander's keys: the Norton row, Shift+F6 to rename, Alt with the function keys for archives."
+source = "a third-party list of Total Commander's shortcuts and forum pages, read for the project's research; Total Commander's own keyboard help page was not read"
+letters = "type-ahead"
+
+[terminal.panel]
+"panel.reload" = ["f2", "ctrl+r"]
+"file.rename" = "shift+f6"
+"file.delete-permanently" = ["shift+f8", "shift+delete"]
+"go.places" = ["alt+f1", "ctrl+g"]
+"go.path" = "alt+d"
+"select.restore" = "/"
+"select.next" = "none"
+"select.previous" = "none"
+"archive.pack" = "alt+f5"
+"archive.unpack" = ["alt+f6", "alt+f9"]
+"archive.test" = "alt+shift+f9"
+
+[window.global]
+"app.quit" = "alt+f4"
+"view.quick-view" = ["ctrl+q", "shift+f3"]
+
+[window.panel]
+"panel.reload" = ["f2", "ctrl+r"]
+"file.rename" = "shift+f6"
+"file.delete-permanently" = ["shift+f8", "shift+delete"]
+"go.places" = ["alt+f1", "ctrl+g"]
+"go.path" = "alt+d"
+"select.all" = "ctrl+a"
+"select.pattern" = ["kp-plus", "plus"]
+"select.unpattern" = ["kp-minus", "-"]
+"select.invert" = ["kp-multiply", "*"]
+"select.restore" = ["kp-divide", "/"]
+"select.none" = ["ctrl+kp-minus", "ctrl+shift+a"]
+"select.next" = "none"
+"select.previous" = "none"
+"archive.pack" = "alt+f5"
+"archive.unpack" = ["alt+f6", "alt+f9"]
+"archive.test" = "alt+shift+f9"
