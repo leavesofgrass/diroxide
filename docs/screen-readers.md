@@ -25,7 +25,7 @@ Other things you can rely on:
 The `screen_reader_mode` setting turns on the behavior a screen reader needs. Its values are `auto`, `on` and `off`, and the default is `auto`. diroxide does not detect your screen reader yet, so `auto` behaves as on: you start in screen-reader mode, and `off` is the choice that changes it. Check the setting in Settings (Alt+T, then S). In screen-reader mode:
 
 - the jobs line changes at once when a job changes state, and otherwise at most every ten seconds (`progress_interval_seconds`). Outside screen-reader mode it can change twice a second;
-- the other panel is redrawn only when you ask, so a change there does not interrupt you. The quick view's one-line announcement still arrives;
+- the other panel is redrawn only when you ask, so a change there does not interrupt you, and the quick view shows only "Preview" there until you press Tab. Its one-line announcement still arrives;
 - while you type in a prompt, one line says the count of matches, and the list is drawn only when you move into it;
 - highlights carry an attribute and a text marker, never only color;
 - code in the viewer is not colored, and a hex row is eight bytes, so it fits 40 cells.
@@ -74,9 +74,10 @@ These lines show what diroxide says for each key. The status line says the same 
 
 ### The quick view
 
-- Shift+F3: "Quick view on". When the cursor settles on a file, one line, never the whole document: "Preview: report.md, 12 headings". Move through five files quickly and about one "Preview:" line arrives when you stop.
-- Tab into the preview: "Preview, report.md" and the line you are on. Moving by heading: "Heading 2: Installation, 3 of 12". In a table: "Table 1 of 2, 5 rows, 3 columns", and a cell says its header first, "Age: 36, row 2 of 5, column 2". Escape returns to the panel.
-- A file changed in another program: "Preview updated: report.md changed", once.
+- Shift+F3: "Quick view on", then one line, never the whole document: "Preview: report.md, 12 headings". Move up through five files quickly: each row is read, then one line arrives when the cursor stops, such as "No preview: locked.zip, archive, 197 bytes".
+- In screen-reader mode the other panel shows only "Preview" and "Tab goes into the preview" until you go into it. Tab then draws the document and says "Preview, report.md, Report, heading 1, 1 of 25". H: "Heading 2: Part 1, 2 of 12". T: "Table 1 of 1, 2 rows, 2 columns". Right: "Age, header, row 1 of 2, column 2". Shift+Down: "Age: 36, row 2 of 2, column 2".
+- Slash: "Find in the preview", then "Match 1 of 22 in the preview", and N: "Match 2 of 22 in the preview". Escape returns to the panel, with the cursor on your row and nothing read twice.
+- A file changed in another program: "Preview updated: report.md changed", once. Shift+F3 again: "Quick view off".
 
 ### Split, join, links and permissions
 
@@ -208,19 +209,21 @@ If you build from source, `cargo xtask demo` followed by a new or empty folder o
 10. Press F3 on `report.md`. Press Ctrl+D: "Line 1 of ...". Press the slash key, type a word that occurs more than once and press Enter: "Match 1 of ...". Press N. Search for a word that is not there: "No match for".
 11. Press F3 on `big.bin`: "big.bin looks binary; hex mode". Press B to hear one byte: "Byte 0 is" and a value. Is eight bytes a row comfortable by ear?
 12. Press F3 on `main.rs`. Nothing about color is spoken. Press Right on a word, then K, Shift+K and O: the token, "Function name:", "Line 4:" and "Outline:".
-13. Press Shift+F3 on `report.md`: "Quick view on" and one line, "Preview: report.md, 12 headings". Move quickly down and up through five files. Is it quiet, with about one "Preview:" line when you stop?
-14. Press Tab. You hear "Preview, report.md". Move by heading, then to the table, and step through a cell: the header, a value and the row and column. Press Escape. Move to `notes.org`: "Preview: notes.org, Org".
-15. Put the cursor on `big.bin`, with the right panel on `out`. Run Split file from the File menu. You hear "Split into, Email attachment, 18 MB, Parts of 18,000,000 bytes, 1 of 9". Press Enter: the plan lists "4 parts of 18 MB, the last 6 MB" and "Enough space", and the question starts on No. Answer y: "Split started: 1 item to out", then "Split finished: 5 done." In `out` are the four parts, then `big.bin.crc`. Press F3 on the `.crc` file: three lines, "filename=big.bin", "size=60000000" and a "crc32=" line.
-16. Rename `big.bin.003` and run Join files from `big.bin.001`: "Part 003 is missing. Nothing was joined." Rename it back. Join from `big.bin.002`: "Join 4 parts into big.bin, 60.0 MB? No is the default. y or n". Answer y: "Joined big.bin: checksum matches." and "Move the 4 parts to the trash? No is the default. y or n". Answer n: "The parts stay where they are."
-17. Press Alt+Enter on `course.zip`: "Details of course.zip, Type: zip archive", then the size, then "Entries: 10 items".
-18. Run Change permissions on `main.rs`: "Permissions, Change permissions of main.rs, 1 of 4".
-19. Run Make symbolic link on `main.rs`: "Make link, Make a link to main.rs in out, 1 of 4". Answer y: "Link finished: 1 done." On Windows without Developer Mode: "Cannot link: needs developer mode."
-20. Press Shift+F5 on `main.rs`: "Duplicate main.rs as: main (2).rs". Press Escape.
-21. Press F9, then Enter for File, then A for Archive, then P for Pack: "Pack, Pack 1 item into" and a name. Press Escape. Is the last line of the screen the key bar, "F2 Rename  F3 View ..."?
-22. In Settings, turn Single letters off: "Single letters: single keys do nothing". Press F3 on a text file, then H: nothing is said. Run Search in file from the palette: "Search for, empty". Type a word and press Enter: "Match 1 of ...". The viewer commands are also in the View menu's Viewer submenu.
-23. Press Ctrl+Q. The program quits and the shell is where you left it.
+13. Press Shift+F3 on `report.md`: "Quick view on", then one line, "Preview: report.md, 12 headings". Hold Down through five files. Each row is read, then you hear one "Preview:" or "No preview:" line when you stop, such as "No preview: locked.zip, archive, 197 bytes". Is it quiet?
+14. Press Tab. You hear "Preview, report.md, Report, heading 1, 1 of 25". Press H: "Heading 2: Part 1, 2 of 12". Press T: "Table 1 of 1, 2 rows, 2 columns". Press Right: "Age, header, row 1 of 2, column 2". Press Shift+Down: "Age: 36, row 2 of 2, column 2".
+15. Press L, then Enter on a web link: the question starts on No ("Open https://example.org in the browser? No is the default. y or n"). Answer n: "Not opened". Press slash, type `part` and press Enter: "Match 1 of 22 in the preview". Press N: "Match 2 of 22 in the preview". Press Escape: the panel, with the cursor on `report.md`, and nothing read twice.
+16. Move to `notes.org`: "Preview: notes.org, Org, 2 headings". In the panel its row says "file". Edit `report.md` in another program and save: "Preview updated: report.md changed", once. Press Shift+F3: "Quick view off".
+17. Put the cursor on `big.bin`, with the right panel on `out`. Run Split file from the File menu. You hear "Split into, Email attachment, 18 MB, Parts of 18,000,000 bytes, 1 of 9". Press Enter: the plan lists "4 parts of 18 MB, the last 6 MB" and "Enough space", and the question starts on No. Answer y: "Split started: 1 item to out", then "Split finished: 5 done." In `out` are the four parts, then `big.bin.crc`. Press F3 on the `.crc` file: three lines, "filename=big.bin", "size=60000000" and a "crc32=" line.
+18. Rename `big.bin.003` and run Join files from `big.bin.001`: "Part 003 is missing. Nothing was joined." Rename it back. Join from `big.bin.002`: "Join 4 parts into big.bin, 60.0 MB? No is the default. y or n". Answer y: "Joined big.bin: checksum matches." and "Move the 4 parts to the trash? No is the default. y or n". Answer n: "The parts stay where they are."
+19. Press Alt+Enter on `course.zip`: "Details of course.zip, Type: zip archive", then the size, then "Entries: 10 items".
+20. Run Change permissions on `main.rs`: "Permissions, Change permissions of main.rs, 1 of 4".
+21. Run Make symbolic link on `main.rs`: "Make link, Make a link to main.rs in out, 1 of 4". Answer y: "Link finished: 1 done." On Windows without Developer Mode: "Cannot link: needs developer mode."
+22. Press Shift+F5 on `main.rs`: "Duplicate main.rs as: main (2).rs". Press Escape.
+23. Press F9, then Enter for File, then A for Archive, then P for Pack: "Pack, Pack 1 item into" and a name. Press Escape. Is the last line of the screen the key bar, "F2 Rename  F3 View ..."?
+24. In Settings, turn Single letters off: "Single letters: single keys do nothing". Press F3 on a text file, then H: nothing is said. Run Search in file from the palette: "Search for, empty". Type a word and press Enter: "Match 1 of ...". The viewer commands are also in the View menu's Viewer submenu.
+25. Press Ctrl+Q. The program quits and the shell is where you left it.
 
-Questions to answer: Was every line's meaning inside the first 40 cells? Did anything speak a password? Did the quick view chatter? Was eight bytes of hex right? Did the job end lines come twice? Which command did you need the palette for?
+Questions to answer: Was every line's meaning inside the first 40 cells? Did anything speak a password? Did the quick view chatter? Was eight bytes of hex right? Which command did you need the palette for?
 
 ## Keys that may clash
 

@@ -59,7 +59,6 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Limits: [the archives guide](archives.md) lists them with the questions they ask. A listing shows at most 500,000 entries of one folder and says so. An archive with more than a million members is refused unless you raise `archives.max_entries`.
 - The command-line `diro archive` commands use the built-in limits, not the `[archives]` table in your settings. Only the program in the terminal or the window reads the table.
 - 7z passwords: diroxide wipes its own copy of a typed password when the job ends, and leaving a locked 7z makes it forget the password. The library that reads and writes 7z keeps a copy in memory in a form diroxide cannot wipe, for as long as it needs it: one read, or the whole time a 7z is being packed. A zip password is only borrowed by its library and does not have this limit.
-- In `diro archive`, one wrong password may use up all three tries, because the password source is wrapped twice there. The panels count correctly.
 - A tar.gz, tar.xz or solid 7z is listed with no progress line. A "Reading logs.tar.xz: 3.2 of 14.0 GB" line is planned and not wired, so a big one shows nothing until the list is ready.
 - Junk entries such as `__MACOSX` are marked hidden by the archive reader. Whether Show hidden files lists them in the panel has not been checked.
 - F5 out of an archive always unpacks with the default settings. There is no "copy with options" yet. To choose the folder rule, the name policy or links, use Unpack from the File menu. Shift+F5 is Duplicate.
@@ -82,6 +81,15 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The outline, the bracket jump, skip comment and context need the file read whole, within the highlight caps. Past them they say "Needs a file under 512 KiB".
 - Colors cover nine languages: Markdown, JSON, TOML, YAML, shell, Rust, Python, HTML and CSS. YAML is colored but not checked for errors.
 - A slim `diro` built without the syntax set says "Highlighting off: not in this build" and keeps the commands that need no grammar.
+- The quick view does not draw code colors. It shows code as plain lines; the viewer (F3) colors it.
+- In the single layout the quick view is drawn only while the focus is in it. The one-line announcement still arrives as you move.
+- Some terminals send Shift+F3 as F15. The View menu (Alt+V, then Q) and the palette turn the quick view on.
+- The key test, `diro keys test`, reports panel and viewer keys. It does not know the quick view's keys yet.
+- An Org file's row in the panel says "file", because the file type table has no Org entry. The preview line says "Org".
+- The quick view wraps by counting characters, so a wide character counts as one.
+- A reader that runs past its deadline cannot be stopped, so it is left to finish, and at most three run at once. A deeply nested document can be cut off at the deadline: "Could not read big.org: took too long." carta 0.0.11 keeps only 32 levels of a nested DokuWiki list, and content nested past 256 elements reads as one row.
+- Raw HTML in Markdown keeps its text and drops its tags. A front-matter title or an Org `#+TITLE` becomes the document's title, not a heading row.
+- Open in textweaver hands over files on this computer only, not a file inside an archive.
 
 ## Split and join
 
@@ -97,7 +105,6 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Windows needs Developer Mode or an administrator to make a symbolic link, and a FAT or exFAT drive holds no links at all. The words for the missing right are tested on the error itself; the test machine had the right, so the real refusal has not been seen yet.
 - A folder link on Windows cannot be changed in one step, so changing its target uses the trash. On a drive with no trash, changing a folder link's target fails in words.
 - Not built yet from the permissions plan: typing an octal number or a symbolic mode such as `u=rw,g=r`, Make runnable, the list of permission presets, a list of protected places that refuse changes in administrator mode, extra checks for private-key names, changing a file with several hard links once, and a "why can't I?" explanation. The permissions dialog steps each of owner, group and others through six choices instead.
-- The end-of-job line for a permissions change is built from the job's verb and may read "Change the attributes of finished: 1 done." This was worked out from the code and has not been heard.
 - Access lists, flags such as immutable and locked, and extended attributes are neither shown nor edited. They come with alpha.7, shown first. Changing the owner comes with alpha.7.
 - The rows alpha.2 adds to the details list (type, size with its exact bytes, a link's target) have no dates of their own, because the preview code has no time zone. The times are in the details list as before.
 - The Unix half of the atomic link swap is covered by the project's Linux container check. It has not been run natively on a Unix machine outside it.
@@ -143,7 +150,6 @@ The table of keys each terminal can send waits for a key probe run by hand on ea
 - Cut, copy and paste of files (Ctrl+X, Ctrl+C, Ctrl+V) work between diroxide's own panels. They do not use the system clipboard, so Explorer and the Finder cannot paste what diroxide copied.
 - Cloud files that are only online are named "online only". diroxide asks before it reads their contents.
 - The terminal frontend has no mouse.
-- Each job announces its end twice: "Unpacking finished" from the jobs line, then the result line, "Unpack finished: 4 done." A follow-up drops the first.
 - How many times a copy retries a lost network, how long before it calls a copy stalled, and whether it keeps dates or checks a move are built into the job engine. They are not settings.
 
 ## See also

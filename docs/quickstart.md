@@ -83,7 +83,7 @@ Move to a zip, a 7z, a tar or another archive and press Enter. It opens like a f
 
 ## Read a file
 
-Press F3 on a file to read it in the viewer. Up and Down move a line, Ctrl+D says where you are, slash searches, and Escape closes the viewer with your cursor back on the file's row. Press Shift+F3 to turn the other panel into a live preview of the file under your cursor, and Shift+F3 again to turn it off. [The viewer](viewer.md) and [the quick view](quick-view.md) have the rest.
+Press F3 on a file to read it in the viewer. Up and Down move a line, Ctrl+D says where you are, slash searches, and Escape closes the viewer with your cursor back on the file's row. Press Shift+F3 to turn the other panel into a live preview of the file under your cursor ("Quick view on"), and Shift+F3 again to turn it off. Tab goes into the preview and Tab or Escape comes back. [The viewer](viewer.md) and [the quick view](quick-view.md) have the rest.
 
 ## Find any command
 

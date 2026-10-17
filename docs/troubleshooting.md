@@ -130,7 +130,7 @@ Windows lets only a program with the right to make symbolic links do so. Turn on
 
 ## F3, or another new key, does nothing
 
-- F3 may not reach diroxide. Run the key test, or use View in the File menu (Alt+F, then V) or the palette. The viewer's own keys are in the View menu's Viewer submenu (Alt+V, then V) and in the palette. [Terminals](terminals.md) lists the keys terminals keep. If Shift+F3 does nothing, [the quick view](quick-view.md) says how to reach it.
+- F3 may not reach diroxide. Run the key test, or use View in the File menu (Alt+F, then V) or the palette. The viewer's own keys are in the View menu's Viewer submenu (Alt+V, then V) and in the palette. [Terminals](terminals.md) lists the keys terminals keep. If Shift+F3 does nothing, your terminal may send it as F15. Quick view in the View menu (Alt+V, then Q) and in the palette turns the quick view on. [The quick view](quick-view.md) has the rest.
 - Windows Terminal keeps Alt+Enter, which is the details list in diroxide. Use Details in the File menu (Alt+F, then D). It also keeps Ctrl+V and Alt with the arrow keys; Paste, Back and Forward are in the Edit and Go menus. Pack, Unpack and Test archive are Alt+F5, Alt+F9 and Alt+Shift+F9 in the desktop window only; in a terminal they are in the File menu under Archive (Alt+F, then A).
 - A terminal built into another program, such as the terminal pane of a desktop app or an editor, may keep other keys for itself. In the one in some desktop apps, Alt+F and Ctrl+Q never arrive. Press F9 to open the menus, and quit from the File menu or the palette. Run `diro keys test` in such a terminal and see what arrives. diroxide's key tables do not list these terminals yet.
 
