@@ -49,6 +49,9 @@ use crate::plan::{Plan, Step, is_read_only};
 use crate::progress::{Estimator, JobProgress};
 use crate::undo::{LeftAs, UndoRecord};
 
+mod join;
+#[cfg(test)]
+mod join_tests;
 mod split;
 #[cfg(test)]
 mod split_tests;
@@ -191,6 +194,7 @@ pub(crate) struct Run<'a> {
     journal: Option<JournalWriter>,
     paused_said: bool,
     split: Option<split::SplitState>,
+    join: Option<join::JoinState>,
 }
 
 /// The reason a step is skipped when its entry changed since the plan.
@@ -254,6 +258,7 @@ impl<'a> Run<'a> {
             journal: None,
             paused_said: false,
             split: None,
+            join: None,
         }
     }
 
@@ -597,6 +602,7 @@ impl<'a> Run<'a> {
 
     fn finish(&mut self) {
         self.finish_split();
+        self.finish_join();
         let folders = std::mem::take(&mut self.folders);
         for (place, source) in folders.iter().rev() {
             if let Ok(provider) = self.engine.registry().resolve(place) {
@@ -624,6 +630,9 @@ impl<'a> Run<'a> {
     fn reconcile(&mut self) {
         let mut planned = self.plan.planned_results();
         planned.retain(|place| !self.gone.iter().any(|gone| place.is_within(gone)));
+        // A join's parts all make one whole: count it once.
+        let mut seen = HashSet::new();
+        planned.retain(|place| seen.insert(place.clone()));
         for made in &self.made {
             if !planned.contains(&made.place) {
                 planned.push(made.place.clone());
@@ -701,6 +710,7 @@ impl<'a> Run<'a> {
                 length,
             } => self.split_part(from, to, *offset, *length),
             Step::WriteChecksum { of, place } => self.write_checksum(of, place),
+            Step::JoinPart { from, to } => self.join_part(from, to),
             Step::SetAttributes { place, change } => {
                 let provider = match self.provider(place) {
                     Ok(provider) => provider,

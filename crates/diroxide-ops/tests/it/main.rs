@@ -5,6 +5,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod interop;
 mod journal;
 mod kill;
 mod parts;

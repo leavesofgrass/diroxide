@@ -17,6 +17,7 @@ use diroxide_core::{
 };
 use diroxide_vfs::{AttributeChange, LinkRequest, TrashGate};
 
+use crate::join::JoinFacts;
 use crate::split::SplitFacts;
 
 /// One step of a plan, acting on one entry.
@@ -121,6 +122,14 @@ pub enum Step {
         /// The sidecar.
         place: Place,
     },
+    /// Add one part to a join's whole, in order; the last part's step
+    /// commits the whole and checks it ([`crate::join`]).
+    JoinPart {
+        /// The part.
+        from: Place,
+        /// The whole.
+        to: Place,
+    },
 }
 
 impl Step {
@@ -138,7 +147,7 @@ impl Step {
             | Step::Remove { place }
             | Step::RemoveEmptyFolder { place }
             | Step::SetAttributes { place, .. } => place,
-            Step::SplitPart { from, .. } => from,
+            Step::SplitPart { from, .. } | Step::JoinPart { from, .. } => from,
             Step::WriteChecksum { of, .. } => of,
         }
     }
@@ -156,7 +165,7 @@ impl Step {
                 Some(place)
             }
             Step::SetAttributes { place, .. } => Some(place),
-            Step::SplitPart { to, .. } => Some(to),
+            Step::SplitPart { to, .. } | Step::JoinPart { to, .. } => Some(to),
             Step::WriteChecksum { place, .. } => Some(place),
             Step::Trash { .. } | Step::Remove { .. } | Step::RemoveEmptyFolder { .. } => None,
         }
@@ -212,6 +221,9 @@ impl Step {
             Step::WriteChecksum { place, .. } => {
                 format!("write the checksum file {}", spell(place))
             }
+            Step::JoinPart { from, to } => {
+                format!("add the part {} to {}", spell(from), spell(to))
+            }
         }
     }
 }
@@ -263,6 +275,24 @@ pub enum Preflight {
         place: Place,
         /// The parts it makes.
         parts: u64,
+    },
+    /// Two sets of parts could be meant (both 000 and 001, or two ways of
+    /// numbering). The plan joins the set a No means; Yes plans the join
+    /// again with `yes` as the request's sources.
+    WhichParts {
+        /// The question, ending "y or n".
+        question: String,
+        /// The parts a Yes joins, in order.
+        yes: Vec<Place>,
+    },
+    /// A part before the last is not the first part's size, and no
+    /// checksum file says the size. Yes joins anyway; No cancels the join:
+    /// a part is never left out of a join.
+    OddPart {
+        /// The part.
+        place: Place,
+        /// The fact: "Part 007 is 18 KB, expected 20 MB."
+        line: String,
     },
 }
 
@@ -319,6 +349,13 @@ impl Preflight {
                     name(place)
                 ),
             ],
+            Preflight::WhichParts { question, yes } => vec![
+                question.clone(),
+                format!("Yes joins {}.", count(yes.len() as u64, "part", "parts")),
+            ],
+            Preflight::OddPart { line, .. } => {
+                vec![line.clone(), Message::question("Join anyway").text]
+            }
         }
     }
 }
@@ -370,6 +407,8 @@ pub struct PlanFacts {
     pub origin: JobOrigin,
     /// A split's parts and room, for its rows ([`SplitFacts::rows`]).
     pub split: Option<SplitFacts>,
+    /// A join's set, sidecar and room, for its rows ([`JoinFacts::rows`]).
+    pub join: Option<JoinFacts>,
 }
 
 impl PlanFacts {
@@ -517,6 +556,14 @@ impl Plan {
                 count(self.steps.len() as u64, "link", "links")
             ),
             JobKind::Undo => format!("Undo {}", count(self.steps.len() as u64, "step", "steps")),
+            JobKind::Join => match &self.facts.join {
+                Some(join) => format!(
+                    "Join {} into {}",
+                    count(join.set.parts.len() as u64, "part", "parts"),
+                    join.name()
+                ),
+                None => format!("Join {}", count(self.steps.len() as u64, "part", "parts")),
+            },
             JobKind::Split => {
                 let split = self.facts.split.clone().unwrap_or_default();
                 let parts = count(split.parts(), "part", "parts");

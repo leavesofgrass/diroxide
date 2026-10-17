@@ -355,6 +355,11 @@ pub struct JobReport {
     pub reconciliation: Option<Reconciliation>,
     /// What the Undo command can reverse.
     pub undo: UndoRecord,
+    /// A join's whole and its verdict, said after the summary; a verified
+    /// join's [`JoinOutcome::trash_offer`] asks about the parts.
+    ///
+    /// [`JoinOutcome::trash_offer`]: crate::join::JoinOutcome::trash_offer
+    pub joined: Option<crate::join::JoinOutcome>,
 }
 
 impl JobReport {
@@ -370,6 +375,7 @@ impl JobReport {
             cancelled: false,
             reconciliation: None,
             undo: UndoRecord::for_job(job, kind),
+            joined: None,
         }
     }
 

@@ -34,6 +34,7 @@ use crate::progress::JobProgress;
 use crate::undo::UndoRecord;
 use crate::walk::{Found, walk};
 
+mod join;
 mod split;
 
 /// Why an anchor is being checked: what the job would do to it.
@@ -888,6 +889,7 @@ impl Engine {
             }
             JobKind::Split if request.destination.is_none() => return Err(OpsError::NoDestination),
             JobKind::Split if request.parts.is_none() => return Err(OpsError::NoPartSize),
+            JobKind::Join if request.destination.is_none() => return Err(OpsError::NoDestination),
             JobKind::Undo => return Err(OpsError::NothingToUndo),
             JobKind::Copy
             | JobKind::Move
@@ -897,7 +899,8 @@ impl Engine {
             | JobKind::Rename
             | JobKind::MakeFolder
             | JobKind::Link
-            | JobKind::Split => {}
+            | JobKind::Split
+            | JobKind::Join => {}
             other => return Err(OpsError::NotBuilt(other.verb().to_owned())),
         }
         if request.sources.is_empty()
@@ -916,6 +919,7 @@ impl Engine {
             JobKind::Rename => planner.rename()?,
             JobKind::MakeFolder => planner.make_folder()?,
             JobKind::Split => planner.split()?,
+            JobKind::Join => planner.join()?,
             _ => planner.link(LinkKind::Symbolic)?,
         }
         let mut progress = JobProgress::start(request.kind, 0, None);

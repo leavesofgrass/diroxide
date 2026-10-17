@@ -22,6 +22,7 @@
 pub mod engine;
 pub mod error;
 pub mod fake;
+pub mod join;
 pub mod journal;
 pub mod options;
 pub mod pace;
@@ -46,6 +47,7 @@ pub use engine::{
 };
 pub use error::OpsError;
 pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, SlowPlace};
+pub use join::{JoinFacts, JoinOutcome, Verdict};
 pub use journal::{Interrupted, Journal};
 pub use options::EngineOptions;
 pub use pace::{FakePacer, Pacer, SystemPacer};

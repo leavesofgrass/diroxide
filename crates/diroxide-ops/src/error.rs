@@ -59,6 +59,10 @@ pub enum OpsError {
     /// or more."
     #[error("{0}")]
     TooManyParts(String),
+    /// A set of parts cannot be joined, said before anything is written:
+    /// "Part 004 is missing. Nothing was joined."
+    #[error("{0}")]
+    CannotJoin(String),
 }
 
 impl Explain for OpsError {
@@ -80,6 +84,7 @@ impl Explain for OpsError {
             }
             OpsError::NoPartSize => "Choose a part size.".to_owned(),
             OpsError::TooManyParts(_) => "Choose a larger part size.".to_owned(),
+            OpsError::CannotJoin(_) => "Check the parts, then join again.".to_owned(),
         }
     }
 }
