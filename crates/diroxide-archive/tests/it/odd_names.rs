@@ -162,11 +162,18 @@ fn nothing_is_written_outside_the_root() {
     let fake = FakeProvider::new();
     let root = fake_root();
     fake.add_folder(&root);
-    // A local destination takes `inner.zip!x.txt` as a plain name (only an
-    // archive place refuses the marker), so nothing needs renaming here.
+    // A local destination refuses `inner.zip!x.txt` too, since its text
+    // would read back as a member of `inner.zip` (W2b's finding, fixed in
+    // core by P2b), so that one name is renamed with an underscore.
     let renamed = copy_into(&index, &fake, &root);
-    assert_eq!(renamed, 0);
-    assert!(fake.exists(&root.join("inner.zip!x.txt").unwrap()));
+    assert_eq!(renamed, 1);
+    assert_eq!(
+        root.join("inner.zip!x.txt"),
+        Err(diroxide_core::PlaceError::ReadsAsArchive(
+            "inner.zip!x.txt".into()
+        ))
+    );
+    assert!(fake.exists(&root.join("inner.zip_x.txt").unwrap()));
     let mut written = 0;
     for place in fake.snapshot().keys() {
         let place = Place::parse(place).unwrap();

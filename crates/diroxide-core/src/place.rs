@@ -21,11 +21,12 @@ use crate::error::PlaceError;
 
 /// The archive extensions, lowercase, the longest first: a local file
 /// with one of them is listed as an archive, and `!` after one starts a
-/// member path. A slice, so the formats of later alphas (`.tar.bz2`,
-/// `.tar.zst`, `.gz`, `.bz2`, `.zst`, `.rar`, `.iso`) join without
-/// breaking callers.
+/// member path. `.gz` is a one-member archive unless it holds a tar
+/// (`notes.txt.gz!notes.txt`, W2a's request 2). A slice, so the formats of
+/// later alphas (`.tar.bz2`, `.tar.zst`, `.bz2`, `.zst`, `.rar`, `.iso`)
+/// join without breaking callers.
 pub const ARCHIVE_EXTENSIONS: &[&str] = &[
-    ".tar.gz", ".tar.xz", ".zip", ".tgz", ".txz", ".tar", ".7z", ".xz",
+    ".tar.gz", ".tar.xz", ".zip", ".tgz", ".txz", ".tar", ".7z", ".xz", ".gz",
 ];
 
 /// Files that are zip archives inside, lowercase: `!` after one of them
@@ -39,7 +40,10 @@ pub const ZIP_DOCUMENT_EXTENSIONS: &[&str] = &[
 /// Whether `name` ends with an archive extension, or with a zip-based
 /// document's, followed by an optional part number (`backup.7z.001`): the
 /// names after which `!` starts a member path, so a split archive opens as
-/// one place. Case is ignored. `photo.jpg.001` is not one.
+/// one place. Case is ignored. `photo.jpg.001` is not one, and neither is
+/// a name with no stem before the extension (`.zip`, `..zip`), which is a
+/// hidden file's whole name (the fuzzing finding of W2b: a local name such
+/// as `.zip!.xz` read as a member of an archive called `.zip`).
 pub fn opens_as_archive(name: &str) -> bool {
     let lower = name.to_lowercase();
     let base = match crate::names::split_part(&lower) {
@@ -49,7 +53,18 @@ pub fn opens_as_archive(name: &str) -> bool {
     ARCHIVE_EXTENSIONS
         .iter()
         .chain(ZIP_DOCUMENT_EXTENSIONS)
-        .any(|ext| base.len() > ext.len() && base.ends_with(ext))
+        .any(|ext| {
+            base.strip_suffix(ext)
+                .is_some_and(|stem| !stem.is_empty() && !stem.bytes().all(|b| b == b'.'))
+        })
+}
+
+/// Whether a name holds an archive marker: a `!` after a name that opens
+/// as an archive (`inner.zip!x.txt`), which a place would read back as a
+/// member of that archive. [`Place::join`] refuses such a name in every
+/// kind of place, so every place reads back from its text as it was.
+pub fn holds_archive_marker(name: &str) -> bool {
+    !archive_splits(name).is_empty()
 }
 
 /// A path for showing and speaking, with the extended-length prefix that
@@ -388,9 +403,13 @@ impl Place {
 
     /// The place of a child called `name`. The name must be one name: not
     /// empty, not `.` or `..`, with no `/` (and no `\` in a Windows path or
-    /// an archive), and no NUL. Inside an archive the name may not hold an
-    /// archive marker (`inner.zip!x.txt`), which would read back as a
-    /// nested archive; the archive provider flags such a member instead.
+    /// an archive), and no NUL. The name may not hold an archive marker
+    /// (`inner.zip!x.txt`, see [`holds_archive_marker`]), which would read
+    /// back as a member of an archive: inside an archive the archive
+    /// provider flags such a member ([`PlaceError::ArchiveMarker`]), and in
+    /// a local or remote folder such a file is left out and said by name
+    /// ([`PlaceError::ReadsAsArchive`]), so a place written as text always
+    /// reads back as itself (W2b's finding).
     pub fn join(&self, name: &str) -> Result<Self, PlaceError> {
         let backslash_ok = matches!(&self.0, Repr::Local(path) if path.starts_with('/'))
             || matches!(&self.0, Repr::Remote(_));
@@ -402,8 +421,12 @@ impl Place {
         {
             return Err(PlaceError::BadName(name.to_owned()));
         }
-        if matches!(self.0, Repr::Archive(..)) && has_archive_marker(name) {
-            return Err(PlaceError::ArchiveMarker(name.to_owned()));
+        if holds_archive_marker(name) {
+            return Err(if matches!(self.0, Repr::Archive(..)) {
+                PlaceError::ArchiveMarker(name.to_owned())
+            } else {
+                PlaceError::ReadsAsArchive(name.to_owned())
+            });
         }
         Ok(match &self.0 {
             Repr::Local(path) => {
@@ -530,21 +553,31 @@ fn valid_scheme(scheme: &str) -> bool {
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "+-.".contains(c))
 }
 
-/// The byte index of the last `!` that follows an archive extension (see
-/// [`opens_as_archive`]).
-fn archive_split(text: &str) -> Option<usize> {
-    text.char_indices()
-        .filter(|&(_, c)| c == '!')
-        .map(|(at, _)| at)
-        .rfind(|&at| opens_as_archive(&text[..at]))
+/// The byte indexes of the `!` characters that start a member path, left
+/// to right: each follows a name that opens as an archive (see
+/// [`opens_as_archive`]), the name being what comes after the last slash,
+/// backslash or earlier split. So `/srv/wow!.zip!x` splits after
+/// `wow!.zip`, and `/srv/.zip!.xz` does not split at all.
+fn archive_splits(text: &str) -> Vec<usize> {
+    let mut splits = Vec::new();
+    let mut start = 0;
+    for (at, c) in text.char_indices() {
+        match c {
+            '/' | '\\' => start = at + 1,
+            '!' if opens_as_archive(&text[start..at]) => {
+                splits.push(at);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    splits
 }
 
-/// Whether a name holds an archive marker: a `!` after an archive
-/// extension, which would read back as a nested archive.
-fn has_archive_marker(name: &str) -> bool {
-    name.char_indices()
-        .filter(|&(_, c)| c == '!')
-        .any(|(at, _)| opens_as_archive(&name[..at]))
+/// The byte index of the last `!` that starts a member path (see
+/// [`archive_splits`]): the last split, so nested archives work.
+fn archive_split(text: &str) -> Option<usize> {
+    archive_splits(text).last().copied()
 }
 
 /// A member path with forward slashes, no leading slash, `.` removed and
@@ -921,6 +954,70 @@ mod tests {
         assert!(root.join("Hello!.txt").is_ok());
         assert!(root.join("inner.zip").is_ok());
         assert!(unix("/srv").join("Hello!.txt").is_ok());
+    }
+
+    /// W2b's fuzzing finding: a local name holding `.zip!` read back as a
+    /// place inside an archive. A name with no stem before the extension
+    /// (`.zip`) opens as nothing, so `.zip!.xz` stays a local file; a name
+    /// that does hold a marker (`a.zip!b.xz`) cannot be joined into a
+    /// local or remote folder, so no place's text reads back as another.
+    #[test]
+    fn local_names_holding_a_marker_never_read_back_as_archives() {
+        let hidden = unix("/fuzz/.zip!.xz");
+        assert_eq!(hidden.local_path(), Some("/fuzz/.zip!.xz"));
+        assert_eq!(unix("/fuzz").join(".zip!.xz"), Ok(hidden.clone()));
+        assert_eq!(unix(&hidden.to_string()), hidden);
+        assert_eq!(
+            win(r"D:\fuzz\..zip!x").local_path(),
+            Some(r"D:\fuzz\..zip!x")
+        );
+        assert!(!opens_as_archive(".zip"));
+        assert!(!opens_as_archive("..zip"));
+        assert!(!opens_as_archive(".7z.001"));
+        assert!(opens_as_archive(".x.zip"));
+        assert!(!holds_archive_marker(".zip!.xz"));
+        // A real marker in a local or remote name is refused by name.
+        for folder in [unix("/fuzz"), win(r"D:\fuzz"), unix("sftp://host/srv")] {
+            assert_eq!(
+                folder.join("round.zip!.xz"),
+                Err(PlaceError::ReadsAsArchive("round.zip!.xz".into())),
+                "{folder}"
+            );
+        }
+        assert!(holds_archive_marker("round.zip!.xz"));
+        // So the text is only ever an archive place.
+        let p = unix("/fuzz/round.zip!.xz");
+        assert_eq!(
+            p.archive().map(|(c, m)| (c.to_string(), m)),
+            Some(("/fuzz/round.zip".into(), ".xz"))
+        );
+        // A `!` inside an archive's own name is part of the name, and a
+        // name with no stem after a split is a member, not an archive.
+        let wow = unix("/srv/wow!.zip!x");
+        assert_eq!(wow.archive().unwrap().0.to_string(), "/srv/wow!.zip");
+        let dotted = unix("/a.zip!.7z!x");
+        assert_eq!(
+            dotted.archive().map(|(c, m)| (c.to_string(), m)),
+            Some(("/a.zip".into(), ".7z!x"))
+        );
+        assert_eq!(unix(&dotted.to_string()), dotted);
+    }
+
+    /// W2a's request 2: a one-member gzip's member place parses, and a
+    /// compressed tar stays one archive.
+    #[test]
+    fn a_gzip_member_place_parses() {
+        let p = win(r"D:\docs\notes.txt.gz!notes.txt");
+        let (container, member) = p.archive().unwrap();
+        assert_eq!(container.to_string(), r"D:\docs\notes.txt.gz");
+        assert_eq!(member, "notes.txt");
+        assert_eq!(win(&p.to_string()), p);
+        assert_eq!(p.title(), "notes.txt, in notes.txt.gz");
+        assert!(opens_as_archive("NOTES.TXT.GZ"));
+        assert!(opens_as_archive("logs.tar.gz"));
+        assert!(!opens_as_archive(".gz"));
+        assert_eq!(unix("/srv/logs.tar.gz!a/b").archive().unwrap().1, "a/b");
+        assert!(ARCHIVE_EXTENSIONS.contains(&".gz"));
     }
 
     #[test]

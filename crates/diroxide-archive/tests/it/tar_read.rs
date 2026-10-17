@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use diroxide_archive::{Allowances, ArchiveError, ArchiveProvider, Limits, member_row};
+use diroxide_core::Place;
 use diroxide_vfs::{CancelToken, OpContext, ProgressSink, ProgressUpdate, Provider, VfsError};
 
 use crate::build::{gzip, tar_header, tar_of, tar_pad};
@@ -87,9 +88,13 @@ fn a_tar_gz_lists_and_reads_through_the_forward_cursor() {
     let gz = world.put("notes.txt.gz", &gzip(b"just one file"));
     let rows = world.rows(&gz.clone().into_archive()).unwrap();
     assert_eq!(rows, ["notes.txt, file"]);
-    // `.gz` is no archive extension in a typed place, so the root joins.
+    // The root joins its member, and since P2b a typed place parses too:
+    // `.gz` is an archive extension (W2a's request 2).
     let inside = gz.clone().into_archive().join("notes.txt").unwrap();
     assert_eq!(world.read(&inside).unwrap(), b"just one file");
+    let typed = Place::parse(&format!("{gz}!notes.txt")).unwrap();
+    assert_eq!(typed, inside);
+    assert_eq!(world.read(&typed).unwrap(), b"just one file");
     let opened = world
         .provider
         .open_archive(&gz, &OpContext::new(), Allowances::default())

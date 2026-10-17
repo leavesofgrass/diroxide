@@ -27,13 +27,16 @@ pub(crate) struct EntryContext {
     pub(crate) volume: Option<u64>,
 }
 
-/// Whether a name ends with an archive extension after a non-empty stem,
-/// ignoring case: the files listed as archives.
+/// Whether a name ends with an archive extension after a stem that is not
+/// empty and not only dots, ignoring case: the files listed as archives,
+/// the same stem rule as the place parser's (`..zip` is no archive).
 pub(crate) fn has_archive_extension(name: &str) -> bool {
     let lower = name.to_lowercase();
-    ARCHIVE_EXTENSIONS
-        .iter()
-        .any(|ext| lower.len() > ext.len() && lower.ends_with(ext))
+    ARCHIVE_EXTENSIONS.iter().any(|ext| {
+        lower
+            .strip_suffix(ext)
+            .is_some_and(|stem| !stem.is_empty() && !stem.bytes().all(|b| b == b'.'))
+    })
 }
 
 /// The kind of what metadata describes, by the metadata's own type: a
@@ -103,6 +106,8 @@ mod tests {
         assert!(has_archive_extension("course.ZIP"));
         assert!(has_archive_extension("backup.tar.gz"));
         assert!(!has_archive_extension(".zip"));
+        assert!(!has_archive_extension("..zip"));
+        assert!(has_archive_extension("notes.txt.GZ"));
         assert!(!has_archive_extension("report.pdf"));
     }
 }

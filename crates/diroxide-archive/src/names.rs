@@ -14,7 +14,6 @@
 use std::fmt;
 
 use diroxide_core::names::classify;
-use diroxide_core::place::opens_as_archive;
 
 use crate::limits::Limits;
 
@@ -328,11 +327,11 @@ fn clean_path(unified: &str, flags: &mut NameFlags) -> Result<String, NameRefusa
 }
 
 /// Whether a name holds a `!` after an archive extension, which a place
-/// would read back as a nested archive (core's own rule).
+/// would read back as a nested archive: core's own rule,
+/// [`diroxide_core::place::holds_archive_marker`], so the provider flags
+/// exactly the names [`Place::join`](diroxide_core::Place::join) refuses.
 pub fn has_archive_marker(name: &str) -> bool {
-    name.char_indices()
-        .filter(|&(_, c)| c == '!')
-        .any(|(at, _)| opens_as_archive(&name[..at]))
+    diroxide_core::place::holds_archive_marker(name)
 }
 
 /// Whether a part looks like a Windows short name: up to six characters, a

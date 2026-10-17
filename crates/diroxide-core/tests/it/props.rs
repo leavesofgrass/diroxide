@@ -124,7 +124,7 @@ proptest! {
         stem in "[a-z][a-z0-9_-]{0,7}",
         extension in prop::sample::select(vec![
             ".zip", ".7z", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".xz",
-            ".ZIP", ".7Z", ".Tar.Gz", ".docx",
+            ".ZIP", ".7Z", ".Tar.Gz", ".docx", ".gz", ".GZ",
         ]),
         number in 0u32..100_000,
         width in 3usize..6,
@@ -176,6 +176,44 @@ proptest! {
             if let Ok(place) = Place::parse_with(&text, style) {
                 let again = Place::parse_with(&place.to_string(), style);
                 prop_assert_eq!(again.as_ref(), Ok(&place));
+            }
+        }
+    }
+
+    /// W2b's fuzzing finding, held for every name: a name joined into a
+    /// local, archive or remote folder reads back from the place's text as
+    /// the same place, or the join refuses it. Names come from an
+    /// alphabet heavy in archive extensions, markers and dots.
+    #[test]
+    fn joined_names_read_back_as_themselves(
+        parts in prop::collection::vec(
+            prop::sample::select(vec![
+                "a", "b", ".", "!", ".zip", ".zip!", ".xz", ".gz", ".7z", ".001", "wow", " ",
+                ".docx", "!x", ".tar",
+            ]),
+            1..7,
+        ),
+    ) {
+        let name = parts.concat();
+        let folders = [
+            ("/fuzz", PathStyle::Unix),
+            ("D:\\fuzz", PathStyle::Windows),
+            ("/fuzz/a.zip!week1", PathStyle::Unix),
+            ("D:\\fuzz\\a.7z!", PathStyle::Windows),
+            ("sftp://host/srv", PathStyle::Unix),
+        ];
+        for (folder, style) in folders {
+            let folder = Place::parse_with(folder, style).unwrap();
+            if let Ok(place) = folder.join(&name) {
+                let again = Place::parse_with(&place.to_string(), style);
+                prop_assert_eq!(again.as_ref(), Ok(&place), "{} in {}", name, folder);
+                prop_assert_eq!(place.name(), Some(name.as_str()));
+            } else {
+                prop_assert!(
+                    diroxide_core::place::holds_archive_marker(&name)
+                        || matches!(name.as_str(), "." | ".."),
+                    "{} refused in {}", name, folder
+                );
             }
         }
     }

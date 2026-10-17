@@ -20,6 +20,10 @@ Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2, from `re
 - **Effects.** `Effect::AppRequests` (W1d-1's request): a runtime effect saying the app queued requests whose types the core cannot name; the app ends its effects with it, `Runtime::carry_out` takes the requests there, and a frontend never sees it. `is_for_frontend` is false for it.
 - **The catalog** gains `trash_copies_across` ("Trashing copies 3.2 GB to another drive. Go on? y or n"), and `format` gains `grouped` for exact byte counts ("4,700,372,992").
 
+Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, from the requests pairs 1 to 3 held at their integrations). Core gains these, and closes again:
+
+- **Places.** `.gz` joins `ARCHIVE_EXTENSIONS`, so a one-member gzip's member place (`notes.txt.gz!notes.txt`) parses (W2a's request 2). A name opens as an archive only with a stem before its extension that is not empty and not only dots, so `.zip` and `..zip` are hidden files' names, not archives; the `!` that starts a member path is found left to right, each after the name since the last slash, backslash or split. A name holding an archive marker (`holds_archive_marker`, now public) is refused by `join` in every kind of place: inside an archive with `ArchiveMarker`, as before, and in a local or remote folder with the new `PlaceError::ReadsAsArchive` ("Rename it with another program first."), so every place's text reads back as itself; a property test holds it for joined names (W2b's fuzzing finding: the local name `.zip!.xz` read as a member of an archive called `.zip`). The archive crate's `has_archive_marker` is core's rule, and the walkers leave such a local file out by name, as they do any name a place cannot hold.
+
 ## Context
 
 Every crate speaks about places, entries, lists, commands, effects, messages, keys and time. If each defined its own, the frontends would read differently and the owner's screen readers would hear different words for the same thing. `diroxide-core` holds these types once, does no I/O, and is finished in Phase 0, so later waves build on it without changing it.
