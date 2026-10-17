@@ -22,7 +22,7 @@ In the config folder, alpha.1 uses these files:
 
 Later alphas add more files, such as the tools list and the plugins folder. They are described when they arrive.
 
-The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and, since alpha.2, a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. Nothing in it needs editing.
+The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and, since alpha.2, a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. Since alpha.3 it also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now.
 
 ## How diroxide treats these files
 
@@ -57,7 +57,7 @@ Names are in code type. Defaults are in parentheses.
 - Key bar (`key_bar`, on): the line at the bottom that names the function keys in words, "F2 Rename  F3 View  F4 Edit  F5 Copy  F6 Move  F7 Folder  F8 Trash  F9 Menu  Ctrl+Q Quit". It is drawn in every mode, screen-reader mode included, and the width decides how many pairs fit. The Compact setting hides it, and a screen too short to hold it leaves it out. Say key bar, in the Help menu and the palette, reads it. In the Settings list it is the Key bar switch in the Look group.
 - Quiet screen (`quiet_screen`, off): draws as little as possible, so a screen reader that reads every change stays quiet.
 - Progress interval (`progress_interval_seconds`, 10; 1 to 600): in screen-reader mode, the shortest time between two progress lines. A job's start, its end and its questions are said at once.
-- Single letters (`single_letters`): what a key without Control or Alt does in a panel. `type_ahead` (default) jumps to a name, `commands` lets letters run commands for the key presets that come with alpha.3, and `off` does nothing. The Filter command still filters when it is off. Turn it off if you use dictation software.
+- Single letters (`single_letters`): what a key without Control or Alt does in a panel. `type_ahead` (default) jumps to a name, `commands` lets letters run commands, which the vim-style key preset needs ([customizing keys](customizing-keys.md)), and `off` does nothing. The Filter command still filters when it is off. Turn it off if you use dictation software.
 - Hidden files (`show_hidden`, off).
 - Sorting: what a new panel sorts by (`sort.key`: name by default, or extension, size, modified, created, accessed, kind, attributes, owner, label or unsorted), the direction (`sort.direction`), where folders go (`sort.folders`: first by default, mixed or last), capitals (`sort.case`: ignore by default, or respect) and numbers in names (`sort.natural`, on, so `file2` comes before `file10`).
 - Columns (`columns`): the details said after each name, in order. The default is type, size and modified.
@@ -73,6 +73,19 @@ Names are in code type. Defaults are in parentheses.
 - Code colors (`highlighting`): `auto` (default) colors code in the viewer except in screen-reader mode, `on` colors it always, and `off` never does. The code commands that say each word's kind work whichever you choose. [The viewer](viewer.md) describes them.
 
 How long a copy retries a lost network, how long it waits before it says "stalled", and whether it keeps dates or checks a move are built into the job engine. They are not settings.
+
+### Search, filters, compare and keys
+
+Alpha.3 adds settings for the filter language, search, compare and the key presets. [The settings reference](settings-reference.md) lists every one with its default and range, under Search and filter and under Keys.
+
+- Filter case (`filter_case`): how case decides a match in filters and searches. `smart` (default) ignores case unless the text has a capital letter, `ignore` never cares and `match` always does.
+- Filter pause (`filter_pause_ms`, 400; 0 to 5000): how long the panel filter waits after your last key before it says the count. A longer pause is quieter.
+- First day of the week (`week_starts_on`, sunday): the day that "this week" and "last week" start on. The choices are sunday, monday and saturday. The read-back always spells out the real days.
+- Search result limit (`search_row_cap`, 100000; 1000 to 10000000): the most rows a search lists. The count goes on past it.
+- Search skips ignored files (`search_respect_ignore`, off): leaves out what `.gitignore` and similar files name. A file manager is not a code search, so it is off.
+- Key preset (`preset`, diroxide): the set of keys under your own changes. Choose it in the Keys list or with `diro keys`. [Customizing keys](customizing-keys.md) describes the presets.
+- Compare (`compare.*`): eleven settings, in one table, `[compare]`. Six leave differences out: `compare.ignore_line_endings` (on), `compare.ignore_trailing_space`, `compare.ignore_space_amount`, `compare.ignore_all_space`, `compare.ignore_blank_lines` and `compare.ignore_case` (all off). `compare.algorithm` is patience, histogram or myers (patience). `compare.deadline_ms` (2000) is how long a compare looks for the fewest changes, `compare.text_limit_mib` (16) the largest file compared as text, `compare.large_files` (ask, head or bytes) what to do past that, and `compare.context` (2; 0 to 9) the lines shown around a change. [Compare files](compare.md) says what each does.
+- Label colors (`label_blue`, `label_orange`, `label_purple`, `label_yellow`, `label_gray` and `label_brown`): the theme roles that color a label's word. They are keys of the `[colors]` table, like the other roles.
 
 ### The viewer, the quick view, archives and split sizes
 
@@ -99,7 +112,7 @@ hex_row = "narrow"
 wait_ms = 800
 ```
 
-Some settings are kept now and do nothing yet. The reference marks each with the alpha that brings it: the key preset (alpha.3), the filter's case, pause and first day of the week (alpha.3), the search limits (alpha.3), plugins (alpha.4), the components list (alpha.4), thumbnails (alpha.7), and hiding the menu bar and focus mode in the window (alpha.6).
+Some settings are kept now and do nothing yet. The reference marks each with the alpha that brings it: plugins (alpha.4), the components list (alpha.4), thumbnails (alpha.7), and hiding the menu bar and focus mode in the window (alpha.6).
 
 ## Themes and colors
 
@@ -115,7 +128,7 @@ diroxide comes with 24 themes. Their names, for the `theme` setting, are in the 
 
 ## Changing keys
 
-Every key is yours to change, with no sequences and no leader keys: each binding is one key with its modifiers. You change them in `keymap.toml`. The Keys list inside the program comes with alpha.3.
+Every key is yours to change, with no sequences and no leader keys: each binding is one key with its modifiers. You change them in `keymap.toml`, or in the program, in the Keys list (Settings, then Keys), which writes the same file for you. [Customizing keys](customizing-keys.md) is the guide to the Keys list, the key test and the presets.
 
 - A key is written in plain words joined by plus signs, in lowercase: `ctrl+f5`, `shift+f3`, `alt+home`, `alt+period`, `kp-plus` for the keypad's plus. The word `none` unbinds a command.
 - The file has one line for each command and each place it works, in tables named for the column and the layer: `terminal.panel`, `terminal.global`, `terminal.list` and `terminal.dialog`, and the same for `window`. A value is one key, or a list of keys. The built-in defaults are written beside it in `keymap-defaults.toml`, so you can copy a line and change it.
@@ -168,5 +181,8 @@ To go back to the defaults, move the config folder aside by renaming it, and sta
 - [The panels](panels.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Every key](keyboard.md)
+- [Customizing keys](customizing-keys.md)
+- [Search and the filter language](search.md)
+- [Labels and bookmarks](labels-bookmarks.md)
 - [Privacy](privacy.md)
 - [The documentation index](README.md)

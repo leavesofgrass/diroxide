@@ -18,6 +18,8 @@ If the key arrives but runs another command, check your own `keymap.toml`:
 diro keys check
 ```
 
+The Keys list (Settings, then Keys) shows each command's key and marks a key that many terminals keep with the words "check terminal". Inside tmux, Ctrl+B is tmux's own prefix key and arrives only when pressed twice; Alt+B opens the same bookmarks. In a compare, Shift+F7 may arrive as another key; P goes to the previous change, and Shift+F10 lists every action. If you chose a key preset, your own lines in `keymap.toml` win over the preset, and the list says "changed" for yours and "preset" for the preset's. [Customizing keys](customizing-keys.md) describes the list.
+
 ## Typing moves the cursor when I did not mean it
 
 With single-letter keys on, typing a letter finds a row by name. That also happens when text is pasted into a panel, or when dictation software types. On Windows a paste in Windows Terminal arrives as typed keys: letters jump to names, plus, minus and star open the pattern prompts, and a line break acts as Enter. Turn the typing off in Settings (`single_letters`), or unbind Ctrl+V in Windows Terminal as [Terminals](terminals.md) shows, so that the key reaches diroxide as a file paste instead of pasting text. Every command still has a key that is not a letter, a menu entry and a palette entry.
@@ -52,7 +54,7 @@ A known bug in the library that paints the terminal can shift the rest of a row 
 
 ## The terminal is in a strange state after diroxide ended
 
-diroxide gives the terminal back when it quits, meets an error or panics. It does not yet do so when it is ended by a signal, by Ctrl+Break or by closing the window, so the terminal may be left in raw mode, with no echo. On Linux and macOS, type `reset` and press Enter. On Windows, close that tab and open a new one.
+diroxide gives the terminal back when it quits, meets an error or panics, and when it is ended by a signal, by Ctrl+Break or by closing the window (it then exits with 130). A kill that cannot be caught, or a crash of the computer's terminal program, can still leave the terminal in raw mode, with no echo. On Linux and macOS, type `reset` and press Enter. On Windows, close that tab and open a new one.
 
 ## The shell stays in the old folder after I quit
 
@@ -150,6 +152,65 @@ diroxide never throws a file away. It reports the problem at start in words, use
 
 That is true until alpha.6. `diro --gui` says "The window comes with alpha.6; the terminal opens instead." Use the terminal for now.
 
+## A filter says "Filter problem"
+
+The line after "Filter problem:" says what is wrong, and a second line names the word and what to try: "Filter problem: size needs a number", then "Word 3. Try size over 10 MB." The second line is said once, after you stop typing.
+
+- "and mixed with or": put brackets around one of them. diroxide never guesses which binds tighter.
+- "write or, not |" or "write and, not &": use the word. Quote the character if it is part of a name.
+- "unknown field": the word before a value is not a field name. The next line says "Did you mean size?" when it is close. To search for a field's name as a name, quote it.
+- "write the year first": write 2026-10-11, not 10/11/2026.
+- "write MB or MiB": a bare k, m or g is not a unit. KB, MB and GB are powers of 1,000, and KiB, MiB and GiB powers of 1,024.
+- "depth works in searches": a panel shows one folder. Use Search.
+
+In a shell, quote a filter that holds `*`, `(`, `)`, `|`, `&`, `>` or `<`, and prefer words to signs. `diro search docs size > 1 MB` redirects its output to a file named `1`. [Search and the filter language](search.md) lists the rest.
+
+## A filter or search finds nothing, and I expected something
+
+- Check the read-back. Say filter, in the palette, or `--explain` in a shell, says what diroxide understood: "name contains Report, match case". A capital letter makes a word match case exactly. Type it in lowercase, or put `anycase` before it.
+- Hidden files are left out unless the panel shows them or the filter says `hidden`. The summary says "Hidden files skipped." In the Search dialog, look at its rows: Hidden files, Ignore files, Links to folders, Inside archives and Depth each say what is left out.
+- A test on something not known matches neither the test nor its opposite. A folder has no size until it is counted: "1 unknown, folder size not counted." `type` matches only a type that is already known.
+- A file with a NUL byte is skipped by a content search: "6 binary files skipped."
+- Files named in `.gitignore` are left out only when you ask: `search_respect_ignore` or `--ignore-files`.
+- A link to a folder is not followed, and another drive is not entered. The summary says so.
+
+## A search takes a long time
+
+Escape stops it: "Stopped at 214 found." Search reads each folder in turn and has no index.
+
+- A network drive costs a round trip for every folder, so it is slower. diroxide says the rate: "Searching over the network: 400 items a second". It does not read file contents there without your yes.
+- A content search opens every file. On Windows that is the slow part.
+- A very large result stops listing at 100,000 rows: "Showing the first 100,000. Narrow the search." The count goes on. Narrow the filter.
+- A folder blocked on a dead share cannot be interrupted: "1 folder is still being read." diroxide lets go of it. Restart the share, or leave it out of the search.
+- Leave a big folder out of every search with the label Skip in searches.
+
+## A label is gone, or Ctrl+1 does nothing
+
+- A file that was renamed or moved loses its label, because a label belongs to the file's path. The Labels list counts the item as missing, the label's results list it as "gone since this list was made", and the trash key (F8 or Delete) there takes the label off. Label the file again at its new place.
+- A label step can be undone only in the same session.
+- Many Unix terminals do not send Ctrl with a digit. Use the Edit menu, Labels submenu (Alt+E, then B), then 1 to 7. [Labels and bookmarks](labels-bookmarks.md) has the rest.
+- A label with a color diroxide does not offer, such as red or green, is reported at start and left out. Use blue, orange, purple, yellow, gray or brown.
+
+## Compare says "Same text", and I can see a difference
+
+Same text means the text is the same once what is left out is left out. Line endings are left out by default. The next lines of the report say what else differs: a byte-order mark, another encoding, a missing final line break, or "Ignoring changes in case." Turn the ignore options off to see every difference: they are the `compare.ignore_` settings in the Compare group of Settings. A hidden character, a tab for spaces, and the same letters in another Unicode form are listed as changes with the reason: "Changed line 3, hidden character U+200B added". [Compare files](compare.md) lists the nine cases.
+
+"Changed while comparing" means a file was written to during the run. Compare again when it stops changing. "Too large to compare as text" asks you to choose: the first 16 MiB as text, byte by byte, or cancel.
+
+## Watch this folder does not say a file arrived
+
+- A file counts as arrived only after its size, time and identity stay the same for 2 seconds, or 10 seconds on a place that is checked and not watched. The status line shows "Waiting for scan-004.pdf to settle" but diroxide does not say it.
+- Unfinished names are never said: names that end in `.part`, `.crdownload`, `.tmp` and the like, and names that start with a dot. When the download finishes and is renamed, the new name arrives.
+- Files already in the folder when the watch began are not arrivals.
+- A producer that pauses for more than 2 seconds is said early on Linux and macOS, then said again as "Arrived again". In a shell, `diro watch --settle 10` waits longer.
+- In screen-reader mode, at most one line is said in each progress interval (ten seconds). Several arrivals become "Watching in: 3 arrived".
+
+[Watching a folder](watching.md) has the rest.
+
+## A saved view keeps applying
+
+A folder with a saved view gets it each time you enter: "Sorted by size, largest first; saved for this folder." To stop, use Forget this folder's view in the View menu (Alt+V, then G). The usual view returns when you leave.
+
 ## Starting clean
 
 To start with factory settings, move the config folder aside by renaming it and start diroxide. [Settings](settings.md) says where the folder is. Your old files stay where you put them.
@@ -173,6 +234,11 @@ If a key is involved, add what `diro keys test` said. If an accessibility proble
 - [Split and join](split-join.md)
 - [The viewer](viewer.md)
 - [Links, permissions and times](links-permissions.md)
+- [Search and the filter language](search.md)
+- [Labels and bookmarks](labels-bookmarks.md)
+- [Compare files](compare.md)
+- [Customizing keys](customizing-keys.md)
+- [Watching a folder](watching.md)
 - [Known limits](known-limits.md)
 - [Privacy](privacy.md)
 - [The documentation index](README.md)

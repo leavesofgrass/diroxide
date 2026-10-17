@@ -13,10 +13,10 @@ diroxide sets the terminal's title to the active place, so a screen reader that 
 
 ## What diroxide asks of a terminal
 
-- It switches to the alternate screen, and gives your screen back when it quits, when it meets an error and when it panics. It does not yet give the terminal back when it is ended by a signal, by Ctrl+Break or by closing the window. [Troubleshooting](troubleshooting.md) says what to do if that leaves the terminal odd.
+- It switches to the alternate screen, and gives your screen back when it quits, when it meets an error and when it panics. It gives the terminal back when it is ended by a signal, by Ctrl+Break or by closing the window, and then exits with 130. [Troubleshooting](troubleshooting.md) says what to do if that leaves the terminal odd.
 - It never captures the mouse.
 - It honors `NO_COLOR`.
-- It asks the terminal once whether it supports an enhanced keyboard protocol and writes the answer to `terminal.log` in the state folder. It never turns the protocol on and never relies on the answer, so every key works without it.
+- It asks the terminal once whether it supports an enhanced keyboard protocol and writes the answer to `terminal.log` in the state folder. Every key works without it, so diroxide never relies on the answer. It turns the protocol on only while Change key in the Keys list waits for one key, so that key is reported exactly (Tab and Ctrl+I, Enter and Ctrl+M are told apart), and turns it off again as soon as the key came. On Windows keys arrive as key records, and diroxide does not ask.
 - It ignores key releases, so one press is one action.
 
 ## Keys a terminal cannot send
@@ -61,7 +61,7 @@ Unbinding Ctrl+V means Windows Terminal no longer pastes text on that key in any
 
 ### The menu is the sure way
 
-If you would rather change nothing, the menus always work. F9 opens the menu bar, and Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. Every item shows its live key. Paste is in Edit, back, forward and the parent folder are in Go, and the palette on Ctrl+P finds any command by name.
+If you would rather change nothing, the menus always work. F9 opens the menu bar, and Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. The Search menu is F9, then R. Every item shows its live key. Paste is in Edit, back, forward and the parent folder are in Go, and the palette on Ctrl+P finds any command by name.
 
 ## The key test
 
@@ -73,7 +73,27 @@ diro keys test
 
 Press the key. diroxide says one line for it, with what the key would run first and what the terminal sent after: "Got Control plus F5. Runs Sort by modified. Sent F5 with Control, a press." or "Got Control plus J. Nothing runs on it." A key's release is said too, as "Released." followed by what was sent, and runs nothing. Insert is named as the screen reader key. Escape ends the test ("Escape: key test ended."), and so do ten seconds without a key ("No key for 10 seconds. Key test ended."). If nothing arrives at all, the terminal kept the key.
 
-You can also start the test from inside diroxide, from the Tools menu (Alt+T, then K) or the palette, as Test keys. It says the same, one line on the status line for each key, and ends with Escape or after ten seconds without a key.
+You can also start the test from inside diroxide, from the Tools menu (Alt+T, then K), the palette or the Keys list, as Test keys. It says the same, one line on the status line for each key, and ends with Escape or after ten seconds without a key.
+
+The Keys list (Settings, then Keys list) marks a row "check terminal" when its key is one that many terminals keep or merge with another key, and on every Shift plus function key, because some terminals send those as F13 to F24. Change key checks a new key against the same table before it binds it. [Customizing keys](customizing-keys.md) describes both.
+
+### The probe
+
+To help fill in the table of what each terminal does with each key, run the guided form:
+
+```bash
+diro keys probe
+```
+
+It asks for each key in turn: "Press Control plus V now, 3 of 95." It notes what arrived, the key itself, another key, or nothing within ten seconds, which counts as kept by the terminal. It ends with one line for each key, such as `ctrl+v = kept`. Send those lines back with the name and version of your terminal. Nothing is written to a file for you.
+
+### Key presets from a shell
+
+`diro keys preset` lists the key presets, and `diro keys preset NAME` applies one. `diro keys check` with no file checks every preset and your `keymap.toml`. [Customizing keys](customizing-keys.md) has the details.
+
+## tmux
+
+tmux keeps Ctrl+B as its prefix key, so inside tmux the Bookmarks key arrives only when pressed twice. Alt+B opens the same list, and so does the Go menu (Alt+G, then K). The vim-style key preset pages up on Ctrl+B in the window only, for the same reason.
 
 ## The classic console
 
@@ -109,10 +129,10 @@ diro ls work
 diro ls -
 ```
 
-`diro search` prints the places under a folder whose names match, one a line, then a summary. The pattern is one or more globs separated by commas. The full search, by name and by content, comes with alpha.3.
+`diro search` prints the places under a folder that match a filter, one a line, then a summary. The filter is the same language as the panel's filter: names, kinds, sizes, dates and file contents. [Search and the filter language](search.md) has it, with the options.
 
 ```bash
-diro search work "*.pdf, *.docx"
+diro search work size over 1 MB and ext pdf
 ```
 
 When its output is not a terminal, `diro` itself prints one screen of plain lines instead of opening the full screen.
@@ -130,6 +150,8 @@ The `diro` subcommands exit with 0 when they are done, 1 when they failed or fou
 ## See also
 
 - [Using diroxide with a screen reader](screen-readers.md)
+- [Customizing keys](customizing-keys.md)
+- [Search and the filter language](search.md)
 - [Troubleshooting](troubleshooting.md)
 - [Known limits](known-limits.md)
 - [Every key](keyboard.md)

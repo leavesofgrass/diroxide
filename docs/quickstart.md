@@ -77,6 +77,20 @@ Shift+Delete deletes for good. It lists every path first, spelling out hidden ch
 
 Ctrl+F3 sorts by name, Ctrl+F4 by extension, Ctrl+F5 by modified time, Ctrl+F6 by size and Ctrl+F7 not at all. The same key again reverses. The status line says the result first: "Sorted by size, largest first". Your cursor stays on the same entry.
 
+## Filter and search
+
+Press Ctrl+S and type what you want to see. `report` shows names that hold report. `*.pdf` shows PDFs. `size over 1 MB` shows big files, and `modified last week` shows what changed then. You hear nothing while you type. When you stop, one line says the count and the first match: "37 matches, first report.pdf". Enter keeps the filter: "Filter on, 4 of 9 shown". Escape in the panel takes it off: "Filter off, 9 shown".
+
+To look inside folders below this one, press Ctrl+F. Find files opens a list of settings named Search, with the focus on its Name or filter row. Type a letter to open that field, give it the same words, and press Enter: "Searching work for *.txt". Results arrive as a list of real files, and Escape stops it: "Stopped at 214 found." [Search and the filter language](search.md) has the whole language and `diro search` for the shell.
+
+## Label and bookmark
+
+Alt+L puts a label on the marked rows, or the focused row: type `urgent` and press Enter. diroxide says "Label urgent added to 3 items", and Ctrl+Z undoes it. Ctrl+B opens the bookmarks. Its first row, "Add this folder", bookmarks the folder you are in. From then on Ctrl+B and then Enter on its row take you back, or its alias letter if you gave it one. [Labels and bookmarks](labels-bookmarks.md) has the rest.
+
+## Compare two files
+
+Mark two files and run Compare files from the palette (Ctrl+P, then "compare"). diroxide says the answer first, "5 changes between old.txt and report.txt", then the counts, then one row for each change. [Compare files](compare.md) explains it, and `diro diff` does the same in a shell.
+
 ## Open an archive
 
 Move to a zip, a 7z, a tar or another archive and press Enter. It opens like a folder, and the status line says "Opened course.zip: 10 items, 1.8 KB." Move around as you do in any folder. Left, at the top of the archive, goes back to the folder that holds it. Mark members and press F5 to unpack them into the other panel. Nothing in an archive can be changed: "Archives are read only here. Use Pack to make a new one." To make a new archive from marked files, run Pack from the palette, or from the File menu under Archive. [Archives](archives.md) has the rest.
@@ -88,7 +102,7 @@ Press F3 on a file to read it in the viewer. Up and Down move a line, Ctrl+D say
 ## Find any command
 
 - Ctrl+P opens the command palette. Type part of a command's name and press Enter. Each entry says its name first and its key after it.
-- F9 opens the menu bar. Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. Every menu item shows its live key. The Plugins menu only says that plugins come with alpha.4.
+- F9 opens the menu bar. Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. The Search menu has no Alt letter, because Alt+S is Select; open it with F9, then R. Every menu item shows its live key. The Plugins menu only says that plugins come with alpha.4.
 - Shift+F1 or the question mark opens help: a list of commands with their keys.
 
 ## Quit
@@ -110,6 +124,9 @@ diro init bash
 - [The panels](panels.md): layouts, moving, sorting, filtering and marking.
 - [Operations and undo](operations.md): every operation, its question and how to reverse it.
 - [Archives](archives.md), [the viewer](viewer.md) and [the quick view](quick-view.md): opening, packing, reading and previewing.
+- [Search and the filter language](search.md), [labels and bookmarks](labels-bookmarks.md) and [compare files](compare.md): finding, remembering and comparing.
+- [Customizing keys](customizing-keys.md): changing a key, testing what your terminal sends, and key presets.
+- [Watching a folder](watching.md): hearing when a new file has finished arriving.
 - [Split and join](split-join.md): big files in parts.
 - [Using diroxide with a screen reader](screen-readers.md): the settings to check in NVDA and JAWS, and what you should hear.
 - [Settings](settings.md): where the files live and what to change.

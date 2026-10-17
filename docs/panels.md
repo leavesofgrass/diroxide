@@ -32,6 +32,7 @@ The hardware cursor always sits on the focused row's first cell, so a screen rea
 A row puts its meaning first: the name, then the kind, the size and the modified time. "report.pdf, PDF, 2.1 MB, modified Tuesday". A folder says "folder" after its name. The position comes last when diroxide speaks the row: "3 of 40".
 
 - A selected row says "selected" right after its name: "report.pdf, selected, PDF, 2.1 MB". When screen-reader mode is off, the screen also starts the row with an asterisk. The word is never left out, and the asterisk is never the only signal.
+- A row that has a label says so right after its name: "report.pdf, label: urgent, 2.1 MB", or "labels: urgent, review". [Labels and bookmarks](labels-bookmarks.md) describes labels.
 - A name that could cause trouble says so: "name needs care". That covers reserved characters, trailing dots and spaces, Windows device names, invisible characters, and names that differ from a sibling only by case.
 - Control, private-use, direction and other invisible characters in a name are shown as a question mark. The real name is kept for operations. Any listing before a delete spells such characters out as `U+XXXX`.
 - A cloud placeholder says "online only". diroxide asks before it reads such a file's contents.
@@ -47,7 +48,7 @@ Permissions are read in words first. On Linux and macOS the permissions column s
 - Up and Down move one row. Home and End go to the first and last row. Page Up and Page Down move a page. At the first or last row diroxide says "Top of the list" or "Bottom of the list".
 - Left goes to the parent folder. Right goes into the folder under the cursor; on a file it says the kind of file and opens nothing: "Not a folder: report.pdf, PDF".
 - Enter opens the focused entry. Backspace and Alt+Up go to the parent as well.
-- Alt+Left and Alt+Right go back and forward through the folders you visited, saying "No folder before this one" or "No folder after this one" at the ends. Windows Terminal keeps those keys and Alt+Up; the Go menu (Alt+G) has Back, Forward and Up one folder as the sure way. Folder history in the Go menu lists the folders you visited, and Enter goes to one.
+- Alt+Left and Alt+Right go back and forward through the folders you visited, saying "No folder before this one" or "No folder after this one" at the ends. Windows Terminal keeps those keys and Alt+Up; the Go menu (Alt+G) has Back, Forward and Up one folder as the sure way. Folder history in the Go menu lists the folders you visited, and Enter goes to one. The History list, also in the Go menu, is longer: every folder from every session, most used first ([labels and bookmarks](labels-bookmarks.md)).
 - Alt+Home goes to your home folder.
 - Ctrl+R lists the folder again: "Reloaded: 124 items".
 
@@ -67,7 +68,7 @@ Ctrl+L or Alt+D opens the path field with the current path in it. Type or paste 
 
 ## Go to a place, and path jump
 
-Ctrl+G opens Go to a place: a prompt with a list under it of your home folder, the drives on Windows or the mounts on Linux and macOS, and the folders you have visited, the ones you use most first. Each candidate says its folder first and what it is after it, such as "home folder" or "visited 12 times". A drive says its type in words ("disk", "removable drive" or "network drive") and its free space. diroxide does not wake an idle drive to read it.
+Ctrl+G opens Go to a place: a prompt with a list under it of your home folder, the drives on Windows or the mounts on Linux and macOS, and the folders you have visited, the ones you use most first. Each candidate says its folder first and what it is after it, such as "home folder" or "visited 12 times". A drive says its type in words ("disk", "removable drive" or "network drive") and its free space. diroxide does not wake an idle drive to read it. Your bookmarks are in the list too, with their kind first, such as "Bookmark, Reports, in work".
 
 Type a few words to narrow the list. This is path jump. Each word has to appear in the path, in the order you typed them, and the last word has to appear in the last folder's name. Case does not matter. Your home folder is left out of the visited list, because it is one key away. Enter goes to the chosen folder.
 
@@ -87,7 +88,7 @@ Sorting is quick and has many keys, because sorting is how you find things and d
 - Ctrl+F3 sorts by name, Ctrl+F4 by extension, Ctrl+F5 by modified time, Ctrl+F6 by size and Ctrl+F7 not at all (the provider's own order). These are the Norton Commander keys that Total Commander and Double Commander also use.
 - Choosing the same key again reverses the direction. Each key has a sensible first direction: names A to Z, sizes largest first, dates newest first, kinds A to Z.
 - The Sort list has every key and marks the current one, saying its direction. Type a letter to jump, press Enter to apply, and choose the same key again to reverse. In the terminal you reach it from the View menu (Alt+V, then S, then Sort list), because a terminal cannot reliably send Ctrl+Shift+S, which opens it in the window. The palette has an entry for every key too: Sort by created, accessed, kind, attributes, owner and label, as well as the five above.
-- A key with no data in this folder says so after the result: "No labels yet; labels come with alpha.3" for labels, and "No entry here has its owner" for a key such as owner.
+- A key with no data in this folder says so after the result: "No entry here has a label; Alt+L sets one" for labels, and "No entry here has its owner" for a key such as owner.
 - Names sort in natural order, so `file2` comes before `file10`, and capitals do not matter. Folders come first, as a setting (`sort.folders`: first, mixed or last). Whatever key you sort by, name is always the last key, so two files that tie come in name order and the cursor never jumps.
 - The status line says the result first and never the position: "Sorted by size, largest first", then "Sorted by size, smallest first" when you press it again. The cursor stays on the same entry.
 - The title line says the sort when it is not your default, so a panel you reach with Tab tells you.
@@ -98,18 +99,20 @@ On macOS the system owns Ctrl+F3 to Ctrl+F8. Use the Sort submenu in the View me
 
 There are two ways to narrow down a long folder.
 
-- Type to find. With single-letter keys on, typing a letter or a digit finds a row by name. The cursor jumps to the first row, from where you are, whose name starts with what you typed, and the status line says the row and the count: "report.pdf, 1 of 3 matches". Typing more narrows the match; the same letter again goes to the next row that starts with it. After a pause of about a second, the next letter starts a new search. When nothing starts with your text, diroxide says "No name starts with" and the text. The `single_letters` setting chooses what typing does: find by name (`type_ahead`, the default), `commands` for the key presets that come with alpha.3, or `off`. Turn it off if you use dictation software, which types letters.
-- Ctrl+S opens the Filter prompt, whether single-letter keys are on or off. As you type it hides every row that does not match and says the count: "3 of 12 match". Enter keeps the filter: "Filter *.pdf: 3 of 12 shown". The title line then names the filter. To clear it, use Clear filter in the View menu or the palette (it says "Filter cleared: 40 items"), or open the prompt, delete the text and press Enter.
+- Type to find. With single-letter keys on, typing a letter or a digit finds a row by name. The cursor jumps to the first row, from where you are, whose name starts with what you typed, and the status line says the row and the count: "report.pdf, 1 of 3 matches". Typing more narrows the match; the same letter again goes to the next row that starts with it. After a pause of about a second, the next letter starts a new search. When nothing starts with your text, diroxide says "No name starts with" and the text. The `single_letters` setting chooses what typing does: find by name (`type_ahead`, the default), `commands` for the vim-style key preset ([customizing keys](customizing-keys.md)), or `off`. Turn it off if you use dictation software, which types letters.
+- Ctrl+S opens the Filter prompt, whether single-letter keys are on or off. The filter hides every row that does not match.
 
-A filter and a pattern use the same small language. The first version understands these, and alpha.3 extends them without breaking them:
+The filter speaks the filter language, the same one that select by pattern, Find files and saved searches use. It is more than a name pattern. It can test size, dates, kind, labels, owner and more, and join tests with and, or and not. [Search and the filter language](search.md) is the guide to it, with twenty examples. These are the habits you need most:
 
-- Plain words match names that contain all of them, in any order: `report 2026`.
-- A term with `*`, `?` or `[` is a glob that matches the whole name: `*.pdf`, `IMG_????.jpg`. Separate terms with commas (or semicolons) to match any of them: `*.pdf, *.docx`.
-- `not` in front of a term leaves out what it matches: `*.pdf, not draft*`. A pattern of only `not` terms matches everything else.
-- A slash at the end limits a term to folders: `src/`, or `*/` for every folder.
-- A `re:` prefix makes the rest one regular expression, matched anywhere in the name: `re:^IMG_\d{4}`.
-
-Case is ignored. A pattern that cannot be read is explained in one short line: "Pattern needs care: unclosed bracket".
+- While you type, the list narrows silently. After you stop for 400 milliseconds (the `filter_pause_ms` setting), one line says the count and the first match: "37 matches, first report.pdf". With none: "No matches".
+- A bare word matches names that contain it. A word with `*`, `?` or `[` is a glob for the whole name: `*.pdf`. A comma means either: `*.pdf, *.docx`. `not` leaves out what follows: `*.pdf, not draft*`.
+- `size over 1 MB`, `modified last week`, `kind folder`, `label urgent` and `hidden` are tests of their own. A space between tests means and. Mixing and with or needs brackets.
+- `re:` makes the rest a regular expression: `re:^IMG_\d{4}`.
+- Case is smart: it is ignored unless the text has a capital letter.
+- A filter that cannot be read is explained in two parts, each once, after the pause: "Filter problem: size needs a number", then "Word 3. Try size over 10 MB."
+- Enter keeps the filter: "Filter on, 4 of 9 shown". The title line names it: "filter: size over 1 KB and name matches *.log". Escape in the panel takes it off: "Filter off, 9 shown". So does Clear filter in the View menu or the palette.
+- Say filter (View menu, Alt+V, then Y) reads the filter back in a sentence, with the real days of words such as last week. Stash filter and Restore filter keep a filter aside and bring it back. Folders only and Files only show one kind with a single command.
+- Filters you used in alpha.1 keep their meaning. A comma now binds tighter than a space, so `report 2026, *.pdf` means report, and also 2026 or a PDF. A name that starts with a bracket or an exclamation mark has to be quoted.
 
 Hidden files have their own switch: Show hidden files, on Alt+Period, in the View menu and the palette. diroxide says "Hidden files shown" or "Hidden files not shown". It is not Ctrl+H, because terminals confuse that key with Backspace. Hidden means a name that starts with a dot on Linux and macOS, the hidden flag on macOS, and the hidden attribute on Windows. A name such as `.gitignore` is not hidden on Windows.
 
@@ -118,10 +121,12 @@ Hidden files have their own switch: Show hidden files, on Alt+Period, in the Vie
 Marking picks the rows a command will act on. With no marks, a command acts on the focused row.
 
 - Space marks the focused row and moves down: "Selected report.pdf. 1 selected." Space on a marked row unmarks it: "Not selected report.pdf. 0 selected."
-- Ctrl+A marks every row, and diroxide says "40 items selected". Select none, invert, select by pattern and unselect by pattern are in the Select menu (Alt+S) and the palette. In the terminal, star inverts the marks, plus asks for a pattern to select and minus asks for a pattern to unselect, when single-letter keys are on. The prompt starts with `*`, so plus and then Enter marks everything. The result is a sentence: "Selected 12 matching *.pdf. 15 selected."
+- Ctrl+A marks every row, and diroxide says "40 items selected". Select none, invert, select by pattern and unselect by pattern are in the Select menu (Alt+S) and the palette. In the terminal, star inverts the marks, plus asks for a pattern to select and minus asks for a pattern to unselect, when single-letter keys are on. The prompt starts with `*`, so plus and then Enter marks everything. The prompt takes the filter language, so `size over 1 MB` and `modified last week` work as well as `*.pdf`. Before it marks anything it counts and asks, starting on No: "4 entries will be selected. No is the default. y or n", and then says "4 selected". ([Search and the filter language](search.md) describes the language.)
 - Ctrl+Down and Ctrl+Up go to the next and previous marked row, saying "No selected row below" or "No selected row above" at the ends.
 - Ctrl+D says the marks with their size: "3 selected, 4.2 MB. Documents, 40 items, on report.pdf, 3 of 40". Folders are not sized until a later alpha.
 - Restore selection (in the Select menu and the palette) brings back the marks that a select all, none, invert, pattern, finished job or change of folder replaced: "Selection restored: 31 selected."
+
+The Select menu has more ways to mark: by kind, by size, by date, the same extension, a range, and the next few rows. [Search and the filter language](search.md) describes them.
 
 Marks belong to rows, not to positions. If the folder is listed again, the marks stay on the same names. If a marked row has disappeared, diroxide says how many marks were lost, and if the focused row has gone it says that the focus moved. After a job, only the entries that failed stay marked, so the marks show what to try again.
 
@@ -138,13 +143,19 @@ In a terminal the keypad's plus, minus and star arrive as the main row's charact
 
 diroxide watches the folders on screen on a fixed local drive and merges outside changes into the list. "Folder changed: 2 added, 1 removed" is said when it matters, not on every change. If the folder you are in is renamed or deleted, diroxide says "Folder is gone" and goes up to the nearest folder that still exists. A folder that cannot be watched says so: "Folder not watched. Reload with Ctrl+R." That is always true of network drives and of removable drives, which diroxide checks again when you return to the panel and every two seconds.
 
+To be told when a new file has finished arriving, use Watch this folder in the View menu or the palette. It waits until a file stops changing and then says its name and size, so a download or a scan is announced when it is ready. [Watching a folder](watching.md) describes it.
+
 ## The session
 
-When you quit, diroxide remembers each panel's folder, the focused row, the sort, whether hidden files are shown, the folders you visited for back and forward, the layout and which panel was active, and puts them back at the next start.
+When you quit, diroxide remembers each panel's folder, the focused row, the sort, whether hidden files are shown, the folders you visited for back and forward, the layout and which panel was active, and puts them back at the next start. A folder with a saved view of its own gets that view whenever you enter it ([labels and bookmarks](labels-bookmarks.md)).
 
 ## See also
 
 - [Operations and undo](operations.md)
+- [Search and the filter language](search.md)
+- [Labels and bookmarks](labels-bookmarks.md)
+- [Compare files](compare.md)
+- [Watching a folder](watching.md)
 - [Every key](keyboard.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Settings and where the files live](settings.md)

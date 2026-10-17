@@ -1,8 +1,8 @@
 # Known limits
 
-This page says what diroxide does not do yet as of alpha.2, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet as of alpha.3, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha. Where a limit has a workaround, the workaround comes first.
 
-## What is not in alpha.2
+## What is not in alpha.3
 
 Each item says which alpha brings it.
 
@@ -12,13 +12,72 @@ Each item says which alpha brings it.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come with alpha.7; until then the quick view says "No preview" and names the kind and size.
 - A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes with alpha.7.
 - Changing the owner and group of a file, and a dialog for typing a file time, come with alpha.7. There is no Change times command in alpha.2, although copies keep dates.
-- Full search by name and content, the full filter language, saved searches, labels and bookmarks, and the Keys list inside the program: alpha.3. `diro search ROOT PATTERN` already prints names that match a list of globs. You can already change keys by editing `keymap.toml`.
 - Plugins, script commands and the downloader for optional components: alpha.4. The Plugins menu only says "Plugins come with alpha.4."
 - SSH and other remote places, and the trash browser: alpha.5.
 - Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands: alpha.7.
-- Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP: alpha.8.
+- Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP: alpha.8. Compare files works on two files since alpha.3; two folders come with alpha.8.
 - Download files for each platform: alpha.6 for Windows x86_64 and Linux x86_64, the other platforms with alpha.9. `cargo install diro`: beta.1.
 - Passwords are asked only for archives. The masked password prompt is built, and the other features that need it, such as SSH, arrive in later alphas.
+
+## Search and the filter language
+
+- Selecting by file contents, and refining search results by file contents, are not built. Each says so in words: "Selecting by contents is not built yet. Filter by contents, then select all." and "Refining by contents is not built yet. Search again with Contains text."
+- A panel's filter that reads file contents runs the search engine over that one folder, at depth 1. `selected` and `bookmarked` stay undecided inside it, and the undecided reasons are counted, not kept for each file. A saved view does not apply a filter that reads contents.
+- A result's file is checked after the focus has rested on it for 300 milliseconds. A row already known to be gone is refused. A row not yet checked relies on the error the action meets.
+- The question that offers to download online-only files, shown when a search's Online-only files row is "read after asking", goes through the runtime and has not been tried against a real online-only file.
+- The results list is a list in front of the panels, not a panel. Only these panel keys work on its rows: view, edit, copy, move, trash, delete for good, marking, refine and show in folder, with the actions list on Shift+F10. Rename and labels do not.
+- A saved search can be run and deleted. It cannot be renamed or edited. Save it again under a new name.
+- Pause search is F2 in a list. In another list F2 says "No search is running."
+- Tab in the Go to a place list completes bookmarks only, by name or place. The list under the field still narrows over every place.
+- On Windows a leading dot does not make a file hidden, so "Hidden files skipped." is said there only for files with the hidden attribute.
+- Go to a path on Windows keeps the forward slashes of a place with a scheme, such as `sftp://`. Remote places come with alpha.5.
+- Content search on Windows is bound by the cost of opening each file: reading every file of a 1 GB tree whole takes about 1.5 seconds on the test machine, and a search needs about 2. Memory maps are off.
+- Search over a network has been tested against a fake place that answers in 5 milliseconds, not against a real share. The thread counts and the rates in [the search guide](search.md) come from that fake place.
+- A search that follows links or looks inside archives always uses the slower walk, one folder at a time through the provider.
+- In a search, `selected` and `bookmarked` are left undecided, because a search has no panel. `empty` on a folder reads that folder when asked.
+- A depth test works in a search and not in a panel, which shows one folder.
+- `type` matches only entries whose type is already known, and `group` goes by extension, with seven groups. The full type model comes with alpha.7.
+- Dates use the computer's current offset from UTC, with no daylight-saving rules. A file changed in the hour a clock changed may land on the wrong side of midnight.
+- Patterns are Rust regular expressions: no look-around and no backreferences. A pattern is at most 1,000 characters.
+- Owner and user group are read where the listing has them. Windows owners are not read in a listing.
+- Names are compared as stored. Accents are not folded.
+- Search has no index. It walks the folders, so it is not instant over a whole drive.
+- The Space list shows at most 30 rows. Hard links are counted once on Unix only; on Windows they may be counted more than once, and the list says so.
+
+## Labels, bookmarks and saved views
+
+- A label step can be undone only in the same session. A job's undo survives a restart.
+- There is no command to rename, recolor, reorder or delete a label. Edit `labels.toml` by hand. The favorite keys follow the order in the file.
+- A file that is renamed or moved loses its label, even when diroxide did it, because a label belongs to the file's path. A label's results show the old place as gone until you take the label off.
+- Ctrl+1 to Ctrl+7, the favorite labels, do not arrive in many Unix terminals. The Edit menu's Labels submenu is the sure way.
+- No command sets a panel's columns yet, so a saved view keeps the columns in use when you saved it.
+- Typing in the Bookmarks list does not narrow it. An alias letter jumps, and any other letter moves by name.
+- Ctrl+B is tmux's prefix key, so inside tmux it arrives only when pressed twice. Alt+B and the Go menu open the bookmarks.
+
+## Compare files
+
+- Two files only. Two folders come with alpha.8, and so does `--names -0`.
+- A file inside an archive is not compared. Copy it out first.
+- The unified view is a list, not a mode of the viewer. Enter on a row opens the viewer at its line.
+- Next and previous change are F7 and Shift+F7 in the compare list. Some terminals send Shift+F7 as another key. P, or Shift+F10 and its actions list, is the sure way. The Compare submenu in the Search menu cannot open while a compare is open.
+- Unicode forms are recognized for Latin, Greek, Cyrillic and Hangul. "Sounds alike" covers space characters, dashes, quotes, full-width letters and a short list of Cyrillic and Greek letters that look like Latin ones. Other lookalikes are listed as ordinary changes.
+- Text is compared in full up to 16 MiB for each file. Past that, you choose the first 16 MiB as text or a byte-by-byte compare.
+- "Stopped early" is worked out from the clock after the run, not reported by the comparing code.
+- When names cannot keep four cells in the 40-cell verdict line, the line leaves them out, and the next line names the files.
+- The deadline, the text limit and how the three line algorithms compare have starting values that have not been tuned on a quiet machine.
+
+## Keys and presets
+
+- The presets are modeled on written sources, not on the programs. Total Commander's own Help was not read, and its keys come from published lists and forum pages that disagree in places. Midnight Commander's come from its manual, Worker's from the project's own notes, and the vim-style keys from the manuals of ranger, lf, yazi and vifm. A key may differ from the version you know.
+- A preset holds no key sequences. Midnight Commander's Ctrl+X family, Worker's Ctrl-x family and the doubled letters of vim-style managers (gg, dd, yy, pp) are left out or turned into single letters.
+- The keypad keys that some presets use need Num Lock on under NVDA and JAWS, whose review keys use the bare keypad.
+- The terminal column of every preset keeps off the keys a terminal never sends. A key a source manager uses that fails this check is in the window column only.
+- A key press in a terminal can change only the terminal column. The window column is changed by typing the key's name.
+- The delivery table, which says what each terminal does with each key, has most of its rows marked "to probe". `diro keys probe` fills in a terminal's column, but only when someone runs it there and sends the answer back.
+- A command that Change key has no sentence for is described as "runs" and its name.
+- On Windows a text paste arrives as typed keys, so during Change key its first character is taken as the key. The questions that follow start on No. The capture says nothing about the terminal on Windows, because whether Windows reports keys exactly is not probed.
+- The Explorer and Finder preset has no Command+D, because on a Mac Command+D is Say status. In the Worker preset Alt+T sorts in a panel, so the Tools menu is F9, then T.
+- Keys that plugins propose come with alpha.4.
 
 ## The trash
 
@@ -45,6 +104,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Removable drives are not watched. diroxide looks again when you return to the panel and every two seconds. Ejecting a USB drive while a panel shows it has not been tested yet; leave the folder first.
 - Network drives are never watched. The panel says: "Folder not watched. Reload with Ctrl+R." A folder that cannot be watched for any other reason says the same.
 - A burst of thousands of changes is shown as one refresh instead of one line each.
+- Watch this folder, which says when a new file has finished arriving, has its own limits: [watching a folder](watching.md) lists them. On Linux and macOS it cannot tell that a program still holds a file open, so a producer that pauses for more than 2 seconds is said early and then said again as "Arrived again". On Windows only a rename inside the watched folder gets the half-second wait; a file moved in from another folder waits the full 2 seconds.
 
 ## Dates and times
 
@@ -111,15 +171,16 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 ## Terminals and keys
 
-The table of keys each terminal can send waits for a key probe run by hand on each terminal, so some keys may not arrive in some terminals.
+The table of keys each terminal can send is built from a key probe run by hand on each terminal, and few terminals have been probed, so some keys may not arrive in some terminals.
 
 - [The keyboard page](keyboard.md) lists the keys a terminal may keep, with the sure way to each command. The ones that most often fail are the Norton sort keys Ctrl+F3 to Ctrl+F7, Alt+Left, Alt+Right, Alt+Up, Shift+F5, Shift+F10, Alt+Enter, Ctrl+C, Ctrl+V and the Ctrl+arrow keys. The menus and the palette reach every command whatever the terminal keeps.
-- `diro keys test` says in words what your terminal sent and what diroxide would run.
+- `diro keys test` says in words what your terminal sent and what diroxide would run. `diro keys probe` asks for each key in turn and prints what arrived.
+- The Keys list says "check terminal" on a row whose key many terminals keep or merge, and on every Shift plus function key, because some terminals send those as F13 to F24.
 - Windows Terminal keeps Ctrl+V for text paste. Use Paste in the Edit menu (Alt+E, then P), or unbind the key as [Terminals](terminals.md) shows.
 - On Windows a text paste arrives as typed keys: letters jump to names, plus, minus and star open the pattern prompts, and a line break acts as Enter. Bracketed paste, which would let diroxide tell a paste from typing, is on for Unix terminals only. Unbind Ctrl+V as [Terminals](terminals.md) shows if you paste text by accident.
 - On Windows the Menu key is never delivered to a terminal program. Shift+F10 opens the context menu instead.
 - On macOS the system owns Ctrl+F3 to Ctrl+F8 and the function keys need Fn. Use the Sort submenu, the menu or the palette.
-- When diroxide is ended by a signal, by Ctrl+Break or by closing the window, it does not yet give the terminal back. Type `reset` on Linux and macOS, or close the tab on Windows. Quitting, an error and a panic do give it back.
+- When diroxide is ended by a signal, by Ctrl+Break or by closing the window, it gives the terminal back and exits with 130. While a program has the terminal, such as your editor, the signal is that program's. Quitting, an error and a panic give the terminal back too.
 - A program that has the terminal, such as your editor or a shell from Shell here, is waited for without a time limit. Every other wait in the screen has one.
 - A move of the cursor keeps the last message on the status line, so a sighted user may see a message that is no longer news. The cursor row is what a screen reader speaks.
 - The inline view (`--inline`) is at most 24 rows tall, and a terminal narrower than 20 columns is drawn as 20.
@@ -136,6 +197,7 @@ The table of keys each terminal can send waits for a key probe run by hand on ea
 - The by-kind code commands, the quick view's one-line announcement and the spoken sentences of the archive, split and join dialogs have been checked against 40 characters in tests, not heard. Braille cells in contracted braille take more room than characters.
 - Whether NVDA or JAWS speak the terminal's window title on each folder change has not been verified.
 - The side by side layout puts the cursor near column 41 when the right panel is active, so a screen reader may read the left panel's row first. The stacked layout avoids this. Which layout suits you best is still being decided by listening; see [Using diroxide with a screen reader](screen-readers.md).
+- The lines of search, the filter, labels, bookmarks, compare, the Keys list and watching were written to carry their meaning in the first 40 cells and are checked in tests, not heard. Whether the count after the filter pause helps or interrupts, whether a result row's first 26 cells are enough, and whether the status line's "Waiting for ... to settle" is read aloud as dynamic content are for the listening check to decide.
 - The 40-cell lines were written for computer braille, one cell per character, on a HumanWare Mantis Q40. Contracted braille and other displays are untested.
 
 ## Names and wide characters
@@ -160,6 +222,11 @@ The table of keys each terminal can send waits for a key probe run by hand on ea
 - [The quick view](quick-view.md)
 - [Split and join](split-join.md)
 - [Links, permissions and times](links-permissions.md)
+- [Search and the filter language](search.md)
+- [Labels and bookmarks](labels-bookmarks.md)
+- [Compare files](compare.md)
+- [Customizing keys](customizing-keys.md)
+- [Watching a folder](watching.md)
 - [Terminals](terminals.md)
 - [Operations and undo](operations.md)
 - [Troubleshooting](troubleshooting.md)
