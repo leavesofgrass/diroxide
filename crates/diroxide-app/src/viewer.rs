@@ -26,6 +26,7 @@
 //!
 //! The viewer is `Send`, so a frontend may keep it on a worker thread.
 
+mod hexmode;
 mod index;
 mod jump;
 mod rows;
@@ -246,6 +247,8 @@ pub struct Viewer {
     binary: Option<&'static str>,
     cursor: RowPos,
     top: RowPos,
+    hex_cursor: u64,
+    hex_top: u64,
     width: usize,
     height: usize,
     wrap: bool,
@@ -303,6 +306,8 @@ impl Viewer {
             binary: None,
             cursor: RowPos::default(),
             top: RowPos::default(),
+            hex_cursor: 0,
+            hex_top: 0,
             width: 80,
             height: 24,
             wrap: settings.wrap,
@@ -428,6 +433,7 @@ impl Viewer {
         self.width = width.max(1);
         self.height = height.max(1);
         self.keep_cursor_visible();
+        self.keep_hex_visible();
     }
 
     /// The rows the lines get.
@@ -482,8 +488,12 @@ impl Viewer {
         }
     }
 
-    /// Say Status: "Line 120 of 4,000, 3 percent".
+    /// Say Status: "Line 120 of 4,000, 3 percent"; in hex mode "Offset 16
+    /// of 2,048 bytes, 0 percent".
     pub fn status(&self) -> String {
+        if self.mode == ViewerMode::Hex {
+            return self.hex_status();
+        }
         let line = self.cursor.line + 1;
         match self.index.total() {
             Some(0) => "Empty file".to_owned(),
@@ -583,6 +593,10 @@ impl Viewer {
     fn land(&mut self, line: u64, past: bool, landing: Landing) -> Vec<Message> {
         self.cursor = RowPos { line, part: 0 };
         self.keep_cursor_visible();
+        if self.mode == ViewerMode::Hex {
+            let offset = self.shown(line).map_or(0, |shown| shown.offset);
+            self.hex_go(offset);
+        }
         match landing {
             Landing::Quiet => Vec::new(),
             Landing::End => {

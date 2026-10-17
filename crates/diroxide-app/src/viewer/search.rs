@@ -352,14 +352,19 @@ impl Search {
         }
     }
 
-    /// "Match 3 of 12, line 120".
-    pub(crate) fn match_line(&self, index: usize) -> String {
-        let line = self.hits.get(index).map_or(0, |h| h.line + 1);
+    /// "Match 3 of 12, line 120"; in hex mode "Match 3 of 12, offset
+    /// 4,096".
+    pub(crate) fn match_line(&self, index: usize, hex: bool) -> String {
+        let hit = self.hits.get(index);
+        let place = if hex {
+            format!("offset {}", grouped(hit.map_or(0, |h| h.offset)))
+        } else {
+            format!("line {}", grouped(hit.map_or(0, |h| h.line + 1)))
+        };
         format!(
-            "Match {} of {}, line {}",
+            "Match {} of {}, {place}",
             grouped(index as u64 + 1),
-            self.count_words(),
-            grouped(line)
+            self.count_words()
         )
     }
 
@@ -458,6 +463,7 @@ impl super::Viewer {
             return Ok(Some(vec![search.none_line()]));
         }
         let last = search.hits.len() - 1;
+        let hex = self.mode == super::ViewerMode::Hex;
         let here = self.cursor.line;
         let (index, wrapped) = match (fresh, search.current, direction) {
             (true, _, Direction::Forward) | (false, None, Direction::Forward) => {
@@ -484,12 +490,16 @@ impl super::Viewer {
                 grouped(index as u64 + 1),
                 search.count_words()
             ),
-            None => search.match_line(index),
+            None => search.match_line(index, hex),
         };
         if let Some(search) = self.search.as_mut() {
             search.current = Some(index);
         }
-        self.land_on_column(hit.line, hit.column);
+        if hex {
+            self.hex_go(hit.offset);
+        } else {
+            self.land_on_column(hit.line, hit.column);
+        }
         Ok(Some(vec![Message::info(said)]))
     }
 
@@ -599,6 +609,6 @@ mod tests {
         while !search.scan(&mut source, &form, 1).unwrap() {}
         let found: Vec<(u64, usize)> = search.hits.iter().map(|h| (h.line, h.column)).collect();
         assert_eq!(found, [(7, 8), (50_007, 8), (100_007, 8), (150_007, 8)]);
-        assert_eq!(search.match_line(1), "Match 2 of 4, line 50,008");
+        assert_eq!(search.match_line(1, false), "Match 2 of 4, line 50,008");
     }
 }

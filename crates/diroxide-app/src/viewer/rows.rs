@@ -8,7 +8,7 @@ use diroxide_core::format::grouped;
 use super::index::Found;
 use super::text::{neutralize, read_line};
 use super::wrap::{CONTINUED, cells, wrap};
-use super::{COMMAND_BUDGET, MAX_LINE_BYTES, RowPos, ShownLine, Viewer, ViewerRow};
+use super::{COMMAND_BUDGET, MAX_LINE_BYTES, RowPos, ShownLine, Viewer, ViewerMode, ViewerRow};
 
 /// The words after a line cut at [`MAX_LINE_BYTES`].
 const CUT: &str = " (line cut)";
@@ -23,6 +23,9 @@ struct Part {
 impl Viewer {
     /// The rows to draw now, top to bottom.
     pub fn rows(&mut self) -> Vec<ViewerRow> {
+        if self.mode == ViewerMode::Hex {
+            return self.hex_rows();
+        }
         let mut rows = Vec::with_capacity(self.height);
         let mut pos = self.top;
         while rows.len() < self.height {
@@ -208,6 +211,10 @@ impl Viewer {
 
     /// Down one row: the screen reader reads the new row itself.
     pub fn down(&mut self) -> Vec<Message> {
+        if self.mode == ViewerMode::Hex {
+            self.hex_move(self.hex_step());
+            return Vec::new();
+        }
         if let Some(next) = self.next_pos(self.cursor) {
             self.cursor = next;
             self.keep_cursor_visible();
@@ -217,6 +224,10 @@ impl Viewer {
 
     /// Up one row.
     pub fn up(&mut self) -> Vec<Message> {
+        if self.mode == ViewerMode::Hex {
+            self.hex_move(-self.hex_step());
+            return Vec::new();
+        }
         if let Some(prev) = self.prev_pos(self.cursor) {
             self.cursor = prev;
             self.keep_cursor_visible();
@@ -226,6 +237,11 @@ impl Viewer {
 
     /// Down one screen.
     pub fn page_down(&mut self) -> Vec<Message> {
+        if self.mode == ViewerMode::Hex {
+            let rows = self.height.saturating_sub(1).max(1) as i64;
+            self.hex_move(self.hex_step() * rows);
+            return Vec::new();
+        }
         for _ in 0..self.height.saturating_sub(1).max(1) {
             match self.next_pos(self.cursor) {
                 Some(next) => self.cursor = next,
@@ -238,6 +254,11 @@ impl Viewer {
 
     /// Up one screen.
     pub fn page_up(&mut self) -> Vec<Message> {
+        if self.mode == ViewerMode::Hex {
+            let rows = self.height.saturating_sub(1).max(1) as i64;
+            self.hex_move(-self.hex_step() * rows);
+            return Vec::new();
+        }
         for _ in 0..self.height.saturating_sub(1).max(1) {
             match self.prev_pos(self.cursor) {
                 Some(prev) => self.cursor = prev,
@@ -250,6 +271,10 @@ impl Viewer {
 
     /// The first line.
     pub fn home(&mut self) -> Vec<Message> {
+        if self.mode == ViewerMode::Hex {
+            self.hex_go(0);
+            return Vec::new();
+        }
         self.cursor = RowPos::default();
         self.keep_cursor_visible();
         Vec::new()
@@ -259,6 +284,12 @@ impl Viewer {
     /// scan otherwise ([`Viewer::work`]); says "Line 4,000 of 4,000, the
     /// last" when it lands.
     pub fn end(&mut self) -> Vec<Message> {
+        if self.mode == ViewerMode::Hex {
+            let last = self.source.available().saturating_sub(1);
+            let start = self.hex_layout().row_start(last);
+            self.hex_go(start);
+            return Vec::new();
+        }
         self.start_task(super::Task::Line {
             line: u64::MAX,
             landing: super::Landing::End,
@@ -310,6 +341,26 @@ impl Viewer {
             }
         }
         self.top = top;
+    }
+
+    /// Left: in hex mode, the byte before, said ("Byte 15 is 20 hex, a
+    /// space"); in text mode, the token before the point.
+    pub fn left(&mut self) -> Vec<Message> {
+        if self.mode == ViewerMode::Hex {
+            self.hex_move(-1);
+            return self.say_byte();
+        }
+        Vec::new()
+    }
+
+    /// Right: in hex mode, the byte after, said; in text mode, the token
+    /// after the point.
+    pub fn right(&mut self) -> Vec<Message> {
+        if self.mode == ViewerMode::Hex {
+            self.hex_move(1);
+            return self.say_byte();
+        }
+        Vec::new()
     }
 
     /// Turns wrapping on or off: "Wrap on".

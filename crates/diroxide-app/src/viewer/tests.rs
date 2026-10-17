@@ -119,10 +119,10 @@ fn tabs_and_hidden_characters_never_reach_the_screen() {
     let rows = viewer.rows();
     let tabs = rows.iter().find(|r| r.pos.line == 12).unwrap();
     assert_eq!(tabs.text, "Tabs    are turned  into    spaces.");
-    let mut viewer = memory(b"bad\x1b[2Jname\nnext\x07\n");
+    let mut viewer = memory(b"bad\x1b[2Jname in a line of text\nnext rings a bell\x07 here\n");
     let rows = viewer.rows();
-    assert_eq!(rows[0].text, "bad?[2Jname");
-    assert_eq!(rows[1].text, "next?");
+    assert_eq!(rows[0].text, "bad?[2Jname in a line of text");
+    assert_eq!(rows[1].text, "next rings a bell? here");
 }
 
 #[test]

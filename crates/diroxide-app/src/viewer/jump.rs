@@ -88,6 +88,26 @@ impl Viewer {
     /// Jumps to a place in the file.
     pub fn jump_to(&mut self, jump: Jump) -> Vec<Message> {
         let landing = Landing::Jump(jump);
+        if self.mode == super::ViewerMode::Hex {
+            let len = self.source.available();
+            match jump {
+                Jump::Offset(offset) => {
+                    self.hex_go(offset);
+                    let at = grouped(self.hex_cursor);
+                    return vec![Message::info(if offset >= len {
+                        format!("Past the end: at offset {at}, the last")
+                    } else {
+                        format!("At offset {at}")
+                    })];
+                }
+                Jump::Percent(p) => {
+                    self.hex_go((u128::from(len) * u128::from(p) / 100) as u64);
+                    let at = grouped(self.hex_cursor);
+                    return vec![Message::info(format!("At offset {at}, {p} percent"))];
+                }
+                Jump::Top | Jump::End | Jump::Line(_) => {}
+            }
+        }
         match jump {
             Jump::Top => {
                 self.home();
@@ -128,6 +148,14 @@ impl Viewer {
             Some(total) => format!(" of {}", grouped(total)),
             None => String::new(),
         };
+        if self.mode == super::ViewerMode::Hex && matches!(jump, Jump::Line(_)) {
+            let offset = grouped(self.hex_cursor);
+            return if past {
+                format!("Past the end: at line {at}, offset {offset}")
+            } else {
+                format!("At line {at}, offset {offset}")
+            };
+        }
         match jump {
             Jump::Offset(offset) if offset >= self.source.available() => {
                 format!("Past the end: at line {at}, the last")
