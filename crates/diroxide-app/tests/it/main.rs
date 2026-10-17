@@ -7,6 +7,7 @@ mod support;
 
 mod access;
 mod archives;
+mod bookmarks;
 mod braille;
 mod commands;
 mod dialogs;

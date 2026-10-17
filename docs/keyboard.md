@@ -79,6 +79,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Ctrl+5: Favorite label 5. Adds the fifth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-5)
 - Ctrl+6: Favorite label 6. Adds the sixth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-6)
 - Ctrl+7: Favorite label 7. Adds the seventh label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-7)
+- Ctrl+B or Alt+B: Bookmarks. Lists the bookmarks; the first row adds or removes this folder, and an alias letter jumps. (go.bookmarks)
 
 ### In any list
 
@@ -188,6 +189,8 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Toggle label. Adds a label to the marked items, or takes it off when every one has it. (label.toggle)
 - Clear labels. Takes every label off the marked items, or the focused one. (label.clear)
 - Labels list. Lists the labels with how many items carry each; choosing one lists its items. (label.list)
+- Bookmark this folder. Adds the active panel's folder to the bookmarks. (bookmark.add)
+- Bookmark the focused item. Adds the focused file or folder as a bookmark that opens its folder with it focused. (bookmark.add-item)
 - Show in folder. Closes the viewer with the file's row focused in its folder. (viewer.show-in-folder)
 - Copy viewed file's path. Puts the viewed file's full path on the system clipboard. (viewer.copy-path)
 - Copy viewed file's name. Puts the viewed file's name on the system clipboard. (viewer.copy-name)
@@ -279,6 +282,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Ctrl+5: Favorite label 5. Adds the fifth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-5)
 - Ctrl+6: Favorite label 6. Adds the sixth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-6)
 - Ctrl+7: Favorite label 7. Adds the seventh label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-7)
+- Ctrl+B or Alt+B: Bookmarks. Lists the bookmarks; the first row adds or removes this folder, and an alias letter jumps. (go.bookmarks)
 
 ### In any list
 
@@ -382,6 +386,8 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Toggle label. Adds a label to the marked items, or takes it off when every one has it. (label.toggle)
 - Clear labels. Takes every label off the marked items, or the focused one. (label.clear)
 - Labels list. Lists the labels with how many items carry each; choosing one lists its items. (label.list)
+- Bookmark this folder. Adds the active panel's folder to the bookmarks. (bookmark.add)
+- Bookmark the focused item. Adds the focused file or folder as a bookmark that opens its folder with it focused. (bookmark.add-item)
 - Show in folder. Closes the viewer with the file's row focused in its folder. (viewer.show-in-folder)
 - Copy viewed file's path. Puts the viewed file's full path on the system clipboard. (viewer.copy-path)
 - Copy viewed file's name. Puts the viewed file's name on the system clipboard. (viewer.copy-name)
@@ -469,7 +475,6 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 ## Kept for later alphas
 
 - Ctrl+F: Find files, coming in alpha.3.
-- Ctrl+B or Alt+B: Bookmarks, coming in alpha.3.
 - Ctrl+T: New tab, coming in alpha.8.
 - Ctrl+W: Close tab, coming in alpha.8.
 - Ctrl+Tab: Next tab, coming in alpha.8, in the window.

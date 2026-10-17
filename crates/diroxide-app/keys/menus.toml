@@ -573,6 +573,18 @@ access = "t"
 command = "app.say-other"
 access = "n"
 
+[[menu.item]]
+command = "go.bookmarks"
+access = "k"
+
+[[menu.item]]
+command = "bookmark.add"
+access = "m"
+
+[[menu.item]]
+command = "bookmark.add-item"
+access = "e"
+
 [[menu]]
 id = "select"
 title = "Select"

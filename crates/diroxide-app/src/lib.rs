@@ -15,13 +15,14 @@
 //! (`app`, `panel`, `dialog`, `jobs`, `runtime`, `request`, `startup`,
 //! `state`); later waves add their own files: W2d owns `viewer`, W2e owns
 //! `quickview`; W2f wires the archives (`archives`), the viewer, the quick
-//! view and the alpha.2 dialogs; W3l owns `labels` (the label store) and
-//! its wiring in `app`.
+//! view and the alpha.2 dialogs; W3l owns `labels` and `bookmarks` (the
+//! label and bookmark stores) and their wiring in `app`.
 //!
 //! [`Effect`]: diroxide_core::Effect
 
 pub mod app;
 pub mod archives;
+pub mod bookmarks;
 pub mod commands;
 pub mod dialog;
 pub mod entry;

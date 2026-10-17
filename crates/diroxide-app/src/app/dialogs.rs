@@ -144,7 +144,7 @@ impl App {
 
     /// A key with a dialog open.
     pub(super) fn dialog_key(&mut self, key: Key) -> Vec<Effect> {
-        // The labels' lists' own keys (W3l).
+        // The labels', bookmarks' and History lists' own keys (W3l).
         if let Some(effects) = self.organize_key(&key) {
             return effects;
         }
@@ -378,6 +378,7 @@ impl App {
                     effects.extend(self.duplicate_prompt(side, next.clone(), more.to_vec()));
                 }
             }
+            Purpose::Organize(wants) => effects.extend(self.organize_escape(*wants)),
             _ => {}
         }
         effects
@@ -421,6 +422,7 @@ impl App {
                 effects.push(self.say(Message::info(format!("Running {name}"))));
                 effects.push(Effect::OpenExternally(place));
             }
+            Purpose::Organize(wants) => effects.extend(self.organize_yes(*wants)),
             _ => {}
         }
         effects
@@ -727,6 +729,7 @@ impl App {
                 match self.typed_place(side, &chosen) {
                     Ok(place) => {
                         self.remember(state::keys::PLACES, &text);
+                        self.bookmark_chosen(&place);
                         let mut effects = self.close_top();
                         effects.extend(self.open(side, place, None));
                         effects
@@ -1136,7 +1139,10 @@ impl App {
                     .into_iter()
                     .filter(|c| terms_in_order(&text, &c.text) || terms_in_order(&text, &c.kind))
                     .collect();
-                candidate_list("Places", &found)
+                let mut list = candidate_list("Places", &found);
+                // Bookmarks say their kind first (W3l).
+                self.bookmark_rows_first(&mut list);
+                list
             }
             Some(Purpose::PickDestination { side, .. }) => {
                 let all = self.place_candidates(side, true);

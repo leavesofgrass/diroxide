@@ -360,6 +360,12 @@ pub mod ids {
         LABEL_FAVORITE_6 = "label.favorite-6";
         /// Toggle the seventh label of the Labels list.
         LABEL_FAVORITE_7 = "label.favorite-7";
+        /// The Bookmarks list; with an `alias`, jump to that bookmark.
+        BOOKMARKS = "go.bookmarks";
+        /// Bookmark the active panel's folder.
+        BOOKMARK_ADD = "bookmark.add";
+        /// Bookmark the focused item, opening its folder on it.
+        BOOKMARK_ITEM = "bookmark.add-item";
         /// Closes the viewer and goes back to the file's row
         CLOSE_VIEWER = "viewer.close";
         /// Moves to the token before, or the byte before in hex mode, and says it
@@ -503,7 +509,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 169] = [
+pub static CATALOG: [CommandInfo; 172] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1383,6 +1389,30 @@ pub static CATALOG: [CommandInfo; 169] = [
         Panel,
         &["ctrl+7"],
         &["ctrl+7"],
+    ),
+    command(
+        ids::BOOKMARKS,
+        "Bookmarks",
+        "Lists the bookmarks; the first row adds or removes this folder, and an alias letter jumps.",
+        Panel,
+        &["ctrl+b", "alt+b"],
+        &["ctrl+b", "alt+b"],
+    ),
+    command(
+        ids::BOOKMARK_ADD,
+        "Bookmark this folder",
+        "Adds the active panel's folder to the bookmarks.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::BOOKMARK_ITEM,
+        "Bookmark the focused item",
+        "Adds the focused file or folder as a bookmark that opens its folder with it focused.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::CLOSE_VIEWER,

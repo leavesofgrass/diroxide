@@ -994,6 +994,18 @@ impl Runtime {
                     )));
                 }
             }
+            Request::SaveBookmarks(bookmarks) => {
+                if let Some(paths) = &self.paths
+                    && let Err(error) = crate::bookmarks::save(paths, &bookmarks)
+                {
+                    self.queue.push_back(AppEvent::Problem(Message::could_not(
+                        "save",
+                        "the bookmarks",
+                        &error,
+                        "",
+                    )));
+                }
+            }
             Request::CheckPlaces { request, places } => {
                 let registry = Arc::clone(&self.registry);
                 self.worker(move |shared| {

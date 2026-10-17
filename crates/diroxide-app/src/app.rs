@@ -19,6 +19,7 @@ mod access_dialogs;
 mod archive;
 mod archive_forms;
 mod archive_jobs;
+mod bookmarking;
 mod dialogs;
 mod files;
 mod info;
@@ -397,7 +398,7 @@ enum Purpose {
     SettingText(String),
     /// A list to read: details, help, problems.
     Read,
-    /// The labels (W3l): what their dialogs are for.
+    /// The labels and bookmarks (W3l): what their dialogs are for.
     Organize(Box<organize::Wants>),
     /// The job history.
     JobHistory,
@@ -531,7 +532,7 @@ pub struct App {
     highlighter: Option<crate::viewer::highlight::Session>,
     /// The quick view and the focus in its region.
     preview: preview::Preview,
-    /// The labels, and what their lists wait for (W3l).
+    /// The labels and bookmarks, and what their lists wait for (W3l).
     organize: organize::Organize,
 }
 
@@ -841,7 +842,7 @@ impl App {
             viewer_wait: None,
             highlighter: None,
             preview: preview::Preview::default(),
-            organize: organize::Organize::new(startup.labels),
+            organize: organize::Organize::new(startup.labels, startup.bookmarks),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1293,7 +1294,7 @@ impl App {
         {
             return effects;
         }
-        // The labels (W3l).
+        // The labels and bookmarks (W3l).
         if let Some(effects) = self.organize_dispatch(command) {
             return effects;
         }
