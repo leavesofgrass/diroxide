@@ -14,10 +14,12 @@
 //! binary; [`hex`], the one hex row function every place that shows bytes
 //! uses; [`highlight`], syntect as a tokenizer into the token classes,
 //! with its caps, its worker and its deadline, the symbols and the
-//! validity lines. The quick view's `doc` modules follow (W2e); Wave 5
+//! validity lines. The quick view's [`doc`] modules (W2e): the row-based
+//! document view the quick view moves through, and its readers. Wave 5
 //! (W5b) adds the image, audio, video, document and archive previewers.
 
 pub mod classes;
+pub mod doc;
 pub mod encoding;
 pub mod hex;
 pub mod highlight;
