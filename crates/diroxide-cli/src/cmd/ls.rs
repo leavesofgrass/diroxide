@@ -1,9 +1,10 @@
 //! `diro ls`: list a place in plain lines, one entry a line, the name
 //! first, then the kind, the size and the date in words.
 //!
-//! - `diro ls [PLACE]` lists a folder through the provider registry, so a
-//!   place inside an archive lists the same way once the archive provider
-//!   is registered (alpha.2). A file lists as itself.
+//! - `diro ls [PLACE]` lists a folder through the provider registry, the
+//!   archive provider registered beside the local one (P2b), so a place
+//!   inside an archive (`course.zip!week1`) lists the same way. A file
+//!   lists as itself.
 //! - `diro ls -` lists the paths given on standard input, NUL-separated by
 //!   default (`find -print0`, `fd -0`), newline-separated with `--lines`.
 //!   An empty list does nothing and says so. It is the last-resort mode
@@ -195,8 +196,15 @@ pub fn run(args: &LsArgs, input: &mut dyn Read, out: &mut dyn Write) -> Result<i
     }
     let clock = diroxide_app::startup::local_clock();
     let here = current_place()?;
-    let registry = Registry::with_local();
+    let registry = providers();
     run_with(args, input, out, &Lister::new(&registry, &clock, &here))
+}
+
+/// The providers `diro ls` lists through: the local one and the archive
+/// provider at the default limits, connected, as `diro archive` has them
+/// (W2g's finding, P2b), so `diro ls course.zip!week1` lists the folder.
+pub fn providers() -> std::sync::Arc<Registry> {
+    crate::cmd::archive::archive_registry().0
 }
 
 /// What a listing needs from outside: the providers, the clock and the
@@ -886,6 +894,35 @@ mod tests {
 
     fn fixed(list: &[&str], input: &[u8]) -> (i32, String) {
         run_in(&fixed_registry(), &fixed_root(), list, input)
+    }
+
+    /// W2g's finding (P2b): a place inside an archive lists through the
+    /// providers `diro ls` runs with, as a folder does.
+    #[test]
+    fn a_place_inside_an_archive_lists_like_a_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let week1 = dir.path().join("week1");
+        fs::create_dir(&week1).unwrap();
+        fs::write(week1.join("a.txt"), b"alpha").unwrap();
+        fs::write(week1.join("b.txt"), b"beta!").unwrap();
+        let here = Place::parse(dir.path().to_str().unwrap()).unwrap();
+        let zip = here.join("course.zip").unwrap();
+        let request = diroxide_archive::PackRequest::new(
+            vec![here.join("week1").unwrap()],
+            zip,
+            diroxide_archive::ArchiveFormat::Zip,
+        );
+        let registry = providers();
+        diroxide_archive::pack(&request, &registry, &OpContext::new()).unwrap();
+        let (code, text) = run_in(&registry, &here, &["course.zip!week1"], b"");
+        assert_eq!(code, 0, "{text}");
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(lines[0].starts_with("a.txt, file, 5 bytes"), "{text}");
+        assert!(lines[1].starts_with("b.txt, file, 5 bytes"), "{text}");
+        assert_eq!(lines[2], "2 items in week1.");
+        // The local provider alone cannot, which was the finding.
+        let (code, text) = run_in(&Registry::with_local(), &here, &["course.zip!week1"], b"");
+        assert_ne!(code, 0, "{text}");
     }
 
     #[test]
