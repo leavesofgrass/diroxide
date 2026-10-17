@@ -818,6 +818,7 @@ dependencies = [
  "diroxide-core",
  "diroxide-filetype",
  "diroxide-ops",
+ "diroxide-preview",
  "diroxide-theme",
  "diroxide-vfs",
  "dirs",
@@ -825,6 +826,7 @@ dependencies = [
  "opener",
  "serde",
  "tempfile",
+ "thiserror 2.0.21",
  "toml",
 ]
 

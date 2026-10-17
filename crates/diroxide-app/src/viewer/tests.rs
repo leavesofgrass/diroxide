@@ -1,0 +1,281 @@
+//! The viewer driven through its methods, on the samples in
+//! `fixtures/viewer/` and on bytes made here; spike V1 behind
+//! `DIRO_SPIKE_LARGE=1`.
+
+use std::io::Cursor;
+use std::path::PathBuf;
+use std::time::Instant;
+
+use diroxide_core::Place;
+use diroxide_core::format::within_cells;
+use diroxide_vfs::Registry;
+
+use super::*;
+
+pub(super) fn fixture(rel: &str) -> Place {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/viewer")
+        .join(rel);
+    let path = std::fs::canonicalize(&path).unwrap_or(path);
+    let text = path
+        .to_string_lossy()
+        .trim_start_matches(r"\\?\")
+        .to_owned();
+    Place::parse(&text).unwrap()
+}
+
+pub(super) fn open(rel: &str) -> (Viewer, Vec<String>) {
+    let (viewer, said) = Viewer::open(
+        &Registry::with_local(),
+        &fixture(rel),
+        None,
+        ViewerOptions::default(),
+    )
+    .unwrap();
+    (viewer, texts(&said))
+}
+
+pub(super) fn texts(said: &[Message]) -> Vec<String> {
+    said.iter().map(|m| m.text.clone()).collect()
+}
+
+pub(super) fn memory(bytes: &[u8]) -> Viewer {
+    let place = Place::parse(env!("CARGO_MANIFEST_DIR"))
+        .unwrap()
+        .join("made.txt")
+        .unwrap();
+    Viewer::from_source(
+        place,
+        ViewerSource::bytes(bytes.to_vec()),
+        ViewerOptions::default(),
+    )
+    .unwrap()
+    .0
+}
+
+fn numbered(lines: u64) -> Vec<u8> {
+    (1..=lines)
+        .flat_map(|i| format!("line {i}\n").into_bytes())
+        .collect()
+}
+
+#[test]
+fn a_text_file_opens_with_its_title_and_its_first_screen() {
+    let (mut viewer, said) = open("text/notes.txt");
+    assert_eq!(said.len(), 1, "plain UTF-8 says only the title: {said:?}");
+    assert!(said[0].starts_with("notes.txt, in "), "{said:?}");
+    assert_eq!(viewer.title(), said[0]);
+    viewer.set_size(80, 5);
+    let rows = viewer.rows();
+    assert_eq!(rows.len(), 5);
+    assert_eq!(rows[0].text, "Notes for the week, kept by Ada Example.");
+    assert!(rows[0].focused && !rows[1].focused);
+    assert_eq!(viewer.cursor_row(), 0);
+    assert_eq!(viewer.status(), "Line 1 of 14, 7 percent");
+    assert_eq!(viewer.line_count(), Some(14));
+}
+
+#[test]
+fn moving_scrolls_only_as_far_as_the_cursor_needs() {
+    let (mut viewer, _) = open("text/notes.txt");
+    viewer.set_size(80, 3);
+    for _ in 0..4 {
+        assert!(
+            viewer.down().is_empty(),
+            "a move is read by the screen reader"
+        );
+    }
+    assert_eq!(viewer.cursor().line, 4);
+    let rows = viewer.rows();
+    assert_eq!(rows[0].pos.line, 2);
+    assert!(rows[2].focused);
+    assert_eq!(viewer.cursor_row(), 2);
+    viewer.page_down();
+    viewer.page_down();
+    viewer.page_down();
+    viewer.page_down();
+    viewer.page_down();
+    viewer.page_down();
+    assert_eq!(viewer.cursor().line, 13, "stops at the last line");
+    viewer.down();
+    assert_eq!(viewer.cursor().line, 13);
+    assert_eq!(
+        viewer.rows().last().unwrap().text,
+        "The last line has no line end after it."
+    );
+    viewer.home();
+    assert_eq!(viewer.cursor().line, 0);
+    assert_eq!(viewer.rows()[0].pos.line, 0);
+    viewer.page_up();
+    assert_eq!(viewer.cursor().line, 0);
+    let said = texts(&viewer.end());
+    assert_eq!(said, ["Line 14 of 14, the last"]);
+}
+
+#[test]
+fn tabs_and_hidden_characters_never_reach_the_screen() {
+    let (mut viewer, _) = open("text/notes.txt");
+    viewer.set_size(80, 20);
+    let rows = viewer.rows();
+    assert_eq!(rows[12].text, "Tabs    are turned  into    spaces.");
+    let mut viewer = memory(b"bad\x1b[2Jname\nnext\x07\n");
+    let rows = viewer.rows();
+    assert_eq!(rows[0].text, "bad?[2Jname");
+    assert_eq!(rows[1].text, "next?");
+}
+
+#[test]
+fn utf16_text_reads_as_text_and_says_its_encoding() {
+    let (mut viewer, said) = open("encoding/utf16le-bom.txt");
+    assert_eq!(said[1], "Encoding: UTF-16 (byte-order mark)");
+    assert!(
+        said[1..].iter().all(|s| s.chars().count() <= 40),
+        "{said:?}"
+    );
+    let rows = viewer.rows();
+    assert_eq!(rows[0].text, "Caf\u{e9} notes.");
+    assert_eq!(rows[1].text, "Second line, na\u{ef}ve.");
+    assert_eq!(viewer.line_count(), Some(3));
+    let (mut viewer, said) = open("encoding/windows-1252.txt");
+    assert_eq!(said[1], "Encoding: Windows-1252 (not UTF-8)");
+    assert_eq!(viewer.rows()[0].text, "Quote: \u{201c}caf\u{e9}\u{201d}.");
+}
+
+#[test]
+fn a_binary_file_says_why_it_opens_in_hex() {
+    let (viewer, said) = open("encoding/pixel.png");
+    assert_eq!(said[1], "pixel.png looks binary; hex mode");
+    assert!(within_cells(&said[1], "hex mode"));
+    assert_eq!(viewer.mode(), ViewerMode::Hex);
+}
+
+#[test]
+fn a_stream_over_its_cap_says_the_policy_and_reads_more() {
+    let bytes = numbered(300_000);
+    let total = bytes.len() as u64;
+    let place = Place::parse(env!("CARGO_MANIFEST_DIR"))
+        .unwrap()
+        .join("big.log")
+        .unwrap();
+    let mib = 1024 * 1024;
+    let source = ViewerSource::stream(Box::new(Cursor::new(bytes)), Some(total), mib);
+    let options = ViewerOptions {
+        settings: ViewerSettings {
+            member_cache_mib: 1,
+            ..ViewerSettings::default()
+        },
+        ..ViewerOptions::default()
+    };
+    let (mut viewer, said) = Viewer::from_source(place, source, options).unwrap();
+    let said = texts(&said);
+    assert_eq!(said[1], "Showing the first 1.0 MB of 3.5 MB.");
+    assert!(said[1].chars().count() <= 40);
+    assert_eq!(viewer.rows()[0].text, "line 1");
+    viewer.finish();
+    viewer.end();
+    viewer.finish();
+    let known = viewer.lines_known();
+    assert!(known < 300_000, "only the cap is read: {known}");
+    let said = texts(&viewer.read_more());
+    assert_eq!(said, ["Showing the first 2.1 MB of 3.5 MB."]);
+    viewer.read_more();
+    assert_eq!(texts(&viewer.read_more()), ["Showing all of big.log."]);
+    while viewer.wants_work() {
+        viewer.work(WORK_BUDGET);
+    }
+    assert_eq!(viewer.line_count(), Some(300_000));
+}
+
+#[test]
+fn the_end_of_a_large_file_is_found_in_slices() {
+    let bytes = numbered(2_000_000);
+    let mut viewer = memory(&bytes);
+    assert_eq!(viewer.line_count(), None, "too large to index at open");
+    assert!(viewer.status().starts_with("Line 1, 0 percent"));
+    assert!(viewer.end().is_empty(), "the first slice does not reach it");
+    assert!(viewer.is_busy());
+    let said = texts(&viewer.finish());
+    assert_eq!(said, ["Line 2,000,000 of 2,000,000, the last"]);
+    assert_eq!(viewer.rows()[0].pos.line + 24, 2_000_000);
+    assert_eq!(viewer.status(), "Line 2,000,000 of 2,000,000, 100 percent");
+    viewer.end();
+    assert!(texts(&viewer.cancel()).is_empty(), "nothing pending");
+}
+
+#[test]
+fn an_empty_file_says_so() {
+    let mut viewer = memory(b"");
+    assert_eq!(viewer.status(), "Empty file");
+    assert!(viewer.rows().len() <= 1);
+}
+
+/// Spike V1 (research/alpha2-plan.md 4.12): a 1 GiB text file; the time
+/// to the first screen, to line 5,000,000 and to the end, and the memory
+/// of the line index. Run with `DIRO_SPIKE_LARGE=1` and
+/// `--no-capture`; the file is made in the temp folder and removed by
+/// the test.
+#[test]
+fn spike_v1_a_gibibyte_log() {
+    if std::env::var_os("DIRO_SPIKE_LARGE").is_none() {
+        return;
+    }
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("big.log");
+    let made = Instant::now();
+    {
+        let file = std::fs::File::create(&path).unwrap();
+        let mut out = std::io::BufWriter::with_capacity(1 << 20, file);
+        let mut written = 0u64;
+        let mut n = 0u64;
+        while written < 1 << 30 {
+            n += 1;
+            let line = format!("2026-10-16 21:00:00 INFO request {n} served in 12 ms\n");
+            out.write_all(line.as_bytes()).unwrap();
+            written += line.len() as u64;
+        }
+        out.flush().unwrap();
+        eprintln!(
+            "V1: wrote {written} bytes, {n} lines in {:?}",
+            made.elapsed()
+        );
+    }
+    let place = Place::parse(&path.to_string_lossy()).unwrap();
+    let started = Instant::now();
+    let (mut viewer, _) = Viewer::open(
+        &Registry::with_local(),
+        &place,
+        None,
+        ViewerOptions::default(),
+    )
+    .unwrap();
+    viewer.set_size(80, 24);
+    let rows = viewer.rows();
+    let first = started.elapsed();
+    assert!(rows[0].text.contains("request 1 served"));
+    let jump = Instant::now();
+    viewer.start_task(Task::Line {
+        line: 4_999_999,
+        landing: Landing::Quiet,
+    });
+    viewer.finish();
+    let rows = viewer.rows();
+    let to_line = jump.elapsed();
+    assert!(
+        rows.iter()
+            .any(|r| r.text.contains("request 5000000 served")),
+        "{:?}",
+        rows.first()
+    );
+    let end = Instant::now();
+    viewer.end();
+    viewer.finish();
+    let to_end = end.elapsed();
+    eprintln!(
+        "V1: first screen {first:?}; line 5,000,000 {to_line:?}; the end {to_end:?}; {} lines; index {} bytes",
+        viewer.line_count().unwrap_or_default(),
+        viewer.index_memory()
+    );
+    drop(viewer);
+    dir.close().unwrap();
+}
