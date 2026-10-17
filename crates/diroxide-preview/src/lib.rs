@@ -5,23 +5,34 @@
 //! request cancels an older one ([`LatestOnly`]).
 //!
 //! Phase 0: text and hex previewers over the provider, and a details line
-//! from the entry and its type. Wave 5 (W5b) owns this crate and adds the
+//! from the entry and its type. The alpha.2 contract step adds the token
+//! classes and their per-line runs ([`classes`]), the entry's detail rows
+//! on every preview ([`detail_rows`]), and serialization, so a preview
+//! can cross a process boundary (a plugin's previewer, `diro serve`).
+//! Wave 2 brings the viewer's `encoding` and `highlight` modules (W2d)
+//! and the quick view's `doc` modules (W2e); Wave 5 (W5b) adds the
 //! image, audio, video, document and archive previewers.
+
+pub mod classes;
 
 use std::io::Read;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use diroxide_core::format::human_size;
-use diroxide_core::{DetailRow, Entry, EntryKind, Explain, Place};
+use diroxide_core::{DetailGroup, DetailRow, Entry, EntryKind, Explain, Place};
 use diroxide_filetype::FileType;
 use diroxide_vfs::{OpContext, Registry, VfsError};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+pub use classes::{ClassRun, TokenClass};
 
 /// How many bytes a text or hex preview reads at most.
 pub const MAX_PREVIEW_BYTES: usize = 64 * 1024;
 
 /// What kind of preview this is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum PreviewKind {
     /// Lines of text.
     Text,
@@ -34,7 +45,7 @@ pub enum PreviewKind {
 }
 
 /// A preview: a details line, then lines to read.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Preview {
     /// What kind of preview.
     pub kind: PreviewKind,
@@ -44,7 +55,51 @@ pub struct Preview {
     pub lines: Vec<String>,
     /// The facts about the entry, as detail rows in their groups' order:
     /// what alpha.2's item information and alpha.7's details view list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub details: Vec<DetailRow>,
+    /// For each line of [`Preview::lines`], its token class runs, when the
+    /// preview was highlighted; empty when it was not (plain text, hex,
+    /// screen reader mode with highlighting off, a file over the caps).
+    /// When present it has one entry per line, an empty one for a line
+    /// with no runs ([`Preview::runs_of`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<Vec<ClassRun>>,
+}
+
+impl Preview {
+    /// A preview of a kind with its summary and nothing else.
+    pub fn new(kind: PreviewKind, summary: impl Into<String>) -> Self {
+        Self {
+            kind,
+            summary: summary.into(),
+            lines: Vec::new(),
+            details: Vec::new(),
+            runs: Vec::new(),
+        }
+    }
+
+    /// The runs of one line: empty when the preview is not highlighted or
+    /// the line has none.
+    pub fn runs_of(&self, line: usize) -> &[ClassRun] {
+        self.runs.get(line).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether the preview carries token classes.
+    pub fn is_highlighted(&self) -> bool {
+        !self.runs.is_empty()
+    }
+
+    /// Whether the runs match the lines: none at all, or one list per line
+    /// whose runs fit it ([`classes::runs_fit`]).
+    pub fn runs_fit(&self) -> bool {
+        self.runs.is_empty()
+            || (self.runs.len() == self.lines.len()
+                && self
+                    .lines
+                    .iter()
+                    .zip(&self.runs)
+                    .all(|(line, runs)| classes::runs_fit(line, runs)))
+    }
 }
 
 /// A preview to make.
@@ -137,6 +192,57 @@ pub fn details(entry: &Entry, file_type: Option<&FileType>) -> String {
     }
 }
 
+/// The facts every preview carries about its entry, as detail rows in
+/// their groups' order (core's `details` module): the type ("Type: PDF
+/// document"), the size in words with the exact bytes ("Size: 48 KB
+/// (49,152 bytes)"), and a link's target with hidden characters spelled
+/// out. The item information list shows them; a format's own reader adds
+/// its rows after these (alpha.7).
+pub fn detail_rows(entry: &Entry, file_type: Option<&FileType>) -> Vec<DetailRow> {
+    let what = match (entry.kind, file_type) {
+        (EntryKind::Folder, _) => "folder".to_owned(),
+        (_, Some(t)) => t.name.clone(),
+        (kind, None) => kind.word().to_owned(),
+    };
+    let mut rows = vec![DetailRow::new("type", "Type", what, DetailGroup::Identity)];
+    if let Some(size) = entry.size.filter(|_| entry.kind != EntryKind::Folder) {
+        rows.push(DetailRow::new(
+            "size",
+            "Size",
+            size_words(size),
+            DetailGroup::Size,
+        ));
+    }
+    if let Some(link) = &entry.link {
+        rows.push(DetailRow::new(
+            "link.target",
+            "Link to",
+            diroxide_core::names::spell_out(&link.target),
+            DetailGroup::Place,
+        ));
+    }
+    diroxide_core::details::order_rows(&mut rows);
+    rows
+}
+
+/// A size in words with its exact bytes after: "48 KB (49,152 bytes)", or
+/// "512 bytes" when the words already are exact.
+pub fn size_words(bytes: u64) -> String {
+    let words = human_size(bytes);
+    if bytes < 1000 {
+        return words;
+    }
+    let digits = bytes.to_string();
+    let mut grouped = String::new();
+    for (at, digit) in digits.chars().enumerate() {
+        if at > 0 && (digits.len() - at) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    format!("{words} ({grouped} bytes)")
+}
+
 /// Hex lines: an offset, sixteen bytes, and the printable characters.
 /// "00000000  50 4b 03 04  PK..".
 pub fn hex_lines(bytes: &[u8], start_offset: u64) -> Vec<String> {
@@ -214,7 +320,8 @@ impl Previewer for TextPreviewer {
                 .take(request.max_lines)
                 .map(str::to_owned)
                 .collect(),
-            details: Vec::new(),
+            details: detail_rows(&request.entry, file_type),
+            runs: Vec::new(),
         })
     }
 }
@@ -246,7 +353,8 @@ impl Previewer for HexPreviewer {
             kind: PreviewKind::Hex,
             summary: format!("{}, shown as hex", details(&request.entry, file_type)),
             lines,
-            details: Vec::new(),
+            details: detail_rows(&request.entry, file_type),
+            runs: Vec::new(),
         })
     }
 }
@@ -289,14 +397,15 @@ impl Previews {
         {
             Some(previewer) => previewer.render(request, file_type, registry, ctx),
             None => Ok(Preview {
-                kind: if request.entry.kind == EntryKind::Folder {
-                    PreviewKind::Folder
-                } else {
-                    PreviewKind::Details
-                },
-                summary: details(&request.entry, file_type),
-                lines: Vec::new(),
-                details: Vec::new(),
+                details: detail_rows(&request.entry, file_type),
+                ..Preview::new(
+                    if request.entry.kind == EntryKind::Folder {
+                        PreviewKind::Folder
+                    } else {
+                        PreviewKind::Details
+                    },
+                    details(&request.entry, file_type),
+                )
             }),
         }
     }
@@ -371,6 +480,71 @@ mod tests {
             (preview.kind, preview.summary.as_str()),
             (PreviewKind::Folder, "folder")
         );
+    }
+
+    #[test]
+    fn a_preview_carries_runs_and_rows_and_travels_as_json() {
+        let entry = Entry::new("main.rs", EntryKind::File).with_size(49_152);
+        let mut preview = Preview::new(PreviewKind::Text, "Rust source, 49.2 KB");
+        preview.lines = vec!["fn main() {".to_owned(), "}".to_owned()];
+        preview.runs = vec![
+            vec![
+                ClassRun::new(0, 2, TokenClass::Keyword),
+                ClassRun::new(3, 7, TokenClass::FunctionName),
+            ],
+            Vec::new(),
+        ];
+        preview.details = detail_rows(&entry, None);
+        assert!(preview.is_highlighted() && preview.runs_fit());
+        assert_eq!(preview.runs_of(0).len(), 2);
+        assert!(preview.runs_of(1).is_empty() && preview.runs_of(9).is_empty());
+        let json = serde_json::to_string(&preview).unwrap();
+        let back: Preview = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, preview);
+        assert!(json.contains(r#""class":"function-name""#), "{json}");
+        let plain = Preview::new(PreviewKind::Hex, "a.bin, shown as hex");
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !json.contains("runs") && !json.contains("details"),
+            "{json}"
+        );
+        assert_eq!(serde_json::from_str::<Preview>(&json).unwrap(), plain);
+        assert!(plain.runs_fit() && !plain.is_highlighted());
+        preview.runs.pop();
+        assert!(!preview.runs_fit(), "one list of runs per line");
+    }
+
+    #[test]
+    fn every_preview_lists_the_entrys_facts_label_first() {
+        let file = Entry::new("a.bin", EntryKind::File).with_size(49_152);
+        let spoken: Vec<String> = detail_rows(&file, None)
+            .iter()
+            .map(DetailRow::spoken)
+            .collect();
+        assert_eq!(spoken, ["Type: file", "Size: 49.2 KB (49,152 bytes)"]);
+        let folder = Entry::new("src", EntryKind::Folder).with_size(4_096);
+        assert_eq!(detail_rows(&folder, None).len(), 1, "no size for a folder");
+        let mut link = Entry::new("latest", EntryKind::Link);
+        link.link = Some(diroxide_core::Link {
+            target: "v2\u{202E}".to_owned(),
+            points_to: None,
+        });
+        let rows = detail_rows(&link, None);
+        assert_eq!(rows[1].spoken(), "Link to: v2[U+202E]");
+        assert_eq!(size_words(512), "512 bytes");
+        assert_eq!(size_words(1_234_567_890), "1.2 GB (1,234,567,890 bytes)");
+        let latest = LatestOnly::new();
+        let request = request_for("Cargo.toml", EntryKind::File, latest.next());
+        let preview = Previews::builtin()
+            .render(
+                &request,
+                None,
+                &latest,
+                &Registry::with_local(),
+                &OpContext::new(),
+            )
+            .unwrap();
+        assert_eq!(preview.details[0].spoken(), "Type: file");
     }
 
     #[test]
