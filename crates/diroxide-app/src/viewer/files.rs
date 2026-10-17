@@ -112,6 +112,7 @@ impl Viewer {
                 grouped(of as u64)
             );
         }
+        said.extend(self.start_code());
         said
     }
 

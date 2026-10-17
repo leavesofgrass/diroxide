@@ -216,6 +216,9 @@ impl Viewer {
             return Vec::new();
         }
         if let Some(next) = self.next_pos(self.cursor) {
+            if next.line != self.cursor.line {
+                self.point = 0;
+            }
             self.cursor = next;
             self.keep_cursor_visible();
         }
@@ -229,6 +232,9 @@ impl Viewer {
             return Vec::new();
         }
         if let Some(prev) = self.prev_pos(self.cursor) {
+            if prev.line != self.cursor.line {
+                self.point = 0;
+            }
             self.cursor = prev;
             self.keep_cursor_visible();
         }
@@ -275,6 +281,7 @@ impl Viewer {
             self.hex_go(0);
             return Vec::new();
         }
+        self.point = 0;
         self.cursor = RowPos::default();
         self.keep_cursor_visible();
         Vec::new()
@@ -303,6 +310,7 @@ impl Viewer {
             parts.iter().rposition(|p| p.from <= column).unwrap_or(0)
         });
         self.cursor = RowPos { line, part };
+        self.point = column;
         self.keep_cursor_visible();
     }
 
@@ -350,7 +358,7 @@ impl Viewer {
             self.hex_move(-1);
             return self.say_byte();
         }
-        Vec::new()
+        self.token_left()
     }
 
     /// Right: in hex mode, the byte after, said; in text mode, the token
@@ -360,7 +368,7 @@ impl Viewer {
             self.hex_move(1);
             return self.say_byte();
         }
-        Vec::new()
+        self.token_right()
     }
 
     /// Turns wrapping on or off: "Wrap on".

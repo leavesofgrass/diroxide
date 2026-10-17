@@ -26,6 +26,7 @@
 //!
 //! The viewer is `Send`, so a frontend may keep it on a worker thread.
 
+mod code;
 mod files;
 mod hexmode;
 mod index;
@@ -47,6 +48,7 @@ use diroxide_preview::encoding::{SNIFF_BYTES, binary_kind};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
+pub use code::IndentMove;
 pub use files::Sibling;
 pub use jump::Jump;
 pub use search::{MAX_HITS, Query};
@@ -261,6 +263,10 @@ pub struct Viewer {
     task: Option<Task>,
     search: Option<search::Search>,
     siblings: Vec<Sibling>,
+    session: Option<diroxide_preview::highlight::Session>,
+    code: Option<code::CodeDoc>,
+    job: Option<diroxide_preview::highlight::Job>,
+    point: usize,
 }
 
 impl fmt::Debug for Viewer {
@@ -321,6 +327,10 @@ impl Viewer {
             task: None,
             search: None,
             siblings: Vec::new(),
+            session: None,
+            code: None,
+            job: None,
+            point: 0,
         };
         viewer.load()?;
         let said = viewer.opening_lines();
@@ -596,6 +606,7 @@ impl Viewer {
 
     fn land(&mut self, line: u64, past: bool, landing: Landing) -> Vec<Message> {
         self.cursor = RowPos { line, part: 0 };
+        self.point = 0;
         self.keep_cursor_visible();
         if self.mode == ViewerMode::Hex {
             let offset = self.shown(line).map_or(0, |shown| shown.offset);

@@ -206,6 +206,7 @@ impl Viewer {
             };
         }
         self.keep_cursor_visible();
+        let code = self.start_code();
         let mut said = vec![Message::info(match self.index.total() {
             Some(total) => format!("Reloaded {}, {}", self.name, Viewer::lines_words(total)),
             None => format!("Reloaded {}", self.name),
@@ -213,6 +214,7 @@ impl Viewer {
         if let Some(policy) = self.policy_line() {
             said.push(Message::info(policy));
         }
+        said.extend(code);
         said
     }
 
@@ -278,10 +280,18 @@ impl Viewer {
         });
         self.finish();
         let new = self.index.lines_known().saturating_sub(lines_before);
-        if new == 0 {
-            return Vec::new();
+        let mut said = Vec::new();
+        if new > 0 {
+            said.push(Message::info(count(new, "new line", "new lines")));
         }
-        vec![Message::info(count(new, "new line", "new lines"))]
+        if self.code.is_some() {
+            // The file read whole is stale; read it again, quietly unless
+            // it is now over a cap.
+            let point = self.point;
+            said.extend(self.start_code());
+            self.point = point;
+        }
+        said
     }
 }
 
