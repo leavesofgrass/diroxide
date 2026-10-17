@@ -32,6 +32,7 @@ use diroxide_config::SingleLetters;
 use diroxide_core::{CommandId, Key, KeyCode, Layer};
 
 use super::names::Platform;
+use super::tables::{self, TerminalEntry, TerminalKind};
 use super::{Binding, KeyConcern, Keymap, written};
 use crate::commands::{self, ids};
 
@@ -295,6 +296,15 @@ fn program_holds(program: &str, platform: Platform) -> bool {
         "Windows Terminal" => platform != Platform::MacOs,
         _ => true,
     }
+}
+
+/// The terminal table's row for a key when it holds on this system: a key
+/// a terminal cannot send, one some terminals send as another, or one a
+/// terminal program on this system may keep. The Keys list says "check
+/// terminal" on a row with one.
+pub fn terminal_concern(key: &Key, platform: Platform) -> Option<&'static TerminalEntry> {
+    tables::terminal_entry(key)
+        .filter(|row| row.kind != TerminalKind::Program || program_holds(&row.program, platform))
 }
 
 /// Everything to say about binding `key` to `command` in `layer` of this

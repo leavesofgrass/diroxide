@@ -3,11 +3,23 @@
 //! 5.7, "Customizing keys"; research/alpha3-plan.md, "The Keys list").
 //!
 //! The pure parts live in the keymap's modules: the capture engine
-//! ([`crate::keymap::capture`]). This module holds what the app keeps
-//! while they run and turns their answers into dialogs and sentences.
+//! ([`crate::keymap::capture`]), the conflict analysis
+//! ([`crate::keymap::conflicts`]), the Keys list's rows
+//! ([`crate::keymap::keys_list`]) and the `keymap.toml` writer
+//! ([`crate::keymap::file`]). This module holds what the app keeps while
+//! they run, turns their answers into dialogs and sentences, and asks the
+//! runtime to write each change; `list` holds the Keys list's own flows.
+//!
+//! The keys the app runs on are layers: the defaults, then the owner's
+//! `keymap.toml` lines, then the single-letter setting. Every change
+//! writes the owner's lines it touched and builds the keys again from the
+//! layers, so what runs now is what the next start reads.
 //!
 //! W3k owns this module.
 
+mod list;
+
+use diroxide_config::KeymapConfig;
 use diroxide_core::{
     Command, CommandId, Effect, Key, KeyColumn, Layer, ListModel, ListRow, Message, Redraw,
 };
@@ -18,7 +30,9 @@ use crate::dialog::{Dialog, with_default_no};
 use crate::entry::{CompletionSource, EntryField};
 use crate::keymap::capture::{self, Capture, Captured, KeyReports};
 use crate::keymap::conflicts::{self, AskKind, Finding, Taken};
+use crate::keymap::file::{self, KeyLine, KeymapEdit};
 use crate::keymap::{KeyChoice, Keymap, written};
+use crate::request::Request;
 
 /// A change asked for: a command's key in one column, replaced or added
 /// to.
@@ -65,6 +79,21 @@ pub(crate) enum KeysPurpose {
         /// The findings still to say.
         rest: Vec<Finding>,
     },
+    /// The Keys list: a field that narrows it, and the list.
+    List,
+    /// A row's actions.
+    Actions(CommandId),
+    /// Which of a command's keys to remove.
+    RemoveWhich(CommandId),
+    /// "Reset all keys? y or n".
+    ResetAll,
+}
+
+impl KeysPurpose {
+    /// Whether this is the Keys list, whose field narrows it.
+    pub(super) fn is_list(&self) -> bool {
+        matches!(self, KeysPurpose::List)
+    }
 }
 
 /// What was chosen about a key another command holds.
@@ -92,32 +121,80 @@ pub(super) struct KeysState {
     pub(super) capture: Option<(Capture, Change)>,
     /// What the frontend knows of the terminal.
     pub(super) reports: KeyReports,
+    /// The owner's `keymap.toml` lines, as the file holds them after every
+    /// change the app asked the runtime to write.
+    pub(super) owner: KeymapConfig,
+}
+
+impl KeysState {
+    /// The state with the owner's lines read at start.
+    pub(super) fn new(owner: KeymapConfig) -> Self {
+        Self {
+            owner,
+            ..Self::default()
+        }
+    }
 }
 
 /// Whether a command is one of the keys commands this module runs.
 pub(super) fn is_keys_command(id: &CommandId) -> bool {
-    [ids::KEYS_CHANGE].contains(id)
+    [
+        ids::KEYS_CHANGE,
+        ids::KEYS_LIST,
+        ids::KEYS_RESET_ALL,
+        ids::KEYS_SINGLE_LETTERS,
+    ]
+    .contains(id)
 }
 
 impl App {
-    /// Runs a keys command: Change a key with its `command` argument.
+    /// Runs a keys command: the Keys list, Change a key (with a `command`
+    /// argument, that command's capture; without, the Keys list), Reset
+    /// all keys and the single-letter switch.
     pub(super) fn keys_dispatch(&mut self, command: &Command) -> Vec<Effect> {
         if !self.dialogs.is_empty() && self.top_keys_purpose().is_none() {
             return vec![self.say(Message::status("Close this dialog first."))];
         }
-        if command.id == ids::KEYS_CHANGE {
-            let target = command.text("command").and_then(|t| CommandId::new(t).ok());
-            return match target {
-                Some(target) if commands::info(&target).is_some() => self.change_key(&target),
-                Some(target) => vec![self.say(Message::error(format!(
-                    "No command has the id {target}. Nothing changed."
-                )))],
-                None => vec![self.say(Message::error(
-                    "Change a key needs a command: keys.change command=view.sort-size.",
-                ))],
-            };
+        match &command.id {
+            id if *id == ids::KEYS_CHANGE => {
+                let Some(text) = command.text("command") else {
+                    return self.open_keys_list();
+                };
+                match CommandId::new(text)
+                    .ok()
+                    .filter(|t| commands::info(t).is_some())
+                {
+                    Some(target) => self.change_key(&target),
+                    None => vec![self.say(Message::error(format!(
+                        "No command has the id {text}. Nothing changed."
+                    )))],
+                }
+            }
+            id if *id == ids::KEYS_LIST => self.open_keys_list(),
+            id if *id == ids::KEYS_RESET_ALL => self.reset_all_question(),
+            id if *id == ids::KEYS_SINGLE_LETTERS => self.setting_chosen("single_letters"),
+            _ => Vec::new(),
         }
-        Vec::new()
+    }
+
+    /// One column's keys from the layers: the defaults for this system,
+    /// then the owner's lines; every key, whatever the single-letter
+    /// setting.
+    pub(super) fn layered(&self, column: KeyColumn) -> Keymap {
+        self.base_keymap(column).with_overrides(&self.keys.owner)
+    }
+
+    /// One column's keys under the owner's lines: the defaults.
+    pub(super) fn base_keymap(&self, column: KeyColumn) -> Keymap {
+        Keymap::defaults_for(column).for_platform(self.keymap.platform())
+    }
+
+    /// Builds the keys the app runs on again from the layers and the
+    /// single-letter setting.
+    pub(super) fn rebuild_keymap(&mut self) {
+        self.keymap = self
+            .layered(self.keymap.column())
+            .with_single_letters(self.settings.single_letters);
     }
 
     /// Change key for a command, as the Keys list's Change key does: the
@@ -260,21 +337,13 @@ impl App {
         }
     }
 
-    /// The keymap of a column as the checks see it.
-    pub(super) fn column_keymap(&self, column: KeyColumn) -> Keymap {
-        if column == self.keymap.column() {
-            return self.keymap.clone();
-        }
-        Keymap::defaults_for(column).for_platform(self.keymap.platform())
-    }
-
     /// What the checks find for a change.
     fn findings(&self, change: &Change, key: &Key) -> Vec<Finding> {
         let Some(info) = commands::info(&change.command) else {
             return Vec::new();
         };
         conflicts::analyze(
-            &self.column_keymap(change.column),
+            &self.layered(change.column),
             info.layer,
             key,
             &change.command,
@@ -390,6 +459,9 @@ impl App {
     /// the window column only?" moves the change to the window column and
     /// checks it there again.
     pub(super) fn keys_yes(&mut self, purpose: KeysPurpose) -> Vec<Effect> {
+        if purpose == KeysPurpose::ResetAll {
+            return self.reset_all();
+        }
         let KeysPurpose::Check {
             mut change,
             key,
@@ -408,8 +480,60 @@ impl App {
         self.run_checks(change, key, rest, choice)
     }
 
-    /// Makes a change in the keymap of its column, and says it: "Ctrl+F9
-    /// now runs Sort by size."
+    /// Writes the owner's lines a change touched: each command's keys in
+    /// its layer as the changed keymap has them, or the line taken away
+    /// when they are the keys under the owner's lines again. The runtime
+    /// writes `keymap.toml`; the app's keys are built again from the
+    /// layers.
+    pub(super) fn persist(
+        &mut self,
+        column: KeyColumn,
+        changed_keymap: &Keymap,
+        changed: &[(Layer, CommandId)],
+    ) {
+        let base = self.base_keymap(column);
+        let sorted = |mut keys: Vec<Key>| {
+            keys.sort();
+            keys
+        };
+        let lines = |explicit: bool| -> Vec<KeyLine> {
+            changed
+                .iter()
+                .map(|(layer, command)| {
+                    let now = changed_keymap.keys_in(*layer, command);
+                    let back = sorted(now.clone()) == sorted(base.keys_in(*layer, command));
+                    KeyLine {
+                        column,
+                        layer: *layer,
+                        command: command.clone(),
+                        keys: (explicit || !back).then_some(now),
+                    }
+                })
+                .collect()
+        };
+        // A line taken away must give back what the change made; when
+        // another line of the owner's would take a key again, every line
+        // is written as it is.
+        let mut edit = KeymapEdit::Lines(lines(false));
+        let mut trial = self.keys.owner.clone();
+        file::apply_to(&mut trial, &edit);
+        let rebuilt = base.clone().with_overrides(&trial);
+        let same = changed.iter().all(|(layer, command)| {
+            sorted(rebuilt.keys_in(*layer, command))
+                == sorted(changed_keymap.keys_in(*layer, command))
+        });
+        if !same {
+            edit = KeymapEdit::Lines(lines(true));
+        }
+        file::apply_to(&mut self.keys.owner, &edit);
+        self.request(Request::EditKeymap(Box::new(edit)));
+        if column == self.keymap.column() {
+            self.rebuild_keymap();
+        }
+    }
+
+    /// Makes a change in its column, writes it and says it: "Ctrl+F9
+    /// saved for Sort by size."
     fn make_change(&mut self, change: &Change, key: Key, choice: &Choice) -> Vec<Effect> {
         let Some(info) = commands::info(&change.command) else {
             return Vec::new();
@@ -417,8 +541,8 @@ impl App {
         let platform = self.keymap.platform();
         let k = written(&key, platform);
         let name = info.name;
-        let mut keymap = self.column_keymap(change.column);
-        keymap.bind(
+        let mut keymap = self.layered(change.column);
+        let changed = keymap.bind(
             info.layer,
             key,
             &change.command,
@@ -426,10 +550,11 @@ impl App {
             choice.from.clone(),
             choice.choice,
         );
+        self.persist(change.column, &keymap, &changed);
         let mut said = if change.column == self.keymap.column() {
-            format!("{k} now runs {name}.")
+            format!("{k} saved for {name}.")
         } else {
-            format!("{k} now runs {name} in the {} column.", change.column)
+            format!("{k} saved for {name} in the {} column.", change.column)
         };
         if let Some((layer, other)) = &choice.from {
             let left = keymap.keys_in(*layer, other);
@@ -447,10 +572,9 @@ impl App {
             said.push(' ');
             said.push_str(&tail);
         }
-        if change.column == self.keymap.column() {
-            self.keymap = keymap;
-        }
-        vec![Effect::Redraw(Redraw::All), self.say(Message::info(said))]
+        let mut effects = vec![Effect::Redraw(Redraw::All), self.say(Message::info(said))];
+        effects.extend(self.refresh_keys_list(Some(&change.command)));
+        effects
     }
 
     /// Enter on a keys dialog.
@@ -484,14 +608,24 @@ impl App {
                 effects.extend(self.run_checks(change, key, rest, Choice { choice, from }));
                 effects
             }
+            KeysPurpose::List => self.keys_list_enter(row),
+            KeysPurpose::Actions(command) => self.action_chosen(&command, row),
+            KeysPurpose::RemoveWhich(command) => self.remove_chosen(&command, row),
+            // Enter on a yes-or-no question answers No.
+            KeysPurpose::ResetAll => self.dialog_escape(),
         }
     }
 
-    /// Escape on a keys dialog: nothing changes.
+    /// Escape on a keys dialog: nothing changes. Leaving the Keys list or
+    /// a row's actions says nothing more than the dialog's closing.
     pub(super) fn keys_escape(&mut self, purpose: KeysPurpose) -> Vec<Effect> {
-        if let KeysPurpose::Capture(_) = purpose {
-            self.keys.capture = None;
+        match purpose {
+            KeysPurpose::List | KeysPurpose::Actions(_) | KeysPurpose::RemoveWhich(_) => Vec::new(),
+            KeysPurpose::Capture(_) => {
+                self.keys.capture = None;
+                vec![self.say(Message::info(capture::CANCELLED))]
+            }
+            _ => vec![self.say(Message::info(capture::CANCELLED))],
         }
-        vec![self.say(Message::info(capture::CANCELLED))]
     }
 }

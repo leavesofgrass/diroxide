@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 
-use diroxide_config::{Config, ConfigProblem, Layout, Paths, SessionState};
+use diroxide_config::{Config, ConfigProblem, KeymapConfig, Layout, Paths, SessionState};
 use diroxide_core::{CommandId, Place, SystemClock, UtcOffset};
 use diroxide_ops::{Interrupted, Journal, UndoRecord};
 
@@ -49,6 +49,9 @@ pub struct Startup {
     pub home: Option<Place>,
     /// Whether this is the first start (no session was ever saved).
     pub first_run: bool,
+    /// The owner's `keymap.toml` lines, which the Keys list shows as
+    /// changed and writes to (W3k).
+    pub keymap: KeymapConfig,
 }
 
 impl Default for Startup {
@@ -65,6 +68,7 @@ impl Default for Startup {
             histories: BTreeMap::new(),
             home: None,
             first_run: false,
+            keymap: KeymapConfig::default(),
         }
     }
 }
@@ -176,6 +180,7 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         histories: state::load_histories(paths),
         home,
         first_run,
+        keymap: config.keymap.clone(),
     }
 }
 

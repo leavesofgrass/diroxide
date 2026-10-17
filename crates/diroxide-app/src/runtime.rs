@@ -852,6 +852,14 @@ impl Runtime {
                     }
                 }
             }
+            Request::EditKeymap(edit) => {
+                if let Some(paths) = &self.paths
+                    && let Err(said) = crate::keymap::file::save(paths, &edit)
+                {
+                    self.queue
+                        .push_back(AppEvent::Problem(Message::error(said)));
+                }
+            }
             Request::Settle(job) => {
                 if let Some(paths) = &self.paths {
                     let _ = Journal::new(paths.state_dir.clone()).settle(job);

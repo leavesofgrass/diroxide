@@ -758,6 +758,7 @@ impl App {
     pub fn new(options: AppOptions) -> Self {
         let mut settings = options.settings;
         let startup = options.startup;
+        let owner_keys = startup.keymap.clone();
         if let Some(layout) = startup.layout {
             settings.layout = layout;
         }
@@ -829,7 +830,7 @@ impl App {
             viewer_wait: None,
             highlighter: None,
             preview: preview::Preview::default(),
-            keys: keys::KeysState::default(),
+            keys: keys::KeysState::new(owner_keys),
         };
         app.apply_session();
         for side in Side::BOTH {

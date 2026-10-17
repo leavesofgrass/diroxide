@@ -319,6 +319,9 @@ pub enum Request {
         /// The folders packs wrote into.
         folders: Vec<Place>,
     },
+    /// Write the Keys list's change to `keymap.toml`, one line at a time,
+    /// keeping the owner's comments (W3k); a failure comes back in words.
+    EditKeymap(Box<crate::keymap::file::KeymapEdit>),
 }
 
 #[cfg(test)]

@@ -478,7 +478,10 @@ fn a_capture_takes_one_press_and_ten_seconds_end_it_in_words() {
     assert!(!s.app().capturing_key());
     let said: Vec<&str> = s.said().iter().map(|m| m.text.as_str()).collect();
     assert!(said.contains(&"Got Control plus F9"), "{said:?}");
-    assert!(said.contains(&"Ctrl+F9 now runs Sort by size."), "{said:?}");
+    assert!(
+        said.contains(&"Ctrl+F9 saved for Sort by size."),
+        "{said:?}"
+    );
     assert_eq!(*toggles.lock().unwrap(), [true, false]);
 
     // Ten seconds without a key end the capture in words and offer the
@@ -505,7 +508,7 @@ fn a_capture_takes_one_press_and_ten_seconds_end_it_in_words() {
     assert!(
         s.said()
             .iter()
-            .any(|m| m.text == "Ctrl+F12 now runs Sort by name."),
+            .any(|m| m.text == "Ctrl+F12 saved for Sort by name."),
         "{:?}",
         s.said()
     );

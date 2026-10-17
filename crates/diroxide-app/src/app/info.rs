@@ -509,6 +509,9 @@ impl App {
     /// Enter on a setting: a switch flips; a choice opens its choices with
     /// "Back to default" last; anything else opens a field.
     pub(super) fn setting_chosen(&mut self, key: &str) -> Vec<Effect> {
+        if key == settings::KEYS_ROW {
+            return self.open_keys_list();
+        }
         let Some(info) = settings::setting(key) else {
             return Vec::new();
         };
@@ -684,11 +687,8 @@ impl App {
     /// What a changed setting changes at once.
     fn after_setting(&mut self, key: &str) {
         match key {
-            "single_letters" => {
-                let full = keymap::Keymap::defaults_for(self.keymap.column())
-                    .for_platform(self.keymap.platform());
-                self.keymap = full.with_single_letters(self.settings.single_letters);
-            }
+            // Built again from the layers, so the owner's lines stay.
+            "single_letters" => self.rebuild_keymap(),
             "screen_reader_mode" => {
                 self.screen_reader = !matches!(
                     self.settings.screen_reader_mode,

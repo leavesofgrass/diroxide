@@ -280,6 +280,7 @@ impl App {
                     | Purpose::Places(_)
                     | Purpose::PickDestination { .. }
                     | Purpose::TypedPlan(..)
+                    | Purpose::Keys(_)
             );
             if candidates.is_some() && !list_always {
                 *candidates = None;
@@ -1092,6 +1093,7 @@ impl App {
             Some(Purpose::Palette | Purpose::Places(_) | Purpose::PickDestination { .. }) => {
                 self.refresh_candidates()
             }
+            Some(Purpose::Keys(purpose)) if purpose.is_list() => self.keys_list_typed(),
             _ => {
                 if let Some((
                     _,

@@ -15,6 +15,8 @@
 
 pub mod capture;
 pub mod conflicts;
+pub mod file;
+pub mod keys_list;
 pub mod names;
 pub mod tables;
 
@@ -602,6 +604,14 @@ impl Keymap {
             command: command.clone(),
         });
         changed
+    }
+
+    /// Takes one key away from a command in a layer; whether it had it.
+    pub fn unbind(&mut self, layer: Layer, key: &Key, command: &CommandId) -> bool {
+        let before = self.bindings.len();
+        self.bindings
+            .retain(|b| !(b.layer == layer && b.key == *key && &b.command == command));
+        self.bindings.len() != before
     }
 
     /// The keys of a command in one layer, in order.

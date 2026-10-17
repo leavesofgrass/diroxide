@@ -457,8 +457,15 @@ pub mod ids {
         /// The focused answer, in a dialog.
         ACCEPT = "dialog.accept";
         /// Change a command's key (W3k): with a `command` argument, the
-        /// capture waits for that command's new key.
+        /// capture waits for that command's new key; without one, the Keys
+        /// list opens.
         KEYS_CHANGE = "keys.change";
+        /// The Keys list (W3k).
+        KEYS_LIST = "keys.list";
+        /// Reset all keys (W3k).
+        KEYS_RESET_ALL = "keys.reset-all";
+        /// The single-letter switch (W3k).
+        KEYS_SINGLE_LETTERS = "keys.single-letters";
     }
 }
 
@@ -484,7 +491,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 159] = [
+pub static CATALOG: [CommandInfo; 162] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1718,6 +1725,30 @@ pub static CATALOG: [CommandInfo; 159] = [
         &["alt+p"],
     ),
     // Keys (W3k): Change key and the Keys list.
+    command(
+        ids::KEYS_LIST,
+        "Keys list",
+        "Lists every command with its keys in both columns; type to narrow it, and change any key.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::KEYS_RESET_ALL,
+        "Reset all keys",
+        "Takes every change of yours out of keymap.toml, after asking; the preset stays.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::KEYS_SINGLE_LETTERS,
+        "Single letters",
+        "Chooses what a key without Control or Alt does in a panel: jump to a name, run a command, or nothing.",
+        Global,
+        &[],
+        &[],
+    ),
     command(
         ids::KEYS_CHANGE,
         "Change a key",
