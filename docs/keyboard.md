@@ -442,7 +442,6 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 - Ctrl+F: Find files, coming in alpha.3.
 - Ctrl+B or Alt+B: Bookmarks, coming in alpha.3.
 - Alt+L: Set label, coming in alpha.3.
-- Shift+F3: Quick view, coming in alpha.2.
 - Ctrl+T: New tab, coming in alpha.8.
 - Ctrl+W: Close tab, coming in alpha.8.
 - Ctrl+Tab: Next tab, coming in alpha.8, in the window.

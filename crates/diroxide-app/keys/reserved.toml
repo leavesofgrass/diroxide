@@ -27,13 +27,6 @@ alpha = "alpha.3"
 column = "both"
 
 [[key]]
-keys = ["shift+f3"]
-command = "view.quick-view"
-name = "Quick view"
-alpha = "alpha.2"
-column = "both"
-
-[[key]]
 keys = ["ctrl+t"]
 command = "tab.new"
 name = "New tab"
