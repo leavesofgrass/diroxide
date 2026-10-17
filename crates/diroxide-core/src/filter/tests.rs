@@ -1114,3 +1114,57 @@ fn a_duration_counts_past_999_and_a_year_stays_a_year() {
         &Problem::NumberTooLarge
     );
 }
+
+/// P3b (the docs lane's finding): a size range reads with spaces before
+/// its units as it does without them, in either unit family, and the
+/// read-back says the range in words with the bytes on the details line.
+#[test]
+fn a_size_range_reads_with_spaces_before_its_units() {
+    let joined = parse("size 1KiB..1MiB");
+    for text in [
+        "size 1 KiB..1 MiB",
+        "size 1 KiB.. 1 MiB",
+        "size 1 KiB .. 1 MiB",
+        "size 1KiB ..1MiB",
+        "size 1 KiB ..1 MiB",
+        "size 1 kib..1 mib",
+    ] {
+        assert_eq!(parse(text).expr(), joined.expr(), "{text}");
+    }
+    let clock = written();
+    let read_back = parse("size 1 KiB..1 MiB").read_back(&clock);
+    assert_eq!(read_back.sentence(), "size from 1 KiB to 1 MiB");
+    assert_eq!(
+        read_back.details(),
+        ["1 KiB is 1,024 bytes.", "1 MiB is 1,048,576 bytes."]
+    );
+    assert_eq!(parse(read_back.sentence()).expr(), joined.expr());
+    let ends = |text: &str| {
+        let Expr::Test {
+            test: Test::Number(number),
+            ..
+        } = parse(text).expr().clone()
+        else {
+            panic!("not a number test: {text}");
+        };
+        let NumberOp::Between(low, high) = number.op else {
+            panic!("not a range: {text}");
+        };
+        (low.value(), high.value())
+    };
+    // KB and MB are powers of 1,000; KiB and MiB powers of 1,024.
+    assert_eq!(ends("size 1 KB..2 MB"), (Some(1_000), Some(2_000_000)));
+    assert_eq!(ends("size 1 KiB..2 MiB"), (Some(1_024), Some(2_097_152)));
+    // The second end's unit reaches a first end without one, as before.
+    assert_eq!(ends("size 1 ..5 MB"), ends("size 1..5 MB"));
+    assert_eq!(ends("size 1 ..5 MB"), (Some(1_000_000), Some(5_000_000)));
+    // A name that only looks like a range stays a name.
+    assert!(matches!(
+        parse("notes..txt").expr(),
+        Expr::Test {
+            test: Test::Text(_),
+            ..
+        }
+    ));
+    assert_eq!(problem("depth 1 KB..3").problem(), &Problem::DepthHasNoUnit);
+}
