@@ -112,9 +112,9 @@ The pack dialog is a list of "label: value" rows. A row that does not apply stay
 
 Then the question, starting on No: "Pack 12 items into reports.zip? y or n".
 
-If you set a password, diroxide asks for it in the masked prompt, typed twice: "Password for reports.zip (hidden):". There is no way to recover a forgotten password.
+If you set a password, diroxide asks for it in the masked prompt, typed twice: "New password for reports.zip (hidden):". There is no way to recover a forgotten password.
 
-The progress line is the job engine's: "Packing 12 of 300, 1.2 of 4.0 GB, about 2 minutes left". The end says "Pack finished: 300 done, 2 skipped." and then "Checked 300 of 300 entries, all good." Ctrl+Z puts the new archive in the trash.
+The progress line is the job engine's: "Packing: counting, 120 so far" first, then "Packing 30 percent, 2 minutes left". Say Status (Ctrl+D) adds the detail: "12 of 300 items, 1.2 of 4.0 GB, 48 MB a second". The end says "Pack finished: 300 done, 2 skipped." and then "Checked 300 of 300 entries, all good." Ctrl+Z puts the new archive in the trash.
 
 Packing to an existing name asks the usual question about a taken name. The old archive goes to the trash if you choose to replace it.
 
@@ -132,7 +132,7 @@ Pack runs the same test on its own result, which is where "Checked 300 of 300 en
 ## Passwords
 
 - The prompt names its purpose and hides what you type: "Password for course.zip (hidden):". It never reads your typing back. By default it shows an asterisk for each key, which proves a key registered; the `secret_echo` setting can make it silent, and `secret_show_toggle` starts the field with the text shown, which anyone near can read.
-- A wrong password gets up to three tries. Each retry is a question starting on No: "Wrong password for course.zip. Try again? y or n". For a 7z: "Wrong password or damaged data. Try again? y or n". Escape or no skips the locked members and says so.
+- A wrong password gets up to three tries. Each retry is a question starting on No: "Wrong password for course.zip. Try again? y or n". For a 7z: "Wrong password or damaged data. Try again? y or n". Escape or no skips the locked members and says so: "No password given. Skipped 10 members of course.zip." After three wrong tries: "Gave up on course.zip after 3 wrong passwords. Skipped."
 - A locked 7z with encrypted names cannot be listed without the password: "Could not open a.7z: a password is needed. Enter the password and try again."
 - An archive with ZipCrypto, the old zip password, is read, with a warning: "Weak encryption in a.zip (ZipCrypto)." diroxide never writes it.
 - One password serves a whole job, and diroxide forgets it when the job ends. A password is never written to the log, the jobs list, a script or the undo record, and it is never taken on a command line. [Privacy](privacy.md) has more.
@@ -143,14 +143,14 @@ A zip inside a zip opens like a folder, to four levels. A fifth level is refused
 
 ## Limits, and the questions they ask
 
-A hostile or broken archive can claim to be small and expand to fill a drive, or ask a decoder for more memory than the computer has. diroxide checks each of these against a limit, and a limit reached is one of two things.
+A hostile or broken archive can claim to be small and expand to fill a drive, or ask a decoder for more memory than the computer has. diroxide checks each of these against a limit, and a limit reached is one of two things. A note on sizes: the settings count in GiB and MiB, which are powers of 1024, and the messages say sizes in KB, MB and GB, powers of 1000. So the default of 32 GiB is said as 34.4 GB.
 
 A question: something large but possibly real. The question puts the fact first, ends in "y or n", and starts on No:
 
-- "Expands to 40 GB from 40 KB. Unpack? y or n". One member grows far more than any normal file would (the ratio and the amount are `archives.max_ratio` and `archives.ratio_floor_mib`).
-- "Expands to more than 32 GB. Go on? y or n". The whole job passes the total it asks at (`archives.ask_total_gib`).
-- "big.bin is 4.3 GB. Read it? y or n". A single member is larger than `archives.max_member_gib`.
-- "Needs 33.6 MB of memory for a.7z. Go on? y or n". A 7z or xz asks for a large dictionary (`archives.ask_dictionary_mib`).
+- "Expands to 40 GB from 40 KB. Read huge.bin? y or n". One member grows far more than any normal file would (the ratio and the amount are `archives.max_ratio` and `archives.ratio_floor_mib`).
+- "Expands to more than 34.4 GB. Go on? y or n". The whole job passes the total it asks at (`archives.ask_total_gib`).
+- "big.bin is 9.1 GB. Read it? y or n". A single member is larger than `archives.max_member_gib`.
+- "Needs 400 MB of memory for a.7z. Go on? y or n". A 7z or xz asks for a large dictionary (`archives.ask_dictionary_mib`).
 - "Read 3.2 GB first to open note.txt? y or n", described above.
 
 A refusal: something past any real use. It says what, in the usual shape: "Could not open bomb.zip: it passes the limit for bytes unpacked: 1 TB." The hard limits are the total (`archives.max_total_gib`), the dictionary (`archives.max_dictionary_mib`), the header and the list of members (`archives.max_header_mib`, `archives.max_index_mib`), the number of members (`archives.max_entries`, a million), the length of a name (`archives.max_name_bytes` and `archives.max_component_bytes`) and the memory of a decoder (`archives.max_memory_mib`).

@@ -61,7 +61,7 @@ These lines show what diroxide says for each key. The status line says the same 
 - Enter on an archive: the title puts the kind first, "course.zip, archive, in D:\docs", and the status line says "Opened course.zip: 10 items, 48 KB." A row inside says its name, then its kind, size and position: "notes.txt, text file, 3 KB, 5 of 10". A flag comes right after the name: "secret.docx, locked, Word, 40 KB".
 - A big tar.gz or tar.xz: "Reading logs.tar.xz: 3.2 of 14.0 GB" at most every ten seconds.
 - A locked archive: the prompt "Password for course.zip (hidden):", with an asterisk for each key you type or nothing, as `secret_echo` says. A wrong password: "Wrong password for course.zip. Try again? y or n".
-- A limit: "Expands to 40 GB from 40 KB. Unpack? y or n". The fact is first and the question starts on No.
+- A limit: "Expands to 40 GB from 40 KB. Read huge.bin? y or n". The fact is first and the question starts on No.
 - Unpack: "Unpack 10 members into course? y or n", then the job lines, then "Unpack finished: 118 done, 2 skipped." and a line for each skip, the name first: "Skipped ../x: name leaves the archive."
 - Pack: "Pack 12 items into reports.zip? y or n", the progress, "Pack finished: 300 done, 2 skipped." and "Checked 300 of 300 entries, all good."
 - Test archive: "Archive is sound: 10 members."

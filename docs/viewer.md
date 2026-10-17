@@ -25,7 +25,7 @@ The viewer shows a file as a list of rows, one for each line, with the hardware 
 - A tab shows as spaces. Control, escape, direction and other invisible characters are shown as a question mark, so a file cannot move your cursor, color the screen or hide text from you.
 - A line longer than 64 KiB is cut and its row ends with "(line cut)".
 
-The first screen of a file appears at once, however large it is. The viewer reads only what it needs, a little at a time, and builds the index of line starts as far as you go. A command that has to look far, such as a jump to line 5,000,000, says "Finding line..." once while it works and then where it landed.
+The first screen of a file appears at once, however large it is. The viewer reads only what it needs, a little at a time, and builds the index of line starts as far as you go. A command that has to look far, such as a jump to line 5,000,000, says "Finding line 5,000,000" once while it works and then where it landed.
 
 ## Wrap and line numbers
 
@@ -63,7 +63,7 @@ diroxide scans the whole file once so the count is real, then moves between matc
 - A pattern that cannot be read is explained in one line: "Pattern needs care: bad expression".
 - Past 100,000 matches the count says "more than".
 
-A long scan is done in slices, so the screen never freezes, and a slow one says "Searching for..." once.
+A long scan is done in slices, so the screen never freezes, and a slow one says "Searching for" and what you typed, once.
 
 ## Hex mode
 

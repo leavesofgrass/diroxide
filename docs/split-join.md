@@ -67,13 +67,13 @@ Then the question, starting on No: "Split report.pdf into 12 parts, 223 MB? y or
 
 If the other panel's drive does not have room, the plan says so first: "Not enough room on D:", then the numbers, then "Go on anyway? y or n".
 
-- More than 999 parts asks first: "This makes 1,500 parts. Go on? y or n". Past 999 the numbers just grow: `.1000`, `.1001`. Answer no and the file is left out.
+- More than 999 parts asks first: "This makes 1,500 parts. Go on? y or n", and a second line says "Splitting report.pdf: past 999, parts are 1000 and up." Past 999 the numbers just grow: `.1000`, `.1001`. Answer no and the file is left out.
 - More than 99,999 parts is refused, with the size to use instead: "Too many parts: 150,000. Use parts of 6.1 MB or more."
 - An empty file has nothing to split: "it is empty: nothing to split".
 
 ## Running it, cancelling it, undoing it
 
-- Progress is by part, in the job engine's words: "Splitting 4 of 12 parts, 1.4 of 4.0 GB". In screen-reader mode it changes at most every ten seconds.
+- Progress is by part, in the job engine's words: "Splitting 4 of 12 parts, 1.4 of 4.0 GB", and for a join "Joining 4 of 12 parts, 1.4 of 4.0 GB". In screen-reader mode it changes at most every ten seconds. The estimate of time left is added only where the line still fits in 40 characters.
 - Each part is written under an unfinished name and given its name when it is whole. Cancel with Escape and no part and no checksum file is left behind.
 - If the file changes while it is split, the split fails: "report.pdf changed while it was split". Nothing is trashed.
 - Ctrl+Z undoes a split: the parts go to the trash.
