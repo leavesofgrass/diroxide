@@ -22,6 +22,7 @@ pub mod index;
 pub mod job;
 pub mod limits;
 pub mod names;
+pub mod pack;
 mod pipe;
 pub mod provider;
 mod read_7z;
@@ -29,6 +30,7 @@ mod read_tar;
 mod read_xz;
 mod read_zip;
 pub mod request;
+pub mod run_pack;
 pub mod run_unpack;
 pub mod secrets;
 pub mod sniff;
@@ -37,6 +39,7 @@ pub mod spool;
 pub mod test_archive;
 pub mod unpack;
 pub mod words;
+mod write;
 
 pub use error::ArchiveError;
 pub use format::ArchiveFormat;
@@ -50,8 +53,10 @@ pub use limits::{Limits, limit_words};
 pub use names::{
     MemberPath, NameFlags, NameRefusal, is_junk, member_path, nesting_depth, normalize_member_name,
 };
+pub use pack::{PackItem, PackPlan, format_row, is_pack_temp, plan_pack};
 pub use provider::{ArchiveProvider, Listing, Opened, Visitor, capabilities_for};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
+pub use run_pack::{PackOutcome, run_pack};
 pub use run_unpack::{UnpackOutcome, run_unpack, safe_mode};
 pub use secrets::{JobSecrets, new_password_request};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};

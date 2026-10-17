@@ -101,3 +101,145 @@ fn the_zip_listing_matches_seven_z() {
     assert_eq!(ours, theirs);
     let _ = provider.capabilities(&place);
 }
+
+/// The first line a tool says about its version, for the report.
+pub fn version_of(tool: &str, flag: &str) -> String {
+    Command::new(tool)
+        .arg(flag)
+        .output()
+        .map(|out| {
+            let text = String::from_utf8_lossy(&out.stdout).into_owned();
+            let text = if text.trim().is_empty() {
+                String::from_utf8_lossy(&out.stderr).into_owned()
+            } else {
+                text
+            };
+            let line = text
+                .lines()
+                .find(|line| !line.trim().is_empty())
+                .unwrap_or("")
+                .trim();
+            // The version, not the sentence after it.
+            line.split("  ")
+                .next()
+                .unwrap_or(line)
+                .trim_end_matches('.')
+                .to_owned()
+        })
+        .unwrap_or_default()
+}
+
+/// A tree of plain names on disk to pack: text, noise, an empty file, a
+/// folder two deep.
+pub fn source_tree(dir: &std::path::Path) -> std::path::PathBuf {
+    let root = dir.join("course");
+    std::fs::create_dir_all(root.join("week1").join("deep")).unwrap();
+    std::fs::write(root.join("notes.txt"), "the notes\n".repeat(200)).unwrap();
+    std::fs::write(root.join("empty.txt"), b"").unwrap();
+    std::fs::write(root.join("week1").join("a.txt"), b"week one").unwrap();
+    std::fs::write(
+        root.join("week1").join("deep").join("noise.bin"),
+        crate::build::noise(100_000, 9),
+    )
+    .unwrap();
+    root
+}
+
+/// Packs `source` on disk into `name` beside it, through the real local
+/// provider, with an optional password; gives the archive's path.
+pub fn pack_on_disk(
+    source: &std::path::Path,
+    name: &str,
+    format: diroxide_archive::ArchiveFormat,
+    password: Option<&str>,
+) -> std::path::PathBuf {
+    use diroxide_archive::{JobEnv, PackRequest, plan_pack, run_pack};
+    let (registry, archives) = ArchiveProvider::install(Registry::with_local(), Limits::default());
+    let engine = diroxide_ops::Engine::new(registry.clone());
+    let destination = source.parent().unwrap().join(name);
+    let request = PackRequest {
+        password: password.map(|p| diroxide_core::Secret::new(p.to_owned())),
+        encrypt_names: password.is_some(),
+        ..PackRequest::new(
+            vec![Place::parse(&source.to_string_lossy()).unwrap()],
+            Place::parse(&destination.to_string_lossy()).unwrap(),
+            format,
+        )
+    };
+    let job = diroxide_core::JobId::new(7);
+    let plan = plan_pack(&registry, &request, job, &OpContext::new()).unwrap();
+    let control = diroxide_ops::JobControl::new();
+    let sink = crate::jobs::Sink::skipping();
+    let env = JobEnv::new(&engine, &archives, job, &control, &sink);
+    let outcome = run_pack(&plan, request.password.as_ref(), &env);
+    assert!(outcome.report.failed.is_empty(), "{:?}", outcome.lines);
+    assert!(destination.exists(), "{:?}", outcome.lines);
+    destination
+}
+
+/// Runs a tool and says whether it succeeded, with what it printed.
+pub fn tool_says(tool: &str, args: &[&std::ffi::OsStr]) -> (bool, String) {
+    let output = Command::new(tool).args(args).output().unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    (output.status.success(), text)
+}
+
+#[test]
+fn diroxide_zips_pass_unzip_and_seven_z() {
+    let tools: Vec<&str> = ["unzip", "7z"]
+        .into_iter()
+        .filter(|tool| match oracle(tool) {
+            Ok(()) => true,
+            Err(why) => {
+                eprintln!("cross-check of packed zips against {tool} not run: {why}");
+                false
+            }
+        })
+        .collect();
+    if tools.is_empty() {
+        return;
+    }
+    let dir = crate::spike_listing::scratch();
+    let source = source_tree(dir.path());
+    for password in [None, Some("cross-check-password")] {
+        let name = if password.is_some() {
+            "locked.zip"
+        } else {
+            "plain.zip"
+        };
+        let zip = pack_on_disk(
+            &source,
+            name,
+            diroxide_archive::ArchiveFormat::Zip,
+            password,
+        );
+        for tool in &tools {
+            let version = if *tool == "7z" {
+                version_of("7z", "i")
+            } else {
+                version_of("unzip", "-v")
+            };
+            let mut args: Vec<std::ffi::OsString> = Vec::new();
+            match (*tool, password) {
+                ("unzip", Some(p)) => args.extend(["-t".into(), "-P".into(), p.into()]),
+                ("unzip", None) => args.push("-t".into()),
+                (_, Some(p)) => args.extend(["t".into(), format!("-p{p}").into()]),
+                (_, None) => args.push("t".into()),
+            }
+            args.push(zip.clone().into_os_string());
+            let args: Vec<&std::ffi::OsStr> = args.iter().map(|a| a.as_os_str()).collect();
+            let (ok, said) = tool_says(tool, &args);
+            // Info-ZIP's unzip reads no AES; 7-Zip does.
+            if *tool == "unzip" && password.is_some() {
+                eprintln!("cross-check: {version} does not read AES zips; 7z checks those");
+                continue;
+            }
+            assert!(ok, "{tool} on {name}: {said}");
+            eprintln!("cross-check: {name} passed {tool} ({version})");
+        }
+    }
+}

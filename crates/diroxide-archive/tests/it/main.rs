@@ -10,6 +10,7 @@ mod jobs;
 mod memory;
 mod nested;
 mod odd_names;
+mod pack_zip;
 mod prompt;
 mod registration;
 mod seeds;

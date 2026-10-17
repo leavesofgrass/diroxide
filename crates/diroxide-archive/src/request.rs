@@ -1,7 +1,7 @@
 //! What to pack and what to unpack: plain data the app builds from its
 //! dialogs, for the runners of the write side (W2b).
 
-use diroxide_core::{ConflictPolicy, Place, Secret};
+use diroxide_core::{ConflictPolicy, JobId, JobKind, JobRequest, Place, Secret};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 
 use crate::format::ArchiveFormat;
@@ -186,8 +186,81 @@ impl UnpackRequest {
     }
 }
 
-/// Packs entries into a new archive. Phase 0: not built.
+impl PackRequest {
+    /// The job request the app keeps in its jobs list and journal for this
+    /// pack: the sources, the folder, the archive's name and the policy.
+    /// It holds no password.
+    pub fn job_request(&self, id: JobId) -> JobRequest {
+        let mut request = JobRequest::new(id, JobKind::Pack, self.sources.clone());
+        if let Some(name) = self.destination.name() {
+            request = request.named(name);
+        }
+        if let Some(folder) = self.destination.parent() {
+            request = request.to(folder);
+        }
+        request.conflicts = self.conflicts;
+        request
+    }
+}
+
+impl UnpackRequest {
+    /// The job request the app keeps for this unpack (or, with
+    /// `test_only`, this test): the archive, the destination, the policy.
+    /// It holds no password.
+    pub fn job_request(&self, id: JobId) -> JobRequest {
+        let kind = if self.test_only {
+            JobKind::TestArchive
+        } else {
+            JobKind::Unpack
+        };
+        let mut request = JobRequest::new(id, kind, vec![self.source.clone()]);
+        if !self.test_only {
+            request = request.to(self.destination.clone());
+        }
+        request.conflicts = self.conflicts;
+        request
+    }
+}
+
+/// A sink for a job run with no frontend: progress unsaid, every conflict
+/// and error skipped.
+struct Quiet;
+
+impl diroxide_ops::JobSink for Quiet {
+    fn progress(&self, _progress: &diroxide_ops::JobProgress) {}
+
+    fn conflict(&self, _conflict: &diroxide_ops::Conflict) -> diroxide_core::ConflictAnswer {
+        diroxide_core::ConflictAnswer::skip()
+    }
+
+    fn error(&self, _error: &diroxide_ops::ItemError) -> diroxide_core::ErrorAction {
+        diroxide_core::ErrorAction::Skip
+    }
+}
+
+/// Packs entries into a new archive with no frontend: plans the pack and
+/// runs it, asking nothing (a taken name is skipped unless the request's
+/// policy says otherwise; a password is asked of `ctx` only through the
+/// request), with the default limits. `Ok` once the archive is in place.
+/// The app plans and runs a pack itself ([`crate::plan_pack`],
+/// [`crate::run_pack`]) to show the plan and the progress.
 pub fn pack(request: &PackRequest, registry: &Registry, ctx: &OpContext) -> Result<(), VfsError> {
-    let _ = (request, registry, ctx);
-    Err(VfsError::unsupported("archive", "pack yet"))
+    let registry = std::sync::Arc::new(registry.clone());
+    let engine = diroxide_ops::Engine::new(registry.clone());
+    let archives = crate::ArchiveProvider::new(crate::Limits::default());
+    let job = JobId::new(1);
+    let plan = crate::plan_pack(&registry, request, job, ctx).map_err(VfsError::from)?;
+    let mut control = diroxide_ops::JobControl::new();
+    control.cancel = ctx.cancel.clone();
+    let env = crate::JobEnv::new(&engine, &archives, job, &control, &Quiet)
+        .with_secrets(ctx.secrets.clone());
+    let outcome = crate::run_pack(&plan, request.password.as_ref(), &env);
+    if outcome.report.cancelled {
+        return Err(VfsError::Cancelled);
+    }
+    match outcome.report.failed.first() {
+        Some((_, cause)) => Err(VfsError::Unsafe { why: cause.clone() }),
+        None if outcome.archive.is_some() => Ok(()),
+        None => Err(VfsError::AlreadyExists),
+    }
 }
