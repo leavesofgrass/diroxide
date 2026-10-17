@@ -1,47 +1,41 @@
 //! Content search: the lines of a file that hold a filter's `content`
-//! test, read the way ripgrep reads them.
+//! test, read by ripgrep's own searcher (`grep-searcher` with
+//! `grep-regex`), set the way ripgrep reads the files it walks.
 //!
 //! - **Binary detection is set:** a NUL byte stops the read and the file
-//!   is skipped as binary and counted, as ripgrep does for the files it
-//!   walks. A UTF-16 file without a byte-order mark has NUL bytes, so it
-//!   is one.
+//!   is skipped as binary and counted (`BinaryDetection::quit`); a match
+//!   before the NUL is not shown, as ripgrep shows none. A UTF-16 file
+//!   without a byte-order mark has NUL bytes, so it is one.
 //! - **Byte-order marks are sniffed:** a UTF-16 file with its mark (either
-//!   order) is read as text, through `encoding_rs`; a UTF-8 mark is
-//!   dropped.
+//!   order) is read as text; a UTF-8 mark is dropped.
 //! - **The byte limit** (`first 64 KB`) stops the read after that many
 //!   bytes of the file.
 //! - **Lines** end at a line feed; a carriage return before it is not part
 //!   of the line, and `$` matches before it. Line numbers start at one.
-//!   `^` and `$` are the line's ends.
+//!   `^` and `$` are the line's ends. A match never runs past its line: a
+//!   class such as `\s` does not take the line feed.
 //! - **Case** follows the filter: smart unless the test says.
-//!
-//! The plan names ripgrep's `grep-searcher` for this. Two of its own
-//! dependencies are not in this machine's cache, and downloading is
-//! outside this lane's brief, so the reader is built on the `regex`
-//! crate's byte matcher and `encoding_rs` with the same rules; the swap is
-//! one module (the hand-back's contract change request).
+//! - **No memory maps**, the searcher's default (ripgrep's own figures show
+//!   them slower on many small files).
 
 use std::io::{self, Read};
 use std::ops::Range;
 
 use diroxide_core::filter::ContentQuery;
-use encoding_rs::{CoderResult, Decoder, UTF_16BE, UTF_16LE};
+use grep_regex::{RegexMatcher, RegexMatcherBuilder};
+use grep_searcher::{BinaryDetection, Searcher, SearcherBuilder, Sink, SinkMatch};
 use regex::bytes::{Regex, RegexBuilder};
 
 use crate::hit::{ContentMatch, excerpt};
-
-/// How much is read at a time.
-const CHUNK: usize = 64 * 1024;
-
-/// The longest line held whole: a longer one is searched in pieces of
-/// this size, so one huge line cannot hold all of memory.
-const LONGEST_LINE: usize = 16 * 1024 * 1024;
 
 /// How many characters of a line a row shows, around the match.
 pub(crate) const LINE_WIDTH: usize = 120;
 
 /// How many matching lines one file gives in one-row-per-line results.
 pub(crate) const MOST_LINES: usize = 10_000;
+
+/// The size limit of a compiled pattern.
+const PATTERN_LIMIT: usize = 10 * (1 << 20);
 
 /// What reading a file found.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -60,237 +54,152 @@ pub(crate) enum Found {
     Binary,
 }
 
-/// One compiled content test.
+/// One compiled content test, with its own searcher (one per walking
+/// thread).
 #[derive(Debug)]
 pub(crate) struct Reader {
+    matcher: RegexMatcher,
+    /// The same pattern, to place the match inside a matching line.
     regex: Regex,
+    searcher: Searcher,
     limit: Option<u64>,
 }
 
 impl Reader {
     /// The reader for a filter's content test.
-    pub(crate) fn new(query: &ContentQuery) -> Result<Self, regex::Error> {
-        let regex = RegexBuilder::new(query.regex().as_str())
-            .case_insensitive(query.ignores_case())
+    pub(crate) fn new(query: &ContentQuery) -> Result<Self, String> {
+        let pattern = query.regex().as_str();
+        let ignore_case = query.ignores_case();
+        let mut builder = RegexMatcherBuilder::new();
+        builder
+            .case_insensitive(ignore_case)
             .multi_line(true)
             .crlf(true)
-            .size_limit(10 * (1 << 20))
-            .build()?;
+            .line_terminator(Some(b'\n'))
+            .size_limit(PATTERN_LIMIT)
+            .dfa_size_limit(PATTERN_LIMIT);
+        // A pattern that names a line feed itself can never match inside a
+        // line; without the line terminator the searcher reads it line by
+        // line, where it finds nothing, as before.
+        let matcher = match builder.build(pattern) {
+            Ok(matcher) => matcher,
+            Err(_) => builder
+                .line_terminator(None)
+                .build(pattern)
+                .map_err(|error| error.to_string())?,
+        };
+        let regex = RegexBuilder::new(pattern)
+            .case_insensitive(ignore_case)
+            .multi_line(true)
+            .crlf(true)
+            .size_limit(PATTERN_LIMIT)
+            .build()
+            .map_err(|error| error.to_string())?;
+        let searcher = SearcherBuilder::new()
+            .binary_detection(BinaryDetection::quit(b'\x00'))
+            .bom_sniffing(true)
+            .line_number(true)
+            .build();
         Ok(Self {
+            matcher,
             regex,
+            searcher,
             limit: query.limit(),
         })
     }
 
     /// Reads a file and says what it found, keeping at most `keep`
     /// matching lines, with the bytes read. `stop` is asked before each
-    /// piece, so a cancel (or a pause, which `stop` waits out) reaches
+    /// read, so a cancel (or a pause, which `stop` waits out) reaches
     /// inside a large file; a stopped read finds nothing.
     pub(crate) fn search(
-        &self,
+        &mut self,
         reader: impl Read,
         keep: usize,
         stop: &dyn Fn() -> bool,
     ) -> io::Result<(Found, u64)> {
-        let mut source = Source::new(reader.take(self.limit.unwrap_or(u64::MAX)))?;
-        let mut lines = Lines::new(&self.regex, keep.max(1));
-        let mut buffer = Vec::with_capacity(CHUNK * 2);
-        loop {
-            if stop() {
-                return Ok((Found::Nothing, source.read));
-            }
-            let more = source.fill(&mut buffer)?;
-            if buffer.contains(&0) {
-                return Ok((Found::Binary, source.read));
-            }
-            let end = match buffer.iter().rposition(|b| *b == b'\n') {
-                Some(last) => last + 1,
-                None if !more || buffer.len() >= LONGEST_LINE => buffer.len(),
-                None => continue,
-            };
-            let end = if more { end } else { buffer.len() };
-            lines.scan(&buffer[..end]);
-            buffer.drain(..end);
-            if !more {
-                break;
-            }
-        }
-        Ok((lines.found(), source.read))
-    }
-}
-
-/// The bytes of a file as UTF-8 where a byte-order mark says UTF-16, and
-/// as they are otherwise.
-struct Source<R> {
-    inner: R,
-    decoder: Option<Decoder>,
-    pending: Vec<u8>,
-    read: u64,
-    done: bool,
-}
-
-impl<R: Read> Source<R> {
-    /// Reads the first piece and sniffs the byte-order mark in it: one
-    /// read for a small file, never a byte at a time.
-    fn new(mut inner: R) -> io::Result<Self> {
-        let mut head = vec![0u8; CHUNK];
-        let mut filled = 0;
-        while filled < 3 {
-            match inner.read(&mut head[filled..]) {
-                Ok(0) => break,
-                Ok(n) => filled += n,
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(e),
-            }
-        }
-        head.truncate(filled);
-        let read = filled as u64;
-        let (decoder, pending) = if head.starts_with(&[0xEF, 0xBB, 0xBF]) {
-            (None, head[3..].to_vec())
-        } else if head.starts_with(&[0xFF, 0xFE]) {
-            (
-                Some(UTF_16LE.new_decoder_without_bom_handling()),
-                head[2..].to_vec(),
-            )
-        } else if head.starts_with(&[0xFE, 0xFF]) {
-            (
-                Some(UTF_16BE.new_decoder_without_bom_handling()),
-                head[2..].to_vec(),
-            )
+        let mut counted = Counted {
+            inner: reader.take(self.limit.unwrap_or(u64::MAX)),
+            read: 0,
+            stop,
+            stopped: false,
+        };
+        let mut lines = Lines {
+            regex: &self.regex,
+            keep: keep.max(1),
+            kept: Vec::new(),
+            count: 0,
+            binary: false,
+        };
+        self.searcher
+            .search_reader(&self.matcher, &mut counted, &mut lines)?;
+        let found = if counted.stopped || (lines.count == 0 && !lines.binary) {
+            Found::Nothing
+        } else if lines.binary {
+            Found::Binary
         } else {
-            (None, head)
-        };
-        Ok(Self {
-            inner,
-            decoder,
-            pending,
-            read,
-            done: false,
-        })
-    }
-
-    /// Appends the next piece to `out`; returns whether more may follow.
-    fn fill(&mut self, out: &mut Vec<u8>) -> io::Result<bool> {
-        if self.done {
-            return Ok(false);
-        }
-        let mut raw = std::mem::take(&mut self.pending);
-        let start = raw.len();
-        raw.resize(start + CHUNK, 0);
-        let n = loop {
-            match self.inner.read(&mut raw[start..]) {
-                Ok(n) => break n,
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(e),
+            Found::Lines {
+                lines: lines.kept,
+                count: lines.count,
             }
         };
-        raw.truncate(start + n);
-        self.read += n as u64;
-        let last = n == 0;
-        match &mut self.decoder {
-            None => out.extend_from_slice(&raw),
-            Some(decoder) => {
-                let mut src = raw.as_slice();
-                loop {
-                    let room = decoder
-                        .max_utf8_buffer_length(src.len())
-                        .unwrap_or(src.len() * 3 + 16);
-                    let at = out.len();
-                    out.resize(at + room, 0);
-                    let (result, used, written, _) =
-                        decoder.decode_to_utf8(src, &mut out[at..], last);
-                    out.truncate(at + written);
-                    src = &src[used..];
-                    if result == CoderResult::InputEmpty {
-                        break;
-                    }
-                }
-            }
-        }
-        if last {
-            self.done = true;
-        }
-        Ok(!last)
+        Ok((found, counted.read))
     }
 }
 
-/// The matching lines found so far.
+/// A reader that counts its bytes and ends early when asked to stop.
+struct Counted<'a, R> {
+    inner: R,
+    read: u64,
+    stop: &'a dyn Fn() -> bool,
+    stopped: bool,
+}
+
+impl<R: Read> Read for Counted<'_, R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.stopped || (self.stop)() {
+            self.stopped = true;
+            return Ok(0);
+        }
+        let n = self.inner.read(buffer)?;
+        self.read += n as u64;
+        Ok(n)
+    }
+}
+
+/// The searcher's sink: the matching lines kept, all of them counted,
+/// and whether the file was binary.
 struct Lines<'a> {
     regex: &'a Regex,
     keep: usize,
     kept: Vec<ContentMatch>,
     count: u64,
-    /// Lines before the piece being scanned.
-    line: u64,
+    binary: bool,
 }
 
-impl<'a> Lines<'a> {
-    fn new(regex: &'a Regex, keep: usize) -> Self {
-        Self {
-            regex,
-            keep,
-            kept: Vec::new(),
-            count: 0,
-            line: 0,
+impl Sink for Lines<'_> {
+    type Error = io::Error;
+
+    fn matched(&mut self, _: &Searcher, found: &SinkMatch<'_>) -> Result<bool, io::Error> {
+        self.count += 1;
+        if self.kept.len() < self.keep {
+            let line = trim_line(found.bytes());
+            let range = self.regex.find(line).map_or(0..0, |m| m.range());
+            let number = found.line_number().unwrap_or(0);
+            self.kept.push(matched_line(number, line, range));
         }
+        Ok(true)
     }
 
-    /// Scans a piece that holds whole lines (the last may lack its line
-    /// feed at the end of the file).
-    fn scan(&mut self, piece: &[u8]) {
-        let mut at = 0;
-        let mut counted = 0;
-        while at < piece.len() {
-            let Some(found) = self.regex.find_at(piece, at) else {
-                break;
-            };
-            let start = piece[..found.start()]
-                .iter()
-                .rposition(|b| *b == b'\n')
-                .map_or(0, |i| i + 1)
-                .max(at);
-            let end = piece[found.start()..]
-                .iter()
-                .position(|b| *b == b'\n')
-                .map_or(piece.len(), |i| found.start() + i);
-            let line = trim_cr(&piece[start..end]);
-            // A match that runs past its line's end (a pattern that can
-            // match a line feed) counts only if the line matches alone.
-            let within = if found.end() <= start + line.len() {
-                Some(found.start() - start..found.end() - start)
-            } else {
-                self.regex.find(line).map(|m| m.range())
-            };
-            if let Some(range) = within {
-                self.line += 1 + count_lines(&piece[counted..start]);
-                counted = (end + 1).min(piece.len());
-                self.count += 1;
-                if self.kept.len() < self.keep {
-                    self.kept.push(matched_line(self.line, line, range));
-                }
-            }
-            at = end + 1;
-        }
-        self.line += count_lines(&piece[counted.min(piece.len())..]);
-    }
-
-    fn found(self) -> Found {
-        if self.count == 0 {
-            Found::Nothing
-        } else {
-            Found::Lines {
-                lines: self.kept,
-                count: self.count,
-            }
-        }
+    fn binary_data(&mut self, _: &Searcher, _: u64) -> Result<bool, io::Error> {
+        self.binary = true;
+        Ok(false)
     }
 }
 
-fn count_lines(bytes: &[u8]) -> u64 {
-    bytes.iter().filter(|b| **b == b'\n').count() as u64
-}
-
-fn trim_cr(line: &[u8]) -> &[u8] {
+/// A line without its line feed and the carriage return before it.
+fn trim_line(line: &[u8]) -> &[u8] {
+    let line = line.strip_suffix(b"\n").unwrap_or(line);
     line.strip_suffix(b"\r").unwrap_or(line)
 }
 
@@ -312,6 +221,9 @@ fn matched_line(number: u64, line: &[u8], range: Range<usize>) -> ContentMatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A piece of a read, as the old reader read them.
+    const CHUNK: usize = 64 * 1024;
     use diroxide_core::filter::{Filter, Test};
 
     fn reader(expression: &str) -> Reader {

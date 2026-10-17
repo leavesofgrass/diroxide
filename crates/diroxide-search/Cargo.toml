@@ -10,8 +10,10 @@ publish.workspace = true
 [dependencies]
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
-# Content search reads UTF-16 files that start with a byte-order mark.
-encoding_rs.workspace = true
+# Content search: ripgrep's searcher and its regex matcher (plan section
+# 5.5), with binary detection set and byte-order marks sniffed.
+grep-regex.workspace = true
+grep-searcher.workspace = true
 # ripgrep's parallel walker, with its standard filters off (the plan's
 # section 5.5 and R14): diroxide decides hidden entries itself.
 ignore.workspace = true

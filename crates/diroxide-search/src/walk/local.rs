@@ -8,15 +8,19 @@
 //!
 //! On Windows another drive mounted in a folder is a reparse point, which
 //! the walk sees as a link and does not enter; on Unix a folder on
-//! another device is handed over and not entered, and counted.
+//! another device is handed over and not entered, and counted. A folder
+//! that is one of its own ancestors (a bind mount of a folder above it,
+//! known by volume and inode where the entry carries them, as on Unix) is
+//! a loop: handed over, not entered, counted, as the provider walk does.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::ops::ControlFlow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use diroxide_core::EntryKind;
+use diroxide_core::{Entry, EntryKind};
 use ignore::{DirEntry, ParallelVisitor, ParallelVisitorBuilder, WalkBuilder, WalkState};
 
 use super::{Candidate, Location, Visitor, WalkPlan, WalkStats};
@@ -103,11 +107,23 @@ where
     };
     #[cfg(not(unix))]
     let root_device: Option<u64> = None;
+    // The folders walked so far by their volume and inode, where entries
+    // carry them, for the loop check on each folder's own ancestors.
+    let mut walked = HashMap::new();
+    if let Ok(metadata) = std::fs::metadata(root_path) {
+        let root = entry_from(OsStr::new(""), root_path, None, Some(&metadata));
+        if let Some(id) = root.volume.zip(root.inode) {
+            walked.insert(root_path.to_path_buf(), id);
+        }
+    }
+    let walked = Mutex::new(walked);
     let mut threads = Threads {
         plan,
         make,
         stats: &stats,
         root_device,
+        root_path,
+        walked: &walked,
     };
     builder.build_parallel().visit(&mut threads);
     let mut stats = stats.into_inner().unwrap_or_else(PoisonError::into_inner);
@@ -124,6 +140,8 @@ struct Threads<'a, F> {
     make: &'a F,
     stats: &'a Mutex<WalkStats>,
     root_device: Option<u64>,
+    root_path: &'a Path,
+    walked: &'a Mutex<HashMap<PathBuf, (u64, u64)>>,
 }
 
 impl<'s, F, V> ParallelVisitorBuilder<'s> for Threads<'s, F>
@@ -138,6 +156,8 @@ where
             stats: WalkStats::default(),
             shared: self.stats,
             root_device: self.root_device,
+            root_path: self.root_path,
+            walked: self.walked,
         })
     }
 }
@@ -150,6 +170,8 @@ struct Thread<'a, V: Visitor> {
     stats: WalkStats,
     shared: &'a Mutex<WalkStats>,
     root_device: Option<u64>,
+    root_path: &'a Path,
+    walked: &'a Mutex<HashMap<PathBuf, (u64, u64)>>,
 }
 
 impl<V: Visitor> Drop for Thread<'_, V> {
@@ -203,6 +225,9 @@ impl<V: Visitor> ParallelVisitor for Thread<'_, V> {
                 if self.plan.too_deep(depth) {
                     self.stats.skips.too_deep += 1;
                 }
+            } else if self.repeats_an_ancestor(dent.path(), &entry) {
+                self.stats.skips.loops += 1;
+                descend = false;
             } else {
                 self.stats.folders += 1;
                 self.plan.live.folders.fetch_add(1, Ordering::Relaxed);
@@ -234,6 +259,26 @@ impl<V: Visitor> ParallelVisitor for Thread<'_, V> {
 }
 
 impl<V: Visitor> Thread<'_, V> {
+    /// Whether a folder is one of the folders above it on its own path, by
+    /// volume and inode (a bind mount of an ancestor); folders reached
+    /// another way are walked. A folder that is not a repeat is noted, so
+    /// the folders below it can be checked against it.
+    fn repeats_an_ancestor(&self, path: &Path, entry: &Entry) -> bool {
+        let Some(id) = entry.volume.zip(entry.inode) else {
+            return false;
+        };
+        let mut walked = self.walked.lock().unwrap_or_else(PoisonError::into_inner);
+        let repeat = path
+            .ancestors()
+            .skip(1)
+            .take_while(|above| above.starts_with(self.root_path))
+            .any(|above| walked.get(above) == Some(&id));
+        if !repeat {
+            walked.insert(path.to_path_buf(), id);
+        }
+        repeat
+    }
+
     /// Whether a folder is on another device than the start (Unix; on
     /// Windows such a folder is a reparse point, which is a link).
     fn other_device(&self, metadata: Option<&std::fs::Metadata>) -> bool {

@@ -305,6 +305,58 @@ fn followed_links_stay_inside_the_start_and_loops_are_caught() {
 }
 
 #[test]
+fn what_a_followed_link_reaches_is_walked_and_links_to_each_other_end() {
+    let dir = scratch();
+    let root = dir.path().join("root");
+    write(
+        &root.join("a").join("x.txt"),
+        "x
+",
+    );
+    write(
+        &root.join("b").join("y.txt"),
+        "y
+",
+    );
+    let links = link(&root.join("a").join("to-b"), &root.join("b"))
+        && link(&root.join("b").join("to-a"), &root.join("a"))
+        && link(&root.join("also-b"), &root.join("b"));
+    if !links {
+        eprintln!("Links could not be made here: test skipped.");
+        return;
+    }
+    let fixture = Fixture {
+        _dir: dir,
+        root,
+        links,
+    };
+    let (seen, stats) = walk_with(
+        &fixture,
+        &Options {
+            hidden: false,
+            ignore_files: false,
+            follow_links: true,
+            max_depth: None,
+            provider_walk: true,
+        },
+    );
+    // Two links to b: both walked, each path its own.
+    for path in [
+        "b/y.txt",
+        "a/to-b/y.txt",
+        "also-b/y.txt",
+        "b/to-a/x.txt",
+        "also-b/to-a/x.txt",
+    ] {
+        assert!(seen.contains(path), "{path} in {seen:?}");
+    }
+    // a/to-b/to-a, b/to-a/to-b and also-b/to-a/to-b each lead back into
+    // their own path: three loops, and the walk ends.
+    assert_eq!(stats.skips.loops, 3, "{stats:?}");
+    assert!(!seen.iter().any(|p| p.contains("to-a/to-b/")), "{seen:?}");
+}
+
+#[test]
 fn the_depth_limit_holds_in_both_walkers() {
     let fixture = fixture();
     for provider_walk in [false, true] {
