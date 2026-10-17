@@ -32,6 +32,7 @@ pub mod secrets;
 pub mod sniff;
 mod source;
 pub mod spool;
+pub mod unpack;
 pub mod words;
 
 pub use error::ArchiveError;
@@ -49,6 +50,10 @@ pub use provider::{ArchiveProvider, Listing, Opened, Visitor, capabilities_for};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
 pub use secrets::{JobSecrets, new_password_request};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};
+pub use unpack::{
+    LeftOut, PlannedMember, Room, UnpackFacts, UnpackPlan, archive_stem, destination_name,
+    plan_unpack,
+};
 pub use words::{READ_ONLY, read_only_refusal, wrong_password};
 
 #[cfg(test)]

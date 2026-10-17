@@ -19,6 +19,7 @@ mod spike_password;
 mod spike_sequential;
 mod split_sets;
 mod tar_read;
+mod unpack_plan;
 mod world;
 mod xz_read;
 mod zip_read;
