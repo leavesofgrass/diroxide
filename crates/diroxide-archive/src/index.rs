@@ -914,13 +914,21 @@ impl IndexBuilder {
         }
         index.summary.members = members;
         index.summary.folders = folders;
-        index.summary.total_size = checked_total(
-            index
-                .records
-                .iter()
-                .filter(|r| r.kind != RecordKind::Folder)
-                .map(|r| r.size),
-        );
+        let unknown = index
+            .records
+            .iter()
+            .any(|r| r.flags.contains(RecordFlags::SIZE_UNKNOWN));
+        index.summary.total_size = if unknown {
+            None
+        } else {
+            checked_total(
+                index
+                    .records
+                    .iter()
+                    .filter(|r| r.kind != RecordKind::Folder)
+                    .map(|r| r.size),
+            )
+        };
         self.index
     }
 }

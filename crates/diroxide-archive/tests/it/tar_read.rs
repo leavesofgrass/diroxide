@@ -88,8 +88,16 @@ fn a_tar_gz_lists_and_reads_through_the_forward_cursor() {
     let rows = world.rows(&gz.clone().into_archive()).unwrap();
     assert_eq!(rows, ["notes.txt, file"]);
     // `.gz` is no archive extension in a typed place, so the root joins.
-    let inside = gz.into_archive().join("notes.txt").unwrap();
+    let inside = gz.clone().into_archive().join("notes.txt").unwrap();
     assert_eq!(world.read(&inside).unwrap(), b"just one file");
+    let opened = world
+        .provider
+        .open_archive(&gz, &OpContext::new(), Allowances::default())
+        .unwrap();
+    assert_eq!(
+        opened.opened_line(),
+        "Opened notes.txt.gz: 1 item, size unknown."
+    );
 }
 
 /// A progress sink that keeps every update.
