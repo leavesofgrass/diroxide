@@ -353,6 +353,14 @@ pub fn plan_pack(
     if format == ArchiveFormat::Xz && plan_items.len() != 1 {
         return Err(refuse("xz holds one file. Use tar.xz."));
     }
+    if format == ArchiveFormat::Xz
+        && let Some(item) = write_items.first_mut()
+    {
+        // An xz keeps no name: a reader names its one file by the
+        // archive's stem (`one.xz` holds `one`), so the file is written
+        // and checked under that name (W2g's finding, P2b).
+        item.name = crate::read_tar::single_name(&archive_name);
+    }
     let count_of = |kind: EntryKind| plan_items.iter().filter(|i| i.kind == kind).count() as u64;
     let bytes = plan_items.iter().map(|i| i.size).sum();
     let free = provider
@@ -475,12 +483,21 @@ impl PackPlan {
             self.password_row(),
             self.solid_row(),
             self.reads_row(),
-            match self.store_paths {
-                StorePaths::Relative => "Paths: relative to their folder".to_owned(),
-                StorePaths::Full => "Paths: full, without the drive".to_owned(),
-                StorePaths::NamesOnly => "Paths: names only".to_owned(),
-            },
         ];
+        if let (ArchiveFormat::Xz, Some(item), Some(written)) =
+            (self.format, self.items.first(), self.write_items.first())
+            && item.name != written.name
+        {
+            rows.push(format!(
+                "Unpacks as {}: xz keeps no name",
+                spell_out(&written.name)
+            ));
+        }
+        rows.extend([match self.store_paths {
+            StorePaths::Relative => "Paths: relative to their folder".to_owned(),
+            StorePaths::Full => "Paths: full, without the drive".to_owned(),
+            StorePaths::NamesOnly => "Paths: names only".to_owned(),
+        }]);
         if matches!(
             self.format,
             ArchiveFormat::Tar | ArchiveFormat::TarGz | ArchiveFormat::TarXz

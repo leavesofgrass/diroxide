@@ -178,6 +178,47 @@ fn xz_holds_one_file() {
     assert_eq!(two.to_string(), folder.to_string());
 }
 
+/// W2g's finding (P2b): a plain xz whose name is not the file's own name
+/// and `.xz` (`diro archive pack one.xz notes.txt`) failed its own test
+/// after packing, since an xz keeps no name and reads back as its own
+/// stem. The member is stored and checked as `one`, and the plan says so.
+#[test]
+fn an_xz_named_otherwise_holds_its_file_as_its_stem() {
+    let world = World::plain();
+    let docs = sources(&world);
+    let out = out(&world);
+    let notes = docs.join("notes.txt").unwrap();
+    let destination = out.join("one.xz").unwrap();
+    let request = PackRequest::new(vec![notes], destination.clone(), ArchiveFormat::Xz);
+    let plan = plan_of(&world, &request);
+    assert!(
+        plan.rows()
+            .contains(&"Unpacks as one: xz keeps no name".to_owned()),
+        "{:?}",
+        plan.rows()
+    );
+    let outcome = run_plan(&world, &plan, &Sink::skipping());
+    assert!(outcome.report.failed.is_empty(), "{:?}", outcome.lines);
+    assert_eq!(outcome.lines[1], "Checked 1 of 1 entries, all good.");
+    assert_eq!(
+        unxz(&world.fake.contents(&destination).unwrap()),
+        b"the notes, again and again and again"
+    );
+    assert!(!world.fake.exists(&plan.temp), "nothing is left behind");
+    // The name the file's own and `.xz` needs no such row.
+    let same = PackRequest::new(
+        vec![docs.join("notes.txt").unwrap()],
+        out.join("notes.txt.xz").unwrap(),
+        ArchiveFormat::Xz,
+    );
+    assert!(
+        !plan_of(&world, &same)
+            .rows()
+            .iter()
+            .any(|row| row.starts_with("Unpacks as"))
+    );
+}
+
 #[test]
 fn tar_takes_no_password() {
     let world = World::plain();
