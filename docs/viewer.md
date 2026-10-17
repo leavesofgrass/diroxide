@@ -12,8 +12,9 @@ F3 opens the focused file in the viewer, on top of the panels. It works on a fil
 
 The viewer is for reading. Editing is F4, which hands the file to your editor ([operations and undo](operations.md) describes it).
 
-The title puts the file's name first. Inside an archive it names both: "notes.txt, in course.zip". [Archives](archives.md) explains the member form.
+The title puts the file's name first. Inside an archive it names both: "notes.txt, in course.zip", and for a member in a folder of the archive, "a.txt, in course.zip!week1". [Archives](archives.md) explains the member form.
 
+<!-- to confirm with the wiring: the title of a member in a folder of an archive (the plan's two lines disagree: "notes.txt, in course.zip" and "a.txt, in course.zip!week1"). -->
 ## A file is a list of lines
 
 The viewer shows a file as a list of rows, one for each line, with the hardware cursor on the first cell of the row you are on. A screen reader and a Braille display follow the cursor as they do in a panel, so nothing about reading changes.
