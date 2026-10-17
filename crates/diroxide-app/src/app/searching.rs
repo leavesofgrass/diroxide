@@ -127,8 +127,9 @@ pub(super) struct SearchState {
     current: Option<Box<Search>>,
     /// The last dialog's settings, for the next Find files.
     form: Option<SearchForm>,
-    /// The results lister while the viewer shows a result.
-    parked: Option<Box<Parked>>,
+    /// The dialogs (the results lister, a compare's lists) taken aside
+    /// while the viewer shows one of their files, the top last.
+    parked: Vec<Parked>,
     /// The viewer opening now came from the results: park them.
     park_on_open: bool,
     /// When the focus last moved on a result, for its check.
@@ -661,7 +662,7 @@ impl App {
             label: None,
             day: None,
         }));
-        self.searching.parked = None;
+        self.searching.parked.clear();
         let list = self.results_model();
         self.open_dialog_saying(
             Dialog::Choose {
@@ -728,7 +729,7 @@ impl App {
             label: None,
             day: None,
         }));
-        self.searching.parked = None;
+        self.searching.parked.clear();
         id
     }
 
@@ -849,7 +850,7 @@ impl App {
             label: Some(label.to_owned()),
             day: None,
         }));
-        self.searching.parked = None;
+        self.searching.parked.clear();
         let list = self.results_model();
         let start = format!(
             "Looking for {} labeled {name}",
@@ -970,7 +971,12 @@ impl App {
 
     /// The results lister's list, open or parked.
     fn results_list_mut(&mut self) -> Option<&mut ListModel> {
-        if let Some(parked) = self.searching.parked.as_mut() {
+        if let Some(parked) = self
+            .searching
+            .parked
+            .iter_mut()
+            .rfind(|p| matches!(p.open.purpose, Purpose::Results))
+        {
             return match &mut parked.dialog {
                 Dialog::Choose { list, .. } => Some(list),
                 _ => None,
@@ -1108,7 +1114,7 @@ impl App {
         if self.searching.current.is_none() {
             return vec![self.say(Message::status("No search yet. Find files starts one."))];
         }
-        self.searching.parked = None;
+        self.searching.parked.clear();
         let list = self.results_model();
         let line = match self.searching.current.as_ref() {
             Some(search) if search.running => {
@@ -1404,6 +1410,20 @@ impl App {
         self.view_place_at(hit.place, hit.entry.size, siblings)
     }
 
+    /// The viewer on a file from a dialog (a compared file), at a line,
+    /// the dialogs aside until it closes.
+    pub(super) fn searching_view_at(
+        &mut self,
+        place: Place,
+        size: Option<u64>,
+        siblings: Vec<crate::viewer::Sibling>,
+        line: u64,
+    ) -> Vec<Effect> {
+        self.searching.park_on_open = true;
+        self.searching.view_line = Some(line);
+        self.view_place_at(place, size, siblings)
+    }
+
     /// The edit key on a result: the editor at the matching line.
     fn edit_result(&mut self) -> Vec<Effect> {
         let hit = match self.focused_hit() {
@@ -1667,27 +1687,19 @@ impl App {
         }
     }
 
-    /// Takes the results lister off the dialog stack while the viewer
-    /// shows one of its files.
+    /// Takes every open dialog off the stack while the viewer shows a file
+    /// one of them named (a search result, a compared file).
     pub(super) fn park_results(&mut self) {
-        let Some(index) = self
-            .opens
-            .iter()
-            .rposition(|o| matches!(o.purpose, Purpose::Results))
-        else {
-            return;
-        };
-        if index + 1 != self.dialogs.len() {
-            return;
+        while let (Some((id, dialog)), Some(open)) = (self.dialogs.pop(), self.opens.pop()) {
+            self.searching.parked.push(Parked { id, dialog, open });
         }
-        let (id, dialog) = self.dialogs.remove(index);
-        let open = self.opens.remove(index);
-        self.searching.parked = Some(Box::new(Parked { id, dialog, open }));
+        self.searching.parked.reverse();
     }
 
-    /// Whether the results wait aside while the viewer shows one.
+    /// Whether dialogs wait aside while the viewer shows one of their
+    /// files.
     pub(super) fn results_parked(&self) -> bool {
-        self.searching.parked.is_some()
+        !self.searching.parked.is_empty()
     }
 
     /// Whether a viewer opening now came from the results, which then go
@@ -1701,24 +1713,32 @@ impl App {
         self.searching.view_line.take()
     }
 
-    /// Puts the results lister back after the viewer closed, its focus as
-    /// it was.
+    /// Puts the dialogs back after the viewer closed, each focus as it
+    /// was: "Back in the results, notes.txt, ...".
     pub(super) fn unpark_results(&mut self) -> Vec<Effect> {
-        let Some(parked) = self.searching.parked.take() else {
+        if self.searching.parked.is_empty() {
             return Vec::new();
+        }
+        let mut effects = Vec::new();
+        let opened = self.now();
+        for Parked { id, dialog, open } in std::mem::take(&mut self.searching.parked) {
+            self.dialogs.push((id, dialog));
+            self.opens.push(Open { opened, ..open });
+            effects.push(Effect::OpenDialog(id));
+        }
+        let line = self
+            .dialogs
+            .last()
+            .map(|(_, d)| d.focus_line())
+            .unwrap_or_default();
+        let back = if self.results_on_top() {
+            format!("Back in the results, {line}")
+        } else {
+            format!("Back in {line}")
         };
-        let Parked { id, dialog, open } = *parked;
-        let line = dialog.focus_line();
-        self.dialogs.push((id, dialog));
-        self.opens.push(Open {
-            opened: self.now(),
-            ..open
-        });
-        vec![
-            Effect::OpenDialog(id),
-            Effect::Redraw(Redraw::All),
-            self.say(Message::info(format!("Back in the results, {line}"))),
-        ]
+        effects.push(Effect::Redraw(Redraw::All));
+        effects.push(self.say(Message::info(back)));
+        effects
     }
 
     /// Escape on the results lister, after it closed.

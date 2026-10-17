@@ -13,6 +13,8 @@ publish.workspace = true
 diroxide-archive.workspace = true
 diroxide-config.workspace = true
 diroxide-core.workspace = true
+# Compare files (W3a, over W3d's crate).
+diroxide-diff.workspace = true
 diroxide-filetype.workspace = true
 diroxide-ops.workspace = true
 # The viewer's decoder and highlighter (W2d).

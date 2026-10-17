@@ -20,6 +20,8 @@ mod archive;
 mod archive_forms;
 mod archive_jobs;
 mod bookmarking;
+// Compare files (W3a).
+mod comparing;
 mod dialogs;
 mod files;
 // The panel filter on the filter language (W3a).
@@ -257,6 +259,22 @@ pub enum AppEvent {
         /// The summary, or why not.
         result: Result<diroxide_search::SearchSummary, Message>,
     },
+    /// A compare ended (W3a): what it found, or why not.
+    Compared {
+        /// The request.
+        request: RequestId,
+        /// The comparison, or why not.
+        result: Result<Box<diroxide_diff::FileComparison>, Message>,
+    },
+    /// How far a compare got (W3a), in bytes read of both files.
+    CompareProgress {
+        /// The request.
+        request: RequestId,
+        /// Bytes read so far.
+        done: u64,
+        /// Bytes in all, when known.
+        total: Option<u64>,
+    },
     /// The saved searches were read (W3a), each file with its search or
     /// why it could not be read.
     SavedListed {
@@ -446,6 +464,14 @@ enum Purpose {
     Space(Box<diroxide_search::SpaceList>),
     /// The size sort offered after Size every folder (W3a).
     OfferSizeSort,
+    /// A compare's change list (W3a).
+    Compare(Box<comparing::Compared>),
+    /// A compare's unified view (W3a).
+    Unified(Box<comparing::Compared>),
+    /// The choice for a file too large to compare as text (W3a).
+    CompareLarge(Box<comparing::Pair>),
+    /// The actions on a compare (W3a).
+    CompareMenu,
     /// Copy or move to a place picked from a list.
     PickDestination {
         side: Side,
@@ -692,6 +718,8 @@ pub struct App {
     searching: searching::SearchState,
     /// What the search tools wait for (W3a).
     tools: search_tools::ToolsState,
+    /// The compare on its way (W3a).
+    comparing: comparing::CompareState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1008,6 +1036,7 @@ impl App {
             selecting: selecting::SelectState::default(),
             searching: searching::SearchState::default(),
             tools: search_tools::ToolsState::default(),
+            comparing: comparing::CompareState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1122,6 +1151,9 @@ impl App {
         if self.results_shown() {
             return crate::menu::results_bank().key_bar(&self.keymap);
         }
+        if self.compare_shown() {
+            return crate::menu::compare_bank().key_bar(&self.keymap);
+        }
         self.active_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
@@ -1142,6 +1174,9 @@ impl App {
         }
         if self.results_shown() {
             return crate::menu::results_bank().key_bar_within(&self.keymap, cells);
+        }
+        if self.compare_shown() {
+            return crate::menu::compare_bank().key_bar_within(&self.keymap, cells);
         }
         self.active_bank()
             .map(|bank| bank.key_bar_within(&self.keymap, cells))
@@ -1448,6 +1483,12 @@ impl App {
             }
             AppEvent::SearchDone { search, result } => self.search_done(search, result),
             AppEvent::SavedListed { request, found } => self.saved_listed(request, found),
+            AppEvent::Compared { request, result } => self.compared(request, result),
+            AppEvent::CompareProgress {
+                request,
+                done,
+                total,
+            } => self.compare_progress(request, done, total),
             AppEvent::SpaceListed { request, result } => self.space_listed(request, result),
             AppEvent::LargestFound { search, result } => self.largest_found(search, result),
             AppEvent::DirSized { request, sizes } => self.folders_sized(request, sizes),
@@ -1516,6 +1557,10 @@ impl App {
         }
         // Saved searches, the Space list, sizes and newest files (W3a).
         if let Some(effects) = self.tools_dispatch(command) {
+            return effects;
+        }
+        // Compare files, its properties and the differences (W3a).
+        if let Some(effects) = self.compare_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

@@ -693,6 +693,37 @@ access = "n"
 command = "search.earlier-day"
 access = "d"
 
+# Compare (W3a).
+[[menu.item]]
+menu = "compare"
+access = "o"
+
+[[menu]]
+id = "compare"
+title = "Compare"
+access = "o"
+bar = false
+
+[[menu.item]]
+command = "compare.files"
+access = "f"
+
+[[menu.item]]
+command = "compare.properties"
+access = "p"
+
+[[menu.item]]
+command = "select.differences"
+access = "d"
+
+[[menu.item]]
+command = "compare.next"
+access = "n"
+
+[[menu.item]]
+command = "compare.previous"
+access = "r"
+
 [[menu]]
 id = "select"
 title = "Select"

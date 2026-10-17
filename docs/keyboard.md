@@ -146,6 +146,8 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 
 ### In a question
 
+- F7: Next change. In a compare, goes to the next change. (compare.next)
+- Shift+F7: Previous change. In a compare, goes to the previous change. (compare.previous)
 - Y: Yes. Answers yes to the question. (dialog.yes)
 - N: No. Answers no to the question. (dialog.no)
 - Enter: Accept. Chooses the focused answer. (dialog.accept)
@@ -187,6 +189,9 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Run a command. Asks for a command line and runs it in this folder. (file.run-command)
 - Shell here. Opens your shell in this folder; exit it to come back. (file.shell-here)
 - Clear filter. Shows every name again. (view.filter-clear)
+- Compare files. Compares two files: two marked here, or one in each panel, from the other panel's to this one's. (compare.files)
+- Compare properties. Lists what differs between two files' size, times, type, permissions and owner. (compare.properties)
+- Select the differences. Marks, in both panels, what is on one side only and what differs in size or is newer. (select.differences)
 - Say filter. Says the panel's filter in one sentence, with the real days of date words such as last week. (view.say-filter)
 - Stash filter. Keeps the panel's filter aside and shows everything; Restore filter brings it back. (view.filter-stash)
 - Restore filter. Brings back the filter kept aside last. (view.filter-restore)
@@ -385,6 +390,8 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 
 ### In a question
 
+- F7: Next change. In a compare, goes to the next change. (compare.next)
+- Shift+F7: Previous change. In a compare, goes to the previous change. (compare.previous)
 - Y: Yes. Answers yes to the question. (dialog.yes)
 - N: No. Answers no to the question. (dialog.no)
 - Enter: Accept. Chooses the focused answer. (dialog.accept)
@@ -421,6 +428,9 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Run a command. Asks for a command line and runs it in this folder. (file.run-command)
 - Shell here. Opens your shell in this folder; exit it to come back. (file.shell-here)
 - Clear filter. Shows every name again. (view.filter-clear)
+- Compare files. Compares two files: two marked here, or one in each panel, from the other panel's to this one's. (compare.files)
+- Compare properties. Lists what differs between two files' size, times, type, permissions and owner. (compare.properties)
+- Select the differences. Marks, in both panels, what is on one side only and what differs in size or is newer. (select.differences)
 - Say filter. Says the panel's filter in one sentence, with the real days of date words such as last week. (view.say-filter)
 - Stash filter. Keeps the panel's filter aside and shows everything; Restore filter brings it back. (view.filter-stash)
 - Restore filter. Brings back the filter kept aside last. (view.filter-restore)
@@ -490,6 +500,7 @@ These keys of the terminal list work in most terminals, but a terminal program m
 - Menu for Context menu: Windows keeps it; crossterm never delivers the Menu key in a Windows terminal; Shift+F10 is the way. Sure way: File menu, Context menu.
 - Ctrl+C for Copy: Windows Terminal keeps it; it copies text when text is selected. Sure way: Edit menu, Copy.
 - Ctrl+V for Paste: Windows Terminal keeps it; it pastes text, so the key never arrives. Sure way: Edit menu, Paste.
+- Shift+F7 for Previous change: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: Search menu, Compare submenu, Previous change.
 - Ctrl+F3 for Sort by name: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by name.
 - Ctrl+F4 for Sort by extension: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by extension.
 - Ctrl+F5 for Sort by modified: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by modified.

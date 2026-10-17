@@ -403,6 +403,20 @@ pub enum Request {
         /// The places.
         places: Vec<Place>,
     },
+    /// Compare two files on a worker (W3a); answered as
+    /// [`AppEvent::Compared`](crate::AppEvent::Compared), with
+    /// [`AppEvent::CompareProgress`](crate::AppEvent::CompareProgress)
+    /// meanwhile.
+    Compare {
+        /// The request.
+        request: diroxide_core::RequestId,
+        /// The file read from.
+        before: Place,
+        /// The file read to.
+        after: Place,
+        /// What it ignores, its limits.
+        options: diroxide_diff::FileOptions,
+    },
     /// Write a saved search to the state folder's `saved` folder (W3a).
     SaveSearch(Box<diroxide_search::Saved>),
     /// Read the saved searches (W3a); answered as

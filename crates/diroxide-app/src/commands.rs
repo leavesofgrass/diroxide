@@ -581,6 +581,20 @@ pub mod ids {
         /// Newest files of the day before the one listed.
         EARLIER_DAY = "search.earlier-day";
     }
+
+    // Compare files (W3a, plan commit 40).
+    ids! {
+        /// Compare two files: two marked here, or one in each panel.
+        COMPARE_FILES = "compare.files";
+        /// The properties that differ between two files.
+        COMPARE_PROPERTIES = "compare.properties";
+        /// Mark what differs between the two panels.
+        SELECT_DIFFERENCES = "select.differences";
+        /// The next change in a compare.
+        COMPARE_NEXT = "compare.next";
+        /// The previous change in a compare.
+        COMPARE_PREVIOUS = "compare.previous";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -605,7 +619,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 208] = [
+pub static CATALOG: [CommandInfo; 213] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1349,6 +1363,46 @@ pub static CATALOG: [CommandInfo; 208] = [
         Panel,
         &[],
         &[],
+    ),
+    command(
+        ids::COMPARE_FILES,
+        "Compare files",
+        "Compares two files: two marked here, or one in each panel, from the other panel's to this one's.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPARE_PROPERTIES,
+        "Compare properties",
+        "Lists what differs between two files' size, times, type, permissions and owner.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_DIFFERENCES,
+        "Select the differences",
+        "Marks, in both panels, what is on one side only and what differs in size or is newer.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPARE_NEXT,
+        "Next change",
+        "In a compare, goes to the next change.",
+        Dialog,
+        &["f7"],
+        &["f7"],
+    ),
+    command(
+        ids::COMPARE_PREVIOUS,
+        "Previous change",
+        "In a compare, goes to the previous change.",
+        Dialog,
+        &["shift+f7"],
+        &["shift+f7"],
     ),
     command(
         ids::SAY_FILTER,

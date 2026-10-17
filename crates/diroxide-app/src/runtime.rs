@@ -1089,6 +1089,18 @@ impl Runtime {
                     });
                 });
             }
+            Request::Compare {
+                request,
+                before,
+                after,
+                options,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let result = compare_two(shared, &registry, request, &before, &after, &options);
+                    shared.send(AppEvent::Compared { request, result });
+                });
+            }
             Request::SaveSearch(saved) => {
                 if let Some(paths) = &self.paths {
                     let folder = paths.state_dir.join(diroxide_search::SAVED_FOLDER);
@@ -1621,6 +1633,75 @@ impl Runtime {
                 .flat_map(|event| app.handle(event))
                 .collect();
         }
+    }
+}
+
+/// Compares two files for the app, the progress sent at most four times a
+/// second; a cancel says "Not compared".
+fn compare_two(
+    shared: &Arc<Shared>,
+    registry: &Registry,
+    request: RequestId,
+    before: &Place,
+    after: &Place,
+    options: &diroxide_diff::FileOptions,
+) -> Result<Box<diroxide_diff::FileComparison>, Message> {
+    use diroxide_diff::{DiffError, FileSide, Verdict, compare_files, verdict_line};
+    let name = |place: &Place| crate::panel::place_leaf(place);
+    let before_provider = registry
+        .resolve(before)
+        .map_err(|e| Message::from_error("compare", &name(before), &e))?;
+    let after_provider = registry
+        .resolve(after)
+        .map_err(|e| Message::from_error("compare", &name(after), &e))?;
+    let sink = Arc::new(CompareSink {
+        shared: Arc::clone(shared),
+        request,
+        sent: Mutex::new(None),
+    });
+    let ctx = OpContext::new().with_progress(sink);
+    let result = compare_files(
+        FileSide {
+            provider: before_provider.as_ref(),
+            place: before,
+        },
+        FileSide {
+            provider: after_provider.as_ref(),
+            place: after,
+        },
+        options,
+        &ctx,
+    );
+    match result {
+        Ok(result) => Ok(Box::new(result)),
+        Err(DiffError::Cancelled) => Err(Message::info(verdict_line(
+            Verdict::NotCompared,
+            &name(after),
+            &name(before),
+        ))),
+        Err(error) => Err(Message::from_error("compare", &name(after), &error)),
+    }
+}
+
+/// Sends a compare's progress to the app, thinned.
+struct CompareSink {
+    shared: Arc<Shared>,
+    request: RequestId,
+    sent: Mutex<Option<Instant>>,
+}
+
+impl ProgressSink for CompareSink {
+    fn report(&self, update: ProgressUpdate) {
+        let mut sent = lock(&self.sent);
+        if sent.is_some_and(|at| at.elapsed() < Duration::from_millis(250)) {
+            return;
+        }
+        *sent = Some(Instant::now());
+        self.shared.send(AppEvent::CompareProgress {
+            request: self.request,
+            done: update.bytes_done,
+            total: update.bytes_total,
+        });
     }
 }
 

@@ -173,6 +173,9 @@ impl App {
         if let Some(effects) = self.space_key(&key) {
             return effects;
         }
+        if let Some(effects) = self.compare_key(&key) {
+            return effects;
+        }
         // The labels', bookmarks' and History lists' own keys (W3l).
         if let Some(effects) = self.organize_key(&key) {
             return effects;
@@ -400,6 +403,9 @@ impl App {
             }
             Purpose::DeleteSaved(..) => {
                 effects.push(self.say(Message::info("Nothing deleted.")));
+            }
+            Purpose::CompareLarge(_) => {
+                effects.push(self.say(Message::info("Nothing was compared.")));
             }
             Purpose::Rename {
                 side, rest, done, ..
@@ -846,6 +852,19 @@ impl App {
             }
             Purpose::Results => self.open_result(),
             Purpose::SaveSearchName => self.save_search_named(&text),
+            Purpose::Compare(compared) => match row {
+                Some(row) => self.change_detail(*compared, &row),
+                None => Vec::new(),
+            },
+            Purpose::Unified(compared) => self.unified_view_line(*compared),
+            Purpose::CompareLarge(pair) => match row {
+                Some(row) => self.large_chosen(*pair, &row),
+                None => Vec::new(),
+            },
+            Purpose::CompareMenu => match row {
+                Some(row) => self.compare_action(&row),
+                None => Vec::new(),
+            },
             Purpose::SavedList(rows) => match row {
                 Some(row) => self.saved_chosen(rows, &row),
                 None => Vec::new(),

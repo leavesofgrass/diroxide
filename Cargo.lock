@@ -878,6 +878,7 @@ dependencies = [
  "diroxide-archive",
  "diroxide-config",
  "diroxide-core",
+ "diroxide-diff",
  "diroxide-filetype",
  "diroxide-ops",
  "diroxide-preview",

@@ -590,6 +590,27 @@ pub fn results_bank() -> Bank {
     }
 }
 
+/// The key bar in a compare's change list (W3a): the change keys first.
+pub fn compare_bank() -> Bank {
+    let buttons = [
+        ("Next", ids::COMPARE_NEXT),
+        ("Previous", ids::COMPARE_PREVIOUS),
+        ("View", ids::VIEW),
+        ("Actions", ids::CONTEXT_MENU),
+        ("Status", ids::SAY_STATUS),
+    ];
+    Bank {
+        name: "Compare".to_owned(),
+        buttons: buttons
+            .into_iter()
+            .map(|(label, id)| Button {
+                label: label.to_owned(),
+                commands: vec![Command::new(id)],
+            })
+            .collect(),
+    }
+}
+
 /// The key bar in the quick view's preview region (plan commit 64): its
 /// own keys, Escape first.
 pub fn preview_bank() -> Bank {

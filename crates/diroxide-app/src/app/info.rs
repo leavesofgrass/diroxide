@@ -162,12 +162,15 @@ impl App {
         let viewer_bank = crate::menu::viewer_bank();
         let preview_bank = crate::menu::preview_bank();
         let results_bank = crate::menu::results_bank();
+        let compare_bank = crate::menu::compare_bank();
         let bank = if self.viewer_open() {
             Some(&viewer_bank)
         } else if self.in_preview() {
             Some(&preview_bank)
         } else if self.results_shown() {
             Some(&results_bank)
+        } else if self.compare_shown() {
+            Some(&compare_bank)
         } else {
             self.active_bank()
         };

@@ -10,6 +10,8 @@ mod archives;
 mod bookmarks;
 mod braille;
 mod commands;
+// Compare files (W3a).
+mod comparing;
 mod dialogs;
 // The panel filter on the filter language (W3a).
 mod filtering;
