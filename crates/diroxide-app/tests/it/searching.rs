@@ -169,7 +169,7 @@ fn show_in_its_folder_refine_and_the_actions_list() {
     // The context menu's key lists the actions.
     let said = f.s.key("shift+f10");
     assert!(
-        said[0].starts_with("Actions on the results, View at the match, F3, 1 of 10"),
+        said[0].starts_with("Actions on the results, View at the match, F3, 1 of 12"),
         "{said:?}"
     );
     f.s.key("escape");

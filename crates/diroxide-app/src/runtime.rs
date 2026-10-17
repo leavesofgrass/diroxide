@@ -1089,6 +1089,132 @@ impl Runtime {
                     });
                 });
             }
+            Request::SaveSearch(saved) => {
+                if let Some(paths) = &self.paths {
+                    let folder = paths.state_dir.join(diroxide_search::SAVED_FOLDER);
+                    if let Err(error) = saved.save(&folder) {
+                        let line = format!("Could not save the search: {error}");
+                        self.queue
+                            .push_back(AppEvent::Problem(Message::error(line)));
+                    }
+                }
+            }
+            Request::ListSaved { request } => {
+                let folder = self
+                    .paths
+                    .as_ref()
+                    .map(|p| p.state_dir.join(diroxide_search::SAVED_FOLDER));
+                self.worker(move |shared| {
+                    let found = folder
+                        .map(|folder| {
+                            diroxide_search::Saved::list(&folder)
+                                .into_iter()
+                                .map(|(path, result)| (path, result.map_err(|e| e.to_string())))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    shared.send(AppEvent::SavedListed { request, found });
+                });
+            }
+            Request::DeleteSaved(path) => {
+                // Only a file inside the saved searches' own folder.
+                let inside = self.paths.as_ref().is_some_and(|p| {
+                    path.parent() == Some(p.state_dir.join(diroxide_search::SAVED_FOLDER).as_path())
+                        && path.extension().is_some_and(|x| x == "toml")
+                });
+                if inside && let Err(error) = std::fs::remove_file(&path) {
+                    let line = format!("Could not delete the saved search: {error}");
+                    self.queue
+                        .push_back(AppEvent::Problem(Message::error(line)));
+                }
+            }
+            Request::SpaceList {
+                request,
+                place,
+                grouping,
+                clock,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    use diroxide_search::{Grouping, SearchControl};
+                    let control = SearchControl::new();
+                    let leaf = crate::panel::place_leaf(&place);
+                    let result = match grouping {
+                        Grouping::Kind => {
+                            diroxide_search::space_by_kind(&place, &registry, &control)
+                        }
+                        Grouping::Age => diroxide_search::space_by_age(
+                            &place,
+                            &registry,
+                            clock.0.as_ref(),
+                            &control,
+                        ),
+                        _ => diroxide_search::space_list(&place, &registry, &control),
+                    }
+                    .map_err(|error| Message::from_error("count", &leaf, &error));
+                    shared.send(AppEvent::SpaceListed { request, result });
+                });
+            }
+            Request::Largest {
+                search,
+                place,
+                limit,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let control = diroxide_search::SearchControl::new();
+                    let leaf = crate::panel::place_leaf(&place);
+                    let result = diroxide_search::largest_below(&place, &registry, &control, limit)
+                        .map_err(|error| Message::from_error("search", &leaf, &error));
+                    shared.send(AppEvent::LargestFound { search, result });
+                });
+            }
+            Request::DirSizes { request, places } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let control = diroxide_search::SearchControl::new();
+                    let sizes = diroxide_search::size_every_folder(
+                        &places,
+                        &registry,
+                        &control,
+                        &mut |_, _| {},
+                    )
+                    .into_iter()
+                    .map(|(place, result)| {
+                        let leaf = crate::panel::place_leaf(&place);
+                        let result =
+                            result.map_err(|error| Message::from_error("size", &leaf, &error));
+                        (place, result)
+                    })
+                    .collect();
+                    shared.send(AppEvent::DirSized { request, sizes });
+                });
+            }
+            Request::Newest {
+                search,
+                scope,
+                before,
+                clock,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let control = diroxide_search::SearchControl::new();
+                    let leaf = scope
+                        .places
+                        .first()
+                        .map(crate::panel::place_leaf)
+                        .unwrap_or_default();
+                    let result = diroxide_search::newest_files(
+                        &scope,
+                        &registry,
+                        clock.0.as_ref(),
+                        &control,
+                        before,
+                    )
+                    .map_err(|error| Message::from_error("search", &leaf, &error));
+                    shared.send(AppEvent::NewestFound { search, result });
+                });
+            }
             Request::StopSearch => {
                 if let Some((_, control)) = &self.search {
                     control.cancel();

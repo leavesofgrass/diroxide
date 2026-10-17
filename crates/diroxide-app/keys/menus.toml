@@ -653,6 +653,46 @@ access = "i"
 command = "search.remove-row"
 access = "m"
 
+[[menu.item]]
+command = "search.save"
+access = "s"
+
+[[menu.item]]
+command = "search.saved"
+access = "v"
+
+[[menu.item]]
+command = "search.space"
+access = "c"
+
+[[menu.item]]
+command = "search.space-by-kind"
+access = "k"
+
+[[menu.item]]
+command = "search.space-by-age"
+access = "a"
+
+[[menu.item]]
+command = "search.largest"
+access = "l"
+
+[[menu.item]]
+command = "dir.sizes"
+access = "z"
+
+[[menu.item]]
+command = "dir.size-every-folder"
+access = "e"
+
+[[menu.item]]
+command = "search.newest"
+access = "n"
+
+[[menu.item]]
+command = "search.earlier-day"
+access = "d"
+
 [[menu]]
 id = "select"
 title = "Select"

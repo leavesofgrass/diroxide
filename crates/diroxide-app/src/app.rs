@@ -31,6 +31,8 @@ mod labeling;
 mod nav;
 mod organize;
 mod preview;
+// Saved searches, the Space list, sizes and newest files (W3a).
+mod search_tools;
 // Search, its dialog and its results (W3a).
 mod searching;
 mod select;
@@ -255,6 +257,42 @@ pub enum AppEvent {
         /// The summary, or why not.
         result: Result<diroxide_search::SearchSummary, Message>,
     },
+    /// The saved searches were read (W3a), each file with its search or
+    /// why it could not be read.
+    SavedListed {
+        /// The request.
+        request: RequestId,
+        /// The files found.
+        found: Vec<(std::path::PathBuf, Result<diroxide_search::Saved, String>)>,
+    },
+    /// A Space list was counted (W3a).
+    SpaceListed {
+        /// The request.
+        request: RequestId,
+        /// The list, or why not.
+        result: Result<diroxide_search::SpaceList, Message>,
+    },
+    /// The largest items below a folder were found (W3a).
+    LargestFound {
+        /// The results' search number.
+        search: u64,
+        /// What was found, or why not.
+        result: Result<diroxide_search::Largest, Message>,
+    },
+    /// Folders were sized (W3a), each with its size or why not.
+    DirSized {
+        /// The request.
+        request: RequestId,
+        /// The sizes.
+        sizes: Vec<(Place, Result<diroxide_search::DirSize, Message>)>,
+    },
+    /// Newest files were found (W3a).
+    NewestFound {
+        /// The results' search number.
+        search: u64,
+        /// What was found, or why not.
+        result: Result<diroxide_search::Newest, Message>,
+    },
     /// A label's items were looked up for the results lister (W3a).
     LabeledFound {
         /// The search.
@@ -398,6 +436,16 @@ enum Purpose {
     Refine,
     /// The actions on the results (W3a).
     ResultsMenu,
+    /// The name to save the last search under (W3a).
+    SaveSearchName,
+    /// The saved searches (W3a).
+    SavedList(Vec<search_tools::SavedRow>),
+    /// The question before a saved search is deleted (W3a).
+    DeleteSaved(std::path::PathBuf, String),
+    /// A Space list (W3a).
+    Space(Box<diroxide_search::SpaceList>),
+    /// The size sort offered after Size every folder (W3a).
+    OfferSizeSort,
     /// Copy or move to a place picked from a list.
     PickDestination {
         side: Side,
@@ -642,6 +690,8 @@ pub struct App {
     selecting: selecting::SelectState,
     /// The search dialog, the results and their parking (W3a).
     searching: searching::SearchState,
+    /// What the search tools wait for (W3a).
+    tools: search_tools::ToolsState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -957,6 +1007,7 @@ impl App {
             filtering: filtering::FilterState::default(),
             selecting: selecting::SelectState::default(),
             searching: searching::SearchState::default(),
+            tools: search_tools::ToolsState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1396,6 +1447,11 @@ impl App {
                 self.search_progress(search, &progress)
             }
             AppEvent::SearchDone { search, result } => self.search_done(search, result),
+            AppEvent::SavedListed { request, found } => self.saved_listed(request, found),
+            AppEvent::SpaceListed { request, result } => self.space_listed(request, result),
+            AppEvent::LargestFound { search, result } => self.largest_found(search, result),
+            AppEvent::DirSized { request, sizes } => self.folders_sized(request, sizes),
+            AppEvent::NewestFound { search, result } => self.newest_found(search, result),
             AppEvent::LabeledFound {
                 search,
                 found,
@@ -1456,6 +1512,10 @@ impl App {
         }
         // Find files and the results' commands (W3a).
         if let Some(effects) = self.search_dispatch(command) {
+            return effects;
+        }
+        // Saved searches, the Space list, sizes and newest files (W3a).
+        if let Some(effects) = self.tools_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

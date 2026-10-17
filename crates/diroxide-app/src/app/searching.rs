@@ -106,6 +106,8 @@ pub(super) struct Search {
     /// The label whose items these are, when the Labels list opened them:
     /// the trash key then takes the label off.
     label: Option<String>,
+    /// The day newest files listed, for Earlier day.
+    day: Option<diroxide_search::Day>,
 }
 
 /// The results lister taken off the dialog stack while the viewer shows
@@ -657,6 +659,7 @@ impl App {
             stale: HashMap::new(),
             removed: HashSet::new(),
             label: None,
+            day: None,
         }));
         self.searching.parked = None;
         let list = self.results_model();
@@ -668,6 +671,141 @@ impl App {
             Purpose::Results,
             Message::info(start),
         )
+    }
+
+    /// Runs a search from its query (a saved search), titled by its name
+    /// when it has one.
+    pub(super) fn start_query_search(
+        &mut self,
+        query: SearchQuery,
+        name: Option<String>,
+    ) -> Vec<Effect> {
+        let root = match query.scope.places.as_slice() {
+            [one] => Some(one.clone()),
+            _ => None,
+        };
+        let (title, start) = match &name {
+            Some(name) => (
+                format!("Results: {name}"),
+                format!("Running {name}: {}", query.start_line()),
+            ),
+            None => (format!("Results: {}", query.sentence()), query.start_line()),
+        };
+        let id = self.begin_results(query.clone(), root, title, start.clone());
+        self.request(Request::Search {
+            search: id,
+            query: Box::new(query),
+            clock: SharedClock(Arc::clone(&self.clock)),
+        });
+        self.open_results_saying(start)
+    }
+
+    /// A new search's state, running, its results empty: returns its
+    /// number.
+    pub(super) fn begin_results(
+        &mut self,
+        query: SearchQuery,
+        root: Option<Place>,
+        title: String,
+        _start: String,
+    ) -> u64 {
+        self.searching.next += 1;
+        let id = self.searching.next;
+        self.searching.current = Some(Box::new(Search {
+            id,
+            query,
+            root,
+            title,
+            hits: Vec::new(),
+            running: true,
+            paused: false,
+            found: 0,
+            summary: None,
+            said_at: Some(self.now()),
+            refine: None,
+            stale: HashMap::new(),
+            removed: HashSet::new(),
+            label: None,
+            day: None,
+        }));
+        self.searching.parked = None;
+        id
+    }
+
+    /// Opens the results lister of the current search, saying `start`.
+    pub(super) fn open_results_saying(&mut self, start: String) -> Vec<Effect> {
+        let list = self.results_model();
+        self.open_dialog_saying(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::SEARCH_RESULTS),
+            },
+            Purpose::Results,
+            Message::info(start),
+        )
+    }
+
+    /// Hits found all at once (the largest items, newest files): they fill
+    /// the results, the end said; newest files retitle them with the day.
+    pub(super) fn finish_results(
+        &mut self,
+        id: u64,
+        hits: Vec<SearchHit>,
+        line: String,
+        newest: Option<(String, Option<diroxide_search::Day>)>,
+    ) -> Vec<Effect> {
+        let Some(search) = self.searching.current.as_mut().filter(|s| s.id == id) else {
+            return Vec::new();
+        };
+        search.running = false;
+        search.found = hits.len() as u64;
+        search.hits = hits;
+        if let Some((title, day)) = newest {
+            search.title = title;
+            search.day = day;
+        }
+        let title = search.title.clone();
+        let rows = match self.searching.current.as_ref() {
+            Some(search) => self.result_rows(search),
+            None => Vec::new(),
+        };
+        if let Some(list) = self.results_list_mut() {
+            list.set_rows(rows);
+            list.set_title(title);
+            list.set_empty_text("Nothing found");
+        }
+        self.searching.stale_at = Some(self.now());
+        vec![Effect::Redraw(Redraw::All), self.say(Message::done(line))]
+    }
+
+    /// A walk for the results failed: it is said, and the list stays.
+    pub(super) fn finish_results_failed(&mut self, id: u64, message: Message) -> Vec<Effect> {
+        if let Some(search) = self.searching.current.as_mut().filter(|s| s.id == id) {
+            search.running = false;
+        }
+        if let Some(list) = self.results_list_mut() {
+            list.set_empty_text("Nothing found");
+        }
+        vec![Effect::Redraw(Redraw::All), self.say(message)]
+    }
+
+    /// The day the newest files on the screen were changed.
+    pub(super) fn newest_day(&self) -> Option<diroxide_search::Day> {
+        self.searching.current.as_ref()?.day
+    }
+
+    /// The last search's query and a name to save it under: its sentence.
+    pub(super) fn last_search_query(&self) -> Option<(String, SearchQuery)> {
+        let search = self.searching.current.as_ref()?;
+        if search.label.is_some() {
+            return None;
+        }
+        let name = search
+            .title
+            .strip_prefix("Results: ")
+            .unwrap_or(&search.title)
+            .to_owned();
+        Some((name, search.query.clone()))
     }
 
     /// Enter on a row of the Labels list: the label's items as results,
@@ -709,6 +847,7 @@ impl App {
             stale: HashMap::new(),
             removed: HashSet::new(),
             label: Some(label.to_owned()),
+            day: None,
         }));
         self.searching.parked = None;
         let list = self.results_model();
@@ -1103,7 +1242,7 @@ impl App {
     /// The actions on the results, as a list (the context menu's key):
     /// each runs on the marked results, or the focused one.
     fn results_menu(&mut self) -> Vec<Effect> {
-        let actions: [(CommandId, &str); 10] = [
+        let actions: [(CommandId, &str); 12] = [
             (ids::VIEW, "View at the match"),
             (ids::EDIT, "Edit at the line"),
             (ids::SEARCH_SHOW_IN_FOLDER, "Show in its folder"),
@@ -1114,6 +1253,8 @@ impl App {
             (ids::SEARCH_REMOVE_ROW, "Remove from results"),
             (ids::SEARCH_PAUSE, "Pause or resume search"),
             (ids::FIND, "Search again"),
+            (ids::SEARCH_SAVE, "Save this search"),
+            (ids::EARLIER_DAY, "Earlier day"),
         ];
         let rows = actions
             .iter()
@@ -1612,7 +1753,6 @@ impl App {
             Some((_, dialog)) => dialog.focus_line(),
             None => String::new(),
         };
-        let _ = &search.query;
         Some(format!("{state}. {focus}"))
     }
 }

@@ -556,6 +556,31 @@ pub mod ids {
         /// Take the focused result out of the list, the file staying.
         SEARCH_REMOVE_ROW = "search.remove-row";
     }
+
+    // Saved searches, the Space list, sizes and newest files (W3a, plan
+    // commit 38).
+    ids! {
+        /// Save the last search under a name.
+        SEARCH_SAVE = "search.save";
+        /// The saved searches; Enter runs one.
+        SEARCH_SAVED = "search.saved";
+        /// What takes the space in this folder, item by item.
+        SPACE_LIST = "search.space";
+        /// What takes the space below this folder, by kind of file.
+        SPACE_BY_KIND = "search.space-by-kind";
+        /// What takes the space below this folder, by age.
+        SPACE_BY_AGE = "search.space-by-age";
+        /// The largest files anywhere below this folder.
+        LARGEST_BELOW = "search.largest";
+        /// The size of the marked folders, or the focused one.
+        DIR_SIZES = "dir.sizes";
+        /// The size of every folder in the panel.
+        SIZE_EVERY_FOLDER = "dir.size-every-folder";
+        /// The files changed on the latest day below this folder.
+        NEWEST_FILES = "search.newest";
+        /// Newest files of the day before the one listed.
+        EARLIER_DAY = "search.earlier-day";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -580,7 +605,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 198] = [
+pub static CATALOG: [CommandInfo; 208] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1326,46 +1351,6 @@ pub static CATALOG: [CommandInfo; 198] = [
         &[],
     ),
     command(
-        ids::FIND,
-        "Find files",
-        "Searches names and contents below this folder or the marked items, the results listed as they are found.",
-        Panel,
-        &["ctrl+f"],
-        &["ctrl+f"],
-    ),
-    command(
-        ids::SEARCH_RESULTS,
-        "Search results",
-        "Opens the last search's results again.",
-        Panel,
-        &[],
-        &[],
-    ),
-    command(
-        ids::SEARCH_PAUSE,
-        "Pause search",
-        "In the search results, holds the running search; again, it goes on.",
-        List,
-        &["f2"],
-        &["f2"],
-    ),
-    command(
-        ids::SEARCH_SHOW_IN_FOLDER,
-        "Show in its folder",
-        "In the search results, shows the focused result in its folder.",
-        List,
-        &[],
-        &[],
-    ),
-    command(
-        ids::SEARCH_REMOVE_ROW,
-        "Remove from results",
-        "In the search results, takes the focused row out of the list; the file stays.",
-        List,
-        &[],
-        &[],
-    ),
-    command(
         ids::SAY_FILTER,
         "Say filter",
         "Says the panel's filter in one sentence, with the real days of date words such as last week.",
@@ -1500,6 +1485,126 @@ pub static CATALOG: [CommandInfo; 198] = [
         Panel,
         &[],
         &["ctrl+shift+s"],
+    ),
+    command(
+        ids::FIND,
+        "Find files",
+        "Searches names and contents below this folder or the marked items, the results listed as they are found.",
+        Panel,
+        &["ctrl+f"],
+        &["ctrl+f"],
+    ),
+    command(
+        ids::SEARCH_RESULTS,
+        "Search results",
+        "Opens the last search's results again.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_PAUSE,
+        "Pause search",
+        "In the search results, holds the running search; again, it goes on.",
+        List,
+        &["f2"],
+        &["f2"],
+    ),
+    command(
+        ids::SEARCH_SHOW_IN_FOLDER,
+        "Show in its folder",
+        "In the search results, shows the focused result in its folder.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_REMOVE_ROW,
+        "Remove from results",
+        "In the search results, takes the focused row out of the list; the file stays.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_SAVE,
+        "Save this search",
+        "Keeps the last search under a name, so Saved searches runs it again.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_SAVED,
+        "Saved searches",
+        "Lists the saved searches, each run again when chosen, its date words read anew.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SPACE_LIST,
+        "Space list",
+        "Lists what takes the space in this folder, the largest first, with the percent of the total.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SPACE_BY_KIND,
+        "Space by kind",
+        "Lists the space below this folder by kind of file: images, music, video and the rest.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SPACE_BY_AGE,
+        "Space by age",
+        "Lists the space below this folder by when the files last changed.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LARGEST_BELOW,
+        "Largest items below here",
+        "Lists the largest files anywhere below this folder, as search results.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::DIR_SIZES,
+        "Folder sizes",
+        "Counts the size of the marked folders, or the focused one, everything inside them.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SIZE_EVERY_FOLDER,
+        "Size every folder",
+        "Counts the size of every folder here, then offers to sort by size.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::NEWEST_FILES,
+        "Newest files",
+        "Lists the files changed on the latest day below this folder, as search results.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::EARLIER_DAY,
+        "Earlier day",
+        "In newest files, lists the files of the day before.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::LABEL_SET,

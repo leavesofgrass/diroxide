@@ -111,7 +111,15 @@ pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> Lis
         details.push(labels);
     }
     for column in columns {
-        let detail = column.cell(entry, clock);
+        let mut detail = column.cell(entry, clock);
+        // A folder whose size was counted says it where a file's size goes.
+        if detail.is_empty()
+            && *column == ColumnKind::Size
+            && entry.kind == EntryKind::Folder
+            && let Some(size) = entry.size
+        {
+            detail = human_size(size);
+        }
         if !detail.is_empty() {
             details.push(detail);
         }
@@ -288,6 +296,8 @@ pub struct Panel {
     sort: SortSpec,
     show_hidden: bool,
     columns: Vec<ColumnKind>,
+    /// Folder sizes counted here, by name, until the panel leaves.
+    counted: HashMap<String, u64>,
     filter: Option<PanelFilter>,
     /// What the filter could not decide at the last refresh.
     tally: Tally,
@@ -314,6 +324,7 @@ impl Panel {
             sort: settings.sort_spec(),
             show_hidden: settings.show_hidden,
             columns: settings.column_kinds(),
+            counted: HashMap::new(),
             filter: None,
             tally: Tally::default(),
             history: Vec::new(),
@@ -567,6 +578,7 @@ impl Panel {
             self.list.set_title(place_title(&self.place));
             self.filter = None;
             self.tally = Tally::default();
+            self.counted.clear();
             self.capabilities = None;
             self.watching = Watching::Unknown;
             self.list.set_rows(Vec::new());
@@ -636,6 +648,12 @@ impl Panel {
         for entry in &mut entries {
             if entry.type_name.is_none() {
                 entry.type_name = types.short_name(entry);
+            }
+            // A folder's size counted here stays with it (W3a).
+            if entry.kind == EntryKind::Folder
+                && let Some(size) = self.counted.get(&entry.name)
+            {
+                entry.size = Some(*size);
             }
             // Every provider's names are checked the same way, so a row
             // says "name needs care" whatever served it.
@@ -747,6 +765,27 @@ impl Panel {
             .filter(|e| hidden || !e.hidden)
             .count();
         (self.entries.len(), visible)
+    }
+
+    /// Notes the sizes of folders counted here (Folder sizes, Size every
+    /// folder): their rows say the size, and the size sort uses it, until
+    /// the panel leaves the folder.
+    pub fn set_folder_sizes(
+        &mut self,
+        sizes: &HashMap<String, u64>,
+        clock: &dyn Clock,
+    ) -> RowsReplaced {
+        for (name, size) in sizes {
+            self.counted.insert(name.clone(), *size);
+        }
+        for entry in &mut self.all_entries {
+            if entry.kind == EntryKind::Folder
+                && let Some(size) = self.counted.get(&entry.name)
+            {
+                entry.size = Some(*size);
+            }
+        }
+        self.refresh(clock)
     }
 
     /// The ids of the rows shown whose entries a filter matches, in row

@@ -167,6 +167,12 @@ impl App {
         if let Some(effects) = self.search_form_key(&key) {
             return effects;
         }
+        if let Some(effects) = self.saved_key(&key) {
+            return effects;
+        }
+        if let Some(effects) = self.space_key(&key) {
+            return effects;
+        }
         // The labels', bookmarks' and History lists' own keys (W3l).
         if let Some(effects) = self.organize_key(&key) {
             return effects;
@@ -392,6 +398,9 @@ impl App {
             Purpose::SelectCount { .. } => {
                 effects.push(self.say(Message::info("Nothing changed.")));
             }
+            Purpose::DeleteSaved(..) => {
+                effects.push(self.say(Message::info("Nothing deleted.")));
+            }
             Purpose::Rename {
                 side, rest, done, ..
             } => match rest.split_first() {
@@ -467,6 +476,8 @@ impl App {
             Purpose::SelectCount { side, select, ids } => {
                 effects.extend(self.select_counted(side, select, ids));
             }
+            Purpose::DeleteSaved(path, name) => effects.extend(self.delete_saved(path, &name)),
+            Purpose::OfferSizeSort => effects.extend(self.sort_by_size_now()),
             _ => {}
         }
         effects
@@ -834,6 +845,15 @@ impl App {
                 self.search_text_entered(*form, field, &text)
             }
             Purpose::Results => self.open_result(),
+            Purpose::SaveSearchName => self.save_search_named(&text),
+            Purpose::SavedList(rows) => match row {
+                Some(row) => self.saved_chosen(rows, &row),
+                None => Vec::new(),
+            },
+            Purpose::Space(space) => match row {
+                Some(row) => self.space_row(*space, &row),
+                None => Vec::new(),
+            },
             Purpose::Refine => {
                 if in_list && let Some(row) = row {
                     return self.take_candidate(&row);
@@ -872,6 +892,8 @@ impl App {
             | Purpose::PreviewLink
             | Purpose::FilterContents { .. }
             | Purpose::SelectCount { .. }
+            | Purpose::DeleteSaved(..)
+            | Purpose::OfferSizeSort
             | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }

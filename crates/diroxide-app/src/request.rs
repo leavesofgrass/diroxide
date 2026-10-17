@@ -403,6 +403,58 @@ pub enum Request {
         /// The places.
         places: Vec<Place>,
     },
+    /// Write a saved search to the state folder's `saved` folder (W3a).
+    SaveSearch(Box<diroxide_search::Saved>),
+    /// Read the saved searches (W3a); answered as
+    /// [`AppEvent::SavedListed`](crate::AppEvent::SavedListed).
+    ListSaved {
+        /// The request.
+        request: diroxide_core::RequestId,
+    },
+    /// Delete a saved search's file, only inside the `saved` folder (W3a).
+    DeleteSaved(std::path::PathBuf),
+    /// Count a folder's Space list (W3a); answered as
+    /// [`AppEvent::SpaceListed`](crate::AppEvent::SpaceListed).
+    SpaceList {
+        /// The request.
+        request: diroxide_core::RequestId,
+        /// The folder.
+        place: Place,
+        /// By items, by kind or by age.
+        grouping: diroxide_search::Grouping,
+        /// The app's clock, for the ages.
+        clock: SharedClock,
+    },
+    /// Find the largest items below a folder (W3a); answered as
+    /// [`AppEvent::LargestFound`](crate::AppEvent::LargestFound).
+    Largest {
+        /// The results' search number.
+        search: u64,
+        /// The folder.
+        place: Place,
+        /// How many.
+        limit: usize,
+    },
+    /// Size folders (W3a); answered as
+    /// [`AppEvent::DirSized`](crate::AppEvent::DirSized).
+    DirSizes {
+        /// The request.
+        request: diroxide_core::RequestId,
+        /// The folders.
+        places: Vec<Place>,
+    },
+    /// Find the newest files (W3a); answered as
+    /// [`AppEvent::NewestFound`](crate::AppEvent::NewestFound).
+    Newest {
+        /// The results' search number.
+        search: u64,
+        /// Where.
+        scope: Box<diroxide_search::Scope>,
+        /// The day to look before, for Earlier day.
+        before: Option<diroxide_search::Day>,
+        /// The app's clock.
+        clock: SharedClock,
+    },
     /// Stop the running search: its summary says where it stopped.
     StopSearch,
     /// Hold the running search (`true`) or let it go on (`false`).
