@@ -570,9 +570,20 @@ fn details_context_menu_help_and_the_key_bar() {
     f.s.key("escape");
     let said = f.s.key("shift+f1");
     assert!(
-        said[0].starts_with("Help, Panel, Up and Down move"),
+        said[0].starts_with("Keyboard, ") && said[0].contains(" commands, Up and Down move"),
         "{said:?}"
     );
+    // The keyboard page as a list: headings, then each command with its
+    // keys; a letter jumps by name.
+    let said = f.s.key("down");
+    assert!(said[0].starts_with("Everywhere, 2 of "), "{said:?}");
+    let said = f.s.key("c");
+    assert!(
+        said[0].starts_with("Command palette, Ctrl+P, Finds"),
+        "{said:?}"
+    );
+    let said = f.s.key("enter");
+    assert!(said[0].starts_with("Command palette"), "{said:?}");
     f.s.key("escape");
     let said = f.s.command(ids::SAY_KEY_BAR);
     assert!(

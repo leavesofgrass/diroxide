@@ -538,6 +538,14 @@ impl App {
                 None => Vec::new(),
             },
             Purpose::Read | Purpose::JobItems => {
+                if row
+                    .as_deref()
+                    .is_some_and(|r| r.starts_with(super::info::HEADING_ROW) || r == "help")
+                {
+                    // A heading or the help line of the keyboard list: Enter
+                    // stays on it.
+                    return Vec::new();
+                }
                 if let Some(id) = row.and_then(|r| CommandId::new(r).ok())
                     && commands::info(&id).is_some()
                 {

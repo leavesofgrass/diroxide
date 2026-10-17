@@ -22,6 +22,12 @@ use crate::request::{Request, SpawnKind};
 use crate::settings;
 use crate::state;
 
+/// The keyboard list's first row: the help for where the focus is.
+const HELP_ROW: &str = "help";
+
+/// The start of a heading row's id in the keyboard list.
+pub(super) const HEADING_ROW: &str = "heading:";
+
 fn read_list(title: impl Into<String>, rows: Vec<ListRow>) -> ListModel {
     let mut list = ListModel::new(title).with_rows(rows);
     list.set_help("Up and Down read, Escape closes.");
@@ -205,21 +211,8 @@ impl App {
             let line = if first.is_empty() { title } else { first };
             return vec![self.say(Message::info(line))];
         }
-        let mut rows = vec![ListRow::new("help", first)];
-        for info in CATALOG
-            .iter()
-            .filter(|i| matches!(i.layer, Layer::Panel | Layer::List | Layer::Global))
-        {
-            let key = self.keymap.key_text(&info.id);
-            let row = ListRow::new(info.id.as_str(), info.name);
-            rows.push(if key.is_empty() {
-                row.with_details([info.help])
-            } else {
-                row.with_details([key, info.help.to_owned()])
-            });
-        }
-        let mut list = ListModel::new(format!("Help, {title}")).with_rows(rows);
-        list.set_help("Up and Down read, Enter runs a command, Escape closes.");
+        let _ = title;
+        let list = self.keyboard_list(first);
         self.open_dialog(
             Dialog::Choose {
                 list,
@@ -227,6 +220,70 @@ impl App {
             },
             Purpose::Read,
         )
+    }
+
+    /// The keyboard page as a list (answer 49), from the live keymap, so a
+    /// key is found from inside the program: the help for where the focus
+    /// is first, then a heading for each layer as `docs/keyboard.md` has
+    /// them ("Everywhere", "In a panel", "In the viewer"), each command a
+    /// row with its name first, then its keys and what it does ("Copy to
+    /// other panel, F5, Copies the selection to the other panel's
+    /// folder."), and last the commands with no key, with the menu that
+    /// holds them. Letters jump by name; Enter runs a command.
+    pub(super) fn keyboard_list(&self, first: String) -> ListModel {
+        let mut rows = vec![ListRow::new(HELP_ROW, first)];
+        let layers = [
+            (Layer::Global, "Everywhere"),
+            (Layer::Panel, "In a panel"),
+            (Layer::List, "In any list"),
+            (Layer::Viewer, "In the viewer"),
+            (Layer::Dialog, "In a question"),
+        ];
+        let mut keyless: Vec<&commands::CommandInfo> = Vec::new();
+        for (layer, heading) in layers {
+            let mut lines = Vec::new();
+            for info in CATALOG.iter().filter(|i| i.layer == layer) {
+                let keys: Vec<String> = self
+                    .keymap
+                    .bindings()
+                    .iter()
+                    .filter(|b| b.layer == layer && b.command == info.id)
+                    .map(|b| keymap::written(&b.key, self.keymap.platform()))
+                    .collect();
+                if keys.is_empty() {
+                    keyless.push(info);
+                    continue;
+                }
+                lines.push(
+                    ListRow::new(info.id.as_str(), info.name)
+                        .with_details([keys.join(" or "), info.help.to_owned()]),
+                );
+            }
+            if !lines.is_empty() {
+                rows.push(ListRow::new(format!("{HEADING_ROW}{heading}"), heading));
+                rows.extend(lines);
+            }
+        }
+        if !keyless.is_empty() {
+            let heading = "By the palette and the menus";
+            rows.push(ListRow::new(format!("{HEADING_ROW}{heading}"), heading));
+            for info in keyless {
+                let way = self
+                    .menus
+                    .holder_of(&info.id)
+                    .map_or_else(|| "the palette".to_owned(), |m| format!("{m} menu"));
+                rows.push(
+                    ListRow::new(info.id.as_str(), info.name)
+                        .with_details([way, info.help.to_owned()]),
+                );
+            }
+        }
+        let commands = count(CATALOG.len() as u64, "command", "commands");
+        let mut list = ListModel::new(format!("Keyboard, {commands}")).with_rows(rows);
+        list.set_help(
+            "Up and Down read, a letter jumps to a command by name, Enter runs it, Escape closes.",
+        );
+        list
     }
 
     /// Details of the focused entry, one fact a row, each said first.
