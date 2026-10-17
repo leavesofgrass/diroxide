@@ -107,7 +107,7 @@ type ReaderKey = (String, bool, Option<u64>);
 /// What a walking thread keeps between candidates for content tests.
 struct Contents<'a> {
     /// Each content test's reader, compiled once.
-    readers: RefCell<HashMap<ReaderKey, Option<Arc<Reader>>>>,
+    readers: RefCell<HashMap<ReaderKey, Option<Reader>>>,
     /// The thread's skip counts.
     skips: RefCell<Skips>,
     keep: usize,
@@ -133,18 +133,12 @@ impl Facts<'_> {
         Truth::Unknown(Unknown::ContentNotRead)
     }
 
-    fn reader(&self, query: &ContentQuery) -> Option<Arc<Reader>> {
-        let key = (
+    fn reader_key(query: &ContentQuery) -> ReaderKey {
+        (
             query.regex().as_str().to_owned(),
             query.ignores_case(),
             query.limit(),
-        );
-        self.contents
-            .readers
-            .borrow_mut()
-            .entry(key)
-            .or_insert_with(|| Reader::new(query).ok().map(Arc::new))
-            .clone()
+        )
     }
 
     /// Whether a link's target may be read: only when links are followed
@@ -211,7 +205,11 @@ impl Lookup for Facts<'_> {
                 });
             }
         }
-        let Some(reader) = self.reader(query) else {
+        let mut readers = self.contents.readers.borrow_mut();
+        let reader = readers
+            .entry(Self::reader_key(query))
+            .or_insert_with(|| Reader::new(query).ok());
+        let Some(reader) = reader.as_mut() else {
             return Truth::Unknown(Unknown::ContentNotRead);
         };
         let opened: Option<Box<dyn std::io::Read>> = match &self.candidate.location {
