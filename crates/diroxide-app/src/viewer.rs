@@ -49,6 +49,14 @@ use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
 pub use code::IndentMove;
+/// Whether code is colored, for a frontend that draws the runs.
+pub use diroxide_config::Highlighting as HighlightSetting;
+/// The token classes and their runs, for a frontend that may not depend
+/// on the preview crate (the terminal, the window).
+pub use diroxide_preview::classes::{ClassRun, TokenClass};
+/// The highlighter: the session a frontend keeps and hands to each
+/// viewer, the languages, the caps.
+pub use diroxide_preview::highlight;
 pub use files::Sibling;
 pub use jump::Jump;
 pub use search::{MAX_HITS, Query};
@@ -263,9 +271,9 @@ pub struct Viewer {
     task: Option<Task>,
     search: Option<search::Search>,
     siblings: Vec<Sibling>,
-    session: Option<diroxide_preview::highlight::Session>,
+    session: Option<highlight::Session>,
     code: Option<code::CodeDoc>,
-    job: Option<diroxide_preview::highlight::Job>,
+    job: Option<highlight::Job>,
     point: usize,
 }
 

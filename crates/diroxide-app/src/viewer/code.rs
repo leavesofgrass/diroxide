@@ -292,6 +292,19 @@ impl Viewer {
         Some((text[token.0..token.1].to_owned(), token.2))
     }
 
+    /// The bytes of the cursor's line the point's token takes, for a
+    /// frontend to mark it (in sighted mode, with an attribute).
+    pub fn point_token(&mut self) -> Option<std::ops::Range<usize>> {
+        if self.mode == ViewerMode::Hex || self.point == 0 {
+            return None;
+        }
+        let tokens = self.tokens(self.cursor.line);
+        tokens
+            .iter()
+            .find(|(_, end, _)| *end > self.point)
+            .map(|(start, end, _)| *start..*end)
+    }
+
     /// Moves the point to the token after the one it is on (or before, in
     /// the indent) and says it ("parse_args").
     pub(super) fn token_right(&mut self) -> Vec<Message> {

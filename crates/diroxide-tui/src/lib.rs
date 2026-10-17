@@ -26,7 +26,8 @@
 //! (presses and repeats only); [`style`] applies the theme through its
 //! roles; [`session`] is the loop one step at a time over any backend,
 //! which the tests drive on ratatui's test backend; [`terminal`] owns the
-//! real terminal; [`keytest`] is `diro keys test`.
+//! real terminal; [`keytest`] is `diro keys test`; [`viewer`] draws the
+//! viewer's rows and their token classes (W2d).
 //!
 //! Wave 1 (W1d) owns this crate.
 
@@ -46,6 +47,7 @@ pub mod session;
 pub mod style;
 pub mod terminal;
 mod view;
+pub mod viewer;
 
 pub use session::Session;
 pub use style::Styles;
