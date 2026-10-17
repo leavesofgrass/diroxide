@@ -52,6 +52,9 @@ use crate::undo::{LeftAs, UndoRecord};
 mod join;
 #[cfg(test)]
 mod join_tests;
+mod links;
+#[cfg(test)]
+mod links_tests;
 mod split;
 #[cfg(test)]
 mod split_tests;
@@ -711,6 +714,7 @@ impl<'a> Run<'a> {
             } => self.split_part(from, to, *offset, *length),
             Step::WriteChecksum { of, place } => self.write_checksum(of, place),
             Step::JoinPart { from, to } => self.join_part(from, to),
+            Step::Relink { place, request } => self.relink(place, request),
             Step::SetAttributes { place, change } => {
                 let provider = match self.provider(place) {
                     Ok(provider) => provider,
@@ -1808,12 +1812,7 @@ impl<'a> Run<'a> {
     }
 
     fn link(&mut self, place: &Place, request: &LinkRequest) -> Outcome {
-        let provider = match self.provider(place) {
-            Ok(provider) => provider,
-            Err(stop) => return stop.into(),
-        };
-        let ctx = self.ctx.clone();
-        match self.attempt(place, |_| provider.create_link(place, request, &ctx)) {
+        match self.make_link(place, request) {
             Ok(()) => {
                 self.report.undo.created.push(place.clone());
                 let kind = if request.kind == LinkKind::Hard {
@@ -1824,7 +1823,7 @@ impl<'a> Run<'a> {
                 self.made(place, kind, None);
                 Outcome::Done
             }
-            Err(stop) => stop.into(),
+            Err(outcome) => outcome,
         }
     }
 

@@ -8,6 +8,7 @@
 mod interop;
 mod journal;
 mod kill;
+mod links;
 mod parts;
 mod props;
 mod support;

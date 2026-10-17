@@ -130,6 +130,14 @@ pub enum Step {
         /// The whole.
         to: Place,
     },
+    /// Change where a link points: the new link made beside it, the old
+    /// one to the trash, the new one given its name ([`crate::links`]).
+    Relink {
+        /// The link.
+        place: Place,
+        /// The new link's kind and target.
+        request: LinkRequest,
+    },
 }
 
 impl Step {
@@ -142,6 +150,7 @@ impl Step {
             | Step::RenameHop { from, .. } => from,
             Step::MakeFolder { place }
             | Step::Link { place, .. }
+            | Step::Relink { place, .. }
             | Step::Trash { place }
             | Step::Restore { place }
             | Step::Remove { place }
@@ -161,9 +170,10 @@ impl Step {
             | Step::Move { to, .. }
             | Step::Rename { to, .. }
             | Step::RenameHop { to, .. } => Some(to),
-            Step::MakeFolder { place } | Step::Link { place, .. } | Step::Restore { place } => {
-                Some(place)
-            }
+            Step::MakeFolder { place }
+            | Step::Link { place, .. }
+            | Step::Relink { place, .. }
+            | Step::Restore { place } => Some(place),
             Step::SetAttributes { place, .. } => Some(place),
             Step::SplitPart { to, .. } | Step::JoinPart { to, .. } => Some(to),
             Step::WriteChecksum { place, .. } => Some(place),
@@ -180,6 +190,7 @@ impl Step {
                 | Step::Trash { .. }
                 | Step::Remove { .. }
                 | Step::RemoveEmptyFolder { .. }
+                | Step::Relink { .. }
         )
     }
 
@@ -224,6 +235,11 @@ impl Step {
             Step::JoinPart { from, to } => {
                 format!("add the part {} to {}", spell(from), spell(to))
             }
+            Step::Relink { place, request } => format!(
+                "point the link {} to {}",
+                spell(place),
+                spell_out(&request.target)
+            ),
         }
     }
 }
@@ -551,6 +567,17 @@ impl Plan {
                 "Make {}",
                 count(self.steps.len() as u64, "folder", "folders")
             ),
+            JobKind::Link
+                if self
+                    .steps
+                    .iter()
+                    .any(|step| matches!(step, Step::Relink { .. })) =>
+            {
+                format!(
+                    "Change where {} points",
+                    count(self.steps.len() as u64, "link", "links")
+                )
+            }
             JobKind::Link => format!(
                 "Make {}{to}",
                 count(self.steps.len() as u64, "link", "links")

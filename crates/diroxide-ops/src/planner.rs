@@ -29,12 +29,14 @@ use diroxide_vfs::{
 
 use crate::engine::{Engine, JobControl, JobSink, Quiet};
 use crate::error::OpsError;
+use crate::links::LinkForm;
 use crate::plan::{Plan, Preflight, Step};
 use crate::progress::JobProgress;
 use crate::undo::UndoRecord;
 use crate::walk::{Found, walk};
 
 mod join;
+mod links;
 mod split;
 
 /// Why an anchor is being checked: what the job would do to it.
@@ -753,7 +755,7 @@ impl<'a> Planner<'a> {
 
     /// Links: one link in the destination for each source, pointing at
     /// the source's full place.
-    fn link(&mut self, kind: LinkKind) -> Result<(), OpsError> {
+    fn link(&mut self, kind: LinkKind, form: LinkForm) -> Result<(), OpsError> {
         let folder = self.destination()?;
         self.folder(&folder)?;
         let capabilities = self.provider(&folder)?.capabilities(&folder);
@@ -771,11 +773,12 @@ impl<'a> Planner<'a> {
             self.check_new_name(&folder, &name)?;
             let entry = self.stat(source)?;
             let place = folder.join(&name).map_err(VfsError::from)?;
+            let target = self.link_target(&place, source, kind, form);
             self.plan.steps.push(Step::Link {
                 place,
                 request: LinkRequest {
                     kind,
-                    target: source.to_string(),
+                    target,
                     target_is_folder: entry.kind == EntryKind::Folder,
                 },
             });
@@ -920,7 +923,7 @@ impl Engine {
             JobKind::MakeFolder => planner.make_folder()?,
             JobKind::Split => planner.split()?,
             JobKind::Join => planner.join()?,
-            _ => planner.link(LinkKind::Symbolic)?,
+            _ => planner.link(LinkKind::Symbolic, LinkForm::Absolute)?,
         }
         let mut progress = JobProgress::start(request.kind, 0, None);
         progress.items_done = planner.counted;
@@ -967,7 +970,7 @@ impl Engine {
         let control = JobControl::new();
         let mut planner = Planner::new(self, request, &control, &quiet);
         planner.plan.kind = JobKind::Link;
-        planner.link(kind)?;
+        planner.link(kind, LinkForm::Absolute)?;
         Ok(planner.finish())
     }
 
