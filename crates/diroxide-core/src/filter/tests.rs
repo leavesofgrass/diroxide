@@ -1168,3 +1168,51 @@ fn a_size_range_reads_with_spaces_before_its_units() {
     ));
     assert_eq!(problem("depth 1 KB..3").problem(), &Problem::DepthHasNoUnit);
 }
+
+/// P3b (the docs lane's finding): Say filter says what a name's slash
+/// means, as the plan's slash rules have it: `build/` and `/build` are
+/// folders only. The note reads back to the same tree, and a value
+/// typed with the note but no slash gets the slash.
+#[test]
+fn a_name_with_a_slash_reads_back_as_folders_only() {
+    let clock = written();
+    let said = |text: &str| parse(text).read_back(&clock).sentence().to_owned();
+    assert_eq!(said("build/"), "name contains build/, folders only");
+    assert_eq!(said("/build"), "name contains /build, folders only");
+    assert_eq!(said("name is build/"), "name is build/, folders only");
+    assert_eq!(said("build"), "name contains build", "no slash, no note");
+    assert_eq!(
+        said("path \"/work/\""),
+        "path contains /work/",
+        "a path's slash is only a slash"
+    );
+    for text in [
+        "build/",
+        "/build",
+        "build/ or dist/",
+        "not build/",
+        "Build/",
+        "build/ and size over 1 MB",
+        "hidden .cache/",
+    ] {
+        let filter = parse(text);
+        let sentence = filter.read_back(&clock).sentence().to_owned();
+        assert!(sentence.contains(", folders only"), "{text}: {sentence}");
+        assert_eq!(parse(&sentence).expr(), filter.expr(), "{text}: {sentence}");
+    }
+    assert_eq!(
+        parse("name contains build, folders only").expr(),
+        parse("build/").expr()
+    );
+    assert_eq!(
+        parse("build, folders only, match case").expr(),
+        parse("build/, match case").expr()
+    );
+    let folder = crate::entry::Entry::new("build", EntryKind::Folder);
+    let file = crate::entry::Entry::new("build", EntryKind::File);
+    let evaluator = parse("build, folders only").evaluator(&clock);
+    assert!(evaluator.matches(&folder, &NoLookup));
+    assert!(!evaluator.matches(&file, &NoLookup));
+    let line = said("build/");
+    assert!(line.chars().count() <= 40, "{line}");
+}

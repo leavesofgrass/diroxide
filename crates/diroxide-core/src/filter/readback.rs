@@ -1,11 +1,13 @@
 //! Reading a filter back ("Say filter"): one canonical sentence of field
 //! words and comparison words, units written out, dates spelled, `match
-//! case` where case matters, `including hidden` when a `hidden` test
+//! case` where case matters, `folders only` after a name whose slash
+//! limits it to folders, `including hidden` when a `hidden` test
 //! shows hidden entries, and brackets only where the strict and-or rule
 //! needs them. Typed forms never matter: `size>1mb` and `size over 1 MB`
 //! read back the same. The sentence parses back to the same tree; the
 //! exact byte counts go on the details line.
 
+use crate::pattern::folder_rule;
 use crate::sort::NameCase;
 
 use super::FilterOptions;
@@ -18,6 +20,10 @@ use super::tree::{
 
 /// The note the read-back ends with when hidden entries are shown.
 pub(crate) const HIDDEN_NOTE: &str = ", including hidden";
+
+/// The note after a name value whose slash limits it to folders
+/// (`build/`, `/build`), so the sentence says what the slash means (P3b).
+pub(crate) const FOLDERS_NOTE: &str = ", folders only";
 
 /// A filter read back: the sentence Say filter says and the title line
 /// shows, and the details line with the exact byte counts.
@@ -230,8 +236,17 @@ impl Writer<'_> {
             return false;
         }
         self.value(&text.value);
+        self.folders_note(text.field, &text.value);
         self.case_note(text.field, text.op == TextOp::Regex, &text.value, text.case);
         true
+    }
+
+    /// ", folders only" after a name value with a slash at either end,
+    /// which limits the test to folders.
+    fn folders_note(&mut self, field: Field, value: &str) {
+        if field == Field::Name && folder_rule(value).1 {
+            self.out.push_str(FOLDERS_NOTE);
+        }
     }
 
     fn value(&mut self, value: &str) {
@@ -287,6 +302,7 @@ impl Writer<'_> {
                 } else {
                     self.value(&text.value);
                 }
+                self.folders_note(text.field, &text.value);
                 self.case_note(text.field, regex, &text.value, text.case);
             }
             Test::Kind(kind) => {

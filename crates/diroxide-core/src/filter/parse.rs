@@ -188,6 +188,21 @@ fn set_case(expr: &mut Expr, case: NameCase) {
     }
 }
 
+/// Limits a name test to folders, as the slash at its end does: what the
+/// read-back's ", folders only" says, so a value typed without a slash
+/// gets one (P3b).
+fn set_folders_only(expr: &mut Expr) {
+    if let Expr::Test {
+        test: Test::Text(text),
+        ..
+    } = expr
+        && text.field == Field::Name
+        && !folder_rule(&text.value).1
+    {
+        text.value.push('/');
+    }
+}
+
 fn is_digits(token: &Token) -> bool {
     token.kind == Kind::Word
         && !token.text.is_empty()
@@ -644,6 +659,16 @@ impl<'a> Parser<'a> {
                 positives.push(one);
             }
             negate = false;
+            if self.folders_annotation(field) {
+                let last = if last_negative {
+                    negatives.last_mut()
+                } else {
+                    positives.last_mut()
+                };
+                if let Some(last) = last {
+                    set_folders_only(last);
+                }
+            }
             if !self.next_kind(Kind::Comma) || self.at_hidden_note() {
                 break;
             }
@@ -678,6 +703,20 @@ impl<'a> Parser<'a> {
             && self.peek_at(1).is_some_and(|t| t.is_word("including"))
             && self.peek_at(2).is_some_and(|t| t.is_word("hidden"))
             && self.peek_at(3).is_none()
+    }
+
+    /// At a comma after a name value: the read-back's `, folders only`,
+    /// which says what a slash at the value's end means. Read, and true,
+    /// only for a name.
+    fn folders_annotation(&mut self, field: Field) -> bool {
+        let note = field == Field::Name
+            && self.next_kind(Kind::Comma)
+            && self.peek_at(1).is_some_and(|t| t.is_word("folders"))
+            && self.peek_at(2).is_some_and(|t| t.is_word("only"));
+        if note {
+            self.pos += 3;
+        }
+        note
     }
 
     /// At a comma: `, match case` or `, any case`.

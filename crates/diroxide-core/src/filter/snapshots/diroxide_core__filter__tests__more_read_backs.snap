@@ -25,13 +25,13 @@ typed: not *.tmp
 said: not name matches *.tmp
 
 typed: src/
-said: name contains src/
+said: name contains src/, folders only
 
 typed: /
-said: name contains /
+said: name contains /, folders only
 
 typed: */
-said: name matches */
+said: name matches */, folders only
 
 typed: RE:\.(jpe?g|png)$
 said: name regex \.(jpe?g|png)$
