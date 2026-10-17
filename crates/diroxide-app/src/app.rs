@@ -135,7 +135,7 @@ pub enum AppEvent {
         progress: JobProgress,
     },
     /// A job finished.
-    JobFinished(JobReport),
+    JobFinished(Box<JobReport>),
     /// A worker waits for an answer.
     Asks {
         /// The question's number, for the answer.
@@ -959,7 +959,7 @@ impl App {
             }
             AppEvent::Planned { job, result } => self.planned(job, result),
             AppEvent::JobProgress { job, progress } => self.job_progress(job, &progress),
-            AppEvent::JobFinished(report) => self.job_finished(report),
+            AppEvent::JobFinished(report) => self.job_finished(*report),
             AppEvent::Asks { ask, question } => self.asks(ask, question),
             AppEvent::Watched { side, place, event } => self.watched(side, &place, &event),
             AppEvent::NotWatched { side, place } => self.not_watched(side, &place),
