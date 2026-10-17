@@ -104,7 +104,11 @@ pub struct SearchSummary {
     pub row_cap: Option<u64>,
     /// What was skipped.
     pub skipped: Skips,
-    /// Entries a test could not decide, by reason, most common first.
+    /// Entries a test could not decide, by reason, most common first. A
+    /// read skipped as binary, online only or unreadable answers with
+    /// that reason ([`Unknown::Binary`], [`Unknown::OnlineOnly`],
+    /// [`Unknown::Unreadable`]) and is counted once, in `skipped`, whose
+    /// sentences say which.
     pub unknown: Vec<(Unknown, u64)>,
 }
 

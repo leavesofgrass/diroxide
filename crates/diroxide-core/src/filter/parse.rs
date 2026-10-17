@@ -188,6 +188,21 @@ fn set_case(expr: &mut Expr, case: NameCase) {
     }
 }
 
+/// Limits a name test to folders, as the slash at its end does: what the
+/// read-back's ", folders only" says, so a value typed without a slash
+/// gets one (P3b).
+fn set_folders_only(expr: &mut Expr) {
+    if let Expr::Test {
+        test: Test::Text(text),
+        ..
+    } = expr
+        && text.field == Field::Name
+        && !folder_rule(&text.value).1
+    {
+        text.value.push('/');
+    }
+}
+
 fn is_digits(token: &Token) -> bool {
     token.kind == Kind::Word
         && !token.text.is_empty()
@@ -644,6 +659,16 @@ impl<'a> Parser<'a> {
                 positives.push(one);
             }
             negate = false;
+            if self.folders_annotation(field) {
+                let last = if last_negative {
+                    negatives.last_mut()
+                } else {
+                    positives.last_mut()
+                };
+                if let Some(last) = last {
+                    set_folders_only(last);
+                }
+            }
             if !self.next_kind(Kind::Comma) || self.at_hidden_note() {
                 break;
             }
@@ -678,6 +703,20 @@ impl<'a> Parser<'a> {
             && self.peek_at(1).is_some_and(|t| t.is_word("including"))
             && self.peek_at(2).is_some_and(|t| t.is_word("hidden"))
             && self.peek_at(3).is_none()
+    }
+
+    /// At a comma after a name value: the read-back's `, folders only`,
+    /// which says what a slash at the value's end means. Read, and true,
+    /// only for a name.
+    fn folders_annotation(&mut self, field: Field) -> bool {
+        let note = field == Field::Name
+            && self.next_kind(Kind::Comma)
+            && self.peek_at(1).is_some_and(|t| t.is_word("folders"))
+            && self.peek_at(2).is_some_and(|t| t.is_word("only"));
+        if note {
+            self.pos += 3;
+        }
+        note
     }
 
     /// At a comma: `, match case` or `, any case`.
@@ -1037,6 +1076,60 @@ impl<'a> Parser<'a> {
         Ok(NumberOp::Between(low, high))
     }
 
+    /// A range whose `..` is joined to the first end's unit or to the
+    /// second end, with spaces elsewhere: `1 KiB..1 MiB`, `1 KiB.. 1 MiB`,
+    /// `1 ..5 MB` (P3b, the docs lane's finding: they read as name words).
+    /// `None`, with nothing read, when the words after the first number
+    /// are no such range.
+    fn spaced_range(&mut self, field: Field) -> Result<Option<NumberOp>, FilterError> {
+        let (Some(first), Some(joint)) = (self.peek().cloned(), self.peek_at(1).cloned()) else {
+            return Ok(None);
+        };
+        if first.kind != Kind::Word || joint.kind != Kind::Word {
+            return Ok(None);
+        }
+        let Some((unit_text, rest)) = joint.text.split_once("..") else {
+            return Ok(None);
+        };
+        if !(rest.is_empty() || rest.starts_with(|c: char| c.is_ascii_digit())) {
+            return Ok(None);
+        }
+        let joined_unit = if unit_text.is_empty() {
+            None
+        } else {
+            match SizeUnit::from_word(unit_text) {
+                Some(unit) => Some(unit),
+                None => return Ok(None),
+            }
+        };
+        if !first
+            .text
+            .starts_with(|c: char| c.is_ascii_digit() || c == '.')
+        {
+            return Ok(None);
+        }
+        let (a, first_unit) = self.number_text(&first.text, field, &first)?;
+        if first_unit.is_some() && joined_unit.is_some() {
+            return Ok(None);
+        }
+        if joined_unit.is_some() && field == Field::Depth {
+            return Err(self.fail_at(&joint, Problem::DepthHasNoUnit, Vec::new()));
+        }
+        self.pos += 2;
+        let ua = first_unit.or(joined_unit);
+        let (b, ub, tb) = if rest.is_empty() {
+            self.number(field)?
+        } else {
+            let (b, ub) = self.number_text(rest, field, &joint)?;
+            let ub = match ub {
+                Some(unit) => Some(unit),
+                None => self.unit_after(field)?,
+            };
+            (b, ub, joint)
+        };
+        Ok(Some(self.range(field, (a, ua, &first), (b, ub, &tb))?))
+    }
+
     fn number_term(&mut self, field: Field) -> Result<Test, FilterError> {
         let cmp = self.number_cmp(field)?;
         let op = match cmp {
@@ -1070,12 +1163,32 @@ impl<'a> Parser<'a> {
                         (b, ub)
                     };
                     self.range(field, (a, ua, &token), (b, ub, &token))?
+                } else if let Some(range) = self.spaced_range(field)? {
+                    range
                 } else {
                     let (a, ua, ta) = self.number(field)?;
+                    // The second end joined to the `..` after a space:
+                    // `1 KiB ..1 MiB` (P3b).
+                    let joined_end = self
+                        .peek()
+                        .filter(|t| {
+                            t.kind == Kind::Word
+                                && t.text.starts_with("..")
+                                && t.text[2..].starts_with(|c: char| c.is_ascii_digit())
+                        })
+                        .cloned();
                     if self.next_is("..") {
                         self.bump();
                         let (b, ub, tb) = self.number(field)?;
                         self.range(field, (a, ua, &ta), (b, ub, &tb))?
+                    } else if let Some(token) = joined_end {
+                        self.bump();
+                        let (b, ub) = self.number_text(&token.text[2..], field, &token)?;
+                        let ub = match ub {
+                            Some(unit) => Some(unit),
+                            None => self.unit_after(field)?,
+                        };
+                        self.range(field, (a, ua, &ta), (b, ub, &token))?
                     } else {
                         NumberOp::Is(self.amount(field, a, ua, &ta)?)
                     }
@@ -1226,7 +1339,17 @@ impl<'a> Parser<'a> {
         let token = self.value_token(field)?;
         let fail = |p: &Self, problem| p.fail_at(&token, problem, vec![Expected::Value(field)]);
         let text = token.text.as_str();
-        let found = if token.kind == Kind::Quoted {
+        // A number is a count, never a year, where only a duration may
+        // stand or a time unit follows it, so `within 1000 days` and
+        // `< 2026 days` read like `within 999 days` (P3b, W3s's finding:
+        // four digits read as a year and were refused as "duration
+        // needed"). A count's only limit is its size.
+        let counted = is_digits(&token)
+            && (want == Want::Duration
+                || self.peek().is_some_and(|next| {
+                    next.kind == Kind::Word && TimeUnit::from_word(&next.text).is_some()
+                }));
+        let found = if token.kind == Kind::Quoted || counted {
             None
         } else if let Some(word) = DateWord::from_one(text) {
             self.skip_annotation();

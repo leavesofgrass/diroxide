@@ -28,11 +28,20 @@
 //! can override a class and the contrast check covers it: each is its text
 //! color on the page. A class is said in words by Say Token Kind and Say
 //! Line by Kind, so these too are never the only signal.
+//!
+//! The label roles (`label_blue` to `label_brown`, P3b, W3l's request 1)
+//! color a label's word in a row, one for each color a label may have:
+//! blue, orange, purple, yellow, gray and brown, a set with no red and no
+//! green, so no two labels are told apart by red against green. Each is
+//! a fixed hue whose lightness is moved, hue kept, until it meets the
+//! theme's text floor on the page, so every theme's label colors pass
+//! the contrast check and still look like their names. The label's name
+//! and its color word come first in every row; the color is the extra.
 
 use std::fmt;
 
-use crate::check::{Check, ContrastReport, Requirement, check, check_pair};
-use crate::color::Rgb;
+use crate::check::{Check, ContrastReport, Requirement, check, check_pair, minimum};
+use crate::color::{Rgb, adjust_lightness};
 use crate::model::{Attrs, ColorRole, StyleRole, Theme, ThemeKind};
 
 /// One part of the file manager's screen that a theme colors.
@@ -122,6 +131,18 @@ pub enum PanelRole {
     TokenAttribute,
     /// Something the grammar marks as invalid: reversed.
     TokenProblem,
+    /// A blue label's word.
+    LabelBlue,
+    /// An orange label's word.
+    LabelOrange,
+    /// A purple label's word.
+    LabelPurple,
+    /// A yellow label's word.
+    LabelYellow,
+    /// A gray label's word.
+    LabelGray,
+    /// A brown label's word.
+    LabelBrown,
 }
 
 impl PanelRole {
@@ -146,9 +167,19 @@ impl PanelRole {
         PanelRole::TokenProblem,
     ];
 
+    /// The label roles, in the order new labels take their colors.
+    pub const LABELS: [PanelRole; 6] = [
+        PanelRole::LabelBlue,
+        PanelRole::LabelOrange,
+        PanelRole::LabelPurple,
+        PanelRole::LabelYellow,
+        PanelRole::LabelGray,
+        PanelRole::LabelBrown,
+    ];
+
     /// Every role: the list in plan section 5.10, then the token-class
-    /// roles.
-    pub const ALL: [PanelRole; 42] = [
+    /// roles, then the label roles.
+    pub const ALL: [PanelRole; 48] = [
         PanelRole::Page,
         PanelRole::Text,
         PanelRole::FocusedRow,
@@ -191,11 +222,22 @@ impl PanelRole {
         PanelRole::TokenTag,
         PanelRole::TokenAttribute,
         PanelRole::TokenProblem,
+        PanelRole::LabelBlue,
+        PanelRole::LabelOrange,
+        PanelRole::LabelPurple,
+        PanelRole::LabelYellow,
+        PanelRole::LabelGray,
+        PanelRole::LabelBrown,
     ];
 
     /// Whether this is a token-class role, which colors highlighted text.
     pub fn is_token(self) -> bool {
         Self::TOKENS.contains(&self)
+    }
+
+    /// Whether this is a label role, which colors a label's word.
+    pub fn is_label(self) -> bool {
+        Self::LABELS.contains(&self)
     }
 
     /// The key for a setting that overrides the role, `snake_case`.
@@ -243,6 +285,12 @@ impl PanelRole {
             PanelRole::TokenTag => "token_tag",
             PanelRole::TokenAttribute => "token_attribute",
             PanelRole::TokenProblem => "token_problem",
+            PanelRole::LabelBlue => "label_blue",
+            PanelRole::LabelOrange => "label_orange",
+            PanelRole::LabelPurple => "label_purple",
+            PanelRole::LabelYellow => "label_yellow",
+            PanelRole::LabelGray => "label_gray",
+            PanelRole::LabelBrown => "label_brown",
         }
     }
 
@@ -291,6 +339,12 @@ impl PanelRole {
             PanelRole::TokenTag => "tag in markup",
             PanelRole::TokenAttribute => "attribute in markup",
             PanelRole::TokenProblem => "problem in code",
+            PanelRole::LabelBlue => "blue label",
+            PanelRole::LabelOrange => "orange label",
+            PanelRole::LabelPurple => "purple label",
+            PanelRole::LabelYellow => "yellow label",
+            PanelRole::LabelGray => "gray label",
+            PanelRole::LabelBrown => "brown label",
         }
     }
 
@@ -339,9 +393,43 @@ fn styled(theme: &Theme, role: StyleRole, add: Attrs) -> RoleStyle {
     }
 }
 
+/// The hue a label role starts from: none red and none green, so with
+/// red-green color blindness the six stay apart by lightness and hue as
+/// far as they can, and their words say which is which.
+fn label_hue(role: PanelRole) -> Option<Rgb> {
+    Some(Rgb::from_u32(match role {
+        PanelRole::LabelBlue => 0x3b82f6,
+        PanelRole::LabelOrange => 0xf97316,
+        PanelRole::LabelPurple => 0xa855f7,
+        PanelRole::LabelYellow => 0xeab308,
+        PanelRole::LabelGray => 0x8b929c,
+        PanelRole::LabelBrown => 0xa0522d,
+        _ => return None,
+    }))
+}
+
+/// A label role on the page: its hue with the lightness moved, the hue
+/// kept, until it meets the theme's text floor there (4.5 to 1, or 7 to 1
+/// in a high-contrast theme); the theme's text color if no lightness
+/// does.
+fn label_style(theme: &Theme, hue: Rgb) -> RoleStyle {
+    let page = theme.color(ColorRole::Background);
+    let floor = minimum(Requirement::Text, theme.kind());
+    RoleStyle {
+        foreground: adjust_lightness(hue, &[page], floor)
+            .unwrap_or_else(|| theme.color(ColorRole::Text)),
+        background: page,
+        attributes: Attrs::NONE,
+    }
+}
+
 /// A role's colors and attribute in a theme, drawn from the theme's own
-/// colors and styles.
+/// colors and styles; a label role, from its own hue fitted to the
+/// theme's page.
 pub fn role_style(theme: &Theme, role: PanelRole) -> RoleStyle {
+    if let Some(hue) = label_hue(role) {
+        return label_style(theme, hue);
+    }
     use ColorRole as C;
     use PanelRole as P;
     let on_page = |fg, attributes| colored(theme, fg, C::Background, attributes);
@@ -388,6 +476,13 @@ pub fn role_style(theme: &Theme, role: PanelRole) -> RoleStyle {
         P::TokenCode => on_page(C::Code, Attrs::NONE),
         P::TokenAttribute => on_page(C::Quote, Attrs::NONE),
         P::TokenProblem => on_page(C::Error, Attrs::REVERSE),
+        // Fitted to the page above, before this match.
+        P::LabelBlue
+        | P::LabelOrange
+        | P::LabelPurple
+        | P::LabelYellow
+        | P::LabelGray
+        | P::LabelBrown => on_page(C::Text, Attrs::NONE),
     }
 }
 
@@ -535,6 +630,83 @@ mod tests {
         assert!(
             failing.contains(&"panel.token_function".to_owned()),
             "{failing:?}"
+        );
+    }
+
+    /// The hue of a color in degrees, and its saturation, as HSL says
+    /// them.
+    fn hue_and_saturation(color: Rgb) -> (f64, f64) {
+        let [r, g, b] = [color.r, color.g, color.b].map(|c| f64::from(c) / 255.0);
+        let max = r.max(g).max(b);
+        let min = r.min(g).min(b);
+        let delta = max - min;
+        let lightness = f64::midpoint(max, min);
+        if delta == 0.0 {
+            return (0.0, 0.0);
+        }
+        let saturation = delta / (1.0 - (2.0 * lightness - 1.0).abs());
+        let hue = if max == r {
+            60.0 * ((g - b) / delta).rem_euclid(6.0)
+        } else if max == g {
+            60.0 * ((b - r) / delta + 2.0)
+        } else {
+            60.0 * ((r - g) / delta + 4.0)
+        };
+        (hue, saturation)
+    }
+
+    /// W3l's request 1 (P3b): six label roles, each a text color that
+    /// meets the floor on the page in every built-in theme, none red and
+    /// none green, with a key the `[colors]` table can name and a label
+    /// that says the color first.
+    #[test]
+    fn label_roles_meet_the_floor_and_are_never_red_or_green() {
+        assert_eq!(PanelRole::LABELS.len(), 6);
+        for role in PanelRole::LABELS {
+            assert!(role.is_label() && !role.is_token());
+            assert!(PanelRole::ALL.contains(&role));
+            assert!(role.key().starts_with("label_"), "{}", role.key());
+            assert!(role.label().ends_with(" label"), "{role}");
+            assert_eq!(
+                role.label().split(' ').next(),
+                role.key().strip_prefix("label_"),
+                "the color word comes first"
+            );
+        }
+        assert!(!PanelRole::Folder.is_label());
+        for theme in builtin::all() {
+            let checks = panel_checks(theme);
+            for role in PanelRole::LABELS {
+                let key = format!("panel.{}", role.key());
+                let check = checks.iter().find(|c| c.key == key).unwrap();
+                assert!(check.passed, "{}: {role} falls short", theme.name());
+                let style = role_style(theme, role);
+                assert_eq!(style.background, theme.color(ColorRole::Background));
+                let (hue, saturation) = hue_and_saturation(style.foreground);
+                if saturation > 0.2 {
+                    let red = !(12.0..=345.0).contains(&hue);
+                    let green = (75.0..=165.0).contains(&hue);
+                    assert!(
+                        !red && !green,
+                        "{}: {role} reads as red or green, hue {hue:.0}",
+                        theme.name()
+                    );
+                }
+            }
+        }
+        let theme = builtin::default_theme();
+        let colors: Vec<Rgb> = PanelRole::LABELS
+            .iter()
+            .map(|role| role_style(theme, *role).foreground)
+            .collect();
+        for (i, a) in colors.iter().enumerate() {
+            for b in &colors[i + 1..] {
+                assert_ne!(a, b, "two label colors are the same");
+            }
+        }
+        assert_eq!(
+            PanelRole::from_key("label_orange"),
+            Some(PanelRole::LabelOrange)
         );
     }
 

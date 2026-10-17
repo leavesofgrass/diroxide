@@ -1038,3 +1038,181 @@ proptest! {
         }
     }
 }
+
+/// P3b (W3s's finding): a duration's count has no limit but its size. A
+/// four-digit count read as a year, so `within 1000 days` was refused
+/// as "duration needed" while 999 days read; a year still reads where a
+/// date may stand and no time unit follows.
+#[test]
+fn a_duration_counts_past_999_and_a_year_stays_a_year() {
+    let Expr::Test {
+        test: Test::Date(date),
+        ..
+    } = parse("modified within 1000 days").expr().clone()
+    else {
+        panic!("not a date test");
+    };
+    assert_eq!(
+        date.op,
+        DateOp::Within(Duration {
+            count: 1000,
+            unit: TimeUnit::Day
+        })
+    );
+    let clock = written();
+    for text in [
+        "modified within 1000 days",
+        "modified older than 2026 days",
+        "created within 9999 hours",
+        "modified within 123456 minutes",
+    ] {
+        let filter = parse(text);
+        assert_eq!(filter.read_back(&clock).sentence(), text);
+        assert_eq!(parse(&filter.sentence()).expr(), filter.expr(), "{text}");
+    }
+    assert_eq!(
+        parse("modified < 1000 days").expr(),
+        parse("modified within 1000 days").expr()
+    );
+    assert_eq!(
+        parse("modified > 2026 d").expr(),
+        parse("modified older than 2026 days").expr()
+    );
+    // Where a date may stand, four digits with no unit are still a year.
+    let Expr::Test {
+        test: Test::Date(year),
+        ..
+    } = parse("modified 2026").expr().clone()
+    else {
+        panic!("not a date test");
+    };
+    assert!(
+        matches!(year.op, DateOp::On(DateValue::Date(_))),
+        "{:?}",
+        year.op
+    );
+    assert_eq!(
+        parse("modified < 2026").expr(),
+        parse("modified before 2026").expr()
+    );
+    // A count with a unit where a date stands asks for within, as 3 days
+    // does; a count with no unit asks for one; too large is too large.
+    assert_eq!(
+        problem("modified 1000 days").problem(),
+        &Problem::WithinOrOlder
+    );
+    assert_eq!(
+        problem("modified 1000 days").problem(),
+        problem("modified 3 days").problem()
+    );
+    assert_eq!(
+        problem("modified within 2026").problem(),
+        &Problem::NeedsTimeUnit
+    );
+    assert_eq!(
+        problem("modified within 99999999999 days").problem(),
+        &Problem::NumberTooLarge
+    );
+}
+
+/// P3b (the docs lane's finding): a size range reads with spaces before
+/// its units as it does without them, in either unit family, and the
+/// read-back says the range in words with the bytes on the details line.
+#[test]
+fn a_size_range_reads_with_spaces_before_its_units() {
+    let joined = parse("size 1KiB..1MiB");
+    for text in [
+        "size 1 KiB..1 MiB",
+        "size 1 KiB.. 1 MiB",
+        "size 1 KiB .. 1 MiB",
+        "size 1KiB ..1MiB",
+        "size 1 KiB ..1 MiB",
+        "size 1 kib..1 mib",
+    ] {
+        assert_eq!(parse(text).expr(), joined.expr(), "{text}");
+    }
+    let clock = written();
+    let read_back = parse("size 1 KiB..1 MiB").read_back(&clock);
+    assert_eq!(read_back.sentence(), "size from 1 KiB to 1 MiB");
+    assert_eq!(
+        read_back.details(),
+        ["1 KiB is 1,024 bytes.", "1 MiB is 1,048,576 bytes."]
+    );
+    assert_eq!(parse(read_back.sentence()).expr(), joined.expr());
+    let ends = |text: &str| {
+        let Expr::Test {
+            test: Test::Number(number),
+            ..
+        } = parse(text).expr().clone()
+        else {
+            panic!("not a number test: {text}");
+        };
+        let NumberOp::Between(low, high) = number.op else {
+            panic!("not a range: {text}");
+        };
+        (low.value(), high.value())
+    };
+    // KB and MB are powers of 1,000; KiB and MiB powers of 1,024.
+    assert_eq!(ends("size 1 KB..2 MB"), (Some(1_000), Some(2_000_000)));
+    assert_eq!(ends("size 1 KiB..2 MiB"), (Some(1_024), Some(2_097_152)));
+    // The second end's unit reaches a first end without one, as before.
+    assert_eq!(ends("size 1 ..5 MB"), ends("size 1..5 MB"));
+    assert_eq!(ends("size 1 ..5 MB"), (Some(1_000_000), Some(5_000_000)));
+    // A name that only looks like a range stays a name.
+    assert!(matches!(
+        parse("notes..txt").expr(),
+        Expr::Test {
+            test: Test::Text(_),
+            ..
+        }
+    ));
+    assert_eq!(problem("depth 1 KB..3").problem(), &Problem::DepthHasNoUnit);
+}
+
+/// P3b (the docs lane's finding): Say filter says what a name's slash
+/// means, as the plan's slash rules have it: `build/` and `/build` are
+/// folders only. The note reads back to the same tree, and a value
+/// typed with the note but no slash gets the slash.
+#[test]
+fn a_name_with_a_slash_reads_back_as_folders_only() {
+    let clock = written();
+    let said = |text: &str| parse(text).read_back(&clock).sentence().to_owned();
+    assert_eq!(said("build/"), "name contains build/, folders only");
+    assert_eq!(said("/build"), "name contains /build, folders only");
+    assert_eq!(said("name is build/"), "name is build/, folders only");
+    assert_eq!(said("build"), "name contains build", "no slash, no note");
+    assert_eq!(
+        said("path \"/work/\""),
+        "path contains /work/",
+        "a path's slash is only a slash"
+    );
+    for text in [
+        "build/",
+        "/build",
+        "build/ or dist/",
+        "not build/",
+        "Build/",
+        "build/ and size over 1 MB",
+        "hidden .cache/",
+    ] {
+        let filter = parse(text);
+        let sentence = filter.read_back(&clock).sentence().to_owned();
+        assert!(sentence.contains(", folders only"), "{text}: {sentence}");
+        assert_eq!(parse(&sentence).expr(), filter.expr(), "{text}: {sentence}");
+    }
+    assert_eq!(
+        parse("name contains build, folders only").expr(),
+        parse("build/").expr()
+    );
+    assert_eq!(
+        parse("build, folders only, match case").expr(),
+        parse("build/, match case").expr()
+    );
+    let folder = crate::entry::Entry::new("build", EntryKind::Folder);
+    let file = crate::entry::Entry::new("build", EntryKind::File);
+    let evaluator = parse("build, folders only").evaluator(&clock);
+    assert!(evaluator.matches(&folder, &NoLookup));
+    assert!(!evaluator.matches(&file, &NoLookup));
+    let line = said("build/");
+    assert!(line.chars().count() <= 40, "{line}");
+}

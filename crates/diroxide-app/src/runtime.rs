@@ -1649,13 +1649,58 @@ mod tests {
         let plan = planned(&mut runtime);
         runtime.request(Request::Run(Box::new(plan)));
         let ask = asked(&mut runtime);
+        // The worker counts itself idle on its own thread just after it
+        // sends the question, so under load the flag can come down a
+        // moment after the question arrives (P3b, W3l's finding). Settle
+        // instead of looking at once: settling waits while any worker is
+        // busy and ends only when nothing more will come on its own, so a
+        // waiting job counted busy would leave the flag up here. What
+        // matters is the order and the counts: nothing more before the
+        // answer, one question, one finish, the file replaced.
+        let mut before_answer = Vec::new();
+        loop {
+            let more = runtime.settle();
+            if more.is_empty() {
+                break;
+            }
+            before_answer.extend(more);
+        }
         assert!(!runtime.is_busy(), "a job waiting for an answer is idle");
+        assert!(
+            !before_answer
+                .iter()
+                .any(|e| matches!(e, AppEvent::Asks { .. } | AppEvent::JobFinished(_))),
+            "nothing is asked or finished before the answer: {before_answer:?}"
+        );
+        assert_eq!(fake.contents(&p("/b/x.txt")).unwrap(), b"old");
         runtime.request(Request::Answer {
             ask,
             reply: Reply::Conflict(ConflictAnswer::once(ConflictAction::Replace)),
         });
-        let report = finished(&mut runtime);
-        assert_eq!(report.done.len(), 1, "{report:?}");
+        let mut after_answer = Vec::new();
+        loop {
+            let more = runtime.settle();
+            if more.is_empty() {
+                break;
+            }
+            after_answer.extend(more);
+        }
+        let finishes: Vec<&diroxide_ops::JobReport> = after_answer
+            .iter()
+            .filter_map(|e| match e {
+                AppEvent::JobFinished(report) => Some(&**report),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(finishes.len(), 1, "{after_answer:?}");
+        assert_eq!(finishes[0].done.len(), 1, "{:?}", finishes[0]);
+        assert!(
+            !after_answer
+                .iter()
+                .any(|e| matches!(e, AppEvent::Asks { .. })),
+            "one question only: {after_answer:?}"
+        );
+        assert!(!runtime.is_busy());
         assert_eq!(fake.contents(&p("/b/x.txt")).unwrap(), b"new");
     }
 

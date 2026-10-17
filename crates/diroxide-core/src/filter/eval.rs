@@ -60,6 +60,11 @@ pub enum Unknown {
     ContentNotRead,
     /// The file could not be read.
     Unreadable,
+    /// The file is binary, so its text was not searched (P3b).
+    Binary,
+    /// The file is online only: reading it would download it, and that
+    /// was not allowed (P3b).
+    OnlineOnly,
 }
 
 impl Unknown {
@@ -81,6 +86,8 @@ impl Unknown {
             Unknown::LinkNotChecked => "link not checked",
             Unknown::ContentNotRead => "content not read",
             Unknown::Unreadable => "file not readable",
+            Unknown::Binary => "binary file not searched",
+            Unknown::OnlineOnly => "online-only file not read",
         }
     }
 }
@@ -666,7 +673,9 @@ fn flag_truth(flag: Flag, entry: &Entry, lookup: &dyn Lookup) -> Truth {
     let file = matches!(entry.kind, EntryKind::File | EntryKind::Archive);
     match flag {
         Flag::Hidden => Truth::of(entry.hidden),
-        Flag::NeedsCare => Truth::of(entry.needs_care),
+        // As a row says it: a name the provider could not read as
+        // Unicode needs care too.
+        Flag::NeedsCare => Truth::of(entry.needs_care || entry.name_not_unicode),
         Flag::Labeled => Truth::of(!entry.labels.is_empty()),
         Flag::ReadOnly => match attributes {
             Some(Attributes::Windows(bits)) => Truth::of(bits & WINDOWS_READ_ONLY != 0),

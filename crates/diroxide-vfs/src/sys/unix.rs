@@ -82,6 +82,24 @@ pub(crate) fn fill_platform(entry: &mut Entry, metadata: &Metadata, context: &En
     }
 }
 
+/// Whether an entry is hidden by this platform's rule: a leading dot, and
+/// on macOS the Finder's flag too when the metadata is given.
+pub(crate) fn is_hidden(name: &std::ffi::OsStr, metadata: Option<&Metadata>) -> bool {
+    if name.as_encoded_bytes().first() == Some(&b'.') {
+        return true;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(metadata) = metadata
+            && std::os::macos::fs::MetadataExt::st_flags(metadata) & UF_HIDDEN != 0
+        {
+            return true;
+        }
+    }
+    let _ = metadata;
+    false
+}
+
 /// Nothing more to read: `lstat` gave every fact a stat needs.
 pub(crate) fn fill_from_handle(_entry: &mut Entry, _path: &Path) {}
 

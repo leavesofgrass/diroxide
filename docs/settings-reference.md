@@ -766,6 +766,12 @@ The roles the `[colors]` table can color, each as `role = "#rrggbb"`. Every role
 - `token_tag`: tag in markup.
 - `token_attribute`: attribute in markup.
 - `token_problem`: problem in code.
+- `label_blue`: blue label.
+- `label_orange`: orange label.
+- `label_purple`: purple label.
+- `label_yellow`: yellow label.
+- `label_gray`: gray label.
+- `label_brown`: brown label.
 
 ## Columns
 

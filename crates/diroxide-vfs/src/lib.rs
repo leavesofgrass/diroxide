@@ -39,7 +39,7 @@ pub use cancel::{
 };
 pub use capabilities::{AccessCapabilities, Can, Capabilities};
 pub use error::{ErrorClass, ErrorScope, VfsError};
-pub use local::LocalProvider;
+pub use local::{LocalEntryBuilder, LocalProvider};
 pub use names::{NameIssue, NameRules, check_name, check_name_with, first_refused};
 pub use protected::{Protection, protection};
 pub use provider::{

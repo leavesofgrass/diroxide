@@ -104,7 +104,12 @@ pub struct LinkRequest {
 }
 
 /// What changed in a watched place.
+///
+/// New kinds of event may come (P3b made it non-exhaustive): code that
+/// matches on it treats one it does not know as [`WatchEvent::Rescan`],
+/// and lists the place again.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WatchEvent {
     /// An entry appeared.
     Created(Place),
@@ -119,6 +124,33 @@ pub enum WatchEvent {
     /// Too much changed to say (the 50-event threshold, the only overflow
     /// signal on Windows); list the place again.
     Rescan,
+    /// An entry was renamed into the folder, from another name in it or
+    /// from elsewhere (P3b, W3t's request): a file finished where it was
+    /// made and renamed into place, so a watch for arrivals settles it
+    /// sooner. Code that does not care treats it as
+    /// [`WatchEvent::Created`].
+    RenamedIn(Place),
+}
+
+impl WatchEvent {
+    /// The entry an event names: the place of what appeared, changed,
+    /// went away or was renamed in; `None` for the folder gone and for a
+    /// rescan.
+    pub fn place(&self) -> Option<&Place> {
+        match self {
+            WatchEvent::Created(place)
+            | WatchEvent::Changed(place)
+            | WatchEvent::Removed(place)
+            | WatchEvent::RenamedIn(place) => Some(place),
+            WatchEvent::Gone | WatchEvent::Rescan => None,
+        }
+    }
+
+    /// Whether the event says an entry is there now that may be new to
+    /// the listing: created, or renamed in.
+    pub fn is_arrival(&self) -> bool {
+        matches!(self, WatchEvent::Created(_) | WatchEvent::RenamedIn(_))
+    }
 }
 
 /// Receives watch events, on whatever thread the provider uses. It must
