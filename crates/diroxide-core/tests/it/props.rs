@@ -116,6 +116,60 @@ proptest! {
         }
     }
 
+    /// A numbered part of an archive (`backup.7z.001`) followed by `!` is
+    /// an archive place that prints back equal, in both path styles, with
+    /// any number of three digits or more (R20, commit 5).
+    #[test]
+    fn split_archive_places_round_trip(
+        stem in "[a-z][a-z0-9_-]{0,7}",
+        extension in prop::sample::select(vec![
+            ".zip", ".7z", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".xz",
+            ".ZIP", ".7Z", ".Tar.Gz", ".docx",
+        ]),
+        number in 0u32..100_000,
+        width in 3usize..6,
+        folder in "[a-z]{1,6}",
+        member in prop::collection::vec("[a-z0-9.]{0,2}[a-z0-9]", 0..3),
+    ) {
+        let name = format!("{stem}{extension}.{number:0width$}");
+        let member = member.join("/");
+        for (text, style) in [
+            (format!("/{folder}/{name}!{member}"), PathStyle::Unix),
+            (format!("D:\\{folder}\\{name}!{member}"), PathStyle::Windows),
+        ] {
+            let place = Place::parse_with(&text, style).unwrap();
+            let (container, inside) = place.archive().expect("an archive place");
+            prop_assert_eq!(container.name(), Some(name.as_str()));
+            prop_assert_eq!(inside, member.as_str());
+            prop_assert_eq!(Place::parse_with(&place.to_string(), style), Ok(place.clone()));
+            prop_assert_eq!(
+                place.archive().map(|(c, _)| c.parent()),
+                Some(Place::parse_with(&text[..text.find(&name).unwrap() - 1], style).ok())
+            );
+        }
+    }
+
+    /// Look-alikes are plain local places: a numbered part of a file that
+    /// is not an archive (`photo.jpg.001`), a part number of fewer than
+    /// three digits (`a.7z.01`), a number with a letter in it, and a
+    /// name that only resembles an archive's.
+    #[test]
+    fn look_alike_parts_are_not_archive_places(
+        stem in "[a-z]{1,6}",
+        tail in prop::sample::select(vec![
+            ".jpg.001", ".pdf.0042", ".txt.1000", ".jpg.000", ".7z.01", ".zip.1",
+            ".zip.0a1", ".zipx.001", ".7zz.001", ".tar.gz.bak.001", ".001", ".zip.",
+        ]),
+        member in "[a-z]{1,4}",
+    ) {
+        let text = format!("/srv/{stem}{tail}!{member}");
+        let place = Place::parse_with(&text, PathStyle::Unix).unwrap();
+        prop_assert_eq!(place.local_path(), Some(text.as_str()));
+        prop_assert!(place.archive().is_none());
+        let name = format!("{stem}{tail}");
+        prop_assert!(!diroxide_core::place::opens_as_archive(&name), "{}", name);
+    }
+
     #[test]
     fn places_never_panic(text in "\\PC{0,40}") {
         for style in [PathStyle::Windows, PathStyle::Unix] {
