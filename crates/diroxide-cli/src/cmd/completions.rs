@@ -326,12 +326,6 @@ pub fn command() -> Command {
                 .arg(named("before", "The before file").value_hint(ValueHint::FilePath))
                 .arg(named("after", "The after file").value_hint(ValueHint::FilePath)),
         )
-        .subcommand(no_help(
-            Command::new("search")
-                .about("Print the places under ROOT whose names match PATTERN")
-                .arg(named("root", "Where to start").value_hint(ValueHint::DirPath))
-                .arg(named("pattern", "Names to match, globs joined by commas")),
-        ))
         .subcommand(search_command())
         .subcommand(no_help(
             Command::new("serve")
