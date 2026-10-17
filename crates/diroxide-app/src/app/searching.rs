@@ -86,7 +86,6 @@ pub(crate) enum SearchField {
 #[derive(Clone, Debug)]
 pub(super) struct Search {
     id: u64,
-    query: SearchQuery,
     /// The start, when there is one, for the rows' "in Documents/q3".
     root: Option<Place>,
     title: String,
@@ -136,6 +135,8 @@ pub(super) struct SearchState {
     stale_at: Option<Timestamp>,
     /// The line the viewer goes to when the result opening now has one.
     view_line: Option<u64>,
+    /// The last search that can be saved, with the name offered for it.
+    last: Option<(String, SearchQuery)>,
 }
 
 /// A search command of this module.
@@ -640,6 +641,7 @@ impl App {
             _ => None,
         };
         let (start, title) = self.search_words(&form);
+        self.keep_last_search(&title, &query);
         self.request(Request::Search {
             search: id,
             query: Box::new(query.clone()),
@@ -647,7 +649,6 @@ impl App {
         });
         self.searching.current = Some(Box::new(Search {
             id,
-            query,
             root,
             title,
             hits: Vec::new(),
@@ -692,7 +693,8 @@ impl App {
             ),
             None => (format!("Results: {}", query.sentence()), query.start_line()),
         };
-        let id = self.begin_results(query.clone(), root, title, start.clone());
+        self.keep_last_search(&title, &query);
+        let id = self.begin_results(root, title);
         self.request(Request::Search {
             search: id,
             query: Box::new(query),
@@ -703,18 +705,11 @@ impl App {
 
     /// A new search's state, running, its results empty: returns its
     /// number.
-    pub(super) fn begin_results(
-        &mut self,
-        query: SearchQuery,
-        root: Option<Place>,
-        title: String,
-        _start: String,
-    ) -> u64 {
+    pub(super) fn begin_results(&mut self, root: Option<Place>, title: String) -> u64 {
         self.searching.next += 1;
         let id = self.searching.next;
         self.searching.current = Some(Box::new(Search {
             id,
-            query,
             root,
             title,
             hits: Vec::new(),
@@ -797,16 +792,14 @@ impl App {
 
     /// The last search's query and a name to save it under: its sentence.
     pub(super) fn last_search_query(&self) -> Option<(String, SearchQuery)> {
-        let search = self.searching.current.as_ref()?;
-        if search.label.is_some() {
-            return None;
-        }
-        let name = search
-            .title
-            .strip_prefix("Results: ")
-            .unwrap_or(&search.title)
-            .to_owned();
-        Some((name, search.query.clone()))
+        self.searching.last.clone()
+    }
+
+    /// Notes a search that can be saved: Find files' and a saved one's,
+    /// not a label's items, the largest items or newest files.
+    fn keep_last_search(&mut self, title: &str, query: &SearchQuery) {
+        let name = title.strip_prefix("Results: ").unwrap_or(title).to_owned();
+        self.searching.last = Some((name, query.clone()));
     }
 
     /// Enter on a row of the Labels list: the label's items as results,
@@ -821,12 +814,9 @@ impl App {
             .cloned()
             .collect();
         let name = crate::labels::in_sentence(label);
-        let Some(first) = places.first().cloned() else {
+        if places.is_empty() {
             return vec![self.say(Message::info(format!("No item has the label {name}.")))];
-        };
-        let text = format!("label {}", diroxide_search::quoted(label));
-        let query = SearchQuery::parse(first, &text)
-            .unwrap_or_else(|_| SearchQuery::everything(places[0].clone()));
+        }
         self.searching.next += 1;
         let id = self.searching.next;
         self.request(Request::StatPlaces {
@@ -835,7 +825,6 @@ impl App {
         });
         self.searching.current = Some(Box::new(Search {
             id,
-            query,
             root: None,
             title: format!("Results: label {name}"),
             hits: Vec::new(),

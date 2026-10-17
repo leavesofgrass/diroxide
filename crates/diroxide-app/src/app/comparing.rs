@@ -551,7 +551,9 @@ impl App {
         }
         let total = compared.result.rows(&compared.options).len();
         let title = format!("Change {} of {total}", index + 1);
-        let said = format!("{title}. {}", join_sentences(&lines));
+        // The first line says which change it is ("Change 1 of 5, line
+        // 12 before, none after").
+        let said = join_sentences(&lines);
         self.open_dialog_saying(
             Dialog::Read { title, lines },
             Purpose::Read,

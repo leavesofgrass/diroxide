@@ -719,7 +719,7 @@ pub static CATALOG: [CommandInfo; 213] = [
     command(
         ids::CANCEL,
         "Cancel",
-        "Closes the menu or dialog, or stops the job in front.",
+        "Closes the menu or dialog, stops the job in front or the search, or else stops watching the folder or takes the filter off.",
         Global,
         &["escape"],
         &["escape"],

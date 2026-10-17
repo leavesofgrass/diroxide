@@ -21,7 +21,7 @@ use diroxide_core::{
     Command, CommandId, Effect, Importance, Key, Layer, ListModel, ListRow, Message, MessageKind,
     Place, RequestId, Side,
 };
-use diroxide_search::{Day, Grouping, Largest, Newest, Saved, Scope, SearchQuery, SpaceList};
+use diroxide_search::{Day, Grouping, Largest, Newest, Saved, Scope, SpaceList};
 
 use super::{App, Purpose};
 use crate::commands::ids;
@@ -349,10 +349,9 @@ impl App {
     fn largest_below(&mut self, side: Side) -> Vec<Effect> {
         let place = self.panel(side).place().clone();
         let leaf = place_leaf(&place);
-        let query = SearchQuery::everything(place.clone());
         let title = format!("Largest {LARGEST_LIMIT} below {leaf}");
         let start = format!("Looking for the largest items below {leaf}");
-        let search = self.begin_results(query, Some(place.clone()), title, start.clone());
+        let search = self.begin_results(Some(place.clone()), title);
         self.request(Request::Largest {
             search,
             place,
@@ -526,9 +525,7 @@ impl App {
             None => format!("Looking for the newest files below {leaf}"),
             Some(day) => format!("Looking for files changed before {}", day.words()),
         };
-        let query = SearchQuery::everything(place.clone()).with_scope(scope.clone());
-        let search =
-            self.begin_results(query, Some(place), "Newest files".to_owned(), start.clone());
+        let search = self.begin_results(Some(place), "Newest files".to_owned());
         self.request(Request::Newest {
             search,
             scope: Box::new(scope),
