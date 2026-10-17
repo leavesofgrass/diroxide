@@ -1004,6 +1004,17 @@ impl<T> IndexCache<T> {
         }
     }
 
+    /// The newest entry for a place, whatever its size and time: for a
+    /// quick answer that needs no stat (capabilities, a title).
+    pub fn peek(&self, place: &str) -> Option<Arc<T>> {
+        let entries = self.entries.lock().ok()?;
+        entries
+            .iter()
+            .rev()
+            .find(|(k, _, _)| k.place == place)
+            .map(|(_, v, _)| v.clone())
+    }
+
     /// Drops every entry whose place starts with `prefix`: the archive and
     /// everything nested in it.
     pub fn forget(&self, prefix: &str) {

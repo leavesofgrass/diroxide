@@ -8,6 +8,7 @@ mod cross_check;
 mod hostile;
 mod memory;
 mod odd_names;
+mod registration;
 mod seeds;
 mod spike_hostile;
 mod spike_listing;

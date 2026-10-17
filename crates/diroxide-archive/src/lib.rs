@@ -27,6 +27,7 @@ mod read_zip;
 pub mod request;
 pub mod sniff;
 mod source;
+pub mod words;
 
 pub use error::ArchiveError;
 pub use format::ArchiveFormat;
@@ -39,9 +40,10 @@ pub use limits::{Limits, limit_words};
 pub use names::{
     MemberPath, NameFlags, NameRefusal, is_junk, member_path, nesting_depth, normalize_member_name,
 };
-pub use provider::{ArchiveProvider, Listing, Opened};
+pub use provider::{ArchiveProvider, Listing, Opened, capabilities_for};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};
+pub use words::{READ_ONLY, read_only_refusal};
 
 #[cfg(test)]
 mod tests {

@@ -15,7 +15,8 @@ use std::sync::{Arc, RwLock, Weak};
 use diroxide_core::format::{count, human_size};
 use diroxide_core::{Entry, EntryKind, Place, SecretKind, SecretRequest};
 use diroxide_vfs::{
-    AttributeChange, Capabilities, FileWriter, OpContext, Provider, Registry, VfsError, WriteMode,
+    AttributeChange, Capabilities, FileWriter, LinkRequest, OpContext, Provider, Registry,
+    TrashCheck, VfsError, WriteMode,
 };
 
 use crate::error::ArchiveError;
@@ -141,6 +142,31 @@ impl ArchiveProvider {
     /// The limits.
     pub fn limits(&self) -> Limits {
         self.limits
+    }
+
+    /// Registers a new provider with these limits as the archive provider
+    /// of `registry`, and connects it: the registry the app asks for any
+    /// place, archives included.
+    pub fn install(
+        mut registry: Registry,
+        limits: Limits,
+    ) -> (Arc<Registry>, Arc<ArchiveProvider>) {
+        let provider = Arc::new(ArchiveProvider::new(limits));
+        registry.set_archive(provider.clone());
+        let registry = Arc::new(registry);
+        provider.connect(&registry);
+        (registry, provider)
+    }
+
+    /// The title line for a place inside an archive, with the format named
+    /// when the bytes and the name disagree ("a.zip, 7z archive, in
+    /// D:\docs"); from the cache, never opening anything.
+    pub fn title(&self, place: &Place) -> String {
+        let sniffed = place
+            .archive()
+            .and_then(|(container, _)| self.cache.peek(&container.to_string()))
+            .map(|opened| opened.sniffed);
+        crate::words::title(place, sniffed.as_ref())
     }
 
     /// Connects the provider to the registry it reaches archive files
@@ -348,10 +374,6 @@ impl ArchiveProvider {
             ctx.cancel.clone(),
         )))
     }
-
-    fn not_built(&self, operation: &str) -> VfsError {
-        VfsError::unsupported(self.scheme(), &format!("{operation} yet"))
-    }
 }
 
 impl Provider for ArchiveProvider {
@@ -359,10 +381,17 @@ impl Provider for ArchiveProvider {
         "archive"
     }
 
-    fn capabilities(&self, _place: &Place) -> Capabilities {
-        let mut capabilities = Capabilities::read_only();
-        capabilities.case_sensitive = true;
-        capabilities
+    fn capabilities(&self, place: &Place) -> Capabilities {
+        let Some((container, _)) = place.archive() else {
+            return Capabilities::read_only();
+        };
+        match self.cache.peek(&container.to_string()) {
+            Some(opened) => capabilities_for(opened.format(), !opened.random_read()),
+            None => match container.name().and_then(ArchiveFormat::from_name) {
+                Some(format) => capabilities_for(format, false),
+                None => capabilities_for(ArchiveFormat::Zip, false),
+            },
+        }
     }
 
     fn list(&self, place: &Place, ctx: &OpContext) -> Result<Vec<Entry>, VfsError> {
@@ -390,19 +419,19 @@ impl Provider for ArchiveProvider {
         _mode: WriteMode,
         _ctx: &OpContext,
     ) -> Result<Box<dyn FileWriter>, VfsError> {
-        Err(self.not_built("write into archives"))
+        Err(crate::words::read_only_error())
     }
 
     fn create_dir(&self, _place: &Place, _ctx: &OpContext) -> Result<(), VfsError> {
-        Err(self.not_built("make folders in archives"))
+        Err(crate::words::read_only_error())
     }
 
     fn rename(&self, _from: &Place, _to: &Place, _ctx: &OpContext) -> Result<(), VfsError> {
-        Err(self.not_built("rename in archives"))
+        Err(crate::words::read_only_error())
     }
 
     fn remove(&self, _place: &Place, _ctx: &OpContext) -> Result<(), VfsError> {
-        Err(self.not_built("delete from archives"))
+        Err(crate::words::read_only_error())
     }
 
     fn set_attributes(
@@ -411,6 +440,34 @@ impl Provider for ArchiveProvider {
         _change: &AttributeChange,
         _ctx: &OpContext,
     ) -> Result<AttributeChange, VfsError> {
-        Err(self.not_built("change attributes in archives"))
+        Err(crate::words::read_only_error())
     }
+
+    fn create_link(
+        &self,
+        _place: &Place,
+        _link: &LinkRequest,
+        _ctx: &OpContext,
+    ) -> Result<(), VfsError> {
+        Err(crate::words::read_only_error())
+    }
+
+    fn trash(&self, _place: &Place, _ctx: &OpContext) -> Result<TrashCheck, VfsError> {
+        Err(crate::words::read_only_error())
+    }
+}
+
+/// What a place inside an archive of this format can do: nothing but
+/// reading in this alpha; names are case-sensitive; random reads where the
+/// format allows them (a zip, a 7z that is not solid, an uncompressed
+/// tar), so the app can word the cost of reading a sequential one.
+pub fn capabilities_for(format: ArchiveFormat, solid: bool) -> Capabilities {
+    let mut capabilities = Capabilities::read_only();
+    capabilities.case_sensitive = true;
+    capabilities.random_read = match format {
+        ArchiveFormat::Zip | ArchiveFormat::Tar => true,
+        ArchiveFormat::SevenZ => !solid,
+        _ => false,
+    };
+    capabilities
 }
