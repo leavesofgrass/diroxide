@@ -750,6 +750,12 @@ impl<'a> Planner<'a> {
     fn link(&mut self, kind: LinkKind) -> Result<(), OpsError> {
         let folder = self.destination()?;
         self.folder(&folder)?;
+        let capabilities = self.provider(&folder)?.capabilities(&folder);
+        if !capabilities.can_link() {
+            return Err(OpsError::CannotLink(
+                capabilities.links_in_words().to_owned(),
+            ));
+        }
         let request = self.request;
         for source in &request.sources {
             let name = match (&request.new_name, request.sources.len()) {
@@ -1466,6 +1472,45 @@ mod tests {
                 }
             }]
         );
+    }
+
+    #[test]
+    fn a_link_job_makes_the_link_and_a_place_without_links_refuses_in_words() {
+        let fake = tree();
+        let engine = engine(&fake);
+        let plan = engine
+            .plan(&request(JobKind::Link, &["/a/notes.txt"]).to(p("/b")))
+            .unwrap();
+        assert_eq!(plan.summary(), format!("Make 1 link to {}", p("/b")));
+        let report = engine.run(&plan, &JobControl::new(), &Script::default());
+        assert_eq!(report.done, vec![p("/b/notes.txt")]);
+        let made = fake.entry(&p("/b/notes.txt")).unwrap();
+        assert_eq!(made.kind, EntryKind::Link);
+        assert_eq!(
+            made.link.map(|link| link.target),
+            Some(p("/a/notes.txt").to_string())
+        );
+        assert_eq!(report.undo.created, vec![p("/b/notes.txt")]);
+
+        let stick = tree();
+        stick.switches_mut().no_links = true;
+        let refused = crate::testing::engine(&stick)
+            .plan(&request(JobKind::Link, &["/a/notes.txt"]).to(p("/b")))
+            .unwrap_err();
+        assert_eq!(
+            refused,
+            OpsError::CannotLink("Cannot link here: this place holds no links".into())
+        );
+        assert!(within_cells(&refused.to_string(), "Cannot link here"));
+        assert!(
+            crate::testing::engine(&stick)
+                .plan_links(
+                    &request(JobKind::Link, &["/a/photos"]).to(p("/b")),
+                    LinkKind::Junction,
+                )
+                .is_err()
+        );
+        assert!(!stick.exists(&p("/b/notes.txt")), "nothing was made");
     }
 
     #[test]

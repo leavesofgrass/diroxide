@@ -150,6 +150,9 @@ pub struct FakeSwitches {
     pub reserved_names: bool,
     /// The place has no trash.
     pub no_trash: bool,
+    /// The place holds no links, as a FAT or exFAT drive: the capabilities
+    /// say so and `create_link` is unsupported.
+    pub no_links: bool,
     /// Places within this one are on a second volume.
     pub second_volume: Option<Place>,
     /// The volume's kind, for the trash gate (fixed by default).
@@ -800,7 +803,7 @@ impl Provider for FakeProvider {
         capabilities.writable = true;
         capabilities.trash = !switches.no_trash;
         capabilities.restore = !switches.no_trash;
-        capabilities.links = true;
+        capabilities.links = !switches.no_links;
         capabilities.attributes = true;
         capabilities.access.mode = Can::Yes;
         capabilities.access.os_attributes = Can::Yes;
@@ -945,7 +948,10 @@ impl Provider for FakeProvider {
         request: &LinkRequest,
         ctx: &OpContext,
     ) -> Result<(), VfsError> {
-        self.enter(FakeCall::CreateLink, place, ctx)?;
+        let switches = self.enter(FakeCall::CreateLink, place, ctx)?;
+        if switches.no_links {
+            return Err(VfsError::unsupported(self.scheme(), "make links"));
+        }
         if self.exists(place) {
             return Err(VfsError::AlreadyExists);
         }

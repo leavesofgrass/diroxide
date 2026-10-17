@@ -172,11 +172,62 @@ impl Capabilities {
         }
         words.join(", ")
     }
+
+    /// Whether links can be made here, in words, the fact first: "Links
+    /// can be made here", "Cannot link here: this place holds no links".
+    /// On Windows a symbolic link may also need Developer Mode or an
+    /// administrator; that is said when the link is made, from the
+    /// system's own answer, since only the attempt tells.
+    pub fn links_in_words(&self) -> &'static str {
+        match (self.links, self.writable) {
+            (false, _) => "Cannot link here: this place holds no links",
+            (true, false) => "Cannot link here: the place is read only",
+            (true, true) if cfg!(windows) => {
+                "Links can be made here; symbolic links may need Developer Mode"
+            }
+            (true, true) => "Links can be made here",
+        }
+    }
+
+    /// Whether a new link can be made here: links held and the place
+    /// writable.
+    pub const fn can_link(&self) -> bool {
+        self.links && self.writable
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diroxide_core::format::within_cells;
+
+    #[test]
+    fn links_are_said_in_words() {
+        let mut caps = Capabilities::read_only();
+        assert!(!caps.can_link());
+        assert_eq!(
+            caps.links_in_words(),
+            "Cannot link here: this place holds no links"
+        );
+        caps.links = true;
+        assert_eq!(
+            caps.links_in_words(),
+            "Cannot link here: the place is read only"
+        );
+        caps.writable = true;
+        assert!(caps.can_link());
+        assert!(caps.links_in_words().starts_with("Links can be made here"));
+        for words in [
+            caps.links_in_words(),
+            Capabilities::read_only().links_in_words(),
+        ] {
+            assert!(
+                within_cells(words, "Links can be made here")
+                    || within_cells(words, "Cannot link here"),
+                "{words}"
+            );
+        }
+    }
 
     #[test]
     fn limits_are_said_in_words() {
