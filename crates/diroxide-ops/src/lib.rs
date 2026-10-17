@@ -32,6 +32,7 @@ pub mod progress;
 mod run;
 #[cfg(test)]
 mod run_tests;
+pub mod sidecar;
 #[cfg(test)]
 mod testing;
 pub mod undo;
@@ -49,4 +50,5 @@ pub use pace::{FakePacer, Pacer, SystemPacer};
 pub use parts::{PartInfo, PartsError, PartsReader};
 pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
+pub use sidecar::{Sidecar, SidecarRead};
 pub use undo::{LeftAs, UndoLog, UndoRecord};
