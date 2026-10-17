@@ -40,6 +40,7 @@ pub mod test_archive;
 pub mod unpack;
 pub mod words;
 mod write;
+mod write_7z;
 
 pub use error::ArchiveError;
 pub use format::ArchiveFormat;

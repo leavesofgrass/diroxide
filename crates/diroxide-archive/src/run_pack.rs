@@ -11,13 +11,14 @@
 //! Progress counts the bytes read from the sources, in the engine's
 //! words: "Packing 30 percent, 2 minutes left".
 
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::sync::Mutex;
 
 use diroxide_core::{Entry, EntryKind, JobKind, JobState, Place, Secret, Timestamp};
 use diroxide_ops::{JobControl, JobReport};
 use diroxide_vfs::{OpContext, Provider, ReadSeek, Registry, TrashCheck, VfsError, WriteMode};
 
+use crate::format::ArchiveFormat;
 use crate::guard::Allowances;
 use crate::job::{JobEnv, Landing, Progress, Settler};
 use crate::pack::{PACK_TEMP_PREFIX, PACK_TEMP_SUFFIX, PackPlan};
@@ -261,6 +262,11 @@ fn write_temp(
     records: &Records,
     ctx: &OpContext,
 ) -> Result<(), PackFailure> {
+    if plan.format == ArchiveFormat::SevenZ {
+        return write_temp_7z(
+            provider, temp, plan, contents, settings, watch, records, ctx,
+        );
+    }
     let writer = provider
         .write(temp, WriteMode::CreateNew, ctx)
         .map_err(PackFailure::Write)?;
@@ -273,6 +279,161 @@ fn write_temp(
         records,
     )?;
     writer.commit(true).map_err(PackFailure::Write)
+}
+
+/// The most of a 7z's body held in memory before it goes to a body file
+/// beside the destination.
+const BODY_IN_MEMORY: usize = 64 << 20;
+
+/// A 7z's body on its way: in memory while it is small, then in a body
+/// file beside the destination through the committing writer. The 7z
+/// writer must put its start header in front once it knows it, which a
+/// committing writer cannot seek back to; the body is copied behind the
+/// header into the temporary archive when it is whole. (A seek on the
+/// committing writer, a contract change request, would save the copy.)
+enum Spill<'p> {
+    Memory {
+        bytes: Vec<u8>,
+        limit: usize,
+        provider: &'p dyn Provider,
+        place: Place,
+        ctx: &'p OpContext,
+    },
+    File {
+        writer: Box<dyn diroxide_vfs::FileWriter>,
+        provider: &'p dyn Provider,
+        place: Place,
+        ctx: &'p OpContext,
+    },
+    Moved,
+}
+
+impl Write for Spill<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if let Spill::Memory { bytes, limit, .. } = self {
+            if bytes.len() + buf.len() <= *limit {
+                bytes.extend_from_slice(buf);
+                return Ok(buf.len());
+            }
+            let Spill::Memory {
+                bytes,
+                provider,
+                place,
+                ctx,
+                ..
+            } = std::mem::replace(self, Spill::Moved)
+            else {
+                return Err(io::Error::other("the body went missing"));
+            };
+            let mut writer = provider
+                .write(&place, WriteMode::CreateNew, ctx)
+                .map_err(crate::guard::to_io)?;
+            writer.write_all(&bytes)?;
+            *self = Spill::File {
+                writer,
+                provider,
+                place,
+                ctx,
+            };
+        }
+        match self {
+            Spill::File { writer, .. } => writer.write(buf),
+            _ => Err(io::Error::other("the body went missing")),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Spill::File { writer, .. } => writer.flush(),
+            _ => Ok(()),
+        }
+    }
+}
+
+impl Spill<'_> {
+    /// Copies the body behind the header already written to `out`, and
+    /// removes the body file, if there was one.
+    fn finish_into(self, out: &mut dyn Write, watch: &dyn Watch) -> Result<(), PackFailure> {
+        match self {
+            Spill::Memory { bytes, .. } => out.write_all(&bytes).map_err(PackFailure::from_io),
+            Spill::File {
+                writer,
+                provider,
+                place,
+                ctx,
+            } => {
+                let copied = writer
+                    .commit(false)
+                    .map_err(PackFailure::Write)
+                    .and_then(|()| provider.read(&place, ctx).map_err(PackFailure::Write))
+                    .and_then(|mut reader| {
+                        let mut chunk = vec![0u8; 1 << 20];
+                        loop {
+                            watch.check().map_err(PackFailure::from_io)?;
+                            let n = reader.read(&mut chunk).map_err(PackFailure::from_io)?;
+                            if n == 0 {
+                                return Ok(());
+                            }
+                            out.write_all(&chunk[..n]).map_err(PackFailure::from_io)?;
+                        }
+                    });
+                // The body file is the job's own, done with either way.
+                let _ = provider.remove(&place, &OpContext::new());
+                copied
+            }
+            Spill::Moved => Err(PackFailure::Write(VfsError::NotFound)),
+        }
+    }
+}
+
+/// Writes a 7z under its temporary name: the body through [`Spill`],
+/// then the start header and the body into the temporary archive.
+#[allow(clippy::too_many_arguments)]
+fn write_temp_7z(
+    provider: &dyn Provider,
+    temp: &Place,
+    plan: &PackPlan,
+    contents: &dyn Contents,
+    settings: &Settings<'_>,
+    watch: &dyn Watch,
+    records: &Records,
+    ctx: &OpContext,
+) -> Result<(), PackFailure> {
+    let folder = temp
+        .parent()
+        .ok_or(PackFailure::Write(VfsError::NotFound))?;
+    let body = folder
+        .join(&format!(
+            "{PACK_TEMP_PREFIX}{}-body{PACK_TEMP_SUFFIX}",
+            plan.job.get()
+        ))
+        .map_err(|e| PackFailure::Write(e.into()))?;
+    if provider.stat(&body, ctx).is_ok() {
+        return Err(PackFailure::Write(VfsError::AlreadyExists));
+    }
+    let spill = Spill::Memory {
+        bytes: Vec::new(),
+        limit: BODY_IN_MEMORY,
+        provider,
+        place: body,
+        ctx,
+    };
+    let holder = crate::write_7z::HeadHolder::new(spill);
+    let holder = crate::write_7z::write_7z(
+        holder,
+        &plan.write_items,
+        contents,
+        settings,
+        watch,
+        records,
+    )?;
+    let (head, spill) = holder.into_parts();
+    let mut out = provider
+        .write(temp, WriteMode::CreateNew, ctx)
+        .map_err(PackFailure::Write)?;
+    out.write_all(&head).map_err(PackFailure::from_io)?;
+    spill.finish_into(&mut out, watch)?;
+    out.commit(true).map_err(PackFailure::Write)
 }
 
 /// Gives the tested archive its name: free, or as the conflict question
@@ -354,5 +515,38 @@ fn land(
             report.failed.push((target, error.to_string()));
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::write::NoWatch;
+    use diroxide_ops::FakeProvider;
+
+    #[test]
+    fn a_large_body_spills_to_a_file_and_comes_back() {
+        let fake = FakeProvider::new();
+        let folder = Place::parse(if cfg!(windows) { r"D:\out" } else { "/out" }).unwrap();
+        fake.add_folder(&folder);
+        let body = folder.join(".diroxide-9-body.tmp").unwrap();
+        let ctx = OpContext::new();
+        let mut spill = Spill::Memory {
+            bytes: Vec::new(),
+            limit: 10,
+            provider: &fake,
+            place: body.clone(),
+            ctx: &ctx,
+        };
+        spill.write_all(b"0123456789").unwrap();
+        assert!(matches!(spill, Spill::Memory { .. }));
+        spill.write_all(b"abcdef").unwrap();
+        assert!(matches!(spill, Spill::File { .. }));
+        let mut out = Vec::new();
+        out.extend_from_slice(b"HEAD");
+        spill.finish_into(&mut out, &NoWatch).unwrap();
+        assert_eq!(out, b"HEAD0123456789abcdef");
+        assert!(!fake.exists(&body), "the body file is removed");
+        assert!(fake.unfinished().is_empty());
     }
 }

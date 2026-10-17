@@ -85,7 +85,6 @@ impl Contents for InMemory<'_> {
 
 /// How a new archive is written.
 #[derive(Clone, Copy, Debug)]
-#[allow(dead_code)] // The tar and 7z writers read the rest (commits 33, 34).
 pub(crate) struct Settings<'a> {
     /// Its format.
     pub(crate) format: ArchiveFormat,
@@ -167,7 +166,8 @@ pub(crate) struct Feed<'a, R> {
     watch: &'a dyn Watch,
     records: &'a Records,
     done: bool,
-    failure: Option<VfsError>,
+    /// The member's own read error, once it failed.
+    pub(crate) failure: Option<VfsError>,
 }
 
 impl<'a, R: Read> Feed<'a, R> {
@@ -389,8 +389,28 @@ pub(crate) fn write_archive<W: Write>(
         }
         _ => Err(PackFailure::Write(VfsError::unsupported(
             "archive",
-            "pack to this format yet",
+            "pack a 7z to a sink that cannot seek",
         ))),
+    }
+}
+
+/// Writes a new archive of any format to a sink that seeks (memory, for
+/// the round-trip fuzz target): a 7z directly, the rest as
+/// [`write_archive`] does.
+#[allow(dead_code)] // The round-trip fuzz target's (plan commit 37).
+pub(crate) fn write_archive_seekable<W: Write + io::Seek>(
+    out: W,
+    items: &[WriteItem],
+    contents: &dyn Contents,
+    settings: &Settings<'_>,
+    watch: &dyn Watch,
+    records: &Records,
+) -> Result<W, PackFailure> {
+    match settings.format {
+        ArchiveFormat::SevenZ => {
+            crate::write_7z::write_7z(out, items, contents, settings, watch, records)
+        }
+        _ => write_archive(out, items, contents, settings, watch, records),
     }
 }
 
