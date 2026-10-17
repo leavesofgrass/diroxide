@@ -10,6 +10,7 @@ mod braille;
 mod commands;
 mod dialogs;
 mod session;
+mod viewer;
 
 use diroxide_app::{App, AppEvent, AppOptions, Runtime};
 use diroxide_core::{Effect, Key, Place, Side};

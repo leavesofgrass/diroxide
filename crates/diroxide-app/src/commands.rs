@@ -324,6 +324,72 @@ pub mod ids {
         SORT_LABEL = "view.sort-label";
         /// The Sort list.
         SORT_LIST = "view.sort-list";
+        /// Closes the viewer and goes back to the file's row
+        CLOSE_VIEWER = "viewer.close";
+        /// Moves to the token before, or the byte before in hex mode, and says it
+        VIEWER_LEFT = "viewer.left";
+        /// Moves to the next token, or the next byte in hex mode, and says it
+        VIEWER_RIGHT = "viewer.right";
+        /// Wraps long lines at the screen's width, or stops wrapping
+        VIEWER_WRAP = "viewer.wrap";
+        /// Shows or hides the number of each line
+        VIEWER_LINE_NUMBERS = "viewer.line-numbers";
+        /// Asks for a line, an offset or a percent, and goes there
+        VIEWER_JUMP = "viewer.jump";
+        /// Asks for text, quoted text or hex bytes, and finds it after the cursor
+        VIEWER_SEARCH = "viewer.search";
+        /// Asks for text and finds it before the cursor
+        VIEWER_SEARCH_BACK = "viewer.search-back";
+        /// Goes to the next match of the last search
+        VIEWER_NEXT_MATCH = "viewer.next-match";
+        /// Goes to the match before, of the last search
+        VIEWER_PREVIOUS_MATCH = "viewer.previous-match";
+        /// Switches between the text and rows of bytes
+        VIEWER_HEX = "viewer.hex";
+        /// Says the byte at the cursor in hex and as a character
+        VIEWER_BYTE = "viewer.byte";
+        /// Reads further into a file larger than the viewer keeps
+        VIEWER_READ_MORE = "viewer.read-more";
+        /// Reads the file again from its place
+        VIEWER_RELOAD = "viewer.reload";
+        /// Goes to the end and stays there as the file grows, or stops
+        VIEWER_FOLLOW = "viewer.follow";
+        /// Shows the next file of the folder in the viewer
+        VIEWER_NEXT_FILE = "viewer.next-file";
+        /// Shows the file before in the viewer
+        VIEWER_PREVIOUS_FILE = "viewer.previous-file";
+        /// Closes the viewer with the file's row focused in its folder
+        VIEWER_SHOW_IN_FOLDER = "viewer.show-in-folder";
+        /// Puts the viewed file's full path on the system clipboard
+        VIEWER_COPY_PATH = "viewer.copy-path";
+        /// Puts the viewed file's name on the system clipboard
+        VIEWER_COPY_NAME = "viewer.copy-name";
+        /// Says what the token at the cursor is, such as a keyword or a function name
+        VIEWER_TOKEN_KIND = "viewer.token-kind";
+        /// Says the kinds of token on the cursor's line, in order
+        VIEWER_LINE_KINDS = "viewer.line-kinds";
+        /// Lists the file's symbols, to go to one
+        VIEWER_OUTLINE = "viewer.outline";
+        /// Goes to the next function, type or heading
+        VIEWER_NEXT_SYMBOL = "viewer.next-symbol";
+        /// Goes to the function, type or heading before
+        VIEWER_PREVIOUS_SYMBOL = "viewer.previous-symbol";
+        /// Goes to the bracket that matches the one at the cursor
+        VIEWER_BRACKET = "viewer.bracket";
+        /// Goes to the next line of code after a comment
+        VIEWER_SKIP_COMMENT = "viewer.skip-comment";
+        /// Says the indent level of the cursor's line
+        VIEWER_INDENT = "viewer.indent";
+        /// Goes to the next line at the same indent, within the block
+        VIEWER_INDENT_NEXT = "viewer.indent-next";
+        /// Goes to the line before at the same indent, within the block
+        VIEWER_INDENT_PREVIOUS = "viewer.indent-previous";
+        /// Goes to the line before with less indent
+        VIEWER_INDENT_PARENT = "viewer.indent-parent";
+        /// Goes to the next line with more indent, inside this one
+        VIEWER_INDENT_CHILD = "viewer.indent-child";
+        /// Says the function and the blocks the cursor is in
+        VIEWER_CONTEXT = "viewer.context";
         /// List the plugins.
         PLUGINS = "plugins.list";
         /// Yes, in a question.
@@ -335,7 +401,7 @@ pub mod ids {
     }
 }
 
-use Layer::{Dialog, Global, List, Panel};
+use Layer::{Dialog, Global, List, Panel, Viewer};
 
 const fn command(
     id: CommandId,
@@ -357,7 +423,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 96] = [
+pub static CATALOG: [CommandInfo; 129] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1093,6 +1159,270 @@ pub static CATALOG: [CommandInfo; 96] = [
         Panel,
         &[],
         &["ctrl+shift+s"],
+    ),
+    command(
+        ids::CLOSE_VIEWER,
+        "Close viewer",
+        "Closes the viewer and goes back to the file's row.",
+        Viewer,
+        &["escape", "q"],
+        &["escape", "q"],
+    ),
+    command(
+        ids::VIEWER_LEFT,
+        "Previous token",
+        "Moves to the token before, or the byte before in hex mode, and says it.",
+        Viewer,
+        &["left"],
+        &["left"],
+    ),
+    command(
+        ids::VIEWER_RIGHT,
+        "Next token",
+        "Moves to the next token, or the next byte in hex mode, and says it.",
+        Viewer,
+        &["right"],
+        &["right"],
+    ),
+    command(
+        ids::VIEWER_WRAP,
+        "Wrap lines",
+        "Wraps long lines at the screen's width, or stops wrapping.",
+        Viewer,
+        &["w"],
+        &["w"],
+    ),
+    command(
+        ids::VIEWER_LINE_NUMBERS,
+        "Line numbers",
+        "Shows or hides the number of each line.",
+        Viewer,
+        &["l"],
+        &["l"],
+    ),
+    command(
+        ids::VIEWER_JUMP,
+        "Go to line",
+        "Asks for a line, an offset or a percent, and goes there.",
+        Viewer,
+        &["g", "ctrl+g"],
+        &["g", "ctrl+g"],
+    ),
+    command(
+        ids::VIEWER_SEARCH,
+        "Search in file",
+        "Asks for text, quoted text or hex bytes, and finds it after the cursor.",
+        Viewer,
+        &["/", "f7"],
+        &["/", "f7"],
+    ),
+    command(
+        ids::VIEWER_SEARCH_BACK,
+        "Search backward",
+        "Asks for text and finds it before the cursor.",
+        Viewer,
+        &["?"],
+        &["?"],
+    ),
+    command(
+        ids::VIEWER_NEXT_MATCH,
+        "Next match",
+        "Goes to the next match of the last search.",
+        Viewer,
+        &["n"],
+        &["n"],
+    ),
+    command(
+        ids::VIEWER_PREVIOUS_MATCH,
+        "Previous match",
+        "Goes to the match before, of the last search.",
+        Viewer,
+        &["p"],
+        &["p"],
+    ),
+    command(
+        ids::VIEWER_HEX,
+        "Hex mode",
+        "Switches between the text and rows of bytes.",
+        Viewer,
+        &["h"],
+        &["h"],
+    ),
+    command(
+        ids::VIEWER_BYTE,
+        "Say byte",
+        "Says the byte at the cursor in hex and as a character.",
+        Viewer,
+        &["b"],
+        &["b"],
+    ),
+    command(
+        ids::VIEWER_READ_MORE,
+        "Read more",
+        "Reads further into a file larger than the viewer keeps.",
+        Viewer,
+        &["shift+r"],
+        &["shift+r"],
+    ),
+    command(
+        ids::VIEWER_RELOAD,
+        "Reload file",
+        "Reads the file again from its place.",
+        Viewer,
+        &["ctrl+r"],
+        &["ctrl+r"],
+    ),
+    command(
+        ids::VIEWER_FOLLOW,
+        "Follow file",
+        "Goes to the end and stays there as the file grows, or stops.",
+        Viewer,
+        &["f"],
+        &["f"],
+    ),
+    command(
+        ids::VIEWER_NEXT_FILE,
+        "Next file",
+        "Shows the next file of the folder in the viewer.",
+        Viewer,
+        &["alt+n"],
+        &["alt+n"],
+    ),
+    command(
+        ids::VIEWER_PREVIOUS_FILE,
+        "Previous file",
+        "Shows the file before in the viewer.",
+        Viewer,
+        &["alt+p"],
+        &["alt+p"],
+    ),
+    command(
+        ids::VIEWER_SHOW_IN_FOLDER,
+        "Show in folder",
+        "Closes the viewer with the file's row focused in its folder.",
+        Viewer,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VIEWER_COPY_PATH,
+        "Copy path",
+        "Puts the viewed file's full path on the system clipboard.",
+        Viewer,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VIEWER_COPY_NAME,
+        "Copy name",
+        "Puts the viewed file's name on the system clipboard.",
+        Viewer,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VIEWER_TOKEN_KIND,
+        "Say token kind",
+        "Says what the token at the cursor is, such as a keyword or a function name.",
+        Viewer,
+        &["k"],
+        &["k"],
+    ),
+    command(
+        ids::VIEWER_LINE_KINDS,
+        "Say line by kind",
+        "Says the kinds of token on the cursor's line, in order.",
+        Viewer,
+        &["shift+k"],
+        &["shift+k"],
+    ),
+    command(
+        ids::VIEWER_OUTLINE,
+        "Outline",
+        "Lists the file's symbols, to go to one.",
+        Viewer,
+        &["o"],
+        &["o"],
+    ),
+    command(
+        ids::VIEWER_NEXT_SYMBOL,
+        "Next symbol",
+        "Goes to the next function, type or heading.",
+        Viewer,
+        &["s"],
+        &["s"],
+    ),
+    command(
+        ids::VIEWER_PREVIOUS_SYMBOL,
+        "Previous symbol",
+        "Goes to the function, type or heading before.",
+        Viewer,
+        &["shift+s"],
+        &["shift+s"],
+    ),
+    command(
+        ids::VIEWER_BRACKET,
+        "Matching bracket",
+        "Goes to the bracket that matches the one at the cursor.",
+        Viewer,
+        &["m"],
+        &["m"],
+    ),
+    command(
+        ids::VIEWER_SKIP_COMMENT,
+        "Skip comment",
+        "Goes to the next line of code after a comment.",
+        Viewer,
+        &["c"],
+        &["c"],
+    ),
+    command(
+        ids::VIEWER_INDENT,
+        "Say indent",
+        "Says the indent level of the cursor's line.",
+        Viewer,
+        &["i"],
+        &["i"],
+    ),
+    command(
+        ids::VIEWER_INDENT_NEXT,
+        "Next at this indent",
+        "Goes to the next line at the same indent, within the block.",
+        Viewer,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VIEWER_INDENT_PREVIOUS,
+        "Previous at this indent",
+        "Goes to the line before at the same indent, within the block.",
+        Viewer,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VIEWER_INDENT_PARENT,
+        "Up an indent level",
+        "Goes to the line before with less indent.",
+        Viewer,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VIEWER_INDENT_CHILD,
+        "Into the next indent",
+        "Goes to the next line with more indent, inside this one.",
+        Viewer,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VIEWER_CONTEXT,
+        "Say context",
+        "Says the function and the blocks the cursor is in.",
+        Viewer,
+        &["x"],
+        &["x"],
     ),
     command(
         ids::PLUGINS,

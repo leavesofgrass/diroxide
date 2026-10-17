@@ -163,7 +163,7 @@ pub fn render(app: &App, options: &TuiOptions) -> Screen {
         ColorSupport::NoColor,
     );
     let mut buffer = Buffer::empty(Rect::new(0, 0, built.width, built.height));
-    view::paint(&built, &styles, &mut buffer);
+    view::paint(&built, &styles, &viewer::CodeStyles::plain(), &mut buffer);
     Screen {
         lines: (0..built.height)
             .map(|y| view::line_text(&buffer, y))

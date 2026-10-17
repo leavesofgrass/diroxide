@@ -866,6 +866,22 @@ impl Runtime {
                     lock(&jobs).remove(&job);
                 });
             }
+            Request::OpenViewer {
+                request,
+                place,
+                size,
+                cap,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let result = open_viewer_source(shared, &registry, &place, size, cap);
+                    shared.send(AppEvent::ViewerSource {
+                        request,
+                        place,
+                        result,
+                    });
+                });
+            }
             Request::DropArchiveJob(job) => {
                 // Dropping the job's secrets wipes its password.
                 lock(&self.archive_secrets).remove(&job);
@@ -1146,6 +1162,46 @@ impl Runtime {
                 .collect();
         }
     }
+}
+
+/// Reads a file for the viewer: a seekable read where the provider has one
+/// (a local file, a stored member, a spooled one), else a stream kept up to
+/// `cap`; a locked member asks its password through the app, three tries.
+fn open_viewer_source(
+    shared: &Arc<Shared>,
+    registry: &Registry,
+    place: &Place,
+    size: Option<u64>,
+    cap: u64,
+) -> Result<crate::viewer::ViewerSource, Message> {
+    let source: Arc<dyn SecretSource> = Arc::new(ForwardSecrets {
+        job: None,
+        shared: Arc::clone(shared),
+    });
+    let secrets = JobSecrets::new(source);
+    let ctx = OpContext::new();
+    let opened = secrets.with_tries(&ctx, |ctx| {
+        let provider = registry.resolve(place)?;
+        match provider.open_seekable(place, ctx) {
+            Ok(reader) => crate::viewer::ViewerSource::seekable(reader)
+                .map_err(|e| ArchiveError::Vfs(diroxide_vfs::VfsError::from(e))),
+            Err(diroxide_vfs::VfsError::WrongPassword) => {
+                Err(ArchiveError::Vfs(diroxide_vfs::VfsError::WrongPassword))
+            }
+            Err(_) => {
+                let reader = provider.read(place, ctx)?;
+                Ok(crate::viewer::ViewerSource::stream(reader, size, cap))
+            }
+        }
+    });
+    opened.map_err(|error| {
+        let name = place
+            .name()
+            .map(diroxide_core::names::display_name)
+            .unwrap_or_default()
+            .into_owned();
+        error.message("view", &name)
+    })
 }
 
 /// Lists a place inside an archive on a worker: the archive opened with

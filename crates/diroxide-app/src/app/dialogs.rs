@@ -611,6 +611,24 @@ impl App {
                 None => Vec::new(),
             },
             Purpose::PackName(form) => self.pack_named(*form, &text),
+            Purpose::ViewerJump => {
+                let mut effects = self.close_top();
+                effects.extend(self.viewer_jump(&text));
+                effects
+            }
+            Purpose::ViewerSearch { backward } => {
+                let mut effects = self.close_top();
+                effects.extend(self.viewer_search(&text, backward));
+                effects
+            }
+            Purpose::ViewerOutline => match row {
+                Some(row) => {
+                    let mut effects = self.close_top();
+                    effects.extend(self.viewer_outline_go(&row));
+                    effects
+                }
+                None => Vec::new(),
+            },
             Purpose::UnpackForm(form) => match row {
                 Some(row) => self.unpack_row(*form, &row),
                 None => Vec::new(),

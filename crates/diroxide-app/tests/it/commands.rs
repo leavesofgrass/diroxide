@@ -599,7 +599,9 @@ fn details_context_menu_help_and_the_key_bar() {
         f.s.command(ids::SWITCH_BANK),
         ["Only one bank: Function keys."]
     );
-    assert_eq!(f.s.key("f3"), ["The viewer comes with alpha.2."]);
+    let said = f.s.key("f3");
+    assert!(said[0].starts_with("report.pdf, in "), "{said:?}");
+    assert_eq!(f.s.key("escape"), ["Viewer closed: report.pdf"]);
     assert_eq!(f.s.command(ids::PLUGINS), ["Plugins come with alpha.4."]);
 }
 

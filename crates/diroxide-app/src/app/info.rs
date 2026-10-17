@@ -144,8 +144,13 @@ impl App {
     /// Say Key Bar: every pair of the active bank, keys in words: "Key
     /// bar: F2 Rename, F3 View, ... Control plus Q Quit."
     pub(super) fn say_key_bar(&mut self) -> Vec<Effect> {
-        let text = self
-            .active_bank()
+        let viewer_bank = crate::menu::viewer_bank();
+        let bank = if self.viewer_open() {
+            Some(&viewer_bank)
+        } else {
+            self.active_bank()
+        };
+        let text = bank
             .map(|bank| bank.key_bar_spoken(&self.keymap))
             .filter(|text| !text.is_empty())
             .unwrap_or_else(|| "The key bar is empty.".to_owned());

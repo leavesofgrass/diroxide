@@ -80,6 +80,35 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Home: First row. Moves the focus to the first row. (list.home)
 - End: Last row. Moves the focus to the last row. (list.end)
 
+### In the viewer
+
+- Escape or Q: Close viewer. Closes the viewer and goes back to the file's row. (viewer.close)
+- Left: Previous token. Moves to the token before, or the byte before in hex mode, and says it. (viewer.left)
+- Right: Next token. Moves to the next token, or the next byte in hex mode, and says it. (viewer.right)
+- W: Wrap lines. Wraps long lines at the screen's width, or stops wrapping. (viewer.wrap)
+- L: Line numbers. Shows or hides the number of each line. (viewer.line-numbers)
+- G or Ctrl+G: Go to line. Asks for a line, an offset or a percent, and goes there. (viewer.jump)
+- / or F7: Search in file. Asks for text, quoted text or hex bytes, and finds it after the cursor. (viewer.search)
+- ?: Search backward. Asks for text and finds it before the cursor. (viewer.search-back)
+- N: Next match. Goes to the next match of the last search. (viewer.next-match)
+- P: Previous match. Goes to the match before, of the last search. (viewer.previous-match)
+- H: Hex mode. Switches between the text and rows of bytes. (viewer.hex)
+- B: Say byte. Says the byte at the cursor in hex and as a character. (viewer.byte)
+- Shift+R: Read more. Reads further into a file larger than the viewer keeps. (viewer.read-more)
+- Ctrl+R: Reload file. Reads the file again from its place. (viewer.reload)
+- F: Follow file. Goes to the end and stays there as the file grows, or stops. (viewer.follow)
+- Alt+N: Next file. Shows the next file of the folder in the viewer. (viewer.next-file)
+- Alt+P: Previous file. Shows the file before in the viewer. (viewer.previous-file)
+- K: Say token kind. Says what the token at the cursor is, such as a keyword or a function name. (viewer.token-kind)
+- Shift+K: Say line by kind. Says the kinds of token on the cursor's line, in order. (viewer.line-kinds)
+- O: Outline. Lists the file's symbols, to go to one. (viewer.outline)
+- S: Next symbol. Goes to the next function, type or heading. (viewer.next-symbol)
+- Shift+S: Previous symbol. Goes to the function, type or heading before. (viewer.previous-symbol)
+- M: Matching bracket. Goes to the bracket that matches the one at the cursor. (viewer.bracket)
+- C: Skip comment. Goes to the next line of code after a comment. (viewer.skip-comment)
+- I: Say indent. Says the indent level of the cursor's line. (viewer.indent)
+- X: Say context. Says the function and the blocks the cursor is in. (viewer.context)
+
 ### In a question
 
 - Y: Yes. Answers yes to the question. (dialog.yes)
@@ -117,6 +146,13 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Sort by owner. Sorts by owner, A to Z; again for Z to A. (view.sort-owner)
 - Sort by label. Sorts by label, A to Z; again for Z to A. (view.sort-label)
 - Sort list. Lists every sort key, the current one marked with its direction. (view.sort-list)
+- Show in folder. Closes the viewer with the file's row focused in its folder. (viewer.show-in-folder)
+- Copy path. Puts the viewed file's full path on the system clipboard. (viewer.copy-path)
+- Copy name. Puts the viewed file's name on the system clipboard. (viewer.copy-name)
+- Next at this indent. Goes to the next line at the same indent, within the block. (viewer.indent-next)
+- Previous at this indent. Goes to the line before at the same indent, within the block. (viewer.indent-previous)
+- Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
+- Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
 - Plugins. Lists the plugins and what they may do. Plugins come with alpha.4. (plugins.list)
 
 ## In the window
@@ -201,6 +237,35 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Home: First row. Moves the focus to the first row. (list.home)
 - End: Last row. Moves the focus to the last row. (list.end)
 
+### In the viewer
+
+- Escape or Q: Close viewer. Closes the viewer and goes back to the file's row. (viewer.close)
+- Left: Previous token. Moves to the token before, or the byte before in hex mode, and says it. (viewer.left)
+- Right: Next token. Moves to the next token, or the next byte in hex mode, and says it. (viewer.right)
+- W: Wrap lines. Wraps long lines at the screen's width, or stops wrapping. (viewer.wrap)
+- L: Line numbers. Shows or hides the number of each line. (viewer.line-numbers)
+- G or Ctrl+G: Go to line. Asks for a line, an offset or a percent, and goes there. (viewer.jump)
+- / or F7: Search in file. Asks for text, quoted text or hex bytes, and finds it after the cursor. (viewer.search)
+- ?: Search backward. Asks for text and finds it before the cursor. (viewer.search-back)
+- N: Next match. Goes to the next match of the last search. (viewer.next-match)
+- P: Previous match. Goes to the match before, of the last search. (viewer.previous-match)
+- H: Hex mode. Switches between the text and rows of bytes. (viewer.hex)
+- B: Say byte. Says the byte at the cursor in hex and as a character. (viewer.byte)
+- Shift+R: Read more. Reads further into a file larger than the viewer keeps. (viewer.read-more)
+- Ctrl+R: Reload file. Reads the file again from its place. (viewer.reload)
+- F: Follow file. Goes to the end and stays there as the file grows, or stops. (viewer.follow)
+- Alt+N: Next file. Shows the next file of the folder in the viewer. (viewer.next-file)
+- Alt+P: Previous file. Shows the file before in the viewer. (viewer.previous-file)
+- K: Say token kind. Says what the token at the cursor is, such as a keyword or a function name. (viewer.token-kind)
+- Shift+K: Say line by kind. Says the kinds of token on the cursor's line, in order. (viewer.line-kinds)
+- O: Outline. Lists the file's symbols, to go to one. (viewer.outline)
+- S: Next symbol. Goes to the next function, type or heading. (viewer.next-symbol)
+- Shift+S: Previous symbol. Goes to the function, type or heading before. (viewer.previous-symbol)
+- M: Matching bracket. Goes to the bracket that matches the one at the cursor. (viewer.bracket)
+- C: Skip comment. Goes to the next line of code after a comment. (viewer.skip-comment)
+- I: Say indent. Says the indent level of the cursor's line. (viewer.indent)
+- X: Say context. Says the function and the blocks the cursor is in. (viewer.context)
+
 ### In a question
 
 - Y: Yes. Answers yes to the question. (dialog.yes)
@@ -232,6 +297,13 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Sort by attributes. Sorts by permissions or attributes; again to reverse. (view.sort-attributes)
 - Sort by owner. Sorts by owner, A to Z; again for Z to A. (view.sort-owner)
 - Sort by label. Sorts by label, A to Z; again for Z to A. (view.sort-label)
+- Show in folder. Closes the viewer with the file's row focused in its folder. (viewer.show-in-folder)
+- Copy path. Puts the viewed file's full path on the system clipboard. (viewer.copy-path)
+- Copy name. Puts the viewed file's name on the system clipboard. (viewer.copy-name)
+- Next at this indent. Goes to the next line at the same indent, within the block. (viewer.indent-next)
+- Previous at this indent. Goes to the line before at the same indent, within the block. (viewer.indent-previous)
+- Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
+- Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
 - Plugins. Lists the plugins and what they may do. Plugins come with alpha.4. (plugins.list)
 
 ## Keys a terminal may keep

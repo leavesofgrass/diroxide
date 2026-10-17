@@ -23,6 +23,7 @@ mod files;
 mod info;
 mod nav;
 mod select;
+mod viewing;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -182,6 +183,16 @@ pub enum AppEvent {
         /// The plan, or why not.
         result: Result<Box<crate::request::ArchivePlan>, Message>,
     },
+    /// A file's bytes for the viewer were read, or could not be (the
+    /// sentence says why).
+    ViewerSource {
+        /// The request it answers.
+        request: RequestId,
+        /// The file.
+        place: Place,
+        /// The bytes, or why not.
+        result: Result<crate::viewer::ViewerSource, Message>,
+    },
     /// An archive job ended: its report, and the runner's lines, the
     /// summary first ("Unpack finished: 4 done.", "Checked 300 of 300
     /// entries, all good.").
@@ -309,6 +320,12 @@ enum Purpose {
     },
     /// The unpack dialog: its settings.
     UnpackForm(Box<archive_forms::UnpackForm>),
+    /// The viewer's jump prompt.
+    ViewerJump,
+    /// The viewer's search prompt.
+    ViewerSearch { backward: bool },
+    /// The viewer's outline.
+    ViewerOutline,
     /// The settings list.
     Settings,
     /// A setting's choices.
@@ -434,6 +451,12 @@ pub struct App {
     /// The runner's lines of the archive job ending now, which its result
     /// says instead of the report's summary.
     finish_lines: Option<Vec<String>>,
+    /// The open viewer.
+    viewing: Option<viewing::Viewing>,
+    /// The viewer source being read, and what for.
+    viewer_wait: Option<(RequestId, viewing::SourceFor)>,
+    /// The highlighter, one for the run, handed to each viewer.
+    highlighter: Option<crate::viewer::highlight::Session>,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -720,6 +743,9 @@ impl App {
             pending_archive: Vec::new(),
             archive_entered: [false, false],
             finish_lines: None,
+            viewing: None,
+            viewer_wait: None,
+            highlighter: None,
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -825,6 +851,9 @@ impl App {
     /// terminal draws it on its last line in every mode (answer 49); see
     /// [`App::key_bar_within`] for a line of fixed width.
     pub fn key_bar(&self) -> String {
+        if self.viewing.is_some() {
+            return crate::menu::viewer_bank().key_bar(&self.keymap);
+        }
         self.active_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
@@ -836,6 +865,9 @@ impl App {
     pub fn key_bar_within(&self, cells: usize) -> String {
         if !self.settings.key_bar {
             return String::new();
+        }
+        if self.viewing.is_some() {
+            return crate::menu::viewer_bank().key_bar_within(&self.keymap, cells);
         }
         self.active_bank()
             .map(|bank| bank.key_bar_within(&self.keymap, cells))
@@ -930,6 +962,9 @@ impl App {
     /// the panel always fit; the whole path is Go to a path's default
     /// text. The terminal draws this; the window uses the whole line.
     pub fn title_line_within(&self, cells: usize) -> String {
+        if let Some(title) = self.viewer_title(cells) {
+            return title;
+        }
         let panel = self.active_panel();
         let place = panel.loading_place().unwrap_or(panel.place());
         if place.kind() == diroxide_core::PlaceKind::Archive {
@@ -1006,6 +1041,11 @@ impl App {
     /// reader that speaks changed text says the row once (R4 section
     /// 5.1). A focus move keeps the last message.
     pub fn status_line(&self) -> String {
+        if self.status.is_empty()
+            && let Some(viewer) = self.viewer()
+        {
+            return viewer.status();
+        }
         if self.status.is_empty() {
             let panel = self.active_panel();
             let list = panel.list();
@@ -1096,6 +1136,11 @@ impl App {
             } => self.program_ended(&what, &folder, result),
             AppEvent::ArchiveOpened { request, facts } => self.archive_opened(request, *facts),
             AppEvent::ArchivePlanned { job, result } => self.archive_planned(job, result),
+            AppEvent::ViewerSource {
+                request,
+                place,
+                result,
+            } => self.viewer_source(request, place, result),
             AppEvent::ArchiveFinished { report, lines } => self.archive_finished(*report, lines),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
@@ -1116,7 +1161,19 @@ impl App {
         {
             self.quick = None;
         }
-        let Some(action) = route(&command.id) else {
+        let action = route(&command.id);
+        if self.dialogs.is_empty()
+            && let Some(effects) = self.viewer_dispatch(action, &command.id)
+        {
+            return effects;
+        }
+        if viewing::viewer_route(&command.id).is_some() {
+            if !self.dialogs.is_empty() {
+                return vec![self.say(Message::status("Close this dialog first."))];
+            }
+            return self.viewer_closed_command();
+        }
+        let Some(action) = action else {
             let message =
                 Message::could_not("run", command.id.as_str(), "no command has that id", "");
             return vec![self.say(message)];
@@ -1171,7 +1228,7 @@ impl App {
             Action::SelectNext => self.next_selected(true),
             Action::SelectPrevious => self.next_selected(false),
             Action::SelectRestore => self.restore_selection(),
-            Action::View => vec![self.say(Message::info("The viewer comes with alpha.2."))],
+            Action::View => self.view_file(),
             Action::Edit => self.edit_file(),
             Action::Copy => self.copy_or_move(diroxide_core::JobKind::Copy),
             Action::Move => self.copy_or_move(diroxide_core::JobKind::Move),
@@ -1277,6 +1334,24 @@ impl App {
         }
         if !self.dialogs.is_empty() {
             return self.dialog_key(key);
+        }
+        if self.viewing.is_some() {
+            let layers = [
+                diroxide_core::Layer::Viewer,
+                diroxide_core::Layer::List,
+                diroxide_core::Layer::Global,
+            ];
+            return match self.keymap.lookup(&layers, &key) {
+                Lookup::Command(id) => {
+                    self.status.clear();
+                    self.dispatch(&Command::new(id))
+                }
+                // A panel's key says the viewer is in the way.
+                Lookup::NoMatch => match self.keymap.lookup(&[diroxide_core::Layer::Panel], &key) {
+                    Lookup::Command(id) => self.dispatch(&Command::new(id)),
+                    Lookup::NoMatch => Vec::new(),
+                },
+            };
         }
         let layers = [
             diroxide_core::Layer::Panel,

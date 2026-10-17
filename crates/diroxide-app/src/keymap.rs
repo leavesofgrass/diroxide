@@ -273,6 +273,11 @@ impl Keymap {
             if b.layer == Layer::Dialog || !b.key.is_single_character() {
                 return true;
             }
+            // The viewer has no type-ahead, so its letters run its
+            // commands unless single-character keys are off.
+            if b.layer == Layer::Viewer && mode == SingleLetters::TypeAhead {
+                return true;
+            }
             match mode {
                 SingleLetters::Commands => true,
                 SingleLetters::Off => false,

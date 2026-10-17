@@ -687,3 +687,52 @@ fn the_key_bar_is_the_last_line_in_every_mode() {
     start(&mut s, &clock);
     assert_eq!(s.screen().lines[23], "No jobs");
 }
+
+/// Plan commit 63: F3 draws the viewer over the panels, the hardware
+/// cursor on the focused row's first cell in every state (the rows, the
+/// search prompt, back on the panel), the viewer's keys on the key bar.
+#[test]
+fn f3_draws_the_viewer_with_the_cursor_on_its_row_and_escape_comes_back() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    std::fs::write(
+        work.join("poem.txt"),
+        "first line\nsecond line\nthird line\n",
+    )
+    .unwrap();
+    let (mut one, mut runtime) = app(place(&work), place(&work), settings(Layout::Single));
+    let clock = Clock::at_start();
+    let mut s = session(&mut one, &mut runtime, 80, 24, true);
+    start(&mut s, &clock);
+    focus(&mut s, &clock, "poem.txt");
+    press(&mut s, &clock, "f3");
+    let screen = s.screen();
+    assert!(
+        screen.lines[0].starts_with("poem.txt, in "),
+        "{:#?}",
+        screen.lines
+    );
+    assert_eq!(screen.lines[1], "first line");
+    assert_eq!(screen.lines[3], "third line");
+    assert!(
+        screen.lines[23].starts_with("Escape Close  / Search  N Next"),
+        "{:#?}",
+        screen.lines
+    );
+    cursor_at(&s, 0, 1);
+    press(&mut s, &clock, "down");
+    cursor_at(&s, 0, 2);
+    press(&mut s, &clock, "ctrl+d");
+    assert!(s.screen().lines[21].starts_with("Line 2 of 3"));
+    press(&mut s, &clock, "/");
+    let prompt = line_of(&s.screen(), "Search for:");
+    cursor_at(&s, "Search for: ".len(), prompt);
+    type_text(&mut s, &clock, "third");
+    press(&mut s, &clock, "enter");
+    cursor_at(&s, 0, 3);
+    assert!(s.screen().lines[21].starts_with("Match 1 of 1, line 3"));
+    press(&mut s, &clock, "escape");
+    let row = line_of(&s.screen(), "poem.txt");
+    cursor_at(&s, 0, row);
+    assert!(s.screen().lines[0].starts_with("work, left panel"));
+}

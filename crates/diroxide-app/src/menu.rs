@@ -539,6 +539,30 @@ pub fn default_bank() -> Bank {
     }
 }
 
+/// The viewer's bank, which the key bar shows while the viewer is open:
+/// "Escape Close  / Search  n Next  g Jump  h Hex  w Wrap  Ctrl+D Status".
+pub fn viewer_bank() -> Bank {
+    let buttons = [
+        ("Close", ids::CLOSE_VIEWER),
+        ("Search", ids::VIEWER_SEARCH),
+        ("Next", ids::VIEWER_NEXT_MATCH),
+        ("Jump", ids::VIEWER_JUMP),
+        ("Hex", ids::VIEWER_HEX),
+        ("Wrap", ids::VIEWER_WRAP),
+        ("Status", ids::SAY_STATUS),
+    ];
+    Bank {
+        name: "Viewer".to_owned(),
+        buttons: buttons
+            .into_iter()
+            .map(|(label, id)| Button {
+                label: label.to_owned(),
+                commands: vec![Command::new(id)],
+            })
+            .collect(),
+    }
+}
+
 /// The banks from `banks.toml`, each button's commands read in the command
 /// text form, with the problems in words; a command that cannot be read is
 /// left out of its button. With no banks configured, the default bank.

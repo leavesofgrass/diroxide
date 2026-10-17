@@ -278,6 +278,20 @@ pub enum Request {
         /// The archive file.
         archive: Place,
     },
+    /// Read a file's bytes for the viewer on a worker (a seekable read
+    /// where the provider has one, a stream kept up to `cap` otherwise; a
+    /// locked member asks its password); answered as
+    /// [`AppEvent::ViewerSource`](crate::AppEvent::ViewerSource).
+    OpenViewer {
+        /// The request, so a late answer to an old one is dropped.
+        request: diroxide_core::RequestId,
+        /// The file.
+        place: Place,
+        /// Its listed size, for the large-file policy.
+        size: Option<u64>,
+        /// The bytes a stream keeps at most.
+        cap: u64,
+    },
     /// Drop the passwords an archive job's plan holds: its confirmation
     /// said no, or it was never run.
     DropArchiveJob(JobId),

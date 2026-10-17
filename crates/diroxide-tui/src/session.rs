@@ -42,6 +42,7 @@ use ratatui::layout::Position;
 
 use crate::style::Styles;
 use crate::view::{self, Look, Memory};
+use crate::viewer::{CodeStyles, ViewerLook};
 use crate::{Screen, Theme, TuiError, TuiOptions, keys};
 
 /// How long a repeated message's line stays blank before it is drawn.
@@ -103,6 +104,10 @@ pub struct Session<'a, B: Backend> {
     options: TuiOptions,
     themes_dir: Option<PathBuf>,
     styles: Styles,
+    /// The viewer's code styles, in the same theme.
+    code: CodeStyles,
+    /// When the viewer gets its next slice of time.
+    viewer_tick_at: Option<Instant>,
     memory: Memory,
     redraw: bool,
     resumed: Arc<AtomicBool>,
@@ -149,6 +154,8 @@ impl<'a, B: Backend> Session<'a, B> {
         app.set_screen_reader(options.screen_reader);
         let support = options.color.unwrap_or_else(ColorSupport::detect);
         let styles = Styles::new(&app.settings().theme, &app.settings().colors, None, support);
+        let code =
+            CodeStyles::with_colors(&app.settings().theme, &app.settings().colors, None, support);
         Self {
             app,
             runtime,
@@ -156,6 +163,8 @@ impl<'a, B: Backend> Session<'a, B> {
             options,
             themes_dir: None,
             styles,
+            code,
+            viewer_tick_at: None,
             memory: Memory::default(),
             redraw: true,
             resumed: Arc::new(AtomicBool::new(false)),
@@ -182,6 +191,12 @@ impl<'a, B: Backend> Session<'a, B> {
         self.themes_dir = dir;
         let settings = self.app.settings();
         self.styles = Styles::new(
+            &settings.theme,
+            &settings.colors,
+            self.themes_dir.as_deref(),
+            self.styles.support(),
+        );
+        self.code = CodeStyles::with_colors(
             &settings.theme,
             &settings.colors,
             self.themes_dir.as_deref(),
@@ -451,6 +466,18 @@ impl<'a, B: Backend> Session<'a, B> {
             self.first_draw_at = None;
             self.redraw = true;
         }
+        // The viewer's time: a long scan, the highlighter, Follow.
+        match self.app.viewer_wants_tick() {
+            Some(ms) => {
+                if self.viewer_tick_at.is_none_or(|at| now >= at) {
+                    let effects = self.app.viewer_tick();
+                    self.carry(effects, now);
+                    let next = self.app.viewer_wants_tick().unwrap_or(ms);
+                    self.viewer_tick_at = Some(now + Duration::from_millis(next));
+                }
+            }
+            None => self.viewer_tick_at = None,
+        }
     }
 
     /// The next moment a timer needs the loop.
@@ -460,6 +487,7 @@ impl<'a, B: Backend> Session<'a, B> {
             self.key_test_since.map(|since| since + KEY_TEST_IDLE),
             self.resize_until,
             self.first_draw_at,
+            self.viewer_tick_at,
         ]
         .into_iter()
         .flatten()
@@ -516,7 +544,26 @@ impl<'a, B: Backend> Session<'a, B> {
                 self.themes_dir.as_deref(),
                 self.styles.support(),
             );
+            self.code = CodeStyles::with_colors(
+                &settings.theme,
+                &settings.colors,
+                self.themes_dir.as_deref(),
+                self.styles.support(),
+            );
         }
+        let viewer_look = ViewerLook {
+            width: 0,
+            height: 0,
+            screen_reader: self.app.screen_reader(),
+            color: self.styles.support(),
+            highlighting: settings.highlighting,
+        };
+        let plain = CodeStyles::plain();
+        let code = if viewer_look.colors_code() {
+            &self.code
+        } else {
+            &plain
+        };
         // The size comes from the frame: the whole screen, or the inline
         // viewport's rows.
         let base = self.look(0, 0, now);
@@ -526,7 +573,7 @@ impl<'a, B: Backend> Session<'a, B> {
         } else {
             self.status.clone()
         };
-        let app: &App = self.app;
+        let app: &mut App = self.app;
         let memory = &mut self.memory;
         let styles = &self.styles;
         let mut origin = (0, 0);
@@ -541,8 +588,23 @@ impl<'a, B: Backend> Session<'a, B> {
                     height: area.height,
                     ..base
                 };
-                let view = view::build(app, &look, &status, memory);
-                view::paint(&view, styles, frame.buffer_mut());
+                let mut view = view::build(app, &look, &status, memory);
+                if view.viewer_body
+                    && let Some(viewer) = app.viewer_mut()
+                {
+                    let vlook = ViewerLook {
+                        width: view.width,
+                        height: view.body_height,
+                        ..viewer_look
+                    };
+                    let (rows, at) =
+                        crate::viewer::body(viewer, view.width, view.body_height, &vlook);
+                    view.viewer = Some(rows);
+                    if view.cursor_in_body {
+                        view.cursor = (at.0, view.body_top + at.1);
+                    }
+                }
+                view::paint(&view, styles, code, frame.buffer_mut());
                 frame.set_cursor_position(Position::new(
                     area.x + view.cursor.0,
                     area.y + view.cursor.1,

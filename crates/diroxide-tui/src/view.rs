@@ -104,6 +104,18 @@ pub(crate) struct View {
     pub cursor: (u16, u16),
     /// The rows each panel shows, for Page Up and Page Down.
     pub page_rows: [usize; 2],
+    /// The body's first line and its height: where the viewer's rows go.
+    pub body_top: u16,
+    /// The body's height.
+    pub body_height: u16,
+    /// Whether the body is the viewer's (it is open and no list dialog
+    /// covers it): the session puts the viewer's rows there.
+    pub viewer_body: bool,
+    /// Whether the cursor follows the body's focus (no prompt holds it and
+    /// the fallback is off).
+    pub cursor_in_body: bool,
+    /// The viewer's rows, laid in the body when it is the viewer's.
+    pub viewer: Option<Vec<crate::viewer::Line>>,
 }
 
 /// Where a list's scroll is kept.
@@ -794,9 +806,19 @@ pub(crate) fn build(app: &App, look: &Look, status: &str, memory: &mut Memory) -
     let mini_lines = mini.as_ref().map_or(0, |m| m.lines.len());
     let body_h = height.saturating_sub(fixed(show_title, show_bar) - mini_base + mini_lines);
     let covering = app.dialogs().iter().rev().find(|(_, d)| !in_minibuffer(d));
+    let viewer_body = covering.is_none() && app.viewer_open();
     let (body, pages) = match covering {
         Some((id, dialog)) => (
             dialog_body(*id, dialog, memory, width, body_h),
+            [body_h.max(1); 2],
+        ),
+        // The viewer's rows are laid in by the session, which can give the
+        // viewer its size; the body is blank here.
+        None if viewer_body => (
+            Region {
+                lines: Vec::new(),
+                focus: None,
+            },
             [body_h.max(1); 2],
         ),
         None => panels_body(app, look, memory, width, body_h),
@@ -849,11 +871,22 @@ pub(crate) fn build(app: &App, look: &Look, status: &str, memory: &mut Memory) -
         lines,
         cursor,
         page_rows: pages,
+        body_top: body_top as u16,
+        body_height: body_h as u16,
+        viewer_body,
+        cursor_in_body: mini.is_none() && !look.cursor_fallback,
+        viewer: None,
     }
 }
 
-/// Paints a view into a buffer of its size with the styles.
-pub(crate) fn paint(view: &View, styles: &Styles, buffer: &mut Buffer) {
+/// Paints a view into a buffer of its size with the styles, the viewer's
+/// rows with the code styles.
+pub(crate) fn paint(
+    view: &View,
+    styles: &Styles,
+    code: &crate::viewer::CodeStyles,
+    buffer: &mut Buffer,
+) {
     let area = buffer.area;
     buffer.set_style(area, styles.get(PanelRole::Page));
     for (y, line) in view.lines.iter().enumerate() {
@@ -873,6 +906,16 @@ pub(crate) fn paint(view: &View, styles: &Styles, buffer: &mut Buffer) {
             }
             buffer.set_stringn(x, y, &run.text, usize::from(width), style);
         }
+    }
+    if let Some(rows) = &view.viewer {
+        let body = Rect::new(
+            area.x,
+            area.y + view.body_top,
+            area.width,
+            view.body_height
+                .min(area.height.saturating_sub(view.body_top)),
+        );
+        crate::viewer::paint(rows, body, styles, code, buffer);
     }
 }
 
