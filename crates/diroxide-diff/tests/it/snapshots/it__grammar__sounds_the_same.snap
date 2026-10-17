@@ -1,0 +1,76 @@
+---
+source: crates/diroxide-diff/tests/it/grammar.rs
+expression: out
+---
+-- trailing-spaces
+1 change between after.txt and bef...txt
+Changed 1.
+From the other panel to this panel.
+-- rows
+Changed line 3, trailing spaces added
+-- detail 1
+Change 1 of 1, line 3 before, line 3 after
+Before, line 3:     total due: 40
+After, line 3:     total due: 40   
+Differs: trailing spaces added
+-- tabs-spaces
+1 change between after.txt and bef...txt
+Changed 1.
+From the other panel to this panel.
+-- rows
+Changed line 3, tab became 4 spaces
+-- detail 1
+Change 1 of 1, line 3 before, line 3 after
+Before, line 3:     total due: 40
+After, line 3:     total due: 40
+Differs: tab became 4 spaces
+-- case
+1 change between after.txt and bef...txt
+Changed 1.
+From the other panel to this panel.
+-- rows
+Changed line 3, case only
+-- detail 1
+Change 1 of 1, line 3 before, line 3 after
+Before, line 3:     total due: 40
+After, line 3:     Total Due: 40
+Differs: case only
+-- zero-width
+1 change between after.txt and bef...txt
+Changed 1.
+From the other panel to this panel.
+-- rows
+Changed line 3, hidden character U+200B added
+-- detail 1
+Change 1 of 1, line 3 before, line 3 after
+Before, line 3:     total due: 40
+After, line 3:     total due: 4?0
+Differs: hidden character U+200B added
+-- unicode-form
+1 change between after.txt and bef...txt
+Changed 1.
+From the other panel to this panel.
+-- rows
+Changed line 1, same text in another Unicode form
+-- detail 1
+Change 1 of 1, line 1 before, line 1 after
+Before, line 1: Invoice for Ada Example, Café Oxide
+After, line 1: Invoice for Ada Example, Café Oxide
+Differs: same text in another Unicode form
+-- line-endings
+Same text: after.txt and before.txt
+Line endings differ: CRLF here, LF there. Compared ignoring them.
+-- rows
+-- byte-order-mark
+Same text: after.txt and before.txt
+Byte-order mark here, none there.
+-- rows
+-- encoding
+Same text: after.txt and before.txt
+Encodings differ: UTF-16 here, UTF-8 there.
+Byte-order mark here, none there.
+-- rows
+-- final-newline
+Same text: after.txt and before.txt
+Last line has no line break here.
+-- rows

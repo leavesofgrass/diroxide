@@ -1,0 +1,36 @@
+---
+source: crates/diroxide-diff/tests/it/grammar.rs
+expression: "transcript(&result, \"report.txt\", \"old.txt\", &Sides::panels_swapped())"
+---
+5 changes between report.txt and old.txt
+Changed 3, added 1, removed 1.
+From this panel to the other panel.
+-- rows
+Added line 12, Copyright 2025
+Changed line 20, was: ...in Portland opened late and the crows..., now: ...in Portland opened early and the crows...
+Changed line 30, trailing spaces removed
+Changed line 40, was: total owed, now: total due
+Removed lines 51 to 53, 3 lines
+-- detail 1
+Change 1 of 5, none before, line 12 after
+After, line 12: Copyright 2025
+-- detail 2
+Change 2 of 5, line 19 before, line 20 after
+Before, line 19: The shipment of widgets this quarter was larger than planned because the warehouse in Portland opened late and the crows that live on its roof did not object to the new trucks at all.
+After, line 20: The shipment of widgets this quarter was larger than planned because the warehouse in Portland opened early and the crows that live on its roof did not object to the new trucks at all.
+Differs: late became early
+-- detail 3
+Change 3 of 5, line 29 before, line 30 after
+Before, line 29: status: open   
+After, line 30: status: open
+Differs: trailing spaces removed
+-- detail 4
+Change 4 of 5, line 39 before, line 40 after
+Before, line 39: total owed
+After, line 40: total due
+Differs: owed became due
+-- detail 5
+Change 5 of 5, lines 51 to 53 before, none after
+Before, line 51: Note: Jimothy the raccoon visited the dock
+Before, line 52: Note: no widgets were harmed
+Before, line 53: Note: see the attached photos

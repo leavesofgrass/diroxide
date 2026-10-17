@@ -179,6 +179,8 @@ pub struct Sides {
     before: String,
     after: String,
     before_first: bool,
+    from: String,
+    to: String,
 }
 
 impl Sides {
@@ -189,16 +191,14 @@ impl Sides {
             before: "there".to_owned(),
             after: "here".to_owned(),
             before_first: false,
+            from: "the other panel".to_owned(),
+            to: "this panel".to_owned(),
         }
     }
 
     /// The panels after Swap: read from this panel's file to the other's.
     pub fn panels_swapped() -> Sides {
-        Sides {
-            before: "here".to_owned(),
-            after: "there".to_owned(),
-            before_first: true,
-        }
+        Sides::panels().swapped()
     }
 
     /// Two named files, read from the first to the second: "in old.txt",
@@ -209,6 +209,8 @@ impl Sides {
             before: format!("in {}", display_name(before)),
             after: format!("in {}", display_name(after)),
             before_first: true,
+            from: display_name(before).into_owned(),
+            to: display_name(after).into_owned(),
         }
     }
 
@@ -218,7 +220,21 @@ impl Sides {
             before: self.after.clone(),
             after: self.before.clone(),
             before_first: !self.before_first,
+            from: self.to.clone(),
+            to: self.from.clone(),
         }
+    }
+
+    /// The direction as the second sentence of a report says it: "From
+    /// the other panel to this panel.", "From old.txt to new.txt."
+    pub fn direction(&self) -> String {
+        format!("From {} to {}.", self.from, self.to)
+    }
+
+    /// Whether the before side is named first: in the panels "here" comes
+    /// first, on the command line the first file does.
+    pub fn before_first(&self) -> bool {
+        self.before_first
     }
 
     /// The before side's words: "there", or "in old.txt".

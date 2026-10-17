@@ -257,6 +257,12 @@ impl TextComparison {
         }
         out
     }
+
+    /// The stretches of the alignment, in order: same lines paired,
+    /// blank lines left out, and the changes.
+    pub(crate) fn segments(&self) -> &[Segment] {
+        &self.segments
+    }
 }
 
 /// Gives each distinct key one small number, so the engine compares
