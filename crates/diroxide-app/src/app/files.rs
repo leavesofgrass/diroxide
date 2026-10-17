@@ -51,6 +51,11 @@ fn start_line(plan: &Plan) -> String {
         JobKind::Rename => "Rename",
         JobKind::MakeFolder => "Make folder",
         JobKind::Undo => "Undo",
+        JobKind::Split => "Split",
+        JobKind::Join => "Join",
+        JobKind::Link => "Link",
+        JobKind::SetAttributes => "Change permissions",
+        JobKind::SetTimes => "Change times",
         _ => "Job",
     };
     let items = count(plan.entries(), "item", "items");

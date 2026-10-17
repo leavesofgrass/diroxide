@@ -560,7 +560,13 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
         any_starts(&said, "Pack started: 2 items into demo.zip"),
         "{said:?}"
     );
-    assert!(any_contains(&said, "all good"), "{said:?}");
+    assert!(
+        last_is(
+            &said,
+            "Pack finished: 2 done. Checked 2 of 2 entries, all good."
+        ),
+        "{said:?}"
+    );
     assert!(out.join("demo.zip").exists());
     c.unmark(&["main.rs", "report.md"]);
     // 12. Test archive on the new zip.
@@ -678,7 +684,11 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
     assert!(any_starts(&listing, "Enough space: "), "{listing:?}");
     // 27. Yes: the finish; the parts and big.bin.crc after them.
     let said = c.key("y");
-    assert!(any_contains(&said, "finished"), "{said:?}");
+    assert!(
+        any_starts(&said, "Split started: 1 item to out"),
+        "{said:?}"
+    );
+    assert!(any_starts(&said, "Split finished: 5 done."), "{said:?}");
     c.key("tab");
     let names = c.names();
     let at = |name: &str| names.iter().position(|n| n == name);
@@ -718,6 +728,10 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
         "{said:?}"
     );
     let said = c.key("y");
+    assert!(
+        any_starts(&said, "Join started: 4 items to joined"),
+        "{said:?}"
+    );
     assert!(
         any_starts(&said, "Joined big.bin: checksum matches."),
         "{said:?}"
@@ -770,6 +784,7 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
         "{said:?}"
     );
     let said = c.key("y");
+    assert!(any_starts(&said, "Link started: 1 item to out"), "{said:?}");
     let made = fs::symlink_metadata(out.join("main.rs")).is_ok_and(|m| m.file_type().is_symlink());
     assert!(
         made || any_contains(&said, "Cannot link: needs developer mode"),
