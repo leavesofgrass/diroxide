@@ -1,0 +1,45 @@
+---
+source: crates/diroxide-diff/tests/it/grammar.rs
+expression: "rows.join(\"\\n\")"
+---
+9 same lines left out
+Same 10: Item 10: 30 widgets shipped
+Same 11: Item 11: 33 widgets shipped
+Change 1 of 5, line 12 before, none after
+Removed 12: Copyright 2025
+Same 12: Item 13: 39 widgets shipped
+Same 13: Item 14: 42 widgets shipped
+3 same lines left out
+Same 17: Item 18: 54 widgets shipped
+Same 18: Item 19: 57 widgets shipped
+Change 2 of 5, line 20 before, line 19 after
+Removed 20: The shipment of widgets this quarter was larger than planned because the warehouse in Portland opened early and the crows that live on its roof did not object to the new trucks at all.
+Added 19: The shipment of widgets this quarter was larger than planned because the warehouse in Portland opened late and the crows that live on its roof did not object to the new trucks at all.
+Same 20: Item 21: 63 widgets shipped
+Same 21: Item 22: 66 widgets shipped
+5 same lines left out
+Same 27: Item 28: 84 widgets shipped
+Same 28: Item 29: 87 widgets shipped
+Change 3 of 5, line 30 before, line 29 after
+Removed 30: status: open
+Added 29: status: open   
+Same 30: Item 31: 93 widgets shipped
+Same 31: Item 32: 96 widgets shipped
+5 same lines left out
+Same 37: Item 38: 114 widgets shipped
+Same 38: Item 39: 117 widgets shipped
+Change 4 of 5, line 40 before, line 39 after
+Removed 40: total due
+Added 39: total owed
+Same 40: Item 41: 123 widgets shipped
+Same 41: Item 42: 126 widgets shipped
+7 same lines left out
+Same 49: Item 50: 150 widgets shipped
+Same 50: Item 51: 153 widgets shipped
+Change 5 of 5, none before, lines 51 to 53 after
+Added 51: Note: Jimothy the raccoon visited the dock
+Added 52: Note: no widgets were harmed
+Added 53: Note: see the attached photos
+Same 54: Item 52: 156 widgets shipped
+Same 55: Item 53: 159 widgets shipped
+7 same lines left out

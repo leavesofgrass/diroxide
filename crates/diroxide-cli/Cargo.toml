@@ -20,6 +20,8 @@ diroxide-app.workspace = true
 diroxide-archive.workspace = true
 diroxide-config.workspace = true
 diroxide-core.workspace = true
+# diro diff (W3d): compare two files in words.
+diroxide-diff.workspace = true
 diroxide-filetype.workspace = true
 diroxide-ops.workspace = true
 diroxide-plugins.workspace = true

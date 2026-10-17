@@ -34,6 +34,7 @@ diroxide-vfs = { path = "crates/diroxide-vfs", version = "0.1.0-alpha.1" }
 diroxide-archive = { path = "crates/diroxide-archive", version = "0.1.0-alpha.1" }
 diroxide-ops = { path = "crates/diroxide-ops", version = "0.1.0-alpha.1" }
 diroxide-search = { path = "crates/diroxide-search", version = "0.1.0-alpha.1" }
+diroxide-diff = { path = "crates/diroxide-diff", version = "0.1.0-alpha.1" }
 diroxide-filetype = { path = "crates/diroxide-filetype", version = "0.1.0-alpha.1" }
 diroxide-config = { path = "crates/diroxide-config", version = "0.1.0-alpha.1" }
 diroxide-plugins = { path = "crates/diroxide-plugins", version = "0.1.0-alpha.1" }

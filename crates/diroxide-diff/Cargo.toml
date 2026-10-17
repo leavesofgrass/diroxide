@@ -1,0 +1,31 @@
+[package]
+name = "diroxide-diff"
+description = "Compare two files in words for diroxide: the verdict and the counts first, then one row per change, each with its meaning in its first 40 cells."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+diroxide-core.workspace = true
+# The viewer's decoder (byte-order mark, encoding) and its safe form of a
+# line, so the compare reads and shows text exactly as the viewer does.
+diroxide-preview.workspace = true
+# The cancel token every run honors, and (with the driver) the provider
+# reads of two files.
+diroxide-vfs.workspace = true
+# The line and word engine (research/diffing.md section 4): std, text and
+# inline only, as the root manifest declares it. The engine module is the
+# one file that names it.
+similar.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true
+# The edge-case tests write their files to a temporary folder.
+tempfile.workspace = true
+
+[lints]
+workspace = true
