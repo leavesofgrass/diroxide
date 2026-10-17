@@ -20,6 +20,9 @@ use diroxide_vfs::{
     Registry, TrashCheck, VfsError, WriteMode,
 };
 
+use diroxide_ops::part_names::{Discovery, SetProblem, find_set};
+use diroxide_ops::{PartInfo, PartsError, PartsReader};
+
 use crate::error::ArchiveError;
 use crate::format::ArchiveFormat;
 use crate::guard::{Allowances, Budget, Claims, Guarded, check_cost, check_member, refuse};
@@ -48,6 +51,7 @@ pub struct Opened {
     sniffed: Sniffed,
     index: Index,
     backend: Backend,
+    parts: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -108,6 +112,301 @@ impl Opened {
             Backend::Single(_) => false,
             Backend::SevenZ(sevenz) => sevenz.random_read(),
         }
+    }
+
+    /// How many parts the archive was opened from, for a split archive
+    /// (`backup.7z.001` and its siblings); `None` for one file.
+    pub fn parts(&self) -> Option<usize> {
+        self.parts
+    }
+
+    /// How many times a compressed tar's decoder started again from the
+    /// archive's start to read members, after the listing: a whole
+    /// unpack in archive order is one. Zero for the other formats.
+    pub fn passes(&self) -> u64 {
+        match &self.backend {
+            Backend::Tar(tar) => tar.passes(),
+            _ => 0,
+        }
+    }
+
+    /// The record numbers in the order their data lies in the archive: a
+    /// tar's by their offset (a duplicate's last copy lies later than its
+    /// record's place in the index), every other format's as listed.
+    pub fn archive_order(&self) -> Vec<u32> {
+        let mut ids: Vec<u32> = (0..self.index.len() as u32).collect();
+        if let Backend::Tar(_) = &self.backend {
+            ids.sort_by_key(|&id| match self.index.record(id).map(|r| r.locator) {
+                Some(Locator::Tar(offset)) => offset,
+                _ => 0,
+            });
+        }
+        ids
+    }
+
+    /// Reads one record's data through the limiter chain: its claims
+    /// checked first (a member over the size limit asks), the job's budget
+    /// shared when given, a password asked of the context when the member
+    /// is locked.
+    pub(crate) fn read_record(
+        &self,
+        id: u32,
+        ctx: &OpContext,
+        allow: Allowances,
+        budget: Option<Budget>,
+        limits: &Limits,
+        cost_ask_bytes: u64,
+    ) -> Result<Box<dyn Read + Send>, ArchiveError> {
+        let record = *self.index.record(id).ok_or(VfsError::NotAFolder)?;
+        match record.kind {
+            RecordKind::Folder => return Err(VfsError::NotAFolder.into()),
+            RecordKind::Special => {
+                return Err(VfsError::UnsupportedFeature {
+                    what: "a special entry, which holds no data".to_owned(),
+                }
+                .into());
+            }
+            RecordKind::File | RecordKind::Link => {}
+        }
+        let name = self.index.name(id).to_owned();
+        check_member(&name, record.size, limits, allow)?;
+        let password = if record.flags.contains(RecordFlags::ENCRYPTED) {
+            match &self.backend {
+                Backend::SevenZ(sevenz) if sevenz.password().is_some() => {
+                    sevenz.password().cloned()
+                }
+                _ => {
+                    let request =
+                        SecretRequest::new(SecretKind::ArchivePassword, self.name.clone());
+                    Some(ctx.ask_secret(&request).ok_or(VfsError::PasswordRequired)?)
+                }
+            }
+        } else {
+            None
+        };
+        let inner: Box<dyn Read + Send> = match &self.backend {
+            Backend::Zip(zip) => {
+                Box::new(zip.read(&self.index, id, password, ctx.cancel.clone())?)
+            }
+            Backend::Tar(tar) => tar.read(&self.index, id, &ctx.cancel, allow, cost_ask_bytes)?,
+            Backend::Single(single) => single.read(),
+            Backend::SevenZ(sevenz) => {
+                let Locator::SevenZ(file) = record.locator else {
+                    return Err(VfsError::NotFound.into());
+                };
+                let file = file as usize;
+                if !sevenz.random_read() {
+                    check_cost(&name, sevenz.ahead(file), cost_ask_bytes, allow)?;
+                }
+                Box::new(sevenz.read(file, password, ctx.cancel.clone())?)
+            }
+        };
+        let size_known = !record.flags.contains(RecordFlags::SIZE_UNKNOWN);
+        let claims = Claims {
+            name,
+            size: size_known.then_some(record.size),
+            packed: record.packed(),
+            crc32: record
+                .flags
+                .contains(RecordFlags::HAS_CRC)
+                .then_some(record.crc32),
+        };
+        let budget = budget.unwrap_or_else(|| Budget::new(limits));
+        Ok(Box::new(Guarded::new(
+            inner,
+            claims,
+            *limits,
+            budget,
+            allow,
+            ctx.cancel.clone(),
+        )))
+    }
+
+    /// Visits every record in archive order; see [`ArchiveProvider::visit`].
+    pub(crate) fn visit_records(
+        &self,
+        ctx: &OpContext,
+        allow: Allowances,
+        budget: Budget,
+        limits: &Limits,
+        each: &mut Visitor<'_>,
+    ) -> Result<(), ArchiveError> {
+        let index = &self.index;
+        let claims_of = |id: u32| {
+            let record = index.record(id).copied();
+            Claims {
+                name: index.name(id).to_owned(),
+                size: record
+                    .filter(|r| !r.flags.contains(RecordFlags::SIZE_UNKNOWN))
+                    .map(|r| r.size),
+                packed: record.and_then(|r| r.packed()),
+                crc32: record
+                    .filter(|r| r.flags.contains(RecordFlags::HAS_CRC))
+                    .map(|r| r.crc32),
+            }
+        };
+        if let Backend::SevenZ(sevenz) = &self.backend {
+            let mut record_of = vec![u32::MAX; index.len()];
+            for id in 0..index.len() as u32 {
+                if let Some(Locator::SevenZ(file)) = index.record(id).map(|r| r.locator) {
+                    let file = file as usize;
+                    if file >= record_of.len() {
+                        record_of.resize(file + 1, u32::MAX);
+                    }
+                    record_of[file] = id;
+                }
+            }
+            let encrypted = (0..index.len() as u32).any(|id| {
+                index
+                    .record(id)
+                    .is_some_and(|r| r.flags.contains(RecordFlags::ENCRYPTED))
+            });
+            let password = match (sevenz.password(), encrypted) {
+                (Some(password), _) => Some(password.clone()),
+                (None, true) => {
+                    let request =
+                        SecretRequest::new(SecretKind::ArchivePassword, self.name.clone());
+                    Some(ctx.ask_secret(&request).ok_or(VfsError::PasswordRequired)?)
+                }
+                (None, false) => None,
+            };
+            let mut visit_one = |file: usize, reader: &mut dyn Read| -> Result<bool, VfsError> {
+                match record_of.get(file).copied() {
+                    Some(id) if id != u32::MAX => {
+                        let mut guarded = Guarded::new(
+                            reader,
+                            claims_of(id),
+                            *limits,
+                            budget.clone(),
+                            allow,
+                            ctx.cancel.clone(),
+                        );
+                        each(index, id, &mut guarded)
+                    }
+                    _ => Ok(true),
+                }
+            };
+            sevenz.visit(password.as_ref(), &ctx.cancel, &mut visit_one)?;
+            return Ok(());
+        }
+        let in_order = Allowances {
+            cost: true,
+            ..allow
+        };
+        for id in self.archive_order() {
+            ctx.check()?;
+            let Some(record) = index.record(id).copied() else {
+                continue;
+            };
+            let go_on = if record.kind == RecordKind::File && record.locator != Locator::None {
+                let mut reader =
+                    self.read_record(id, ctx, in_order, Some(budget.clone()), limits, u64::MAX)?;
+                each(index, id, &mut reader)?
+            } else {
+                each(index, id, &mut std::io::empty())?
+            };
+            if !go_on {
+                break;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Builds an archive's index from its bytes: the format by the name and
+/// the first bytes, then the format's reader.
+#[allow(clippy::too_many_arguments)]
+fn open_source(
+    source: Source,
+    key: ContainerKey,
+    container: Place,
+    name: String,
+    parts: Option<usize>,
+    limits: &Limits,
+    ctx: &OpContext,
+    allow: Allowances,
+) -> Result<Opened, ArchiveError> {
+    let mut head = vec![0u8; SNIFF_LEN];
+    let got = source.read_at(0, &mut head).map_err(VfsError::from)?;
+    head.truncate(got);
+    let sniffed = decide(&name, &head)?;
+    let (index, backend) = match sniffed.format {
+        ArchiveFormat::Zip => {
+            let (index, zip) = read_zip::open(source, &name, limits, &ctx.cancel)?;
+            (index, Backend::Zip(zip))
+        }
+        ArchiveFormat::Tar => {
+            let index = read_tar::list(&source, Wrapper::Plain, &name, limits, ctx, allow)?;
+            (index, Backend::Tar(TarBackend::new(source, Wrapper::Plain)))
+        }
+        ArchiveFormat::TarGz if read_tar::holds_tar(&source, Wrapper::Gzip) => {
+            let index = read_tar::list(&source, Wrapper::Gzip, &name, limits, ctx, allow)?;
+            (index, Backend::Tar(TarBackend::new(source, Wrapper::Gzip)))
+        }
+        ArchiveFormat::TarGz => {
+            let index = read_tar::single_index(&name, None, limits)?;
+            (
+                index,
+                Backend::Single(SingleBackend::new(source, Wrapper::Gzip)),
+            )
+        }
+        ArchiveFormat::SevenZ => {
+            let ask = || {
+                ctx.ask_secret(&SecretRequest::new(
+                    SecretKind::ArchivePassword,
+                    name.clone(),
+                ))
+            };
+            let (index, sevenz) = read_7z::open(source, &name, limits, allow, &ask)?;
+            (index, Backend::SevenZ(sevenz))
+        }
+        ArchiveFormat::TarXz | ArchiveFormat::Xz => {
+            read_xz::check(&source, &name, limits, allow)?;
+            let wrapper = Wrapper::Xz {
+                mem_limit_kb: read_xz::mem_limit_kb(limits),
+            };
+            if sniffed.format == ArchiveFormat::TarXz || read_tar::holds_tar(&source, wrapper) {
+                let index = read_tar::list(&source, wrapper, &name, limits, ctx, allow)?;
+                (index, Backend::Tar(TarBackend::new(source, wrapper)))
+            } else {
+                let size = read_xz::uncompressed_size(&source, limits);
+                let index = read_tar::single_index(&name, size, limits)?;
+                (index, Backend::Single(SingleBackend::new(source, wrapper)))
+            }
+        }
+    };
+    Ok(Opened {
+        key,
+        container,
+        name,
+        sniffed,
+        index,
+        backend,
+        parts,
+    })
+}
+
+/// A split archive found from one of its parts: the provider of its
+/// folder and the parts, in order.
+struct SplitSet {
+    provider: Arc<dyn Provider>,
+    parts: Vec<SetPart>,
+}
+
+/// One part of a split archive, as its folder lists it.
+struct SetPart {
+    place: Place,
+    size: u64,
+    modified: Option<(i64, u32)>,
+}
+
+impl SplitSet {
+    fn total(&self) -> u64 {
+        self.parts.iter().map(|part| part.size).sum()
+    }
+
+    fn newest(&self) -> Option<(i64, u32)> {
+        self.parts.iter().filter_map(|part| part.modified).max()
     }
 }
 
@@ -189,11 +488,78 @@ impl ArchiveProvider {
     /// when the bytes and the name disagree ("a.zip, 7z archive, in
     /// D:\docs"); from the cache, never opening anything.
     pub fn title(&self, place: &Place) -> String {
-        let sniffed = place
+        let opened = place
             .archive()
-            .and_then(|(container, _)| self.cache.peek(&container.to_string()))
-            .map(|opened| opened.sniffed);
+            .and_then(|(container, _)| self.cache.peek(&container.to_string()));
+        if let Some((_, "")) = place.archive()
+            && let Some(parts) = opened.as_ref().and_then(|opened| opened.parts)
+        {
+            return crate::words::set_title(place, parts);
+        }
+        let sniffed = opened.map(|opened| opened.sniffed);
         crate::words::title(place, sniffed.as_ref())
+    }
+
+    /// The parts of a split archive, when `container` is a numbered part
+    /// of one (`backup.7z.001`): found by name and number among its
+    /// folder's entries, in numeric order. A missing or empty part means
+    /// the set cannot be read whole, and says which.
+    fn split_set(
+        &self,
+        container: &Place,
+        ctx: &OpContext,
+    ) -> Result<Option<SplitSet>, ArchiveError> {
+        if container.archive().is_some() {
+            return Ok(None);
+        }
+        let Some(name) = container.name() else {
+            return Ok(None);
+        };
+        if diroxide_core::names::split_part(name).is_none()
+            || ArchiveFormat::from_name(name).is_none()
+        {
+            return Ok(None);
+        }
+        let registry = self.registry()?;
+        let provider = registry.resolve(container)?;
+        let folder = container.parent().ok_or(VfsError::NotFound)?;
+        let entries = provider.list(&folder, ctx)?;
+        if !entries.iter().any(|entry| entry.name == name) {
+            return Err(VfsError::NotFound.into());
+        }
+        let case_sensitive = provider.capabilities(&folder).case_sensitive;
+        let set = match find_set(&folder, &entries, name, case_sensitive) {
+            Ok(Discovery::Found(set)) => set,
+            Ok(Discovery::Ask { no, .. }) => *no,
+            Err(_) => {
+                return Err(VfsError::UnsupportedFeature {
+                    what: "a set of parts that is not split bytes".to_owned(),
+                }
+                .into());
+            }
+        };
+        for problem in set.problems(None) {
+            let (SetProblem::Missing(number) | SetProblem::Empty(number)) = problem else {
+                continue;
+            };
+            let label = set.label(number).to_lowercase();
+            let what = if matches!(problem, SetProblem::Missing(_)) {
+                format!("{label} is missing")
+            } else {
+                format!("{label} is empty")
+            };
+            return Err(VfsError::Corrupt { what }.into());
+        }
+        let parts = set
+            .parts
+            .iter()
+            .map(|part| SetPart {
+                place: part.place.clone(),
+                size: part.size,
+                modified: part.modified.map(|t| (t.unix_seconds(), t.subsec_nanos())),
+            })
+            .collect();
+        Ok(Some(SplitSet { provider, parts }))
     }
 
     /// Connects the provider to the registry it reaches archive files
@@ -240,6 +606,15 @@ impl ArchiveProvider {
                 modified: opened.key.modified,
             });
         }
+        if let Some(set) = self.split_set(container, ctx)? {
+            // A split archive is the same archive while every part keeps
+            // its size and the newest keeps its time.
+            return Ok(ContainerKey {
+                place: container.to_string(),
+                size: set.total(),
+                modified: set.newest(),
+            });
+        }
         let registry = self.registry()?;
         let provider = registry.resolve(container)?;
         let entry = provider.stat(container, ctx)?;
@@ -253,39 +628,55 @@ impl ArchiveProvider {
         })
     }
 
-    /// A container's bytes: a local file opened for random reads, a stored
-    /// zip member as a window of its outer archive, any other member read
-    /// out into the spool.
+    /// A container's bytes, and the parts it was read from: a local file
+    /// opened for random reads; a split archive's parts as one seekable
+    /// read, nothing joined; a stored zip member as a window of its outer
+    /// archive; any other member read out into the spool.
     fn source_of(
         &self,
         container: &Place,
         ctx: &OpContext,
         allow: Allowances,
-    ) -> Result<Source, ArchiveError> {
+    ) -> Result<(Source, Option<usize>), ArchiveError> {
+        if let Some(set) = self.split_set(container, ctx)? {
+            let count = set.parts.len();
+            let parts = set
+                .parts
+                .into_iter()
+                .map(|part| PartInfo::new(part.place, part.size))
+                .collect();
+            // The reader keeps its own context: a later read must not see
+            // the opening job's cancel.
+            let reader = PartsReader::with_parts(set.provider, parts, &OpContext::new())
+                .map_err(PartsError::into_vfs)?;
+            let source = Source::new(Box::new(reader)).map_err(VfsError::from)?;
+            return Ok((source, Some(count)));
+        }
         if let Some((outer, member)) = container.archive() {
             let opened = self.open_archive(outer, ctx, allow)?;
             let id = opened.index.find(member).ok_or(VfsError::NotFound)?;
             if let Backend::Zip(zip) = &opened.backend
                 && let Some(window) = zip.stored_window(&opened.index, id)
             {
-                return Ok(window);
+                return Ok((window, None));
             }
             let reader = self.read_member(container, ctx, allow, None)?;
             let dir = self.spool_dir.read().ok().and_then(|d| d.clone());
             let free = dir.as_deref().and_then(|dir| self.free_space(dir, ctx));
-            return spool::spool(
+            let source = spool::spool(
                 reader,
                 &self.limits,
                 dir.as_deref(),
                 &self.spool_budget,
                 free,
                 &ctx.cancel,
-            );
+            )?;
+            return Ok((source, None));
         }
         let registry = self.registry()?;
         let provider = registry.resolve(container)?;
         let reader = provider.open_seekable(container, ctx)?;
-        Ok(Source::new(reader).map_err(VfsError::from)?)
+        Ok((Source::new(reader).map_err(VfsError::from)?, None))
     }
 
     /// The bytes free on the spool folder's drive, when the registry can
@@ -337,67 +728,18 @@ impl ArchiveProvider {
         if let Some(opened) = self.cache.get(&key) {
             return Ok(opened);
         }
-        let source = self.source_of(container, ctx, allow)?;
+        let (source, parts) = self.source_of(container, ctx, allow)?;
         let name = container.name().unwrap_or("archive").to_owned();
-        let mut head = vec![0u8; SNIFF_LEN];
-        let got = source.read_at(0, &mut head).map_err(VfsError::from)?;
-        head.truncate(got);
-        let sniffed = decide(&name, &head)?;
-        let (index, backend) = match sniffed.format {
-            ArchiveFormat::Zip => {
-                let (index, zip) = read_zip::open(source, &name, &self.limits, &ctx.cancel)?;
-                (index, Backend::Zip(zip))
-            }
-            ArchiveFormat::Tar => {
-                let index =
-                    read_tar::list(&source, Wrapper::Plain, &name, &self.limits, ctx, allow)?;
-                (index, Backend::Tar(TarBackend::new(source, Wrapper::Plain)))
-            }
-            ArchiveFormat::TarGz if read_tar::holds_tar(&source, Wrapper::Gzip) => {
-                let index =
-                    read_tar::list(&source, Wrapper::Gzip, &name, &self.limits, ctx, allow)?;
-                (index, Backend::Tar(TarBackend::new(source, Wrapper::Gzip)))
-            }
-            ArchiveFormat::TarGz => {
-                let index = read_tar::single_index(&name, None, &self.limits)?;
-                (
-                    index,
-                    Backend::Single(SingleBackend::new(source, Wrapper::Gzip)),
-                )
-            }
-            ArchiveFormat::SevenZ => {
-                let ask = || {
-                    ctx.ask_secret(&SecretRequest::new(
-                        SecretKind::ArchivePassword,
-                        name.clone(),
-                    ))
-                };
-                let (index, sevenz) = read_7z::open(source, &name, &self.limits, allow, &ask)?;
-                (index, Backend::SevenZ(sevenz))
-            }
-            ArchiveFormat::TarXz | ArchiveFormat::Xz => {
-                read_xz::check(&source, &name, &self.limits, allow)?;
-                let wrapper = Wrapper::Xz {
-                    mem_limit_kb: read_xz::mem_limit_kb(&self.limits),
-                };
-                if sniffed.format == ArchiveFormat::TarXz || read_tar::holds_tar(&source, wrapper) {
-                    let index = read_tar::list(&source, wrapper, &name, &self.limits, ctx, allow)?;
-                    (index, Backend::Tar(TarBackend::new(source, wrapper)))
-                } else {
-                    let size = read_xz::uncompressed_size(&source, &self.limits);
-                    let index = read_tar::single_index(&name, size, &self.limits)?;
-                    (index, Backend::Single(SingleBackend::new(source, wrapper)))
-                }
-            }
-        };
-        let opened = Arc::new(Opened {
-            key: key.clone(),
-            container: container.clone(),
+        let opened = Arc::new(open_source(
+            source,
+            key.clone(),
+            container.clone(),
             name,
-            sniffed,
-            index,
-            backend,
-        });
+            parts,
+            &self.limits,
+            ctx,
+            allow,
+        )?);
         let bytes = opened.index.memory();
         self.cache.put(key, opened.clone(), bytes);
         Ok(opened)
@@ -453,11 +795,13 @@ impl ArchiveProvider {
 
     /// Visits every member of an archive in archive order, in one pass
     /// where the format is sequential: a solid 7z block by block, a
-    /// compressed tar from its start to its end, a zip in its own order.
-    /// `each` gets the index, the record and a reader of the member's data
-    /// through the limiter chain (an empty one for a folder, a link or a
-    /// special entry), and returns whether to go on. What the unpack
-    /// runner builds on.
+    /// compressed tar from its start to its end (a duplicate's last copy
+    /// where it lies), a zip in its own order. `each` gets the index, the
+    /// record and a reader of the member's data through the limiter chain
+    /// (an empty one for a folder, a link or a special entry), and returns
+    /// whether to go on. Members are read by record, never by place, so a
+    /// name a place cannot hold (one with `.zip!` in it) is visited too.
+    /// What the unpack runner and Test archive build on.
     pub fn visit(
         &self,
         container: &Place,
@@ -467,94 +811,53 @@ impl ArchiveProvider {
         each: &mut Visitor<'_>,
     ) -> Result<(), ArchiveError> {
         let opened = self.open_archive(container, ctx, allow)?;
+        self.visit_opened(&opened, ctx, allow, budget, each)
+    }
+
+    /// [`ArchiveProvider::visit`] over an archive already opened, with
+    /// this provider's limits: one opened from bytes with
+    /// [`ArchiveProvider::open_bytes`] too.
+    pub fn visit_opened(
+        &self,
+        opened: &Opened,
+        ctx: &OpContext,
+        allow: Allowances,
+        budget: Option<Budget>,
+        each: &mut Visitor<'_>,
+    ) -> Result<(), ArchiveError> {
         let budget = budget.unwrap_or_else(|| Budget::new(&self.limits));
-        let index = &opened.index;
-        let claims_of = |id: u32| {
-            let record = index.record(id).copied();
-            Claims {
-                name: index.name(id).to_owned(),
-                size: record
-                    .filter(|r| !r.flags.contains(RecordFlags::SIZE_UNKNOWN))
-                    .map(|r| r.size),
-                packed: record.and_then(|r| r.packed()),
-                crc32: record
-                    .filter(|r| r.flags.contains(RecordFlags::HAS_CRC))
-                    .map(|r| r.crc32),
-            }
+        opened.visit_records(ctx, allow, budget, &self.limits, each)
+    }
+
+    /// Opens an archive from any seekable bytes, under this provider's
+    /// limits and never cached: a new archive read back before it takes
+    /// its place (the test after packing). `place` is the place the bytes
+    /// are for; its name decides the format with the first bytes, as a
+    /// file's name does.
+    pub fn open_bytes(
+        &self,
+        bytes: Box<dyn ReadSeek>,
+        place: &Place,
+        ctx: &OpContext,
+        allow: Allowances,
+    ) -> Result<Opened, ArchiveError> {
+        let source = Source::new(bytes).map_err(VfsError::from)?;
+        let key = ContainerKey {
+            place: place.to_string(),
+            size: source.len(),
+            modified: None,
         };
-        let guard = |reader: &mut dyn Read, id: u32, each: &mut Visitor<'_>| {
-            let mut guarded = Guarded::new(
-                reader,
-                claims_of(id),
-                self.limits,
-                budget.clone(),
-                allow,
-                ctx.cancel.clone(),
-            );
-            each(index, id, &mut guarded)
-        };
-        if let Backend::SevenZ(sevenz) = &opened.backend {
-            let mut record_of = vec![u32::MAX; index.len()];
-            let mut files = 0usize;
-            for id in 0..index.len() as u32 {
-                if let Some(Locator::SevenZ(file)) = index.record(id).map(|r| r.locator) {
-                    let file = file as usize;
-                    if file >= record_of.len() {
-                        record_of.resize(file + 1, u32::MAX);
-                    }
-                    record_of[file] = id;
-                    files = files.max(file + 1);
-                }
-            }
-            let encrypted = (0..index.len() as u32).any(|id| {
-                index
-                    .record(id)
-                    .is_some_and(|r| r.flags.contains(RecordFlags::ENCRYPTED))
-            });
-            let password = match (sevenz.password(), encrypted) {
-                (Some(password), _) => Some(password.clone()),
-                (None, true) => {
-                    let request =
-                        SecretRequest::new(SecretKind::ArchivePassword, opened.name.clone());
-                    Some(ctx.ask_secret(&request).ok_or(VfsError::PasswordRequired)?)
-                }
-                (None, false) => None,
-            };
-            let mut visit_one = |file: usize, reader: &mut dyn Read| -> Result<bool, VfsError> {
-                match record_of.get(file).copied() {
-                    Some(id) if id != u32::MAX => guard(reader, id, each),
-                    _ => Ok(true),
-                }
-            };
-            sevenz.visit(password.as_ref(), &ctx.cancel, &mut visit_one)?;
-            return Ok(());
-        }
-        let in_order = Allowances {
-            cost: true,
-            ..allow
-        };
-        for id in 0..index.len() as u32 {
-            ctx.check()?;
-            let Some(record) = index.record(id).copied() else {
-                continue;
-            };
-            let go_on = if record.kind == RecordKind::File && record.locator != Locator::None {
-                let place = container.clone().into_archive();
-                let path = index.path(id);
-                let mut member = place;
-                for part in path.split('/') {
-                    member = member.join(part).map_err(VfsError::from)?;
-                }
-                let mut reader = self.read_member(&member, ctx, in_order, Some(budget.clone()))?;
-                each(index, id, &mut reader)?
-            } else {
-                each(index, id, &mut std::io::empty())?
-            };
-            if !go_on {
-                break;
-            }
-        }
-        Ok(())
+        let name = place.name().unwrap_or("archive").to_owned();
+        open_source(
+            source,
+            key,
+            place.clone(),
+            name,
+            None,
+            &self.limits,
+            ctx,
+            allow,
+        )
     }
 
     /// Reads a member through the limiter chain: its claims checked first
@@ -568,76 +871,20 @@ impl ArchiveProvider {
         budget: Option<Budget>,
     ) -> Result<Box<dyn Read + Send>, ArchiveError> {
         let (opened, id) = self.locate(place, ctx, allow)?;
-        let record = *opened.index.record(id).ok_or(VfsError::NotAFolder)?;
-        match record.kind {
-            RecordKind::Folder => return Err(VfsError::NotAFolder.into()),
-            RecordKind::Special => {
-                return Err(VfsError::UnsupportedFeature {
-                    what: "a special entry, which holds no data".to_owned(),
-                }
-                .into());
-            }
-            RecordKind::File | RecordKind::Link => {}
-        }
-        let name = opened.index.name(id).to_owned();
-        check_member(&name, record.size, &self.limits, allow)?;
-        let password = if record.flags.contains(RecordFlags::ENCRYPTED) {
-            match &opened.backend {
-                Backend::SevenZ(sevenz) if sevenz.password().is_some() => {
-                    sevenz.password().cloned()
-                }
-                _ => {
-                    let request =
-                        SecretRequest::new(SecretKind::ArchivePassword, opened.name.clone());
-                    Some(ctx.ask_secret(&request).ok_or(VfsError::PasswordRequired)?)
-                }
-            }
-        } else {
-            None
-        };
-        let inner: Box<dyn Read + Send> = match &opened.backend {
-            Backend::Zip(zip) => {
-                Box::new(zip.read(&opened.index, id, password, ctx.cancel.clone())?)
-            }
-            Backend::Tar(tar) => {
-                tar.read(&opened.index, id, &ctx.cancel, allow, self.cost_ask_bytes)?
-            }
-            Backend::Single(single) => single.read(),
-            Backend::SevenZ(sevenz) => {
-                let Locator::SevenZ(file) = record.locator else {
-                    return Err(VfsError::NotFound.into());
-                };
-                let file = file as usize;
-                if !sevenz.random_read() {
-                    check_cost(
-                        &name_of(&opened, id),
-                        sevenz.ahead(file),
-                        self.cost_ask_bytes,
-                        allow,
-                    )?;
-                }
-                Box::new(sevenz.read(file, password, ctx.cancel.clone())?)
-            }
-        };
-        let size_known = !record.flags.contains(RecordFlags::SIZE_UNKNOWN);
-        let claims = Claims {
-            name,
-            size: size_known.then_some(record.size),
-            packed: record.packed(),
-            crc32: record
-                .flags
-                .contains(RecordFlags::HAS_CRC)
-                .then_some(record.crc32),
-        };
-        let budget = budget.unwrap_or_else(|| Budget::new(&self.limits));
-        Ok(Box::new(Guarded::new(
-            inner,
-            claims,
-            self.limits,
-            budget,
-            allow,
-            ctx.cancel.clone(),
-        )))
+        opened.read_record(id, ctx, allow, budget, &self.limits, self.cost_ask_bytes)
+    }
+
+    /// Reads one record of an archive already opened through the limiter
+    /// chain, as [`ArchiveProvider::read_member`] reads a place.
+    pub fn read_record(
+        &self,
+        opened: &Opened,
+        id: u32,
+        ctx: &OpContext,
+        allow: Allowances,
+        budget: Option<Budget>,
+    ) -> Result<Box<dyn Read + Send>, ArchiveError> {
+        opened.read_record(id, ctx, allow, budget, &self.limits, self.cost_ask_bytes)
     }
 }
 
@@ -741,11 +988,6 @@ impl Provider for ArchiveProvider {
 /// What [`ArchiveProvider::visit`] calls for each member: the index, the
 /// record, a reader of its data; it returns whether to go on.
 pub type Visitor<'a> = dyn FnMut(&Index, u32, &mut dyn Read) -> Result<bool, VfsError> + 'a;
-
-/// A record's name, for the words.
-fn name_of(opened: &Opened, id: u32) -> String {
-    opened.index.name(id).to_owned()
-}
 
 /// What a place inside an archive of this format can do: nothing but
 /// reading in this alpha; names are case-sensitive; random reads where the

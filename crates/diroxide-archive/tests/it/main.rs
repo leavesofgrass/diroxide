@@ -17,6 +17,7 @@ mod spike_hostile;
 mod spike_listing;
 mod spike_password;
 mod spike_sequential;
+mod split_sets;
 mod tar_read;
 mod world;
 mod xz_read;
