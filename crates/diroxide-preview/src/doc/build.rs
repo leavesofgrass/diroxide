@@ -2,12 +2,18 @@
 //! and the whitespace rules are kept here once. Inline text collapses its
 //! whitespace to one space; a space or a break waits for the next text,
 //! so a row never starts or ends with a space and no empty row is kept;
-//! rows written as they are (code, plain lines) keep their text.
+//! rows written as they are (code, plain lines) keep their text. Every
+//! hidden character (controls, escapes, format, direction and private-use
+//! characters) is shown as a question mark and every tab as spaces, as the
+//! viewer shows them ([`super::text::neutralize`]), so a file cannot move
+//! the cursor, color the screen or hide text from a reader.
 
+use super::text::neutralize;
 use super::{
     CELL_SEPARATOR, CodeBlock, DocKind, DocLink, DocRow, DocTable, DocView, RowKind, SEPARATOR_WORD,
 };
 use crate::highlight::{Symbol, SymbolKind};
+use diroxide_core::names::classify;
 
 /// The row being written.
 #[derive(Debug)]
@@ -152,11 +158,14 @@ impl DocBuilder {
     }
 
     /// Inline text: whitespace runs collapse to one space, dropped at a
-    /// row's start. Text with no row open starts a paragraph.
+    /// row's start; a hidden character shows as a question mark. Text
+    /// with no row open starts a paragraph.
     pub fn text(&mut self, text: &str) {
         for c in text.chars() {
             if c.is_whitespace() {
                 self.space = true;
+            } else if classify(c).is_hidden() {
+                self.push_char('?');
             } else {
                 self.push_char(c);
             }
@@ -255,7 +264,7 @@ impl DocBuilder {
         for line in text.split('\n') {
             self.view.rows.push(DocRow {
                 kind: RowKind::Code { block: index },
-                text: line.trim_end().to_owned(),
+                text: neutralize(line.trim_end()),
                 block,
                 continued: false,
                 runs: Vec::new(),
@@ -283,7 +292,7 @@ impl DocBuilder {
         let block = self.take_block();
         self.view.rows.push(DocRow {
             kind,
-            text: text.to_owned(),
+            text: neutralize(text),
             block,
             continued: false,
             runs: Vec::new(),

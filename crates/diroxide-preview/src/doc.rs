@@ -37,6 +37,7 @@ pub mod callout;
 pub mod markdown;
 #[cfg(test)]
 mod tests;
+pub mod text;
 
 use std::ops::Range;
 
