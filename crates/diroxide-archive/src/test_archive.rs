@@ -167,6 +167,7 @@ pub fn test_archive(archive: &Place, password: Option<Secret>, env: &JobEnv<'_>)
         &mut outcome,
     );
     progress.finish();
+    outcome.cancelled |= env.control.cancel.is_cancelled();
     outcome.report.cancelled = outcome.cancelled;
     outcome
 }

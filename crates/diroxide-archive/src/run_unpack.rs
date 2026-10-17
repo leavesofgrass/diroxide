@@ -96,7 +96,9 @@ struct State<'a> {
 /// Runs an unpack plan: see the module documentation. `password` is a
 /// password already typed (the first try); otherwise the first locked
 /// member asks through the environment's secrets. `allow` carries the
-/// answers to the plan's questions.
+/// answers to the plan's questions. A locked 7z's names were asked for
+/// when the plan was made: give the run the same [`JobSecrets`] as the
+/// environment's secrets, and the job asks once.
 pub fn run_unpack(
     plan: &UnpackPlan,
     password: Option<Secret>,
@@ -172,6 +174,11 @@ pub fn run_unpack(
         state.report.failed.push((plan.destination.clone(), reason));
     } else {
         runner.passes(&mut state, &secrets, allow);
+    }
+    // A cancel at a prompt or a question ends the job as a cancel, even
+    // when what stopped it was the missing answer.
+    if env.control.cancel.is_cancelled() {
+        state.report.cancelled = true;
     }
     runner.finish(&mut state);
     if plan.renamed > 0 {

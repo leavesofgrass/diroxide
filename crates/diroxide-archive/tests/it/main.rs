@@ -13,6 +13,7 @@ mod odd_names;
 mod pack_7z;
 mod pack_tar;
 mod pack_zip;
+mod passwords;
 mod prompt;
 mod registration;
 mod seeds;
