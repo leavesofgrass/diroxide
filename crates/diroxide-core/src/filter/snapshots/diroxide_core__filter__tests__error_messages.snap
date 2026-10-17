@@ -2,6 +2,12 @@
 source: crates/diroxide-core/src/filter/tests.rs
 expression: errors
 ---
+typed: group imges
+said: Filter problem: unknown group 'imges'. Word 2. Did you mean images?
+
+typed: group pictures
+said: Filter problem: unknown group 'pictures'. Word 2. Groups: images, music, video, documents, archives, code, text.
+
 typed: 
 said: Filter problem: the filter is empty. Word 1. Type a word, or a pattern such as *.pdf.
 

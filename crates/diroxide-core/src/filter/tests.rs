@@ -374,6 +374,34 @@ fn trees_say_what_was_meant() {
 }
 
 #[test]
+fn groups_are_read_by_their_own_names() {
+    assert_eq!(parse("group Image").sentence(), "group is images");
+    assert_eq!(parse("group image").expr(), parse("group:images").expr());
+    let error = problem("group imges");
+    assert_eq!(
+        error.problem(),
+        &Problem::UnknownGroup {
+            word: "imges".into(),
+            nearest: Some("images"),
+        }
+    );
+    assert_eq!(
+        error.sentences(),
+        "Filter problem: unknown group 'imges'. Word 2. Did you mean images?"
+    );
+    assert_eq!(
+        problem("group pictures").next_step(),
+        "Word 2. Groups: images, music, video, documents, archives, code, text."
+    );
+    // The error's group list is the table's.
+    let names: Vec<&str> = GROUPS.iter().map(|g| g.name).collect();
+    assert_eq!(
+        names.join(", "),
+        "images, music, video, documents, archives, code, text"
+    );
+}
+
+#[test]
 fn smart_case_is_decided_per_test_and_said() {
     let case_of = |text: &str| match parse(text).expr().clone() {
         Expr::Test {
@@ -629,7 +657,9 @@ fn more_errors_are_said_in_words() {
 }
 
 /// Texts that each give one error, for the message snapshot.
-const MISTAKES: [&str; 40] = [
+const MISTAKES: [&str; 42] = [
+    "group imges",
+    "group pictures",
     "",
     "size over MB",
     "size over",

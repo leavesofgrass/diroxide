@@ -14,20 +14,10 @@
 use super::FilterOptions;
 use super::dates::{DateWord, TimeUnit};
 use super::error::{Expected, Keyword};
+use super::groups::GROUPS;
 use super::parse::expected_at_end;
 use super::readback::{needs_quotes, quoted};
 use super::tree::{Field, FieldShape, Flag, KIND_WORDS, SizeUnit};
-
-/// The seven built-in group names, until the group table's own list.
-const GROUP_WORDS: [&str; 7] = [
-    "images",
-    "music",
-    "video",
-    "documents",
-    "archives",
-    "code",
-    "text",
-];
 
 /// One candidate: the text inserted when chosen, and what it is, said
 /// after it ("over, comparison").
@@ -166,8 +156,8 @@ fn candidates(expected: &[Expected], context: &CompletionContext<'_>) -> Vec<Can
                 }
                 _ => match field {
                     Field::Group => {
-                        for group in GROUP_WORDS {
-                            out.push(Candidate::new(group, "group"));
+                        for group in GROUPS {
+                            out.push(Candidate::new(group.name, "group"));
                         }
                     }
                     Field::Type => {

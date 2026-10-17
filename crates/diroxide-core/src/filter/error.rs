@@ -14,6 +14,7 @@ use crate::error::Explain;
 use crate::format::BRAILLE_CELLS;
 use crate::pattern::{BACKREFERENCE_ADVICE, LOOK_AROUND_ADVICE};
 
+use super::groups::GROUPS;
 use super::tree::Field;
 
 /// The start of every first sentence.
@@ -275,7 +276,10 @@ impl Problem {
             Problem::UnknownKind(_) => KINDS_SENTENCE.to_owned(),
             Problem::UnknownGroup { nearest, .. } => match nearest {
                 Some(group) => format!("Did you mean {group}?"),
-                None => "Groups: images, music, video, documents, archives, code, text.".to_owned(),
+                None => {
+                    let names: Vec<&str> = GROUPS.iter().map(|g| g.name).collect();
+                    format!("Groups: {}.", names.join(", "))
+                }
             },
             Problem::StateIsSelected => "Write selected.".to_owned(),
             Problem::DepthInPanel => "A panel shows one folder; search to go deeper.".to_owned(),

@@ -42,6 +42,7 @@ mod complete;
 mod dates;
 mod error;
 mod eval;
+mod groups;
 mod lint;
 mod parse;
 mod readback;
@@ -65,6 +66,7 @@ pub use error::{
     Expected, FilterError, KINDS_SENTENCE, Keyword, PROBLEM_START, Problem, UNITS_SENTENCE,
 };
 pub use eval::{ContentQuery, Evaluator, Lookup, NoLookup, Tally, Truth, Unknown};
+pub use groups::{GROUPS, Group, group_named, group_of, group_of_extension};
 pub use lint::{Lint, LintContext, LintKind};
 pub use readback::ReadBack;
 pub use tree::{

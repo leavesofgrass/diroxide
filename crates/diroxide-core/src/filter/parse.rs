@@ -18,6 +18,7 @@ use super::dates::{
     parse_clock_time, parse_duration, parse_iso,
 };
 use super::error::{Expected, FilterError, Keyword, Problem};
+use super::groups::{GROUPS, group_named};
 use super::token::{Kind, Sign, Token, lex, split_head};
 use super::tree::{
     Amount, ContentOp, ContentTest, DateOp, DateTest, Decimal, Expr, Field, FieldShape, Flag,
@@ -133,6 +134,21 @@ fn check_text(field: Field, op: TextOp, value: &str, case: NameCase) -> Result<(
             .map(drop)
             .map_err(|e| pattern_problem(&e, value)),
         _ => Ok(()),
+    }
+}
+
+/// A value as the tree keeps it: a group by its own name, which must be
+/// one of the built-in groups.
+fn canonical(field: Field, op: TextOp, value: String) -> Result<String, Problem> {
+    if field != Field::Group || !matches!(op, TextOp::Is | TextOp::IsNot) {
+        return Ok(value);
+    }
+    match group_named(&value) {
+        Some(group) => Ok(group.name.to_owned()),
+        None => Err(Problem::UnknownGroup {
+            nearest: nearest(&value, GROUPS.iter().map(|g| g.name)),
+            word: value,
+        }),
     }
 }
 
@@ -797,7 +813,9 @@ impl<'a> Parser<'a> {
         if let Err(problem) = check_text(field, op, &value, case) {
             return Err(FilterError::new(problem, at.word(), at.span(), Vec::new()));
         }
-        let value = self.canonical(field, value);
+        let value = canonical(field, op, value).map_err(|problem| {
+            FilterError::new(problem, at.word(), at.span(), vec![Expected::Value(field)])
+        })?;
         Ok(Expr::Test {
             test: Test::Text(TextTest {
                 field,
@@ -807,11 +825,6 @@ impl<'a> Parser<'a> {
             }),
             at,
         })
-    }
-
-    /// A value as the tree keeps it.
-    fn canonical(&self, _field: Field, value: String) -> String {
-        value
     }
 
     fn kind_term(&mut self) -> Result<Expr, FilterError> {

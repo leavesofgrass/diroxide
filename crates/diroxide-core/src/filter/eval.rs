@@ -21,6 +21,7 @@ use crate::pattern::{Glob, GlobScope, PatternError, build_regex, compile_regex, 
 use crate::sort::NameCase;
 
 use super::dates::{DateContext, DateValue};
+use super::groups::group_of;
 use super::tree::{
     ContentOp, ContentTest, DateOp, DateTest, Expr, Field, Flag, KindTest, NumberOp, NumberTest,
     Test, TextOp, TextTest,
@@ -635,7 +636,8 @@ fn text_truth(text: &TextMatch, entry: &Entry, lookup: &dyn Lookup) -> Truth {
             Some(name) => text.hit(name),
             None => Truth::Unknown(Unknown::TypeNotChecked),
         },
-        Field::Group => Truth::Unknown(Unknown::TypeNotChecked),
+        // By extension, from the built-in table, until the type model.
+        Field::Group => text.hit(group_of(entry).map_or("", |group| group.name)),
         Field::Label => {
             let any = entry
                 .labels

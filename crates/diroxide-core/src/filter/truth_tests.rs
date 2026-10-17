@@ -45,6 +45,7 @@ fn fixture(name: &str) -> Entry {
             e
         }
         "week-old.txt" => file(name, 10, at(2026, 10, 6, 12)),
+        "holiday.PNG" => file(name, 6_000_000, at(2026, 8, 1, 12)),
         "old.log" => file(name, 2_000_000_000, at(2024, 1, 1, 12)),
         "deep.txt" => file(name, 10, at(2026, 10, 1, 12)),
         ".profile" => {
@@ -245,12 +246,21 @@ fn truth_tables_over_known_and_unknown_facts() {
     for (text, name, expected) in table {
         assert_eq!(truth(text, name), expected, "{text} on {name}");
     }
-    let more: [(&str, &str, Truth); 5] = [
+    let more: [(&str, &str, Truth); 13] = [
+        ("group images and size over 5 MB", "holiday.PNG", Y),
         ("content:x", "build", N),
         ("content:x", "unreadable.bin", U(Unknown::Unreadable)),
         ("needs-care", "plain.txt", N),
         ("not not report", "report.pdf", Y),
         ("name like \"rprt\"", "report.pdf", Y),
+        // The group table, by extension.
+        ("group images", "holiday.PNG", Y),
+        ("group image", "holiday.PNG", Y),
+        ("group images", "report.pdf", N),
+        ("group documents", "report.pdf", Y),
+        ("group images", "build", N),
+        ("group is not images", "build", Y),
+        ("group images and size over 5 MB", "notes.txt", N),
     ];
     for (text, name, expected) in more {
         assert_eq!(truth(text, name), expected, "{text} on {name}");
@@ -507,16 +517,9 @@ fn entries() -> impl Strategy<Value = Entry> {
         )
 }
 
-/// The terms whose facts the fixture lister always knows. Groups wait for
-/// the group table, and are unknown until then.
+/// The terms, every one of whose facts the fixture lister knows.
 fn known_terms() -> impl Strategy<Value = &'static str> {
-    prop::sample::select(
-        TERMS
-            .iter()
-            .copied()
-            .filter(|t| !t.starts_with("group"))
-            .collect::<Vec<_>>(),
-    )
+    prop::sample::select(TERMS.to_vec())
 }
 
 fn terms() -> impl Strategy<Value = &'static str> {
