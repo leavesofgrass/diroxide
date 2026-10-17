@@ -2,7 +2,7 @@
 
 This guide is for people who use a screen reader such as NVDA, JAWS, Orca or VoiceOver, with or without a Braille display. It says how diroxide works with a screen reader, what you should hear for each key, the settings to check in NVDA and JAWS, how to read it on a 40-cell display, and a short check you can run yourself.
 
-What this guide says about diroxide comes from its design. A setting that comes from a screen reader's own documentation, or that has not been tried here, is marked not yet verified. Nothing in alpha.2 had been heard on a screen reader when this guide was written, so every "you should hear" line below is what diroxide is built to say, not a report of what was heard. If your experience differs, that is a finding. [The accessibility statement](accessibility.md) says what has been checked.
+What this guide says about diroxide comes from its design. A setting that comes from a screen reader's own documentation, or that has not been tried here, is marked not yet verified. Nothing in alpha.3 had been heard on a screen reader when this guide was written, so every "you should hear" line below is what diroxide is built to say, not a report of what was heard. If your experience differs, that is a finding. [The accessibility statement](accessibility.md) says what has been checked.
 
 ## How diroxide works with your screen reader
 
@@ -88,6 +88,53 @@ These lines show what diroxide says for each key. The status line says the same 
 - Make symbolic link, from File: "Make link, Make a link to main.rs in out, 1 of 4". The job says "Link finished: 1 done." On Windows without Developer Mode: "Cannot link: needs developer mode."
 - Shift+F5 (Duplicate): "Duplicate main.rs as: main (2).rs".
 
+### Search, filters and select by pattern
+
+- Ctrl+S and typing: nothing is spoken for each key. About 400 milliseconds after you stop, one line says the count and the first match: "37 matches, first report.pdf". With none: "No matches". A filter you clear says "Filter off, 120 shown".
+- A problem is said once, after the same pause: "Filter problem: size needs a number", then "Word 3. Try size over 10 MB." It is not said on every key.
+- Say filter, in the palette: the filter in one sentence with the real days, "modified last week, October 4 to 10".
+- Plus (select by pattern), then a filter and Enter: "12 entries will be selected. y or n", and after y, "12 selected".
+- Search from the palette: a dialog with labeled fields. Enter starts it: "Searching Documents for *.txt". Then at the progress interval, not on every change: "Searching: 214 found, 3,120 folders". At the end: "Done: 214 found in 3,120 folders", then the skips: "214 found. Hidden files skipped." Escape: "Stopped at 214 found." Pause: "Paused at 214 found."
+- A result row: "notes.txt, in Documents/q3, 4 KB". A content hit: "report.txt, line 42: total due, 3 more, in Documents/q3". A folder: "q3, folder, in Documents". The position comes last. The cursor never moves while results arrive.
+- F3 on a content hit opens the viewer at the match: "line 42 of 900". A file that has gone since the list was made: "report.txt, gone since this list was made".
+- The Space list: first "Total 66.4 GB. Largest 3 hold 81 percent", then rows such as "Videos, folder, 41.2 GB, 62 percent", ending "And 340 smaller items, 2.1 GB, 3 percent".
+
+<!-- to confirm: every line in this subsection but the diro search lines waits for the wiring lane (W3a, commits 35 to 38). The final pass runs each key on the merged build. -->
+
+### Labels, bookmarks and views
+
+- Alt+L: "Set label on 3 items, empty", with the labels listed under the field. Type `urg` and one line says how many labels match. Enter: "Label urgent added to 3 items". Ctrl+Z: "Undid label urgent on 3 items".
+- A labeled row: "report.pdf, label: urgent, 2.1 MB".
+- Labels list, from the palette: "Labels, 6 labels", then rows such as "Urgent, label, 14 items, checking, orange, Ctrl+1". When the count is ready the row says "2 missing" and the status line says "Checked 14 labeled items: 2 missing". The row's change is not spoken. Enter: "Urgent, 14 items", then the files.
+- Ctrl+B: "Bookmarks, no bookmarks, Add this folder, sample, in Drive D:\, 1 of 1". Enter on the first row: "Bookmarked sample, in Drive D:\". Ctrl+B again: the first row says "Remove this folder", and the bookmark's row says "sample, bookmark, in Drive D:\, not used yet".
+- Delete on a bookmark: "Remove bookmark Reports? No is the default. y or n", then "Removed bookmark Reports".
+- History list, in the Go menu (Alt+G, then R): rows such as "reports, in work, used 12 times, today". Delete: "Forgot Backup. 2 places left."
+- Save view for this folder, in the View menu (Alt+V, then W): "View saved for work: sorted by size, largest first". When you enter that folder later: the folder's line, then "Sorted by size, largest first; saved for this folder."
+
+### Compare files
+
+- Compare files from the palette: first "Comparing report.txt here with report.txt there". Then the verdict, exactly 40 cells for short names: "5 changes between old.txt and report.txt". Then "Changed 3, added 1, removed 1." Then the direction, "From the other panel to this panel." Then, when it applies, "Ignoring changes in spaces."
+- N and P, or F7 and Shift+F7, move between changes and say each row: "Changed line 39, was: total due, now: total owed". Enter on a row: "Change 4 of 5, line 40 before, line 39 after", "Before, line 40: total due", "After, line 39: total owed", "Differs: due became owed".
+- Two files that are the same: "Same: report.txt and old.txt". The same file on both sides: "Same file: report.txt". Swap changes the direction sentence.
+- A difference you cannot hear says its reason: "Changed line 3, hidden character U+200B added".
+
+<!-- to confirm: the app lines wait for the wiring lane (W3a, commit 40). The `diro diff` lines are real and are in the check below. -->
+
+### The Keys list and presets
+
+- Settings, then Keys: "Keys, preset diroxide defaults, 0 changed", then rows such as "Copy to other panel, F5 in both". Type `copy` to narrow the list.
+- Change key on a row: "Press the new key now. Escape cancels." Press a key: "Got Control plus F9". After 10 seconds with no key: "No key heard. The terminal may keep it." A key that is taken: "Ctrl+F5 already sorts by modified time.", then "Take it, swap, or cancel?" The screen reader key: "Insert is the screen reader key." A saved key: "Ctrl+F9 saved for Sort by size".
+- Choose a preset: "Apply Total Commander keys? y or n". The row title then says "Keys, preset Total Commander, 3 changed".
+- Test keys: "Got Control plus F5. Runs Sort by modified."
+
+<!-- to confirm: all of this subsection waits for the keys lane (W3k) and the wiring lane (W3a, commit 41). -->
+
+### Watching a folder
+
+- Watch this folder, from the palette: "Watching in for new files. Escape stops." (The folder here is called in.) A file copied in slowly: nothing while it grows, then about 2 seconds after it stops, "Arrived: scan-004.pdf, 1.2 MB". Several within ten seconds: "Watching in: 3 arrived". Escape: "Stopped watching in: 3 arrived".
+- The status line shows "Waiting for scan-004.pdf to settle" but diroxide does not say it.
+- In a shell, `diro watch in`: "Watching in for new files. Ctrl+C stops."
+
 ## Choosing a layout
 
 Side by side is the default and the first choice of sighted users. For a screen reader, stacked is recommended, because every line is one row at full width and Tab changes only the cursor, a marker and a title. Press Ctrl+P, type "layout" and press Enter to change it; the `layout` setting keeps the choice. The listening check will say which layout to recommend, and this guide will change if it finds that side by side reads well. [The panels guide](panels.md) has the reasons.
@@ -150,6 +197,13 @@ What each line shows in its first 40 characters:
 - A hex row, eight bytes: `000010: 48 65 6c 6c 6f 20 77 6f Hello wo`, exactly 40 characters.
 - The quick view's line: "Preview: report.md, 12 headings".
 - A split plan: "12 parts of 20 MB, the last 3.1 MB". A gap: "Part 004 is missing. Nothing was joined."
+- A filter problem: "Filter problem: size needs a number" (35 cells). The count after a filter: "37 matches, first report.pdf" (28).
+- A search: "Searching: 214 found, 3,120 folders" (35), "Done: 214 found in 3,120 folders" (32), "Stopped at 214 found." (21). A result: "notes.txt, in Documents/q3, 4 KB" (32), "report.txt, line 42: total due" (30).
+- A label: "Label urgent added to 3 items" (29), "Urgent, label, 14 items, 2 missing" (34). A bookmark: "Reports, alias r, in work" (25), "Bookmarked Reports, in work" (27); a bookmark row, "Reports, bookmark, in work, used 12 times", is 41 cells, with the kind and the place inside the first 26.
+- Compare: "5 changes between old.txt and report.txt" (40), "Changed 3, added 1, removed 1." (30). A change row starts with the kind and the line: "Removed line 12, Copyright 2025" (31). A long change is cut to a window in the row.
+- The Keys list: "Keys, preset Total Commander, 3 changed" (39), "Copy to other panel, F5 in both" (31), "Press the new key now. Escape cancels." (38), "Ctrl+F5 already sorts by modified time." (39).
+- Watching: "Watching in for new files. Escape stops." (40), "Arrived: scan-004.pdf, 1.2 MB" (29), "Watching in: 3 arrived" (22).
+- The Space list: "Total 66.4 GB. Largest 3 hold 81 percent" (40).
 - The key bar: "F2 Rename  F3 View  F4 Edit  F5 Copy" is the first 36 characters, and the width of the display decides how many pairs show after it.
 
 A line that runs past 40 cells still reads correctly when you pan. Only the start is guaranteed. A test walks a session and checks that each of these lines carries its key fact inside 40 cells.
@@ -225,11 +279,41 @@ If you build from source, `cargo xtask demo` followed by a new or empty folder o
 
 Questions to answer: Was every line's meaning inside the first 40 cells? Did anything speak a password? Did the quick view chatter? Was eight bytes of hex right? Which command did you need the palette for?
 
+## A check for search, labels, compare, keys and watching
+
+Run this once with NVDA, once with JAWS, and then read the first 40 cells of each line on the Braille display. It uses the demo set from the check above (`cargo xtask demo` followed by a new or empty folder on your own drive). For the compare steps, copy `old.txt` and `report.txt` from `fixtures\diff\report` in the source folder into the demo folder. Use its empty folder, `out`, to watch. Steps 1 to 3 run in a shell and work in any build of alpha.3. The others use the program, and a step that waits for a key says so.
+
+<!-- to confirm: the demo set may gain these files (the orchestrator's sample generator), which would remove the copy step. Steps 4 to 18 wait for the wiring lane (W3a) and the keys lane (W3k). Run them on the merged build and correct the words. -->
+
+1. In a shell, run `diro search` on the demo folder with `ext md`. You hear "Searching diro-demo for ext md", then "report.md, in diro-demo, 649 bytes", then "1 found." Run it again with `modified last week --explain`. You hear "Reads as: modified last week" and the real days. Run it with `size over`. You hear "Filter problem: size needs a number", then "Word 3. Try size over 10 MB.", and the exit code is 2.
+2. Run `diro search` with `--content crow --extension md`. You hear a row such as "report.md, line 7: The crow count rose again this quarter., 4 more, in diro-demo". Is the line number easy to find in the first 40 cells?
+3. Run `diro diff old.txt report.txt`. You hear "5 changes between old.txt and report.txt", the counts, "From old.txt to report.txt.", then five rows. Does the long line's window, "...in Portland opened early and the crows...", read well? Run it with `--format unified` and listen to "Same", "Added" and "Removed" rows and "9 same lines left out". Then run `diro watch out`, copy a file into `out` slowly, and listen for "Arrived:" about 2 seconds after the copy stops. Press Ctrl+C: "Stopped watching out: 1 arrived".
+4. Start `diro` on the demo folder. The title starts with the folder's name.
+5. Press Ctrl+S and type `size over 1 KB and name *.log` slowly. Is it silent while you type? About a second after you stop, do you hear one line with a count and the first match? Is the title line the filter?
+6. Type `size over` and stop. You should hear "Filter problem: size needs a number" once, after the pause, not on every key.
+7. Type `modified last week`. Run Say filter from the palette. You hear the real days. On Saturday, October 17, 2026, with weeks that start on Sunday, it is "modified last week, October 4 to 10".
+8. Clear the filter. You hear "Filter off" and the count.
+9. Press Plus and type `*.md`. You hear "N entries will be selected. y or n". Press y: "N selected".
+10. Press Alt+L, pick Urgent: "Label urgent added to N items". Press Ctrl+Z: "Undid label urgent on N items". Label again. Open the Labels list. Is the row change from "checking" to "0 missing" noticed? Press Enter on a label, then on an item: you land on the file in its folder.
+11. Press Ctrl+B. The first row says "Add this folder". Press Enter, then Ctrl+B again. The first row says "Remove this folder", and the new bookmark's row starts with its name and "bookmark".
+12. Run Search from the palette. Type `*.md` and press Enter. You hear "Searching diro-demo for *.md", then "Done:" and a count, then what was skipped. Press Down through the results: each row starts with the name. Search for the text `crow` in contents, press F3 on a hit, and hear the viewer open at that line.
+13. Start a search that matches many files and press Escape while it runs. You hear "Stopped at" and a count. The cursor must not have moved while results arrived.
+14. Mark `old.txt` and `report.txt`. Run Compare files. You hear the status line, the verdict, the counts and the direction. Press N and P: each change is one row. Press Enter on one: the lines before and after, and "Differs:". Press Escape. Run Swap: the direction sentence changes. Compare a file with itself: "Same file:".
+15. Open Settings, then Keys. You hear "Keys, preset diroxide defaults, 0 changed". Type `copy` to narrow the list. Choose Sort by size, then Change key, then press Ctrl+F9: "Got Control plus F9". Repeat with F5: "F5 already copies to the other panel", then the choice.
+16. Choose Change key and wait 10 seconds. You hear "No key heard. The terminal may keep it." and the offer to type the name.
+17. Run Test keys. Press Ctrl+V and Ctrl+Enter. In Windows Terminal, Ctrl+V pastes text and does not arrive. Tell the project which keys did not arrive.
+18. Choose the Total Commander preset: "Apply Total Commander keys? y or n". Answer y. Press Shift+F6 on a file: the rename prompt. Press Escape. Choose the diroxide preset again. In a shell, run `diro keys check`.
+19. In the panel on `out`, run Watch this folder from the palette: "Watching out for new files. Escape stops." Copy a file in slowly. Nothing while it grows, then "Arrived: name, size". Press Escape: "Stopped watching out: 1 arrived".
+
+Questions to answer: Was the meaning of every line inside the first 40 cells? Did the count after the filter pause help, or interrupt? Is 400 milliseconds too short? Did "Waiting for ... to settle" get read aloud even though diroxide does not say it? Was the compare verdict and its counts enough before the change list? Did a key in the Keys list do nothing? Which keys does your terminal not deliver?
+
 ## Keys that may clash
 
 - The screen reader key. NVDA, JAWS and Orca use Insert, or Caps Lock if you choose it, as their own key. diroxide uses neither, so your screen reader's commands pass through to it.
 - Single-letter keys. Typing a letter finds a row by name. Screen readers do not use their browse mode in a terminal, so these letters reach diroxide. Dictation software types letters; turn single-letter keys off with the `single_letters` setting, and every command stays reachable by the keys that are not letters, by the menus and by the palette. The viewer has single-letter keys too, such as w, l, q, n and p; with single-letter keys off, every viewer command, search included, is still in the palette, and Escape closes the viewer.
-- The keypad and Num Lock, described above.
+- The keypad and Num Lock, described above. Some key presets use the keypad's plus, minus, star and slash for the selection. They work under NVDA and JAWS only with Num Lock on.
+- Ctrl with a digit. The favorite labels are on Ctrl+1 to Ctrl+7, and many Unix terminals do not send them. The Edit menu's Labels submenu (Alt+E, then B) is the sure way.
+- The vim-style key preset runs letters as commands, so it turns type-ahead off. Dictation software types letters, so use Single letters, off, with dictation.
 - Windows Terminal keeps some keys for itself. [Terminals](terminals.md) lists them and says how to give them back or avoid them.
 
 ## See also
@@ -241,6 +325,11 @@ Questions to answer: Was every line's meaning inside the first 40 cells? Did any
 - [The viewer](viewer.md)
 - [The quick view](quick-view.md)
 - [Split and join](split-join.md)
+- [Search and the filter language](search.md)
+- [Labels and bookmarks](labels-bookmarks.md)
+- [Compare files](compare.md)
+- [Customizing keys](customizing-keys.md)
+- [Watching a folder](watching.md)
 - [Troubleshooting](troubleshooting.md)
 - [Settings and where the files live](settings.md)
 - [The documentation index](README.md)
