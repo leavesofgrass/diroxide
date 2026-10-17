@@ -21,6 +21,7 @@
 //! reads changes from the other panel's file (before) to this panel's file
 //! (after), and Swap turns the direction around ([`TextComparison::swapped`]).
 
+pub mod binary;
 pub mod change;
 pub mod content;
 mod engine;
@@ -28,6 +29,7 @@ pub mod equal;
 pub mod error;
 pub mod explain;
 pub mod facts;
+pub mod file;
 mod forms;
 pub mod grammar;
 mod lines;
@@ -35,12 +37,14 @@ pub mod options;
 pub mod text;
 pub mod words;
 
+pub use binary::{BinaryComparison, ByteRun, compare_binary};
 pub use change::{Change, ChangeKind, Counts};
 pub use content::{ContentComparison, compare_contents};
 pub use equal::{Equality, equal};
 pub use error::DiffError;
 pub use explain::{Delta, Reason, explain};
 pub use facts::{Endings, FactDifference, FileFacts, Sides};
+pub use file::{FileComparison, FileOptions, FileSide, LargeFiles, Outcome, compare_files};
 pub use grammar::{Context, UnifiedKind, UnifiedRow, Verdict, verdict_line, verdict_sentence};
 pub use lines::LineEnding;
 pub use options::{CompareOptions, Ignore, LineAlgorithm};

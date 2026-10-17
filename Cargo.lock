@@ -901,6 +901,7 @@ dependencies = [
  "diroxide-archive",
  "diroxide-config",
  "diroxide-core",
+ "diroxide-diff",
  "diroxide-filetype",
  "diroxide-ops",
  "diroxide-plugins",
@@ -952,6 +953,7 @@ dependencies = [
  "insta",
  "proptest",
  "similar 3.2.0",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 

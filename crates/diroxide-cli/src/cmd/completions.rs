@@ -282,6 +282,50 @@ pub fn command() -> Command {
                         .help("Any part of the set"),
                 ),
         )
+        .subcommand(
+            Command::new("diff")
+                .about("Compare two files: the verdict first, then each change")
+                .arg(flag("brief", "Print the verdict line only").short('q'))
+                .arg(
+                    Arg::new("format")
+                        .long("format")
+                        .value_parser(["words", "unified", "json"])
+                        .help("How to write the result"),
+                )
+                .arg(
+                    Arg::new("context")
+                        .long("context")
+                        .value_name("N")
+                        .help("Same lines around each change when unified, 0 to 9"),
+                )
+                .arg(flag("ignore-case", "Ignore upper and lower case").short('i'))
+                .arg(flag(
+                    "ignore-trailing-space",
+                    "Ignore space at the end of lines",
+                ))
+                .arg(
+                    flag(
+                        "ignore-space-change",
+                        "Ignore changes in the amount of space",
+                    )
+                    .short('b'),
+                )
+                .arg(flag("ignore-all-space", "Ignore all space").short('w'))
+                .arg(
+                    flag(
+                        "ignore-blank-lines",
+                        "Ignore changes whose lines are all blank",
+                    )
+                    .short('B'),
+                )
+                .arg(flag("line-endings", "Compare line endings too"))
+                .arg(flag(
+                    "head",
+                    "Over 16 MiB, compare the first 16 MiB as text",
+                ))
+                .arg(named("before", "The before file").value_hint(ValueHint::FilePath))
+                .arg(named("after", "The after file").value_hint(ValueHint::FilePath)),
+        )
         .subcommand(no_help(
             Command::new("search")
                 .about("Print the places under ROOT whose names match PATTERN")

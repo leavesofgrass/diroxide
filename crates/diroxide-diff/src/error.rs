@@ -15,6 +15,10 @@ pub enum DiffError {
     /// A file could not be read or looked at.
     #[error(transparent)]
     Read(VfsError),
+    /// A place to compare is a folder, a broken link or something else
+    /// that is not a file; the place is kept for the caller to name.
+    #[error("it is not a file")]
+    NotAFile(String),
 }
 
 impl From<VfsError> for DiffError {
@@ -32,6 +36,7 @@ impl Explain for DiffError {
         match self {
             DiffError::Cancelled => String::new(),
             DiffError::Read(inner) => inner.next_step(),
+            DiffError::NotAFile(_) => "Choose two files to compare.".to_owned(),
         }
     }
 }

@@ -24,6 +24,8 @@ thiserror.workspace = true
 [dev-dependencies]
 insta.workspace = true
 proptest.workspace = true
+# The edge-case tests write their files to a temporary folder.
+tempfile.workspace = true
 
 [lints]
 workspace = true

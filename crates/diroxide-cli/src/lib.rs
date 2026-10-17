@@ -13,6 +13,8 @@
 //! - `diro init SHELL`: the shell function that moves the shell where diro
 //!   left it, through `--cwd-file`.
 //! - `diro archive list|pack|unpack|test`: archives from a shell.
+//! - `diro diff BEFORE AFTER`: compare two files, the verdict first, then
+//!   one line a change; exit 0 the same, 1 different, 2 trouble.
 //! - `diro split FILE` and `diro join PART`: split a file into numbered
 //!   parts with a `.crc` sidecar, and put them back together.
 //! - `diro plugin list|new|enable|disable|run|log`: plugin tooling.
@@ -24,7 +26,8 @@
 //! Owners after Phase 0: W1d owns this file, `open.rs` and `serve.rs`, and
 //! `cmd/keys.rs` and `cmd/init.rs`; W1e owns the rest of `cmd/` (W3b owns
 //! `cmd/plugin.rs`; W2g owns `cmd/archive.rs`, `cmd/split.rs` and
-//! `cmd/join.rs`, and their lines here).
+//! `cmd/join.rs`, and their lines here; W3d owns `cmd/diff.rs` and its
+//! lines here).
 
 pub mod cmd;
 pub mod open;
@@ -68,6 +71,8 @@ pub enum Invocation {
     Split(cmd::split::SplitArgs),
     /// Join a split file's parts.
     Join(cmd::join::JoinArgs),
+    /// Compare two files.
+    Diff(cmd::diff::DiffArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -136,6 +141,7 @@ pub fn help_text() -> String {
         "diro archive test ARCHIVE  read every member of an archive and check it",
         "diro split FILE --preset NAME  split into numbered parts; or --size N, --parts N",
         "diro join PART            join a split file's parts back into one file",
+        "diro diff BEFORE AFTER    compare two files: the verdict first, then each change",
         "diro plugin list          list the plugins",
         "diro --version            print the version",
         "diro --help               print this help",
@@ -156,6 +162,7 @@ pub fn help_text() -> String {
         "3  partly done: some items failed; the output says which",
         "",
         "diro ls --help gives the options of diro ls; diro archive --help those of diro archive.",
+        "diro diff --help gives the options of diro diff.",
     ]
     .join("\n")
 }
@@ -247,6 +254,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "archive" => cmd::archive::parse(&args[1..]).map(Invocation::Archive),
         "split" => cmd::split::parse(&args[1..]).map(Invocation::Split),
         "join" => cmd::join::parse(&args[1..]).map(Invocation::Join),
+        "diff" => cmd::diff::parse(&args[1..]).map(Invocation::Diff),
         _ => parse_open(&args).map(Invocation::Open),
     }
 }
@@ -279,6 +287,7 @@ pub fn run(
         Invocation::Archive(args) => cmd::archive::run(&args, input, out),
         Invocation::Split(args) => cmd::split::run(&args, out),
         Invocation::Join(args) => cmd::join::run(&args, out),
+        Invocation::Diff(args) => cmd::diff::run(&args, out),
     }
 }
 

@@ -277,8 +277,12 @@ pub fn stopped_early_sentence(deadline: Duration) -> String {
 fn range_words(range: &Range<usize>) -> String {
     match range.len() {
         0 => "none".to_owned(),
-        1 => format!("line {}", range.start + 1),
-        _ => format!("lines {} to {}", range.start + 1, range.end),
+        1 => format!("line {}", grouped(range.start as u64 + 1)),
+        _ => format!(
+            "lines {} to {}",
+            grouped(range.start as u64 + 1),
+            grouped(range.end as u64)
+        ),
     }
 }
 
@@ -402,9 +406,13 @@ impl ContentComparison {
         let kind = change.kind.word();
         let lines = change.lines();
         let place = if lines.len() == 1 {
-            format!("line {}", lines.start)
+            format!("line {}", grouped(lines.start as u64))
         } else {
-            format!("lines {} to {}", lines.start, lines.end - 1)
+            format!(
+                "lines {} to {}",
+                grouped(lines.start as u64),
+                grouped(lines.end as u64 - 1)
+            )
         };
         match change.kind {
             ChangeKind::Added | ChangeKind::Removed => {
@@ -531,14 +539,14 @@ impl ContentComparison {
         let before = |i: usize| {
             format!(
                 "Before, line {}: {}",
-                i + 1,
+                grouped(i as u64 + 1),
                 neutralize(text.before_line(i).unwrap_or_default())
             )
         };
         let after = |i: usize| {
             format!(
                 "After, line {}: {}",
-                i + 1,
+                grouped(i as u64 + 1),
                 neutralize(text.after_line(i).unwrap_or_default())
             )
         };
@@ -575,36 +583,39 @@ impl ContentComparison {
 
     /// The unified view as rows: each change under its header, removed
     /// lines then added lines, with `context` same lines around it, and
-    /// a row saying how many same lines were left out between.
+    /// a row saying how many same lines were left out between. Only the
+    /// rows shown are built, so a large file with few changes stays cheap.
     pub fn unified(&self, context: Context) -> Vec<UnifiedRow> {
-        let all = self.all_rows();
-        let Context::Lines(context) = context else {
-            return all;
-        };
-        // How far each same row is from the nearest change, in same rows.
-        let mut near = vec![usize::MAX; all.len()];
+        let slots = self.slots();
+        // How far each same line is from the nearest change, in same lines.
+        let mut near = vec![usize::MAX; slots.len()];
         let mut since = usize::MAX;
-        for (at, row) in all.iter().enumerate() {
-            since = if row.kind == UnifiedKind::Same {
-                since.saturating_add(1)
-            } else {
-                0
+        for (at, slot) in slots.iter().enumerate() {
+            since = match slot {
+                Slot::Same { .. } => since.saturating_add(1),
+                Slot::Change(_) => 0,
             };
             near[at] = since;
         }
         since = usize::MAX;
-        for (at, row) in all.iter().enumerate().rev() {
-            since = if row.kind == UnifiedKind::Same {
-                since.saturating_add(1)
-            } else {
-                0
+        for (at, slot) in slots.iter().enumerate().rev() {
+            since = match slot {
+                Slot::Same { .. } => since.saturating_add(1),
+                Slot::Change(_) => 0,
             };
             near[at] = near[at].min(since);
         }
+        let shown = |distance: usize| match context {
+            Context::WholeFile => true,
+            Context::Lines(lines) => distance <= lines,
+        };
+        let text = self.text();
         let mut out = Vec::new();
         let mut left_out = 0usize;
-        for (row, distance) in all.into_iter().zip(near) {
-            if row.kind == UnifiedKind::Same && distance > context {
+        for (slot, distance) in slots.into_iter().zip(near) {
+            if let Slot::Same { .. } = slot
+                && !shown(distance)
+            {
                 left_out += 1;
                 continue;
             }
@@ -612,7 +623,16 @@ impl ContentComparison {
                 out.push(UnifiedRow::gap(left_out));
                 left_out = 0;
             }
-            out.push(row);
+            match slot {
+                Slot::Same { before, after } => out.push(UnifiedRow {
+                    kind: UnifiedKind::Same,
+                    before_line: before.map(|b| b + 1),
+                    after_line: Some(after + 1),
+                    text: neutralize(text.after_line(after).unwrap_or_default()),
+                    change: None,
+                }),
+                Slot::Change(index) => self.push_change_rows(index, &mut out),
+            }
         }
         if left_out > 0 {
             out.push(UnifiedRow::gap(left_out));
@@ -620,72 +640,76 @@ impl ContentComparison {
         out
     }
 
-    /// Every row of the whole file, in order.
-    fn all_rows(&self) -> Vec<UnifiedRow> {
-        let text = self.text();
-        let mut rows = Vec::new();
+    /// The file as a sequence of same lines and changes, without text.
+    fn slots(&self) -> Vec<Slot> {
+        let mut slots = Vec::new();
         for Segment {
             kind,
             before,
             after,
-        } in text.segments()
+        } in self.text().segments()
         {
             match kind {
                 SegmentKind::Same => {
-                    for (b, a) in before.clone().zip(after.clone()) {
-                        rows.push(UnifiedRow {
-                            kind: UnifiedKind::Same,
-                            before_line: Some(b + 1),
-                            after_line: Some(a + 1),
-                            text: neutralize(text.after_line(a).unwrap_or_default()),
-                            change: None,
-                        });
-                    }
+                    slots.extend(before.clone().zip(after.clone()).map(|(b, a)| Slot::Same {
+                        before: Some(b),
+                        after: a,
+                    }));
                 }
                 // Blank lines left out of the compare read as the after
                 // file has them.
                 SegmentKind::Blank => {
-                    for a in after.clone() {
-                        rows.push(UnifiedRow {
-                            kind: UnifiedKind::Same,
-                            before_line: None,
-                            after_line: Some(a + 1),
-                            text: neutralize(text.after_line(a).unwrap_or_default()),
-                            change: None,
-                        });
-                    }
+                    slots.extend(after.clone().map(|a| Slot::Same {
+                        before: None,
+                        after: a,
+                    }));
                 }
-                SegmentKind::Change(index) => {
-                    rows.push(UnifiedRow {
-                        kind: UnifiedKind::Header,
-                        before_line: None,
-                        after_line: None,
-                        text: self.header(*index),
-                        change: Some(*index),
-                    });
-                    for b in before.clone() {
-                        rows.push(UnifiedRow {
-                            kind: UnifiedKind::Removed,
-                            before_line: Some(b + 1),
-                            after_line: None,
-                            text: neutralize(text.before_line(b).unwrap_or_default()),
-                            change: Some(*index),
-                        });
-                    }
-                    for a in after.clone() {
-                        rows.push(UnifiedRow {
-                            kind: UnifiedKind::Added,
-                            before_line: None,
-                            after_line: Some(a + 1),
-                            text: neutralize(text.after_line(a).unwrap_or_default()),
-                            change: Some(*index),
-                        });
-                    }
-                }
+                SegmentKind::Change(index) => slots.push(Slot::Change(*index)),
             }
         }
-        rows
+        slots
     }
+
+    /// A change's rows in the unified view: its header, its removed lines,
+    /// then its added lines.
+    fn push_change_rows(&self, index: usize, out: &mut Vec<UnifiedRow>) {
+        let text = self.text();
+        let Some(change) = text.changes().get(index) else {
+            return;
+        };
+        out.push(UnifiedRow {
+            kind: UnifiedKind::Header,
+            before_line: None,
+            after_line: None,
+            text: self.header(index),
+            change: Some(index),
+        });
+        for b in change.before.clone() {
+            out.push(UnifiedRow {
+                kind: UnifiedKind::Removed,
+                before_line: Some(b + 1),
+                after_line: None,
+                text: neutralize(text.before_line(b).unwrap_or_default()),
+                change: Some(index),
+            });
+        }
+        for a in change.after.clone() {
+            out.push(UnifiedRow {
+                kind: UnifiedKind::Added,
+                before_line: None,
+                after_line: Some(a + 1),
+                text: neutralize(text.after_line(a).unwrap_or_default()),
+                change: Some(index),
+            });
+        }
+    }
+}
+
+/// One step of the unified view before its text is built: a same line,
+/// by its numbers counted from 0, or a change by its index.
+enum Slot {
+    Same { before: Option<usize>, after: usize },
+    Change(usize),
 }
 
 /// How much of the file the unified view shows.
