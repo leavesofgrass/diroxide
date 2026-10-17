@@ -110,7 +110,6 @@ Key preset. The set of keys under your own keys in keymap.toml: diroxide, or a p
 
 - Holds: text.
 - Default: `"diroxide"`.
-- Comes with alpha.3.
 
 ## Speech and Braille
 

@@ -380,7 +380,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         kind: K::Text,
         default: "\"diroxide\"",
         help: "The set of keys under your own keys in keymap.toml: diroxide, or a preset modeled on another file manager.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "screen_reader_mode",

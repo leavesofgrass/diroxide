@@ -132,7 +132,7 @@ mod tests {
         let theme = list.rows().iter().find(|r| r.id == "theme").unwrap();
         assert_eq!(theme.spoken(), "Theme, galaxy, meets AA");
         let preset = list.rows().iter().find(|r| r.id == "preset").unwrap();
-        assert_eq!(preset.spoken(), "Key preset, diroxide, comes with alpha.3");
+        assert_eq!(preset.spoken(), "Key preset, diroxide");
         for row in list.rows() {
             assert!(within_cells(&row.spoken(), &row.label), "{}", row.spoken());
         }
