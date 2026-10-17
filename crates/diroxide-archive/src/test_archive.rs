@@ -142,7 +142,7 @@ pub fn test_archive(archive: &Place, password: Option<Secret>, env: &JobEnv<'_>)
             Err(error) => {
                 let cause = match &error {
                     ArchiveError::Ask(question) => format!("you said No to: {}", question.text),
-                    ArchiveError::Vfs(error) => error.to_string(),
+                    other => other.to_string(),
                 };
                 outcome.report.failed.push((archive.clone(), cause.clone()));
                 outcome.failed = Some(cause);
@@ -278,7 +278,7 @@ fn run_checks(
                     break;
                 }
             }
-            (Err(ArchiveError::Vfs(error)), _) => {
+            (Err(error), _) => {
                 // The archive cannot be read past here: the member at work
                 // and what follows are damaged.
                 let cause = error.to_string();

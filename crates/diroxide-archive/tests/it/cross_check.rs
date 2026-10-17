@@ -243,3 +243,66 @@ fn diroxide_zips_pass_unzip_and_seven_z() {
         }
     }
 }
+
+#[test]
+fn diroxide_tars_pass_tar_xz_and_gzip_with_no_owner_names() {
+    use diroxide_archive::ArchiveFormat;
+    let tar_ok = oracle("tar");
+    if let Err(why) = &tar_ok {
+        eprintln!("cross-check of packed tars against tar not run: {why}");
+        return;
+    }
+    let dir = crate::spike_listing::scratch();
+    let source = source_tree(dir.path());
+    let tar_version = version_of("tar", "--version");
+    let cases = [
+        (ArchiveFormat::Tar, "course.tar", "-tvf", None),
+        (ArchiveFormat::TarGz, "course.tar.gz", "-tzvf", Some("gzip")),
+        (ArchiveFormat::TarXz, "course.tar.xz", "-tJvf", Some("xz")),
+    ];
+    for (format, name, flags, filter) in cases {
+        if let Some(tool) = filter
+            && let Err(why) = oracle(tool)
+        {
+            eprintln!("cross-check of {name} not run: {why}");
+            continue;
+        }
+        let archive = pack_on_disk(&source, name, format, None);
+        let (ok, listing) = tool_says("tar", &[flags.as_ref(), archive.as_os_str()]);
+        assert!(ok, "tar {flags} {name}: {listing}");
+        let lines: Vec<&str> = listing.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(lines.len(), 7, "{listing}");
+        for line in &lines {
+            // GNU tar says "0/0"; bsdtar (Windows ships it) says "0 0"
+            // after the link count.
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            let owners = if tar_version.contains("bsdtar") {
+                fields.get(2..4).map(|f| f.join("/")).unwrap_or_default()
+            } else {
+                fields.get(1).map(|f| (*f).to_owned()).unwrap_or_default()
+            };
+            assert_eq!(owners, "0/0", "no owner names: {line}");
+        }
+        eprintln!("cross-check: {name} passed tar {flags} ({tar_version}), owners 0/0");
+        if let Some(tool) = filter {
+            let (ok, said) = tool_says(tool, &["-t".as_ref(), archive.as_os_str()]);
+            assert!(ok, "{tool} -t {name}: {said}");
+            eprintln!(
+                "cross-check: {name} passed {tool} -t ({})",
+                version_of(tool, "--version")
+            );
+        }
+    }
+    if oracle("xz").is_ok() {
+        let notes = source.join("notes.txt");
+        let archive = pack_on_disk(&notes, "notes.txt.xz", ArchiveFormat::Xz, None);
+        let (ok, said) = tool_says("xz", &["-t".as_ref(), archive.as_os_str()]);
+        assert!(ok, "xz -t: {said}");
+        let (ok, text) = tool_says("xz", &["-dc".as_ref(), archive.as_os_str()]);
+        assert!(
+            ok && text == "the notes\n".repeat(200),
+            "xz -dc gives the file back"
+        );
+        eprintln!("cross-check: notes.txt.xz passed xz -t and xz -dc");
+    }
+}

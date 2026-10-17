@@ -351,6 +351,10 @@ impl Runner<'_> {
                 self.fail_left(state, &error.to_string());
                 false
             }
+            other => {
+                self.fail_left(state, &other.to_string());
+                false
+            }
         }
     }
 

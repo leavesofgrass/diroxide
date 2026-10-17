@@ -359,11 +359,205 @@ pub(crate) fn write_archive<W: Write>(
 ) -> Result<W, PackFailure> {
     match settings.format {
         ArchiveFormat::Zip => write_zip(out, items, contents, settings, watch, records),
+        ArchiveFormat::Tar => write_tar(out, items, contents, settings, watch, records),
+        ArchiveFormat::TarGz => {
+            let level = settings.level.number_for(ArchiveFormat::TarGz).unwrap_or(6);
+            let gzip = flate2::write::GzEncoder::new(out, flate2::Compression::new(level));
+            let gzip = write_tar(gzip, items, contents, settings, watch, records)?;
+            gzip.finish().map_err(PackFailure::from_io)
+        }
+        ArchiveFormat::TarXz => {
+            let xz = XzSink::new(out, settings)?;
+            let xz = write_tar(xz, items, contents, settings, watch, records)?;
+            xz.finish()
+        }
+        ArchiveFormat::Xz => {
+            let mut xz = XzSink::new(out, settings)?;
+            match items {
+                [item] if item.kind == ItemKind::File => {
+                    watch.check().map_err(PackFailure::from_io)?;
+                    watch.member(&item.name);
+                    feed(contents, 0, watch, records)?.copy_into(&mut xz)?;
+                }
+                _ => {
+                    return Err(PackFailure::Write(VfsError::UnsupportedFeature {
+                        what: "more than one file in xz, which holds one; use tar.xz".to_owned(),
+                    }));
+                }
+            }
+            xz.finish()
+        }
         _ => Err(PackFailure::Write(VfsError::unsupported(
             "archive",
             "pack to this format yet",
         ))),
     }
+}
+
+/// The memory one xz encoder thread takes at a preset, in MiB (the xz
+/// manual's figures, rounded up).
+fn xz_thread_mib(preset: u32) -> u64 {
+    match preset {
+        0..=3 => 32,
+        4..=6 => 100,
+        7 => 190,
+        8 => 370,
+        _ => 680,
+    }
+}
+
+/// An xz stream being written: one thread, or several over blocks of
+/// three dictionaries each (xz's own default), as many as fit in 1 GiB.
+enum XzSink<W: Write> {
+    One(lzma_rust2::XzWriter<W>),
+    Many(lzma_rust2::XzWriterMt<W>),
+}
+
+impl<W: Write> XzSink<W> {
+    fn new(out: W, settings: &Settings<'_>) -> Result<Self, PackFailure> {
+        let preset = settings.level.number_for(ArchiveFormat::Xz).unwrap_or(6);
+        let mut options = lzma_rust2::XzOptions::with_preset(preset);
+        let fit = (1024 / xz_thread_mib(preset)).max(1) as u32;
+        let threads = settings.threads.min(fit);
+        if threads > 1 {
+            let block = u64::from(options.lzma_options.dict_size).saturating_mul(3);
+            options.set_block_size(std::num::NonZeroU64::new(block.max(1 << 20)));
+            lzma_rust2::XzWriterMt::new(out, options, threads)
+                .map(XzSink::Many)
+                .map_err(PackFailure::from_io)
+        } else {
+            lzma_rust2::XzWriter::new(out, options)
+                .map(XzSink::One)
+                .map_err(PackFailure::from_io)
+        }
+    }
+
+    fn finish(self) -> Result<W, PackFailure> {
+        match self {
+            XzSink::One(writer) => writer.finish(),
+            XzSink::Many(writer) => writer.finish(),
+        }
+        .map_err(PackFailure::from_io)
+    }
+}
+
+impl<W: Write> Write for XzSink<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            XzSink::One(writer) => writer.write(buf),
+            XzSink::Many(writer) => writer.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            XzSink::One(writer) => writer.flush(),
+            XzSink::Many(writer) => writer.flush(),
+        }
+    }
+}
+
+/// A member's bytes held to the size its header already says: fewer
+/// bytes, or more, mean the file changed while it was packed.
+struct Exactly<'f, R> {
+    inner: &'f mut R,
+    left: u64,
+    name: &'f str,
+}
+
+impl<R: Read> Read for Exactly<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.left == 0 {
+            let mut one = [0u8; 1];
+            return match self.inner.read(&mut one)? {
+                0 => Ok(0),
+                _ => Err(to_io(changed(self.name))),
+            };
+        }
+        let want = buf
+            .len()
+            .min(usize::try_from(self.left).unwrap_or(usize::MAX));
+        let n = self.inner.read(&mut buf[..want])?;
+        if n == 0 {
+            return Err(to_io(changed(self.name)));
+        }
+        self.left -= n as u64;
+        Ok(n)
+    }
+}
+
+/// The error of a file that changed while it was packed.
+fn changed(name: &str) -> VfsError {
+    VfsError::Unsafe {
+        why: format!("{name} changed while it was packed; pack it again"),
+    }
+}
+
+/// Writes a tar in GNU format: long names as GNU long-name entries, no
+/// sparse entries, owner and group ids of 0 and no owner names unless
+/// they are kept, times and modes from the sources, links as links.
+pub(crate) fn write_tar<W: Write>(
+    out: W,
+    items: &[WriteItem],
+    contents: &dyn Contents,
+    settings: &Settings<'_>,
+    watch: &dyn Watch,
+    records: &Records,
+) -> Result<W, PackFailure> {
+    let mut builder = tar::Builder::new(out);
+    builder.follow_symlinks(false);
+    builder.sparse(false);
+    for (n, item) in items.iter().enumerate() {
+        watch.check().map_err(PackFailure::from_io)?;
+        watch.member(&item.name);
+        let mut header = tar::Header::new_gnu();
+        header.set_mtime(
+            item.modified
+                .map_or(0, |t| u64::try_from(t.unix_seconds()).unwrap_or(0)),
+        );
+        header.set_mode(item.stored_mode());
+        header.set_uid(0);
+        header.set_gid(0);
+        if settings.keep_owner
+            && let Some((owner, group)) = &item.owner
+        {
+            let _ = header.set_username(owner);
+            let _ = header.set_groupname(group);
+        }
+        let appended = match &item.kind {
+            ItemKind::Folder => {
+                header.set_entry_type(tar::EntryType::Directory);
+                header.set_size(0);
+                builder.append_data(&mut header, format!("{}/", item.name), io::empty())
+            }
+            ItemKind::Link(target) => {
+                header.set_entry_type(tar::EntryType::Symlink);
+                header.set_size(0);
+                builder.append_link(&mut header, &item.name, target)
+            }
+            ItemKind::File => {
+                header.set_entry_type(tar::EntryType::Regular);
+                header.set_size(item.size);
+                let mut source = feed(contents, n, watch, records)?;
+                let result = {
+                    let mut exact = Exactly {
+                        inner: &mut source,
+                        left: item.size,
+                        name: &item.name,
+                    };
+                    builder.append_data(&mut header, &item.name, &mut exact)
+                };
+                if result.is_err()
+                    && let Some(failure) = source.failure.take()
+                {
+                    return Err(PackFailure::Source(n, failure));
+                }
+                result
+            }
+        };
+        appended.map_err(PackFailure::from_io)?;
+    }
+    builder.into_inner().map_err(PackFailure::from_io)
 }
 
 #[cfg(test)]

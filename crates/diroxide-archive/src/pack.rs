@@ -229,12 +229,17 @@ pub fn plan_pack(
     if request.destination.archive().is_some() {
         return Err(crate::words::read_only_error().into());
     }
+    let archive_name = request
+        .destination
+        .name()
+        .map_or_else(|| request.destination.to_string(), str::to_owned);
+    let refuse = |why: &str| ArchiveError::Refused(format!("Could not pack {archive_name}: {why}"));
     let locked = request.password.as_ref().is_some_and(|p| !p.is_empty());
     if locked && !takes_password(format) {
-        return Err(VfsError::UnsupportedFeature {
-            what: format!("a password in {}; use 7z or zip", format_word(format)),
-        }
-        .into());
+        return Err(refuse(&format!(
+            "{} keeps no password. Use 7z or zip.",
+            format_word(format)
+        )));
     }
     let folder = request.destination.parent().ok_or(VfsError::NotFound)?;
     if request.destination.name().is_none() {
@@ -308,10 +313,7 @@ pub fn plan_pack(
                 _ => {}
             }
             if format == ArchiveFormat::Xz && kind != EntryKind::File {
-                return Err(VfsError::UnsupportedFeature {
-                    what: "folders and links in xz, which holds one file; use tar.xz".to_owned(),
-                }
-                .into());
+                return Err(refuse("xz holds one file. Use tar.xz."));
             }
             if !names.insert(stored.to_lowercase()) {
                 left_out.push((place, format!("{stored} is in the archive already")));
@@ -349,10 +351,7 @@ pub fn plan_pack(
         }
     }
     if format == ArchiveFormat::Xz && plan_items.len() != 1 {
-        return Err(VfsError::UnsupportedFeature {
-            what: "more than one file in xz, which holds one; use tar.xz".to_owned(),
-        }
-        .into());
+        return Err(refuse("xz holds one file. Use tar.xz."));
     }
     let count_of = |kind: EntryKind| plan_items.iter().filter(|i| i.kind == kind).count() as u64;
     let bytes = plan_items.iter().map(|i| i.size).sum();
