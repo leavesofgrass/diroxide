@@ -120,20 +120,23 @@ struct Source<R> {
 }
 
 impl<R: Read> Source<R> {
+    /// Reads the first piece and sniffs the byte-order mark in it: one
+    /// read for a small file, never a byte at a time.
     fn new(mut inner: R) -> io::Result<Self> {
-        let mut head = Vec::with_capacity(4);
-        let mut byte = [0u8; 1];
-        while head.len() < 3 {
-            match inner.read(&mut byte) {
+        let mut head = vec![0u8; CHUNK];
+        let mut filled = 0;
+        while filled < 3 {
+            match inner.read(&mut head[filled..]) {
                 Ok(0) => break,
-                Ok(_) => head.push(byte[0]),
+                Ok(n) => filled += n,
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
             }
         }
-        let read = head.len() as u64;
+        head.truncate(filled);
+        let read = filled as u64;
         let (decoder, pending) = if head.starts_with(&[0xEF, 0xBB, 0xBF]) {
-            (None, Vec::new())
+            (None, head[3..].to_vec())
         } else if head.starts_with(&[0xFF, 0xFE]) {
             (
                 Some(UTF_16LE.new_decoder_without_bom_handling()),
