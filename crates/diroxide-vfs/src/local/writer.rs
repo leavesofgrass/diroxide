@@ -17,6 +17,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use diroxide_core::Place;
+
 use crate::error::VfsError;
 use crate::names;
 use crate::provider::{FileWriter, WriteMode};
@@ -138,6 +140,15 @@ impl Write for LocalWriter {
 }
 
 impl FileWriter for LocalWriter {
+    /// The unfinished file, as a place: the target's folder and the
+    /// `.diro-part-` name, read back from the path the writer made.
+    fn unfinished_place(&self) -> Option<Place> {
+        self.unfinished
+            .path()
+            .to_str()
+            .and_then(|path| Place::parse(path).ok())
+    }
+
     fn commit(mut self: Box<Self>, durable: bool) -> Result<(), VfsError> {
         if let Some(mut file) = self.file.take() {
             file.flush()?;

@@ -741,6 +741,10 @@ impl Drop for FakeWriter {
 }
 
 impl FileWriter for FakeWriter {
+    fn unfinished_place(&self) -> Option<Place> {
+        self.unfinished.clone()
+    }
+
     fn commit(mut self: Box<Self>, _durable: bool) -> Result<(), VfsError> {
         if let Some(unfinished) = self.unfinished.take() {
             self.fake.vanish(&unfinished);
@@ -1241,6 +1245,9 @@ mod tests {
             .unwrap();
         writer.write_all(b"made").unwrap();
         assert_eq!(fake.unfinished().len(), 1, "the unfinished name shows");
+        let unfinished = writer.unfinished_place().unwrap();
+        assert_eq!(unfinished.parent(), Some(p("/a")));
+        assert!(fake.exists(&unfinished), "the writer names it");
         writer.commit(false).unwrap();
         assert!(fake.unfinished().is_empty());
         assert_eq!(fake.contents(&p("/a/new.txt")).unwrap(), b"made");

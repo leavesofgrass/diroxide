@@ -46,6 +46,26 @@ fn a_write_dropped_part_way_leaves_nothing() {
     assert!(everything_in(&folder).is_empty());
 }
 
+/// The writer says where its bytes are until the commit, so the journal
+/// can tie the unfinished name to its target (W1b's contract request 1).
+#[test]
+fn the_writer_says_its_unfinished_place() {
+    let folder = scratch();
+    let provider = LocalProvider::new();
+    let target = child(&folder, "report.txt");
+    let mut writer = provider
+        .write(&target, WriteMode::CreateNew, &OpContext::new())
+        .unwrap();
+    writer.write_all(b"draft").unwrap();
+    let unfinished = writer.unfinished_place().expect("the local writer says");
+    assert_eq!(unfinished.parent(), target.parent(), "beside its target");
+    let name = unfinished.name().unwrap().to_owned();
+    assert!(diroxide_vfs::names::is_unfinished(&name), "{name}");
+    assert_eq!(everything_in(&folder), [name]);
+    writer.commit(false).unwrap();
+    assert_eq!(everything_in(&folder), ["report.txt"]);
+}
+
 #[test]
 fn a_new_file_never_replaces_one_that_appeared_meanwhile() {
     let folder = scratch();
