@@ -4,7 +4,7 @@
 //! a word that starts with it, then names that contain it, then ids that
 //! contain it; within each, the commands used most recently come first,
 //! then the catalog's order. Each row is the name, then its key from the
-//! live keymap.
+//! live keymap, or the menu that holds a command with no key.
 //!
 //! A dialog's own commands (Yes, No, Accept) are not listed: they act only
 //! inside the dialog, where its keys and choices reach them.
@@ -13,6 +13,7 @@ use diroxide_core::{CommandId, Layer, ListModel, ListRow};
 
 use crate::commands::{CATALOG, CommandInfo};
 use crate::keymap::Keymap;
+use crate::menu::Menus;
 
 /// How many recent commands the palette remembers.
 pub const RECENT_LIMIT: usize = 20;
@@ -79,6 +80,14 @@ impl Palette {
 
     /// The palette's list for a query.
     pub fn list(&self, query: &str, keymap: &Keymap) -> ListModel {
+        self.list_with(query, keymap, None)
+    }
+
+    /// The palette's list for a query, each row the command's name and its
+    /// key beside it ("Copy to other panel, F5"); a command with no key
+    /// says the menu that holds it instead ("Switch bank, View menu"), so
+    /// every row says how to reach the command again (answer 49).
+    pub fn list_with(&self, query: &str, keymap: &Keymap, menus: Option<&Menus>) -> ListModel {
         let wanted = query.trim().to_lowercase();
         let mut ranked: Vec<(u8, usize, usize, &CommandInfo)> = reachable()
             .enumerate()
@@ -98,10 +107,12 @@ impl Palette {
             .map(|(_, _, _, info)| {
                 let key = keymap.key_text(&info.id);
                 let row = ListRow::new(info.id.as_str(), info.name);
-                if key.is_empty() {
-                    row
-                } else {
-                    row.with_details([key])
+                if !key.is_empty() {
+                    return row.with_details([key]);
+                }
+                match menus.and_then(|m| m.holder_of(&info.id)) {
+                    Some(menu) => row.with_details([format!("{menu} menu")]),
+                    None => row,
                 }
             })
             .collect();
@@ -160,6 +171,23 @@ mod tests {
         assert_eq!(palette.recent().len(), 2);
         let again = Palette::with_recent(palette.recent().to_vec());
         assert_eq!(again, palette);
+    }
+
+    #[test]
+    fn every_row_says_its_key_or_its_menu() {
+        let keymap = Keymap::defaults();
+        let menus = Menus::builtin();
+        let list = Palette::new().list_with("", &keymap, Some(&menus));
+        for row in list.rows() {
+            let info = crate::commands::info(&CommandId::new(row.id.clone()).unwrap()).unwrap();
+            if menus.reaches(&info.id) || !keymap.key_text(&info.id).is_empty() {
+                assert!(!row.details.is_empty(), "{}", row.id);
+            }
+        }
+        let bank = Palette::new().list_with("switch bank", &keymap, Some(&menus));
+        assert_eq!(bank.focused().unwrap().spoken(), "Switch bank, View menu");
+        let copy = Palette::new().list_with("copy to other", &keymap, Some(&menus));
+        assert_eq!(copy.focused().unwrap().spoken(), "Copy to other panel, F5");
     }
 
     #[test]

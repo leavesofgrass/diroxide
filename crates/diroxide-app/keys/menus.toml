@@ -23,6 +23,10 @@ command = "panel.enter"
 access = "o"
 
 [[menu.item]]
+menu = "archive"
+access = "a"
+
+[[menu.item]]
 command = "file.view"
 access = "v"
 
@@ -64,6 +68,29 @@ access = "g"
 when = "writable"
 
 [[menu.item]]
+command = "file.split"
+access = "p"
+
+[[menu.item]]
+command = "file.join"
+access = "j"
+
+[[menu.item]]
+command = "file.link"
+access = "l"
+when = "links"
+
+[[menu.item]]
+command = "file.relink"
+access = "i"
+when = "links"
+
+[[menu.item]]
+command = "file.permissions"
+access = "w"
+when = "attributes"
+
+[[menu.item]]
 command = "file.run-command"
 access = "n"
 
@@ -82,6 +109,28 @@ access = "k"
 [[menu.item]]
 command = "app.quit"
 access = "q"
+
+[[menu]]
+id = "archive"
+title = "Archive"
+access = "a"
+bar = false
+
+[[menu.item]]
+command = "archive.pack"
+access = "p"
+
+[[menu.item]]
+command = "archive.unpack"
+access = "u"
+
+[[menu.item]]
+command = "archive.test"
+access = "t"
+
+[[menu.item]]
+command = "archive.open-as"
+access = "o"
 
 [[menu]]
 id = "edit"
@@ -124,6 +173,14 @@ command = "file.move-to"
 access = "v"
 when = "writable"
 
+[[menu.item]]
+command = "file.copy-path"
+access = "a"
+
+[[menu.item]]
+command = "file.copy-name"
+access = "n"
+
 [[menu]]
 id = "view"
 title = "View"
@@ -154,8 +211,121 @@ command = "app.next-theme"
 access = "t"
 
 [[menu.item]]
+command = "app.switch-bank"
+access = "b"
+
+[[menu.item]]
 command = "panel.reload"
 access = "r"
+
+[[menu.item]]
+menu = "viewer"
+access = "v"
+
+[[menu]]
+id = "viewer"
+title = "Viewer"
+access = "v"
+bar = false
+
+[[menu.item]]
+command = "viewer.close"
+
+[[menu.item]]
+command = "viewer.left"
+
+[[menu.item]]
+command = "viewer.right"
+
+[[menu.item]]
+command = "viewer.wrap"
+
+[[menu.item]]
+command = "viewer.line-numbers"
+
+[[menu.item]]
+command = "viewer.jump"
+
+[[menu.item]]
+command = "viewer.search"
+
+[[menu.item]]
+command = "viewer.search-back"
+
+[[menu.item]]
+command = "viewer.next-match"
+
+[[menu.item]]
+command = "viewer.previous-match"
+
+[[menu.item]]
+command = "viewer.hex"
+
+[[menu.item]]
+command = "viewer.byte"
+
+[[menu.item]]
+command = "viewer.read-more"
+
+[[menu.item]]
+command = "viewer.reload"
+
+[[menu.item]]
+command = "viewer.follow"
+
+[[menu.item]]
+command = "viewer.next-file"
+
+[[menu.item]]
+command = "viewer.previous-file"
+
+[[menu.item]]
+command = "viewer.show-in-folder"
+
+[[menu.item]]
+command = "viewer.copy-path"
+
+[[menu.item]]
+command = "viewer.copy-name"
+
+[[menu.item]]
+command = "viewer.token-kind"
+
+[[menu.item]]
+command = "viewer.line-kinds"
+
+[[menu.item]]
+command = "viewer.outline"
+
+[[menu.item]]
+command = "viewer.next-symbol"
+
+[[menu.item]]
+command = "viewer.previous-symbol"
+
+[[menu.item]]
+command = "viewer.bracket"
+
+[[menu.item]]
+command = "viewer.skip-comment"
+
+[[menu.item]]
+command = "viewer.indent"
+
+[[menu.item]]
+command = "viewer.indent-next"
+
+[[menu.item]]
+command = "viewer.indent-previous"
+
+[[menu.item]]
+command = "viewer.indent-parent"
+
+[[menu.item]]
+command = "viewer.indent-child"
+
+[[menu.item]]
+command = "viewer.context"
 
 [[menu]]
 id = "sort"

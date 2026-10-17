@@ -131,12 +131,24 @@ impl App {
         } else if self.first_run {
             let help = self.key(&ids::HELP);
             let palette = self.key(&ids::PALETTE);
-            let welcome = if help.is_empty() {
-                "diroxide alpha 1. Help is in the Help menu.".to_owned()
+            let quit = self.key(&ids::QUIT);
+            let mut welcome = if help.is_empty() {
+                format!("diroxide {}. Help is in the Help menu.", release_words())
             } else {
-                format!("diroxide alpha 1. {help} for help.")
+                format!("diroxide {}. {help} for help.", release_words())
             };
+            // The owner's finding from the alpha.1 terminal: say how to
+            // quit beside the help key, and name the key bar.
+            if quit.is_empty() {
+                welcome.push_str(" Quit is in the File menu.");
+            } else {
+                welcome.push_str(&format!(" {quit} quits."));
+            }
             effects.push(self.say(Message::info(welcome)));
+            if self.settings.key_bar && !self.settings.compact {
+                let bar = Message::info("The key bar on the last line names the keys.");
+                effects.push(self.say(bar));
+            }
             let layout = self.settings.layout.word();
             let line = if palette.is_empty() {
                 format!("Layout: {layout}. Change it in the View menu.")
@@ -167,6 +179,11 @@ impl App {
         else {
             return Vec::new();
         };
+        if result.is_ok() {
+            self.take_archive_facts(side, request, place);
+        } else {
+            self.pending_archive.retain(|(r, _)| *r != request);
+        }
         match result {
             Ok(entries) => self.listed_ok(side, entries),
             Err(error) => self.listed_err(side, place, &error),
@@ -193,6 +210,13 @@ impl App {
                 side,
                 place: Some(place),
             });
+            if active && let Some(line) = self.archive_landing(side) {
+                // Inside an archive: "Opened course.zip: 10 items, 48 KB."
+                // at its root, "week1, 3 items, in course.zip" below it.
+                effects.push(Effect::Redraw(Redraw::TitleLine));
+                effects.push(self.say(Message::info(line)));
+                return effects;
+            }
             if active {
                 // The leaf and the count first, the folder it is in after:
                 // "Backup, 12 items, in D:\work".
@@ -289,10 +313,11 @@ impl App {
             effects.extend(self.open(side, parent, name));
             return effects;
         }
-        vec![
-            Effect::Redraw(Redraw::TitleLine),
-            self.say(Message::from_error("open", &shown, error)),
-        ]
+        let message = match error.sentence() {
+            Some(sentence) => Message::error(sentence),
+            None => Message::from_error("open", &shown, error),
+        };
+        vec![Effect::Redraw(Redraw::TitleLine), self.say(message)]
     }
 
     pub(super) fn list_progress(&mut self, request: RequestId, so_far: u64) -> Vec<Effect> {
@@ -337,7 +362,10 @@ impl App {
             return Vec::new();
         }
         self.panel_mut(side).set_watching(Watching::No);
-        if side != self.active {
+        // A place inside an archive has nothing to watch: it changes only
+        // when its archive does, and a listing reads it again from the
+        // cache. Saying so would be noise.
+        if side != self.active || place.kind() == diroxide_core::PlaceKind::Archive {
             return Vec::new();
         }
         let key = self.key(&ids::RELOAD);
@@ -644,4 +672,31 @@ fn history_row(place: &Place, when: &str) -> diroxide_core::ListRow {
         .unwrap_or_default();
     diroxide_core::ListRow::new(place.to_string(), place_leaf(place))
         .with_details([when.to_owned(), parent])
+}
+
+/// The release as said on the first run, from the build's version:
+/// "0.1.0-alpha.2" is "alpha 2", "0.1.0-beta.1" is "beta 1", and a
+/// version without a pre-release is said as it is ("1.0.0").
+fn release_words() -> String {
+    words_for_version(env!("CARGO_PKG_VERSION"))
+}
+
+fn words_for_version(version: &str) -> String {
+    match version.split_once('-') {
+        Some((_, pre)) => pre.replacen('.', " ", 1),
+        None => version.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod release_tests {
+    use super::words_for_version;
+
+    #[test]
+    fn the_release_is_said_in_words() {
+        assert_eq!(words_for_version("0.1.0-alpha.1"), "alpha 1");
+        assert_eq!(words_for_version("0.1.0-alpha.12"), "alpha 12");
+        assert_eq!(words_for_version("0.2.0-beta.1"), "beta 1");
+        assert_eq!(words_for_version("1.0.0"), "1.0.0");
+    }
 }

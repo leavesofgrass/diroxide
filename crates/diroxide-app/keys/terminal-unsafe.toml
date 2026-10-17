@@ -207,6 +207,13 @@ why = "it splits or resizes panes"
 source = "Windows Terminal actions page"
 
 [[key]]
+keys = ["alt+f", "ctrl+q"]
+kind = "program"
+program = "The Claude app's terminal"
+why = "it takes the key for itself, so the key never arrives; the palette's Quit and the F9 menus are the way"
+source = "the owner's first try of alpha.1 in the desktop app's built-in terminal, Friday, October 16, 2026; the owner's key probe there adds the rest"
+
+[[key]]
 pattern = "ctrl+alt+digit"
 kind = "program"
 program = "Windows Terminal"

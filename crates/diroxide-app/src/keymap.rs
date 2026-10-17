@@ -273,6 +273,11 @@ impl Keymap {
             if b.layer == Layer::Dialog || !b.key.is_single_character() {
                 return true;
             }
+            // The viewer has no type-ahead, so its letters run its
+            // commands unless single-character keys are off.
+            if b.layer == Layer::Viewer && mode == SingleLetters::TypeAhead {
+                return true;
+            }
             match mode {
                 SingleLetters::Commands => true,
                 SingleLetters::Off => false,
@@ -607,6 +612,29 @@ pub fn key_test(keymap: &Keymap, layers: &[Layer], key: &Key) -> String {
     }
 }
 
+/// What the key test says for a key in the panel or, `in_viewer`, in the
+/// viewer, and what the same key runs in the other place when that
+/// differs: "Got F7. Runs Make folder. In the viewer: Search in file."
+pub fn key_test_everywhere(keymap: &Keymap, key: &Key, in_viewer: bool) -> String {
+    let panel = [Layer::Panel, Layer::List, Layer::Global];
+    let viewer = [Layer::Viewer, Layer::List, Layer::Global];
+    let (here, there, there_words) = if in_viewer {
+        (viewer, panel, "In a panel")
+    } else {
+        (panel, viewer, "In the viewer")
+    };
+    let mut said = key_test(keymap, &here, key);
+    if key.code == KeyCode::Insert {
+        return said;
+    }
+    if let Lookup::Command(other) = keymap.lookup(&there, key)
+        && keymap.lookup(&here, key) != Lookup::Command(other.clone())
+    {
+        said.push_str(&format!(" {there_words}: {}.", commands::name_of(&other)));
+    }
+    said
+}
+
 /// What the key test says for a key typed by its name, the equal way in
 /// for keys a terminal cannot capture: "hyper+q" gives "Not a key name:
 /// hyper+q."
@@ -827,7 +855,11 @@ mod tests {
     fn a_key_a_terminal_may_keep_has_a_menu_as_the_sure_way() {
         let menus = crate::menu::Menus::builtin();
         for binding in Keymap::defaults().bindings() {
-            if tables::terminal_entry(&binding.key).is_some() {
+            // A command that opens a menu is reached by the menu bar (F9).
+            let opens_a_menu = commands::Menu::ALL
+                .iter()
+                .any(|m| m.command() == binding.command);
+            if tables::terminal_entry(&binding.key).is_some() && !opens_a_menu {
                 assert!(
                     menus.reaches(&binding.command),
                     "{} on {} has no menu item",
@@ -1147,6 +1179,27 @@ mod tests {
         assert_eq!(
             key_test_typed(&keymap, &PANEL, "alt+home"),
             "Got Alt plus Home. Runs Home folder."
+        );
+    }
+
+    #[test]
+    fn the_key_test_knows_the_viewers_keys_too() {
+        let keymap = Keymap::defaults().for_platform(Platform::Windows);
+        assert_eq!(
+            key_test_everywhere(&keymap, &key("f7"), false),
+            "Got F7. Runs Make folder. In the viewer: Search in file."
+        );
+        assert_eq!(
+            key_test_everywhere(&keymap, &key("f7"), true),
+            "Got F7. Runs Search in file. In a panel: Make folder."
+        );
+        assert_eq!(
+            key_test_everywhere(&keymap, &key("ctrl+d"), false),
+            "Got Control plus D. Runs Say status."
+        );
+        assert_eq!(
+            key_test_everywhere(&keymap, &key("escape"), false),
+            "Got Escape. Runs Cancel. In the viewer: Close viewer."
         );
     }
 

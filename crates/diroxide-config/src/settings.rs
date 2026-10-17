@@ -464,6 +464,8 @@ pub struct Settings {
     pub borders: bool,
     /// Hide the key bar and the title line in a terminal.
     pub compact: bool,
+    /// Draw the key bar on a terminal's last line (answer 49).
+    pub key_bar: bool,
     /// Code colors in the viewer (alpha.2).
     pub highlighting: Highlighting,
     /// Thumbnails in the window (alpha.7).
@@ -529,6 +531,7 @@ impl Default for Settings {
             colors: BTreeMap::new(),
             borders: false,
             compact: false,
+            key_bar: true,
             highlighting: Highlighting::Auto,
             thumbnails: false,
             auto_hide_menu: true,

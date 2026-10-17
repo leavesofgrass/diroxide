@@ -16,6 +16,9 @@
 //!   drawn once.
 //! - After a program had the terminal (the editor, a shell, a command),
 //!   the whole screen is drawn again.
+//! - Text the app puts on the clipboard (the viewer's Copy Path and Copy
+//!   Name) goes to the clipboard sink, which the real terminal points at
+//!   the terminal's clipboard sequence (OSC 52).
 //! - After a frame, a changed row that holds a character two cells wide
 //!   is sent again from that character to the row's end, each cell placed
 //!   on its own (ratatui issue 2651: no release after 0.30.2 carries the
@@ -39,6 +42,7 @@ use ratatui::layout::Position;
 
 use crate::style::Styles;
 use crate::view::{self, Look, Memory};
+use crate::viewer::{CodeStyles, ViewerLook};
 use crate::{Screen, Theme, TuiError, TuiOptions, keys};
 
 /// How long a repeated message's line stays blank before it is drawn.
@@ -58,6 +62,40 @@ pub(crate) fn backend_error(error: impl std::fmt::Display) -> TuiError {
 /// Sets the terminal's title; the real terminal's loop gives one.
 pub type TitleSink = Box<dyn FnMut(&str)>;
 
+/// Puts text on the system clipboard ([`Effect::SetClipboardText`]: the
+/// viewer's Copy Path and Copy Name); the real terminal's loop gives one,
+/// which writes the terminal's clipboard sequence ([`osc52`]).
+pub type ClipboardSink = Box<dyn FnMut(&str)>;
+
+/// The terminal's clipboard sequence for a text (OSC 52): the text in
+/// base64 between `ESC ] 52 ; c ;` and the bell, so no character of it
+/// can reach the terminal as a control. Terminals that do not know the
+/// sequence ignore it.
+pub fn osc52(text: &str) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4 + 8);
+    out.push_str("\u{1b}]52;c;");
+    for chunk in bytes.chunks(3) {
+        let n = chunk.len();
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let v = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= n {
+                out.push(char::from(ALPHABET[((v >> (18 - 6 * i)) & 63) as usize]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out.push('\u{7}');
+    out
+}
+
 /// One running screen: the app, its runtime and a terminal.
 pub struct Session<'a, B: Backend> {
     app: &'a mut App,
@@ -66,6 +104,10 @@ pub struct Session<'a, B: Backend> {
     options: TuiOptions,
     themes_dir: Option<PathBuf>,
     styles: Styles,
+    /// The viewer's code styles, in the same theme.
+    code: CodeStyles,
+    /// When the viewer gets its next slice of time.
+    viewer_tick_at: Option<Instant>,
     memory: Memory,
     redraw: bool,
     resumed: Arc<AtomicBool>,
@@ -84,6 +126,8 @@ pub struct Session<'a, B: Backend> {
     resent: Vec<u16>,
     title: String,
     title_sink: Option<TitleSink>,
+    clipboard_sink: Option<ClipboardSink>,
+    clipboard: Vec<String>,
     said: Vec<Message>,
     quit: bool,
 }
@@ -110,6 +154,8 @@ impl<'a, B: Backend> Session<'a, B> {
         app.set_screen_reader(options.screen_reader);
         let support = options.color.unwrap_or_else(ColorSupport::detect);
         let styles = Styles::new(&app.settings().theme, &app.settings().colors, None, support);
+        let code =
+            CodeStyles::with_colors(&app.settings().theme, &app.settings().colors, None, support);
         Self {
             app,
             runtime,
@@ -117,6 +163,8 @@ impl<'a, B: Backend> Session<'a, B> {
             options,
             themes_dir: None,
             styles,
+            code,
+            viewer_tick_at: None,
             memory: Memory::default(),
             redraw: true,
             resumed: Arc::new(AtomicBool::new(false)),
@@ -131,6 +179,8 @@ impl<'a, B: Backend> Session<'a, B> {
             resent: Vec::new(),
             title: String::new(),
             title_sink: None,
+            clipboard_sink: None,
+            clipboard: Vec::new(),
             said: Vec::new(),
             quit: false,
         }
@@ -146,6 +196,12 @@ impl<'a, B: Backend> Session<'a, B> {
             self.themes_dir.as_deref(),
             self.styles.support(),
         );
+        self.code = CodeStyles::with_colors(
+            &settings.theme,
+            &settings.colors,
+            self.themes_dir.as_deref(),
+            self.styles.support(),
+        );
         self
     }
 
@@ -154,6 +210,17 @@ impl<'a, B: Backend> Session<'a, B> {
     pub fn with_title_sink(mut self, sink: TitleSink) -> Self {
         self.title_sink = Some(sink);
         self
+    }
+
+    /// The same session putting copied text on the system clipboard.
+    pub fn with_clipboard_sink(mut self, sink: ClipboardSink) -> Self {
+        self.clipboard_sink = Some(sink);
+        self
+    }
+
+    /// Every text put on the clipboard so far, in order.
+    pub fn clipboard_texts(&self) -> &[String] {
+        &self.clipboard
     }
 
     /// The flag a terminal hook sets when it takes the terminal back from
@@ -258,6 +325,12 @@ impl<'a, B: Backend> Session<'a, B> {
                     self.redraw = true;
                 }
                 Effect::Quit => self.quit = true,
+                Effect::SetClipboardText(text) => {
+                    if let Some(sink) = self.clipboard_sink.as_mut() {
+                        sink(&text);
+                    }
+                    self.clipboard.push(text);
+                }
                 _ => self.redraw = true,
             }
         }
@@ -393,6 +466,18 @@ impl<'a, B: Backend> Session<'a, B> {
             self.first_draw_at = None;
             self.redraw = true;
         }
+        // The viewer's time: a long scan, the highlighter, Follow.
+        match self.app.viewer_wants_tick() {
+            Some(ms) => {
+                if self.viewer_tick_at.is_none_or(|at| now >= at) {
+                    let effects = self.app.viewer_tick();
+                    self.carry(effects, now);
+                    let next = self.app.viewer_wants_tick().unwrap_or(ms);
+                    self.viewer_tick_at = Some(now + Duration::from_millis(next));
+                }
+            }
+            None => self.viewer_tick_at = None,
+        }
     }
 
     /// The next moment a timer needs the loop.
@@ -402,6 +487,7 @@ impl<'a, B: Backend> Session<'a, B> {
             self.key_test_since.map(|since| since + KEY_TEST_IDLE),
             self.resize_until,
             self.first_draw_at,
+            self.viewer_tick_at,
         ]
         .into_iter()
         .flatten()
@@ -458,7 +544,26 @@ impl<'a, B: Backend> Session<'a, B> {
                 self.themes_dir.as_deref(),
                 self.styles.support(),
             );
+            self.code = CodeStyles::with_colors(
+                &settings.theme,
+                &settings.colors,
+                self.themes_dir.as_deref(),
+                self.styles.support(),
+            );
         }
+        let viewer_look = ViewerLook {
+            width: 0,
+            height: 0,
+            screen_reader: self.app.screen_reader(),
+            color: self.styles.support(),
+            highlighting: settings.highlighting,
+        };
+        let plain = CodeStyles::plain();
+        let code = if viewer_look.colors_code() {
+            &self.code
+        } else {
+            &plain
+        };
         // The size comes from the frame: the whole screen, or the inline
         // viewport's rows.
         let base = self.look(0, 0, now);
@@ -468,7 +573,7 @@ impl<'a, B: Backend> Session<'a, B> {
         } else {
             self.status.clone()
         };
-        let app: &App = self.app;
+        let app: &mut App = self.app;
         let memory = &mut self.memory;
         let styles = &self.styles;
         let mut origin = (0, 0);
@@ -483,8 +588,23 @@ impl<'a, B: Backend> Session<'a, B> {
                     height: area.height,
                     ..base
                 };
-                let view = view::build(app, &look, &status, memory);
-                view::paint(&view, styles, frame.buffer_mut());
+                let mut view = view::build(app, &look, &status, memory);
+                if view.viewer_body
+                    && let Some(viewer) = app.viewer_mut()
+                {
+                    let vlook = ViewerLook {
+                        width: view.width,
+                        height: view.body_height,
+                        ..viewer_look
+                    };
+                    let (rows, at) =
+                        crate::viewer::body(viewer, view.width, view.body_height, &vlook);
+                    view.viewer = Some(rows);
+                    if view.cursor_in_body {
+                        view.cursor = (at.0, view.body_top + at.1);
+                    }
+                }
+                view::paint(&view, styles, code, frame.buffer_mut());
                 frame.set_cursor_position(Position::new(
                     area.x + view.cursor.0,
                     area.y + view.cursor.1,
@@ -545,5 +665,48 @@ impl<'a, B: Backend> Session<'a, B> {
             self.title = title;
         }
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use diroxide_app::AppOptions;
+    use diroxide_core::Place;
+    use ratatui::backend::TestBackend;
+
+    use super::*;
+
+    #[test]
+    fn the_clipboard_sequence_is_base64_between_its_markers() {
+        let esc = char::from(0x1b);
+        let bell = char::from(7);
+        assert_eq!(osc52("Man"), format!("{esc}]52;c;TWFu{bell}"));
+        assert_eq!(osc52("Ma"), format!("{esc}]52;c;TWE={bell}"));
+        assert_eq!(osc52("M"), format!("{esc}]52;c;TQ=={bell}"));
+        assert_eq!(osc52(""), format!("{esc}]52;c;{bell}"));
+        let hostile = format!("a{esc}[2J");
+        let sent = osc52(&hostile);
+        assert_eq!(sent.matches(esc).count(), 1, "only the opening marker");
+        assert!(!sent.contains("[2J"));
+    }
+
+    #[test]
+    fn a_text_for_the_clipboard_goes_to_the_sink() {
+        let here = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let mut app = App::new(AppOptions::new(here.clone(), here));
+        let mut runtime = Runtime::with_local();
+        let terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        let got = Arc::new(Mutex::new(Vec::new()));
+        let sink_got = Arc::clone(&got);
+        let mut s = Session::new(&mut app, &mut runtime, terminal, TuiOptions::default())
+            .with_clipboard_sink(Box::new(move |text| {
+                sink_got.lock().unwrap().push(text.to_owned());
+            }));
+        let now = Instant::now();
+        s.carry(vec![Effect::SetClipboardText("notes.txt".to_owned())], now);
+        assert_eq!(s.clipboard_texts(), ["notes.txt"]);
+        assert_eq!(*got.lock().unwrap(), ["notes.txt"]);
     }
 }

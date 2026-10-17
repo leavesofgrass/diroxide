@@ -2,11 +2,13 @@
 //! the cursor in every state, a key's press and release, the three
 //! layouts with hostile, emoji and Japanese names, the inactive panel in
 //! screen-reader mode, the repeated message, the key test's timeout, the
-//! settled resize, attributes without color, and the editor's handover.
+//! settled resize, attributes without color, the editor's handover, the
+//! key bar, the viewer, and the owner's check of alpha.2 (`owners_check`).
 
 // Test helpers: a failure is the test's.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod owners_check;
 mod support;
 
 use std::ffi::OsString;
@@ -152,7 +154,7 @@ fn the_cursor_fallback_parks_on_the_status_line_but_a_prompt_keeps_its_place() {
     let clock = Clock::at_start();
     let mut s = session(&mut app, &mut runtime, 80, 24, true);
     start(&mut s, &clock);
-    cursor_at(&s, 0, 22);
+    cursor_at(&s, 0, 21);
     press(&mut s, &clock, "f7");
     let prompt = line_of(&s.screen(), "New folder in work:");
     cursor_at(&s, "New folder in work: ".len(), prompt);
@@ -308,8 +310,8 @@ fn tab_in_the_stacked_layout_rewrites_no_row() {
         "{:#?}",
         after.lines
     );
-    assert!(after.lines[22].starts_with("Right panel: Photos, 1 item"));
-    for line in 1..22 {
+    assert!(after.lines[21].starts_with("Right panel: Photos, 1 item"));
+    for line in 1..21 {
         assert_eq!(before.lines[line], after.lines[line], "line {line} changed");
     }
     let row = line_of(&after, "crow.jpg");
@@ -369,20 +371,20 @@ fn a_repeated_message_blanks_the_status_line_first() {
     let mut s = session(&mut app, &mut runtime, 80, 24, true);
     start(&mut s, &clock);
     press(&mut s, &clock, "up");
-    assert_eq!(s.screen().lines[22], "Top of the list");
+    assert_eq!(s.screen().lines[21], "Top of the list");
     press(&mut s, &clock, "up");
-    assert_eq!(s.screen().lines[22], "");
+    assert_eq!(s.screen().lines[21], "");
     clock.advance(Duration::from_millis(149));
     s.tick(clock.now());
     s.draw(clock.now()).unwrap();
-    assert_eq!(s.screen().lines[22], "");
+    assert_eq!(s.screen().lines[21], "");
     clock.advance(Duration::from_millis(1));
     s.tick(clock.now());
     assert!(s.draw(clock.now()).unwrap());
-    assert_eq!(s.screen().lines[22], "Top of the list");
+    assert_eq!(s.screen().lines[21], "Top of the list");
     // A move keeps the line as it is, so a reader says the row alone.
     press(&mut s, &clock, "down");
-    assert_eq!(s.screen().lines[22], "Top of the list");
+    assert_eq!(s.screen().lines[21], "Top of the list");
 }
 
 #[test]
@@ -395,7 +397,7 @@ fn the_key_test_ends_after_ten_seconds_without_a_key() {
     start(&mut s, &clock);
     s.command(Command::new(ids::KEY_TEST), clock.now());
     s.draw(clock.now()).unwrap();
-    assert!(s.screen().lines[22].starts_with("Key test: press keys"));
+    assert!(s.screen().lines[21].starts_with("Key test: press keys"));
     assert!(s.app().key_test_active());
     assert_eq!(
         s.next_deadline(),
@@ -403,7 +405,7 @@ fn the_key_test_ends_after_ten_seconds_without_a_key() {
     );
     clock.advance(Duration::from_secs(6));
     press(&mut s, &clock, "ctrl+f5");
-    assert!(s.screen().lines[22].starts_with("Got Control plus F5. Runs Sort by modified."));
+    assert!(s.screen().lines[21].starts_with("Got Control plus F5. Runs Sort by modified."));
     clock.advance(Duration::from_secs(9));
     s.tick(clock.now());
     assert!(s.app().key_test_active());
@@ -411,7 +413,7 @@ fn the_key_test_ends_after_ten_seconds_without_a_key() {
     s.tick(clock.now());
     s.draw(clock.now()).unwrap();
     assert!(!s.app().key_test_active());
-    assert!(s.screen().lines[22].starts_with("No key for 10 seconds. Key test ended."));
+    assert!(s.screen().lines[21].starts_with("No key for 10 seconds. Key test ended."));
 }
 
 #[test]
@@ -431,7 +433,7 @@ fn a_resize_is_drawn_once_the_size_is_still() {
     assert!(s.draw(clock.now()).unwrap());
     let screen = s.screen();
     assert_eq!(screen.lines.len(), 30);
-    assert_eq!(screen.lines[29], "No jobs");
+    assert_eq!(screen.lines[28], "No jobs");
 }
 
 #[test]
@@ -480,9 +482,9 @@ fn next_theme_draws_the_screen_in_the_next_themes_colors() {
     s.command(Command::new(ids::NEXT_THEME), clock.now());
     settle(&mut s, &clock);
     assert!(
-        s.screen().lines[22].starts_with("Theme Galaxy Light, meets AA"),
+        s.screen().lines[21].starts_with("Theme Galaxy Light, meets AA"),
         "{}",
-        s.screen().lines[22]
+        s.screen().lines[21]
     );
     let after = s.terminal().backend().buffer()[(0, 0)].clone();
     assert!(
@@ -518,7 +520,7 @@ fn the_inline_viewport_holds_the_whole_screen_in_its_rows() {
     let screen = s.screen();
     assert_eq!(screen.lines.len(), 12, "{:#?}", screen.lines);
     assert!(screen.lines[0].starts_with("work, left panel"));
-    assert_eq!(screen.lines[11], "No jobs");
+    assert_eq!(screen.lines[10], "No jobs");
     let top = s.terminal_mut().get_frame().area().y;
     let at = s.terminal().backend().cursor_position();
     assert_eq!(usize::from(at.y - top), screen.cursor_line.unwrap());
@@ -573,7 +575,7 @@ fn the_editor_gets_the_terminal_and_the_screen_comes_back_whole() {
     assert!(!s.resumed_flag().load(Ordering::SeqCst));
     let screen = s.screen();
     assert!(screen.lines[0].starts_with("work, left panel"));
-    assert_eq!(screen.lines[22], "Back in diroxide, work");
+    assert_eq!(screen.lines[21], "Back in diroxide, work");
 }
 
 #[test]
@@ -592,6 +594,12 @@ fn candidates_are_a_count_while_typing_and_a_list_on_demand_for_a_screen_reader(
         if screen_reader {
             assert!(
                 screen.lines[prompt + 1].ends_with("matches, Down arrow lists them"),
+                "{:#?}",
+                screen.lines
+            );
+            // The first match with its key, read while typing (answer 49).
+            assert!(
+                screen.lines[prompt + 1].starts_with("Sort by name, Ctrl+F3. "),
                 "{:#?}",
                 screen.lines
             );
@@ -645,4 +653,88 @@ fn the_quiet_screen_waits_for_the_listings_before_its_first_frame() {
         "{:#?}",
         screen.lines
     );
+}
+
+/// Answer 49: the key bar is the last line in every mode, screen-reader
+/// mode included, whole pairs as the width allows; the `key_bar` setting
+/// and compact mode turn it off.
+#[test]
+fn the_key_bar_is_the_last_line_in_every_mode() {
+    for screen_reader in [true, false] {
+        let dir = temp();
+        let work = fixture(dir.path());
+        let (mut one, mut runtime) = app(place(&work), place(&work), settings(Layout::SideBySide));
+        let clock = Clock::at_start();
+        let mut s = session(&mut one, &mut runtime, 80, 24, screen_reader);
+        start(&mut s, &clock);
+        let screen = s.screen();
+        assert_eq!(
+            screen.lines[23],
+            "F2 Rename F3 View F4 Edit F5 Copy F6 Move F7 Folder F8 Trash F9 Menu Ctrl+Q Quit"
+        );
+        assert_eq!(screen.lines[22], "No jobs");
+        assert_ne!(screen.cursor_line, Some(23), "the cursor never visits it");
+    }
+    let dir = temp();
+    let work = fixture(dir.path());
+    let (mut narrow, mut runtime) = app(place(&work), place(&work), settings(Layout::Stacked));
+    let clock = Clock::at_start();
+    let mut s = session(&mut narrow, &mut runtime, 40, 24, true);
+    start(&mut s, &clock);
+    assert_eq!(s.screen().lines[23], "F2 Rename  F3 View  F4 Edit  F5 Copy");
+    let mut off = settings(Layout::Stacked);
+    off.key_bar = false;
+    let (mut quiet, mut other) = app(place(&work), place(&work), off);
+    let mut s = session(&mut quiet, &mut other, 80, 24, true);
+    start(&mut s, &clock);
+    assert_eq!(s.screen().lines[23], "No jobs");
+}
+
+/// Plan commit 63: F3 draws the viewer over the panels, the hardware
+/// cursor on the focused row's first cell in every state (the rows, the
+/// search prompt, back on the panel), the viewer's keys on the key bar.
+#[test]
+fn f3_draws_the_viewer_with_the_cursor_on_its_row_and_escape_comes_back() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    std::fs::write(
+        work.join("poem.txt"),
+        "first line\nsecond line\nthird line\n",
+    )
+    .unwrap();
+    let (mut one, mut runtime) = app(place(&work), place(&work), settings(Layout::Single));
+    let clock = Clock::at_start();
+    let mut s = session(&mut one, &mut runtime, 80, 24, true);
+    start(&mut s, &clock);
+    focus(&mut s, &clock, "poem.txt");
+    press(&mut s, &clock, "f3");
+    let screen = s.screen();
+    assert!(
+        screen.lines[0].starts_with("poem.txt, in "),
+        "{:#?}",
+        screen.lines
+    );
+    assert_eq!(screen.lines[1], "first line");
+    assert_eq!(screen.lines[3], "third line");
+    assert!(
+        screen.lines[23].starts_with("Escape Close  / Search  N Next"),
+        "{:#?}",
+        screen.lines
+    );
+    cursor_at(&s, 0, 1);
+    press(&mut s, &clock, "down");
+    cursor_at(&s, 0, 2);
+    press(&mut s, &clock, "ctrl+d");
+    assert!(s.screen().lines[21].starts_with("Line 2 of 3"));
+    press(&mut s, &clock, "/");
+    let prompt = line_of(&s.screen(), "Search for:");
+    cursor_at(&s, "Search for: ".len(), prompt);
+    type_text(&mut s, &clock, "third");
+    press(&mut s, &clock, "enter");
+    cursor_at(&s, 0, 3);
+    assert!(s.screen().lines[21].starts_with("Match 1 of 1, line 3"));
+    press(&mut s, &clock, "escape");
+    let row = line_of(&s.screen(), "poem.txt");
+    cursor_at(&s, 0, row);
+    assert!(s.screen().lines[0].starts_with("work, left panel"));
 }
