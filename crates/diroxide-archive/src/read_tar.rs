@@ -1,4 +1,4 @@
-//! Tar reading, plain and inside gzip (and xz, in the next step):
+//! Tar reading, plain and inside gzip or xz ([`crate::read_xz`]):
 //! research/archives.md 2, 4 and 6. The headers are parsed one by one with
 //! the `tar` crate's header type, under the provider's own caps (the crate's
 //! entry walk reads a long name or a PAX header whole, whatever it claims),
@@ -53,6 +53,11 @@ pub enum Wrapper {
     Plain,
     /// gzip, read member after member.
     Gzip,
+    /// xz, with a memory limit for each block.
+    Xz {
+        /// The decoder's memory limit, in KiB.
+        mem_limit_kb: u32,
+    },
 }
 
 /// gzip members one after another, as one stream (RFC 1952 2.2): zero
@@ -134,6 +139,11 @@ pub(crate) fn decoder(
     match wrapper {
         Wrapper::Plain => Box::new(counted),
         Wrapper::Gzip => Box::new(GzStream::new(counted, trailing)),
+        Wrapper::Xz { mem_limit_kb } => Box::new(lzma_rust2::XzReader::new_mem_limit(
+            counted,
+            true,
+            mem_limit_kb,
+        )),
     }
 }
 

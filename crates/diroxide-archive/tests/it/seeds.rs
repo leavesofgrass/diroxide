@@ -67,6 +67,24 @@ fn generated() -> Vec<(&'static str, String, Vec<u8>)> {
     ] {
         seeds.push(("archive_stream", file.to_owned(), bytes));
     }
+    let mut xz_tar = vec![1u8];
+    xz_tar.extend_from_slice(&build::xz(&course, 1));
+    seeds.push(("archive_stream", "xz-tar.bin".to_owned(), xz_tar));
+    let mut joined = build::xz(b"first ", 0);
+    joined.extend_from_slice(&[0; 4]);
+    joined.extend_from_slice(&build::xz(b"second", 0));
+    let xzs: [(&str, Vec<u8>); 4] = [
+        ("plain.xz", build::xz(b"one compressed file", 1)),
+        ("joined.xz", joined),
+        ("over-cap.xz", hostile::xz_block_over_cap()),
+        (
+            "cut.xz",
+            build::xz(&build::noise(8 << 10, 5), 0)[..4096].to_vec(),
+        ),
+    ];
+    for (file, bytes) in xzs {
+        seeds.push(("archive_xz", file.to_owned(), bytes));
+    }
     seeds
 }
 
@@ -78,6 +96,7 @@ fn replay(target: &str, bytes: &[u8]) {
         "archive_zip" => fuzzing::zip(bytes),
         "archive_tar" => fuzzing::tar(bytes),
         "archive_stream" => fuzzing::stream(bytes),
+        "archive_xz" => fuzzing::xz(bytes),
         other => panic!("no body for the target {other}"),
     }
 }

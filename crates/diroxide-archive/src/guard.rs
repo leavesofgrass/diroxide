@@ -235,6 +235,15 @@ pub fn from_io(error: io::Error) -> VfsError {
     }
     match error.kind() {
         io::ErrorKind::UnexpectedEof => damaged("its data ends early"),
+        io::ErrorKind::Unsupported => VfsError::UnsupportedFeature {
+            what: lowercase_first(&error.to_string())
+                .trim_start_matches("unsupported ")
+                .to_owned(),
+        },
+        io::ErrorKind::OutOfMemory => VfsError::LimitReached {
+            what: "memory for one operation".to_owned(),
+            limit: "the decoder's limit".to_owned(),
+        },
         io::ErrorKind::InvalidData | io::ErrorKind::InvalidInput => {
             damaged(&lowercase_first(&error.to_string()))
         }

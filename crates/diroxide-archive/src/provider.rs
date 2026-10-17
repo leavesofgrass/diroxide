@@ -26,6 +26,7 @@ use crate::index::{ContainerKey, Index, IndexCache, MAX_LISTED, ROOT, RecordFlag
 use crate::limits::Limits;
 use crate::names::nesting_depth;
 use crate::read_tar::{self, SingleBackend, TarBackend, Wrapper};
+use crate::read_xz;
 use crate::read_zip::{self, ZipBackend};
 use crate::sniff::{SNIFF_LEN, Sniffed, decide};
 use crate::source::Source;
@@ -279,6 +280,20 @@ impl ArchiveProvider {
                     index,
                     Backend::Single(SingleBackend::new(source, Wrapper::Gzip)),
                 )
+            }
+            ArchiveFormat::TarXz | ArchiveFormat::Xz => {
+                read_xz::check(&source, &name, &self.limits, allow)?;
+                let wrapper = Wrapper::Xz {
+                    mem_limit_kb: read_xz::mem_limit_kb(&self.limits),
+                };
+                if sniffed.format == ArchiveFormat::TarXz || read_tar::holds_tar(&source, wrapper) {
+                    let index = read_tar::list(&source, wrapper, &name, &self.limits, ctx, allow)?;
+                    (index, Backend::Tar(TarBackend::new(source, wrapper)))
+                } else {
+                    let size = read_xz::uncompressed_size(&source, &self.limits);
+                    let index = read_tar::single_index(&name, size, &self.limits)?;
+                    (index, Backend::Single(SingleBackend::new(source, wrapper)))
+                }
             }
             other => {
                 return Err(VfsError::UnsupportedFeature {

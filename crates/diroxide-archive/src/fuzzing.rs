@@ -121,14 +121,20 @@ pub fn tar(data: &[u8]) {
     walk_tar(source, crate::read_tar::Wrapper::Plain);
 }
 
-/// `archive_stream`: the first byte picks the wrapper around a tar (gzip
-/// for now; xz joins with its reader), the rest is the stream, decoded
+/// `archive_stream`: the first byte picks the wrapper around a tar (even
+/// for gzip, odd for xz), the rest is the stream, decoded
 /// under the strict limits' output cap, as a tar or as one member.
 pub fn stream(data: &[u8]) {
-    let Some((_pick, rest)) = data.split_first() else {
+    let Some((&pick, rest)) = data.split_first() else {
         return;
     };
-    let wrapper = crate::read_tar::Wrapper::Gzip;
+    let wrapper = if pick % 2 == 0 {
+        crate::read_tar::Wrapper::Gzip
+    } else {
+        crate::read_tar::Wrapper::Xz {
+            mem_limit_kb: crate::read_xz::mem_limit_kb(&Limits::strict()),
+        }
+    };
     let source = crate::source::Source::from_bytes(rest.to_vec());
     if crate::read_tar::holds_tar(&source, wrapper) {
         walk_tar(source, wrapper);
@@ -174,6 +180,38 @@ fn walk_tar(source: crate::source::Source, wrapper: crate::read_tar::Wrapper) {
             drain(reader, &index, id, &record, &limits, &budget, &ctx.cancel);
         }
     }
+}
+
+/// `archive_xz`: an xz stream decoded with the strict limits' memory cap,
+/// with and without several streams, under an output cap; its index
+/// walked for the size, and its end and first dictionary checked. Nothing
+/// may panic, hang or allocate past the cap.
+pub fn xz(data: &[u8]) {
+    let limits = Limits::strict();
+    let source = crate::source::Source::from_bytes(data.to_vec());
+    let _ = crate::read_xz::check(
+        &source,
+        "fuzz.xz",
+        &limits,
+        crate::guard::Allowances::default(),
+    );
+    let _ = crate::read_xz::uncompressed_size(&source, &limits);
+    let cap = limits.max_member_size;
+    for multiple in [true, false] {
+        let reader = lzma_rust2::XzReader::new_mem_limit(
+            data,
+            multiple,
+            crate::read_xz::mem_limit_kb(&limits),
+        );
+        let _ = std::io::copy(&mut std::io::Read::take(reader, cap), &mut std::io::sink());
+    }
+}
+
+/// The size an xz file's indexes give, for the tests: `None` when they
+/// cannot be read.
+pub fn xz_size_of(data: &[u8]) -> Option<u64> {
+    let source = crate::source::Source::from_bytes(data.to_vec());
+    crate::read_xz::uncompressed_size(&source, &Limits::default())
 }
 
 /// `archive_zip`: a zip opened under the strict limits, its index made

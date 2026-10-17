@@ -14,6 +14,7 @@ mod spike_hostile;
 mod spike_listing;
 mod tar_read;
 mod world;
+mod xz_read;
 mod zip_read;
 
 use std::sync::Arc;
