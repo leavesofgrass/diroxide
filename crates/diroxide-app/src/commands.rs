@@ -456,6 +456,9 @@ pub mod ids {
         NO = "dialog.no";
         /// The focused answer, in a dialog.
         ACCEPT = "dialog.accept";
+        /// Change a command's key (W3k): with a `command` argument, the
+        /// capture waits for that command's new key.
+        KEYS_CHANGE = "keys.change";
     }
 }
 
@@ -481,7 +484,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 158] = [
+pub static CATALOG: [CommandInfo; 159] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1713,6 +1716,15 @@ pub static CATALOG: [CommandInfo; 158] = [
         Preview,
         &["alt+p"],
         &["alt+p"],
+    ),
+    // Keys (W3k): Change key and the Keys list.
+    command(
+        ids::KEYS_CHANGE,
+        "Change a key",
+        "Waits for a command's new key, says it back, and says what it already does.",
+        Global,
+        &[],
+        &[],
     ),
     command(
         ids::PLUGINS,

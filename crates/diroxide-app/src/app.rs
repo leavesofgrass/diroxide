@@ -22,6 +22,7 @@ mod archive_jobs;
 mod dialogs;
 mod files;
 mod info;
+mod keys;
 mod nav;
 mod preview;
 mod select;
@@ -388,6 +389,8 @@ enum Purpose {
     JobHistory,
     /// One job's items.
     JobItems,
+    /// A dialog of Change key, the Keys list or the presets (W3k).
+    Keys(Box<keys::KeysPurpose>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -516,6 +519,8 @@ pub struct App {
     highlighter: Option<crate::viewer::highlight::Session>,
     /// The quick view and the focus in its region.
     preview: preview::Preview,
+    /// Change key's capture, the Keys list and the presets (W3k).
+    keys: keys::KeysState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -824,6 +829,7 @@ impl App {
             viewer_wait: None,
             highlighter: None,
             preview: preview::Preview::default(),
+            keys: keys::KeysState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -966,7 +972,7 @@ impl App {
     /// Whether the key test is on: the frontend sends every key, as it
     /// came, and the app says what it is.
     pub fn key_test_active(&self) -> bool {
-        self.key_test
+        self.key_test || self.capturing_key()
     }
 
     /// Sets how many rows Page Up and Page Down move in each panel: the
@@ -1279,6 +1285,9 @@ impl App {
             }
             return self.viewer_closed_command();
         }
+        if keys::is_keys_command(&command.id) {
+            return self.keys_dispatch(command);
+        }
         let Some(action) = action else {
             let message =
                 Message::could_not("run", command.id.as_str(), "no command has that id", "");
@@ -1446,6 +1455,9 @@ impl App {
     }
 
     fn press(&mut self, key: Key) -> Vec<Effect> {
+        if self.capturing_key() {
+            return self.capture_press(key);
+        }
         if self.key_test {
             return self.key_test_press(key);
         }

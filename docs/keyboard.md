@@ -185,6 +185,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
 - Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
 - Open in textweaver. Hands the quick view's file to textweaver for full reading with speech, when it is installed. (preview.textweaver)
+- Change a key. Waits for a command's new key, says it back, and says what it already does. (keys.change)
 - Plugins. Lists the plugins and what they may do. Plugins come with alpha.4. (plugins.list)
 
 ## In the window
@@ -368,6 +369,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
 - Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
 - Open in textweaver. Hands the quick view's file to textweaver for full reading with speech, when it is installed. (preview.textweaver)
+- Change a key. Waits for a command's new key, says it back, and says what it already does. (keys.change)
 - Plugins. Lists the plugins and what they may do. Plugins come with alpha.4. (plugins.list)
 
 ## Keys a terminal may keep

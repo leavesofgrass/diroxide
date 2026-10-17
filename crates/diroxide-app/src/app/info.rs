@@ -840,6 +840,9 @@ impl App {
     /// this after ten seconds without a key (research/alpha3-plan.md, the
     /// key test), so a key the terminal never sends cannot trap the user.
     pub fn end_key_test(&mut self, idle_seconds: u64) -> Vec<Effect> {
+        if self.capturing_key() {
+            return self.capture_timed_out();
+        }
         if !self.key_test {
             return Vec::new();
         }

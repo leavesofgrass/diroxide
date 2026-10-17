@@ -13,6 +13,7 @@
 //! kept for a later alpha, and a key another command already has, which
 //! the Keys list offers as "take it, swap, or cancel".
 
+pub mod capture;
 pub mod names;
 pub mod tables;
 

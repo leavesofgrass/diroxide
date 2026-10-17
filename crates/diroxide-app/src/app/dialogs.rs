@@ -374,6 +374,7 @@ impl App {
                     effects.extend(self.duplicate_prompt(side, next.clone(), more.to_vec()));
                 }
             }
+            Purpose::Keys(purpose) => effects.extend(self.keys_escape(*purpose)),
             _ => {}
         }
         effects
@@ -779,6 +780,7 @@ impl App {
                 effects.extend(self.run_line(side, &text));
                 effects
             }
+            Purpose::Keys(purpose) => self.keys_accept(*purpose, &text),
             Purpose::RunPlan(_)
             | Purpose::Quit
             | Purpose::RunProgram(_)

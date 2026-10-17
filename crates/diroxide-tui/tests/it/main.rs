@@ -417,6 +417,102 @@ fn the_key_test_ends_after_ten_seconds_without_a_key() {
 }
 
 #[test]
+fn a_capture_takes_one_press_and_ten_seconds_end_it_in_words() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    let (mut app, mut runtime) = app(place(&work), place(&work), settings(Layout::Single));
+    let mut clock = Clock::at_start();
+    let toggles = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&toggles);
+    let mut s = session(&mut app, &mut runtime, 80, 24, true)
+        .with_keyboard_sink(Box::new(move |on| seen.lock().unwrap().push(on)));
+    start(&mut s, &clock);
+
+    // Change key on Sort by size: the prompt opens and the enhancement
+    // protocol goes on while it waits.
+    let change = |id: &str| {
+        Command::new(ids::KEYS_CHANGE)
+            .with_arg("command", diroxide_core::ArgValue::Text(id.to_owned()))
+    };
+    s.command(change("view.sort-size"), clock.now());
+    s.draw(clock.now()).unwrap();
+    assert!(s.app().capturing_key());
+    assert_eq!(
+        s.app().dialog().unwrap().1.title(),
+        "Press the new key now. Escape cancels."
+    );
+    // A release and a modifier alone are passed over; the paste is
+    // refused and the wait goes on.
+    s.key_event(
+        &key_event(TermCode::Enter, KeyEventKind::Release),
+        clock.now(),
+    );
+    s.key_event(
+        &KeyEvent {
+            code: TermCode::Modifier(crossterm::event::ModifierKeyCode::LeftControl),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        },
+        clock.now(),
+    );
+    s.paste("hello", clock.now());
+    s.draw(clock.now()).unwrap();
+    assert!(s.app().capturing_key());
+    assert!(
+        s.said()
+            .iter()
+            .any(|m| m.text == "Pasted text is not a key. Press one key.")
+    );
+    // The first press is taken and said back in words.
+    s.key_event(
+        &KeyEvent {
+            code: TermCode::F(9),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        },
+        clock.now(),
+    );
+    settle(&mut s, &clock);
+    assert!(!s.app().capturing_key());
+    let said: Vec<&str> = s.said().iter().map(|m| m.text.as_str()).collect();
+    assert!(said.contains(&"Got Control plus F9"), "{said:?}");
+    assert!(said.contains(&"Ctrl+F9 now runs Sort by size."), "{said:?}");
+    assert_eq!(*toggles.lock().unwrap(), [true, false]);
+
+    // Ten seconds without a key end the capture in words and offer the
+    // typed name, an equal way in.
+    s.command(change("view.sort-name"), clock.now());
+    s.tick(clock.now());
+    assert_eq!(
+        s.next_deadline(),
+        Some(clock.now() + Duration::from_secs(10))
+    );
+    clock.advance(Duration::from_secs(10));
+    s.tick(clock.now());
+    s.draw(clock.now()).unwrap();
+    assert!(!s.app().capturing_key());
+    assert!(
+        s.said()
+            .iter()
+            .any(|m| m.text == "No key heard. The terminal may keep it.")
+    );
+    let (_, dialog) = s.app().dialog().unwrap();
+    assert_eq!(dialog.title(), "Type the key's name, such as ctrl+f5");
+    type_text(&mut s, &clock, "ctrl+f12");
+    press(&mut s, &clock, "enter");
+    assert!(
+        s.said()
+            .iter()
+            .any(|m| m.text == "Ctrl+F12 now runs Sort by name."),
+        "{:?}",
+        s.said()
+    );
+    assert_eq!(*toggles.lock().unwrap(), [true, false, true, false]);
+}
+
+#[test]
 fn a_resize_is_drawn_once_the_size_is_still() {
     let dir = temp();
     let work = fixture(dir.path());

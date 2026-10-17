@@ -67,6 +67,13 @@ pub type TitleSink = Box<dyn FnMut(&str)>;
 /// which writes the terminal's clipboard sequence ([`osc52`]).
 pub type ClipboardSink = Box<dyn FnMut(&str)>;
 
+/// Turns the terminal's keyboard enhancement protocol on (`true`) or off
+/// again (`false`): on only while Change key waits for a key
+/// ([`App::capturing_key`]), so the terminal reports that one key
+/// exactly. The real terminal's loop gives one when the terminal has the
+/// protocol.
+pub type KeyboardSink = Box<dyn FnMut(bool)>;
+
 /// The terminal's clipboard sequence for a text (OSC 52): the text in
 /// base64 between `ESC ] 52 ; c ;` and the bell, so no character of it
 /// can reach the terminal as a control. Terminals that do not know the
@@ -132,6 +139,9 @@ pub struct Session<'a, B: Backend> {
     title: String,
     title_sink: Option<TitleSink>,
     clipboard_sink: Option<ClipboardSink>,
+    keyboard_sink: Option<KeyboardSink>,
+    /// Whether the keyboard sink last turned the protocol on.
+    exact_keys: bool,
     clipboard: Vec<String>,
     said: Vec<Message>,
     quit: bool,
@@ -190,6 +200,8 @@ impl<'a, B: Backend> Session<'a, B> {
             title: String::new(),
             title_sink: None,
             clipboard_sink: None,
+            keyboard_sink: None,
+            exact_keys: false,
             clipboard: Vec::new(),
             said: Vec::new(),
             quit: false,
@@ -225,6 +237,13 @@ impl<'a, B: Backend> Session<'a, B> {
     /// The same session putting copied text on the system clipboard.
     pub fn with_clipboard_sink(mut self, sink: ClipboardSink) -> Self {
         self.clipboard_sink = Some(sink);
+        self
+    }
+
+    /// The same session turning the keyboard enhancement protocol on
+    /// while a capture waits for a key, and off again after.
+    pub fn with_keyboard_sink(mut self, sink: KeyboardSink) -> Self {
+        self.keyboard_sink = Some(sink);
         self
     }
 
@@ -364,6 +383,13 @@ impl<'a, B: Backend> Session<'a, B> {
             (false, Some(_)) => self.key_test_since = None,
             _ => {}
         }
+        let capturing = self.app.capturing_key();
+        if capturing != self.exact_keys {
+            self.exact_keys = capturing;
+            if let Some(sink) = self.keyboard_sink.as_mut() {
+                sink(capturing);
+            }
+        }
     }
 
     /// A key from the terminal: a press or a repeat goes to the app; a
@@ -396,9 +422,12 @@ impl<'a, B: Backend> Session<'a, B> {
             .dialog()
             .is_some_and(|(_, d)| matches!(d, Dialog::Edit { .. } | Dialog::Secret { .. }));
         if !typing {
-            let message =
-                Message::info("Text paste ignored here. Paste files with Paste in the Edit menu.");
-            let effects = self.app.handle(AppEvent::Problem(message));
+            // A capture refuses it in words and waits again; anywhere else
+            // it is refused, since its letters would run as keys.
+            if self.key_test_since.is_some() {
+                self.key_test_since = Some(now);
+            }
+            let effects = self.app.pasted(text);
             self.carry(effects, now);
             return;
         }
