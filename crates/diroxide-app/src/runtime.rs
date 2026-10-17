@@ -1056,6 +1056,20 @@ impl Runtime {
                 self.watch_arrivals(watch, place, pace);
             }
             Request::StopArrivals => self.arrivals = None,
+            Request::FilterContents {
+                request,
+                side: _,
+                place,
+                filter,
+                hidden,
+                clock,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let result = filter_contents(&registry, place, *filter, hidden, &clock);
+                    shared.send(AppEvent::FilterContents { request, result });
+                });
+            }
         }
     }
 
@@ -1355,6 +1369,40 @@ impl Runtime {
                 .collect();
         }
     }
+}
+
+/// Runs a panel's content filter over its folder alone, depth 1, every
+/// hit kept: the names that matched, and what could not be decided.
+fn filter_contents(
+    registry: &Registry,
+    place: Place,
+    filter: diroxide_core::filter::Filter,
+    hidden: bool,
+    clock: &crate::request::SharedClock,
+) -> Result<crate::app::FilterContents, Message> {
+    use diroxide_search::{FnSink, RowShape, Scope, SearchControl, SearchQuery, run_search};
+    let folder = crate::panel::place_leaf(&place);
+    let query = SearchQuery {
+        filter: Some(filter),
+        scope: Scope::new(place)
+            .with_hidden(hidden)
+            .with_max_depth(Some(1))
+            .with_row_cap(None),
+        rows: RowShape::PerFile,
+    };
+    let mut matched = Vec::new();
+    let summary = run_search(
+        &query,
+        registry,
+        clock.0.as_ref(),
+        &SearchControl::new(),
+        &mut FnSink(|hit: diroxide_search::SearchHit| matched.push(hit.entry.name)),
+    )
+    .map_err(|error| Message::from_error("filter", &folder, &error))?;
+    Ok(crate::app::FilterContents {
+        matched,
+        unknown: summary.unknown,
+    })
 }
 
 /// Reads a file for the viewer: a seekable read where the provider has one

@@ -252,6 +252,27 @@ access = "f"
 command = "view.filter-clear"
 access = "c"
 
+# The filter language (W3a).
+[[menu.item]]
+command = "view.say-filter"
+access = "y"
+
+[[menu.item]]
+command = "view.filter-stash"
+access = "k"
+
+[[menu.item]]
+command = "view.filter-restore"
+access = "e"
+
+[[menu.item]]
+command = "view.only-folders"
+access = "d"
+
+[[menu.item]]
+command = "view.only-files"
+access = "i"
+
 [[menu.item]]
 menu = "sort"
 access = "s"

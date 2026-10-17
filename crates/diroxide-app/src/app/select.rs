@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use diroxide_core::format::count;
-use diroxide_core::{Command, CommandId, Effect, Message, Move, Pattern, Redraw, Side, SortKey};
+use diroxide_core::{Command, CommandId, Effect, Message, Move, Pattern, Side, SortKey};
 
 use super::{App, KEPT_LIMIT, Kept, Purpose, Quick};
 use crate::commands::{self, ids};
@@ -300,75 +300,6 @@ impl App {
         } else {
             "Hidden files not shown"
         };
-        vec![self.redraw_panel(side), self.say(Message::info(text))]
-    }
-
-    /// The name filter: a command with a `pattern` applies it; otherwise
-    /// the filter prompt opens and narrows the panel as you type.
-    pub(super) fn filter_prompt(&mut self, command: &Command) -> Vec<Effect> {
-        let side = self.active;
-        if let Some(pattern) = command.text("pattern") {
-            let pattern = pattern.to_owned();
-            self.filter_live(side, &pattern);
-            return self.filter_done(side, &pattern);
-        }
-        let previous = self.panel(side).filter().cloned();
-        let text = previous
-            .as_ref()
-            .map(|p| p.text().to_owned())
-            .unwrap_or_default();
-        let field = EntryField::new("Filter", CompletionSource::History)
-            .with_text(text)
-            .with_history(state::keys::FILTER);
-        self.open_dialog(
-            crate::dialog::Dialog::edit(field),
-            Purpose::Filter(side, previous),
-        )
-    }
-
-    /// Applies the filter as typed; a pattern that cannot be read yet
-    /// leaves the panel as it was. Returns the count line.
-    pub(super) fn filter_live(&mut self, side: Side, text: &str) -> Option<String> {
-        let clock = Arc::clone(&self.clock);
-        if text.trim().is_empty() {
-            self.panels[side.index()].set_filter(None, clock.as_ref());
-        } else {
-            let pattern = Pattern::parse(text).ok()?;
-            self.panels[side.index()].set_filter(Some(pattern), clock.as_ref());
-        }
-        let (shown, all) = self.panel(side).filter_counts();
-        Some(format!("{shown} of {all} match"))
-    }
-
-    pub(super) fn filter_done(&mut self, side: Side, text: &str) -> Vec<Effect> {
-        if text.trim().is_empty() {
-            return self.filter_clear();
-        }
-        match Pattern::parse(text) {
-            Ok(pattern) => {
-                self.remember(state::keys::FILTER, text);
-                let (shown, all) = self.panel(side).filter_counts();
-                let line = format!("Filter {}: {shown} of {all} shown", pattern.text());
-                vec![
-                    self.redraw_panel(side),
-                    Effect::Redraw(Redraw::TitleLine),
-                    self.say(Message::info(line)),
-                ]
-            }
-            Err(error) => {
-                use diroxide_core::Explain;
-                let line = format!("{}. {}", error.line(), error.next_step());
-                vec![self.say(Message::error(line))]
-            }
-        }
-    }
-
-    pub(super) fn filter_clear(&mut self) -> Vec<Effect> {
-        let side = self.active;
-        let clock = Arc::clone(&self.clock);
-        self.panels[side.index()].set_filter(None, clock.as_ref());
-        let shown = self.panel(side).list().len() as u64;
-        let text = format!("Filter cleared: {}", count(shown, "item", "items"));
         vec![self.redraw_panel(side), self.say(Message::info(text))]
     }
 

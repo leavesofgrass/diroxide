@@ -348,11 +348,11 @@ fn the_filter_narrows_as_you_type_and_clears() {
     assert_eq!(said, ["Filter, empty"]);
     f.s.type_text("*.txt");
     assert_eq!(f.s.app.active_panel().list().len(), 4);
-    assert_eq!(f.s.key("enter"), ["Filter *.txt: 4 of 8 shown"]);
-    assert_eq!(f.s.command(ids::FILTER_CLEAR), ["Filter cleared: 8 items"]);
+    assert_eq!(f.s.key("enter"), ["Filter on, 4 of 8 shown"]);
+    assert_eq!(f.s.command(ids::FILTER_CLEAR), ["Filter off, 8 shown"]);
     f.s.key("ctrl+s");
     f.s.type_text("pdf");
-    f.s.key("escape");
+    assert_eq!(f.s.key("escape"), ["No filter, 8 shown"]);
     assert_eq!(f.s.app.active_panel().list().len(), 8, "Escape restores");
     assert_eq!(f.s.key("alt+."), ["Hidden files shown"]);
 }

@@ -361,10 +361,9 @@ impl App {
             Purpose::UnpackForm(_) => {
                 effects.push(self.say(Message::info("Nothing was unpacked.")));
             }
-            Purpose::Filter(side, previous) => {
-                let clock = std::sync::Arc::clone(&self.clock);
-                self.panels[side.index()].set_filter(previous, clock.as_ref());
-                effects.push(self.redraw_panel(side));
+            Purpose::Filter(side, previous) => effects.extend(self.filter_escaped(side, previous)),
+            Purpose::FilterContents { side, previous, .. } => {
+                effects.extend(self.filter_contents_declined(side, previous.map(|f| *f)));
             }
             Purpose::Rename {
                 side, rest, done, ..
@@ -426,6 +425,11 @@ impl App {
             }
             Purpose::Keys(purpose) => effects.extend(self.keys_yes(*purpose)),
             Purpose::Organize(wants) => effects.extend(self.organize_yes(*wants)),
+            Purpose::FilterContents {
+                side,
+                filter,
+                previous,
+            } => effects.extend(self.read_filter_contents(side, *filter, previous.map(|f| *f))),
             _ => {}
         }
         effects
@@ -770,10 +774,11 @@ impl App {
                 effects.extend(self.duplicate_answer(side, current, rest, &text));
                 effects
             }
-            Purpose::Filter(side, _) => {
-                let mut effects = self.close_top();
-                effects.extend(self.filter_done(side, &text));
-                effects
+            Purpose::Filter(side, previous) => {
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                self.filter_enter(side, &text, previous)
             }
             Purpose::Pattern { side, select } => {
                 let mut effects = self.close_top();
@@ -797,6 +802,7 @@ impl App {
             | Purpose::TrashParts(_)
             | Purpose::JunctionInstead { .. }
             | Purpose::PreviewLink
+            | Purpose::FilterContents { .. }
             | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }
@@ -1088,11 +1094,19 @@ impl App {
         };
         match self.top_purpose().cloned() {
             Some(Purpose::Filter(side, _)) => {
-                let mut effects = vec![self.redraw_panel(side)];
-                if let Some(line) = self.filter_live(side, &text) {
-                    effects.push(self.say(Message::status(line)));
+                if let Some((
+                    _,
+                    Dialog::Edit {
+                        candidates,
+                        in_list,
+                        ..
+                    },
+                )) = self.dialogs.last_mut()
+                {
+                    *candidates = None;
+                    *in_list = false;
                 }
-                effects
+                self.filter_typed(side, &text)
             }
             Some(Purpose::Palette | Purpose::Places(_) | Purpose::PickDestination { .. }) => {
                 self.refresh_candidates()
@@ -1258,6 +1272,17 @@ impl App {
                     .unwrap_or_default()
             }
             CompletionSource::Values(values) => crate::entry::value_candidates(&values),
+            CompletionSource::Filter => {
+                let cursor = match self.dialogs.last() {
+                    Some((_, Dialog::Edit { field, .. })) => field.cursor(),
+                    _ => 0,
+                };
+                let (start, candidates) = self.filter_completions(&text, cursor);
+                if let Some(Dialog::Edit { field, .. }) = self.top_dialog_mut() {
+                    field.set_stem_start(start);
+                }
+                candidates
+            }
             CompletionSource::Labels => crate::entry::label_candidates(&self.organize.labels),
             CompletionSource::Bookmarks => {
                 crate::entry::bookmark_candidates(&self.organize.bookmarks)

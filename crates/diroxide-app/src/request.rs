@@ -205,6 +205,18 @@ pub struct Spawn {
     pub selection: Vec<Place>,
 }
 
+/// The app's clock, handed to a worker that reads date words (a content
+/// filter, a search), so "today" means the app's day. Two are equal when
+/// they are the same clock.
+#[derive(Clone, Debug)]
+pub struct SharedClock(pub std::sync::Arc<dyn diroxide_core::Clock>);
+
+impl PartialEq for SharedClock {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// A request from the app to its runtime. See the module documentation.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
@@ -352,6 +364,24 @@ pub enum Request {
     },
     /// Stop watching for arriving files (W3t).
     StopArrivals,
+    /// Read the files of a panel's folder for its content filter, on a
+    /// worker (W3a): the filter is run over the folder alone, and the
+    /// names it matched come back as
+    /// [`AppEvent::FilterContents`](crate::AppEvent::FilterContents).
+    FilterContents {
+        /// The request, so a late answer to an old one is dropped.
+        request: diroxide_core::RequestId,
+        /// The panel.
+        side: Side,
+        /// The panel's folder.
+        place: Place,
+        /// The filter.
+        filter: Box<diroxide_core::filter::Filter>,
+        /// Whether hidden files are read too.
+        hidden: bool,
+        /// The app's clock, for the date words.
+        clock: SharedClock,
+    },
 }
 
 #[cfg(test)]

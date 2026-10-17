@@ -41,6 +41,10 @@ pub enum CompletionSource {
     /// The bookmarks (W3l): each completes to its place, its name said
     /// after it.
     Bookmarks,
+    /// The filter language's words (W3a): fields, comparisons, units,
+    /// date words, labels, groups and types, from the parser's
+    /// expected-next list; the word before the cursor is completed.
+    Filter,
 }
 
 /// One candidate: the text inserted, and its kind said after it
@@ -114,6 +118,9 @@ pub struct EntryField {
     source: CompletionSource,
     history_key: Option<String>,
     history_at: Option<usize>,
+    /// Where the word being completed starts, in characters, when the
+    /// source says (the filter language's completion).
+    stem_start: Option<usize>,
 }
 
 fn byte_index(text: &str, chars: usize) -> usize {
@@ -136,6 +143,7 @@ impl EntryField {
             source,
             history_key: None,
             history_at: None,
+            stem_start: None,
         }
     }
 
@@ -191,6 +199,28 @@ impl EntryField {
         self.text = text.into();
         self.cursor = self.text.chars().count();
         self.history_at = None;
+        self.stem_start = None;
+    }
+
+    /// Notes where the word being completed starts, in characters from
+    /// the start of the text, for a source that knows (the filter
+    /// language's completion says it); the part from there to the cursor
+    /// is the stem.
+    pub fn set_stem_start(&mut self, start: usize) {
+        self.stem_start = Some(start.min(self.cursor));
+    }
+
+    /// Where the stem starts in a filter field: as the completion said, or
+    /// after the last space or bracket before the cursor.
+    fn filter_stem_start(&self) -> usize {
+        if let Some(start) = self.stem_start {
+            return start.min(self.cursor);
+        }
+        let before: Vec<char> = self.text.chars().take(self.cursor).collect();
+        before
+            .iter()
+            .rposition(|c| c.is_whitespace() || matches!(c, '(' | ')' | ',' | ':' | '"'))
+            .map_or(0, |i| i + 1)
     }
 
     /// Types a character at the cursor.
@@ -199,6 +229,7 @@ impl EntryField {
         self.text.insert(at, c);
         self.cursor += 1;
         self.history_at = None;
+        self.stem_start = None;
     }
 
     /// Types text at the cursor, such as a paste.
@@ -216,6 +247,7 @@ impl EntryField {
         self.cursor -= 1;
         let at = byte_index(&self.text, self.cursor);
         self.history_at = None;
+        self.stem_start = None;
         Some(self.text.remove(at))
     }
 
@@ -265,11 +297,26 @@ impl EntryField {
                 .text
                 .rfind(is_separator)
                 .map_or(self.text.as_str(), |i| &self.text[i + 1..]),
+            CompletionSource::Filter => {
+                let start = byte_index(&self.text, self.filter_stem_start());
+                let end = byte_index(&self.text, self.cursor);
+                &self.text[start..end]
+            }
             _ => &self.text,
         }
     }
 
     fn replace_stem(&mut self, with: &str) {
+        if self.source == CompletionSource::Filter {
+            let start_chars = self.filter_stem_start();
+            let start = byte_index(&self.text, start_chars);
+            let end = byte_index(&self.text, self.cursor);
+            self.text.replace_range(start..end, with);
+            self.cursor = start_chars + with.chars().count();
+            self.history_at = None;
+            self.stem_start = None;
+            return;
+        }
         let keep = match self.source {
             CompletionSource::Paths => self.text.rfind(is_separator).map_or(0, |i| i + 1),
             _ => 0,
@@ -534,6 +581,28 @@ mod tests {
         assert_eq!(field.text(), "/home/ada/Download-old");
         let mut none = EntryField::new("Go to a path", CompletionSource::Paths).with_text("zz");
         assert_eq!(none.complete(&here).sentence(), "No match");
+    }
+
+    #[test]
+    fn a_filter_field_completes_the_word_before_the_cursor() {
+        let mut field = EntryField::new("Filter", CompletionSource::Filter).with_text("size ov");
+        assert_eq!(field.stem(), "ov");
+        field.set_stem_start(5);
+        let done = field.complete(&[Candidate::new("over", "comparison")]);
+        assert_eq!(done, Completion::Completed("over".into()));
+        assert_eq!(field.text(), "size over");
+        assert_eq!(field.cursor(), 9);
+        let mut field =
+            EntryField::new("Filter", CompletionSource::Filter).with_text("ext pdf and mo");
+        field.home();
+        for _ in 0..3 {
+            field.right();
+        }
+        assert_eq!(field.stem(), "ext");
+        field.end();
+        assert_eq!(field.stem(), "mo");
+        field.accept(&Candidate::new("modified", "field"));
+        assert_eq!(field.text(), "ext pdf and modified");
     }
 
     #[test]

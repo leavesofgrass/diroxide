@@ -512,6 +512,20 @@ pub mod ids {
         /// in it; again, or Cancel, stops.
         WATCH_FOLDER = "view.watch-folder";
     }
+
+    // The panel filter on the filter language (W3a, plan commit 35).
+    ids! {
+        /// Say the panel's filter read back, with its dates spelled.
+        SAY_FILTER = "view.say-filter";
+        /// Keep the panel's filter aside and show everything.
+        FILTER_STASH = "view.filter-stash";
+        /// Bring back the filter kept aside last.
+        FILTER_RESTORE = "view.filter-restore";
+        /// Show only the folders; again, the filter before it.
+        ONLY_FOLDERS = "view.only-folders";
+        /// Show only the files; again, the filter before it.
+        ONLY_FILES = "view.only-files";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -536,7 +550,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 182] = [
+pub static CATALOG: [CommandInfo; 187] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1220,7 +1234,7 @@ pub static CATALOG: [CommandInfo; 182] = [
     command(
         ids::FILTER,
         "Filter",
-        "Shows only the names that match what you type; Cancel or Clear filter ends it.",
+        "Shows only what matches what you type, in the filter language, such as size over 1 MB; Cancel or Clear filter ends it.",
         Panel,
         &["ctrl+s"],
         &["ctrl+s"],
@@ -1229,6 +1243,46 @@ pub static CATALOG: [CommandInfo; 182] = [
         ids::FILTER_CLEAR,
         "Clear filter",
         "Shows every name again.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SAY_FILTER,
+        "Say filter",
+        "Says the panel's filter in one sentence, with the real days of date words such as last week.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FILTER_STASH,
+        "Stash filter",
+        "Keeps the panel's filter aside and shows everything; Restore filter brings it back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FILTER_RESTORE,
+        "Restore filter",
+        "Brings back the filter kept aside last.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::ONLY_FOLDERS,
+        "Folders only",
+        "Shows only the folders; again, the filter before it comes back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::ONLY_FILES,
+        "Files only",
+        "Shows only the files and archives; again, the filter before it comes back.",
         Panel,
         &[],
         &[],

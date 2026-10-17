@@ -1247,6 +1247,11 @@ impl App {
             }
             None => {
                 self.quick = None;
+                // With no job to cancel, Cancel takes the panel's filter
+                // off (W3a): "Filter off, 120 shown".
+                if self.panel(self.active).filter().is_some() {
+                    return self.filter_clear();
+                }
                 Vec::new()
             }
         }

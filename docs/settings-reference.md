@@ -628,7 +628,6 @@ Filter case. Whether case matters in filters and searches. Smart: only when the 
 - `smart`: case matters only with a capital.
 - `ignore`: case never matters.
 - `match`: case always matters.
-- Comes with alpha.3.
 
 ### filter_pause_ms
 
@@ -636,7 +635,6 @@ Filter pause. How long the filter waits after the last key before it says the co
 
 - Holds: a number of milliseconds, 0 to 5000.
 - Default: `400`.
-- Comes with alpha.3.
 
 ### week_starts_on
 
@@ -647,7 +645,6 @@ First day of the week. The day this week and last week start on in filters and s
 - `sunday`: Sunday.
 - `monday`: Monday.
 - `saturday`: Saturday.
-- Comes with alpha.3.
 
 ### search_row_cap
 

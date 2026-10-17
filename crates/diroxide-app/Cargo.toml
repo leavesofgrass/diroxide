@@ -17,6 +17,9 @@ diroxide-filetype.workspace = true
 diroxide-ops.workspace = true
 # The viewer's decoder and highlighter (W2d).
 diroxide-preview.workspace = true
+# Search, the Space list, dirsize, newest files and saved searches, and a
+# panel's content filter (W3a).
+diroxide-search.workspace = true
 diroxide-theme.workspace = true
 # The quick view's "Open in textweaver" finds `tw` through the tools
 # registry (W2e).

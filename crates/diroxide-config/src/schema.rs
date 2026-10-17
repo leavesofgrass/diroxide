@@ -1063,7 +1063,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         kind: SettingKind::Choice(FILTER_CASES),
         default: "\"smart\"",
         help: "Whether case matters in filters and searches. Smart: only when the text has a capital letter.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "filter_pause_ms",
@@ -1076,7 +1076,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         },
         default: "400",
         help: "How long the filter waits after the last key before it says the count.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "week_starts_on",
@@ -1085,7 +1085,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         kind: SettingKind::Choice(WEEK_STARTS),
         default: "\"sunday\"",
         help: "The day this week and last week start on in filters and searches.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "search_row_cap",

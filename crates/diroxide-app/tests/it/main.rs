@@ -11,6 +11,8 @@ mod bookmarks;
 mod braille;
 mod commands;
 mod dialogs;
+// The panel filter on the filter language (W3a).
+mod filtering;
 mod keys;
 mod labels;
 mod palette;

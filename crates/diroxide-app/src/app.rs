@@ -22,6 +22,8 @@ mod archive_jobs;
 mod bookmarking;
 mod dialogs;
 mod files;
+// The panel filter on the filter language (W3a).
+mod filtering;
 mod folder_views;
 mod info;
 mod keys;
@@ -59,6 +61,7 @@ use crate::startup::Startup;
 use crate::state::{self, Visits};
 
 pub use files::Clipboard;
+pub use filtering::FilterContents;
 
 /// What the app starts with.
 #[derive(Clone, Debug)]
@@ -227,6 +230,14 @@ pub enum AppEvent {
         /// The facts.
         facts: Box<crate::archives::ArchiveFacts>,
     },
+    /// The files a panel's content filter asked about were read (W3a):
+    /// those that matched, or why not.
+    FilterContents {
+        /// The request it answers.
+        request: RequestId,
+        /// What was read, or why not.
+        result: Result<FilterContents, Message>,
+    },
     /// What the arrival watch of Watch this folder saw (W3t), tagged with
     /// its watch, so a note from a watch already stopped is dropped.
     Arrivals {
@@ -312,8 +323,14 @@ enum Purpose {
     Places(Side),
     /// The folder history.
     History(Side),
-    /// The name filter, live; the filter before it opened.
-    Filter(Side, Option<diroxide_core::Pattern>),
+    /// The filter prompt, live; the filter before it opened.
+    Filter(Side, Option<diroxide_core::filter::Filter>),
+    /// The question before a panel's filter reads files (W3a).
+    FilterContents {
+        side: Side,
+        filter: Box<diroxide_core::filter::Filter>,
+        previous: Option<Box<diroxide_core::filter::Filter>>,
+    },
     /// Select or unselect by pattern.
     Pattern { side: Side, select: bool },
     /// Copy or move to a place picked from a list.
@@ -554,6 +571,8 @@ pub struct App {
     organize: organize::Organize,
     /// The folder watched for arrivals (W3t).
     watching: watching::WatchState,
+    /// The filter's pause, stashes and content reads (W3a).
+    filtering: filtering::FilterState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -866,6 +885,7 @@ impl App {
             keys: keys::KeysState::new(owner_keys),
             organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
             watching: watching::WatchState::default(),
+            filtering: filtering::FilterState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1104,11 +1124,8 @@ impl App {
             if panel.is_loading() {
                 tail.push_str(", loading");
             }
-            if let Some(filter) = panel.filter() {
-                tail.push_str(&format!(
-                    ", filter {}",
-                    diroxide_core::names::display_name(filter.text())
-                ));
+            if let Some(filter) = self.filter_title(self.active) {
+                tail.push_str(&format!(", {filter}"));
             }
             let sort = panel.sort();
             if *sort != self.settings.sort_spec() {
@@ -1129,11 +1146,8 @@ impl App {
         if panel.is_loading() {
             head.push_str(", loading");
         }
-        if let Some(filter) = panel.filter() {
-            head.push_str(&format!(
-                ", filter {}",
-                diroxide_core::names::display_name(filter.text())
-            ));
+        if let Some(filter) = self.filter_title(self.active) {
+            head.push_str(&format!(", {filter}"));
         }
         let sort = panel.sort();
         let tail = if *sort == self.settings.sort_spec() {
@@ -1297,6 +1311,9 @@ impl App {
                 unreadable,
             } => self.places_checked(request, missing, unreadable),
             AppEvent::Arrivals { watch, note } => self.arrivals(watch, note),
+            AppEvent::FilterContents { request, result } => {
+                self.filter_contents_arrived(request, result)
+            }
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }
@@ -1334,6 +1351,10 @@ impl App {
         }
         // Watch this folder, and Cancel while it watches (W3t).
         if let Some(effects) = self.watch_dispatch(command, action) {
+            return effects;
+        }
+        // Say filter, stash and restore, the kind toggles (W3a).
+        if let Some(effects) = self.filtering_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {
