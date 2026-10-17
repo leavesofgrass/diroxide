@@ -107,7 +107,9 @@ Make symbolic link makes a link to the focused entry, relative or absolute. Chan
 
 ## Permissions and times
 
-Change permissions says the result in words first and the octal number second: "Owner can read and write, group can read, others can read (644)". On Windows it changes the attributes. A change can go inside folders, with "Apply to:" as the plan's first row. The plan lists what will change and asks first, and Ctrl+Z reverses it. Times can be set the same way. A copy keeps the modified time of files and folders; see [links, permissions and times](links-permissions.md).
+Change permissions says the result in words first and the octal number second: "Owner can read and write, group can read, others can read (644)". On Windows it changes the attributes. A change can go inside folders, with "Apply to:" as the plan's first row. The plan lists what will change and asks first, and Ctrl+Z reverses it. Times are changed by the same kind of job. A copy keeps the modified time of files and folders; see [links, permissions and times](links-permissions.md).
+
+<!-- to confirm with the wiring (W2f): the names and keys of Make symbolic link, Change link target, Change permissions and Change times, and whether alpha.2 has a Change times command. -->
 
 ## Delete to the trash: F8 and Delete
 
