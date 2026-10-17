@@ -114,6 +114,68 @@ pub fn sniff(data: &[u8]) {
     }
 }
 
+/// `archive_tar`: an uncompressed tar listed under the strict limits, its
+/// index made into rows, its first 64 members read through the chain.
+pub fn tar(data: &[u8]) {
+    let source = crate::source::Source::from_bytes(data.to_vec());
+    walk_tar(source, crate::read_tar::Wrapper::Plain);
+}
+
+/// `archive_stream`: the first byte picks the wrapper around a tar (gzip
+/// for now; xz joins with its reader), the rest is the stream, decoded
+/// under the strict limits' output cap, as a tar or as one member.
+pub fn stream(data: &[u8]) {
+    let Some((_pick, rest)) = data.split_first() else {
+        return;
+    };
+    let wrapper = crate::read_tar::Wrapper::Gzip;
+    let source = crate::source::Source::from_bytes(rest.to_vec());
+    if crate::read_tar::holds_tar(&source, wrapper) {
+        walk_tar(source, wrapper);
+    } else {
+        let limits = Limits::strict();
+        let single = crate::read_tar::SingleBackend::new(source, wrapper);
+        let claims = crate::guard::Claims {
+            name: "fuzz".to_owned(),
+            ..crate::guard::Claims::default()
+        };
+        let mut guarded = crate::guard::Guarded::new(
+            single.read(),
+            claims,
+            limits,
+            crate::guard::Budget::new(&limits),
+            crate::guard::Allowances::default(),
+            diroxide_vfs::CancelToken::new(),
+        );
+        let _ = std::io::copy(&mut guarded, &mut std::io::sink());
+    }
+}
+
+/// Lists a tar and reads its first members, all under the strict limits.
+fn walk_tar(source: crate::source::Source, wrapper: crate::read_tar::Wrapper) {
+    let limits = Limits::strict();
+    let ctx = diroxide_vfs::OpContext::new();
+    let allow = crate::guard::Allowances::default();
+    let Ok(index) = crate::read_tar::list(&source, wrapper, "fuzz.tar", &limits, &ctx, allow)
+    else {
+        return;
+    };
+    rows(&index);
+    let backend = crate::read_tar::TarBackend::new(source, wrapper);
+    let budget = crate::guard::Budget::new(&limits);
+    for id in (0..index.len() as u32).take(64) {
+        let Some(record) = index.record(id).copied() else {
+            continue;
+        };
+        if record.kind != crate::index::RecordKind::File {
+            continue;
+        }
+        if let Ok(reader) = backend.read(&index, id, &ctx.cancel, allow, 1 << 20) {
+            drain(reader, &index, id, &record, &limits, &budget, &ctx.cancel);
+        }
+    }
+}
+
 /// `archive_zip`: a zip opened under the strict limits, its index made
 /// into rows, and its first 64 members read through the limiter chain
 /// with one job budget. Nothing may panic, hang or allocate from a claim.

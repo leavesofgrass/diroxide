@@ -41,6 +41,32 @@ fn generated() -> Vec<(&'static str, String, Vec<u8>)> {
     for (file, bytes) in zips {
         seeds.push(("archive_zip", file.to_owned(), bytes));
     }
+    let course = build::tar_of(&[("week1/", b""), ("week1/notes.txt", b"hello")]);
+    let tars: [(&str, Vec<u8>); 4] = [
+        ("plain.tar", course.clone()),
+        ("pax-size.tar", hostile::pax_size_disagrees()),
+        ("links.tar", hostile::tar_links_out_of_root()),
+        (
+            "long-name.tar",
+            build::tar_of(&[(&"d".repeat(150), b"deep")]),
+        ),
+    ];
+    for (file, bytes) in tars {
+        seeds.push(("archive_tar", file.to_owned(), bytes));
+    }
+    let mut gz_tar = vec![0u8];
+    gz_tar.extend_from_slice(&build::gzip(&course));
+    let mut gz_one = vec![0u8];
+    gz_one.extend_from_slice(&build::gzip(b"one compressed file"));
+    let mut gz_zeros = vec![0u8];
+    gz_zeros.extend_from_slice(&build::gzip(&vec![0u8; 1 << 20]));
+    for (file, bytes) in [
+        ("gzip-tar.bin", gz_tar),
+        ("gzip-one.bin", gz_one),
+        ("gzip-zeros.bin", gz_zeros),
+    ] {
+        seeds.push(("archive_stream", file.to_owned(), bytes));
+    }
     seeds
 }
 
@@ -50,6 +76,8 @@ fn replay(target: &str, bytes: &[u8]) {
         "archive_names" => fuzzing::names(bytes),
         "archive_sniff" => fuzzing::sniff(bytes),
         "archive_zip" => fuzzing::zip(bytes),
+        "archive_tar" => fuzzing::tar(bytes),
+        "archive_stream" => fuzzing::stream(bytes),
         other => panic!("no body for the target {other}"),
     }
 }

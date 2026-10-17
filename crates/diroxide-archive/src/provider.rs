@@ -25,6 +25,7 @@ use crate::guard::{Allowances, Budget, Claims, Guarded, check_member, refuse};
 use crate::index::{ContainerKey, Index, IndexCache, MAX_LISTED, ROOT, RecordFlags, RecordKind};
 use crate::limits::Limits;
 use crate::names::nesting_depth;
+use crate::read_tar::{self, SingleBackend, TarBackend, Wrapper};
 use crate::read_zip::{self, ZipBackend};
 use crate::sniff::{SNIFF_LEN, Sniffed, decide};
 use crate::source::Source;
@@ -46,6 +47,8 @@ pub struct Opened {
 #[derive(Debug)]
 enum Backend {
     Zip(ZipBackend),
+    Tar(TarBackend),
+    Single(SingleBackend),
 }
 
 impl Opened {
@@ -94,6 +97,8 @@ impl Opened {
     pub fn random_read(&self) -> bool {
         match &self.backend {
             Backend::Zip(_) => true,
+            Backend::Tar(tar) => tar.random_read(),
+            Backend::Single(_) => false,
         }
     }
 }
@@ -121,6 +126,7 @@ pub struct ArchiveProvider {
     limits: Limits,
     registry: RwLock<Weak<Registry>>,
     cache: IndexCache<Opened>,
+    cost_ask_bytes: u64,
 }
 
 impl Default for ArchiveProvider {
@@ -136,7 +142,16 @@ impl ArchiveProvider {
             limits,
             registry: RwLock::new(Weak::new()),
             cache: IndexCache::new(CACHED_INDEXES, limits.max_index_bytes),
+            cost_ask_bytes: read_tar::COST_ASK_BYTES,
         }
+    }
+
+    /// The same provider asking before a member of a sequential archive is
+    /// read alone with more than `bytes` to read first (256 MiB by
+    /// default).
+    pub fn with_cost_question(mut self, bytes: u64) -> Self {
+        self.cost_ask_bytes = bytes;
+        self
     }
 
     /// The limits.
@@ -226,7 +241,6 @@ impl ArchiveProvider {
         ctx: &OpContext,
         allow: Allowances,
     ) -> Result<Arc<Opened>, ArchiveError> {
-        let _ = allow;
         let depth = nesting_depth(container) + 1;
         if depth > self.limits.max_nesting {
             return Err(refuse(
@@ -248,6 +262,23 @@ impl ArchiveProvider {
             ArchiveFormat::Zip => {
                 let (index, zip) = read_zip::open(source, &name, &self.limits, &ctx.cancel)?;
                 (index, Backend::Zip(zip))
+            }
+            ArchiveFormat::Tar => {
+                let index =
+                    read_tar::list(&source, Wrapper::Plain, &name, &self.limits, ctx, allow)?;
+                (index, Backend::Tar(TarBackend::new(source, Wrapper::Plain)))
+            }
+            ArchiveFormat::TarGz if read_tar::holds_tar(&source, Wrapper::Gzip) => {
+                let index =
+                    read_tar::list(&source, Wrapper::Gzip, &name, &self.limits, ctx, allow)?;
+                (index, Backend::Tar(TarBackend::new(source, Wrapper::Gzip)))
+            }
+            ArchiveFormat::TarGz => {
+                let index = read_tar::single_index(&name, None, &self.limits)?;
+                (
+                    index,
+                    Backend::Single(SingleBackend::new(source, Wrapper::Gzip)),
+                )
             }
             other => {
                 return Err(VfsError::UnsupportedFeature {
@@ -354,10 +385,15 @@ impl ArchiveProvider {
             Backend::Zip(zip) => {
                 Box::new(zip.read(&opened.index, id, password, ctx.cancel.clone())?)
             }
+            Backend::Tar(tar) => {
+                tar.read(&opened.index, id, &ctx.cancel, allow, self.cost_ask_bytes)?
+            }
+            Backend::Single(single) => single.read(),
         };
+        let size_known = !record.flags.contains(RecordFlags::SIZE_UNKNOWN);
         let claims = Claims {
             name,
-            size: Some(record.size),
+            size: size_known.then_some(record.size),
             packed: record.packed(),
             crc32: record
                 .flags

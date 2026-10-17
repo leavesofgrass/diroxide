@@ -99,6 +99,9 @@ impl RecordFlags {
     pub const SYNTHESIZED: Self = Self(1 << 11);
     /// It stores a CRC-32 to check.
     pub const HAS_CRC: Self = Self(1 << 12);
+    /// Its size is not known until it is read (a gzip's own size field
+    /// counts only to 4 GiB).
+    pub const SIZE_UNKNOWN: Self = Self(1 << 13);
 
     /// Whether every flag of `other` is set.
     pub const fn contains(self, other: Self) -> bool {
@@ -408,7 +411,7 @@ impl Index {
             RecordKind::Special => EntryKind::Special,
         };
         let mut entry = Entry::new(name.to_owned(), kind);
-        if record.kind != RecordKind::Folder {
+        if record.kind != RecordKind::Folder && !record.flags.contains(RecordFlags::SIZE_UNKNOWN) {
             entry.size = Some(record.size);
         }
         entry.packed_size = record.packed();

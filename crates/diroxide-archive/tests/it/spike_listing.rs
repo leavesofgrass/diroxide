@@ -245,7 +245,7 @@ fn seven_z_numbers_round_trip() {
 }
 
 /// The formats the provider reads so far, for the provider half of M1.
-const PROVIDER_READS: [&str; 1] = ["spike.zip"];
+const PROVIDER_READS: [&str; 2] = ["spike.zip", "spike.tar"];
 
 /// The memory figure the spike holds a million entries to.
 const MILLION_CAP: u64 = 600 << 20;

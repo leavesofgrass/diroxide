@@ -23,6 +23,7 @@ pub mod limits;
 pub mod names;
 mod pipe;
 pub mod provider;
+mod read_tar;
 mod read_zip;
 pub mod request;
 pub mod sniff;

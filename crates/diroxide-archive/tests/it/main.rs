@@ -12,6 +12,7 @@ mod registration;
 mod seeds;
 mod spike_hostile;
 mod spike_listing;
+mod tar_read;
 mod world;
 mod zip_read;
 
