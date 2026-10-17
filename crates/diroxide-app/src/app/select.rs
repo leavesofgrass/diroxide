@@ -9,11 +9,10 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use diroxide_core::format::count;
-use diroxide_core::{Command, CommandId, Effect, Message, Move, Pattern, Side, SortKey};
+use diroxide_core::{Command, CommandId, Effect, Message, Move, Side, SortKey};
 
 use super::{App, KEPT_LIMIT, Kept, Purpose, Quick};
 use crate::commands::{self, ids};
-use crate::entry::{CompletionSource, EntryField};
 use crate::jobs::millis_between;
 use crate::state;
 
@@ -143,37 +142,33 @@ impl App {
             let pattern = pattern.to_owned();
             return self.apply_pattern(side, select, &pattern);
         }
-        let label = if select {
-            "Select by pattern"
-        } else {
-            "Unselect by pattern"
-        };
-        let field = EntryField::new(label, CompletionSource::History)
-            .with_text("*")
-            .with_history(state::keys::PATTERN);
-        self.open_dialog(
-            crate::dialog::Dialog::edit(field),
-            Purpose::Pattern { side, select },
-        )
+        // The filter language, with `*` (every entry) to start, so Enter
+        // alone is all (W3a).
+        self.pattern_prompt_with(side, select, "*")
     }
 
+    /// A pattern given by a command's argument (a bank, a script, `diro
+    /// run`): applied at once, in the filter language.
     pub(super) fn apply_pattern(&mut self, side: Side, select: bool, text: &str) -> Vec<Effect> {
-        let pattern = match Pattern::parse(text) {
-            Ok(pattern) => pattern,
-            Err(error) => {
-                use diroxide_core::Explain;
-                let line = format!("{}. {}", error.line(), error.next_step());
+        let filter = match self.read_filter(text) {
+            Ok(Some(filter)) if filter.panel_problem().is_none() => filter,
+            Ok(Some(filter)) => {
+                let line = filter
+                    .panel_problem()
+                    .map(|p| p.sentences())
+                    .unwrap_or_default();
                 return vec![self.say(Message::error(line))];
             }
+            Ok(None) => return vec![self.say(Message::error("Type a pattern, such as *.txt"))],
+            Err(error) => return vec![self.say(Message::error(error.sentences()))],
         };
         self.remember(state::keys::PATTERN, text);
         self.keep_selection(side);
+        let clock = Arc::clone(&self.clock);
         let matching: HashSet<String> = self
             .panel(side)
-            .entries()
-            .iter()
-            .filter(|e| pattern.matches(&e.name, e.is_folder_like()))
-            .map(|e| e.name.clone())
+            .matching_ids(&filter, Some(&self.organize.bookmarks), clock.as_ref())
+            .into_iter()
             .collect();
         let list = self.panel_mut(side).list_mut();
         let changed = if select {
@@ -196,7 +191,7 @@ impl App {
         let verb = if select { "Selected" } else { "Unselected" };
         let text = format!(
             "{verb} {changed} matching {}. {total} selected.",
-            pattern.text()
+            filter.text()
         );
         vec![self.redraw_panel(side), self.say(Message::info(text))]
     }

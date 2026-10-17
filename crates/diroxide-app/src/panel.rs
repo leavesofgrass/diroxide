@@ -749,6 +749,30 @@ impl Panel {
         (self.entries.len(), visible)
     }
 
+    /// The ids of the rows shown whose entries a filter matches, in row
+    /// order, with the panel's own facts and the bookmarks: what select by
+    /// pattern marks.
+    pub fn matching_ids(
+        &self,
+        filter: &Filter,
+        bookmarks: Option<&crate::bookmarks::Bookmarks>,
+        clock: &dyn Clock,
+    ) -> Vec<String> {
+        let selected: HashSet<&str> = self.list.selected_ids().into_iter().collect();
+        let lookup = PanelLookup {
+            place: &self.place,
+            selected: &selected,
+            bookmarks,
+            content: None,
+        };
+        let evaluator = filter.evaluator(clock);
+        self.entries
+            .iter()
+            .filter(|e| evaluator.matches(e, &lookup))
+            .map(|e| e.name.clone())
+            .collect()
+    }
+
     /// Whether hidden entries are listed: the panel's setting, or a filter
     /// that asks for them.
     fn hidden_shown(&self) -> bool {

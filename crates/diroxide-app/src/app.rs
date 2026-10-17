@@ -24,6 +24,7 @@ mod dialogs;
 mod files;
 // The panel filter on the filter language (W3a).
 mod filtering;
+// Selection on the filter language (W3a).
 mod folder_views;
 mod info;
 mod keys;
@@ -32,6 +33,7 @@ mod nav;
 mod organize;
 mod preview;
 mod select;
+mod selecting;
 mod split_join;
 mod viewing;
 // Watch this folder (W3t).
@@ -333,6 +335,16 @@ enum Purpose {
     },
     /// Select or unselect by pattern.
     Pattern { side: Side, select: bool },
+    /// The count before a pattern's selection changes (W3a).
+    SelectCount {
+        side: Side,
+        select: bool,
+        ids: Vec<String>,
+    },
+    /// Select by kind's list (W3a).
+    SelectKind(Side),
+    /// Select the next rows' count (W3a).
+    NextRows(Side),
     /// Copy or move to a place picked from a list.
     PickDestination {
         side: Side,
@@ -573,6 +585,8 @@ pub struct App {
     watching: watching::WatchState,
     /// The filter's pause, stashes and content reads (W3a).
     filtering: filtering::FilterState,
+    /// Where each panel's range started (W3a).
+    selecting: selecting::SelectState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -886,6 +900,7 @@ impl App {
             organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
             watching: watching::WatchState::default(),
             filtering: filtering::FilterState::default(),
+            selecting: selecting::SelectState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1355,6 +1370,10 @@ impl App {
         }
         // Say filter, stash and restore, the kind toggles (W3a).
         if let Some(effects) = self.filtering_dispatch(command) {
+            return effects;
+        }
+        // Select by kind, size, date, extension, range and rows (W3a).
+        if let Some(effects) = self.selecting_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

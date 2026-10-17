@@ -365,6 +365,9 @@ impl App {
             Purpose::FilterContents { side, previous, .. } => {
                 effects.extend(self.filter_contents_declined(side, previous.map(|f| *f)));
             }
+            Purpose::SelectCount { .. } => {
+                effects.push(self.say(Message::info("Nothing changed.")));
+            }
             Purpose::Rename {
                 side, rest, done, ..
             } => match rest.split_first() {
@@ -430,6 +433,9 @@ impl App {
                 filter,
                 previous,
             } => effects.extend(self.read_filter_contents(side, *filter, previous.map(|f| *f))),
+            Purpose::SelectCount { side, select, ids } => {
+                effects.extend(self.select_counted(side, select, ids));
+            }
             _ => {}
         }
         effects
@@ -781,10 +787,16 @@ impl App {
                 self.filter_enter(side, &text, previous)
             }
             Purpose::Pattern { side, select } => {
-                let mut effects = self.close_top();
-                effects.extend(self.apply_pattern(side, select, &text));
-                effects
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                self.pattern_entered(side, select, &text)
             }
+            Purpose::SelectKind(side) => match row {
+                Some(row) => self.select_kind_chosen(side, &row),
+                None => Vec::new(),
+            },
+            Purpose::NextRows(side) => self.next_rows_typed(side, &text),
             Purpose::RunCommand(side) => {
                 let mut effects = self.close_top();
                 effects.extend(self.run_line(side, &text));
@@ -803,6 +815,7 @@ impl App {
             | Purpose::JunctionInstead { .. }
             | Purpose::PreviewLink
             | Purpose::FilterContents { .. }
+            | Purpose::SelectCount { .. }
             | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }

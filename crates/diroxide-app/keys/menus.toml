@@ -668,6 +668,31 @@ access = "v"
 command = "select.restore"
 access = "r"
 
+# Selection on the filter language (W3a).
+[[menu.item]]
+command = "select.by-kind"
+access = "k"
+
+[[menu.item]]
+command = "select.by-size"
+access = "z"
+
+[[menu.item]]
+command = "select.by-date"
+access = "d"
+
+[[menu.item]]
+command = "select.same-extension"
+access = "e"
+
+[[menu.item]]
+command = "select.range"
+access = "g"
+
+[[menu.item]]
+command = "select.next-rows"
+access = "w"
+
 [[menu]]
 id = "tools"
 title = "Tools"

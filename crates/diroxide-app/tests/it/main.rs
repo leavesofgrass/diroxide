@@ -17,6 +17,8 @@ mod keys;
 mod labels;
 mod palette;
 mod preview;
+// Selection on the filter language (W3a).
+mod selecting;
 mod session;
 mod split_join;
 mod viewer;

@@ -526,6 +526,22 @@ pub mod ids {
         /// Show only the files; again, the filter before it.
         ONLY_FILES = "view.only-files";
     }
+
+    // Selection on the filter language (W3a, plan commit 36).
+    ids! {
+        /// Select every entry of a kind or file-type group.
+        SELECT_BY_KIND = "select.by-kind";
+        /// Select by size, through the pattern prompt.
+        SELECT_BY_SIZE = "select.by-size";
+        /// Select by date, through the pattern prompt.
+        SELECT_BY_DATE = "select.by-date";
+        /// Select the focused entry's extension.
+        SELECT_SAME_EXTENSION = "select.same-extension";
+        /// Start a range, then mark it.
+        SELECT_RANGE = "select.range";
+        /// Select a number of rows from the focus.
+        SELECT_NEXT_ROWS = "select.next-rows";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -550,7 +566,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 187] = [
+pub static CATALOG: [CommandInfo; 193] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1070,6 +1086,54 @@ pub static CATALOG: [CommandInfo; 187] = [
         Panel,
         &["ctrl+up"],
         &["ctrl+up"],
+    ),
+    command(
+        ids::SELECT_BY_KIND,
+        "Select by kind",
+        "Lists the kinds and file-type groups, to select every entry of one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_BY_SIZE,
+        "Select by size",
+        "Opens the pattern prompt on size over, to finish with a size such as 1 MB.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_BY_DATE,
+        "Select by date",
+        "Opens the pattern prompt on modified within, to finish with a time such as 3 days.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_SAME_EXTENSION,
+        "Select same extension",
+        "Selects every file with the focused file's extension.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_RANGE,
+        "Mark range",
+        "Starts a range at the focused row; again, marks every row from there to the focus.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_NEXT_ROWS,
+        "Select next rows",
+        "Asks how many, then marks that many rows from the focus.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::SELECT_RESTORE,
