@@ -55,6 +55,7 @@ Plugins, in any language, come with alpha.4.
 
 - [Quick start](docs/quickstart.md) and [installing diroxide](docs/install.md).
 - [The panels](docs/panels.md), [operations and undo](docs/operations.md), [settings](docs/settings.md) and the [settings reference](docs/settings-reference.md).
+- [Archives](docs/archives.md), [the viewer](docs/viewer.md), [the quick view](docs/quick-view.md), [split and join](docs/split-join.md) and [links, permissions and times](docs/links-permissions.md).
 - [Every key](docs/keyboard.md), generated from the keymap.
 - [Terminals](docs/terminals.md) and [troubleshooting](docs/troubleshooting.md).
 - [Known limits](docs/known-limits.md), [privacy](docs/privacy.md) and the [accessibility statement](docs/accessibility.md).
