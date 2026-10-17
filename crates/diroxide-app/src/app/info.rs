@@ -804,8 +804,12 @@ impl App {
     }
 
     pub(super) fn key_test_press(&mut self, key: Key) -> Vec<Effect> {
-        let layers = [Layer::Panel, Layer::List, Layer::Global];
-        let mut text = keymap::key_test(&self.keymap, &layers, &key);
+        let layers = if self.viewer_open() {
+            [Layer::Viewer, Layer::List, Layer::Global]
+        } else {
+            [Layer::Panel, Layer::List, Layer::Global]
+        };
+        let mut text = keymap::key_test_everywhere(&self.keymap, &key, self.viewer_open());
         // AltGr on Windows arrives as Control plus Alt (crossterm issue
         // 820): such a key types its character in a text field.
         if key.mods.ctrl
@@ -814,7 +818,11 @@ impl App {
         {
             text.push_str(&format!(" In a text field it types {c}."));
         }
-        if self.keymap.lookup(&layers, &key) == keymap::Lookup::Command(ids::CANCEL) {
+        let ends = matches!(
+            self.keymap.lookup(&layers, &key),
+            keymap::Lookup::Command(id) if id == ids::CANCEL || id == ids::CLOSE_VIEWER
+        );
+        if ends {
             self.key_test = false;
             text.push_str(" Key test ended.");
         }

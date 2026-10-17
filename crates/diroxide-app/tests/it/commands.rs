@@ -660,7 +660,7 @@ fn the_key_test_says_each_key_until_cancel() {
     assert_eq!(f.s.key("f5"), ["Got F5. Runs Copy to other panel."]);
     assert_eq!(
         f.s.key("escape"),
-        ["Got Escape. Runs Cancel. Key test ended."]
+        ["Got Escape. Runs Cancel. In the viewer: Close viewer. Key test ended."]
     );
     assert!(!f.s.app.key_test_active());
 }

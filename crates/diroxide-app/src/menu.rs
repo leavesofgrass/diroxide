@@ -640,6 +640,39 @@ mod tests {
         assert!(view.rows().iter().any(|r| r.spoken() == "Sort, submenu"));
     }
 
+    /// Plan commit 67: every command alpha.2 adds is in a menu, in the
+    /// palette, and named on the keyboard page by its id.
+    #[test]
+    fn every_alpha_2_command_is_in_a_menu() {
+        let menus = Menus::builtin();
+        let alpha2 = [
+            ids::SWITCH_BANK,
+            ids::OPEN_AS_ARCHIVE,
+            ids::PACK,
+            ids::UNPACK,
+            ids::TEST_ARCHIVE,
+            ids::SPLIT,
+            ids::JOIN,
+            ids::MAKE_LINK,
+            ids::RELINK,
+            ids::PERMISSIONS,
+            ids::COPY_PATH,
+            ids::COPY_NAME,
+        ];
+        let viewer = commands::CATALOG
+            .iter()
+            .filter(|i| i.layer == Layer::Viewer)
+            .map(|i| i.id.clone());
+        let palette = crate::palette::palette("", &Keymap::defaults());
+        for id in alpha2.into_iter().chain(viewer) {
+            assert!(menus.reaches(&id), "{id} is in no menu");
+            assert!(
+                palette.rows().iter().any(|r| r.id == id.as_str()),
+                "{id} is not in the palette"
+            );
+        }
+    }
+
     #[test]
     fn the_access_keys_match_the_menu_commands_keys() {
         let menus = Menus::builtin();
