@@ -17,6 +17,8 @@ use diroxide_core::{
 };
 use diroxide_vfs::{AttributeChange, LinkRequest, TrashGate};
 
+use crate::split::SplitFacts;
+
 /// One step of a plan, acting on one entry.
 ///
 /// A copy step on a folder makes the folder at its target, or merges into
@@ -99,6 +101,26 @@ pub enum Step {
         /// What changes.
         change: AttributeChange,
     },
+    /// Write one part of a split: `length` bytes of `from`, starting at
+    /// `offset`, as the new file `to` ([`crate::split`]).
+    SplitPart {
+        /// The file split.
+        from: Place,
+        /// The part.
+        to: Place,
+        /// Where the part starts in the file.
+        offset: u64,
+        /// The part's bytes.
+        length: u64,
+    },
+    /// Write a split's `.crc` sidecar, after its last part, once the file
+    /// split is checked unchanged ([`crate::sidecar`]).
+    WriteChecksum {
+        /// The file split.
+        of: Place,
+        /// The sidecar.
+        place: Place,
+    },
 }
 
 impl Step {
@@ -116,6 +138,8 @@ impl Step {
             | Step::Remove { place }
             | Step::RemoveEmptyFolder { place }
             | Step::SetAttributes { place, .. } => place,
+            Step::SplitPart { from, .. } => from,
+            Step::WriteChecksum { of, .. } => of,
         }
     }
 
@@ -132,6 +156,8 @@ impl Step {
                 Some(place)
             }
             Step::SetAttributes { place, .. } => Some(place),
+            Step::SplitPart { to, .. } => Some(to),
+            Step::WriteChecksum { place, .. } => Some(place),
             Step::Trash { .. } | Step::Remove { .. } | Step::RemoveEmptyFolder { .. } => None,
         }
     }
@@ -178,6 +204,14 @@ impl Step {
             Step::SetAttributes { place, .. } => {
                 format!("change the attributes of {}", spell(place))
             }
+            Step::SplitPart { to, length, .. } => format!(
+                "write the part {}, {}",
+                spell(to),
+                crate::part_names::size_words(*length)
+            ),
+            Step::WriteChecksum { place, .. } => {
+                format!("write the checksum file {}", spell(place))
+            }
         }
     }
 }
@@ -221,6 +255,14 @@ pub enum Preflight {
         gate: TrashGate,
         /// The items left out of the trash job.
         places: Vec<Place>,
+    },
+    /// A split makes more than 999 parts, more than three digits number;
+    /// No leaves the file out.
+    ManyParts {
+        /// The file.
+        place: Place,
+        /// The parts it makes.
+        parts: u64,
     },
 }
 
@@ -266,6 +308,17 @@ impl Preflight {
                 }
                 lines
             }
+            Preflight::ManyParts { place, parts } => vec![
+                Message::question(&format!(
+                    "This makes {} parts. Go on",
+                    diroxide_core::format::grouped(*parts)
+                ))
+                .text,
+                format!(
+                    "Splitting {}: past 999, parts are 1000 and up.",
+                    name(place)
+                ),
+            ],
         }
     }
 }
@@ -315,6 +368,8 @@ pub struct PlanFacts {
     pub whole: Vec<(usize, usize)>,
     /// Who asked for the job, for the journal and the undo record.
     pub origin: JobOrigin,
+    /// A split's parts and room, for its rows ([`SplitFacts::rows`]).
+    pub split: Option<SplitFacts>,
 }
 
 impl PlanFacts {
@@ -462,6 +517,17 @@ impl Plan {
                 count(self.steps.len() as u64, "link", "links")
             ),
             JobKind::Undo => format!("Undo {}", count(self.steps.len() as u64, "step", "steps")),
+            JobKind::Split => {
+                let split = self.facts.split.clone().unwrap_or_default();
+                let parts = count(split.parts(), "part", "parts");
+                match split.files.as_slice() {
+                    [one] => format!("Split {} into {parts}", one.name()),
+                    files => format!(
+                        "Split {} into {parts}",
+                        count(files.len() as u64, "file", "files")
+                    ),
+                }
+            }
             other => {
                 let verb = other.verb();
                 let mut first = verb.chars();

@@ -684,6 +684,9 @@ impl<'a> Run<'a> {
             Step::Restore { place } => self.restore(place),
             Step::Remove { place } => self.remove(place, false),
             Step::RemoveEmptyFolder { place } => self.remove(place, true),
+            Step::SplitPart { .. } | Step::WriteChecksum { .. } => {
+                Outcome::Failed("a split is not run in this version".to_owned())
+            }
             Step::SetAttributes { place, change } => {
                 let provider = match self.provider(place) {
                     Ok(provider) => provider,

@@ -34,6 +34,7 @@ mod run;
 #[cfg(test)]
 mod run_tests;
 pub mod sidecar;
+pub mod split;
 #[cfg(test)]
 mod testing;
 pub mod undo;
@@ -53,4 +54,5 @@ pub use parts::{PartInfo, PartsError, PartsReader};
 pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
 pub use sidecar::{Sidecar, SidecarRead};
+pub use split::{SplitFacts, SplitFile};
 pub use undo::{LeftAs, UndoLog, UndoRecord};

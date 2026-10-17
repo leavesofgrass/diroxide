@@ -51,6 +51,14 @@ pub enum OpsError {
     /// capability's words: "Cannot link here: this place holds no links".
     #[error("{0}")]
     CannotLink(String),
+    /// A split was asked for with no part size, or a size of zero.
+    #[error("there is no part size")]
+    NoPartSize,
+    /// A split would make more than 99,999 parts; the sentence names the
+    /// size to use instead: "Too many parts: 600,000. Use parts of 6.1 MB
+    /// or more."
+    #[error("{0}")]
+    TooManyParts(String),
 }
 
 impl Explain for OpsError {
@@ -70,6 +78,8 @@ impl Explain for OpsError {
             OpsError::CannotLink(_) => {
                 "Make the link in a folder on a drive that holds links.".to_owned()
             }
+            OpsError::NoPartSize => "Choose a part size.".to_owned(),
+            OpsError::TooManyParts(_) => "Choose a larger part size.".to_owned(),
         }
     }
 }

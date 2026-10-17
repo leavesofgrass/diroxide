@@ -34,6 +34,8 @@ use crate::progress::JobProgress;
 use crate::undo::UndoRecord;
 use crate::walk::{Found, walk};
 
+mod split;
+
 /// Why an anchor is being checked: what the job would do to it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Removal {
@@ -884,6 +886,8 @@ impl Engine {
             JobKind::Rename if request.renames.is_empty() && request.new_name.is_none() => {
                 return Err(OpsError::NoName);
             }
+            JobKind::Split if request.destination.is_none() => return Err(OpsError::NoDestination),
+            JobKind::Split if request.parts.is_none() => return Err(OpsError::NoPartSize),
             JobKind::Undo => return Err(OpsError::NothingToUndo),
             JobKind::Copy
             | JobKind::Move
@@ -892,7 +896,8 @@ impl Engine {
             | JobKind::DeletePermanently
             | JobKind::Rename
             | JobKind::MakeFolder
-            | JobKind::Link => {}
+            | JobKind::Link
+            | JobKind::Split => {}
             other => return Err(OpsError::NotBuilt(other.verb().to_owned())),
         }
         if request.sources.is_empty()
@@ -910,6 +915,7 @@ impl Engine {
             JobKind::DeletePermanently => planner.delete()?,
             JobKind::Rename => planner.rename()?,
             JobKind::MakeFolder => planner.make_folder()?,
+            JobKind::Split => planner.split()?,
             _ => planner.link(LinkKind::Symbolic)?,
         }
         let mut progress = JobProgress::start(request.kind, 0, None);
