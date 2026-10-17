@@ -68,6 +68,14 @@ access = "g"
 when = "writable"
 
 [[menu.item]]
+command = "file.split"
+access = "p"
+
+[[menu.item]]
+command = "file.join"
+access = "j"
+
+[[menu.item]]
 command = "file.run-command"
 access = "n"
 

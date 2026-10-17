@@ -92,6 +92,23 @@ fn confirmation_lines(plan: &Plan) -> Vec<String> {
     if let Some(caution) = plan.caution() {
         lines.push(caution.to_owned());
     }
+    // What a split, a join or a change of permissions will do, in its own
+    // rows (W2c's notes): "12 parts of 20 MB, the last 3.1 MB".
+    if let Some(split) = &plan.facts.split {
+        lines.extend(split.rows());
+        lines.extend(
+            split
+                .files
+                .iter()
+                .map(diroxide_ops::SplitFile::details_line),
+        );
+    }
+    if let Some(join) = &plan.facts.join {
+        lines.extend(join.rows());
+    }
+    if let Some(attributes) = &plan.facts.attributes {
+        lines.extend(attributes.rows.iter().cloned());
+    }
     lines
 }
 
@@ -164,7 +181,7 @@ impl App {
     }
 
     /// Asks the engine for a plan; what happens next is the flow's.
-    fn plan_job(
+    pub(super) fn plan_job(
         &mut self,
         side: Side,
         request: JobRequest,
@@ -656,6 +673,11 @@ impl App {
                         Message::error(format!("{sentence}. {}", error.next_step()))
                     }
                     OpsError::NothingToUndo => Message::info("Nothing to undo"),
+                    // These say the whole sentence themselves: "Part 004 is
+                    // missing. Nothing was joined."
+                    OpsError::CannotJoin(sentence)
+                    | OpsError::TooManyParts(sentence)
+                    | OpsError::CannotLink(sentence) => Message::error(sentence.clone()),
                     // The read-only refusal is a sentence of its own (P2b).
                     OpsError::Vfs(inner) if inner.sentence().is_some() => {
                         Message::error(inner.sentence().unwrap_or_default())
@@ -673,6 +695,7 @@ impl App {
         let mut forced = false;
         let questions = std::mem::take(&mut plan.facts.questions);
         let mut kept = Vec::new();
+        let mut asked = Vec::new();
         for question in questions {
             match &question {
                 Preflight::TooLarge { place, .. } => {
@@ -699,11 +722,141 @@ impl App {
                     continue;
                 }
                 Preflight::NotEnoughRoom { .. } => forced = true,
+                // Asked one at a time before the confirmation, each with
+                // what its No does (W2c's notes).
+                Preflight::ManyParts { .. }
+                | Preflight::WhichParts { .. }
+                | Preflight::OddPart { .. }
+                | Preflight::RunsAsOwner { .. }
+                | Preflight::EveryoneCanChange { .. }
+                | Preflight::LosesAccess { .. }
+                | Preflight::TrashCopies { .. } => {
+                    asked.push(question);
+                    continue;
+                }
                 _ => forced = true,
             }
             kept.push(question);
         }
         plan.facts.questions = kept;
+        if !asked.is_empty() {
+            let first = asked.remove(0);
+            effects.extend(self.ask_plan_preflight(plan, first, asked, forced));
+            return effects;
+        }
+        effects.extend(self.finish_planning(job, plan, forced));
+        effects
+    }
+
+    /// One of a plan's questions, before its confirmation: the line that
+    /// asks, starting on No, with the plan's other lines under it.
+    fn ask_plan_preflight(
+        &mut self,
+        plan: Box<Plan>,
+        question: Preflight,
+        rest: Vec<Preflight>,
+        forced: bool,
+    ) -> Vec<Effect> {
+        let lines = question.lines();
+        let asks = lines
+            .iter()
+            .rposition(|l| l.ends_with("y or n"))
+            .unwrap_or(0);
+        let text = lines.get(asks).cloned().unwrap_or_default();
+        let listing: Vec<String> = lines
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != asks)
+            .map(|(_, l)| l.clone())
+            .collect();
+        let message = with_default_no(Message::new(
+            text,
+            diroxide_core::Importance::High,
+            diroxide_core::MessageKind::Question,
+        ));
+        self.open_dialog(
+            Dialog::Confirm {
+                question: message,
+                listing,
+                on_yes: Command::new(ids::YES),
+            },
+            Purpose::PlanQuestion {
+                plan,
+                question: Box::new(question),
+                rest,
+                forced,
+            },
+        )
+    }
+
+    /// The answer to one of a plan's questions: a file left out, the job
+    /// cancelled, or the join planned again with the other set; then the
+    /// next question, or the confirmation.
+    pub(super) fn plan_preflight_answered(
+        &mut self,
+        mut plan: Box<Plan>,
+        question: &Preflight,
+        mut rest: Vec<Preflight>,
+        forced: bool,
+        yes: bool,
+    ) -> Vec<Effect> {
+        let job = plan.job;
+        let cancel = |app: &mut App, words: &str| {
+            app.flows.remove(&job);
+            app.jobs.finish(job);
+            vec![
+                Effect::Redraw(Redraw::JobsLine),
+                app.say(Message::info(words.to_owned())),
+            ]
+        };
+        match question {
+            Preflight::ManyParts { place, .. } if !yes => {
+                plan.leave_out(place, "too many parts");
+            }
+            Preflight::RunsAsOwner { place } if !yes => {
+                plan.leave_out(place, "would run as its owner");
+            }
+            Preflight::TrashCopies { places, .. } if !yes => {
+                for place in places {
+                    plan.leave_out(place, "left where it is");
+                }
+            }
+            // A part is never left out of a join: No cancels it.
+            Preflight::OddPart { .. } if !yes => return cancel(self, "Nothing was joined."),
+            Preflight::EveryoneCanChange { .. } | Preflight::LosesAccess { .. } if !yes => {
+                return cancel(self, "Nothing changed.");
+            }
+            Preflight::WhichParts { yes: parts, .. } if yes => {
+                // Yes joins the other set: planned again with it.
+                let destination = plan
+                    .facts
+                    .join
+                    .as_ref()
+                    .and_then(|j| j.output.parent())
+                    .or_else(|| plan.facts.destination.clone());
+                let mut request = JobRequest::new(job, JobKind::Join, parts.clone());
+                if let Some(destination) = destination {
+                    request = request.to(destination);
+                }
+                self.request(Request::Plan(Box::new(request)));
+                return Vec::new();
+            }
+            _ => {}
+        }
+        if !rest.is_empty() {
+            let next = rest.remove(0);
+            return self.ask_plan_preflight(plan, next, rest, forced);
+        }
+        self.finish_planning(job, plan, forced)
+    }
+
+    /// A plan whose questions are answered: nothing left to do said, the
+    /// typed confirmation of a big plan, the confirmation, or the run.
+    fn finish_planning(&mut self, job: JobId, plan: Box<Plan>, forced: bool) -> Vec<Effect> {
+        let Some(flow) = self.flows.get(&job).cloned() else {
+            return Vec::new();
+        };
+        let mut effects = Vec::new();
         if plan.steps.is_empty() {
             self.flows.remove(&job);
             self.jobs.finish(job);
@@ -885,6 +1038,12 @@ impl App {
             _ if self.finish_lines.is_some() => {
                 self.finish_lines.take().unwrap_or_default().join(" ")
             }
+            // A join says its verdict: "Joined big.bin: checksum matches."
+            _ if report.joined.is_some() => report
+                .joined
+                .as_ref()
+                .map(diroxide_ops::JoinOutcome::sentence)
+                .unwrap_or_default(),
             _ => {
                 let mut text = report.summary();
                 if let Some(reconciliation) = report.reconciliation.as_ref().filter(|_| missing) {
@@ -924,6 +1083,9 @@ impl App {
             let keep = if each == side { focus.clone() } else { None }
                 .or_else(|| panel.list().focused().map(|r| r.id.clone()));
             effects.extend(self.open_as(each, place, keep, Load::AfterJob));
+        }
+        if clean && let Some(outcome) = report.joined.clone() {
+            effects.extend(self.offer_trash_parts(&outcome));
         }
         effects
     }

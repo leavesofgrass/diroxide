@@ -206,6 +206,10 @@ pub mod ids {
         INTO = "panel.into";
         /// Open the focused file as an archive, by its bytes.
         OPEN_AS_ARCHIVE = "archive.open-as";
+        /// Split the focused file into numbered parts.
+        SPLIT = "file.split";
+        /// Join numbered parts back into one file.
+        JOIN = "file.join";
         /// Pack the selection into a new archive.
         PACK = "archive.pack";
         /// Unpack the focused archive.
@@ -423,7 +427,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 129] = [
+pub static CATALOG: [CommandInfo; 131] = [
     command(
         ids::QUIT,
         "Quit",
@@ -684,6 +688,22 @@ pub static CATALOG: [CommandInfo; 129] = [
         ids::OPEN_AS_ARCHIVE,
         "Open as archive",
         "Opens the focused file as an archive by what its bytes say, whatever its name.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SPLIT,
+        "Split file",
+        "Splits the focused file, or each marked file, into numbered parts in the other panel.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::JOIN,
+        "Join files",
+        "Joins numbered parts back into one file in the other panel, from any part.",
         Panel,
         &[],
         &[],

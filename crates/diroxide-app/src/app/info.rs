@@ -537,6 +537,7 @@ impl App {
                     Purpose::SettingValue(key.to_owned()),
                 )
             }
+            SettingKind::SplitPresets => self.split_presets_list(),
             SettingKind::Theme => {
                 let mut rows: Vec<ListRow> = settings::theme_names()
                     .into_iter()

@@ -23,6 +23,7 @@ mod files;
 mod info;
 mod nav;
 mod select;
+mod split_join;
 mod viewing;
 
 use std::collections::{BTreeMap, HashMap};
@@ -307,6 +308,13 @@ enum Purpose {
     },
     /// Run an archive job on Yes.
     RunArchive(Box<crate::request::ArchivePlan>),
+    /// One of a plan's questions, before its confirmation.
+    PlanQuestion {
+        plan: Box<Plan>,
+        question: Box<diroxide_ops::Preflight>,
+        rest: Vec<diroxide_ops::Preflight>,
+        forced: bool,
+    },
     /// The pack dialog: its settings.
     PackForm(Box<archive_forms::PackForm>),
     /// The pack dialog's name field.
@@ -320,6 +328,23 @@ enum Purpose {
     },
     /// The unpack dialog: its settings.
     UnpackForm(Box<archive_forms::UnpackForm>),
+    /// Split file's sizes.
+    SplitSize {
+        side: Side,
+        files: Vec<Place>,
+        destination: Place,
+        note: Option<String>,
+    },
+    /// Split file's number of parts or part size.
+    SplitTyped {
+        side: Side,
+        files: Vec<Place>,
+        destination: Place,
+        note: Option<String>,
+        equal: bool,
+    },
+    /// The offer to trash a verified join's parts.
+    TrashParts(Vec<Place>),
     /// The viewer's jump prompt.
     ViewerJump,
     /// The viewer's search prompt.
@@ -496,6 +521,8 @@ enum Action {
     Enter,
     Into,
     OpenAsArchive,
+    Split,
+    Join,
     Pack,
     Unpack,
     TestArchive,
@@ -564,7 +591,7 @@ enum Action {
     Accept,
 }
 
-const ROUTES: [(CommandId, Action); 96] = [
+const ROUTES: [(CommandId, Action); 98] = [
     (ids::QUIT, Action::Quit),
     (ids::QUIT_TO_FOLDER, Action::QuitToFolder),
     (ids::QUIT_KEEP_FOLDER, Action::QuitKeepFolder),
@@ -598,6 +625,8 @@ const ROUTES: [(CommandId, Action); 96] = [
     (ids::ENTER, Action::Enter),
     (ids::INTO, Action::Into),
     (ids::OPEN_AS_ARCHIVE, Action::OpenAsArchive),
+    (ids::SPLIT, Action::Split),
+    (ids::JOIN, Action::Join),
     (ids::PACK, Action::Pack),
     (ids::UNPACK, Action::Unpack),
     (ids::TEST_ARCHIVE, Action::TestArchive),
@@ -1208,6 +1237,8 @@ impl App {
             Action::Enter => self.enter(),
             Action::Into => self.into(),
             Action::OpenAsArchive => self.open_as_archive(),
+            Action::Split => self.split_dialog(),
+            Action::Join => self.join_files(),
             Action::Pack => self.pack_dialog(),
             Action::Unpack => self.unpack_dialog(),
             Action::TestArchive => self.test_archive(),

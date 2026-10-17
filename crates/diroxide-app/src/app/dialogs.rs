@@ -318,6 +318,9 @@ impl App {
                 effects.push(self.say(Message::info("No password given.")));
             }
             Purpose::Limit { ask } => self.answer_limit(ask, false),
+            Purpose::TrashParts(_) => {
+                effects.push(self.say(Message::info("The parts stay where they are.")));
+            }
             Purpose::WrongPassword { ask, .. } => {
                 self.request(Request::Answer {
                     ask,
@@ -331,6 +334,12 @@ impl App {
                 rest,
             } => effects.extend(self.plan_question_answered(plan, &question, rest, false)),
             Purpose::RunArchive(plan) => effects.extend(self.archive_declined(&plan)),
+            Purpose::PlanQuestion {
+                plan,
+                question,
+                rest,
+                forced,
+            } => effects.extend(self.plan_preflight_answered(plan, &question, rest, forced, false)),
             Purpose::PackName(form) => {
                 effects.extend(self.pack_row_reopen(*form, "name"));
             }
@@ -379,6 +388,7 @@ impl App {
             Purpose::RunPlan(plan) => effects.extend(self.run_plan(*plan)),
             Purpose::Quit => effects.extend(self.quit_now()),
             Purpose::Limit { ask } => self.answer_limit(ask, true),
+            Purpose::TrashParts(parts) => effects.extend(self.trash_parts(parts)),
             Purpose::WrongPassword { ask, request } => {
                 effects.extend(self.secret_prompt(ask, request, false));
             }
@@ -388,6 +398,12 @@ impl App {
                 rest,
             } => effects.extend(self.plan_question_answered(plan, &question, rest, true)),
             Purpose::RunArchive(plan) => effects.extend(self.run_archive(*plan)),
+            Purpose::PlanQuestion {
+                plan,
+                question,
+                rest,
+                forced,
+            } => effects.extend(self.plan_preflight_answered(plan, &question, rest, forced, true)),
             Purpose::RunProgram(place) => {
                 let name = place
                     .name()
@@ -611,6 +627,22 @@ impl App {
                 None => Vec::new(),
             },
             Purpose::PackName(form) => self.pack_named(*form, &text),
+            Purpose::SplitSize {
+                side,
+                files,
+                destination,
+                note,
+            } => match row {
+                Some(row) => self.split_size_chosen(side, files, destination, note, &row),
+                None => Vec::new(),
+            },
+            Purpose::SplitTyped {
+                side,
+                files,
+                destination,
+                note,
+                equal,
+            } => self.split_typed(side, files, destination, note, equal, &text),
             Purpose::ViewerJump => {
                 let mut effects = self.close_top();
                 effects.extend(self.viewer_jump(&text));
@@ -719,6 +751,8 @@ impl App {
             | Purpose::Limit { .. }
             | Purpose::WrongPassword { .. }
             | Purpose::ArchiveQuestion { .. }
+            | Purpose::PlanQuestion { .. }
+            | Purpose::TrashParts(_)
             | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }
