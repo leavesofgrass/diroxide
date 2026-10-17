@@ -14,6 +14,7 @@
 //! image, audio, video, document and archive previewers.
 
 pub mod classes;
+pub mod encoding;
 
 use std::io::Read;
 use std::sync::atomic::{AtomicU64, Ordering};

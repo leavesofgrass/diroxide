@@ -1,5 +1,7 @@
 //! Integration tests of previews.
 
+mod encoding;
+
 use diroxide_core::{Entry, EntryKind, Place};
 use diroxide_filetype::TypeRegistry;
 use diroxide_preview::{LatestOnly, PreviewKind, PreviewRequest, Previews};
