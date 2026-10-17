@@ -621,7 +621,6 @@ pub fn run_with(
         RowShape::PerFile
     };
     let query = query.with_scope(scope).with_rows(rows);
-    let name = root.name().map_or_else(|| root.to_string(), str::to_owned);
     if args.explain {
         let read_back = query.filter.as_ref().map(|f| f.read_back(clock));
         let mut lines = vec![format!(
@@ -654,17 +653,7 @@ pub fn run_with(
         return Ok(2);
     }
     if !args.null && !args.json {
-        let shown = if text.is_empty() {
-            "every entry"
-        } else {
-            &text
-        };
-        say(
-            args,
-            &mut out,
-            "message",
-            &format!("Searching {name} for {shown}"),
-        )?;
+        say(args, &mut out, "message", &query.start_line())?;
     }
     let control = diroxide_search::SearchControl::new();
     let mut writer = Writer {

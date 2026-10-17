@@ -382,6 +382,21 @@ impl SearchQuery {
     pub fn typed(&self) -> &str {
         self.filter.as_ref().map_or("*", Filter::text)
     }
+
+    /// The line said once when the search starts, meaning first:
+    /// "Searching Documents for *.txt", "Searching 3 places for ext pdf",
+    /// "Searching Documents for every entry".
+    pub fn start_line(&self) -> String {
+        let what = self.filter.as_ref().map_or("every entry", Filter::text);
+        let place = match self.scope.places.as_slice() {
+            [one] => one.name().map_or_else(|| one.to_string(), str::to_owned),
+            many => format!("{} places", many.len()),
+        };
+        format!(
+            "Searching {} for {what}",
+            diroxide_core::names::display_name(&place)
+        )
+    }
 }
 
 #[cfg(test)]
@@ -441,6 +456,14 @@ mod tests {
         assert_eq!(query.depth_limit(), Some(2));
         let query = SearchQuery::parse(root(), "").unwrap();
         assert_eq!(query.sentence(), "every entry");
+        assert_eq!(
+            query.start_line(),
+            "Searching diroxide-search for every entry"
+        );
+        let marked = SearchQuery::parse(root(), "ext pdf")
+            .unwrap()
+            .with_scope(Scope::of(vec![root(), root(), root()]));
+        assert_eq!(marked.start_line(), "Searching 3 places for ext pdf");
         assert_eq!(query.typed(), "*");
         let query = SearchQuery::parse(root(), "ext txt or ext md")
             .unwrap()
