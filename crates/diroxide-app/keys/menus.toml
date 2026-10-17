@@ -76,6 +76,21 @@ command = "file.join"
 access = "j"
 
 [[menu.item]]
+command = "file.link"
+access = "l"
+when = "links"
+
+[[menu.item]]
+command = "file.relink"
+access = "i"
+when = "links"
+
+[[menu.item]]
+command = "file.permissions"
+access = "w"
+when = "attributes"
+
+[[menu.item]]
 command = "file.run-command"
 access = "n"
 
@@ -157,6 +172,14 @@ access = "l"
 command = "file.move-to"
 access = "v"
 when = "writable"
+
+[[menu.item]]
+command = "file.copy-path"
+access = "a"
+
+[[menu.item]]
+command = "file.copy-name"
+access = "n"
 
 [[menu]]
 id = "view"

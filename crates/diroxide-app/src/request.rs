@@ -292,6 +292,9 @@ pub enum Request {
         /// The bytes a stream keeps at most.
         cap: u64,
     },
+    /// Count an archive's entries for the details list, on a worker;
+    /// answered as [`AppEvent::ArchiveEntries`](crate::AppEvent::ArchiveEntries).
+    ArchiveEntries(Place),
     /// Drop the passwords an archive job's plan holds: its confirmation
     /// said no, or it was never run.
     DropArchiveJob(JobId),

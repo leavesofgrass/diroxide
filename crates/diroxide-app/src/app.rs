@@ -15,6 +15,7 @@
 //!
 //! Wave 1 (W1d) owns this module.
 
+mod access_dialogs;
 mod archive;
 mod archive_forms;
 mod archive_jobs;
@@ -184,6 +185,13 @@ pub enum AppEvent {
         /// The plan, or why not.
         result: Result<Box<crate::request::ArchivePlan>, Message>,
     },
+    /// An archive's entries were counted for the details list.
+    ArchiveEntries {
+        /// The archive.
+        place: Place,
+        /// "Entries: 10 items", or why not.
+        line: Result<String, Message>,
+    },
     /// A file's bytes for the viewer were read, or could not be (the
     /// sentence says why).
     ViewerSource {
@@ -345,6 +353,16 @@ enum Purpose {
     },
     /// The offer to trash a verified join's parts.
     TrashParts(Vec<Place>),
+    /// The link dialog.
+    LinkForm(Box<access_dialogs::LinkSettings>),
+    /// The junction offered after the privilege's refusal.
+    JunctionInstead { targets: Vec<Place>, folder: Place },
+    /// Change link target's prompt.
+    Relink { side: Side, link: Place },
+    /// The permissions dialog.
+    AccessForm(Box<access_dialogs::AccessForm>),
+    /// The details of an entry.
+    Details(Place),
     /// The viewer's jump prompt.
     ViewerJump,
     /// The viewer's search prompt.
@@ -399,6 +417,13 @@ enum Then {
     Renamed(Vec<(String, String)>),
     /// Clear the file clipboard (a cut was pasted).
     ClearClipboard,
+    /// Links made: a folder link the privilege refused is offered a
+    /// junction.
+    Linked {
+        targets: Vec<Place>,
+        folder: Place,
+        form: diroxide_core::access::LinkForm,
+    },
     /// Say what an undo brought back.
     Undid(Option<diroxide_core::JobKind>),
     /// The permanent delete the trash could not take: its plan is shown
@@ -523,6 +548,11 @@ enum Action {
     OpenAsArchive,
     Split,
     Join,
+    MakeLink,
+    Relink,
+    Permissions,
+    CopyPath,
+    CopyName,
     Pack,
     Unpack,
     TestArchive,
@@ -591,7 +621,7 @@ enum Action {
     Accept,
 }
 
-const ROUTES: [(CommandId, Action); 98] = [
+const ROUTES: [(CommandId, Action); 103] = [
     (ids::QUIT, Action::Quit),
     (ids::QUIT_TO_FOLDER, Action::QuitToFolder),
     (ids::QUIT_KEEP_FOLDER, Action::QuitKeepFolder),
@@ -625,6 +655,11 @@ const ROUTES: [(CommandId, Action); 98] = [
     (ids::ENTER, Action::Enter),
     (ids::INTO, Action::Into),
     (ids::OPEN_AS_ARCHIVE, Action::OpenAsArchive),
+    (ids::MAKE_LINK, Action::MakeLink),
+    (ids::RELINK, Action::Relink),
+    (ids::PERMISSIONS, Action::Permissions),
+    (ids::COPY_PATH, Action::CopyPath),
+    (ids::COPY_NAME, Action::CopyName),
     (ids::SPLIT, Action::Split),
     (ids::JOIN, Action::Join),
     (ids::PACK, Action::Pack),
@@ -1165,6 +1200,7 @@ impl App {
             } => self.program_ended(&what, &folder, result),
             AppEvent::ArchiveOpened { request, facts } => self.archive_opened(request, *facts),
             AppEvent::ArchivePlanned { job, result } => self.archive_planned(job, result),
+            AppEvent::ArchiveEntries { place, line } => self.archive_entries_counted(&place, line),
             AppEvent::ViewerSource {
                 request,
                 place,
@@ -1237,6 +1273,11 @@ impl App {
             Action::Enter => self.enter(),
             Action::Into => self.into(),
             Action::OpenAsArchive => self.open_as_archive(),
+            Action::MakeLink => self.link_dialog(),
+            Action::Relink => self.relink_prompt(),
+            Action::Permissions => self.permissions_dialog(),
+            Action::CopyPath => self.copy_path_or_name(false),
+            Action::CopyName => self.copy_path_or_name(true),
             Action::Split => self.split_dialog(),
             Action::Join => self.join_files(),
             Action::Pack => self.pack_dialog(),

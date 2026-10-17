@@ -1087,6 +1087,19 @@ impl App {
         if clean && let Some(outcome) = report.joined.clone() {
             effects.extend(self.offer_trash_parts(&outcome));
         }
+        // A link Windows refused for the privilege: a junction instead,
+        // which needs none (folders only).
+        let refused = report.failed.iter().any(|(_, why)| {
+            why.contains(diroxide_ops::links::NEEDS_DEVELOPER_MODE.trim_end_matches('.'))
+        });
+        if refused
+            && let Then::Linked {
+                targets, folder, ..
+            } = then
+            && !targets.is_empty()
+        {
+            effects.extend(self.offer_junction(targets, folder));
+        }
         effects
     }
 

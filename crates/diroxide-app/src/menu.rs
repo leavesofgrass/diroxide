@@ -633,7 +633,7 @@ mod tests {
         let keymap = Keymap::defaults();
         let edit = menus.list("edit", &keymap, &local()).unwrap();
         assert_eq!(edit.title(), "Edit menu");
-        assert_eq!(edit.announce_focus(), "Undo, Ctrl+Z, 1 of 8");
+        assert_eq!(edit.announce_focus(), "Undo, Ctrl+Z, 1 of 10");
         let bar = menus.bar_list(&keymap);
         assert_eq!(bar.announce_focus(), "File, Alt+F, 1 of 8");
         let view = menus.list("view", &keymap, &local()).unwrap();

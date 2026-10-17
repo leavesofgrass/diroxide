@@ -882,6 +882,37 @@ impl Runtime {
                     });
                 });
             }
+            Request::ArchiveEntries(place) => {
+                let Some(archives) = self.archives.clone() else {
+                    return;
+                };
+                self.worker(move |shared| {
+                    let source: Arc<dyn SecretSource> = Arc::new(ForwardSecrets {
+                        job: None,
+                        shared: Arc::clone(shared),
+                    });
+                    let secrets = JobSecrets::new(source);
+                    let opened = secrets.with_tries(&OpContext::new(), |ctx| {
+                        archives.open_archive(&place, ctx, Allowances::default())
+                    });
+                    secrets.forget();
+                    let line = match opened {
+                        Ok(opened) => {
+                            let summary = opened.index().summary();
+                            Ok(format!(
+                                "Entries: {}",
+                                diroxide_core::format::count(
+                                    summary.members + summary.folders,
+                                    "item",
+                                    "items"
+                                )
+                            ))
+                        }
+                        Err(error) => Err(error.message("count", "the entries")),
+                    };
+                    shared.send(AppEvent::ArchiveEntries { place, line });
+                });
+            }
             Request::DropArchiveJob(job) => {
                 // Dropping the job's secrets wipes its password.
                 lock(&self.archive_secrets).remove(&job);

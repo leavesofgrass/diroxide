@@ -206,6 +206,16 @@ pub mod ids {
         INTO = "panel.into";
         /// Open the focused file as an archive, by its bytes.
         OPEN_AS_ARCHIVE = "archive.open-as";
+        /// Make a link to each selected entry in the other panel.
+        MAKE_LINK = "file.link";
+        /// Point the focused link elsewhere.
+        RELINK = "file.relink";
+        /// Change the selection's permissions or attributes.
+        PERMISSIONS = "file.permissions";
+        /// Copy the focused entry's full path to the system clipboard.
+        COPY_PATH = "file.copy-path";
+        /// Copy the focused entry's name to the system clipboard.
+        COPY_NAME = "file.copy-name";
         /// Split the focused file into numbered parts.
         SPLIT = "file.split";
         /// Join numbered parts back into one file.
@@ -427,7 +437,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 131] = [
+pub static CATALOG: [CommandInfo; 136] = [
     command(
         ids::QUIT,
         "Quit",
@@ -688,6 +698,46 @@ pub static CATALOG: [CommandInfo; 131] = [
         ids::OPEN_AS_ARCHIVE,
         "Open as archive",
         "Opens the focused file as an archive by what its bytes say, whatever its name.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::MAKE_LINK,
+        "Make symbolic link",
+        "Makes a link to each selected entry in the other panel, after a list of its settings.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RELINK,
+        "Change link target",
+        "Points the focused link to another place; Undo points it back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::PERMISSIONS,
+        "Change permissions",
+        "Changes who may read, write and run the selection, after a list of its settings.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COPY_PATH,
+        "Copy path",
+        "Puts the focused entry's full path on the system clipboard.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COPY_NAME,
+        "Copy name",
+        "Puts the focused entry's name on the system clipboard.",
         Panel,
         &[],
         &[],
@@ -1326,7 +1376,7 @@ pub static CATALOG: [CommandInfo; 131] = [
     ),
     command(
         ids::VIEWER_COPY_PATH,
-        "Copy path",
+        "Copy viewed file's path",
         "Puts the viewed file's full path on the system clipboard.",
         Viewer,
         &[],
@@ -1334,7 +1384,7 @@ pub static CATALOG: [CommandInfo; 131] = [
     ),
     command(
         ids::VIEWER_COPY_NAME,
-        "Copy name",
+        "Copy viewed file's name",
         "Puts the viewed file's name on the system clipboard.",
         Viewer,
         &[],

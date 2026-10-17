@@ -558,7 +558,7 @@ fn details_context_menu_help_and_the_key_bar() {
     f.s.focus("report.pdf");
     let said = f.s.key("alt+enter");
     assert!(
-        said[0].starts_with("Details of report.pdf, Name: report.pdf"),
+        said[0].starts_with("Details of report.pdf, Type: PDF document"),
         "{said:?}"
     );
     f.s.key("escape");

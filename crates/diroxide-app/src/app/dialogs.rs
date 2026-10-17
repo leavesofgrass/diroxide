@@ -389,6 +389,9 @@ impl App {
             Purpose::Quit => effects.extend(self.quit_now()),
             Purpose::Limit { ask } => self.answer_limit(ask, true),
             Purpose::TrashParts(parts) => effects.extend(self.trash_parts(parts)),
+            Purpose::JunctionInstead { targets, folder } => {
+                effects.extend(self.make_junctions(targets, folder));
+            }
             Purpose::WrongPassword { ask, request } => {
                 effects.extend(self.secret_prompt(ask, request, false));
             }
@@ -592,7 +595,23 @@ impl App {
                 Some(index) => self.job_items(index),
                 None => Vec::new(),
             },
-            Purpose::Read | Purpose::JobItems => {
+            Purpose::LinkForm(form) => match row {
+                Some(row) => self.link_row(*form, &row),
+                None => Vec::new(),
+            },
+            Purpose::AccessForm(form) => match row {
+                Some(row) => self.access_row(*form, &row),
+                None => Vec::new(),
+            },
+            Purpose::Relink { side, link } => {
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                let mut effects = self.close_top();
+                effects.extend(self.relink(side, link, &text));
+                effects
+            }
+            Purpose::Read | Purpose::JobItems | Purpose::Details(_) => {
                 if row
                     .as_deref()
                     .is_some_and(|r| r.starts_with(super::info::HEADING_ROW) || r == "help")
@@ -753,6 +772,7 @@ impl App {
             | Purpose::ArchiveQuestion { .. }
             | Purpose::PlanQuestion { .. }
             | Purpose::TrashParts(_)
+            | Purpose::JunctionInstead { .. }
             | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }
@@ -1157,7 +1177,7 @@ impl App {
         let candidates = match source {
             CompletionSource::Paths => {
                 let side = match self.top_purpose() {
-                    Some(Purpose::GoPath(side)) => *side,
+                    Some(Purpose::GoPath(side) | Purpose::Relink { side, .. }) => *side,
                     _ => self.active,
                 };
                 let folder_text = &text[..text.len() - stem.len()];

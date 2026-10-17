@@ -301,7 +301,19 @@ impl App {
         };
         let clock = self.clock.as_ref();
         let name = entry.display_name().into_owned();
-        let mut lines = vec![format!("Name: {name}")];
+        // The item information list (plan commit 66): the preview's detail
+        // rows first, the type and the size in words with the exact bytes,
+        // then the name and what the panel knows.
+        let file_type = self
+            .types
+            .detect(&entry.name, &[])
+            .and_then(|d| self.types.get(&d.type_id));
+        let mut lines: Vec<String> = diroxide_preview::detail_rows(entry, file_type)
+            .into_iter()
+            .map(|row| format!("{}: {}", row.label, row.value))
+            .collect();
+        let archive = entry.kind == diroxide_core::EntryKind::Archive;
+        lines.push(format!("Name: {name}"));
         if entry.needs_care {
             let issues = diroxide_vfs::check_name(&entry.name, &panel.names());
             for issue in issues {
@@ -312,21 +324,10 @@ impl App {
                 diroxide_core::names::spell_out(&entry.name)
             ));
         }
-        lines.push(format!(
-            "Kind: {}",
-            entry
-                .type_name
-                .clone()
-                .unwrap_or_else(|| entry.kind.word().to_owned())
-        ));
-        match (entry.is_folder_like(), entry.size) {
-            (true, _) => lines.push("Size: folder size not computed".to_owned()),
-            (false, Some(size)) => lines.push(format!(
-                "Size: {}, {} bytes",
-                diroxide_core::format::human_size(size),
-                crate::messages::grouped(size)
-            )),
-            (false, None) => lines.push("Size: not known".to_owned()),
+        if entry.kind == diroxide_core::EntryKind::Folder {
+            lines.push("Size: folder size not computed".to_owned());
+        } else if entry.size.is_none() {
+            lines.push("Size: not known".to_owned());
         }
         lines.push(format!("Modified: {}", time_words(entry.modified, clock)));
         lines.push(format!("Created: {}", time_words(entry.created, clock)));
@@ -354,13 +355,17 @@ impl App {
             diroxide_core::names::spell_out(&place.to_string())
         ));
         let list = read_list(format!("Details of {name}"), text_rows(lines));
-        self.open_dialog(
+        let effects = self.open_dialog(
             Dialog::Choose {
                 list,
                 on_enter: Command::new(ids::DETAILS),
             },
-            Purpose::Read,
-        )
+            Purpose::Details(place.clone()),
+        );
+        if archive {
+            self.request(Request::ArchiveEntries(place));
+        }
+        effects
     }
 
     /// The context menu as a list: what the File menu offers here, and the
