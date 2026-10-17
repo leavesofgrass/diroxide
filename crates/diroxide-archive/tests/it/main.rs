@@ -6,6 +6,7 @@
 mod build;
 mod hostile;
 mod memory;
+mod odd_names;
 mod seeds;
 mod spike_hostile;
 mod spike_listing;

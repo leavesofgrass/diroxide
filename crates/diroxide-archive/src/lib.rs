@@ -17,6 +17,7 @@
 pub mod format;
 pub mod fuzzing;
 pub mod guard;
+pub mod index;
 pub mod limits;
 pub mod names;
 pub mod provider;
@@ -25,6 +26,10 @@ pub mod sniff;
 
 pub use format::ArchiveFormat;
 pub use guard::{Allowances, Budget, Claims, Guarded, LimitHit, Question, QuestionKind};
+pub use index::{
+    Index, IndexBuilder, IndexCache, IndexSummary, Locator, MAX_LISTED, Member, Record,
+    RecordFlags, RecordKind, capped_line, member_row,
+};
 pub use limits::{Limits, limit_words};
 pub use names::{
     MemberPath, NameFlags, NameRefusal, is_junk, member_path, nesting_depth, normalize_member_name,
