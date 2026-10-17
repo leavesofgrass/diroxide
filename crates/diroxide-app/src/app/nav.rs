@@ -638,7 +638,9 @@ impl App {
         if self.places.is_empty() {
             self.request(Request::Places);
         }
-        let field = EntryField::new("Go to a place", CompletionSource::Places)
+        // Tab completes a bookmark by its name or its place (W3a); the
+        // list under the field narrows over every place as you type.
+        let field = EntryField::new("Go to a place", CompletionSource::Bookmarks)
             .with_history(state::keys::PLACES);
         let mut effects =
             self.open_dialog(crate::dialog::Dialog::edit(field), Purpose::Places(side));

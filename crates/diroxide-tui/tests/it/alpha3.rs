@@ -183,3 +183,40 @@ fn a_search_lists_its_results_with_the_cursor_on_the_first_row() {
     assert!(s.app().dialog().is_none());
     cursor_at(&s, 0, 2);
 }
+
+#[test]
+fn a_label_word_is_drawn_in_its_labels_color_and_says_its_name() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    let (mut app, mut runtime, _app_clock) = app_with_clock(
+        &work,
+        Settings {
+            layout: Layout::Single,
+            ..settings()
+        },
+    );
+    let clock = Clock::at_start();
+    let terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+    let options = diroxide_tui::TuiOptions {
+        screen_reader: true,
+        color: Some(diroxide_theme::ColorSupport::TrueColor),
+        ..diroxide_tui::TuiOptions::default()
+    };
+    let mut s = diroxide_tui::Session::new(&mut app, &mut runtime, terminal, options);
+    start(&mut s, &clock);
+    crate::support::focus(&mut s, &clock, "notes.txt");
+    // Ctrl+1 is Urgent, orange.
+    press(&mut s, &clock, "ctrl+1");
+    press(&mut s, &clock, "home");
+    let screen = s.screen();
+    let line = line_of(&screen, "notes.txt, label: urgent");
+    let text = &screen.lines[line];
+    let word = text.find("urgent").unwrap() as u16;
+    let buffer = s.terminal().backend().buffer();
+    let label = buffer[(word, line as u16)].clone();
+    let name = buffer[(0, line as u16)].clone();
+    assert_eq!(label.symbol(), "u");
+    assert_ne!(label.fg, name.fg, "the label's word has its own color");
+    // The cursor stays on the focused row's first cell, under the title.
+    cursor_at(&s, 0, 1);
+}

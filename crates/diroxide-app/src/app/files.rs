@@ -217,7 +217,7 @@ impl App {
         self.copy_or_move_to(side, kind, sources, note, destination)
     }
 
-    fn copy_or_move_to(
+    pub(super) fn copy_or_move_to(
         &mut self,
         side: Side,
         kind: JobKind,

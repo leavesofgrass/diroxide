@@ -1246,8 +1246,10 @@ impl App {
                     .filter(|c| terms_in_order(&text, &c.text) || terms_in_order(&text, &c.kind))
                     .collect();
                 let mut list = candidate_list("Places", &found);
-                // Bookmarks say their kind first (W3l).
+                // Bookmarks say their kind first (W3l); the other places
+                // their own name first (W3a).
                 self.bookmark_rows_first(&mut list);
+                self.place_rows_first(&mut list);
                 list
             }
             Some(Purpose::PickDestination { side, .. }) => {
@@ -1256,7 +1258,10 @@ impl App {
                     .into_iter()
                     .filter(|c| terms_in_order(&text, &c.text))
                     .collect();
-                candidate_list("Destinations", &found)
+                let mut list = candidate_list("Destinations", &found);
+                self.bookmark_rows_first(&mut list);
+                self.place_rows_first(&mut list);
+                list
             }
             Some(Purpose::Organize(wants)) => match self.organize_candidates(&wants, &text) {
                 Some(list) => list,

@@ -336,9 +336,13 @@ impl EntryField {
             (Vec::new(), Vec::new());
         for candidate in candidates {
             let text = candidate.text.to_lowercase();
+            // A bookmark is found by its name too (W3a).
+            let named = self.source == CompletionSource::Bookmarks
+                && !stem.is_empty()
+                && candidate.kind.to_lowercase().contains(&stem);
             if text.starts_with(&stem) {
                 starting.push(candidate.clone());
-            } else if !stem.is_empty() && text.contains(&stem) {
+            } else if !stem.is_empty() && text.contains(&stem) || named {
                 containing.push(candidate.clone());
             }
         }

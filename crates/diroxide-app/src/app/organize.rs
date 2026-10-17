@@ -261,6 +261,16 @@ impl App {
                 if renames {
                     return Some(self.bookmark_form(side, place, None));
                 }
+                // The copy and move keys copy or move the panel's marked
+                // items, or its focused one, into the bookmark (W3a).
+                let kind = match file_command {
+                    Some(id) if id == ids::COPY => Some(diroxide_core::JobKind::Copy),
+                    Some(id) if id == ids::MOVE => Some(diroxide_core::JobKind::Move),
+                    _ => None,
+                };
+                if let Some(kind) = kind {
+                    return Some(self.send_to_bookmark(side, kind, place));
+                }
                 None
             }
             Wants::History { .. } if removes => {
