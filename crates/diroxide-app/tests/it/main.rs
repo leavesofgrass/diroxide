@@ -5,6 +5,7 @@
 
 mod support;
 
+mod archives;
 mod braille;
 mod commands;
 mod dialogs;

@@ -828,7 +828,7 @@ mod tests {
         let menus = crate::menu::Menus::builtin();
         for binding in Keymap::defaults().bindings() {
             // A command that opens a menu is reached by the menu bar (F9).
-            let opens_a_menu = crate::commands::Menu::ALL
+            let opens_a_menu = commands::Menu::ALL
                 .iter()
                 .any(|m| m.command() == binding.command);
             if tables::terminal_entry(&binding.key).is_some() && !opens_a_menu {

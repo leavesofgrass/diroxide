@@ -75,6 +75,15 @@ pub enum Question {
         /// What is asked.
         request: SecretRequest,
     },
+    /// An archive limit's question ("Expands to 40 GB from 40 KB. Unpack?
+    /// y or n"), asked once per kind in a job, starting on No; the answer
+    /// is [`Reply::Confirm`].
+    Limit {
+        /// The job that asks, or `None` for a listing.
+        job: Option<JobId>,
+        /// The question.
+        question: diroxide_archive::Question,
+    },
 }
 
 impl Question {
@@ -82,7 +91,7 @@ impl Question {
     pub fn job(&self) -> Option<JobId> {
         match self {
             Question::Conflict { job, .. } | Question::Error { job, .. } => Some(*job),
-            Question::Secret { job, .. } => *job,
+            Question::Secret { job, .. } | Question::Limit { job, .. } => *job,
         }
     }
 }
@@ -96,6 +105,8 @@ pub enum Reply {
     Error(ErrorAction),
     /// A typed secret, or `None` when the user gave none.
     Secret(Option<Secret>),
+    /// Yes or no, to a limit's question.
+    Confirm(bool),
 }
 
 /// What the program that runs is.
@@ -182,6 +193,17 @@ pub enum Request {
     Settle(JobId),
     /// Run a program with the screen handed over.
     Spawn(Box<Spawn>),
+    /// Make the archive provider forget an archive's cached index, and
+    /// with it a password a locked 7z keeps while it is open: the panel
+    /// left it (W2b's notes).
+    ForgetArchive(Place),
+    /// Sweep what an interrupted run left, at start: the spool folder's
+    /// spool files, and the temporary archives packs left in these
+    /// folders ([`crate::archives::sweep`]).
+    Sweep {
+        /// The folders packs wrote into.
+        folders: Vec<Place>,
+    },
 }
 
 #[cfg(test)]

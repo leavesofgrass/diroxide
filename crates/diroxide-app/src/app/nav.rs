@@ -179,6 +179,11 @@ impl App {
         else {
             return Vec::new();
         };
+        if result.is_ok() {
+            self.take_archive_facts(side, request, place);
+        } else {
+            self.pending_archive.retain(|(r, _)| *r != request);
+        }
         match result {
             Ok(entries) => self.listed_ok(side, entries),
             Err(error) => self.listed_err(side, place, &error),
@@ -205,6 +210,13 @@ impl App {
                 side,
                 place: Some(place),
             });
+            if active && let Some(line) = self.archive_landing(side) {
+                // Inside an archive: "Opened course.zip: 10 items, 48 KB."
+                // at its root, "week1, 3 items, in course.zip" below it.
+                effects.push(Effect::Redraw(Redraw::TitleLine));
+                effects.push(self.say(Message::info(line)));
+                return effects;
+            }
             if active {
                 // The leaf and the count first, the folder it is in after:
                 // "Backup, 12 items, in D:\work".
@@ -301,10 +313,11 @@ impl App {
             effects.extend(self.open(side, parent, name));
             return effects;
         }
-        vec![
-            Effect::Redraw(Redraw::TitleLine),
-            self.say(Message::from_error("open", &shown, error)),
-        ]
+        let message = match error.sentence() {
+            Some(sentence) => Message::error(sentence),
+            None => Message::from_error("open", &shown, error),
+        };
+        vec![Effect::Redraw(Redraw::TitleLine), self.say(message)]
     }
 
     pub(super) fn list_progress(&mut self, request: RequestId, so_far: u64) -> Vec<Effect> {
@@ -349,7 +362,10 @@ impl App {
             return Vec::new();
         }
         self.panel_mut(side).set_watching(Watching::No);
-        if side != self.active {
+        // A place inside an archive has nothing to watch: it changes only
+        // when its archive does, and a listing reads it again from the
+        // cache. Saying so would be noise.
+        if side != self.active || place.kind() == diroxide_core::PlaceKind::Archive {
             return Vec::new();
         }
         let key = self.key(&ids::RELOAD);

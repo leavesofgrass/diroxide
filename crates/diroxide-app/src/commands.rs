@@ -204,6 +204,8 @@ pub mod ids {
         ENTER = "panel.enter";
         /// Enter the focused folder or archive.
         INTO = "panel.into";
+        /// Open the focused file as an archive, by its bytes.
+        OPEN_AS_ARCHIVE = "archive.open-as";
         /// Go up one folder.
         UP = "panel.up";
         /// List the place again.
@@ -349,7 +351,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 92] = [
+pub static CATALOG: [CommandInfo; 93] = [
     command(
         ids::QUIT,
         "Quit",
@@ -605,6 +607,14 @@ pub static CATALOG: [CommandInfo; 92] = [
         Panel,
         &["right"],
         &["right"],
+    ),
+    command(
+        ids::OPEN_AS_ARCHIVE,
+        "Open as archive",
+        "Opens the focused file as an archive by what its bytes say, whatever its name.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::UP,

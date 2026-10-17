@@ -8,6 +8,9 @@ homepage.workspace = true
 publish.workspace = true
 
 [dependencies]
+# Archives: the provider made from the [archives] settings, and the pack,
+# unpack and test runners the dialogs start (W2f).
+diroxide-archive.workspace = true
 diroxide-config.workspace = true
 diroxide-core.workspace = true
 diroxide-filetype.workspace = true

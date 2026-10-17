@@ -15,6 +15,7 @@
 //!
 //! Wave 1 (W1d) owns this module.
 
+mod archive;
 mod dialogs;
 mod files;
 mod info;
@@ -171,6 +172,14 @@ pub enum AppEvent {
         /// Its exit code, or why it could not start.
         result: Result<Option<i32>, String>,
     },
+    /// What a listed place inside an archive is: its title's words and
+    /// the opening line (sent before its listing).
+    ArchiveOpened {
+        /// The listing request it belongs to.
+        request: RequestId,
+        /// The facts.
+        facts: Box<crate::archives::ArchiveFacts>,
+    },
     /// A dialog was answered.
     Answer {
         /// The dialog.
@@ -252,6 +261,8 @@ enum Purpose {
     ContextMenu,
     /// The Sort list.
     SortList,
+    /// An archive limit's question.
+    Limit { ask: AskId },
     /// The settings list.
     Settings,
     /// A setting's choices.
@@ -368,6 +379,12 @@ pub struct App {
     session: Option<diroxide_config::SessionState>,
     restore: [Option<String>; 2],
     kept: Vec<Kept>,
+    /// What the runtime said about the archive each panel shows.
+    archive_facts: [Option<crate::archives::ArchiveFacts>; 2],
+    /// Archive facts waiting for their listing, by request.
+    pending_archive: Vec<(RequestId, crate::archives::ArchiveFacts)>,
+    /// Whether each panel's last listing entered its archive from outside.
+    archive_entered: [bool; 2],
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -406,6 +423,7 @@ enum Action {
     ThisInOther,
     Enter,
     Into,
+    OpenAsArchive,
     Up,
     Reload,
     Back,
@@ -471,7 +489,7 @@ enum Action {
     Accept,
 }
 
-const ROUTES: [(CommandId, Action); 92] = [
+const ROUTES: [(CommandId, Action); 93] = [
     (ids::QUIT, Action::Quit),
     (ids::QUIT_TO_FOLDER, Action::QuitToFolder),
     (ids::QUIT_KEEP_FOLDER, Action::QuitKeepFolder),
@@ -504,6 +522,7 @@ const ROUTES: [(CommandId, Action); 92] = [
     (ids::THIS_IN_OTHER, Action::ThisInOther),
     (ids::ENTER, Action::Enter),
     (ids::INTO, Action::Into),
+    (ids::OPEN_AS_ARCHIVE, Action::OpenAsArchive),
     (ids::UP, Action::Up),
     (ids::RELOAD, Action::Reload),
     (ids::BACK, Action::Back),
@@ -642,6 +661,9 @@ impl App {
             session: startup.session,
             restore: [None, None],
             kept: Vec::new(),
+            archive_facts: [None, None],
+            pending_archive: Vec::new(),
+            archive_entered: [false, false],
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -655,6 +677,7 @@ impl App {
     /// the listing of both panels.
     pub fn start(&mut self) -> Vec<Effect> {
         let mut effects = self.startup_lines();
+        self.sweep_at_start();
         for side in Side::BOTH {
             let place = self.panel(side).place().clone();
             let focus = self.restored_focus(side);
@@ -853,6 +876,28 @@ impl App {
     pub fn title_line_within(&self, cells: usize) -> String {
         let panel = self.active_panel();
         let place = panel.loading_place().unwrap_or(panel.place());
+        if place.kind() == diroxide_core::PlaceKind::Archive {
+            let mut tail = String::new();
+            if panel.is_loading() {
+                tail.push_str(", loading");
+            }
+            if let Some(filter) = panel.filter() {
+                tail.push_str(&format!(
+                    ", filter {}",
+                    diroxide_core::names::display_name(filter.text())
+                ));
+            }
+            let sort = panel.sort();
+            if *sort != self.settings.sort_spec() {
+                if sort.key == diroxide_core::SortKey::Unsorted {
+                    tail.push_str(", not sorted");
+                } else {
+                    tail.push_str(&format!(", sorted by {}", sort.key.word()));
+                }
+            }
+            let side_words = format!("{} panel", self.active.word());
+            return self.archive_title_line(place, &side_words, &tail, cells);
+        }
         let mut head = format!(
             "{}, {} panel",
             crate::panel::place_leaf(place),
@@ -993,6 +1038,7 @@ impl App {
                 folder,
                 result,
             } => self.program_ended(&what, &folder, result),
+            AppEvent::ArchiveOpened { request, facts } => self.archive_opened(request, *facts),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }
@@ -1021,6 +1067,23 @@ impl App {
             return self.dialog_command(action, command);
         }
         let side = self.active;
+        // A change inside an archive is refused in words (W2a, P2b): an
+        // archive is read only here, and Pack makes a new one.
+        let changes_here = matches!(
+            action,
+            Action::MakeFolder
+                | Action::Trash
+                | Action::DeletePermanently
+                | Action::Rename
+                | Action::Duplicate
+                | Action::Paste
+                | Action::Move
+                | Action::MoveTo
+                | Action::ClipCut
+        );
+        if changes_here && let Some(refused) = self.read_only_refusal(side) {
+            return refused;
+        }
         match action {
             Action::Focus(movement) => self.move_focus(movement),
             Action::SwitchPanel => self.switch_panel(),
@@ -1029,6 +1092,7 @@ impl App {
             Action::ThisInOther => self.this_in_other(),
             Action::Enter => self.enter(),
             Action::Into => self.into(),
+            Action::OpenAsArchive => self.open_as_archive(),
             Action::Up => self.up(),
             Action::Reload => self.reload(side),
             Action::Back => self.back(),

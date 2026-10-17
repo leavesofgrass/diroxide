@@ -627,6 +627,10 @@ impl App {
                         Message::error(format!("{sentence}. {}", error.next_step()))
                     }
                     OpsError::NothingToUndo => Message::info("Nothing to undo"),
+                    // The read-only refusal is a sentence of its own (P2b).
+                    OpsError::Vfs(inner) if inner.sentence().is_some() => {
+                        Message::error(inner.sentence().unwrap_or_default())
+                    }
                     _ => Message::from_error(flow.kind.verb(), "", &error),
                 };
                 return vec![Effect::Redraw(Redraw::JobsLine), self.say(message)];
@@ -949,6 +953,7 @@ impl App {
                     Purpose::ItemError { ask, choices },
                 )
             }
+            Question::Limit { question, .. } => self.ask_limit(ask, &question),
             Question::Secret { job, request } => {
                 let mut effects = Vec::new();
                 if job.is_some() {

@@ -814,6 +814,7 @@ dependencies = [
 name = "diroxide-app"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "diroxide-archive",
  "diroxide-config",
  "diroxide-core",
  "diroxide-filetype",
