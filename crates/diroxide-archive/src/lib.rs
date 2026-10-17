@@ -11,16 +11,24 @@
 //! The read side (W2a): the name rules ([`names`]), the limits
 //! ([`limits`]), the format sniffer, the limiter chain, the index, and a
 //! reader per format, all pure Rust (`zip`, `sevenz-rust2`, `tar`,
-//! `flate2`, `lzma-rust2`). The pack and unpack runners are the write
-//! side's (W2b).
+//! `flate2`, `lzma-rust2`).
+//!
+//! The write side (W2b), jobs that speak the engine's sink, control and
+//! report ([`JobEnv`]): the unpack plan and its one-pass runner
+//! ([`plan_unpack`], [`run_unpack()`]), Test archive ([`test_archive()`]), the
+//! pack plan and its runner with a writer per format ([`plan_pack`],
+//! [`run_pack()`]), the passwords of one job ([`JobSecrets`]), and split
+//! archives opened as one through the parts reader.
 
 pub mod error;
 pub mod format;
 pub mod fuzzing;
 pub mod guard;
 pub mod index;
+pub mod job;
 pub mod limits;
 pub mod names;
+pub mod pack;
 mod pipe;
 pub mod provider;
 mod read_7z;
@@ -28,10 +36,17 @@ mod read_tar;
 mod read_xz;
 mod read_zip;
 pub mod request;
+pub mod run_pack;
+pub mod run_unpack;
+pub mod secrets;
 pub mod sniff;
 mod source;
 pub mod spool;
+pub mod test_archive;
+pub mod unpack;
 pub mod words;
+mod write;
+mod write_7z;
 
 pub use error::ArchiveError;
 pub use format::ArchiveFormat;
@@ -40,14 +55,24 @@ pub use index::{
     Index, IndexBuilder, IndexCache, IndexSummary, Locator, MAX_LISTED, Member, Record,
     RecordFlags, RecordKind, capped_line, member_row,
 };
+pub use job::{ArchiveQuestions, JobEnv, NoQuestions};
 pub use limits::{Limits, limit_words};
 pub use names::{
     MemberPath, NameFlags, NameRefusal, is_junk, member_path, nesting_depth, normalize_member_name,
 };
+pub use pack::{PackItem, PackPlan, format_row, is_pack_temp, plan_pack};
 pub use provider::{ArchiveProvider, Listing, Opened, Visitor, capabilities_for};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
+pub use run_pack::{PackOutcome, run_pack};
+pub use run_unpack::{UnpackOutcome, run_unpack, safe_mode};
+pub use secrets::{JobSecrets, new_password_request};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};
-pub use words::{READ_ONLY, read_only_refusal};
+pub use test_archive::{TestOutcome, check_written, test_archive};
+pub use unpack::{
+    LeftOut, PlannedMember, Room, UnpackFacts, UnpackPlan, archive_stem, destination_name,
+    plan_unpack,
+};
+pub use words::{READ_ONLY, read_only_refusal, wrong_password};
 
 #[cfg(test)]
 mod tests {

@@ -519,14 +519,28 @@ impl SevenZBackend {
         &self,
         password: Option<&Secret>,
         cancel: &CancelToken,
+        wanted: &dyn Fn(usize) -> bool,
         each: &mut dyn FnMut(usize, &mut dyn Read) -> Result<bool, VfsError>,
     ) -> Result<(), VfsError> {
         let crate_password = password.map_or_else(Password::empty, |p| Password::new(p.expose()));
         let archive = &self.archive;
         let mut source = self.source.clone();
         let mut failure = None;
-        for block in 0..archive.blocks.len() {
+        // A block none of whose members is wanted is not decoded at all.
+        let mut needed = vec![false; archive.blocks.len()];
+        for (file, block) in archive.stream_map.file_block_index.iter().enumerate() {
+            if let Some(block) = *block
+                && wanted(file)
+                && let Some(slot) = needed.get_mut(block)
+            {
+                *slot = true;
+            }
+        }
+        for (block, &needed) in needed.iter().enumerate() {
             cancel.check()?;
+            if !needed {
+                continue;
+            }
             let mut at = archive
                 .stream_map
                 .block_first_file_index
@@ -571,6 +585,7 @@ impl SevenZBackend {
                 .flatten()
                 .is_none()
                 && !file.is_anti_item()
+                && wanted(i)
                 && !each(i, &mut io::empty())?
             {
                 return Ok(());

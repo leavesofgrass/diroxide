@@ -106,3 +106,11 @@ path = "fuzz_targets/highlight_hang.rs"
 test = false
 doc = false
 bench = false
+
+# The round-trip target (W2b): diroxide's writers against its readers.
+[[bin]]
+name = "archive_roundtrip"
+path = "fuzz_targets/archive_roundtrip.rs"
+test = false
+doc = false
+bench = false

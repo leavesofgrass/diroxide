@@ -14,6 +14,10 @@ bzip2.workspace = true
 # The CRC check at the end of every member read.
 crc32fast.workspace = true
 diroxide-core.workspace = true
+# The engine's types the runners speak (the sink, the control, the
+# report, the conflict question) and the parts reader of split archives;
+# the dependency direction allows it (xtask deps).
+diroxide-ops.workspace = true
 diroxide-vfs.workspace = true
 flate2.workspace = true
 lzma-rust2.workspace = true
@@ -23,9 +27,9 @@ thiserror.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
-# The fake provider, so hostile names live in memory, never on disk.
-diroxide-ops.workspace = true
 proptest.workspace = true
+# The canary test reads serialized requests (ADR-0009).
+serde_json.workspace = true
 # Resident memory for the spikes (research/alpha2-plan.md 4.1 and 4.2).
 sysinfo.workspace = true
 tempfile.workspace = true

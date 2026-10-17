@@ -843,6 +843,7 @@ dependencies = [
  "flate2",
  "lzma-rust2",
  "proptest",
+ "serde_json",
  "sevenz-rust2",
  "sysinfo",
  "tar",

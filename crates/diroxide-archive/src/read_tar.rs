@@ -552,6 +552,7 @@ pub(crate) struct TarBackend {
     source: Source,
     wrapper: Wrapper,
     cursor: Arc<Mutex<Option<Cursor>>>,
+    starts: AtomicU64,
 }
 
 impl fmt::Debug for TarBackend {
@@ -569,7 +570,14 @@ impl TarBackend {
             source,
             wrapper,
             cursor: Arc::new(Mutex::new(None)),
+            starts: AtomicU64::new(0),
         }
+    }
+
+    /// How many times the decoder started from the archive's start to read
+    /// members: one for a whole unpack in archive order.
+    pub(crate) fn passes(&self) -> u64 {
+        self.starts.load(Ordering::Relaxed)
     }
 
     /// Whether members are read with random access: a plain tar only.
@@ -650,15 +658,18 @@ impl TarBackend {
         let taken = self.cursor.lock().ok().and_then(|mut slot| slot.take());
         let mut cursor = match taken {
             Some(cursor) if cursor.pos <= data => cursor,
-            _ => Cursor {
-                decoder: decoder(
-                    &self.source,
-                    self.wrapper,
-                    Arc::new(AtomicU64::new(0)),
-                    Arc::new(AtomicBool::new(false)),
-                ),
-                pos: 0,
-            },
+            _ => {
+                self.starts.fetch_add(1, Ordering::Relaxed);
+                Cursor {
+                    decoder: decoder(
+                        &self.source,
+                        self.wrapper,
+                        Arc::new(AtomicU64::new(0)),
+                        Arc::new(AtomicBool::new(false)),
+                    ),
+                    pos: 0,
+                }
+            }
         };
         let mut chunk = vec![0u8; 64 << 10];
         while cursor.pos < data {

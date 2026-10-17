@@ -20,6 +20,10 @@ pub enum ArchiveError {
     /// It failed or was refused.
     #[error(transparent)]
     Vfs(#[from] VfsError),
+    /// Refused before anything started, said whole: "Could not pack
+    /// docs.xz: xz holds one file. Use tar.xz."
+    #[error("{0}")]
+    Refused(String),
 }
 
 impl ArchiveError {
@@ -27,7 +31,7 @@ impl ArchiveError {
     pub fn question(&self) -> Option<&Question> {
         match self {
             ArchiveError::Ask(question) => Some(question),
-            ArchiveError::Vfs(_) => None,
+            ArchiveError::Vfs(_) | ArchiveError::Refused(_) => None,
         }
     }
 
@@ -36,6 +40,7 @@ impl ArchiveError {
         match self {
             ArchiveError::Ask(question) => question.as_error(),
             ArchiveError::Vfs(error) => error,
+            ArchiveError::Refused(sentence) => VfsError::Unsafe { why: sentence },
         }
     }
 
@@ -45,6 +50,7 @@ impl ArchiveError {
         match self {
             ArchiveError::Ask(question) => question.message(),
             ArchiveError::Vfs(error) => Message::from_error(verb, object, error),
+            ArchiveError::Refused(sentence) => Message::error(sentence.clone()),
         }
     }
 }
@@ -67,7 +73,7 @@ impl From<ArchiveError> for VfsError {
 impl Explain for ArchiveError {
     fn next_step(&self) -> String {
         match self {
-            ArchiveError::Ask(_) => String::new(),
+            ArchiveError::Ask(_) | ArchiveError::Refused(_) => String::new(),
             ArchiveError::Vfs(error) => error.next_step(),
         }
     }
