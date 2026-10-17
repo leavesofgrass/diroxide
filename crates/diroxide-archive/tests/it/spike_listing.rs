@@ -243,3 +243,73 @@ fn seven_z_numbers_round_trip() {
         assert_eq!(read, value, "{value}");
     }
 }
+
+/// The formats the provider reads so far, for the provider half of M1.
+const PROVIDER_READS: [&str; 1] = ["spike.zip"];
+
+/// The memory figure the spike holds a million entries to.
+const MILLION_CAP: u64 = 600 << 20;
+
+#[test]
+fn the_provider_lists_the_root_and_a_deep_folder() {
+    use std::sync::Arc;
+
+    use diroxide_archive::{Allowances, ArchiveProvider, Limits};
+    use diroxide_core::Place;
+    use diroxide_vfs::{OpContext, Registry};
+
+    let count = entry_count();
+    let (_dir, paths) = spike_archives(count);
+    for path in paths.iter().filter(|p| {
+        PROVIDER_READS
+            .iter()
+            .any(|name| p.file_name().is_some_and(|n| n == *name))
+    }) {
+        let provider = Arc::new(ArchiveProvider::new(Limits::default()));
+        let mut registry = Registry::with_local();
+        registry.set_archive(provider.clone());
+        let registry = Arc::new(registry);
+        provider.connect(&registry);
+        let place = Place::parse(&path.to_string_lossy()).unwrap();
+        let ctx = OpContext::new();
+        let before = resident();
+        let peak = Peak::start();
+        let started = Instant::now();
+        let root = provider
+            .list_folder(&place.clone().into_archive(), &ctx, Allowances::default())
+            .unwrap();
+        let opened_at = started.elapsed();
+        let (root_rows, root_capped) = (root.entries.len(), root.capped());
+        // One listing at a time, as a panel holds it.
+        drop(root);
+        let deep = Place::parse(&format!("{place}!{DEEP}")).unwrap();
+        let deep_started = Instant::now();
+        let folder = provider
+            .list_folder(&deep, &ctx, Allowances::default())
+            .unwrap();
+        let deep_at = deep_started.elapsed();
+        let peak = peak.stop();
+        let index = provider
+            .open_archive(&place, &ctx, Allowances::default())
+            .unwrap()
+            .index()
+            .memory();
+        eprintln!(
+            "provider, {}, {count} entries: root {} rows in {opened_at:?}, deep {} rows in {deep_at:?}; \
+             index {:.1} MiB, {:.1} MiB more resident, {:.1} MiB peak",
+            path.file_name().unwrap().to_string_lossy(),
+            root_rows,
+            folder.entries.len(),
+            mib(index),
+            mib(resident().saturating_sub(before)),
+            mib(peak)
+        );
+        // The root holds half the files and the folder `a`: at a million,
+        // one over the cap, so the listing stops there and says so.
+        let at_root = count / 2 + 1;
+        assert_eq!(root_rows, at_root.min(diroxide_archive::MAX_LISTED));
+        assert_eq!(root_capped, at_root > diroxide_archive::MAX_LISTED);
+        assert_eq!(folder.entries.len(), count / 2);
+        assert!(peak < MILLION_CAP, "{:.1} MiB", mib(peak));
+    }
+}

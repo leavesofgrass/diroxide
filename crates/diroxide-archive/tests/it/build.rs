@@ -636,3 +636,68 @@ pub fn write_number(out: &mut Vec<u8>, value: u64) {
         out.push((value >> (8 * i)) as u8);
     }
 }
+
+/// The traditional PKWARE stream cipher, for a ZipCrypto fixture: the zip
+/// crate reads it and, rightly, will not write it.
+struct ZipCrypto {
+    keys: [u32; 3],
+    table: [u32; 256],
+}
+
+impl ZipCrypto {
+    fn new(password: &[u8]) -> Self {
+        let mut table = [0u32; 256];
+        for (n, slot) in table.iter_mut().enumerate() {
+            let mut c = n as u32;
+            for _ in 0..8 {
+                c = if c & 1 == 1 {
+                    0xEDB8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
+            }
+            *slot = c;
+        }
+        let mut cipher = Self {
+            keys: [0x1234_5678, 0x2345_6789, 0x3456_7890],
+            table,
+        };
+        for &b in password {
+            cipher.update(b);
+        }
+        cipher
+    }
+
+    fn crc_step(&self, crc: u32, b: u8) -> u32 {
+        (crc >> 8) ^ self.table[((crc ^ u32::from(b)) & 0xFF) as usize]
+    }
+
+    fn update(&mut self, plain: u8) {
+        self.keys[0] = self.crc_step(self.keys[0], plain);
+        self.keys[1] = self.keys[1]
+            .wrapping_add(self.keys[0] & 0xFF)
+            .wrapping_mul(134_775_813)
+            .wrapping_add(1);
+        self.keys[2] = self.crc_step(self.keys[2], (self.keys[1] >> 24) as u8);
+    }
+
+    fn encrypt(&mut self, plain: u8) -> u8 {
+        let temp = (self.keys[2] | 2) & 0xFFFF;
+        let key = ((temp * (temp ^ 1)) >> 8) as u8;
+        self.update(plain);
+        plain ^ key
+    }
+}
+
+/// A zip of one deflated member under ZipCrypto with `password`.
+pub fn zipcrypto_zip(name: &str, contents: &[u8], password: &str) -> Vec<u8> {
+    let mut member = RawMember::new(name, contents, Method::Deflated);
+    let mut cipher = ZipCrypto::new(password.as_bytes());
+    let mut header: Vec<u8> = noise(11, 3);
+    header.push((member.crc >> 24) as u8);
+    let mut data: Vec<u8> = header.iter().map(|&b| cipher.encrypt(b)).collect();
+    data.extend(member.data.iter().map(|&b| cipher.encrypt(b)));
+    member.data = data;
+    member.flags |= 1;
+    RawZip::new().member(&member).finish(b"")
+}

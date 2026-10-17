@@ -88,9 +88,15 @@ impl NameFlags {
     /// The flags in words, the most serious first: "contains a control
     /// character", "drive removed".
     pub fn words(self) -> Vec<&'static str> {
+        // A long-path prefix or a drive says the rest: the slash before it
+        // and the backslashes in it go without saying.
+        let mut flags = self;
+        if flags.contains(Self::DEVICE_PREFIX) || flags.contains(Self::DRIVE) {
+            flags.0 &= !(Self::LEADING_SLASH.0 | Self::BACKSLASH.0);
+        }
         Self::ALL
             .iter()
-            .filter(|(flag, _)| self.contains(*flag))
+            .filter(|(flag, _)| flags.contains(*flag))
             .map(|(_, words)| *words)
             .collect()
     }
@@ -165,11 +171,13 @@ impl NameRefusal {
     /// The skip line, the name shown with hidden characters as question
     /// marks: "Skipped ../x: name leaves the archive."
     pub fn line(self, raw: &str) -> String {
-        format!(
-            "Skipped {}: {}.",
-            diroxide_core::names::display_name(raw),
-            self.reason()
-        )
+        let name = diroxide_core::names::display_name(raw);
+        if name.chars().count() > 20 {
+            // A long name would push the reason past the first 40 cells.
+            format!("Skipped, {}: {name}.", self.reason())
+        } else {
+            format!("Skipped {name}: {}.", self.reason())
+        }
     }
 }
 
@@ -433,6 +441,10 @@ mod tests {
         assert!(path.flags.contains(NameFlags::DRIVE));
         assert!(path.flags.contains(NameFlags::DEVICE_PREFIX));
         assert_eq!(
+            path.flags.words(),
+            ["drive removed", "long-path prefix removed"]
+        );
+        assert_eq!(
             lenient("/abs.txt").unwrap().flags.words(),
             ["leading slash removed"]
         );
@@ -467,6 +479,11 @@ mod tests {
         let long = format!("{}.txt", "n".repeat(300));
         let refused = lenient(&long).unwrap_err();
         assert_eq!(refused.reason(), "name part over 255 bytes");
+        assert!(
+            refused
+                .line(&long)
+                .starts_with("Skipped, name part over 255 bytes: nnn")
+        );
         let limits = Limits {
             max_name_bytes: 10,
             ..Limits::default()

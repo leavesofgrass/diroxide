@@ -114,6 +114,73 @@ pub fn sniff(data: &[u8]) {
     }
 }
 
+/// `archive_zip`: a zip opened under the strict limits, its index made
+/// into rows, and its first 64 members read through the limiter chain
+/// with one job budget. Nothing may panic, hang or allocate from a claim.
+pub fn zip(data: &[u8]) {
+    let limits = Limits::strict();
+    let cancel = diroxide_vfs::CancelToken::new();
+    let source = crate::source::Source::from_bytes(data.to_vec());
+    let Ok((index, backend)) = crate::read_zip::open(source, "fuzz.zip", &limits, &cancel) else {
+        return;
+    };
+    rows(&index);
+    let budget = crate::guard::Budget::new(&limits);
+    for id in (0..index.len() as u32).take(64) {
+        let Some(record) = index.record(id).copied() else {
+            continue;
+        };
+        if record.kind != crate::index::RecordKind::File {
+            continue;
+        }
+        let Ok(reader) = backend.read(&index, id, None, cancel.clone()) else {
+            continue;
+        };
+        drain(reader, &index, id, &record, &limits, &budget, &cancel);
+    }
+}
+
+/// Every record of an index as a row: nothing in the words may panic.
+fn rows(index: &crate::index::Index) {
+    for id in 0..index.len() as u32 {
+        if let Some(entry) = index.entry(id) {
+            let _ = crate::index::member_row(&entry);
+        }
+        let _ = index.path(id);
+    }
+    let _ = index.find("a/b");
+}
+
+/// Reads a member to its end through the chain, discarding the bytes.
+fn drain(
+    reader: impl std::io::Read,
+    index: &crate::index::Index,
+    id: u32,
+    record: &crate::index::Record,
+    limits: &Limits,
+    budget: &crate::guard::Budget,
+    cancel: &diroxide_vfs::CancelToken,
+) {
+    let claims = crate::guard::Claims {
+        name: index.name(id).to_owned(),
+        size: Some(record.size),
+        packed: record.packed(),
+        crc32: record
+            .flags
+            .contains(crate::index::RecordFlags::HAS_CRC)
+            .then_some(record.crc32),
+    };
+    let mut guarded = crate::guard::Guarded::new(
+        reader,
+        claims,
+        *limits,
+        budget.clone(),
+        crate::guard::Allowances::default(),
+        cancel.clone(),
+    );
+    let _ = std::io::copy(&mut guarded, &mut std::io::sink());
+}
+
 /// The seeds of each target, generated, so the checked-in files under
 /// `fixtures/archives/seeds/` are reproducible: a test compares them, and
 /// writes them when `DIRO_WRITE_SEEDS=1` is set.

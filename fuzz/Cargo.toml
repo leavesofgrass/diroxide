@@ -49,3 +49,10 @@ path = "fuzz_targets/archive_sniff.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "archive_zip"
+path = "fuzz_targets/archive_zip.rs"
+test = false
+doc = false
+bench = false

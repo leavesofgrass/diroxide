@@ -59,14 +59,9 @@ pub enum Locator {
     Zip(u32),
     /// A 7z member, by its file number.
     SevenZ(u32),
-    /// A tar member: the offsets of its header and its data in the
-    /// (decompressed) tar stream.
-    Tar {
-        /// The offset of its header block.
-        header: u64,
-        /// The offset of its data.
-        data: u64,
-    },
+    /// A tar member: the offset of its data in the (decompressed) tar
+    /// stream.
+    Tar(u64),
     /// The whole decompressed stream: the one member of a plain xz.
     Whole,
 }
@@ -147,16 +142,35 @@ pub struct Record {
     pub name_flags: NameFlags,
     /// The size it claims, uncompressed.
     pub size: u64,
-    /// The bytes it takes packed, or `None`.
-    pub packed: Option<u64>,
-    /// When it last changed, in seconds since the epoch, or `None`.
-    pub modified: Option<i64>,
-    /// Its Unix mode bits, when stored.
-    pub mode: Option<u32>,
+    packed: u64,
+    modified: i64,
+    mode: u32,
     /// Its stored CRC-32 (see [`RecordFlags::HAS_CRC`]).
     pub crc32: u32,
     /// Where its data is.
     pub locator: Locator,
+}
+
+/// The stored value that means "not known", for the compact fields.
+const UNKNOWN_U64: u64 = u64::MAX;
+const UNKNOWN_I64: i64 = i64::MIN;
+const UNKNOWN_U32: u32 = u32::MAX;
+
+impl Record {
+    /// The bytes it takes packed, when known.
+    pub fn packed(&self) -> Option<u64> {
+        (self.packed != UNKNOWN_U64).then_some(self.packed)
+    }
+
+    /// When it last changed, in seconds since the epoch, when known.
+    pub fn modified(&self) -> Option<i64> {
+        (self.modified != UNKNOWN_I64).then_some(self.modified)
+    }
+
+    /// Its Unix mode bits, when stored.
+    pub fn mode(&self) -> Option<u32> {
+        (self.mode != UNKNOWN_U32).then_some(self.mode)
+    }
 }
 
 /// A member as the format reader hands it to the builder.
@@ -225,6 +239,8 @@ pub struct Index {
     /// `children[starts[f + 1]..starts[f + 2]]`, of the root
     /// `children[starts[0]..starts[1]]`.
     children: Vec<u32>,
+    /// The same groups, each sorted by name, for finding a child.
+    by_name: Vec<u32>,
     starts: Vec<u32>,
     lookup: HashMap<u64, u32>,
     collisions: HashMap<u64, Vec<u32>>,
@@ -287,6 +303,21 @@ impl Index {
 
     /// The record of a child called `name` of `parent`.
     pub fn child(&self, parent: u32, name: &str) -> Option<u32> {
+        if !self.by_name.is_empty() || (self.lookup.is_empty() && !self.records.is_empty()) {
+            let slot = if parent == ROOT {
+                0
+            } else {
+                parent as usize + 1
+            };
+            let (Some(&a), Some(&b)) = (self.starts.get(slot), self.starts.get(slot + 1)) else {
+                return None;
+            };
+            let group = self.by_name.get(a as usize..b as usize)?;
+            return group
+                .binary_search_by(|&id| self.name(id).cmp(name))
+                .ok()
+                .map(|at| group[at]);
+        }
         let k = key(&self.hasher, parent, name);
         let matches = |id: u32| {
             self.records
@@ -355,7 +386,8 @@ impl Index {
     /// About how much memory the index holds, in bytes.
     pub fn memory(&self) -> u64 {
         let records = self.records.capacity() * size_of::<Record>();
-        let arrays = (self.children.capacity() + self.starts.capacity()) * 4;
+        let arrays =
+            (self.children.capacity() + self.by_name.capacity() + self.starts.capacity()) * 4;
         let lookup = self.lookup.capacity() * 16;
         (records + arrays + lookup + self.arena.capacity()) as u64
     }
@@ -379,9 +411,9 @@ impl Index {
         if record.kind != RecordKind::Folder {
             entry.size = Some(record.size);
         }
-        entry.packed_size = record.packed;
-        entry.modified = record.modified.map(|secs| Timestamp::from_unix(secs, 0));
-        entry.attributes = record.mode.map(|mode| Attributes::Unix(mode & 0o7777));
+        entry.packed_size = record.packed();
+        entry.modified = record.modified().map(|secs| Timestamp::from_unix(secs, 0));
+        entry.attributes = record.mode().map(|mode| Attributes::Unix(mode & 0o7777));
         if record.flags.contains(RecordFlags::HAS_CRC) {
             entry.crc32 = Some(record.crc32);
         }
@@ -538,6 +570,7 @@ pub fn member_row(entry: &Entry) -> String {
 pub struct IndexBuilder {
     limits: Limits,
     index: Index,
+    members: usize,
 }
 
 impl IndexBuilder {
@@ -546,6 +579,7 @@ impl IndexBuilder {
         Self {
             limits,
             index: Index::default(),
+            members: 0,
         }
     }
 
@@ -567,9 +601,6 @@ impl IndexBuilder {
     }
 
     fn push(&mut self, parent: u32, name: &str, kind: RecordKind) -> Result<u32, LimitHit> {
-        if self.index.records.len() >= self.limits.max_entries {
-            return Err(refuse("entries", grouped(self.limits.max_entries as u64)));
-        }
         let estimate = (self.index.records.len() as u64 + 1) * 120 + self.index.arena.len() as u64;
         if estimate > self.limits.max_index_bytes {
             return Err(refuse(
@@ -590,9 +621,9 @@ impl IndexBuilder {
             flags: RecordFlags::NONE,
             name_flags: NameFlags::NONE,
             size: 0,
-            packed: None,
-            modified: None,
-            mode: None,
+            packed: UNKNOWN_U64,
+            modified: UNKNOWN_I64,
+            mode: UNKNOWN_U32,
             crc32: 0,
             locator: Locator::None,
         });
@@ -641,6 +672,12 @@ impl IndexBuilder {
     /// Adds one member. A refused name is counted and its line kept; a
     /// limit reached stops the build.
     pub fn add(&mut self, member: Member) -> Result<Option<u32>, LimitHit> {
+        // The limit counts the archive's own entries; the folders made up
+        // for them are bounded by the index memory.
+        if self.members >= self.limits.max_entries {
+            return Err(refuse("entries", grouped(self.limits.max_entries as u64)));
+        }
+        self.members += 1;
         let path = match member_path(&member.name, &self.limits) {
             Ok(path) => path,
             Err(refusal) => {
@@ -725,15 +762,19 @@ impl IndexBuilder {
         }
         if kind != RecordKind::Folder {
             record.size = member.size;
-            record.packed = member.packed;
+            record.packed = member.packed.unwrap_or(UNKNOWN_U64);
             record.locator = member.locator;
             if let Some(crc) = member.crc32 {
                 record.crc32 = crc;
                 record.flags.insert(RecordFlags::HAS_CRC);
             }
         }
-        record.modified = member.modified.or(record.modified);
-        record.mode = member.mode.or(record.mode);
+        if let Some(modified) = member.modified {
+            record.modified = modified;
+        }
+        if let Some(mode) = member.mode {
+            record.mode = mode.min(UNKNOWN_U32 - 1);
+        }
         if kind == RecordKind::Link
             && let Some(target) = member.link_target
         {
@@ -840,6 +881,25 @@ impl IndexBuilder {
                 }
             }
         }
+        // Children sorted by name within each group, so a lookup is a
+        // binary search; the build's hash map is then dropped.
+        let mut by_name = index.children.clone();
+        for slot in 0..index.starts.len().saturating_sub(1) {
+            let (a, b) = (index.starts[slot] as usize, index.starts[slot + 1] as usize);
+            let arena = &index.arena;
+            let records = &index.records;
+            let name_of = |id: u32| {
+                let r = &records[id as usize];
+                let start = r.name_start as usize;
+                arena.get(start..start + r.name_len as usize).unwrap_or("")
+            };
+            by_name[a..b].sort_unstable_by(|&x, &y| name_of(x).cmp(name_of(y)));
+        }
+        index.by_name = by_name;
+        index.lookup = HashMap::new();
+        index.collisions = HashMap::new();
+        index.records.shrink_to_fit();
+        index.arena.shrink_to_fit();
         let mut members = 0u64;
         let mut folders = 0u64;
         for record in &index.records {

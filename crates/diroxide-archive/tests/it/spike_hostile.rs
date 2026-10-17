@@ -14,7 +14,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::hostile::{Act, Case, cases};
+use crate::hostile::{Act, Case, Expect, cases};
 use crate::memory::{Peak, mib};
 
 /// The longest a case may take.
@@ -190,7 +190,8 @@ fn the_limiter_chain_stops_a_member_that_lies_about_its_size() {
             "shorter than its stated size",
         ),
         // The zip crate's own check (9.0.1) stops this one first, in its
-        // words; the chain's is the net behind it for every other codec.
+        // words here (the provider says it in its own); the chain's is the
+        // net behind it for every other codec.
         (
             crate::hostile::claims_too_little(),
             "small.bin",
@@ -224,5 +225,142 @@ fn the_limiter_chain_stops_a_member_that_lies_about_its_size() {
         });
         assert!(run.outcome.contains(words), "{name}: {}", run.outcome);
         assert!(run.peak < 512 << 20, "{name}: {:.0} MiB", mib(run.peak));
+    }
+}
+
+/// What a case ended in, through the provider.
+#[derive(Debug)]
+enum Ended {
+    /// Refused, with the sentence the app would say.
+    Refused(String),
+    /// A question first.
+    Asked(String),
+    /// A listing: its rows and its skip lines.
+    Listed {
+        rows: Vec<String>,
+        skipped: Vec<String>,
+    },
+    /// Read to the end.
+    Read(usize),
+}
+
+/// The formats the provider reads so far; a case of another waits.
+const READ_SO_FAR: [&str; 1] = [".zip"];
+
+fn through_provider(case: Case) -> Ended {
+    use diroxide_archive::{Allowances, ArchiveError, member_row};
+    use diroxide_vfs::OpContext;
+    let world = crate::world::World::new(diroxide_archive::Limits::strict());
+    let archive = world.put(case.file, &(case.bytes)());
+    let allow = if case.allow {
+        Allowances::all()
+    } else {
+        Allowances::default()
+    };
+    let say = |error: ArchiveError, verb: &str, object: &str| match error {
+        ArchiveError::Ask(question) => Ended::Asked(question.message().text),
+        other => Ended::Refused(other.message(verb, object).text),
+    };
+    let ctx = OpContext::new();
+    let list = |folder: &diroxide_core::Place| match world.provider.list_folder(folder, &ctx, allow)
+    {
+        Ok(listing) => {
+            let skipped = world
+                .provider
+                .open_archive(&archive, &ctx, allow)
+                .map(|o| o.index().summary().refused_lines.clone())
+                .unwrap_or_default();
+            Ended::Listed {
+                rows: listing.entries.iter().map(member_row).collect(),
+                skipped,
+            }
+        }
+        Err(error) => say(error, "open", case.file),
+    };
+    match case.act {
+        Act::List => list(&archive.clone().into_archive()),
+        Act::ListFolder(path) => list(&world.inside(&archive, path)),
+        Act::Read(member) => {
+            let place = world.inside(&archive, member);
+            match world.read_with(&place, allow) {
+                Ok(bytes) => Ended::Read(bytes.len()),
+                Err(error) => say(error, "read", member),
+            }
+        }
+        Act::Row(member) => {
+            let folder = match member.rsplit_once('/') {
+                Some((folder, _)) => world.inside(&archive, folder),
+                None => archive.clone().into_archive(),
+            };
+            let leaf = member.rsplit('/').next().unwrap_or(member);
+            match world.provider.list_folder(&folder, &ctx, allow) {
+                Ok(listing) => Ended::Listed {
+                    rows: listing
+                        .entries
+                        .iter()
+                        .filter(|e| e.name == leaf)
+                        .map(member_row)
+                        .collect(),
+                    skipped: Vec::new(),
+                },
+                Err(error) => say(error, "open", case.file),
+            }
+        }
+    }
+}
+
+/// Whether a case ended as it must.
+fn ends_as_it_must(expect: Expect, ended: &Ended) -> bool {
+    match (expect, ended) {
+        (Expect::Refused(words), Ended::Refused(said)) => said.contains(words),
+        (Expect::Asked(words), Ended::Asked(said)) => {
+            said.contains(words) && said.ends_with("? y or n")
+        }
+        (Expect::Flagged(words), Ended::Listed { rows, .. }) => {
+            !rows.is_empty() && rows.iter().any(|row| row.contains(words))
+        }
+        (Expect::Skipped(words), Ended::Listed { skipped, .. }) => {
+            skipped.iter().any(|line| line.contains(words))
+        }
+        (Expect::Fine, Ended::Read(bytes)) => *bytes > 0,
+        (Expect::Fine, Ended::Listed { .. }) => true,
+        _ => false,
+    }
+}
+
+#[test]
+fn every_hostile_case_ends_in_its_sentence() {
+    let mut report = Vec::new();
+    for case in cases() {
+        if !READ_SO_FAR.iter().any(|ext| case.file.ends_with(ext)) {
+            report.push(format!("waits | {}", case.name));
+            continue;
+        }
+        let (send, receive) = mpsc::channel();
+        let peak = Peak::start();
+        let started = Instant::now();
+        thread::spawn(move || {
+            let _ = send.send(through_provider(case));
+        });
+        let ended = receive
+            .recv_timeout(WATCHDOG)
+            .unwrap_or_else(|_| panic!("{}: hung past {WATCHDOG:?}", case.name));
+        let elapsed = started.elapsed();
+        let peak = peak.stop();
+        report.push(format!(
+            "provider | {} | {ended:?} | {elapsed:?} | peak {:.0} MiB",
+            case.name,
+            mib(peak)
+        ));
+        assert!(
+            ends_as_it_must(case.expect, &ended),
+            "{}: expected {:?}, ended {ended:?}",
+            case.name,
+            case.expect
+        );
+        assert!(peak < 512 << 20, "{}: {:.0} MiB", case.name, mib(peak));
+    }
+    for line in report {
+        eprintln!("{line}");
     }
 }

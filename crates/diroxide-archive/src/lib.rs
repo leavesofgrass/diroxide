@@ -14,16 +14,21 @@
 //! `flate2`, `lzma-rust2`). The pack and unpack runners are the write
 //! side's (W2b).
 
+pub mod error;
 pub mod format;
 pub mod fuzzing;
 pub mod guard;
 pub mod index;
 pub mod limits;
 pub mod names;
+mod pipe;
 pub mod provider;
+mod read_zip;
 pub mod request;
 pub mod sniff;
+mod source;
 
+pub use error::ArchiveError;
 pub use format::ArchiveFormat;
 pub use guard::{Allowances, Budget, Claims, Guarded, LimitHit, Question, QuestionKind};
 pub use index::{
@@ -34,7 +39,7 @@ pub use limits::{Limits, limit_words};
 pub use names::{
     MemberPath, NameFlags, NameRefusal, is_junk, member_path, nesting_depth, normalize_member_name,
 };
-pub use provider::ArchiveProvider;
+pub use provider::{ArchiveProvider, Listing, Opened};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};
 
@@ -220,14 +225,22 @@ mod tests {
     }
 
     #[test]
-    fn nesting_is_counted() {
+    fn nesting_is_counted_and_refused_past_the_limit() {
         let place = Place::parse_with("/a.zip!b.7z!c", PathStyle::Unix).unwrap();
         assert_eq!(nesting_depth(&place), 2);
         let provider = ArchiveProvider::new(Limits::default());
-        let err = provider.list(&place, &OpContext::new()).unwrap_err();
+        let deep =
+            Place::parse_with("/a.zip!b.zip!c.zip!d.zip!e.zip!f.txt", PathStyle::Unix).unwrap();
+        let err = provider.list(&deep, &OpContext::new()).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "the archive provider cannot list archives yet"
+            "it passes the limit for nesting: 4 archives deep"
+        );
+        let shallow = Place::parse_with("/a.zip!c", PathStyle::Unix).unwrap();
+        let err = provider.list(&shallow, &OpContext::new()).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "nothing is set up to open archive file places"
         );
     }
 }

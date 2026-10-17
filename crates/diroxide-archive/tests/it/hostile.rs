@@ -344,7 +344,7 @@ pub fn cases() -> Vec<Case> {
             "z1.zip",
             nested_five,
             Act::ListFolder("z2.zip!z3.zip!z4.zip!z5.zip!"),
-            Expect::Refused("nested more than"),
+            Expect::Refused("the limit for nesting: 2 archives deep"),
         ),
         case(
             "a link out of the root",

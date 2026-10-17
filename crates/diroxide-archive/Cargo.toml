@@ -19,6 +19,7 @@ flate2.workspace = true
 lzma-rust2.workspace = true
 sevenz-rust2.workspace = true
 tar.workspace = true
+thiserror.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
