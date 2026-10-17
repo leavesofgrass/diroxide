@@ -516,8 +516,12 @@ impl Runtime {
 
     /// Carries out an effect if it is I/O; returns whether it was. Screen
     /// and speech effects return `false` and are left to the frontend.
+    /// [`Effect::AppRequests`] is the runtime's too, but the requests are
+    /// the app's, so only [`Runtime::carry_out`] takes them; here it is
+    /// consumed and the requests wait for that call.
     pub fn execute(&mut self, effect: &Effect) -> bool {
         match effect {
+            Effect::AppRequests => true,
             Effect::List { request, place } => {
                 self.list(*request, place.clone());
                 true
@@ -936,10 +940,17 @@ impl Runtime {
     /// Carries out the effects that are I/O and the app's queued
     /// requests, and returns the screen and speech effects in order. A
     /// frontend calls this with every batch of effects the app returns.
+    /// The requests are taken where [`Effect::AppRequests`] stands in the
+    /// batch, and any still waiting at its end (from an app call that does
+    /// not mark them) after it.
     pub fn carry_out(&mut self, app: &mut App, effects: Vec<Effect>) -> Vec<Effect> {
         let mut screen = Vec::new();
         for effect in effects {
-            if !self.execute(&effect) {
+            if effect == Effect::AppRequests {
+                for request in app.take_requests() {
+                    self.request(request);
+                }
+            } else if !self.execute(&effect) {
                 screen.push(effect);
             }
         }
