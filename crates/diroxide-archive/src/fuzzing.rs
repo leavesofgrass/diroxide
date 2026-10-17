@@ -74,6 +74,46 @@ fn round_trip(path: &str) {
     }
 }
 
+/// `archive_sniff`: the signature sniffer and the decision with the name
+/// never panic, and agree: a decision's format is its signature's, or a
+/// zip by its name when the bytes carry none. The first byte picks a
+/// name; the rest are the head of the file.
+pub fn sniff(data: &[u8]) {
+    const NAMES: [&str; 8] = [
+        "a.zip",
+        "a.7z",
+        "a.tar",
+        "a.tar.gz",
+        "a.tar.xz",
+        "a.xz",
+        "a.dat",
+        "a.zip.001",
+    ];
+    let Some((&pick, head)) = data.split_first() else {
+        return;
+    };
+    let name = NAMES[usize::from(pick) % NAMES.len()];
+    let signature = crate::sniff::sniff_signature(head);
+    if head.len() >= 512 {
+        let _ = crate::sniff::tar_checksum_ok(&head[..512]);
+    }
+    if let Ok(sniffed) = crate::sniff::decide(name, head) {
+        assert_eq!(sniffed.signature, signature);
+        match signature {
+            Some(signature) => {
+                let format = signature.format();
+                assert!(format.is_some());
+                assert!(
+                    format == Some(sniffed.format)
+                        || (format == Some(crate::ArchiveFormat::Xz)
+                            && sniffed.format == crate::ArchiveFormat::TarXz)
+                );
+            }
+            None => assert_eq!(sniffed.format, crate::ArchiveFormat::Zip),
+        }
+    }
+}
+
 /// The seeds of each target, generated, so the checked-in files under
 /// `fixtures/archives/seeds/` are reproducible: a test compares them, and
 /// writes them when `DIRO_WRITE_SEEDS=1` is set.
@@ -104,11 +144,35 @@ pub fn seeds() -> Vec<(&'static str, &'static str, Vec<u8>)> {
         "trailing ",
         "ok/name!.txt",
     ];
-    vec![(
+    let mut seeds = vec![(
         "archive_names",
         "hostile-names.txt",
         names_lines.join("\n").into_bytes(),
-    )]
+    )];
+    let mut tar = vec![4u8];
+    tar.extend_from_slice(&[0u8; 512]);
+    tar[1 + 257..1 + 262].copy_from_slice(b"ustar");
+    let signatures: [(&'static str, Vec<u8>); 9] = [
+        ("zip.bin", [&[0u8][..], b"PK\x03\x04"].concat()),
+        (
+            "seven-z.bin",
+            [&[1u8][..], &[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]].concat(),
+        ),
+        ("gzip.bin", vec![3, 0x1F, 0x8B, 0x08]),
+        (
+            "xz.bin",
+            [&[4u8][..], &[0xFD, b'7', b'z', b'X', b'Z', 0]].concat(),
+        ),
+        ("bzip2.bin", [&[6u8][..], b"BZh9"].concat()),
+        ("rar.bin", [&[6u8][..], b"Rar!\x1A\x07\x00"].concat()),
+        ("tar.bin", tar),
+        ("empty-zip.bin", [&[0u8][..], b"PK\x05\x06"].concat()),
+        ("nothing.bin", vec![6, b'h', b'i']),
+    ];
+    for (file, bytes) in signatures {
+        seeds.push(("archive_sniff", file, bytes));
+    }
+    seeds
 }
 
 #[cfg(test)]
@@ -118,8 +182,10 @@ mod tests {
     #[test]
     fn the_name_seeds_hold() {
         for (target, _, bytes) in seeds() {
-            if target == "archive_names" {
-                names(&bytes);
+            match target {
+                "archive_names" => names(&bytes),
+                "archive_sniff" => sniff(&bytes),
+                _ => {}
             }
         }
         names(b"");

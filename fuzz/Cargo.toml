@@ -42,3 +42,10 @@ path = "fuzz_targets/archive_names.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "archive_sniff"
+path = "fuzz_targets/archive_sniff.rs"
+test = false
+doc = false
+bench = false

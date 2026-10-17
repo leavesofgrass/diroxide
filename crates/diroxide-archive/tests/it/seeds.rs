@@ -16,6 +16,7 @@ fn seeds_dir() -> PathBuf {
 fn replay(target: &str, bytes: &[u8]) {
     match target {
         "archive_names" => fuzzing::names(bytes),
+        "archive_sniff" => fuzzing::sniff(bytes),
         other => panic!("no body for the target {other}"),
     }
 }

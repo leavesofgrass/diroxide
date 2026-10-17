@@ -20,6 +20,7 @@ pub mod limits;
 pub mod names;
 pub mod provider;
 pub mod request;
+pub mod sniff;
 
 pub use format::ArchiveFormat;
 pub use limits::{Limits, limit_words};
@@ -28,6 +29,7 @@ pub use names::{
 };
 pub use provider::ArchiveProvider;
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
+pub use sniff::{Signature, Sniffed, decide, sniff_signature};
 
 #[cfg(test)]
 mod tests {

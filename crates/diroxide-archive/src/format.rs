@@ -19,13 +19,6 @@ pub enum ArchiveFormat {
     Xz,
 }
 
-/// The first bytes of each format the provider knows by its bytes.
-const ZIP_MAGIC: &[u8] = &[0x50, 0x4B, 0x03, 0x04];
-const ZIP_EMPTY_MAGIC: &[u8] = &[0x50, 0x4B, 0x05, 0x06];
-const SEVEN_Z_MAGIC: &[u8] = &[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
-const XZ_MAGIC: &[u8] = &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00];
-const GZIP_MAGIC: &[u8] = &[0x1F, 0x8B];
-
 impl ArchiveFormat {
     /// Every format, in the order the tests and the docs list them.
     pub const ALL: &'static [ArchiveFormat] = &[
@@ -64,21 +57,10 @@ impl ArchiveFormat {
 
     /// The format by the first bytes of the file: the outer container. A
     /// compressed tar is known by its name as well; by its bytes alone a
-    /// gzip stream reads as tar.gz and an xz stream as xz.
+    /// gzip stream reads as tar.gz and an xz stream as xz. See
+    /// [`crate::sniff`] for every signature and the decision with the name.
     pub fn sniff(head: &[u8]) -> Option<Self> {
-        if head.starts_with(ZIP_MAGIC) || head.starts_with(ZIP_EMPTY_MAGIC) {
-            Some(ArchiveFormat::Zip)
-        } else if head.starts_with(SEVEN_Z_MAGIC) {
-            Some(ArchiveFormat::SevenZ)
-        } else if head.starts_with(XZ_MAGIC) {
-            Some(ArchiveFormat::Xz)
-        } else if head.starts_with(GZIP_MAGIC) {
-            Some(ArchiveFormat::TarGz)
-        } else if head.get(257..262) == Some(b"ustar".as_slice()) {
-            Some(ArchiveFormat::Tar)
-        } else {
-            None
-        }
+        crate::sniff::sniff_signature(head).and_then(crate::sniff::Signature::format)
     }
 
     /// The usual extension, with the dot.
