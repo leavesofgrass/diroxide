@@ -1,8 +1,10 @@
-//! Reading a filter back: one canonical sentence of field words and
-//! comparison words, units written out, dates spelled, `match case` where
-//! case matters, and brackets only where the strict and-or rule needs
-//! them. Typed forms never matter: `size>1mb` and `size over 1 MB` read
-//! back the same. The sentence parses back to the same tree.
+//! Reading a filter back ("Say filter"): one canonical sentence of field
+//! words and comparison words, units written out, dates spelled, `match
+//! case` where case matters, `including hidden` when a `hidden` test
+//! shows hidden entries, and brackets only where the strict and-or rule
+//! needs them. Typed forms never matter: `size>1mb` and `size over 1 MB`
+//! read back the same. The sentence parses back to the same tree; the
+//! exact byte counts go on the details line.
 
 use crate::sort::NameCase;
 
@@ -10,7 +12,95 @@ use super::FilterOptions;
 use super::dates::{DateValue, Precision};
 use super::parse::default_op;
 use super::token::split_head;
-use super::tree::{ContentOp, DateOp, Expr, Field, Flag, NumberOp, Test, TextOp, kind_word};
+use super::tree::{
+    Amount, ContentOp, DateOp, Expr, Field, Flag, NumberOp, SizeUnit, Test, TextOp, kind_word,
+};
+
+/// The note the read-back ends with when hidden entries are shown.
+pub(crate) const HIDDEN_NOTE: &str = ", including hidden";
+
+/// A filter read back: the sentence Say filter says and the title line
+/// shows, and the details line with the exact byte counts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReadBack {
+    sentence: String,
+    details: Vec<String>,
+}
+
+impl ReadBack {
+    /// The sentence, meaning first: "size over 100 MB and name matches
+    /// *.log". It reads back to the same filter.
+    pub fn sentence(&self) -> &str {
+        &self.sentence
+    }
+
+    /// The details, each a short sentence: "100 MB is 100,000,000 bytes."
+    pub fn details(&self) -> &[String] {
+        &self.details
+    }
+
+    /// The details on one line, or an empty string when there are none.
+    pub fn details_line(&self) -> String {
+        self.details.join(" ")
+    }
+
+    /// The sentence up to its first and or or outside brackets: what one
+    /// line of the Braille display must carry.
+    pub fn first_clause(&self) -> &str {
+        first_clause(&self.sentence)
+    }
+}
+
+/// A sentence up to its first and or or outside brackets and quotes.
+pub(crate) fn first_clause(sentence: &str) -> &str {
+    let mut depth = 0usize;
+    let mut quoted = false;
+    for (i, c) in sentence.char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            '(' if !quoted => depth += 1,
+            ')' if !quoted => depth = depth.saturating_sub(1),
+            ' ' if !quoted && depth == 0 => {
+                let rest = &sentence[i..];
+                if rest.starts_with(" and ") || rest.starts_with(" or ") {
+                    return &sentence[..i];
+                }
+            }
+            _ => {}
+        }
+    }
+    sentence
+}
+
+/// A whole number with thousands separators: "100,000,000".
+pub(crate) fn thousands(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Whether a `hidden` test shows hidden entries: one under an even
+/// number of nots.
+pub(crate) fn shows_hidden(expr: &Expr) -> bool {
+    fn walk(expr: &Expr, negated: bool) -> bool {
+        match expr {
+            Expr::Test {
+                test: Test::Flag(Flag::Hidden),
+                ..
+            } => !negated,
+            Expr::Test { .. } => false,
+            Expr::Not(inner) => walk(inner, !negated),
+            Expr::And(parts) | Expr::Or(parts) => parts.iter().any(|p| walk(p, negated)),
+        }
+    }
+    walk(expr, false)
+}
 
 /// The words the parser reads as part of the language, which a value
 /// must be quoted to be.
@@ -39,9 +129,24 @@ pub(crate) fn quoted(value: &str) -> String {
 pub(crate) struct Writer<'a> {
     pub(crate) options: &'a FilterOptions,
     pub(crate) out: String,
+    pub(crate) details: Vec<String>,
 }
 
 impl Writer<'_> {
+    /// Notes an amount's exact byte count for the details line.
+    fn count(&mut self, amount: &Amount) {
+        let (Some(unit), Some(bytes)) = (amount.unit, amount.value()) else {
+            return;
+        };
+        if unit == SizeUnit::Bytes {
+            return;
+        }
+        let detail = format!("{amount} is {} bytes.", thousands(bytes));
+        if !self.details.contains(&detail) {
+            self.details.push(detail);
+        }
+    }
+
     pub(crate) fn expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Test { test, .. } => self.test(test),
@@ -161,6 +266,18 @@ impl Writer<'_> {
             }
             Test::Number(number) => {
                 let field = number.field.word();
+                match number.op {
+                    NumberOp::Between(a, b) => {
+                        self.count(&a);
+                        self.count(&b);
+                    }
+                    NumberOp::Is(a)
+                    | NumberOp::IsNot(a)
+                    | NumberOp::Over(a)
+                    | NumberOp::Under(a)
+                    | NumberOp::AtLeast(a)
+                    | NumberOp::AtMost(a) => self.count(&a),
+                }
                 let words = match number.op {
                     NumberOp::Is(a) => format!("{field} is {a}"),
                     NumberOp::IsNot(a) => format!("{field} is not {a}"),
@@ -190,6 +307,7 @@ impl Writer<'_> {
                     self.value(&content.text);
                 }
                 if let Some(limit) = content.limit {
+                    self.count(&limit);
                     self.out.push_str(&format!(" first {limit}"));
                 }
                 self.case_note(Field::Content, regex, &content.text, content.case);
@@ -238,12 +356,44 @@ impl Writer<'_> {
     }
 }
 
-/// The canonical sentence of a tree.
-pub(crate) fn sentence(expr: &Expr, options: &FilterOptions) -> String {
+/// A tree read back.
+pub(crate) fn read_back(expr: &Expr, options: &FilterOptions) -> ReadBack {
     let mut writer = Writer {
         options,
         out: String::new(),
+        details: Vec::new(),
     };
     writer.expr(expr);
-    writer.out
+    if shows_hidden(expr) {
+        writer.out.push_str(HIDDEN_NOTE);
+    }
+    ReadBack {
+        sentence: writer.out,
+        details: writer.details,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbers_get_thousands_separators() {
+        assert_eq!(thousands(0), "0");
+        assert_eq!(thousands(999), "999");
+        assert_eq!(thousands(1_000), "1,000");
+        assert_eq!(thousands(1_048_576), "1,048,576");
+        assert_eq!(thousands(u64::MAX), "18,446,744,073,709,551,615");
+    }
+
+    #[test]
+    fn the_first_clause_stops_at_a_joiner_outside_brackets_and_quotes() {
+        assert_eq!(first_clause("a and b"), "a");
+        assert_eq!(first_clause("(a or b) and c"), "(a or b)");
+        assert_eq!(
+            first_clause("name contains \"x and y\" or z"),
+            "name contains \"x and y\""
+        );
+        assert_eq!(first_clause("size over 1 MB"), "size over 1 MB");
+    }
 }

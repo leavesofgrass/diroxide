@@ -58,6 +58,7 @@ pub use dates::{
 pub use error::{
     Expected, FilterError, KINDS_SENTENCE, Keyword, PROBLEM_START, Problem, UNITS_SENTENCE,
 };
+pub use readback::ReadBack;
 pub use tree::{
     Amount, ContentOp, ContentTest, DateOp, DateTest, Decimal, Expr, Field, FieldShape, Flag,
     KIND_WORDS, KindTest, NumberOp, NumberTest, SizeUnit, Spot, Test, TextOp, TextTest,
@@ -135,7 +136,20 @@ impl Filter {
 
     /// The canonical sentence, which reads back to the same tree.
     pub fn sentence(&self) -> String {
-        readback::sentence(&self.expr, &self.options)
+        self.read_back().sentence().to_owned()
+    }
+
+    /// Say filter: the sentence and the details line with exact byte
+    /// counts.
+    pub fn read_back(&self) -> ReadBack {
+        readback::read_back(&self.expr, &self.options)
+    }
+
+    /// Whether a `hidden` test shows hidden entries, which a panel that
+    /// hides them then lists for this filter; the read-back ends ",
+    /// including hidden".
+    pub fn shows_hidden(&self) -> bool {
+        readback::shows_hidden(&self.expr)
     }
 }
 

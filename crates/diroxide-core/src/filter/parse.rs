@@ -328,6 +328,10 @@ impl<'a> Parser<'a> {
             } else {
                 match token.kind {
                     Kind::Close => break,
+                    Kind::Comma if self.at_hidden_note() => {
+                        self.pos += 3;
+                        break;
+                    }
                     Kind::Comma => return Err(self.fail_here(Problem::CommaNotHere, Vec::new())),
                     Kind::Sign(sign) => {
                         return Err(
@@ -610,7 +614,7 @@ impl<'a> Parser<'a> {
                 positives.push(one);
             }
             negate = false;
-            if !self.next_kind(Kind::Comma) {
+            if !self.next_kind(Kind::Comma) || self.at_hidden_note() {
                 break;
             }
             if let Some(case) = self.case_annotation(field)? {
@@ -631,6 +635,16 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(combine(positives, negatives, all))
+    }
+
+    /// Whether the text ends with the read-back's note ", including
+    /// hidden", which says what a positive `hidden` test already means and
+    /// is left out of the tree.
+    fn at_hidden_note(&self) -> bool {
+        self.next_kind(Kind::Comma)
+            && self.peek_at(1).is_some_and(|t| t.is_word("including"))
+            && self.peek_at(2).is_some_and(|t| t.is_word("hidden"))
+            && self.peek_at(3).is_none()
     }
 
     /// At a comma: `, match case` or `, any case`.

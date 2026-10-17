@@ -97,7 +97,7 @@ fn the_twenty_examples_parse_and_read_back_as_one_sentence() {
         "group is images and size over 5 MB",
         "content contains \"total due\"",
         "content regex \"due \\d+\" and (extension is txt or extension is md)",
-        "hidden and kind is file",
+        "hidden and kind is file, including hidden",
         "depth at most 1 and name matches *.rs",
         "(extension is jpg or extension is png) and not name matches thumb*",
     ];
@@ -108,6 +108,88 @@ fn the_twenty_examples_parse_and_read_back_as_one_sentence() {
     for text in MORE {
         round_trips(text);
     }
+}
+
+/// Each example as typed, its read-back and its details line.
+fn read_backs(texts: &[&str]) -> String {
+    let mut out = String::new();
+    for text in texts {
+        let read_back = parse(text).read_back();
+        out.push_str(&format!("typed: {text}\nsaid: {}\n", read_back.sentence()));
+        if !read_back.details().is_empty() {
+            out.push_str(&format!("details: {}\n", read_back.details_line()));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+#[test]
+fn the_read_backs_snapshot() {
+    insta::assert_snapshot!("twenty_read_backs", read_backs(&TWENTY));
+    insta::assert_snapshot!("more_read_backs", read_backs(&MORE));
+}
+
+#[test]
+fn every_first_clause_fits_one_braille_line() {
+    for text in TWENTY.iter().chain(MORE.iter()) {
+        let read_back = parse(text).read_back();
+        let clause = read_back.first_clause();
+        assert!(
+            clause.chars().count() <= crate::format::BRAILLE_CELLS,
+            "{text}: \"{clause}\" has {} cells",
+            clause.chars().count()
+        );
+        for detail in read_back.details() {
+            assert!(
+                detail.chars().count() <= crate::format::BRAILLE_CELLS,
+                "{detail}"
+            );
+        }
+    }
+}
+
+#[test]
+fn byte_counts_go_on_the_details_line() {
+    let read_back = parse("size over 100 MB").read_back();
+    assert_eq!(read_back.sentence(), "size over 100 MB");
+    assert_eq!(read_back.details(), ["100 MB is 100,000,000 bytes."]);
+    let read_back = parse("size between 1 KiB and 1 MiB").read_back();
+    assert_eq!(
+        read_back.details_line(),
+        "1 KiB is 1,024 bytes. 1 MiB is 1,048,576 bytes."
+    );
+    assert!(parse("size over 500").read_back().details().is_empty());
+    assert_eq!(parse("size over 500").sentence(), "size over 500 bytes");
+    let read_back = parse("size over 1.5 GiB or size under 1.5 GiB").read_back();
+    assert_eq!(read_back.details(), ["1.5 GiB is 1,610,612,736 bytes."]);
+    let read_back = parse("content:\"x\" first 64 KB").read_back();
+    assert_eq!(read_back.details(), ["64 KB is 64,000 bytes."]);
+}
+
+#[test]
+fn a_hidden_test_shows_hidden_entries_and_says_so() {
+    assert!(parse("hidden and kind file").shows_hidden());
+    assert!(parse("hidden or *.txt").shows_hidden());
+    assert!(parse("not not hidden").shows_hidden());
+    assert!(!parse("not hidden").shows_hidden());
+    assert!(!parse("*.txt").shows_hidden());
+    assert_eq!(parse("not hidden").sentence(), "not hidden");
+    assert_eq!(parse("hidden").sentence(), "hidden, including hidden");
+    // The note reads back as nothing more.
+    assert_eq!(
+        parse("hidden, including hidden").expr(),
+        parse("hidden").expr()
+    );
+    assert_eq!(
+        parse("*.txt, *.md and hidden, including hidden").expr(),
+        parse("(*.txt or *.md) and hidden").expr()
+    );
+    // Only at the very end.
+    assert_eq!(
+        problem("hidden, including hidden and x").problem(),
+        &Problem::CommaNotHere
+    );
 }
 
 #[test]
