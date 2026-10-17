@@ -16,6 +16,7 @@
 pub mod classes;
 pub mod encoding;
 pub mod hex;
+pub mod highlight;
 
 use std::io::Read;
 use std::sync::atomic::{AtomicU64, Ordering};

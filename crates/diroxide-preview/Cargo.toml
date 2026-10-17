@@ -18,13 +18,22 @@ diroxide-vfs.workspace = true
 encoding_rs.workspace = true
 pulldown-cmark.workspace = true
 serde.workspace = true
-# The highlight module (W2d): syntect as a tokenizer, bat's grammars.
-syntect.workspace = true
+# The highlight module (W2d): syntect as a tokenizer, bat's grammars,
+# behind the default syntax-set feature.
+syntect = { workspace = true, optional = true }
 thiserror.workspace = true
-two-face.workspace = true
+two-face = { workspace = true, optional = true }
 
 [dev-dependencies]
+proptest.workspace = true
 serde_json.workspace = true
+
+[features]
+default = ["syntax-set"]
+# The syntax set (W2d): syntect with bat's grammars from two-face. Without
+# it the highlighter says "Highlighting off: not in this build" and the
+# viewer's words-first commands keep what needs no grammar.
+syntax-set = ["dep:syntect", "dep:two-face"]
 
 [lints]
 workspace = true

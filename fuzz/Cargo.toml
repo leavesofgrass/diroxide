@@ -43,3 +43,14 @@ bench = false
 # Its own workspace, so the main one never builds it.
 [workspace]
 members = ["."]
+
+# W2d: the highlighter must never hang (spike H2). Run with -timeout=2.
+[dependencies.diroxide-preview]
+path = "../crates/diroxide-preview"
+
+[[bin]]
+name = "highlight_hang"
+path = "fuzz_targets/highlight_hang.rs"
+test = false
+doc = false
+bench = false

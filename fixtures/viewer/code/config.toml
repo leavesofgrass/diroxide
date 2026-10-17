@@ -1,0 +1,11 @@
+# A small settings file for the viewer's tests.
+title = "Sample"
+count = 3
+
+[viewer]
+wrap = true
+wrap_width = 40
+
+[[presets]]
+name = "email"
+bytes = 18_000_000

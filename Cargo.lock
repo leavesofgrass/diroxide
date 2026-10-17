@@ -950,6 +950,7 @@ dependencies = [
  "diroxide-filetype",
  "diroxide-vfs",
  "encoding_rs",
+ "proptest",
  "pulldown-cmark",
  "serde",
  "serde_json",
