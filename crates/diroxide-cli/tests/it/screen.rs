@@ -355,21 +355,21 @@ fn a_scripted_session_moves_marks_copies_renames_trashes_undoes_and_comes_back()
         assert_eq!(s.app().active_panel().place(), &place(&work));
         // Tab to the other panel and back: one message each, said first.
         let screen = run.press(&mut s, "tab");
-        fact(&screen.lines[22], "Right panel: Backup, 1 item");
+        fact(&screen.lines[21], "Right panel: Backup, 1 item");
         on_focus(&s);
         let screen = run.press(&mut s, "tab");
-        fact(&screen.lines[22], "Left panel: work, 8 items");
+        fact(&screen.lines[21], "Left panel: work, 8 items");
         // Mark three rows with Space.
         assert!(
             s.app_mut()
                 .focus_name(diroxide_core::Side::Left, "budget.xlsx")
         );
         let screen = run.press(&mut s, "space");
-        fact(&screen.lines[22], "Selected budget.xlsx. 1 selected.");
+        fact(&screen.lines[21], "Selected budget.xlsx. 1 selected.");
         run.press(&mut s, "space");
         let screen = run.press(&mut s, "space");
         fact(
-            &screen.lines[22],
+            &screen.lines[21],
             "Selected raccoon \u{1f99d}.txt. 3 selected.",
         );
         let marked: Vec<&String> = screen
@@ -382,14 +382,14 @@ fn a_scripted_session_moves_marks_copies_renames_trashes_undoes_and_comes_back()
             assert!(within_cells(line, ", selected"), "{line}");
         }
         let screen = run.press(&mut s, "ctrl+d");
-        fact(&screen.lines[22], "3 selected, 312 bytes. work, 8 items");
+        fact(&screen.lines[21], "3 selected, 312 bytes. work, 8 items");
         // Copy to the other panel: the question starts on No, y answers.
         let screen = run.press(&mut s, "f5");
         fact(&screen.lines[1], "Copy 3 items to Backup, 312 bytes?");
         assert_eq!(screen.cursor_line, Some(1));
         let screen = run.press(&mut s, "y");
-        fact(&screen.lines[22], "Copy finished: 3 done");
-        assert_eq!(screen.lines[23], "No jobs");
+        fact(&screen.lines[21], "Copy finished: 3 done");
+        assert_eq!(screen.lines[22], "No jobs");
         for name in ["budget.xlsx", "notes.txt", "raccoon \u{1f99d}.txt"] {
             assert!(backup.join(name).exists(), "{name} was not copied");
         }
@@ -409,7 +409,7 @@ fn a_scripted_session_moves_marks_copies_renames_trashes_undoes_and_comes_back()
         assert_eq!(screen.cursor_column, "Rename report.pdf to: report".len());
         run.type_text(&mut s, "-2026");
         let screen = run.press(&mut s, "enter");
-        fact(&screen.lines[22], "Renamed report.pdf to report-2026.pdf");
+        fact(&screen.lines[21], "Renamed report.pdf to report-2026.pdf");
         assert!(work.join("report-2026.pdf").exists());
         on_focus(&s);
         assert!(cursor_row(&s.screen()).starts_with("report-2026.pdf"));
@@ -421,7 +421,7 @@ fn a_scripted_session_moves_marks_copies_renames_trashes_undoes_and_comes_back()
         assert_eq!(trash.count(), 1);
         // Undo brings it back.
         let screen = run.press(&mut s, "ctrl+z");
-        fact(&screen.lines[22], "Undid trash: 1 item is back");
+        fact(&screen.lines[21], "Undid trash: 1 item is back");
         assert!(work.join("report-2026.pdf").exists());
         assert!(
             s.app_mut()
@@ -495,7 +495,7 @@ fn the_drawn_jobs_line_changes_no_more_often_than_the_setting_says() {
     let job = JobId::new(5);
     let mut progress = JobProgress::start(JobKind::Copy, 100, None);
     progress.state = JobState::Running;
-    let mut drawn = vec![s.screen().lines[23].clone()];
+    let mut drawn = vec![s.screen().lines[22].clone()];
     for second in 0..30u64 {
         progress.items_done = second * 3;
         s.event(
@@ -506,7 +506,7 @@ fn the_drawn_jobs_line_changes_no_more_often_than_the_setting_says() {
             run.now(),
         );
         s.draw(run.now()).unwrap();
-        let line = s.screen().lines[23].clone();
+        let line = s.screen().lines[22].clone();
         if drawn.last() != Some(&line) {
             drawn.push(line);
         }
@@ -523,7 +523,7 @@ fn the_drawn_jobs_line_changes_no_more_often_than_the_setting_says() {
     progress.state = JobState::Paused;
     s.event(AppEvent::JobProgress { job, progress }, run.now());
     s.draw(run.now()).unwrap();
-    fact(&s.screen().lines[23], "Copying paused at");
+    fact(&s.screen().lines[22], "Copying paused at");
 }
 
 #[test]
@@ -585,20 +585,20 @@ fn the_lines_of_part_three_read_on_a_40_cell_display() {
     );
     run.settle(&mut s);
     let screen = run.press(&mut s, "ctrl+f6");
-    fact(&screen.lines[22], "Sorted by size, largest first");
+    fact(&screen.lines[21], "Sorted by size, largest first");
     assert!(cursor_row(&screen).starts_with("notes.txt"));
     fact(&screen.lines[0], "work, left panel, in ");
     assert!(screen.lines[0].ends_with(", sorted by size"));
     let screen = run.press(&mut s, "ctrl+f6");
-    fact(&screen.lines[22], "Sorted by size, smallest first");
+    fact(&screen.lines[21], "Sorted by size, smallest first");
     let screen = run.press(&mut s, "ctrl+f3");
-    fact(&screen.lines[22], "Sorted by name, A to Z");
+    fact(&screen.lines[21], "Sorted by name, A to Z");
     // Say Status without marks.
     let screen = run.press(&mut s, "ctrl+d");
-    fact(&screen.lines[22], "work, 8 items, no selection");
+    fact(&screen.lines[21], "work, 8 items, no selection");
     // Say Other Panel.
     let screen = run.press(&mut s, "alt+o");
-    fact(&screen.lines[22], "Other panel: work, 8 items");
+    fact(&screen.lines[21], "Other panel: work, 8 items");
     // Make folder: the prompt, then the result.
     let screen = run.press(&mut s, "f7");
     assert!(
@@ -611,7 +611,7 @@ fn the_lines_of_part_three_read_on_a_40_cell_display() {
     );
     run.type_text(&mut s, "Reports");
     let screen = run.press(&mut s, "enter");
-    fact(&screen.lines[22], "Created folder Reports");
+    fact(&screen.lines[21], "Created folder Reports");
     assert!(cursor_row(&screen).starts_with("Reports, folder"));
     // A name that needs care is refused in words.
     let screen = run.press(&mut s, "f2");
@@ -623,21 +623,27 @@ fn the_lines_of_part_three_read_on_a_40_cell_display() {
     );
     run.type_text(&mut s, " ");
     let screen = run.press(&mut s, "enter");
-    fact(&screen.lines[22], "Name needs care: ends in a dot or space");
+    fact(&screen.lines[21], "Name needs care: ends in a dot or space");
     run.press(&mut s, "escape");
     // Layout: the palette's way.
     run.press(&mut s, "ctrl+p");
     run.type_text(&mut s, "layout");
     let screen = run.press(&mut s, "enter");
-    fact(&screen.lines[22], "Layout: stacked");
+    fact(&screen.lines[21], "Layout: stacked");
     // Nothing to undo after an undo of nothing.
     let screen = run.press(&mut s, "ctrl+z");
     assert!(
-        within_cells(&screen.lines[22], "Undid")
-            || within_cells(&screen.lines[22], "Nothing to undo"),
+        within_cells(&screen.lines[21], "Undid")
+            || within_cells(&screen.lines[21], "Nothing to undo"),
         "{}",
-        screen.lines[22]
+        screen.lines[21]
     );
-    // The idle jobs line.
-    assert_eq!(screen.lines[23], "No jobs");
+    // The idle jobs line, then the key bar on the last line (answer 49),
+    // its meaning in the first cells.
+    assert_eq!(screen.lines[22], "No jobs");
+    assert!(
+        screen.lines[23].starts_with("F2 Rename"),
+        "{}",
+        screen.lines[23]
+    );
 }
