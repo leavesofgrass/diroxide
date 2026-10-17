@@ -31,6 +31,7 @@ use crate::entry::{CompletionSource, EntryField};
 use crate::keymap::capture::{self, Capture, Captured, KeyReports};
 use crate::keymap::conflicts::{self, AskKind, Finding, Taken};
 use crate::keymap::file::{self, KeyLine, KeymapEdit};
+use crate::keymap::presets::{self, Preset};
 use crate::keymap::{KeyChoice, Keymap, written};
 use crate::request::Request;
 
@@ -87,6 +88,10 @@ pub(crate) enum KeysPurpose {
     RemoveWhich(CommandId),
     /// "Reset all keys? y or n".
     ResetAll,
+    /// The preset chooser.
+    Presets,
+    /// "Apply Total Commander keys? y or n", by the preset's id.
+    ApplyPreset(String),
 }
 
 impl KeysPurpose {
@@ -143,6 +148,7 @@ pub(super) fn is_keys_command(id: &CommandId) -> bool {
         ids::KEYS_LIST,
         ids::KEYS_RESET_ALL,
         ids::KEYS_SINGLE_LETTERS,
+        ids::KEYS_PRESET,
     ]
     .contains(id)
 }
@@ -173,6 +179,7 @@ impl App {
             id if *id == ids::KEYS_LIST => self.open_keys_list(),
             id if *id == ids::KEYS_RESET_ALL => self.reset_all_question(),
             id if *id == ids::KEYS_SINGLE_LETTERS => self.setting_chosen("single_letters"),
+            id if *id == ids::KEYS_PRESET => self.preset_chooser(),
             _ => Vec::new(),
         }
     }
@@ -184,9 +191,15 @@ impl App {
         self.base_keymap(column).with_overrides(&self.keys.owner)
     }
 
-    /// One column's keys under the owner's lines: the defaults.
+    /// One column's keys under the owner's lines: the defaults, then the
+    /// chosen preset.
     pub(super) fn base_keymap(&self, column: KeyColumn) -> Keymap {
-        Keymap::defaults_for(column).for_platform(self.keymap.platform())
+        self.preset().keymap(column, self.keymap.platform())
+    }
+
+    /// The preset the `preset` setting chooses, or the diroxide defaults.
+    pub(super) fn preset(&self) -> &'static Preset {
+        presets::chosen(&self.settings.preset)
     }
 
     /// Builds the keys the app runs on again from the layers and the
@@ -462,6 +475,9 @@ impl App {
         if purpose == KeysPurpose::ResetAll {
             return self.reset_all();
         }
+        if let KeysPurpose::ApplyPreset(id) = &purpose {
+            return self.apply_preset(id);
+        }
         let KeysPurpose::Check {
             mut change,
             key,
@@ -611,8 +627,9 @@ impl App {
             KeysPurpose::List => self.keys_list_enter(row),
             KeysPurpose::Actions(command) => self.action_chosen(&command, row),
             KeysPurpose::RemoveWhich(command) => self.remove_chosen(&command, row),
+            KeysPurpose::Presets => self.preset_chosen(row),
             // Enter on a yes-or-no question answers No.
-            KeysPurpose::ResetAll => self.dialog_escape(),
+            KeysPurpose::ResetAll | KeysPurpose::ApplyPreset(_) => self.dialog_escape(),
         }
     }
 
@@ -620,7 +637,10 @@ impl App {
     /// a row's actions says nothing more than the dialog's closing.
     pub(super) fn keys_escape(&mut self, purpose: KeysPurpose) -> Vec<Effect> {
         match purpose {
-            KeysPurpose::List | KeysPurpose::Actions(_) | KeysPurpose::RemoveWhich(_) => Vec::new(),
+            KeysPurpose::List
+            | KeysPurpose::Actions(_)
+            | KeysPurpose::RemoveWhich(_)
+            | KeysPurpose::Presets => Vec::new(),
             KeysPurpose::Capture(_) => {
                 self.keys.capture = None;
                 vec![self.say(Message::info(capture::CANCELLED))]

@@ -6,7 +6,6 @@
 //! typing narrows it silently but for the count on the status line, Down
 //! enters the list, Enter on a row opens its actions, Escape closes it.
 
-use diroxide_config::KeymapConfig;
 use diroxide_core::format::count;
 use diroxide_core::{CommandId, Effect, Key, KeyColumn, ListModel, ListRow, Message, Redraw};
 
@@ -18,6 +17,7 @@ use crate::entry::{CompletionSource, EntryField};
 use crate::keymap::conflicts::is_critical;
 use crate::keymap::file::{self, KeyLine, KeymapEdit};
 use crate::keymap::keys_list::{KeysView, actions};
+use crate::keymap::presets;
 use crate::keymap::written;
 use crate::request::Request;
 
@@ -25,9 +25,8 @@ use crate::request::Request;
 pub(crate) const ROW_RESET_ALL: &str = "\u{1}reset-all";
 /// The list's own row for the single-letter switch.
 pub(crate) const ROW_LETTERS: &str = "\u{1}letters";
-
-/// The preset's name in the title until the presets arrive.
-const DEFAULTS_NAME: &str = "diroxide defaults";
+/// The list's own row that chooses a preset.
+pub(crate) const ROW_PRESET: &str = "\u{1}preset";
 
 impl App {
     /// The Keys list for what was typed, built from the layers, with the
@@ -35,16 +34,17 @@ impl App {
     fn keys_list_model(&self, query: &str) -> (String, ListModel) {
         let terminal = self.layered(KeyColumn::Terminal);
         let window = self.layered(KeyColumn::Window);
-        let preset = KeymapConfig::default();
+        let preset = self.preset();
         let view = KeysView {
             terminal: &terminal,
             window: &window,
             here: self.keymap.column(),
             owner: &self.keys.owner,
-            preset: &preset,
-            preset_name: DEFAULTS_NAME,
+            preset: &preset.lines,
+            preset_name: &preset.name,
         };
         let own = vec![
+            ListRow::new(ROW_PRESET, "Choose a preset").with_details([preset.name.clone()]),
             ListRow::new(ROW_RESET_ALL, "Reset all keys")
                 .with_details([format!("{} changed", view.changed_count())]),
             ListRow::new(ROW_LETTERS, "Single letters")
@@ -57,14 +57,14 @@ impl App {
     fn actions_model(&self, info: &CommandInfo) -> ListModel {
         let terminal = self.layered(KeyColumn::Terminal);
         let window = self.layered(KeyColumn::Window);
-        let preset = KeymapConfig::default();
+        let preset = self.preset();
         KeysView {
             terminal: &terminal,
             window: &window,
             here: self.keymap.column(),
             owner: &self.keys.owner,
-            preset: &preset,
-            preset_name: DEFAULTS_NAME,
+            preset: &preset.lines,
+            preset_name: &preset.name,
         }
         .actions(info)
     }
@@ -147,6 +147,7 @@ impl App {
             None => vec![self.say(Message::status("No command matches"))],
             Some(ROW_RESET_ALL) => self.reset_all_question(),
             Some(ROW_LETTERS) => self.setting_chosen("single_letters"),
+            Some(ROW_PRESET) => self.preset_chooser(),
             Some(id) => {
                 let Some(info) = CommandId::new(id).ok().and_then(|id| commands::info(&id)) else {
                     return Vec::new();
@@ -371,6 +372,103 @@ impl App {
             "All keys reset: {} back to the default.",
             count(changed, "command", "commands")
         );
+        let mut effects = vec![Effect::Redraw(Redraw::All), self.say(Message::info(said))];
+        effects.extend(self.refresh_keys_list(None));
+        effects
+    }
+}
+
+impl App {
+    /// The preset chooser: each preset's name, then its description, the
+    /// one in use said as current and focused.
+    pub(crate) fn preset_chooser(&mut self) -> Vec<Effect> {
+        let current = self.preset().id.clone();
+        let rows = presets::presets()
+            .iter()
+            .map(|p| {
+                let row = ListRow::new(p.id.clone(), p.name.clone());
+                if p.id == current {
+                    row.with_details(["current".to_owned(), p.description.clone()])
+                } else {
+                    row.with_details([p.description.clone()])
+                }
+            })
+            .collect();
+        let mut list = ListModel::new("Key presets").with_rows(rows);
+        list.focus_id(&current);
+        list.set_help(
+            "Up and Down choose, Enter asks before applying; your own keys stay on top. Escape closes.",
+        );
+        self.open_dialog(
+            Dialog::Choose {
+                list,
+                on_enter: diroxide_core::Command::new(ids::KEYS_PRESET),
+            },
+            Purpose::Keys(Box::new(KeysPurpose::Presets)),
+        )
+    }
+
+    /// Enter in the preset chooser: the question, starting on No.
+    pub(crate) fn preset_chosen(&mut self, row: Option<&str>) -> Vec<Effect> {
+        let Some(preset) = row.and_then(presets::preset) else {
+            return Vec::new();
+        };
+        if preset.id == self.preset().id {
+            return vec![self.say(Message::info(format!(
+                "{} are in use already.",
+                preset.keys_name()
+            )))];
+        }
+        let mut effects = self.close_top();
+        effects.extend(self.open_dialog(
+            Dialog::Confirm {
+                question: with_default_no(Message::question(&preset.question())),
+                listing: Vec::new(),
+                on_yes: diroxide_core::Command::new(ids::KEYS_PRESET),
+            },
+            Purpose::Keys(Box::new(KeysPurpose::ApplyPreset(preset.id.clone()))),
+        ));
+        effects
+    }
+
+    /// Yes to "Apply Total Commander keys?": the `preset` setting is
+    /// written and nothing is cleared, so the owner's own lines stay on
+    /// top; a preset whose letters run commands turns type-ahead off, and
+    /// one whose letters jump turns it back on after one that ran them.
+    pub(crate) fn apply_preset(&mut self, id: &str) -> Vec<Effect> {
+        let Some(preset) = presets::preset(id) else {
+            return Vec::new();
+        };
+        self.settings.preset = preset.id.clone();
+        self.request(Request::SaveSetting {
+            key: "preset".to_owned(),
+            value: Some(toml::Value::String(preset.id.clone())),
+        });
+        let letters = presets::letters_after(preset, self.settings.single_letters);
+        if let Some(letters) = letters {
+            self.settings.single_letters = letters;
+            self.request(Request::SaveSetting {
+                key: "single_letters".to_owned(),
+                value: Some(toml::Value::String(
+                    presets::letters_value(letters).to_owned(),
+                )),
+            });
+        }
+        self.rebuild_keymap();
+        let mut said = format!("{} applied.", preset.keys_name());
+        let mine = self.changed_commands();
+        if mine > 0 {
+            said.push_str(&format!(
+                " Your {} still apply.",
+                count(mine as u64, "change", "changes")
+            ));
+        }
+        if letters.is_some() {
+            said.push_str(&format!(
+                " Single letters: {}.",
+                self.settings.value_words("single_letters")
+            ));
+        }
         let mut effects = vec![Effect::Redraw(Redraw::All), self.say(Message::info(said))];
         effects.extend(self.refresh_keys_list(None));
         effects

@@ -596,6 +596,10 @@ command = "keys.list"
 access = "l"
 
 [[menu.item]]
+command = "keys.preset"
+access = "p"
+
+[[menu.item]]
 command = "keys.reset-all"
 access = "r"
 

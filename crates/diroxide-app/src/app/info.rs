@@ -512,6 +512,9 @@ impl App {
         if key == settings::KEYS_ROW {
             return self.open_keys_list();
         }
+        if key == "preset" {
+            return self.preset_chooser();
+        }
         let Some(info) = settings::setting(key) else {
             return Vec::new();
         };

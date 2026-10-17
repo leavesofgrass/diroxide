@@ -101,9 +101,11 @@ pub fn local_offset() -> UtcOffset {
     UtcOffset::from_seconds(seconds)
 }
 
-/// The terminal column's keymap with the owner's `keymap.toml` applied.
+/// The terminal column's keymap: the defaults, the preset the `preset`
+/// setting chooses, then the owner's `keymap.toml`.
 pub fn terminal_keymap(config: &Config, platform: Platform) -> Keymap {
-    keymap::keymaps(&config.keymap, platform).0
+    let preset = keymap::presets::chosen(&config.settings.preset);
+    keymap::presets::keymaps(&config.keymap, preset, platform).0
 }
 
 /// The undo records to start with: the journal's finished records, oldest
@@ -130,6 +132,9 @@ pub fn pair_undo_records(records: Vec<UndoRecord>) -> Vec<UndoRecord> {
 pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     let mut problems = config.problems.clone();
     problems.extend(keymap::app_keymap_problems(&config.keymap, platform));
+    if let Some(said) = keymap::presets::unknown_preset(&config.settings.preset) {
+        problems.push(ConfigProblem::new(Paths::SETTINGS, said));
+    }
     let (menus, menu_problems) = Menus::load(config.menus.as_ref());
     problems.extend(menu_problems);
     let (banks, bank_problems) = menu::banks(&config.banks);

@@ -466,6 +466,8 @@ pub mod ids {
         KEYS_RESET_ALL = "keys.reset-all";
         /// The single-letter switch (W3k).
         KEYS_SINGLE_LETTERS = "keys.single-letters";
+        /// The preset chooser (W3k).
+        KEYS_PRESET = "keys.preset";
     }
 }
 
@@ -491,7 +493,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 162] = [
+pub static CATALOG: [CommandInfo; 163] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1729,6 +1731,14 @@ pub static CATALOG: [CommandInfo; 162] = [
         ids::KEYS_LIST,
         "Keys list",
         "Lists every command with its keys in both columns; type to narrow it, and change any key.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::KEYS_PRESET,
+        "Key presets",
+        "Chooses a set of keys modeled on another file manager; your own keys stay on top.",
         Global,
         &[],
         &[],

@@ -280,8 +280,9 @@ fn the_keys_list_from_settings_narrows_and_a_change_keeps_the_files_comments() {
         panic!("{:?}", s.dialog())
     };
     let rows: Vec<String> = list.rows().iter().map(|r| r.spoken()).collect();
-    assert_eq!(rows[0], "Reset all keys, 1 changed");
-    assert!(rows[1].starts_with("Single letters, "), "{}", rows[1]);
+    assert_eq!(rows[0], "Choose a preset, diroxide defaults");
+    assert_eq!(rows[1], "Reset all keys, 1 changed");
+    assert!(rows[2].starts_with("Single letters, "), "{}", rows[2]);
     assert!(rows.contains(&"Copy to other panel, F5 in both".to_owned()));
     assert!(
         rows.contains(
@@ -397,6 +398,12 @@ fn remove_a_key_reset_all_and_the_single_letter_switch() {
 
     // Reset all: asks, starting on No, and keeps the unknown line.
     s.command(ids::KEYS_LIST);
+    s.key("down");
+    let said = s.key("down");
+    assert!(
+        said[0].starts_with("Reset all keys, 2 changed, 2 of "),
+        "{said:?}"
+    );
     let said = s.key("enter");
     assert_eq!(said, ["Reset all keys? No is the default. y or n"]);
     assert_eq!(s.key("n"), ["Nothing changed."]);
@@ -429,6 +436,56 @@ fn remove_a_key_reset_all_and_the_single_letter_switch() {
     s.key("down");
     assert_eq!(s.key("enter"), ["Single letters: letters run commands"]);
     assert_eq!(s.app.keymap().key_text(&ids::SORT_OWNER), "W");
+}
+
+#[test]
+fn the_preset_chooser_says_the_preset_in_use() {
+    let (_dir, mut s) = session_with_settle(0);
+    let said = s.command(ids::KEYS_PRESET);
+    assert!(
+        said[0].starts_with("Key presets, diroxide defaults, current, The keys most people know"),
+        "{said:?}"
+    );
+    assert_eq!(
+        s.key("enter"),
+        ["The diroxide default keys are in use already."]
+    );
+    s.key("escape");
+    // The Settings list's Key preset row opens the same chooser.
+    s.command(ids::SETTINGS);
+    let dialog = s.app.dialog().map(|(id, _)| id).unwrap();
+    let effects = s.app.handle(diroxide_app::AppEvent::Answer {
+        dialog,
+        answer: diroxide_app::Answer::Chosen("preset".to_owned()),
+    });
+    let said = s.run(effects);
+    assert!(said[0].starts_with("Key presets, "), "{said:?}");
+}
+
+#[test]
+fn an_unknown_preset_setting_is_a_startup_problem_and_the_defaults_apply() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+    std::fs::create_dir_all(&paths.config_dir).unwrap();
+    std::fs::write(paths.config_file(Paths::SETTINGS), "preset = \"norton\"\n").unwrap();
+    let s = Session::open(
+        place(&work),
+        place(&work),
+        Registry::with_local(),
+        Setup {
+            paths: Some(paths),
+            ..Setup::default()
+        },
+    );
+    let problems: Vec<&str> = s.app.problems().iter().map(|p| p.text.as_str()).collect();
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.starts_with("Unknown key preset: norton. The diroxide keys are in use")),
+        "{problems:?}"
+    );
+    assert_eq!(s.app.keymap().key_text(&ids::COPY), "F5");
 }
 
 #[test]

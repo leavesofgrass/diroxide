@@ -18,6 +18,7 @@ pub mod conflicts;
 pub mod file;
 pub mod keys_list;
 pub mod names;
+pub mod presets;
 pub mod tables;
 
 pub use names::{Platform, for_file, spoken, written};
