@@ -359,7 +359,7 @@ impl App {
 
     pub(super) fn open_palette(&mut self) -> Vec<Effect> {
         let field = EntryField::new("Command palette", CompletionSource::Commands);
-        let list = self.palette.list("", &self.keymap);
+        let list = self.palette.list_with("", &self.keymap, Some(&self.menus));
         let dialog = Dialog::Edit {
             field,
             candidates: Some(list),

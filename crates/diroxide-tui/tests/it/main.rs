@@ -595,6 +595,12 @@ fn candidates_are_a_count_while_typing_and_a_list_on_demand_for_a_screen_reader(
                 "{:#?}",
                 screen.lines
             );
+            // The first match with its key, read while typing (answer 49).
+            assert!(
+                screen.lines[prompt + 1].starts_with("Sort by name, Ctrl+F3. "),
+                "{:#?}",
+                screen.lines
+            );
             assert!(!screen.lines[prompt + 2].starts_with("Sort by"));
         } else {
             assert!(screen.lines[prompt + 1].starts_with("Sort by"));

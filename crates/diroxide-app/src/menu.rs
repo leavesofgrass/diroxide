@@ -317,6 +317,19 @@ impl Menus {
         })
     }
 
+    /// The title of the menu whose item runs a command, the first in file
+    /// order: "View" for Switch bank, "Sort" for Sort by size.
+    pub fn holder_of(&self, command: &CommandId) -> Option<&str> {
+        self.menus
+            .iter()
+            .find(|m| {
+                m.items
+                    .iter()
+                    .any(|i| i.action == ItemAction::Command(command.clone()))
+            })
+            .map(|m| m.title.as_str())
+    }
+
     /// The item an access key chooses in a menu, where the place allows it.
     pub fn item_by_access(
         &self,

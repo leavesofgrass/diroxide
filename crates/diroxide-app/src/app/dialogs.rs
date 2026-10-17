@@ -952,7 +952,10 @@ impl App {
             _ => return Vec::new(),
         };
         let list = match self.top_purpose().cloned() {
-            Some(Purpose::Palette) => self.palette.list(&text, &self.keymap),
+            Some(Purpose::Palette) => {
+                self.palette
+                    .list_with(&text, &self.keymap, Some(&self.menus))
+            }
             Some(Purpose::Places(side)) => {
                 let all = self.place_candidates(side, false);
                 let found: Vec<Candidate> = all
@@ -972,12 +975,20 @@ impl App {
             _ => return Vec::new(),
         };
         let shown = list.len() as u64;
+        // The palette says its first match with its key, so the key is
+        // heard while typing, before Down enters the list (answer 49).
+        let said = match (self.top_purpose(), list.focused()) {
+            (Some(Purpose::Palette), Some(first)) if !text.is_empty() => {
+                format!("{}. {}", first.spoken(), count(shown, "match", "matches"))
+            }
+            _ => count(shown, "match", "matches"),
+        };
         if let Some((_, Dialog::Edit { candidates, .. })) = self.dialogs.last_mut() {
             *candidates = Some(list);
         }
         vec![
             Effect::Redraw(Redraw::All),
-            Effect::Announce(Message::status(count(shown, "match", "matches"))),
+            Effect::Announce(Message::status(said)),
         ]
     }
 

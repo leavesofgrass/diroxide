@@ -706,3 +706,26 @@ fn commands_with_arguments_act_at_once() {
     );
     assert_eq!(f.s.app.active_panel().place(), &place(&f.backup));
 }
+
+/// Answer 49: every palette row carries its key beside its name, or the
+/// menu that holds a command with no key, and typing says the first match
+/// with its key.
+#[test]
+fn the_palette_says_each_commands_key_beside_its_name() {
+    let mut f = open();
+    f.s.key("ctrl+p");
+    let said = f.s.type_text("sort by s");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Sort by size, Ctrl+F6. 1 match")
+    );
+    for _ in 0.."sort by s".len() {
+        f.s.key("backspace");
+    }
+    let said = f.s.type_text("switch b");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Switch bank, View menu. 1 match")
+    );
+    f.s.key("escape");
+}

@@ -147,6 +147,10 @@ impl Memory {
     }
 }
 
+/// The palette's list title, whose first match the minibuffer says while
+/// typing.
+const PALETTE_TITLE: &str = "Command palette";
+
 /// The text as drawn: hidden characters as question marks (ADR-0002).
 pub(crate) fn clean(text: &str) -> String {
     display_name(text).into_owned()
@@ -683,10 +687,21 @@ fn minibuffer(
                             // A typed confirmation's listing, not matches.
                             format!("{}. Down arrow reads the listing", clean(list.title()))
                         } else {
-                            format!(
+                            let matches = format!(
                                 "{}, Down arrow lists them",
                                 count(list.len() as u64, "match", "matches")
-                            )
+                            );
+                            // The palette's first match comes first with
+                            // its key, so the key is read while typing.
+                            match list.focused() {
+                                Some(first)
+                                    if list.title() == PALETTE_TITLE
+                                        && !field.text().is_empty() =>
+                                {
+                                    format!("{}. {matches}", clean(&first.spoken()))
+                                }
+                                _ => matches,
+                            }
                         };
                         lines.push(vec![Run::new(0, width, said, PanelRole::Dialog)]);
                     }
