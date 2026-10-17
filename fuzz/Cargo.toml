@@ -43,3 +43,58 @@ bench = false
 # Its own workspace, so the main one never builds it.
 [workspace]
 members = ["."]
+
+# The archive targets (W2a). Each body is a plain function in
+# diroxide-archive's `fuzzing` module, so the seeds under
+# `fixtures/archives/seeds/` replay in the crate's normal tests.
+[dependencies.diroxide-archive]
+path = "../crates/diroxide-archive"
+
+[[bin]]
+name = "archive_names"
+path = "fuzz_targets/archive_names.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_sniff"
+path = "fuzz_targets/archive_sniff.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_zip"
+path = "fuzz_targets/archive_zip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_tar"
+path = "fuzz_targets/archive_tar.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_stream"
+path = "fuzz_targets/archive_stream.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_xz"
+path = "fuzz_targets/archive_xz.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_7z"
+path = "fuzz_targets/archive_7z.rs"
+test = false
+doc = false
+bench = false

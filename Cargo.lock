@@ -833,12 +833,18 @@ name = "diroxide-archive"
 version = "0.1.0-alpha.1"
 dependencies = [
  "bzip2",
+ "crc32fast",
  "diroxide-core",
+ "diroxide-ops",
  "diroxide-vfs",
  "flate2",
  "lzma-rust2",
+ "proptest",
  "sevenz-rust2",
+ "sysinfo",
  "tar",
+ "tempfile",
+ "thiserror 2.0.21",
  "zip",
 ]
 
