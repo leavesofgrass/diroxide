@@ -982,6 +982,18 @@ impl Runtime {
                     crate::archives::sweep(&registry, spool.as_deref(), &folders);
                 });
             }
+            Request::SaveLabels(store) => {
+                if let Some(paths) = &self.paths
+                    && let Err(error) = crate::labels::save(paths, &store)
+                {
+                    self.queue.push_back(AppEvent::Problem(Message::could_not(
+                        "save",
+                        "the labels",
+                        &error,
+                        "",
+                    )));
+                }
+            }
         }
     }
 

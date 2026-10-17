@@ -20,13 +20,6 @@ alpha = "alpha.3"
 column = "both"
 
 [[key]]
-keys = ["alt+l"]
-command = "label.set"
-name = "Set label"
-alpha = "alpha.3"
-column = "both"
-
-[[key]]
 keys = ["ctrl+t"]
 command = "tab.new"
 name = "New tab"

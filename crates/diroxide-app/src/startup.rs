@@ -3,7 +3,7 @@
 //! in the config files, the menus and banks, the session to restore, the
 //! interrupted jobs of the last session and the undo records of the
 //! finished ones (from the undo journal), the prompts' histories, the home
-//! folder, and the clock with the local offset.
+//! folder, the labels (W3l), and the clock with the local offset.
 //!
 //! [`load`] does the reading (I/O), so the app's core stays free of it;
 //! tests build a [`Startup`] by hand or load one from a temporary state
@@ -49,6 +49,9 @@ pub struct Startup {
     pub home: Option<Place>,
     /// Whether this is the first start (no session was ever saved).
     pub first_run: bool,
+    /// The labels and the labeled places (`labels.toml`; the starter set
+    /// on a first start).
+    pub labels: crate::labels::LabelStore,
 }
 
 impl Default for Startup {
@@ -65,6 +68,7 @@ impl Default for Startup {
             histories: BTreeMap::new(),
             home: None,
             first_run: false,
+            labels: crate::labels::LabelStore::starter(),
         }
     }
 }
@@ -164,6 +168,8 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     let home = dirs::home_dir()
         .and_then(|home| home.into_os_string().into_string().ok())
         .and_then(|home| Place::parse(&home).ok());
+    let labels = crate::labels::load(paths);
+    problems.extend(labels.problems);
     Startup {
         problems,
         menus,
@@ -176,6 +182,7 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         histories: state::load_histories(paths),
         home,
         first_run,
+        labels: labels.value,
     }
 }
 

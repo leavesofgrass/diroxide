@@ -190,7 +190,11 @@ impl App {
         }
     }
 
-    fn listed_ok(&mut self, side: Side, entries: Vec<Entry>) -> Vec<Effect> {
+    fn listed_ok(&mut self, side: Side, mut entries: Vec<Entry>) -> Vec<Effect> {
+        // The labels each entry carries (W3l).
+        if let Some(place) = self.panel(side).loading_place().cloned() {
+            self.organize.labels.apply_to_entries(&place, &mut entries);
+        }
         let how = self.panel(side).loading_how().unwrap_or(Load::Open);
         let clock = std::sync::Arc::clone(&self.clock);
         let refreshed = self.panels[side.index()].finish(entries, &self.types, clock.as_ref());

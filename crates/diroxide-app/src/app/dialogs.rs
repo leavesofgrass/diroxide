@@ -280,7 +280,7 @@ impl App {
                     | Purpose::Places(_)
                     | Purpose::PickDestination { .. }
                     | Purpose::TypedPlan(..)
-            );
+            ) || matches!(&purpose, Purpose::Organize(w) if w.list_always());
             if candidates.is_some() && !list_always {
                 *candidates = None;
                 *in_list = false;
@@ -779,6 +779,7 @@ impl App {
                 effects.extend(self.run_line(side, &text));
                 effects
             }
+            Purpose::Organize(wants) => self.organize_accept(*wants, row, text, in_list),
             Purpose::RunPlan(_)
             | Purpose::Quit
             | Purpose::RunProgram(_)
@@ -1089,6 +1090,7 @@ impl App {
             Some(Purpose::Palette | Purpose::Places(_) | Purpose::PickDestination { .. }) => {
                 self.refresh_candidates()
             }
+            Some(Purpose::Organize(wants)) if wants.list_always() => self.refresh_candidates(),
             _ => {
                 if let Some((
                     _,
@@ -1140,6 +1142,10 @@ impl App {
                     .collect();
                 candidate_list("Destinations", &found)
             }
+            Some(Purpose::Organize(wants)) => match self.organize_candidates(&wants, &text) {
+                Some(list) => list,
+                None => return Vec::new(),
+            },
             _ => return Vec::new(),
         };
         let shown = list.len() as u64;

@@ -319,6 +319,8 @@ pub enum Request {
         /// The folders packs wrote into.
         folders: Vec<Place>,
     },
+    /// Write the labels to `labels.toml` in the state folder (W3l).
+    SaveLabels(Box<crate::labels::LabelStore>),
 }
 
 #[cfg(test)]

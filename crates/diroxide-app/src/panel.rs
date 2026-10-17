@@ -96,11 +96,15 @@ pub fn row_for(entry: &Entry, columns: &[Column], clock: &dyn Clock) -> ListRow 
 }
 
 /// The row for an entry: its display name, then "name needs care" when it
-/// does, then each column's words; empty cells are left out.
+/// does, then its labels ("label: urgent"), then each column's words;
+/// empty cells are left out.
 pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> ListRow {
     let mut details = Vec::new();
     if entry.needs_care || entry.name_not_unicode {
         details.push("name needs care".to_owned());
+    }
+    if let Some(labels) = labels_words(&entry.labels) {
+        details.push(labels);
     }
     for column in columns {
         let detail = column.cell(entry, clock);
@@ -109,6 +113,20 @@ pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> Lis
         }
     }
     ListRow::new(entry.name.clone(), entry.display_name()).with_details(details)
+}
+
+/// An entry's labels as its row says them, the names first and their
+/// colors never: "label: urgent", "labels: urgent, review" (W3l).
+pub fn labels_words(labels: &[String]) -> Option<String> {
+    let said: Vec<String> = labels
+        .iter()
+        .map(|l| crate::labels::in_sentence(&display_name(l)))
+        .collect();
+    match said.as_slice() {
+        [] => None,
+        [one] => Some(format!("label: {one}")),
+        many => Some(format!("labels: {}", many.join(", "))),
+    }
 }
 
 /// Compares names the way people count: "file2" before "file10", ignoring

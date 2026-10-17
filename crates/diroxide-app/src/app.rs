@@ -22,7 +22,9 @@ mod archive_jobs;
 mod dialogs;
 mod files;
 mod info;
+mod labeling;
 mod nav;
+mod organize;
 mod preview;
 mod select;
 mod split_join;
@@ -384,6 +386,8 @@ enum Purpose {
     SettingText(String),
     /// A list to read: details, help, problems.
     Read,
+    /// The labels (W3l): what their dialogs are for.
+    Organize(Box<organize::Wants>),
     /// The job history.
     JobHistory,
     /// One job's items.
@@ -516,6 +520,8 @@ pub struct App {
     highlighter: Option<crate::viewer::highlight::Session>,
     /// The quick view and the focus in its region.
     preview: preview::Preview,
+    /// The labels (W3l).
+    organize: organize::Organize,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -824,6 +830,7 @@ impl App {
             viewer_wait: None,
             highlighter: None,
             preview: preview::Preview::default(),
+            organize: organize::Organize::new(startup.labels),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1268,6 +1275,10 @@ impl App {
         if self.dialogs.is_empty()
             && let Some(effects) = self.preview_dispatch(action, &command.id)
         {
+            return effects;
+        }
+        // The labels (W3l).
+        if let Some(effects) = self.organize_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

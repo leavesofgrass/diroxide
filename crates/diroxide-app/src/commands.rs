@@ -338,6 +338,26 @@ pub mod ids {
         SORT_LABEL = "view.sort-label";
         /// The Sort list.
         SORT_LIST = "view.sort-list";
+        /// Add a label to the marked items, or the focused one.
+        LABEL_SET = "label.set";
+        /// Add a label, or take it off when every item has it.
+        LABEL_TOGGLE = "label.toggle";
+        /// Take every label off the marked items, or the focused one.
+        LABEL_CLEAR = "label.clear";
+        /// Toggle the first label of the Labels list.
+        LABEL_FAVORITE_1 = "label.favorite-1";
+        /// Toggle the second label of the Labels list.
+        LABEL_FAVORITE_2 = "label.favorite-2";
+        /// Toggle the third label of the Labels list.
+        LABEL_FAVORITE_3 = "label.favorite-3";
+        /// Toggle the fourth label of the Labels list.
+        LABEL_FAVORITE_4 = "label.favorite-4";
+        /// Toggle the fifth label of the Labels list.
+        LABEL_FAVORITE_5 = "label.favorite-5";
+        /// Toggle the sixth label of the Labels list.
+        LABEL_FAVORITE_6 = "label.favorite-6";
+        /// Toggle the seventh label of the Labels list.
+        LABEL_FAVORITE_7 = "label.favorite-7";
         /// Closes the viewer and goes back to the file's row
         CLOSE_VIEWER = "viewer.close";
         /// Moves to the token before, or the byte before in hex mode, and says it
@@ -481,7 +501,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 158] = [
+pub static CATALOG: [CommandInfo; 168] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1273,6 +1293,86 @@ pub static CATALOG: [CommandInfo; 158] = [
         Panel,
         &[],
         &["ctrl+shift+s"],
+    ),
+    command(
+        ids::LABEL_SET,
+        "Set label",
+        "Adds a label to the marked items, or the focused one; a new name makes a new label.",
+        Panel,
+        &["alt+l"],
+        &["alt+l"],
+    ),
+    command(
+        ids::LABEL_TOGGLE,
+        "Toggle label",
+        "Adds a label to the marked items, or takes it off when every one has it.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABEL_CLEAR,
+        "Clear labels",
+        "Takes every label off the marked items, or the focused one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABEL_FAVORITE_1,
+        "Favorite label 1",
+        "Adds the first label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+1"],
+        &["ctrl+1"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_2,
+        "Favorite label 2",
+        "Adds the second label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+2"],
+        &["ctrl+2"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_3,
+        "Favorite label 3",
+        "Adds the third label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+3"],
+        &["ctrl+3"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_4,
+        "Favorite label 4",
+        "Adds the fourth label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+4"],
+        &["ctrl+4"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_5,
+        "Favorite label 5",
+        "Adds the fifth label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+5"],
+        &["ctrl+5"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_6,
+        "Favorite label 6",
+        "Adds the sixth label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+6"],
+        &["ctrl+6"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_7,
+        "Favorite label 7",
+        "Adds the seventh label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+7"],
+        &["ctrl+7"],
     ),
     command(
         ids::CLOSE_VIEWER,

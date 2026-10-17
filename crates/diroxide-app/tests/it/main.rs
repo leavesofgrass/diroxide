@@ -10,6 +10,7 @@ mod archives;
 mod braille;
 mod commands;
 mod dialogs;
+mod labels;
 mod preview;
 mod session;
 mod split_join;

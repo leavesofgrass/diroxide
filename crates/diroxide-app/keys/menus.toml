@@ -181,6 +181,56 @@ access = "a"
 command = "file.copy-name"
 access = "n"
 
+[[menu.item]]
+menu = "labels"
+access = "b"
+
+[[menu]]
+id = "labels"
+title = "Labels"
+access = "b"
+bar = false
+
+[[menu.item]]
+command = "label.set"
+access = "s"
+
+[[menu.item]]
+command = "label.toggle"
+access = "t"
+
+[[menu.item]]
+command = "label.clear"
+access = "c"
+
+[[menu.item]]
+command = "label.favorite-1"
+access = "1"
+
+[[menu.item]]
+command = "label.favorite-2"
+access = "2"
+
+[[menu.item]]
+command = "label.favorite-3"
+access = "3"
+
+[[menu.item]]
+command = "label.favorite-4"
+access = "4"
+
+[[menu.item]]
+command = "label.favorite-5"
+access = "5"
+
+[[menu.item]]
+command = "label.favorite-6"
+access = "6"
+
+[[menu.item]]
+command = "label.favorite-7"
+access = "7"
+
 [[menu]]
 id = "view"
 title = "View"
