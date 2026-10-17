@@ -313,12 +313,16 @@ fn the_owners_check_of_alpha_3_runs_with_its_words() {
         "{said:?}"
     );
     let rows = c.rows();
-    assert!(
-        rows.iter()
-            .any(|r| r.starts_with("invoice.txt, line 3: total due")),
-        "{rows:?}"
-    );
-    c.s.app_mut();
+    // The reports hold "total due" too, and hits come in the order they
+    // are found, which differs between systems: go to the invoice's row.
+    let invoice = rows
+        .iter()
+        .position(|r| r.starts_with("invoice.txt, line 3: total due"))
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    c.key("home");
+    for _ in 0..invoice {
+        c.key("down");
+    }
     let said = c.key("f3");
     assert!(c.s.app().viewer_open(), "{said:?}");
     assert!(any_starts(&said, "At line 3 of 4"), "{said:?}");
