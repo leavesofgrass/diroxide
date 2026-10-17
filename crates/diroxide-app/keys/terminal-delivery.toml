@@ -1,0 +1,825 @@
+# The key-delivery matrix: what each terminal does with the keys the
+# presets and the defaults use (research/alpha3-plan.md, the key capture
+# spike). It sits beside terminal-unsafe.toml and feeds it: every key a
+# terminal here keeps or merges with another key is on that table, so the
+# keymap's tests fail on a terminal binding of it, and the Keys list says
+# "check terminal" on its row.
+#
+# One [[key]] per key, in keymap.toml's syntax, with one field per
+# terminal:
+#   windows_terminal  Windows Terminal on Windows 11, its default settings
+#   built_in          the desktop app's built-in terminal
+#   tmux              tmux with its default settings, in any outer terminal
+#   console_host      the classic Windows console (conhost)
+#
+# Each value is one of:
+#   "delivered"        arrives as itself
+#   "kept"             the terminal keeps it; diroxide never sees it
+#   "merged with KEY"  arrives as another key, KEY in keymap.toml's syntax
+#   "to probe"         not tried yet; the owner's key test fills it in
+#
+# "source" says where the known values come from; "note" adds what a value
+# cannot say. Values marked "to probe" are not guesses: they are the rows
+# the owner has not probed. `diro keys test`, or Test keys in the Keys
+# list, says what a terminal sent for a key.
+#
+# Sources: the wiki's dated copy of Microsoft's Windows Terminal actions
+# page (October 10, 2026), as plan section 5.7 ("What the terminal
+# programs keep") cites it; the owner's first try of alpha.1 in the
+# desktop app's built-in terminal (Friday, October 16, 2026: Alt+F and
+# Ctrl+Q never arrive); research/accessibility-stack.md section 4 (R4,
+# crossterm read from its source: in a terminal that sends escape
+# sequences, Ctrl+I is the same byte as Tab, Ctrl+M as Enter and Ctrl+[ as
+# Escape) and its note that tmux keeps Ctrl+B as its prefix.
+
+# The function keys.
+
+[[key]]
+key = "f1"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "GNOME Terminal keeps it for help (R4, memory); not a Windows key"
+
+[[key]]
+key = "f2"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "f3"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "f4"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "f5"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "f6"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "f7"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "f8"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "f9"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "f10"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "GNOME Terminal keeps it for its menu (R4, memory)"
+
+[[key]]
+key = "f11"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: full screen"
+
+[[key]]
+key = "f12"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "kept free for the terminal programs (plan 5.7)"
+
+# Shift with the function keys: some terminals send F13 to F24.
+
+[[key]]
+key = "shift+f1"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "R19 spike one, R5, memory: some terminals send Shift+F1 to F12 as F13 to F24"
+
+[[key]]
+key = "shift+f2"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Shift+F1"
+
+[[key]]
+key = "shift+f3"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Shift+F1; W2f's notes: some terminals send it as F15"
+
+[[key]]
+key = "shift+f5"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Shift+F1"
+
+[[key]]
+key = "shift+f6"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Shift+F1"
+
+[[key]]
+key = "shift+f8"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Shift+F1"
+
+[[key]]
+key = "shift+f10"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Shift+F1"
+
+# Control with the function keys: the sort keys.
+
+[[key]]
+key = "ctrl+f3"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed; macOS keeps Ctrl+F3 to Ctrl+F8 (plan 5.7)"
+
+[[key]]
+key = "ctrl+f4"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Ctrl+F3"
+
+[[key]]
+key = "ctrl+f5"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Ctrl+F3"
+
+[[key]]
+key = "ctrl+f6"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Ctrl+F3"
+
+[[key]]
+key = "ctrl+f7"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Ctrl+F3"
+
+# Alt with the function keys: the archive keys of the Total Commander
+# preset and the window column.
+
+[[key]]
+key = "alt+f1"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "a Linux desktop may keep it (R21, memory)"
+
+[[key]]
+key = "alt+f5"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+f6"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+f7"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "a Linux window manager may keep it (R21, memory)"
+
+[[key]]
+key = "alt+f9"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+shift+f9"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "a shifted function key (R21)"
+
+# Control with a letter.
+
+[[key]]
+key = "ctrl+a"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+b"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "kept"
+console_host = "to probe"
+source = "R4 4.2 (R1's note): tmux's prefix key"
+note = "in tmux, press it twice to send it once"
+
+[[key]]
+key = "ctrl+c"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: copy"
+note = "Windows Terminal keeps it only while text is selected"
+
+[[key]]
+key = "ctrl+d"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+f"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+g"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+l"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+p"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+q"
+windows_terminal = "to probe"
+built_in = "kept"
+tmux = "to probe"
+console_host = "to probe"
+source = "the owner's first try of alpha.1 in the built-in terminal, Friday, October 16, 2026"
+
+[[key]]
+key = "ctrl+r"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+s"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "raw mode releases it from flow control (plan 5.7); not probed"
+
+[[key]]
+key = "ctrl+u"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+v"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: paste"
+note = "the clipboard's text arrives as typed keys instead"
+
+[[key]]
+key = "ctrl+x"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+z"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+# Control keys that share a byte with another key.
+
+[[key]]
+key = "ctrl+i"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "merged with tab"
+console_host = "to probe"
+source = "R4 4.1: the same byte as Tab; Windows reads key records, not probed"
+
+[[key]]
+key = "ctrl+m"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "merged with enter"
+console_host = "to probe"
+source = "R4 4.1: the same byte as Enter"
+
+[[key]]
+key = "ctrl+h"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "R4 4.1: some terminals send Backspace as this byte"
+
+[[key]]
+key = "ctrl+j"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "R4 4.1: a line feed, which many terminals use for Ctrl+Enter"
+
+[[key]]
+key = "ctrl+["
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "merged with escape"
+console_host = "to probe"
+source = "R4 4.1: the same byte as Escape"
+
+# Enter, Tab, Space and Backspace with a modifier.
+
+[[key]]
+key = "ctrl+enter"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "merged with enter"
+console_host = "to probe"
+source = "R4 4.1; answer 29: terminals send it as Enter or a line feed"
+
+[[key]]
+key = "shift+enter"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "merged with enter"
+console_host = "to probe"
+source = "R4 4.1"
+
+[[key]]
+key = "ctrl+space"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "R4 4.1 and 4.2: a null character in Unix terminals, and input methods take it"
+
+[[key]]
+key = "ctrl+tab"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "merged with tab"
+console_host = "to probe"
+source = "Windows Terminal actions page: next tab; R4 4.1"
+
+[[key]]
+key = "ctrl+shift+tab"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: previous tab"
+
+[[key]]
+key = "shift+tab"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+backspace"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "many terminals send it as Ctrl+H or as Backspace (memory)"
+
+# Alt with a letter or an arrow.
+
+[[key]]
+key = "alt+left"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: pane focus"
+note = "with one pane, Windows Terminal may pass it on; not verified"
+
+[[key]]
+key = "alt+right"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: pane focus"
+note = "with one pane, Windows Terminal may pass it on; not verified"
+
+[[key]]
+key = "alt+up"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: pane focus"
+note = "with one pane, Windows Terminal may pass it on; not verified"
+
+[[key]]
+key = "alt+down"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: pane focus"
+note = "with one pane, Windows Terminal may pass it on; not verified"
+
+[[key]]
+key = "alt+home"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "some terminals do not pass it (plan 5.7)"
+
+[[key]]
+key = "alt+enter"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: full screen"
+
+[[key]]
+key = "alt+f"
+windows_terminal = "to probe"
+built_in = "kept"
+tmux = "to probe"
+console_host = "to probe"
+source = "the owner's first try of alpha.1 in the built-in terminal, Friday, October 16, 2026"
+
+[[key]]
+key = "alt+e"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+b"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+d"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+l"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+o"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+."
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "alt+space"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: the window's system menu"
+
+[[key]]
+key = "alt+f4"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: close the window"
+
+# Control and Shift with the arrows.
+
+[[key]]
+key = "ctrl+up"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed; Mission Control keeps it on macOS (R4, memory)"
+
+[[key]]
+key = "ctrl+down"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Ctrl+Up"
+
+[[key]]
+key = "ctrl+left"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Ctrl+Up"
+
+[[key]]
+key = "ctrl+right"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "as Ctrl+Up"
+
+[[key]]
+key = "shift+up"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "shift+down"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "not probed"
+
+[[key]]
+key = "ctrl+alt+left"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: the previous pane; NVDA, JAWS and Narrator use it too"
+
+# Control and Shift with a letter.
+
+[[key]]
+key = "ctrl+shift+p"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: its command palette (plan 5.7)"
+
+[[key]]
+key = "ctrl+shift+v"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: paste"
+
+[[key]]
+key = "ctrl+shift+a"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "merged with ctrl+a"
+console_host = "to probe"
+source = "R4 4.1: terminals send Control and Shift with a letter as Control and the letter"
+
+[[key]]
+key = "ctrl+shift+n"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "merged with ctrl+n"
+console_host = "to probe"
+source = "Windows Terminal actions page: new window; R4 4.1"
+
+[[key]]
+key = "ctrl+shift+s"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "merged with ctrl+s"
+console_host = "to probe"
+source = "R4 4.1"
+
+# The font size and the settings.
+
+[[key]]
+key = "ctrl+plus"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: font size"
+
+[[key]]
+key = "ctrl+-"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: font size"
+
+[[key]]
+key = "ctrl+0"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: font size"
+
+[[key]]
+key = "ctrl+,"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: its settings"
+
+# The keypad and the rest.
+
+[[key]]
+key = "kp-plus"
+windows_terminal = "merged with plus"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "merged with plus"
+source = "R4 4.1: the keypad arrives as the main row's characters in a Windows terminal"
+
+[[key]]
+key = "kp-minus"
+windows_terminal = "merged with -"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "merged with -"
+source = "R4 4.1"
+
+[[key]]
+key = "kp-multiply"
+windows_terminal = "merged with *"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "merged with *"
+source = "R4 4.1"
+
+[[key]]
+key = "kp-divide"
+windows_terminal = "merged with /"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "merged with /"
+source = "R4 4.1"
+
+[[key]]
+key = "menu"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "kept"
+source = "W1d-2's notes: on Windows crossterm never delivers the Menu key"
+
+[[key]]
+key = "shift+insert"
+windows_terminal = "kept"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "Windows Terminal actions page: paste; Insert is the screen readers' key anyway"
+
+[[key]]
+key = "ctrl+\\"
+windows_terminal = "to probe"
+built_in = "to probe"
+tmux = "to probe"
+console_host = "to probe"
+source = "some terminals send it as Ctrl+4 (R21, memory)"

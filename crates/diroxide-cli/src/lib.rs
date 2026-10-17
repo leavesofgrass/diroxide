@@ -130,6 +130,7 @@ pub fn help_text() -> String {
         "diro keys check [FILE]    say each problem in keymap.toml or FILE",
         "diro keys print           print the current keys as keymap.toml text",
         "diro keys test            say what each key sends and runs; Escape ends it",
+        "diro keys probe           ask for each key in turn and print what arrived",
         "diro init SHELL           print the shell function that moves the shell where diro left it",
         "diro archive list PLACE   list an archive's members, one a line, the path first",
         "diro archive pack ARCHIVE ITEM...  pack items into a new archive",

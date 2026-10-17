@@ -12,6 +12,9 @@
 //! - `test` says, for each key pressed, what diroxide would run and what
 //!   the terminal sent, until Escape or ten seconds without a key (the key
 //!   probe of R19 spike one, for the owner's terminals).
+//! - `probe` asks for each key of the key-delivery matrix in turn and
+//!   prints what arrived for each in the matrix's words (`ctrl+v = kept`),
+//!   the column the owner sends back for `terminal-delivery.toml`.
 //!
 //! Exit codes: 0 clean, printed or tested, 1 problems found, 2 wrong use, a
 //! file that cannot be read, or `test` without a terminal (R14's table).
@@ -34,6 +37,8 @@ pub enum KeysArgs {
     Print,
     /// Say what each key sends and runs.
     Test,
+    /// Ask for each key of the delivery matrix and say what arrived.
+    Probe,
     /// Print the help.
     Help,
 }
@@ -47,11 +52,12 @@ pub fn help_text() -> String {
         "diro keys check [FILE]   say each problem in FILE, or in keymap.toml",
         "diro keys print          write the current keys of both columns",
         "diro keys test           say what each key sends and runs; Escape ends it",
+        "diro keys probe          ask for each key in turn and print what arrived",
         "",
         "Exit codes:",
         "0  clean, printed or tested",
         "1  problems found; each is a line",
-        "2  wrong use, the file cannot be read, or no terminal for test",
+        "2  wrong use, the file cannot be read, or no terminal for test or probe",
     ]
     .join("\n")
 }
@@ -68,6 +74,8 @@ pub fn parse(args: &[String]) -> Result<KeysArgs, CliError> {
         [print, ..] if print == "print" => Err(CliError::TooMany("keys print".to_owned())),
         [test] if test == "test" => Ok(KeysArgs::Test),
         [test, ..] if test == "test" => Err(CliError::TooMany("keys test".to_owned())),
+        [probe] if probe == "probe" => Ok(KeysArgs::Probe),
+        [probe, ..] if probe == "probe" => Err(CliError::TooMany("keys probe".to_owned())),
         [other, ..] => Err(CliError::UnknownOption(other.clone())),
     }
 }
@@ -103,6 +111,20 @@ pub fn run(args: &KeysArgs, paths: Option<&Paths>, out: &mut dyn Write) -> Resul
             let config = paths.map(diroxide_config::load).unwrap_or_default();
             let (terminal, _) = keymap::keymaps(&config.keymap, platform);
             diroxide_tui::keytest::run(&terminal).map_err(|e| CliError::Failed(e.to_string()))?;
+            Ok(0)
+        }
+        KeysArgs::Probe => {
+            if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal()) {
+                writeln!(
+                    out,
+                    "Could not probe the keys: this is not a terminal. Run diro keys probe in one."
+                )
+                .map_err(failed)?;
+                return Ok(2);
+            }
+            let report = diroxide_tui::keytest::probe(platform)
+                .map_err(|e| CliError::Failed(e.to_string()))?;
+            writeln!(out, "{report}").map_err(failed)?;
             Ok(0)
         }
         KeysArgs::Check(file) => {
@@ -175,6 +197,7 @@ mod tests {
         );
         assert_eq!(parse(&args(&["print"])), Ok(KeysArgs::Print));
         assert_eq!(parse(&args(&["test"])), Ok(KeysArgs::Test));
+        assert_eq!(parse(&args(&["probe"])), Ok(KeysArgs::Probe));
         assert_eq!(
             parse(&args(&["test", "x"])),
             Err(CliError::TooMany("keys test".into()))

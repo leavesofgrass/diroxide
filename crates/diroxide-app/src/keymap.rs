@@ -16,7 +16,7 @@
 pub mod names;
 pub mod tables;
 
-pub use names::{Platform, spoken, written};
+pub use names::{Platform, for_file, spoken, written};
 
 use diroxide_config::{ConfigProblem, KeyOverride, KeymapConfig, Paths, SingleLetters};
 use diroxide_core::{CommandId, Key, KeyCode, KeyColumn, Layer};
@@ -854,6 +854,43 @@ mod tests {
     }
 
     #[test]
+    fn a_terminal_binding_of_a_key_a_terminal_loses_is_flagged() {
+        // The key-delivery matrix feeds the terminal table: binding any key
+        // a terminal keeps or merges, in the terminal column, is said.
+        let terminal = Keymap::defaults();
+        let mut checked = 0;
+        for row in tables::delivery_table()
+            .iter()
+            .filter(|r| r.states.iter().any(|s| s.lost()))
+        {
+            checked += 1;
+            let concerns = terminal.concerns(Layer::Panel, &row.key, &ids::SAY_KEY_BAR);
+            assert!(
+                concerns.iter().any(|c| matches!(
+                    c,
+                    KeyConcern::ScreenReaderKey
+                        | KeyConcern::TerminalCannot { .. }
+                        | KeyConcern::TerminalProgram { .. }
+                        | KeyConcern::ArrivesDifferently { .. }
+                )),
+                "{} binds silently",
+                row.key
+            );
+        }
+        assert!(checked >= 25, "{checked}");
+        let merged =
+            KeymapConfig::from_toml("[terminal.panel]\n\"app.say-key-bar\" = \"ctrl+i\"\n")
+                .unwrap();
+        assert_eq!(
+            check_keymap(&merged, Platform::Windows)
+                .iter()
+                .map(|p| p.text.as_str())
+                .collect::<Vec<_>>(),
+            ["The terminal cannot send Ctrl+I: terminals send it as Tab, line 2."]
+        );
+    }
+
+    #[test]
     fn a_key_a_terminal_may_keep_has_a_menu_as_the_sure_way() {
         let menus = crate::menu::Menus::builtin();
         for binding in Keymap::defaults().bindings() {
@@ -1111,6 +1148,7 @@ mod tests {
                     let sentence = concern.sentence(k, p);
                     let meaning = sentence.split(':').next().unwrap_or(&sentence);
                     let meaning = meaning.split(" already").next().unwrap_or(meaning);
+                    let meaning = meaning.split(", coming").next().unwrap_or(meaning);
                     assert!(within_cells(&sentence, meaning), "{sentence}");
                 }
             }

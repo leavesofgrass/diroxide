@@ -215,6 +215,9 @@ pub fn command() -> Command {
                 )
                 .subcommand(
                     Command::new("test").about("Say what each key sends and runs; Escape ends it"),
+                )
+                .subcommand(
+                    Command::new("probe").about("Ask for each key in turn and print what arrived"),
                 ),
         )
         .subcommand(

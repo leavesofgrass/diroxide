@@ -129,6 +129,13 @@ pub fn written(key: &Key, platform: Platform) -> String {
     parts.join("+")
 }
 
+/// A key as `keymap.toml` writes it: "ctrl+f5", "shift+tab", "kp-plus".
+/// The typed name the Keys list takes is read back with
+/// [`Key::parse`], so the two always agree.
+pub fn for_file(key: &Key) -> String {
+    diroxide_config::key_text_for_file(key)
+}
+
 /// A key as it is said: "Control plus F5", "Shift plus F3", "Alt plus
 /// Period", "Question mark", "Up arrow". On macOS Meta is "Command".
 pub fn spoken(key: &Key, platform: Platform) -> String {

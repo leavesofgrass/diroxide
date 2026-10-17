@@ -387,6 +387,7 @@ These keys of the terminal list work in most terminals, but a terminal program m
 - Shift+F5 for Duplicate: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: File menu, Duplicate.
 - Alt+Enter for Details: Windows Terminal keeps it; it goes full screen. Sure way: File menu, Details.
 - Shift+F10 for Context menu: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: File menu, Context menu.
+- Menu for Context menu: Windows keeps it; crossterm never delivers the Menu key in a Windows terminal; Shift+F10 is the way. Sure way: File menu, Context menu.
 - Ctrl+C for Copy: Windows Terminal keeps it; it copies text when text is selected. Sure way: Edit menu, Copy.
 - Ctrl+V for Paste: Windows Terminal keeps it; it pastes text, so the key never arrives. Sure way: Edit menu, Paste.
 - Ctrl+F3 for Sort by name: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by name.
