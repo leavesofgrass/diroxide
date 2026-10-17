@@ -1226,7 +1226,17 @@ impl<'a> Parser<'a> {
         let token = self.value_token(field)?;
         let fail = |p: &Self, problem| p.fail_at(&token, problem, vec![Expected::Value(field)]);
         let text = token.text.as_str();
-        let found = if token.kind == Kind::Quoted {
+        // A number is a count, never a year, where only a duration may
+        // stand or a time unit follows it, so `within 1000 days` and
+        // `< 2026 days` read like `within 999 days` (P3b, W3s's finding:
+        // four digits read as a year and were refused as "duration
+        // needed"). A count's only limit is its size.
+        let counted = is_digits(&token)
+            && (want == Want::Duration
+                || self.peek().is_some_and(|next| {
+                    next.kind == Kind::Word && TimeUnit::from_word(&next.text).is_some()
+                }));
+        let found = if token.kind == Kind::Quoted || counted {
             None
         } else if let Some(word) = DateWord::from_one(text) {
             self.skip_annotation();

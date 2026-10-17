@@ -30,6 +30,7 @@ Status update, Saturday, October 17, 2026 (the pre-W3a contract step, P3b, from 
 
 - **Needs care.** The filter's `needs-care` is also true for a name the provider could not read as Unicode, as the row already says "name needs care"; the search crate had set the flag itself for such names, and now reads the provider's entries (W3s's request 3).
 - **Undecided content answers name their reason.** The filter's `Unknown` gains `Binary` ("binary file not searched") and `OnlineOnly` ("online-only file not read"), after the reasons it had, so their order is kept and the enum stays non-exhaustive. The search crate's content lookup answers with them where it answered "content not read"; each such read is counted once, as a skip, whose sentences say which ("2 binary files skipped."), and a `Tally` over a panel says them in its unknown sentence (W3s's request 4).
+- **A duration counts past 999.** `modified within 1000 days` was refused as "duration needed" while 999 days read: four digits read as a year before they could read as a count. The limit was not meant, so it goes: a number is a count wherever only a duration may stand (`within`, `older than`) or a time unit follows it (`< 2026 days`), and its only limit is its size ("number too large" past 4,294,967,295). A year still reads where a date may stand with no unit after it (`modified 2026`, `before 2026`); `modified 1000 days` asks for within, as `modified 3 days` does; `within 2026` asks for a time unit (W3s's finding).
 
 ## Context
 

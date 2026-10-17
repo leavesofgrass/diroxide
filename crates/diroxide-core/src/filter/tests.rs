@@ -1038,3 +1038,79 @@ proptest! {
         }
     }
 }
+
+/// P3b (W3s's finding): a duration's count has no limit but its size. A
+/// four-digit count read as a year, so `within 1000 days` was refused
+/// as "duration needed" while 999 days read; a year still reads where a
+/// date may stand and no time unit follows.
+#[test]
+fn a_duration_counts_past_999_and_a_year_stays_a_year() {
+    let Expr::Test {
+        test: Test::Date(date),
+        ..
+    } = parse("modified within 1000 days").expr().clone()
+    else {
+        panic!("not a date test");
+    };
+    assert_eq!(
+        date.op,
+        DateOp::Within(Duration {
+            count: 1000,
+            unit: TimeUnit::Day
+        })
+    );
+    let clock = written();
+    for text in [
+        "modified within 1000 days",
+        "modified older than 2026 days",
+        "created within 9999 hours",
+        "modified within 123456 minutes",
+    ] {
+        let filter = parse(text);
+        assert_eq!(filter.read_back(&clock).sentence(), text);
+        assert_eq!(parse(&filter.sentence()).expr(), filter.expr(), "{text}");
+    }
+    assert_eq!(
+        parse("modified < 1000 days").expr(),
+        parse("modified within 1000 days").expr()
+    );
+    assert_eq!(
+        parse("modified > 2026 d").expr(),
+        parse("modified older than 2026 days").expr()
+    );
+    // Where a date may stand, four digits with no unit are still a year.
+    let Expr::Test {
+        test: Test::Date(year),
+        ..
+    } = parse("modified 2026").expr().clone()
+    else {
+        panic!("not a date test");
+    };
+    assert!(
+        matches!(year.op, DateOp::On(DateValue::Date(_))),
+        "{:?}",
+        year.op
+    );
+    assert_eq!(
+        parse("modified < 2026").expr(),
+        parse("modified before 2026").expr()
+    );
+    // A count with a unit where a date stands asks for within, as 3 days
+    // does; a count with no unit asks for one; too large is too large.
+    assert_eq!(
+        problem("modified 1000 days").problem(),
+        &Problem::WithinOrOlder
+    );
+    assert_eq!(
+        problem("modified 1000 days").problem(),
+        problem("modified 3 days").problem()
+    );
+    assert_eq!(
+        problem("modified within 2026").problem(),
+        &Problem::NeedsTimeUnit
+    );
+    assert_eq!(
+        problem("modified within 99999999999 days").problem(),
+        &Problem::NumberTooLarge
+    );
+}
