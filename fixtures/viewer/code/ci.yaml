@@ -1,0 +1,11 @@
+# A small workflow for the viewer's tests.
+name: checks
+on:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run the tests
+        run: cargo test

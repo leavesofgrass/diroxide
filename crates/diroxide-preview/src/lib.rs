@@ -9,11 +9,18 @@
 //! classes and their per-line runs ([`classes`]), the entry's detail rows
 //! on every preview ([`detail_rows`]), and serialization, so a preview
 //! can cross a process boundary (a plugin's previewer, `diro serve`).
-//! Wave 2 brings the viewer's `encoding` and `highlight` modules (W2d)
-//! and the quick view's `doc` modules (W2e); Wave 5 (W5b) adds the
-//! image, audio, video, document and archive previewers.
+//! Wave 2 brings the viewer's modules (W2d): [`encoding`], carried from
+//! textweaver, which decides a file's encoding and tells text from
+//! binary; [`hex`], the one hex row function every place that shows bytes
+//! uses; [`highlight`], syntect as a tokenizer into the token classes,
+//! with its caps, its worker and its deadline, the symbols and the
+//! validity lines. The quick view's `doc` modules follow (W2e); Wave 5
+//! (W5b) adds the image, audio, video, document and archive previewers.
 
 pub mod classes;
+pub mod encoding;
+pub mod hex;
+pub mod highlight;
 
 use std::io::Read;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -235,32 +242,12 @@ pub fn size_words(bytes: u64) -> String {
     format!("{words} ({} bytes)", diroxide_core::format::grouped(bytes))
 }
 
-/// Hex lines: an offset, sixteen bytes, and the printable characters.
-/// "00000000  50 4b 03 04  PK..".
+/// Hex lines: an offset, sixteen bytes, and the printable characters,
+/// through the shared row function ([`hex::hex_row`]): "000000: 50 4b
+/// 03 04 ... PK..".
 pub fn hex_lines(bytes: &[u8], start_offset: u64) -> Vec<String> {
-    bytes
-        .chunks(16)
-        .enumerate()
-        .map(|(i, chunk)| {
-            let hex: Vec<String> = chunk.iter().map(|b| format!("{b:02x}")).collect();
-            let text: String = chunk
-                .iter()
-                .map(|&b| {
-                    if b.is_ascii_graphic() || b == b' ' {
-                        char::from(b)
-                    } else {
-                        '.'
-                    }
-                })
-                .collect();
-            format!(
-                "{:08x}  {}  {}",
-                start_offset + i as u64 * 16,
-                hex.join(" "),
-                text
-            )
-        })
-        .collect()
+    let layout = hex::HexLayout::for_len(start_offset + bytes.len() as u64, 16);
+    hex::hex_rows(bytes, start_offset, layout)
 }
 
 fn read_head(
@@ -542,9 +529,12 @@ mod tests {
     #[test]
     fn hex_lines_show_offsets_bytes_and_text() {
         let lines = hex_lines(b"PK\x03\x04hello", 0);
+        let padding = " ".repeat(7 * 3);
         assert_eq!(
             lines,
-            vec!["00000000  50 4b 03 04 68 65 6c 6c 6f  PK..hello".to_owned()]
+            vec![format!(
+                "000000: 50 4b 03 04 68 65 6c 6c 6f {padding}PK..hello"
+            )]
         );
         let entry = Entry::new("a.bin", EntryKind::File).with_size(2_100_000);
         assert_eq!(details(&entry, None), "file, 2.1 MB");

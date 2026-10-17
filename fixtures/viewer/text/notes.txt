@@ -1,0 +1,14 @@
+Notes for the week, kept by Ada Example.
+Monday: read the archive guide and try the zip samples.
+Tuesday: the viewer opens a file at once, however large it is.
+Wednesday: search for a word, then the next match, then the count.
+Thursday: hex mode shows eight bytes a row for a screen reader.
+Friday: the outline lists the functions of main.rs by kind.
+Saturday: nothing planned; a walk by the river.
+Sunday: write down what was heard, line by line.
+
+A long line follows, to see how wrapping reads on a Braille line of forty cells, where every continued row says so before its text and never starts in the middle of a word.
+The hello line says hello once.
+Another hello, and a third hello on the same line: hello.
+Tabs	are	turned	into	spaces.
+The last line has no line end after it.

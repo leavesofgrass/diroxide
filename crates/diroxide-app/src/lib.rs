@@ -13,7 +13,7 @@
 //! Module owners after Phase 0: W1c owns `commands`, `keymap`, `menu`,
 //! `palette`, `settings`, `entry` and `messages`; W1d owns the rest
 //! (`app`, `panel`, `dialog`, `jobs`, `runtime`, `request`, `startup`,
-//! `state`); later waves add their own files.
+//! `state`); later waves add their own files: W2d owns `viewer`.
 //!
 //! [`Effect`]: diroxide_core::Effect
 
@@ -32,6 +32,7 @@ pub mod runtime;
 pub mod settings;
 pub mod startup;
 pub mod state;
+pub mod viewer;
 
 /// The configuration types a frontend reads through the app: the terminal
 /// crate may depend only on core, app and theme (`cargo xtask deps`), and

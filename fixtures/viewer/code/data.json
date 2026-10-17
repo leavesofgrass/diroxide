@@ -1,0 +1,10 @@
+{
+  "name": "diroxide sample",
+  "version": 2,
+  "tags": ["viewer", "test"],
+  "owner": {
+    "name": "Ada Example",
+    "active": true
+  },
+  "limits": null
+}

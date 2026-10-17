@@ -95,6 +95,14 @@ bench = false
 [[bin]]
 name = "archive_7z"
 path = "fuzz_targets/archive_7z.rs"
+
+# W2d: the highlighter must never hang (spike H2). Run with -timeout=2.
+[dependencies.diroxide-preview]
+path = "../crates/diroxide-preview"
+
+[[bin]]
+name = "highlight_hang"
+path = "fuzz_targets/highlight_hang.rs"
 test = false
 doc = false
 bench = false

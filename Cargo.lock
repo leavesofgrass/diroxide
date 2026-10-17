@@ -818,13 +818,16 @@ dependencies = [
  "diroxide-core",
  "diroxide-filetype",
  "diroxide-ops",
+ "diroxide-preview",
  "diroxide-theme",
  "diroxide-vfs",
  "dirs",
  "jiff",
  "opener",
+ "regex",
  "serde",
  "tempfile",
+ "thiserror 2.0.21",
  "toml",
 ]
 
@@ -953,11 +956,13 @@ dependencies = [
  "diroxide-filetype",
  "diroxide-vfs",
  "encoding_rs",
+ "proptest",
  "pulldown-cmark",
  "serde",
  "serde_json",
  "syntect",
  "thiserror 2.0.21",
+ "toml",
  "two-face",
 ]
 
