@@ -36,7 +36,7 @@ How a copy works:
 - The modified time of files and folders is kept (a folder's is set after its contents), and the created time too where the system can set one (Windows and macOS). The accessed time is not kept.
 - A folder is copied as a whole. A copy that is cancelled halfway keeps the files already finished.
 
-How a move works: on one drive a move is a rename. Across drives, diroxide copies, reads the copy back and compares it with the original, and only then removes the original. The jobs line says "Verifying 60 percent" for that second phase. If the check fails, the original stays where it was.
+How a move works: on one drive a move is a rename. Across drives, diroxide copies, reads the copy back and compares it with the original, and only then removes the original. The jobs line says "Verifying 60 percent" for that second phase. If the check fails, the original stays where it was. A moved file's labels do not follow it, because a label belongs to the file's path; label it again at its new place.
 
 ### When a name is taken
 
@@ -84,6 +84,7 @@ F2 asks for a new name for the focused entry: "Rename report.pdf to". The name i
 - A rename never replaces an existing name. If the name is taken, you are told.
 - A rename that only changes the case, such as `Readme` to `README`, works even on Windows and macOS, where the two names count as the same.
 - Pressing Enter on an unchanged name says "Name unchanged. Nothing renamed."
+- A file's labels belong to its full path, so they do not follow a rename. Label it again ([labels and bookmarks](labels-bookmarks.md)).
 
 ## Make a folder: F7
 
@@ -127,6 +128,12 @@ After a trash call on Windows, diroxide checks that the original is gone and tha
 
 On Linux the trash follows the freedesktop standard. On macOS the trash works, but diroxide cannot restore from it, so Undo cannot bring a trashed item back there; restore it from the Trash in the Finder.
 
+### In a list of search results
+
+A search's results are real files, so Delete in that list moves the real files to the trash, with the usual list of their full paths first and the question starting on No. Removing a row from the list without touching the file is a separate command. A row whose file is gone since the list was made says "gone since this list was made", and the action is refused in words. [Search and the filter language](search.md) has the rest.
+
+<!-- to confirm: the results list and its commands are the wiring lane's (W3a, commit 37). Check these sentences against the merged build. -->
+
 ## Delete for good: Shift+Delete
 
 Shift+Delete deletes without the trash. It is its own command with its own key and its own listing. The listing comes first, deepest paths first, with hidden characters spelled out and the count and size in words: "Delete 12 items for good, 2.3 GB, 2 read-only". A read-only file is part of the same question, and diroxide clears the attribute as part of the delete and says so in the listing. The question starts on No: "Delete 12 items for good? No is the default. y or n". The last line of the listing is honest about what deleting does:
@@ -146,7 +153,8 @@ Ctrl+Z undoes the last job. What it can reverse:
 - an overwrite: the replaced file is restored from the trash, if the job trashed it first;
 - a pack, an unpack, a split and a join: the files the job made go to the trash;
 - a link: the link goes to the trash, and a changed link target goes back to the old link from the trash;
-- a change of permissions, attributes or times: the old values are put back, for each entry that is still as the job left it.
+- a change of permissions, attributes or times: the old values are put back, for each entry that is still as the job left it;
+- a label step (set, toggle or clear): the labels go back: "Undid label urgent on 3 items". This lasts for the session only. A job's undo survives a restart; a label's does not.
 
 What it cannot reverse: a permanent delete, and a move across drives. Before it reverses each step, diroxide checks that the entry is as the job left it. If it changed since, that step is skipped and the undo says why. If there is nothing to undo, diroxide says "Nothing to undo".
 
@@ -177,7 +185,7 @@ Copy path and Copy name, in the palette, put the focused entry's full path or it
 
 Every prompt you type into has completion, with the same keys.
 
-- The prompts are Go to a path, Go to a place, rename, make folder, duplicate, the run-command prompt, the pattern and filter prompts, the copy and move pickers, and the palette. Each completes from what suits it: paths and folders from the place you are in, places, command names, and the prompt's own history.
+- The prompts are Go to a path, Go to a place, rename, make folder, duplicate, the run-command prompt, the pattern and filter prompts, Set label, the copy and move pickers, and the palette. Each completes from what suits it: paths and folders from the place you are in, places, command names, label names, and the prompt's own history.
 - Candidates appear as a list under the field, in the minibuffer region. Each row puts the candidate first and its kind after it: "Downloads, folder". Typing narrows the list, with names that start with your text before names that merely contain it.
 - Tab completes the single match, or the longest part that all the matches share, and says what it did: "completed to Downloads", "2 matches start Download, Down arrow lists them" or "No match". A second Tab, or Down, moves into the list. Enter accepts the highlighted candidate. Escape closes the list and keeps your text.
 - In screen-reader mode nothing is announced while you type, except the count when you press Tab. The `completion_list` setting says whether the list is shown as you type or only on Tab; in the terminal the default is on Tab.
@@ -196,6 +204,9 @@ Every prompt you type into has completion, with the same keys.
 - [Archives](archives.md)
 - [Split and join](split-join.md)
 - [Links, permissions and times](links-permissions.md)
+- [Search and the filter language](search.md)
+- [Labels and bookmarks](labels-bookmarks.md)
+- [Watching a folder](watching.md)
 - [Terminals](terminals.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Settings and where the files live](settings.md)
