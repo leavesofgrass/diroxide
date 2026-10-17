@@ -73,7 +73,6 @@ pub(crate) trait Contents {
 }
 
 /// The bytes of members held in memory, for the fuzz target and tests.
-#[allow(dead_code)] // The round-trip fuzz target's (plan commit 37).
 pub(crate) struct InMemory<'a>(pub(crate) &'a [Vec<u8>]);
 
 impl Contents for InMemory<'_> {
@@ -115,7 +114,6 @@ pub(crate) trait Watch: Sync {
 }
 
 /// A watch that never stops and counts nothing.
-#[allow(dead_code)] // The round-trip fuzz target's (plan commit 37).
 pub(crate) struct NoWatch;
 
 impl Watch for NoWatch {
@@ -397,7 +395,6 @@ pub(crate) fn write_archive<W: Write>(
 /// Writes a new archive of any format to a sink that seeks (memory, for
 /// the round-trip fuzz target): a 7z directly, the rest as
 /// [`write_archive`] does.
-#[allow(dead_code)] // The round-trip fuzz target's (plan commit 37).
 pub(crate) fn write_archive_seekable<W: Write + io::Seek>(
     out: W,
     items: &[WriteItem],

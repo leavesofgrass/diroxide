@@ -17,6 +17,7 @@ mod pack_zip;
 mod passwords;
 mod prompt;
 mod registration;
+mod roundtrip;
 mod seeds;
 mod sevenz_read;
 mod spike_hostile;

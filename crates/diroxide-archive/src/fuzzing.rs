@@ -387,7 +387,273 @@ pub fn seeds() -> Vec<(&'static str, &'static str, Vec<u8>)> {
     for (file, bytes) in signatures {
         seeds.push(("archive_sniff", file, bytes));
     }
+    let course: &[(&str, u8, &[u8])] = &[
+        ("week1", ROUND_FOLDER, b""),
+        ("week1/notes.txt", ROUND_FILE, b"the notes, the notes"),
+        ("week1/empty.txt", ROUND_FILE, b""),
+        ("caf\u{e9}.txt", ROUND_FILE, b"accents"),
+        (
+            "week2/deep/data.bin",
+            ROUND_FILE,
+            &[0, 1, 2, 3, 255, 254, 253, 0, 0, 0],
+        ),
+        ("../climbs.txt", ROUND_FILE, b"refused"),
+        ("dup.txt", ROUND_FILE, b"first"),
+        ("DUP.txt", ROUND_FILE, b"second"),
+    ];
+    let roundtrips: [(&'static str, u8, u8, u8); 9] = [
+        ("zip.bin", 0, 0, 0),
+        ("zip-locked.bin", 0, 1, ROUND_LOCKED),
+        ("seven-z-solid.bin", 1, 0, ROUND_SOLID),
+        ("seven-z-blocks.bin", 1, 1, 0),
+        (
+            "seven-z-locked.bin",
+            1,
+            0,
+            ROUND_SOLID | ROUND_LOCKED | ROUND_NAMES,
+        ),
+        ("tar.bin", 2, 0, 0),
+        ("tar-gz.bin", 3, 1, 0),
+        ("tar-xz.bin", 4, 0, 0),
+        ("xz.bin", 5, 0, 0),
+    ];
+    for (file, format, level, flags) in roundtrips {
+        seeds.push((
+            "archive_roundtrip",
+            file,
+            roundtrip_input(format, level, flags, course),
+        ));
+    }
     seeds
+}
+
+/// A round-trip entry that is a file.
+pub const ROUND_FILE: u8 = 0;
+/// A round-trip entry that is a folder.
+pub const ROUND_FOLDER: u8 = 1;
+/// A round trip into a solid 7z.
+pub const ROUND_SOLID: u8 = 1;
+/// A round trip with a password (zip and 7z).
+pub const ROUND_LOCKED: u8 = 2;
+/// A round trip with the 7z names hidden too.
+pub const ROUND_NAMES: u8 = 4;
+
+/// The input of the round-trip target for these choices: a format (0 zip,
+/// 1 7z, 2 tar, 3 tar.gz, 4 tar.xz, 5 xz), a level (0 fastest, 1 fast),
+/// flags ([`ROUND_SOLID`], [`ROUND_LOCKED`], [`ROUND_NAMES`]), then each
+/// entry as its name's length, its name, its kind ([`ROUND_FILE`] or
+/// [`ROUND_FOLDER`]), its contents' length in two bytes and its contents.
+pub fn roundtrip_input(format: u8, level: u8, flags: u8, entries: &[(&str, u8, &[u8])]) -> Vec<u8> {
+    let mut out = vec![format, level, flags];
+    for (name, kind, data) in entries {
+        let name = name.as_bytes();
+        let name = &name[..name.len().min(255)];
+        out.push(name.len() as u8);
+        out.extend_from_slice(name);
+        out.push(*kind);
+        let data = &data[..data.len().min(usize::from(u16::MAX))];
+        out.extend_from_slice(&(data.len() as u16).to_le_bytes());
+        out.extend_from_slice(data);
+    }
+    out
+}
+
+/// A secret source that always gives one password.
+struct Fixed(&'static str);
+
+impl diroxide_vfs::SecretSource for Fixed {
+    fn ask(
+        &self,
+        _request: &diroxide_core::SecretRequest,
+        _cancel: &diroxide_vfs::CancelToken,
+    ) -> Option<diroxide_core::Secret> {
+        Some(diroxide_core::Secret::new(self.0.to_owned()))
+    }
+}
+
+/// `archive_roundtrip`: a list of entries (plain and hostile names, small
+/// contents, from the input as [`roundtrip_input`] lays it out) is
+/// written in a format at a level by diroxide's own writers, read back by
+/// its own readers under the strict limits, and compared: every file the
+/// writer took reads back whole, every folder is there, nothing else
+/// is. The writers and the readers are tested against each other. Only
+/// the fast levels are used, so a run stays quick and small.
+pub fn roundtrip(data: &[u8]) {
+    use std::collections::HashSet;
+    use std::io::{Cursor, Read};
+
+    use crate::format::ArchiveFormat;
+    use crate::request::CompressionLevel;
+    use crate::write::{InMemory, ItemKind, NoWatch, Records, Settings, WriteItem};
+
+    let [format, level, flags, rest @ ..] = data else {
+        return;
+    };
+    let format = match format % 6 {
+        0 => ArchiveFormat::Zip,
+        1 => ArchiveFormat::SevenZ,
+        2 => ArchiveFormat::Tar,
+        3 => ArchiveFormat::TarGz,
+        4 => ArchiveFormat::TarXz,
+        _ => ArchiveFormat::Xz,
+    };
+    let level = if level % 2 == 0 {
+        CompressionLevel::Fastest
+    } else {
+        CompressionLevel::Fast
+    };
+    let locked =
+        flags & ROUND_LOCKED != 0 && matches!(format, ArchiveFormat::Zip | ArchiveFormat::SevenZ);
+    let mut items: Vec<WriteItem> = Vec::new();
+    let mut contents: Vec<Vec<u8>> = Vec::new();
+    let mut taken: HashSet<String> = HashSet::new();
+    let mut at = rest;
+    while items.len() < 32 {
+        let [len, tail @ ..] = at else { break };
+        let len = usize::from(*len);
+        if tail.len() < len + 3 {
+            break;
+        }
+        let name = String::from_utf8_lossy(&tail[..len]).into_owned();
+        let kind = tail[len];
+        let size = usize::from(u16::from_le_bytes([tail[len + 1], tail[len + 2]]));
+        let body = &tail[len + 3..];
+        let size = size.min(body.len());
+        let bytes = body[..size].to_vec();
+        at = &body[size..];
+        // The writer takes only safe paths, as the pack plan makes them;
+        // a name that would clash with another, or sit under a file, is
+        // left out, as the plan leaves it.
+        let Some(path) = normalize_member_name(&name) else {
+            continue;
+        };
+        if path.split('/').any(|part| part.len() > 200) {
+            continue;
+        }
+        let lower = path.to_lowercase();
+        let parents: Vec<String> = lower
+            .match_indices('/')
+            .map(|(i, _)| lower[..i].to_owned())
+            .collect();
+        let clashes = taken.contains(&lower)
+            || parents
+                .iter()
+                .any(|p| taken.contains(&format!("{p}\u{0}file")))
+            || taken.iter().any(|t| t.starts_with(&format!("{lower}/")));
+        if clashes {
+            continue;
+        }
+        let folder = kind & 1 == ROUND_FOLDER;
+        if format == ArchiveFormat::Xz && (folder || !items.is_empty()) {
+            continue;
+        }
+        taken.insert(lower.clone());
+        if !folder {
+            taken.insert(format!("{lower}\u{0}file"));
+        }
+        for parent in parents {
+            taken.insert(parent);
+        }
+        items.push(WriteItem {
+            name: path,
+            kind: if folder {
+                ItemKind::Folder
+            } else {
+                ItemKind::File
+            },
+            size: if folder { 0 } else { bytes.len() as u64 },
+            modified: Some(diroxide_core::Timestamp::from_unix(1_760_000_000, 0)),
+            mode: Some(if folder { 0o755 } else { 0o644 }),
+            owner: None,
+        });
+        contents.push(if folder { Vec::new() } else { bytes });
+    }
+    if items.is_empty() {
+        return;
+    }
+    let password = locked.then_some("fuzz-password");
+    let settings = Settings {
+        format,
+        level,
+        solid: flags & ROUND_SOLID != 0,
+        block_bytes: 1 << 16,
+        password,
+        encrypt_names: locked && flags & ROUND_NAMES != 0,
+        threads: 1,
+        keep_owner: false,
+    };
+    let records = Records::new(items.len());
+    let written = crate::write::write_archive_seekable(
+        Cursor::new(Vec::new()),
+        &items,
+        &InMemory(&contents),
+        &settings,
+        &NoWatch,
+        &records,
+    );
+    let bytes = match written {
+        Ok(cursor) => cursor.into_inner(),
+        Err(failure) => panic!("the writer failed on a plain list: {failure:?}"),
+    };
+    let provider = crate::provider::ArchiveProvider::new(Limits::strict());
+    let mut ctx = diroxide_vfs::OpContext::new();
+    if let Some(password) = password {
+        ctx = ctx.with_secrets(std::sync::Arc::new(Fixed(password)));
+    }
+    // A fixed name: the members' own names may hold a marker a place
+    // would split at.
+    let name = format!("round{}", format.extension());
+    let Ok(place) = Place::parse_with(&format!("/fuzz/{name}"), PathStyle::Unix) else {
+        return;
+    };
+    let opened = provider
+        .open_bytes(
+            Box::new(Cursor::new(bytes)),
+            &place,
+            &ctx,
+            crate::guard::Allowances::all(),
+        )
+        .unwrap_or_else(|error| panic!("the reader refused what the writer made: {error}"));
+    let index = opened.index();
+    let mut files = 0usize;
+    for (item, data) in items.iter().zip(&contents) {
+        let path = if format == ArchiveFormat::Xz {
+            crate::read_tar::single_name(&name)
+        } else {
+            item.name.clone()
+        };
+        let id = index.find(&path).unwrap_or_else(|| {
+            let names: Vec<String> = (0..index.len() as u32).map(|id| index.path(id)).collect();
+            panic!("{path} is missing from the {format:?} archive, which holds {names:?}")
+        });
+        let record = index.record(id).copied();
+        match item.kind {
+            ItemKind::Folder => assert_eq!(
+                record.map(|r| r.kind),
+                Some(crate::index::RecordKind::Folder),
+                "{path} is a folder"
+            ),
+            _ => {
+                files += 1;
+                let mut reader = provider
+                    .read_record(&opened, id, &ctx, crate::guard::Allowances::all(), None)
+                    .unwrap_or_else(|error| panic!("{path} cannot be read: {error}"));
+                let mut back = Vec::new();
+                reader
+                    .read_to_end(&mut back)
+                    .unwrap_or_else(|error| panic!("{path} reads short: {error}"));
+                assert_eq!(&back, data, "{path} reads back as written");
+            }
+        }
+    }
+    let listed = (0..index.len() as u32)
+        .filter(|&id| {
+            index
+                .record(id)
+                .is_some_and(|r| r.kind == crate::index::RecordKind::File)
+        })
+        .count();
+    assert_eq!(listed, files, "nothing more than was written");
 }
 
 #[cfg(test)]

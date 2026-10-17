@@ -145,6 +145,7 @@ fn replay(target: &str, bytes: &[u8]) {
         "archive_stream" => fuzzing::stream(bytes),
         "archive_xz" => fuzzing::xz(bytes),
         "archive_7z" => fuzzing::sevenz(bytes),
+        "archive_roundtrip" => fuzzing::roundtrip(bytes),
         other => panic!("no body for the target {other}"),
     }
 }
