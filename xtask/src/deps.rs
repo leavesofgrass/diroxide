@@ -115,6 +115,7 @@ pub const ALLOWED: [(&str, &[&str]); 18] = [
             "diroxide-vfs",
             "diroxide-ops",
             "diroxide-archive",
+            "diroxide-search",
             "diroxide-config",
             "diroxide-app",
             "diroxide-theme",

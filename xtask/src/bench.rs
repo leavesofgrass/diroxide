@@ -23,8 +23,7 @@
 //!   screen, in screen-reader mode.
 //! - `search-name` and `search-content`: search the 1 GB tree of
 //!   `bench/search-tree.toml` (its small form with `--quick`) by name and
-//!   by contents through `diro search`, from the start of the process to
-//!   its end (alpha.3, W3s).
+//!   by contents through the search engine (alpha.3, W3s).
 //!
 //! The archive scenarios call the archive provider and its runners
 //! directly (P2b, W2g's request 1): the archives are packed by diroxide's
@@ -55,12 +54,14 @@ use diroxide_archive::{
 };
 use diroxide_core::format::human_size;
 use diroxide_core::{
-    ConflictAnswer, ErrorAction, JobId, JobKind, JobRequest, JobState, Place, Timestamp, UtcOffset,
+    ConflictAnswer, ErrorAction, JobId, JobKind, JobRequest, JobState, Place, SystemClock,
+    Timestamp, UtcOffset,
 };
 use diroxide_ops::{
     Conflict, Engine, EngineOptions, ItemError, JobControl, JobProgress, JobSink, Latency, Plan,
     SlowPlace,
 };
+use diroxide_search::{FnSink, Scope, SearchControl, SearchHit, SearchQuery, quoted, run_search};
 use diroxide_vfs::{OpContext, Provider, Registry};
 use serde::{Deserialize, Serialize};
 
@@ -652,10 +653,8 @@ pub fn run_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
 
 /// The search scenarios (alpha.3, W3s): the search tree written once
 /// (the small one with `--quick`), then searched by name and by contents
-/// through `diro search --null`, each run timed from the start of the
-/// process to its end and checked against the tree's known count of
-/// hits. The bench calls `diro` because xtask may not depend on the
-/// search crate yet (W3s's contract change request).
+/// through the search engine itself (`run_search`, as the app runs it),
+/// each run checked against the tree's known count of hits.
 fn search_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
     let mut outcomes = Vec::new();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -676,20 +675,15 @@ fn search_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
         human_size(facts.bytes),
         time_words(millis(started.elapsed()))
     );
-    let diro = diro_binary(root)?;
-    let tree_text = tree.to_string_lossy().into_owned();
+    let place = place_of(&tree)?;
+    let registry = Registry::with_local();
+    let clock = SystemClock::utc();
     let budgets = &setting.params.budgets_ms;
     let windows = cfg!(windows);
-    let name_expression = format!("name {}*", tree_params.hit_word);
     let scenarios = [
         (
             "search-name",
-            vec![
-                "search",
-                tree_text.as_str(),
-                name_expression.as_str(),
-                "--null",
-            ],
+            format!("name {}*", tree_params.hit_word),
             format!("Search {} files by name", grouped(facts.files)),
             if windows {
                 budgets.search_name_windows
@@ -699,13 +693,7 @@ fn search_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
         ),
         (
             "search-content",
-            vec![
-                "search",
-                tree_text.as_str(),
-                "--content",
-                tree_params.hit_word.as_str(),
-                "--null",
-            ],
+            format!("content {}", quoted(&tree_params.hit_word)),
             format!("Search {} of files by contents", human_size(facts.bytes)),
             if windows {
                 budgets.search_content_windows
@@ -714,19 +702,29 @@ fn search_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
             },
         ),
     ];
-    for (id, args, label, budget) in scenarios {
+    for (id, expression, label, budget) in scenarios {
         if !wanted(setting, &[id]) {
             continue;
         }
+        let query = SearchQuery::parse(place.clone(), &expression)
+            .map_err(|e| anyhow::anyhow!("{expression} does not read: {}", e.line()))?
+            .with_scope(Scope::new(place.clone()).with_row_cap(None));
         let mut found = 0;
         let times = measure(setting.params.runs, |_| {
             let started = Instant::now();
-            let output = run_diro(&diro, &tree, &args, b"")?;
+            let summary = run_search(
+                &query,
+                &registry,
+                &clock,
+                &SearchControl::new(),
+                &mut FnSink(|_: SearchHit| {}),
+            )
+            .map_err(|e| anyhow::anyhow!("the search could not run: {e}"))?;
             let elapsed = started.elapsed();
-            found = output.split(|b| *b == 0).filter(|p| !p.is_empty()).count() as u64;
+            found = summary.hits;
             if found != facts.hit_files {
                 bail!(
-                    "diro search found {found}, and the tree holds {} hits",
+                    "the search found {found}, and the tree holds {} hits",
                     facts.hit_files
                 );
             }
@@ -737,10 +735,7 @@ fn search_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
             label,
             times,
             Some(budget),
-            format!(
-                "{} found, through diro search, the process included",
-                grouped(found)
-            ),
+            format!("{} found, through the search engine", grouped(found)),
         ));
     }
     Ok(outcomes)

@@ -4500,6 +4500,7 @@ dependencies = [
  "diroxide-archive",
  "diroxide-core",
  "diroxide-ops",
+ "diroxide-search",
  "diroxide-vfs",
  "resvg",
  "serde",
