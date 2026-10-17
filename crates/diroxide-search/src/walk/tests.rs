@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use diroxide_core::{Attributes, Place};
-use diroxide_vfs::{
-    AttributeChange, LinkKind, LinkRequest, LocalProvider, OpContext, Provider, Registry,
-};
+use diroxide_vfs::{AttributeChange, LocalProvider, OpContext, Provider, Registry};
+#[cfg(windows)]
+use diroxide_vfs::{LinkKind, LinkRequest};
 
 use super::*;
 use crate::query::SNAPSHOT_FOLDERS;
