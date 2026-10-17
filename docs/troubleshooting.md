@@ -18,7 +18,7 @@ If the key arrives but runs another command, check your own `keymap.toml`:
 diro keys check
 ```
 
-The Keys list (Settings, then Keys) shows each command's key and marks a key that many terminals keep with the words "check terminal". If you chose a key preset, your own lines in `keymap.toml` win over the preset, and the list says "changed" for yours and "preset" for the preset's. [Customizing keys](customizing-keys.md) describes the list.
+The Keys list (Settings, then Keys) shows each command's key and marks a key that many terminals keep with the words "check terminal". Inside tmux, Ctrl+B is tmux's own prefix key and arrives only when pressed twice; Alt+B opens the same bookmarks. In a compare, Shift+F7 may arrive as another key; P goes to the previous change, and Shift+F10 lists every action. If you chose a key preset, your own lines in `keymap.toml` win over the preset, and the list says "changed" for yours and "preset" for the preset's. [Customizing keys](customizing-keys.md) describes the list.
 
 ## Typing moves the cursor when I did not mean it
 
@@ -54,7 +54,7 @@ A known bug in the library that paints the terminal can shift the rest of a row 
 
 ## The terminal is in a strange state after diroxide ended
 
-diroxide gives the terminal back when it quits, meets an error or panics. It does not yet do so when it is ended by a signal, by Ctrl+Break or by closing the window, so the terminal may be left in raw mode, with no echo. On Linux and macOS, type `reset` and press Enter. On Windows, close that tab and open a new one.
+diroxide gives the terminal back when it quits, meets an error or panics, and when it is ended by a signal, by Ctrl+Break or by closing the window (it then exits with 130). A kill that cannot be caught, or a crash of the computer's terminal program, can still leave the terminal in raw mode, with no echo. On Linux and macOS, type `reset` and press Enter. On Windows, close that tab and open a new one.
 
 ## The shell stays in the old folder after I quit
 
@@ -168,7 +168,7 @@ In a shell, quote a filter that holds `*`, `(`, `)`, `|`, `&`, `>` or `<`, and p
 ## A filter or search finds nothing, and I expected something
 
 - Check the read-back. Say filter, in the palette, or `--explain` in a shell, says what diroxide understood: "name contains Report, match case". A capital letter makes a word match case exactly. Type it in lowercase, or put `anycase` before it.
-- Hidden files are left out unless the panel shows them or the filter says `hidden`. The summary says "Hidden files skipped."
+- Hidden files are left out unless the panel shows them or the filter says `hidden`. The summary says "Hidden files skipped." In the Search dialog, look at its rows: Hidden files, Ignore files, Links to folders, Inside archives and Depth each say what is left out.
 - A test on something not known matches neither the test nor its opposite. A folder has no size until it is counted: "1 unknown, folder size not counted." `type` matches only a type that is already known.
 - A file with a NUL byte is skipped by a content search: "6 binary files skipped."
 - Files named in `.gitignore` are left out only when you ask: `search_respect_ignore` or `--ignore-files`.
@@ -186,14 +186,14 @@ Escape stops it: "Stopped at 214 found." Search reads each folder in turn and ha
 
 ## A label is gone, or Ctrl+1 does nothing
 
-- A file that was renamed or moved loses its label, because a label belongs to the file's path. The Labels list shows the item as missing, and Delete in the label's items takes the label off. Label the file again at its new place.
+- A file that was renamed or moved loses its label, because a label belongs to the file's path. The Labels list counts the item as missing, the label's results list it as "gone since this list was made", and the trash key (F8 or Delete) there takes the label off. Label the file again at its new place.
 - A label step can be undone only in the same session.
 - Many Unix terminals do not send Ctrl with a digit. Use the Edit menu, Labels submenu (Alt+E, then B), then 1 to 7. [Labels and bookmarks](labels-bookmarks.md) has the rest.
 - A label with a color diroxide does not offer, such as red or green, is reported at start and left out. Use blue, orange, purple, yellow, gray or brown.
 
 ## Compare says "Same text", and I can see a difference
 
-Same text means the text is the same once what is left out is left out. Line endings are left out by default. The next lines of the report say what else differs: a byte-order mark, another encoding, a missing final line break, or "Ignoring changes in case." Turn the ignore options off to see every difference. A hidden character, a tab for spaces, and the same letters in another Unicode form are listed as changes with the reason: "Changed line 3, hidden character U+200B added". [Compare files](compare.md) lists the nine cases.
+Same text means the text is the same once what is left out is left out. Line endings are left out by default. The next lines of the report say what else differs: a byte-order mark, another encoding, a missing final line break, or "Ignoring changes in case." Turn the ignore options off to see every difference: they are the `compare.ignore_` settings in the Compare group of Settings. A hidden character, a tab for spaces, and the same letters in another Unicode form are listed as changes with the reason: "Changed line 3, hidden character U+200B added". [Compare files](compare.md) lists the nine cases.
 
 "Changed while comparing" means a file was written to during the run. Compare again when it stops changing. "Too large to compare as text" asks you to choose: the first 16 MiB as text, byte by byte, or cancel.
 

@@ -32,7 +32,7 @@ If you are new, begin with the [quick start](quickstart.md).
 
 - [The panels](panels.md): the three layouts, what a row says, moving, going to a path or a place, path jump, sorting, filtering and marking rows.
 - [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo.
-- [Every key](keyboard.md): the default keys for the terminal and the window, the keys a terminal may keep and the keys screen readers keep, generated from the keymap.
+- [Every key](keyboard.md): the default keys for the terminal and the window, the keys a terminal may keep and the keys screen readers keep, generated from the keymap. Each key preset has its own sheet, linked from [customizing keys](customizing-keys.md).
 
 ### Archives, files and previews (alpha.2)
 
