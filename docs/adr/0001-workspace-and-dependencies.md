@@ -20,6 +20,7 @@ Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2): pure Ru
 Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, from the requests pairs 1 to 3 held at their integrations):
 
 - **A slim `diro`.** The root manifest declares `diroxide-preview` with `default-features = false`, and the syntax set (syntect with bat's grammars, about 3 MB) is a `syntax-set` feature at each layer: `diro`'s, on by default beside `fetch`, turns on the CLI's, the CLI's the app's, the app's the preview crate's. The app and the CLI leave it off by default, so `cargo build -p diro --no-default-features` builds without it (`cargo check -p diro --no-default-features` is the check); the app's and the terminal's tests turn it on through their dev-dependencies. `docs/dev/building.md` says how (W2d's request 2).
+- **xtask may depend on the archive crate,** in `xtask/src/deps.rs` and on the architecture page, so the bench's archive scenarios pack, list and unpack through the provider and its runners instead of building and running `diro`, and the demo's `locked.zip` is written by diroxide's own pack runner with its password; the zip crate stays in xtask as an independent reader of that archive (W2g's request 1).
 
 ## Context
 

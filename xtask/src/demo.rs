@@ -15,16 +15,15 @@
 //!
 //! The archives are written with diroxide's own writers, through `diro
 //! archive pack` (the `diro` binary is built first, with this task's
-//! profile), except `locked.zip`, which the zip crate writes directly
-//! because `diro` takes a password only from its terminal, and
-//! `hostile.zip`, which no writer of diroxide's will make. Then each is
-//! read back: `diro archive test`, the zip crate with the password, and
-//! the oracle tools found on PATH (unzip, xz, tar, and 7z in the
-//! container). The command lists what it made, one line each with the
-//! size.
+//! profile), except `locked.zip`, which diroxide's own pack runner writes
+//! directly with its password (P2b), because `diro` takes a password only
+//! from its terminal, and `hostile.zip`, which no writer of diroxide's
+//! will make. Then each is read back: `diro archive test`, the zip crate
+//! with the password, and the oracle tools found on PATH (unzip, xz, tar,
+//! and 7z in the container). The command lists what it made, one line
+//! each with the size.
 
 use std::fs;
-use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -33,7 +32,7 @@ use anyhow::{Context, Result, bail};
 use diroxide_core::format::human_size;
 use diroxide_core::{Timestamp, UtcOffset};
 
-use crate::bench::{diro_binary, log_file, run_diro};
+use crate::bench::{diro_binary, log_file, pack_items, run_diro};
 use crate::sample;
 
 /// What the demo folder holds, in the order the command lists it.
@@ -483,40 +482,15 @@ fn pack(diro: &Path, staged: &Path, archive: &Path, files: &[(&str, &str)]) -> R
     Ok(String::from_utf8_lossy(&said).into_owned())
 }
 
-/// Writes `locked.zip` with the zip crate, every file AES-256 under the
-/// password, folders as their own entries.
+/// Writes `locked.zip` with diroxide's own pack runner, its staged
+/// top-level files and folders packed with the password, so every file is
+/// AES-256, as a zip password always is in diroxide (P2b, W2g's request 1).
 fn write_locked(archive: &Path, staged: &Path, password: &str) -> Result<()> {
-    use zip::write::SimpleFileOptions;
-    let file = fs::File::create(archive)
-        .with_context(|| format!("{} could not be made", archive.display()))?;
-    let mut zip = zip::ZipWriter::new(file);
-    let base = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated)
-        .last_modified_time(
-            zip::DateTime::from_date_and_time(2026, 10, 16, 14, 5, 0).unwrap_or_default(),
-        );
-    let mut folders: Vec<String> = Vec::new();
-    for (path, _) in LOCKED {
-        if let Some((folder, _)) = path.rsplit_once('/')
-            && !folders.iter().any(|f| f == folder)
-        {
-            folders.push(folder.to_owned());
-            zip.add_directory(folder, base)
-                .with_context(|| format!("{folder} could not be added"))?;
-        }
-        let bytes =
-            fs::read(staged.join(path)).with_context(|| format!("{path} could not be read"))?;
-        zip.start_file(
-            path,
-            base.with_aes_encryption(zip::AesMode::Aes256, password),
-        )
-        .with_context(|| format!("{path} could not be added"))?;
-        zip.write_all(&bytes)
-            .with_context(|| format!("{path} could not be written"))?;
-    }
-    zip.finish()
-        .with_context(|| format!("{} could not be finished", archive.display()))?;
-    Ok(())
+    let items: Vec<PathBuf> = tops(&LOCKED)
+        .into_iter()
+        .map(|top| staged.join(top))
+        .collect();
+    pack_items(archive, &items, Some(password))
 }
 
 /// Reads every member of `locked.zip` back with the password: true when

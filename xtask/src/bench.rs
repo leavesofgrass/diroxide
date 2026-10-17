@@ -15,17 +15,17 @@
 //! - `slow-place`: copy from W1b's slow place on the fake provider, every
 //!   call slow and one call stalled, and check that the stall is said.
 //! - `archive-zip`, `archive-tar`, `archive-7z`: list 100,000 members of a
-//!   zip, a tar and a 7z with `diro archive list -0`, the process timed
-//!   from its start to its last path (alpha.2).
-//! - `unpack`: unpack a zip of one 200 MB file with `diro archive
-//!   unpack`, the rate said.
+//!   zip, a tar and a 7z through the archive provider, opened fresh each
+//!   run, from the open to the last entry (alpha.2).
+//! - `unpack`: unpack a zip of one 200 MB file through the unpack runner,
+//!   planned and run, the rate said.
 //! - `viewer`: open a 256 MB text log in the viewer and draw its first
 //!   screen, in screen-reader mode.
 //!
-//! The archive scenarios run the `diro` binary, built first with the
-//! bench's own profile: the archive provider and its runners are reached
-//! through `diro archive`, the command line a user times, until xtask may
-//! depend on the archive crate itself.
+//! The archive scenarios call the archive provider and its runners
+//! directly (P2b, W2g's request 1): the archives are packed by diroxide's
+//! own pack runner, and each timed run opens a new provider, so no run
+//! reads another's cached index.
 //!
 //! The budgets are for an optimized build: `cargo run --release -p xtask
 //! -- bench`. The medians go to `target/bench/result.json` and are said
@@ -45,6 +45,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context, Result, bail};
+use diroxide_archive::{
+    Allowances, ArchiveFormat, ArchiveProvider, JobEnv, Limits, PackRequest, UnpackRequest,
+    plan_unpack, run_unpack,
+};
 use diroxide_core::format::human_size;
 use diroxide_core::{
     ConflictAnswer, ErrorAction, JobId, JobKind, JobRequest, JobState, Place, Timestamp, UtcOffset,
@@ -686,7 +690,9 @@ pub fn run_diro(diro: &Path, folder: &Path, args: &[&str], input: &[u8]) -> Resu
     Ok(output.stdout)
 }
 
-/// The workspace's root: the parent of this crate's folder.
+/// The workspace's root: the parent of this crate's folder (the demo's
+/// test builds `diro` there).
+#[cfg(test)]
 pub fn workspace_root() -> Result<PathBuf> {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -694,15 +700,41 @@ pub fn workspace_root() -> Result<PathBuf> {
         .context("the workspace root could not be found")
 }
 
+/// The local provider and the archive provider, connected, at the
+/// default limits: a new pair for each timed run, so no run reads an index
+/// another run cached.
+pub fn archive_registry() -> (Arc<Registry>, Arc<ArchiveProvider>) {
+    ArchiveProvider::install(Registry::with_local(), Limits::default())
+}
+
+/// Packs `items` into `archive` with diroxide's own pack runner, in the
+/// format its name says, with `password` when one is given (a zip is then
+/// AES-256).
+pub fn pack_items(archive: &Path, items: &[PathBuf], password: Option<&str>) -> Result<()> {
+    let name = archive
+        .file_name()
+        .and_then(|n| n.to_str())
+        .with_context(|| format!("{} has no plain name", archive.display()))?;
+    let format = ArchiveFormat::from_name(name)
+        .with_context(|| format!("{name} is not a name of an archive diroxide writes"))?;
+    let sources = items
+        .iter()
+        .map(|item| place_of(item))
+        .collect::<Result<Vec<_>>>()?;
+    let mut request = PackRequest::new(sources, place_of(archive)?, format);
+    request.password = password.map(|p| diroxide_core::Secret::new(p.to_owned()));
+    let (registry, _) = archive_registry();
+    diroxide_archive::pack(&request, &registry, &OpContext::new())
+        .map_err(|e| anyhow::anyhow!("{name} could not be packed: {e}"))
+}
+
 /// The archive scenarios: a zip, a tar and a 7z of empty members, packed
-/// with `diro archive pack` and listed with `diro archive list -0`; a zip
-/// of one large file unpacked with `diro archive unpack`.
+/// by the pack runner and listed through the archive provider; a zip of
+/// one large file unpacked by the unpack runner.
 fn archive_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
     let sizes = setting.sizes;
     let runs = setting.params.runs;
     let mut outcomes = Vec::new();
-    println!("bench: building diro for the archive scenarios.");
-    let diro = diro_binary(&workspace_root()?)?;
     let folder = setting.work.join("archive");
     let members = folder.join("members");
     fs::create_dir_all(&members)
@@ -715,26 +747,22 @@ fn archive_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
         let entries = grouped(sizes.archive_entries as u64);
         println!("bench: writing {entries} empty files to pack.");
         let names = sample::flat_folder(&members, sizes.archive_entries)?;
-        let mut list = Vec::new();
-        for name in &names {
-            list.extend_from_slice(name.as_bytes());
-            list.push(0);
-        }
+        let items: Vec<PathBuf> = names.iter().map(|name| members.join(name)).collect();
         for (id, archive, kind) in listings {
             println!("bench: packing them into a {kind}.");
-            let target = format!("../{archive}");
-            run_diro(&diro, &members, &["archive", "pack", &target, "-"], &list)?;
             let path = folder.join(archive);
-            let path_text = path
-                .to_str()
-                .with_context(|| format!("{} is not valid Unicode", path.display()))?;
+            pack_items(&path, &items, None)?;
+            let root = place_of(&path)?.into_archive();
             let times = measure(runs, |_| {
+                let (registry, _) = archive_registry();
                 let started = Instant::now();
-                let listed = run_diro(&diro, &folder, &["archive", "list", "-0", path_text], b"")?;
+                let listed = registry
+                    .resolve(&root)
+                    .and_then(|provider| provider.list(&root, &OpContext::new()))
+                    .map_err(|e| anyhow::anyhow!("the {kind} could not be listed: {e}"))?;
                 let elapsed = started.elapsed();
-                let count = listed.iter().filter(|b| **b == 0).count();
-                if count != sizes.archive_entries {
-                    bail!("the {kind} listed {count} members, not {entries}");
+                if listed.len() != sizes.archive_entries {
+                    bail!("the {kind} listed {} members, not {entries}", listed.len());
                 }
                 Ok(elapsed)
             })?;
@@ -745,7 +773,7 @@ fn archive_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
                 format!("List {entries} entries in a {kind}"),
                 times,
                 None,
-                "with diro archive list -0, from its start to its end".to_owned(),
+                "through the archive provider, from the open to the last entry".to_owned(),
             ));
         }
         for name in &names {
@@ -759,29 +787,38 @@ fn archive_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
         let size = human_size(sizes.unpack_bytes);
         println!("bench: writing a file of {size} and packing it into a zip.");
         sample::big_file(&source, sizes.unpack_bytes, None)?;
-        run_diro(
-            &diro,
-            &members,
-            &["archive", "pack", "../unpack.zip", "unpack.bin"],
-            b"",
-        )?;
+        let zip = folder.join("unpack.zip");
+        pack_items(&zip, std::slice::from_ref(&source), None)?;
         fs::remove_file(&source)
             .with_context(|| format!("{} could not be removed", source.display()))?;
+        let zip_place = place_of(&zip)?;
         let times = measure(runs, |run| {
             let target = folder.join(format!("unpack-{run}"));
             fs::create_dir(&target)
                 .with_context(|| format!("{} could not be made", target.display()))?;
-            let target_text = target
-                .to_str()
-                .with_context(|| format!("{} is not valid Unicode", target.display()))?;
+            let (registry, archives) = archive_registry();
+            let engine = Engine::new(Arc::clone(&registry));
+            let control = JobControl::new();
+            let sink = Watch::default();
+            let job = JobId::new(run as u64 + 1);
+            let request = UnpackRequest::new(zip_place.clone(), place_of(&target)?);
+            let allow = Allowances::default();
             let started = Instant::now();
-            run_diro(
-                &diro,
-                &folder,
-                &["archive", "unpack", "unpack.zip", "--into", target_text],
-                b"",
-            )?;
+            let plan = plan_unpack(
+                &archives,
+                &registry,
+                &request,
+                job,
+                &OpContext::new(),
+                allow,
+            )
+            .map_err(|e| anyhow::anyhow!("the unpack could not be planned: {e}"))?;
+            let env = JobEnv::new(&engine, &archives, job, &control, &sink);
+            let outcome = run_unpack(&plan, None, allow, &env);
             let elapsed = started.elapsed();
+            if !outcome.report.failed.is_empty() || outcome.report.cancelled {
+                bail!("the unpack did not finish: {}", outcome.lines.join(" "));
+            }
             let unpacked = target.join("unpack.bin");
             let length = fs::metadata(&unpacked)
                 .with_context(|| format!("{} was not unpacked", unpacked.display()))?
@@ -798,12 +835,11 @@ fn archive_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
                 .with_context(|| format!("{} could not be removed", target.display()))?;
             Ok(elapsed)
         })?;
-        let zip = folder.join("unpack.zip");
         fs::remove_file(&zip).with_context(|| format!("{} could not be removed", zip.display()))?;
         let seconds = median(&times) / 1000.0;
         let note = if seconds > 0.0 {
             format!(
-                "{} a second, with diro archive unpack",
+                "{} a second, through the unpack runner",
                 human_size((sizes.unpack_bytes as f64 / seconds) as u64)
             )
         } else {
