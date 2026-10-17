@@ -55,8 +55,9 @@ pub enum Expected {
     /// The start of a test: a word or pattern, a field, a yes-or-no word,
     /// `not` or a bracket.
     Term,
-    /// `and` or `or`.
-    Joiner,
+    /// `and` or `or`; once a level has one, only that one, since mixing
+    /// them needs brackets.
+    Joiner(Option<Keyword>),
     /// A closing bracket.
     CloseBracket,
     /// One of a field's comparison words.
@@ -72,10 +73,13 @@ pub enum Expected {
     Period,
     /// The `and` (or `to`) between two ends of a range.
     RangeJoiner,
-    /// `case`, after `match` or `any` in an annotation.
-    CaseWord,
+    /// `match case` or `any case`, after the comma that ends a name, path
+    /// or content value.
+    CaseNote,
     /// `selected`, after `state`.
     Selected,
+    /// The rest of a phrase: `least` or `most` after `at`.
+    Words(&'static [&'static str]),
 }
 
 /// Why a filter could not be read.

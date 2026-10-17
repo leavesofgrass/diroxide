@@ -38,6 +38,7 @@
 //! brackets group, so a name that starts with one is quoted; signs such
 //! as `=` are operators outside quotes.
 
+mod complete;
 mod dates;
 mod error;
 mod eval;
@@ -55,6 +56,7 @@ mod truth_tests;
 use crate::clock::{Clock, Weekday};
 use crate::pattern::CaseRule;
 
+pub use complete::{Candidate, CompletionContext, Completions, complete};
 pub use dates::{
     CalendarDate, DateContext, DateProblem, DateValue, DateWord, Duration, Period, Precision,
     TimeUnit, month_from_name, parse_duration, parse_iso,

@@ -314,11 +314,15 @@ impl<'a> Parser<'a> {
         let mut joiner: Option<Keyword> = None;
         loop {
             let Some(token) = self.peek() else {
-                self.want(Expected::Joiner);
+                // Once a level has a joiner, only that one may follow; a
+                // new test after a space is and, so not after an or.
+                self.want(Expected::Joiner(joiner));
                 if depth > 0 {
                     self.want(Expected::CloseBracket);
                 }
-                self.want(Expected::Term);
+                if joiner != Some(Keyword::Or) {
+                    self.want(Expected::Term);
+                }
                 break;
             };
             let (this, explicit) = if token.is_word("and") {
@@ -639,6 +643,9 @@ impl<'a> Parser<'a> {
                 break;
             }
             self.bump();
+            if field.has_case() {
+                self.want(Expected::CaseNote);
+            }
             if self.next_is("not") {
                 self.bump();
                 negate = true;
@@ -880,11 +887,11 @@ impl<'a> Parser<'a> {
                         self.bump();
                         return Ok(NumberCmp::AtMost);
                     }
-                    self.want(Expected::Comparison(field));
-                    return Err(self.fail_here(
-                        Problem::NeedsValue(field),
-                        vec![Expected::Comparison(field)],
-                    ));
+                    const REST: &[&str] = &["least", "most"];
+                    self.want(Expected::Words(REST));
+                    return Err(
+                        self.fail_here(Problem::NeedsValue(field), vec![Expected::Words(REST)])
+                    );
                 }
                 "over" => NumberCmp::Over,
                 "under" => NumberCmp::Under,
@@ -1520,4 +1527,14 @@ fn looks_like_unit(word: &str) -> bool {
 /// Reads a filter into its tree.
 pub(crate) fn parse(text: &str, options: &FilterOptions) -> Result<Expr, FilterError> {
     Parser::new(text, options)?.run()
+}
+
+/// What could come at the end of the text: the expected-next list Tab
+/// completes from, the same list an error there names. `None` when the
+/// text has a problem before its end.
+pub(crate) fn expected_at_end(text: &str, options: &FilterOptions) -> Option<Vec<Expected>> {
+    let mut parser = Parser::new(text, options).ok()?;
+    let read = parser.run();
+    let reached_end = parser.pos >= parser.tokens.len();
+    (read.is_ok() || reached_end).then_some(parser.expected)
 }
