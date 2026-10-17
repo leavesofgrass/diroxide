@@ -139,13 +139,17 @@ encoding_rs = "0.8.42"
 # carta, the pure-Rust converter (answer 27): pinned exactly, textweaver's
 # pin, default features off (no CLI, no `fetch`, no highlight grammars),
 # with the five readers the quick view uses. Its include directives are
-# never followed and its Typst reader is never used. The writer feature
-# (`write-commonmark` for path B, `write-html` for path A) is added by
-# W2e after spike C1 (plan question 66); a bump waits for the twelve
-# samples. MIT OR Apache-2.0.
-carta = { version = "=0.0.11", default-features = false, features = ["read-org", "read-rst", "read-mediawiki", "read-dokuwiki", "read-jira"] }
-# scraper 0.27.0 (ISC, allowed) is declared only if spike C1 chooses path
-# A (an HTML-fragment reader carried from textweaver's html.rs); not now.
+# never followed and its Typst reader is never used. The writer is
+# `write-html`, path A of spike C1 (plan question 66, W2e, Friday, October
+# 16, 2026): carta's CommonMark writer (path B) kept the headings, list
+# items and links of all fifteen samples and none of their 20 tables,
+# which it writes as raw HTML, so carta writes an HTML fragment for the
+# quick view's fragment reader. A bump waits for the samples
+# (`fixtures/docs/carta/`). MIT OR Apache-2.0.
+carta = { version = "=0.0.11", default-features = false, features = ["read-org", "read-rst", "read-mediawiki", "read-dokuwiki", "read-jira", "write-html"] }
+# The quick view's HTML-fragment reader for carta's output (path A of
+# spike C1), carried from textweaver's html.rs. ISC, allowed.
+scraper = "0.27.0"
 # Detection and images.
 infer = "0.19" # unverified
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }

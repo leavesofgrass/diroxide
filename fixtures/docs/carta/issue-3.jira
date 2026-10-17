@@ -1,0 +1,15 @@
+h2. Results
+
+h3. Debug
+
+||Format||Time||
+|Org|12 ms|
+
+h3. Release
+
+||Format||Time||
+|Org|3 ms|
+
+* [Org results|https://example.org/org]
+* [Jira results|https://example.org/jira]
+* [All results|https://example.org/all]

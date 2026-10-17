@@ -1,0 +1,21 @@
+#+TITLE: Field Notes
+
+* Crows
+Crows are clever birds. See [[https://example.org/crows][the crow page]].
+
+** What they eat
+- seeds
+- insects
+- scraps from the market
+
+** Counts
+| Day     | Crows | Jays |
+|---------+-------+------|
+| Monday  |    12 |    3 |
+| Tuesday |     9 |    4 |
+
+* Raccoons
+1. Jimothy
+2. His friends
+
+Read [[https://example.org/raccoons][more about raccoons]].

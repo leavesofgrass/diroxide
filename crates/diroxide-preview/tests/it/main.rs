@@ -1,6 +1,13 @@
 //! Integration tests of previews.
 
+// Test helpers may unwrap: a failure is the test's.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod carta;
+mod carta_paths;
 mod encoding;
+mod markdown;
+mod text;
 
 use diroxide_core::{Entry, EntryKind, Place};
 use diroxide_filetype::TypeRegistry;

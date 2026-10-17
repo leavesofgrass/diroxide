@@ -13,8 +13,9 @@
 //! Module owners after Phase 0: W1c owns `commands`, `keymap`, `menu`,
 //! `palette`, `settings`, `entry` and `messages`; W1d owns the rest
 //! (`app`, `panel`, `dialog`, `jobs`, `runtime`, `request`, `startup`,
-//! `state`); later waves add their own files: W2d owns `viewer`; W2f wires
-//! the archives (`archives`), the viewer and the alpha.2 dialogs.
+//! `state`); later waves add their own files: W2d owns `viewer`, W2e owns
+//! `quickview`; W2f wires the archives (`archives`), the viewer, the quick
+//! view and the alpha.2 dialogs.
 //!
 //! [`Effect`]: diroxide_core::Effect
 
@@ -29,6 +30,7 @@ pub mod menu;
 pub mod messages;
 pub mod palette;
 pub mod panel;
+pub mod quickview;
 pub mod request;
 pub mod runtime;
 pub mod settings;

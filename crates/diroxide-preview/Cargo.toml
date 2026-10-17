@@ -17,6 +17,8 @@ diroxide-vfs.workspace = true
 # The viewer's decoder (W2d), textweaver's encoding module.
 encoding_rs.workspace = true
 pulldown-cmark.workspace = true
+# carta's HTML fragments read into the quick view's rows (path A, W2e).
+scraper.workspace = true
 serde.workspace = true
 # The highlight module's validity lines: JSON and TOML (W2d).
 serde_json.workspace = true
@@ -29,6 +31,9 @@ two-face = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest.workspace = true
+# A harmless sibling file the include test makes, to show what carta does
+# with an include left in.
+tempfile.workspace = true
 
 [features]
 default = ["syntax-set"]
@@ -36,6 +41,11 @@ default = ["syntax-set"]
 # it the highlighter says "Highlighting off: not in this build" and the
 # viewer's words-first commands keep what needs no grammar.
 syntax-set = ["dep:syntect", "dep:two-face"]
+# Spike C1 (plan question 66): carta writing CommonMark for the Markdown
+# reader (path B), compared on the samples with the path in use (path A,
+# HTML fragments), to run again at every carta bump. Off by default and
+# never in the binary.
+carta-markdown = ["carta/write-commonmark"]
 
 [lints]
 workspace = true

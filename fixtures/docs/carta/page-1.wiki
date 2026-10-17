@@ -1,0 +1,18 @@
+= Portland =
+Portland is a city in Oregon. See [https://example.org/portland the city page].
+
+== Weather ==
+* Rain
+* More rain
+* Some sun in August
+
+== Bridges ==
+{| class="wikitable"
+! Bridge !! Opened
+|-
+| Steel || 1912
+|-
+| Hawthorne || 1910
+|}
+
+Read [https://example.org/bridges more about the bridges].

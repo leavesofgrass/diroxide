@@ -18,6 +18,9 @@ diroxide-ops.workspace = true
 # The viewer's decoder and highlighter (W2d).
 diroxide-preview.workspace = true
 diroxide-theme.workspace = true
+# The quick view's "Open in textweaver" finds `tw` through the tools
+# registry (W2e).
+diroxide-tools.workspace = true
 diroxide-vfs.workspace = true
 dirs.workspace = true
 jiff.workspace = true

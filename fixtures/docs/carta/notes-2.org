@@ -1,0 +1,19 @@
+* Packing list
+** Bags
+- Go bag
+  - radio
+  - spare battery
+- Work bag
+** Weather
+It rains in Portland. The forecast is at [[https://example.org/weather][the weather page]],
+and the bus times are at [[https://example.org/bus][the bus page]].
+
+| Item    | Count |
+|---------+-------|
+| Umbrella |    2 |
+| Boots   |     1 |
+| Hat     |     3 |
+
+** Done
+- [X] Charge the radio
+- [ ] Find the map
