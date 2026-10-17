@@ -261,6 +261,7 @@ mod tests {
             JobKind::Duplicate,
             JobKind::Pack,
             JobKind::Unpack,
+            JobKind::TestArchive,
             JobKind::Split,
             JobKind::Join,
             JobKind::Convert,

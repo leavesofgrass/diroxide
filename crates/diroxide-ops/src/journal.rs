@@ -95,6 +95,11 @@ impl Interrupted {
             JobKind::Duplicate => "a duplicate",
             JobKind::MakeFolder => "making folders",
             JobKind::Link => "making links",
+            JobKind::Pack => "a pack",
+            JobKind::Unpack => "an unpack",
+            JobKind::TestArchive => "an archive test",
+            JobKind::Split => "a split",
+            JobKind::Join => "a join",
             JobKind::Undo => "an undo",
             _ => "a job",
         };

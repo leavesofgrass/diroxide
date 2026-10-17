@@ -47,7 +47,11 @@ pub enum JobKind {
     Pack,
     /// Unpack an archive into the destination folder.
     Unpack,
-    /// Split a file into numbered parts (`name.001`, `name.002`).
+    /// Read every member of an archive and check its checksums; nothing
+    /// is written ("Test archive").
+    TestArchive,
+    /// Split a file into numbered parts (`name.001`, `name.002`); the part
+    /// size travels in [`JobRequest::parts`].
     Split,
     /// Join numbered parts back into one file.
     Join,
@@ -68,6 +72,33 @@ pub enum JobKind {
 }
 
 impl JobKind {
+    /// Every kind, [`JobKind::Unknown`] last: the word tests walk it, and
+    /// lists of jobs (the job history's filter, `diro` help) take their
+    /// order from it.
+    pub const ALL: &'static [JobKind] = &[
+        JobKind::Copy,
+        JobKind::Move,
+        JobKind::Rename,
+        JobKind::Duplicate,
+        JobKind::MakeFolder,
+        JobKind::Trash,
+        JobKind::DeletePermanently,
+        JobKind::Link,
+        JobKind::SetAttributes,
+        JobKind::SetTimes,
+        JobKind::Pack,
+        JobKind::Unpack,
+        JobKind::TestArchive,
+        JobKind::Split,
+        JobKind::Join,
+        JobKind::Convert,
+        JobKind::Dirsize,
+        JobKind::Download,
+        JobKind::PluginCommand,
+        JobKind::Undo,
+        JobKind::Unknown,
+    ];
+
     /// The verb for "Could not VERB OBJECT" messages: "copy", "move to the
     /// trash".
     pub const fn verb(self) -> &'static str {
@@ -84,6 +115,7 @@ impl JobKind {
             JobKind::SetTimes => "change the times of",
             JobKind::Pack => "pack",
             JobKind::Unpack => "unpack",
+            JobKind::TestArchive => "test",
             JobKind::Split => "split",
             JobKind::Join => "join",
             JobKind::Convert => "convert",
@@ -111,6 +143,7 @@ impl JobKind {
             JobKind::SetTimes => "Changing times",
             JobKind::Pack => "Packing",
             JobKind::Unpack => "Unpacking",
+            JobKind::TestArchive => "Testing",
             JobKind::Split => "Splitting",
             JobKind::Join => "Joining",
             JobKind::Convert => "Converting",
@@ -331,6 +364,42 @@ pub enum JobOrigin {
     Undo,
 }
 
+/// How a split sizes its parts (plan section 5.4): from a preset or a
+/// typed size, or as a number of equal parts. The preset table itself is
+/// configuration (`split_presets`); the request carries only the bytes,
+/// so a script or a saved task replays the same split.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PartSize {
+    /// Parts of this many bytes each; the last part holds the rest, and
+    /// an exact multiple makes no empty last part.
+    Bytes(u64),
+    /// This many parts, as equal as whole bytes allow; the last is the
+    /// smallest.
+    EqualParts(u32),
+}
+
+impl PartSize {
+    /// The size of each part but the last, for a file of `total` bytes;
+    /// `None` when no split is possible (zero bytes or zero parts).
+    pub fn part_bytes(self, total: u64) -> Option<u64> {
+        match self {
+            PartSize::Bytes(0) | PartSize::EqualParts(0) => None,
+            PartSize::Bytes(bytes) => Some(bytes),
+            PartSize::EqualParts(parts) => Some(total.div_ceil(u64::from(parts)).max(1)),
+        }
+    }
+
+    /// How many parts a file of `total` bytes makes; an empty file makes
+    /// none.
+    pub fn parts_for(self, total: u64) -> u64 {
+        match self.part_bytes(total) {
+            Some(bytes) if total > 0 => total.div_ceil(bytes),
+            _ => 0,
+        }
+    }
+}
+
 /// A request for a job, as the app hands it to the job engine.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobRequest {
@@ -354,6 +423,9 @@ pub struct JobRequest {
     /// Who asked.
     #[serde(default)]
     pub origin: JobOrigin,
+    /// How a split sizes its parts; `None` for every other job.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parts: Option<PartSize>,
 }
 
 impl JobRequest {
@@ -369,7 +441,14 @@ impl JobRequest {
             renames: Vec::new(),
             conflicts: ConflictPolicy::default(),
             origin: JobOrigin::default(),
+            parts: None,
         }
+    }
+
+    /// The same request splitting into parts of this size.
+    pub fn split_into(mut self, parts: PartSize) -> Self {
+        self.parts = Some(parts);
+        self
     }
 
     /// The same request with a destination.
@@ -426,6 +505,97 @@ mod tests {
             serde_json::to_string(&ConflictPolicy::Newer).unwrap(),
             "\"newer\""
         );
+    }
+
+    /// The position of a kind in [`JobKind::ALL`]. The match has no
+    /// fallback arm, so a kind added without a place in the list (and so
+    /// without the word tests below) does not compile.
+    const fn position(kind: JobKind) -> usize {
+        match kind {
+            JobKind::Copy => 0,
+            JobKind::Move => 1,
+            JobKind::Rename => 2,
+            JobKind::Duplicate => 3,
+            JobKind::MakeFolder => 4,
+            JobKind::Trash => 5,
+            JobKind::DeletePermanently => 6,
+            JobKind::Link => 7,
+            JobKind::SetAttributes => 8,
+            JobKind::SetTimes => 9,
+            JobKind::Pack => 10,
+            JobKind::Unpack => 11,
+            JobKind::TestArchive => 12,
+            JobKind::Split => 13,
+            JobKind::Join => 14,
+            JobKind::Convert => 15,
+            JobKind::Dirsize => 16,
+            JobKind::Download => 17,
+            JobKind::PluginCommand => 18,
+            JobKind::Undo => 19,
+            JobKind::Unknown => 20,
+        }
+    }
+
+    #[test]
+    fn every_kind_has_its_words() {
+        assert_eq!(JobKind::ALL.len(), 21);
+        let mut words = std::collections::HashSet::new();
+        for (at, kind) in JobKind::ALL.iter().enumerate() {
+            assert_eq!(position(*kind), at, "{kind:?}");
+            let verb = kind.verb();
+            assert!(!verb.is_empty() && verb == verb.to_lowercase(), "{kind:?}");
+            assert_eq!(kind.to_string(), verb);
+            let word = kind.progress_word();
+            assert!(
+                word.starts_with(|c: char| c.is_ascii_uppercase()),
+                "{kind:?}: {word}"
+            );
+            // "WORD paused at 100 percent" says its state in 40 cells for
+            // every kind; the jobs line with an estimate is checked in the
+            // engine's crate.
+            let paused = format!("{word} paused at 100 percent");
+            assert!(
+                crate::format::within_cells(&paused, &format!("{word} paused")),
+                "{paused}"
+            );
+            assert!(words.insert(word), "two kinds say {word}");
+            let json = serde_json::to_string(kind).unwrap();
+            let back: JobKind = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, *kind, "{json}");
+        }
+        assert_eq!(JobKind::Split.progress_word(), "Splitting");
+        assert_eq!(JobKind::Join.progress_word(), "Joining");
+        assert_eq!(JobKind::TestArchive.progress_word(), "Testing");
+        assert_eq!(JobKind::TestArchive.verb(), "test");
+        assert_eq!(
+            serde_json::to_string(&JobKind::TestArchive).unwrap(),
+            "\"test-archive\""
+        );
+    }
+
+    #[test]
+    fn a_split_carries_its_part_size_and_older_requests_have_none() {
+        let request = JobRequest::new(JobId::new(4), JobKind::Split, Vec::new())
+            .split_into(PartSize::Bytes(20));
+        assert_eq!(request.parts, Some(PartSize::Bytes(20)));
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains(r#""parts":{"bytes":20}"#), "{json}");
+        let back: JobRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, request);
+        let copy = JobRequest::new(JobId::new(5), JobKind::Copy, Vec::new());
+        assert!(!serde_json::to_string(&copy).unwrap().contains("parts"));
+        assert_eq!(PartSize::Bytes(20).parts_for(223), 12);
+        assert_eq!(PartSize::Bytes(20).parts_for(240), 12, "no empty last part");
+        assert_eq!(PartSize::Bytes(20).parts_for(0), 0);
+        assert_eq!(PartSize::EqualParts(3).part_bytes(10), Some(4));
+        assert_eq!(PartSize::EqualParts(3).parts_for(10), 3);
+        assert_eq!(
+            PartSize::EqualParts(5).parts_for(2),
+            2,
+            "never more parts than bytes"
+        );
+        assert_eq!(PartSize::EqualParts(0).part_bytes(10), None);
+        assert_eq!(PartSize::Bytes(0).parts_for(10), 0);
     }
 
     #[test]
