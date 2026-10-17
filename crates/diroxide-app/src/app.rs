@@ -19,10 +19,14 @@ mod access_dialogs;
 mod archive;
 mod archive_forms;
 mod archive_jobs;
+mod bookmarking;
 mod dialogs;
 mod files;
+mod folder_views;
 mod info;
+mod labeling;
 mod nav;
+mod organize;
 mod preview;
 mod select;
 mod split_join;
@@ -220,6 +224,17 @@ pub enum AppEvent {
         /// The facts.
         facts: Box<crate::archives::ArchiveFacts>,
     },
+    /// The places a [`Request::CheckPlaces`] asked about were looked for
+    /// (W3l): the ones gone, and how many could not be read.
+    PlacesChecked {
+        /// The request it answers.
+        request: RequestId,
+        /// The places that are gone.
+        missing: Vec<Place>,
+        /// How many could not be looked at (a drive that is not there, no
+        /// permission).
+        unreadable: usize,
+    },
     /// A dialog was answered.
     Answer {
         /// The dialog.
@@ -384,6 +399,9 @@ enum Purpose {
     SettingText(String),
     /// A list to read: details, help, problems.
     Read,
+    /// The labels, bookmarks, folder views and History list (W3l): what
+    /// their dialogs are for.
+    Organize(Box<organize::Wants>),
     /// The job history.
     JobHistory,
     /// One job's items.
@@ -516,6 +534,9 @@ pub struct App {
     highlighter: Option<crate::viewer::highlight::Session>,
     /// The quick view and the focus in its region.
     preview: preview::Preview,
+    /// The labels, bookmarks and folder views, and what their lists wait
+    /// for (W3l).
+    organize: organize::Organize,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -824,6 +845,7 @@ impl App {
             viewer_wait: None,
             highlighter: None,
             preview: preview::Preview::default(),
+            organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1166,8 +1188,18 @@ impl App {
             let state = session.panel_mut(side);
             state.place = Some(panel.place().clone());
             state.focused = panel.list().focused().map(|r| r.id.clone());
-            state.sort = panel.sort().clone();
-            state.show_hidden = panel.shows_hidden();
+            // While a folder's own view is applied, the panel's usual
+            // view is what it has elsewhere, so that is what is kept (W3l).
+            match &self.organize.usual[side.index()] {
+                Some(usual) => {
+                    state.sort = usual.sort.clone();
+                    state.show_hidden = usual.show_hidden;
+                }
+                None => {
+                    state.sort = panel.sort().clone();
+                    state.show_hidden = panel.shows_hidden();
+                }
+            }
             state.history = panel.history().to_vec();
         }
         session
@@ -1239,6 +1271,11 @@ impl App {
                 result,
             } => self.viewer_source(request, place, result),
             AppEvent::ArchiveFinished { report, lines } => self.archive_finished(*report, lines),
+            AppEvent::PlacesChecked {
+                request,
+                missing,
+                unreadable,
+            } => self.places_checked(request, missing, unreadable),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }
@@ -1268,6 +1305,10 @@ impl App {
         if self.dialogs.is_empty()
             && let Some(effects) = self.preview_dispatch(action, &command.id)
         {
+            return effects;
+        }
+        // The labels, bookmarks, folder views and History list (W3l).
+        if let Some(effects) = self.organize_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

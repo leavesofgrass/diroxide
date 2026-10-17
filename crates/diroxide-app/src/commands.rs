@@ -338,6 +338,42 @@ pub mod ids {
         SORT_LABEL = "view.sort-label";
         /// The Sort list.
         SORT_LIST = "view.sort-list";
+        /// Add a label to the marked items, or the focused one.
+        LABEL_SET = "label.set";
+        /// Add a label, or take it off when every item has it.
+        LABEL_TOGGLE = "label.toggle";
+        /// Take every label off the marked items, or the focused one.
+        LABEL_CLEAR = "label.clear";
+        /// The Labels list.
+        LABELS = "label.list";
+        /// Toggle the first label of the Labels list.
+        LABEL_FAVORITE_1 = "label.favorite-1";
+        /// Toggle the second label of the Labels list.
+        LABEL_FAVORITE_2 = "label.favorite-2";
+        /// Toggle the third label of the Labels list.
+        LABEL_FAVORITE_3 = "label.favorite-3";
+        /// Toggle the fourth label of the Labels list.
+        LABEL_FAVORITE_4 = "label.favorite-4";
+        /// Toggle the fifth label of the Labels list.
+        LABEL_FAVORITE_5 = "label.favorite-5";
+        /// Toggle the sixth label of the Labels list.
+        LABEL_FAVORITE_6 = "label.favorite-6";
+        /// Toggle the seventh label of the Labels list.
+        LABEL_FAVORITE_7 = "label.favorite-7";
+        /// The Bookmarks list; with an `alias`, jump to that bookmark.
+        BOOKMARKS = "go.bookmarks";
+        /// Bookmark the active panel's folder.
+        BOOKMARK_ADD = "bookmark.add";
+        /// Bookmark the focused item, opening its folder on it.
+        BOOKMARK_ITEM = "bookmark.add-item";
+        /// The History list: the folders visited in every session.
+        HISTORY_LIST = "go.history-list";
+        /// Take this folder out of the history.
+        FORGET_PLACE = "go.forget-place";
+        /// Save this folder's own view.
+        SAVE_VIEW = "view.save-view";
+        /// Stop applying this folder's own view.
+        FORGET_VIEW = "view.forget-view";
         /// Closes the viewer and goes back to the file's row
         CLOSE_VIEWER = "viewer.close";
         /// Moves to the token before, or the byte before in hex mode, and says it
@@ -481,7 +517,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 158] = [
+pub static CATALOG: [CommandInfo; 176] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1273,6 +1309,150 @@ pub static CATALOG: [CommandInfo; 158] = [
         Panel,
         &[],
         &["ctrl+shift+s"],
+    ),
+    command(
+        ids::LABEL_SET,
+        "Set label",
+        "Adds a label to the marked items, or the focused one; a new name makes a new label.",
+        Panel,
+        &["alt+l"],
+        &["alt+l"],
+    ),
+    command(
+        ids::LABEL_TOGGLE,
+        "Toggle label",
+        "Adds a label to the marked items, or takes it off when every one has it.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABEL_CLEAR,
+        "Clear labels",
+        "Takes every label off the marked items, or the focused one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABELS,
+        "Labels list",
+        "Lists the labels with how many items carry each; choosing one lists its items.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABEL_FAVORITE_1,
+        "Favorite label 1",
+        "Adds the first label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+1"],
+        &["ctrl+1"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_2,
+        "Favorite label 2",
+        "Adds the second label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+2"],
+        &["ctrl+2"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_3,
+        "Favorite label 3",
+        "Adds the third label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+3"],
+        &["ctrl+3"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_4,
+        "Favorite label 4",
+        "Adds the fourth label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+4"],
+        &["ctrl+4"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_5,
+        "Favorite label 5",
+        "Adds the fifth label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+5"],
+        &["ctrl+5"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_6,
+        "Favorite label 6",
+        "Adds the sixth label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+6"],
+        &["ctrl+6"],
+    ),
+    command(
+        ids::LABEL_FAVORITE_7,
+        "Favorite label 7",
+        "Adds the seventh label of the Labels list to the marked items, or takes it off when every one has it.",
+        Panel,
+        &["ctrl+7"],
+        &["ctrl+7"],
+    ),
+    command(
+        ids::BOOKMARKS,
+        "Bookmarks",
+        "Lists the bookmarks; the first row adds or removes this folder, and an alias letter jumps.",
+        Panel,
+        &["ctrl+b", "alt+b"],
+        &["ctrl+b", "alt+b"],
+    ),
+    command(
+        ids::BOOKMARK_ADD,
+        "Bookmark this folder",
+        "Adds the active panel's folder to the bookmarks.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::BOOKMARK_ITEM,
+        "Bookmark the focused item",
+        "Adds the focused file or folder as a bookmark that opens its folder with it focused.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::HISTORY_LIST,
+        "History list",
+        "Lists the folders visited in every session, most used first, to go back to one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FORGET_PLACE,
+        "Forget this place",
+        "Takes the active panel's folder out of the History list and path jump.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SAVE_VIEW,
+        "Save view for this folder",
+        "Keeps this folder's sort, filter, hidden files and columns, applied each time it opens.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FORGET_VIEW,
+        "Forget this folder's view",
+        "Stops applying this folder's saved view; the usual view returns on leaving it.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::CLOSE_VIEWER,

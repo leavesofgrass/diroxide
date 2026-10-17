@@ -239,3 +239,9 @@ pattern = "shift+fkey"
 kind = "differs"
 why = "some terminals send Shift with F1 to F12 as F13 to F24"
 source = "R19 spike one, R5, memory"
+
+[[key]]
+keys = ["ctrl+1", "ctrl+2", "ctrl+3", "ctrl+4", "ctrl+5", "ctrl+6", "ctrl+7", "ctrl+8", "ctrl+9"]
+kind = "differs"
+why = "many Unix terminals send it as the digit alone or as another control key"
+source = "memory; Windows Terminal delivers it; the key test amends it (W3l)"
