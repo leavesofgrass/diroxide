@@ -10,6 +10,7 @@ mod memory;
 mod odd_names;
 mod registration;
 mod seeds;
+mod sevenz_read;
 mod spike_hostile;
 mod spike_listing;
 mod tar_read;

@@ -23,6 +23,7 @@ pub mod limits;
 pub mod names;
 mod pipe;
 pub mod provider;
+mod read_7z;
 mod read_tar;
 mod read_xz;
 mod read_zip;
@@ -42,7 +43,7 @@ pub use limits::{Limits, limit_words};
 pub use names::{
     MemberPath, NameFlags, NameRefusal, is_junk, member_path, nesting_depth, normalize_member_name,
 };
-pub use provider::{ArchiveProvider, Listing, Opened, capabilities_for};
+pub use provider::{ArchiveProvider, Listing, Opened, Visitor, capabilities_for};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};
 pub use words::{READ_ONLY, read_only_refusal};

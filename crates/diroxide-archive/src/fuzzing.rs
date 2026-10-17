@@ -214,6 +214,54 @@ pub fn xz_size_of(data: &[u8]) -> Option<u64> {
     crate::read_xz::uncompressed_size(&source, &Limits::default())
 }
 
+/// `archive_7z`: a 7z opened under the strict limits, with the pre-scan of
+/// its coders; an odd first byte gives a password from the next eight
+/// bytes. Its index is made into rows, its first 64 members read through
+/// the chain, and the whole visited in order.
+pub fn sevenz(data: &[u8]) {
+    let Some((&pick, rest)) = data.split_first() else {
+        return;
+    };
+    let (password, bytes) = if pick % 2 == 1 && rest.len() >= 8 {
+        let (password, bytes) = rest.split_at(8);
+        let text = String::from_utf8_lossy(password).into_owned();
+        (Some(diroxide_core::Secret::new(text)), bytes)
+    } else {
+        (None, rest)
+    };
+    let limits = Limits::strict();
+    let cancel = diroxide_vfs::CancelToken::new();
+    let source = crate::source::Source::from_bytes(bytes.to_vec());
+    let ask = || password.clone();
+    let allow = crate::guard::Allowances::default();
+    let Ok((index, backend)) = crate::read_7z::open(source, "fuzz.7z", &limits, allow, &ask) else {
+        return;
+    };
+    rows(&index);
+    let budget = crate::guard::Budget::new(&limits);
+    for id in (0..index.len() as u32).take(64) {
+        let Some(record) = index.record(id).copied() else {
+            continue;
+        };
+        let crate::index::Locator::SevenZ(file) = record.locator else {
+            continue;
+        };
+        if record.kind != crate::index::RecordKind::File {
+            continue;
+        }
+        if let Ok(reader) = backend.read(file as usize, password.clone(), cancel.clone()) {
+            drain(reader, &index, id, &record, &limits, &budget, &cancel);
+        }
+    }
+    let mut visited = 0u64;
+    let _ = backend.visit(password.as_ref(), &cancel, &mut |_, reader| {
+        visited += 1;
+        let mut capped = std::io::Read::take(reader, limits.max_member_size);
+        let _ = std::io::copy(&mut capped, &mut std::io::sink());
+        Ok(visited < 256)
+    });
+}
+
 /// `archive_zip`: a zip opened under the strict limits, its index made
 /// into rows, and its first 64 members read through the limiter chain
 /// with one job budget. Nothing may panic, hang or allocate from a claim.

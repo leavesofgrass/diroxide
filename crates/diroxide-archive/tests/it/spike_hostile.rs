@@ -245,7 +245,7 @@ enum Ended {
 }
 
 /// The formats the provider reads so far; a case of another waits.
-const READ_SO_FAR: [&str; 4] = [".zip", ".tar", ".tar.gz", ".xz"];
+const READ_SO_FAR: [&str; 5] = [".zip", ".tar", ".tar.gz", ".xz", ".7z"];
 
 fn through_provider(case: Case) -> Ended {
     use diroxide_archive::{Allowances, ArchiveError, member_row};

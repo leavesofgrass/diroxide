@@ -85,6 +85,53 @@ fn generated() -> Vec<(&'static str, String, Vec<u8>)> {
     for (file, bytes) in xzs {
         seeds.push(("archive_xz", file.to_owned(), bytes));
     }
+    let with_byte = |pick: u8, bytes: Vec<u8>| {
+        let mut out = vec![pick];
+        out.extend_from_slice(&bytes);
+        out
+    };
+    let mut locked = vec![1u8];
+    locked.extend_from_slice(b"seedpass");
+    locked.extend_from_slice(&build::sevenz_of(
+        &[("a.txt", b"locked")],
+        false,
+        Some("seedpass"),
+    ));
+    let sevenzs: [(&str, Vec<u8>); 6] = [
+        (
+            "plain.7z",
+            with_byte(
+                0,
+                build::sevenz_of(&[("dir/a.txt", b"one"), ("b.txt", b"two")], false, None),
+            ),
+        ),
+        (
+            "solid.7z",
+            with_byte(
+                0,
+                build::sevenz_of(&[("a.txt", b"one"), ("b.txt", b"two")], true, None),
+            ),
+        ),
+        ("locked.7z", locked),
+        (
+            "header-dictionary.7z",
+            with_byte(0, hostile::sevenz_four_gib_dictionary()),
+        ),
+        (
+            "content-dictionary.7z",
+            with_byte(0, hostile::sevenz_four_gib_content_dictionary()),
+        ),
+        (
+            "empty-files.7z",
+            with_byte(
+                0,
+                build::sevenz_empty_files((0..20).map(|i| format!("f{i}"))),
+            ),
+        ),
+    ];
+    for (file, bytes) in sevenzs {
+        seeds.push(("archive_7z", file.to_owned(), bytes));
+    }
     seeds
 }
 
@@ -97,6 +144,7 @@ fn replay(target: &str, bytes: &[u8]) {
         "archive_tar" => fuzzing::tar(bytes),
         "archive_stream" => fuzzing::stream(bytes),
         "archive_xz" => fuzzing::xz(bytes),
+        "archive_7z" => fuzzing::sevenz(bytes),
         other => panic!("no body for the target {other}"),
     }
 }

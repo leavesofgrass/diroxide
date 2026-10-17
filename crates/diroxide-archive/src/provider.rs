@@ -21,10 +21,13 @@ use diroxide_vfs::{
 
 use crate::error::ArchiveError;
 use crate::format::ArchiveFormat;
-use crate::guard::{Allowances, Budget, Claims, Guarded, check_member, refuse};
-use crate::index::{ContainerKey, Index, IndexCache, MAX_LISTED, ROOT, RecordFlags, RecordKind};
+use crate::guard::{Allowances, Budget, Claims, Guarded, check_cost, check_member, refuse};
+use crate::index::{
+    ContainerKey, Index, IndexCache, Locator, MAX_LISTED, ROOT, RecordFlags, RecordKind,
+};
 use crate::limits::Limits;
 use crate::names::nesting_depth;
+use crate::read_7z::{self, SevenZBackend};
 use crate::read_tar::{self, SingleBackend, TarBackend, Wrapper};
 use crate::read_xz;
 use crate::read_zip::{self, ZipBackend};
@@ -50,6 +53,7 @@ enum Backend {
     Zip(ZipBackend),
     Tar(TarBackend),
     Single(SingleBackend),
+    SevenZ(SevenZBackend),
 }
 
 impl Opened {
@@ -100,6 +104,7 @@ impl Opened {
             Backend::Zip(_) => true,
             Backend::Tar(tar) => tar.random_read(),
             Backend::Single(_) => false,
+            Backend::SevenZ(sevenz) => sevenz.random_read(),
         }
     }
 }
@@ -281,6 +286,16 @@ impl ArchiveProvider {
                     Backend::Single(SingleBackend::new(source, Wrapper::Gzip)),
                 )
             }
+            ArchiveFormat::SevenZ => {
+                let ask = || {
+                    ctx.ask_secret(&SecretRequest::new(
+                        SecretKind::ArchivePassword,
+                        name.clone(),
+                    ))
+                };
+                let (index, sevenz) = read_7z::open(source, &name, &self.limits, allow, &ask)?;
+                (index, Backend::SevenZ(sevenz))
+            }
             ArchiveFormat::TarXz | ArchiveFormat::Xz => {
                 read_xz::check(&source, &name, &self.limits, allow)?;
                 let wrapper = Wrapper::Xz {
@@ -294,15 +309,6 @@ impl ArchiveProvider {
                     let index = read_tar::single_index(&name, size, &self.limits)?;
                     (index, Backend::Single(SingleBackend::new(source, wrapper)))
                 }
-            }
-            other => {
-                return Err(VfsError::UnsupportedFeature {
-                    what: format!(
-                        "{} reading, which arrives in a later step",
-                        other.spoken_name()
-                    ),
-                }
-                .into());
             }
         };
         let opened = Arc::new(Opened {
@@ -366,6 +372,112 @@ impl ArchiveProvider {
         })
     }
 
+    /// Visits every member of an archive in archive order, in one pass
+    /// where the format is sequential: a solid 7z block by block, a
+    /// compressed tar from its start to its end, a zip in its own order.
+    /// `each` gets the index, the record and a reader of the member's data
+    /// through the limiter chain (an empty one for a folder, a link or a
+    /// special entry), and returns whether to go on. What the unpack
+    /// runner builds on.
+    pub fn visit(
+        &self,
+        container: &Place,
+        ctx: &OpContext,
+        allow: Allowances,
+        budget: Option<Budget>,
+        each: &mut Visitor<'_>,
+    ) -> Result<(), ArchiveError> {
+        let opened = self.open_archive(container, ctx, allow)?;
+        let budget = budget.unwrap_or_else(|| Budget::new(&self.limits));
+        let index = &opened.index;
+        let claims_of = |id: u32| {
+            let record = index.record(id).copied();
+            Claims {
+                name: index.name(id).to_owned(),
+                size: record
+                    .filter(|r| !r.flags.contains(RecordFlags::SIZE_UNKNOWN))
+                    .map(|r| r.size),
+                packed: record.and_then(|r| r.packed()),
+                crc32: record
+                    .filter(|r| r.flags.contains(RecordFlags::HAS_CRC))
+                    .map(|r| r.crc32),
+            }
+        };
+        let guard = |reader: &mut dyn Read, id: u32, each: &mut Visitor<'_>| {
+            let mut guarded = Guarded::new(
+                reader,
+                claims_of(id),
+                self.limits,
+                budget.clone(),
+                allow,
+                ctx.cancel.clone(),
+            );
+            each(index, id, &mut guarded)
+        };
+        if let Backend::SevenZ(sevenz) = &opened.backend {
+            let mut record_of = vec![u32::MAX; index.len()];
+            let mut files = 0usize;
+            for id in 0..index.len() as u32 {
+                if let Some(Locator::SevenZ(file)) = index.record(id).map(|r| r.locator) {
+                    let file = file as usize;
+                    if file >= record_of.len() {
+                        record_of.resize(file + 1, u32::MAX);
+                    }
+                    record_of[file] = id;
+                    files = files.max(file + 1);
+                }
+            }
+            let encrypted = (0..index.len() as u32).any(|id| {
+                index
+                    .record(id)
+                    .is_some_and(|r| r.flags.contains(RecordFlags::ENCRYPTED))
+            });
+            let password = match (sevenz.password(), encrypted) {
+                (Some(password), _) => Some(password.clone()),
+                (None, true) => {
+                    let request =
+                        SecretRequest::new(SecretKind::ArchivePassword, opened.name.clone());
+                    Some(ctx.ask_secret(&request).ok_or(VfsError::PasswordRequired)?)
+                }
+                (None, false) => None,
+            };
+            let mut visit_one = |file: usize, reader: &mut dyn Read| -> Result<bool, VfsError> {
+                match record_of.get(file).copied() {
+                    Some(id) if id != u32::MAX => guard(reader, id, each),
+                    _ => Ok(true),
+                }
+            };
+            sevenz.visit(password.as_ref(), &ctx.cancel, &mut visit_one)?;
+            return Ok(());
+        }
+        let in_order = Allowances {
+            cost: true,
+            ..allow
+        };
+        for id in 0..index.len() as u32 {
+            ctx.check()?;
+            let Some(record) = index.record(id).copied() else {
+                continue;
+            };
+            let go_on = if record.kind == RecordKind::File && record.locator != Locator::None {
+                let place = container.clone().into_archive();
+                let path = index.path(id);
+                let mut member = place;
+                for part in path.split('/') {
+                    member = member.join(part).map_err(VfsError::from)?;
+                }
+                let mut reader = self.read_member(&member, ctx, in_order, Some(budget.clone()))?;
+                each(index, id, &mut reader)?
+            } else {
+                each(index, id, &mut std::io::empty())?
+            };
+            if !go_on {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     /// Reads a member through the limiter chain: its claims checked first
     /// (a member over the size limit asks), the job's budget shared when
     /// given, a password asked of the context when the member is locked.
@@ -391,8 +503,16 @@ impl ArchiveProvider {
         let name = opened.index.name(id).to_owned();
         check_member(&name, record.size, &self.limits, allow)?;
         let password = if record.flags.contains(RecordFlags::ENCRYPTED) {
-            let request = SecretRequest::new(SecretKind::ArchivePassword, opened.name.clone());
-            Some(ctx.ask_secret(&request).ok_or(VfsError::PasswordRequired)?)
+            match &opened.backend {
+                Backend::SevenZ(sevenz) if sevenz.password().is_some() => {
+                    sevenz.password().cloned()
+                }
+                _ => {
+                    let request =
+                        SecretRequest::new(SecretKind::ArchivePassword, opened.name.clone());
+                    Some(ctx.ask_secret(&request).ok_or(VfsError::PasswordRequired)?)
+                }
+            }
         } else {
             None
         };
@@ -404,6 +524,21 @@ impl ArchiveProvider {
                 tar.read(&opened.index, id, &ctx.cancel, allow, self.cost_ask_bytes)?
             }
             Backend::Single(single) => single.read(),
+            Backend::SevenZ(sevenz) => {
+                let Locator::SevenZ(file) = record.locator else {
+                    return Err(VfsError::NotFound.into());
+                };
+                let file = file as usize;
+                if !sevenz.random_read() {
+                    check_cost(
+                        &name_of(&opened, id),
+                        sevenz.ahead(file),
+                        self.cost_ask_bytes,
+                        allow,
+                    )?;
+                }
+                Box::new(sevenz.read(file, password, ctx.cancel.clone())?)
+            }
         };
         let size_known = !record.flags.contains(RecordFlags::SIZE_UNKNOWN);
         let claims = Claims {
@@ -506,6 +641,15 @@ impl Provider for ArchiveProvider {
     fn trash(&self, _place: &Place, _ctx: &OpContext) -> Result<TrashCheck, VfsError> {
         Err(crate::words::read_only_error())
     }
+}
+
+/// What [`ArchiveProvider::visit`] calls for each member: the index, the
+/// record, a reader of its data; it returns whether to go on.
+pub type Visitor<'a> = dyn FnMut(&Index, u32, &mut dyn Read) -> Result<bool, VfsError> + 'a;
+
+/// A record's name, for the words.
+fn name_of(opened: &Opened, id: u32) -> String {
+    opened.index.name(id).to_owned()
 }
 
 /// What a place inside an archive of this format can do: nothing but

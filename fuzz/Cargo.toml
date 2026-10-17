@@ -77,3 +77,10 @@ path = "fuzz_targets/archive_xz.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "archive_7z"
+path = "fuzz_targets/archive_7z.rs"
+test = false
+doc = false
+bench = false

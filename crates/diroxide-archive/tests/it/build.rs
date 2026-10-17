@@ -483,11 +483,13 @@ pub fn sevenz_of(members: &[(&str, &[u8])], solid: bool, password: Option<&str>)
     let mut writer = ArchiveWriter::new(Cursor::new(Vec::new())).unwrap();
     let mut methods = Vec::new();
     if let Some(password) = password {
-        methods.push(
-            EncoderConfiguration::new(EncoderMethod::AES256_SHA256).with_options(
-                AesEncoderOptions::new(sevenz_rust2::Password::from(password)).into(),
-            ),
-        );
+        // A fixed salt and IV, so a fixture is the same bytes every time;
+        // a real packer draws them at random.
+        let mut aes = AesEncoderOptions::new(sevenz_rust2::Password::from(password));
+        aes.iv = [7; 16];
+        aes.salt = [11; 16];
+        methods
+            .push(EncoderConfiguration::new(EncoderMethod::AES256_SHA256).with_options(aes.into()));
         writer.set_encrypt_header(true);
     }
     methods.push(EncoderConfiguration::new(EncoderMethod::LZMA2));
