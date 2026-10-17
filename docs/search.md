@@ -120,7 +120,7 @@ Each example gives the text you type and what diroxide reads back. These are the
 - `needs-care`: names that need care, such as hidden characters, trailing dots or spaces and device names.
 - `label urgent and not label done`: "label is urgent and not label is done".
 - `group images and size over 5 MB`: "group is images and size over 5 MB". Large pictures, by extension.
-- `content:"total due"`: "content contains "total due"". Files that hold the text.
+- `content:"total due"`: files that hold the text total due. It reads back as content contains, then the text in quotes.
 - `content:re:"due \d+" and ext txt,md`: regular-expression content in two kinds of file.
 - `hidden and kind file`: "hidden and kind is file, including hidden".
 - `depth at most 1 and name *.rs`: direct children only. Depth works in searches, not in a panel.
@@ -146,7 +146,7 @@ Every problem starts "Filter problem: " and puts the meaning next, so the first 
 - "Filter problem: nothing after and". Then "Add a test, such as *.txt."
 - "Filter problem: date not understood". Then "Try today, last week or 2026-10-01."
 - "Filter problem: bad regular expression". Then the reason, for example "The pattern is not valid: unclosed group."
-- "Filter problem: content needs text". Then "Try content:"total due"."
+- "Filter problem: content needs text". Then an example to copy, `content:"total due"`.
 - "Filter problem: depth works in searches". Then "A panel shows one folder; search to go deeper."
 - "Filter problem: duration needed". Then "Try within 3 days or older than 1 year."
 - "Filter problem: unknown kind 'thing'". Then the kinds. "Filter problem: unknown group 'pictures'" names the groups.
@@ -169,9 +169,9 @@ Ctrl+S opens the Filter prompt in the active panel. Type any filter from this gu
 
 ## Select by pattern: Plus and Minus
 
-Plus (in a terminal, with single-letter keys on, and in the Select menu) asks for a filter, starting as `*`. Before it marks anything it counts and asks: "12 entries will be selected. y or n". Then "12 selected". Minus unselects the rows that match. The word `selected` lets a second pass narrow the first.
+Plus (in a terminal, with single-letter keys on, and in the Select menu) asks for a filter, starting as `*`. Before it marks anything it counts and asks: "12 entries will be selected? No is the default. y or n". Then "12 selected". Minus unselects the rows that match. The word `selected` lets a second pass narrow the first.
 
-<!-- to confirm: the count-before sentence and the keys are the wiring lane's (W3a, commit 36). -->
+<!-- to confirm: the count-before sentence and the keys are the wiring lane's (W3a, commit 36). The research plan words the question "12 entries will be selected. y or n"; here it follows the project's shape with "No is the default". Use what ships. -->
 
 ## Search
 
@@ -318,7 +318,7 @@ Reads as: modified last week, October 4 to 10. The next lines show the tree, the
 - 2: wrong use, or a bad filter.
 - 3: partly done. Some folders or files could not be read, and the output says which.
 
-The same convention serves `diro diff`. The script commands of alpha.4 use 1 for failed, so check which family a command is in.
+`diro diff` follows the same idea: 0 for the same, 1 for different, 2 for trouble.
 
 ## Limits, said in words
 

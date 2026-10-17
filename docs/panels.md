@@ -131,7 +131,7 @@ Marking picks the rows a command will act on. With no marks, a command acts on t
 - Ctrl+D says the marks with their size: "3 selected, 4.2 MB. Documents, 40 items, on report.pdf, 3 of 40". Folders are not sized until a later alpha.
 - Restore selection (in the Select menu and the palette) brings back the marks that a select all, none, invert, pattern, finished job or change of folder replaced: "Selection restored: 31 selected."
 
-<!-- to confirm: the wiring lane (W3a, commit 36) changes this to a count before the action, "12 entries will be selected. y or n", then "12 selected". Replace the sentence after it merges. -->
+<!-- to confirm: the wiring lane (W3a, commit 36) changes this to a count before the action, "12 entries will be selected? No is the default. y or n", then "12 selected". Replace the sentence after it merges. -->
 
 Marks belong to rows, not to positions. If the folder is listed again, the marks stay on the same names. If a marked row has disappeared, diroxide says how many marks were lost, and if the focused row has gone it says that the focus moved. After a job, only the entries that failed stay marked, so the marks show what to try again.
 

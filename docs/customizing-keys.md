@@ -59,18 +59,18 @@ Choose a row, press Enter, and choose Change key.
 4. It says the key back, in words: "Got Control plus F5".
 5. It checks the key, one sentence for each problem, in this order:
    - "Insert is the screen reader key." The key is refused.
-   - "The terminal cannot send Ctrl+Enter." Then "Use it for the window column only? y or n".
+   - "The terminal cannot send Ctrl+Enter." Then "Use it for the window column only? No is the default. y or n".
    - "Windows Terminal keeps Ctrl+V." This is said for a key the terminal takes before diroxide, even though such a key can never arrive to be captured. You can still type its name.
    - "NVDA and JAWS use Ctrl+Alt+Left." Then the question.
    - "Ctrl+F5 already sorts by modified time." Then "Take it, swap, or cancel?" Taking leaves the other command without a key in that column. Swapping gives it this command's old key. Two commands cannot share a key in one layer.
-   - "A letter key works only while letters run commands. Go on? y or n".
+   - "A letter key works only while letters run commands. Go on? No is the default. y or n".
 6. It writes one line to `keymap.toml`, safely, and says "Ctrl+F5 saved for Sort by modified". Your comments and the order of your lines stay.
 
 Reset this key removes that line. Reset all keys removes your changes, after a question that starts on No. A file that cannot be read keeps its old copy as `keymap.toml.bad`, and diroxide says so in words. A command or a key in the file that diroxide does not know is kept and reported, never dropped.
 
 A keymap moved to a computer with another keyboard layout may need a look, because symbols depend on the layout and `keymap.toml` stores the character.
 
-<!-- to confirm: the Keys list's wording, the order of the checks, the action names and the timeout are written from the research plan. Confirm each against W3k's notes. -->
+<!-- to confirm: the Keys list's wording, the order of the checks, the action names and the timeout are written from the research plan. Confirm each against W3k's notes. The plan words its questions "... y or n"; here they follow the project's shape with "No is the default". Use what ships. -->
 
 ## The key test
 
@@ -103,7 +103,7 @@ A preset holds no key sequences. Midnight Commander's Ctrl+X family and Worker's
 
 ### Choose a preset
 
-Choose a preset, in the Keys list and the palette, lists them. Pick one, and diroxide asks: "Apply Total Commander keys? y or n". Your own lines in `keymap.toml` stay. Choose the diroxide preset to go back.
+Choose a preset, in the Keys list and the palette, lists them. Pick one, and diroxide asks: "Apply Total Commander keys? No is the default. y or n". Your own lines in `keymap.toml` stay. Choose the diroxide preset to go back.
 
 In a shell:
 

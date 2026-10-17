@@ -93,7 +93,7 @@ These lines show what diroxide says for each key. The status line says the same 
 - Ctrl+S and typing: nothing is spoken for each key. About 400 milliseconds after you stop, one line says the count and the first match: "37 matches, first report.pdf". With none: "No matches". A filter you clear says "Filter off, 120 shown".
 - A problem is said once, after the same pause: "Filter problem: size needs a number", then "Word 3. Try size over 10 MB." It is not said on every key.
 - Say filter, in the palette: the filter in one sentence with the real days, "modified last week, October 4 to 10".
-- Plus (select by pattern), then a filter and Enter: "12 entries will be selected. y or n", and after y, "12 selected".
+- Plus (select by pattern), then a filter and Enter: "12 entries will be selected? No is the default. y or n", and after y, "12 selected".
 - Search from the palette: a dialog with labeled fields. Enter starts it: "Searching Documents for *.txt". Then at the progress interval, not on every change: "Searching: 214 found, 3,120 folders". At the end: "Done: 214 found in 3,120 folders", then the skips: "214 found. Hidden files skipped." Escape: "Stopped at 214 found." Pause: "Paused at 214 found."
 - A result row: "notes.txt, in Documents/q3, 4 KB". A content hit: "report.txt, line 42: total due, 3 more, in Documents/q3". A folder: "q3, folder, in Documents". The position comes last. The cursor never moves while results arrive.
 - F3 on a content hit opens the viewer at the match: "line 42 of 900". A file that has gone since the list was made: "report.txt, gone since this list was made".
@@ -124,7 +124,7 @@ These lines show what diroxide says for each key. The status line says the same 
 
 - Settings, then Keys: "Keys, preset diroxide defaults, 0 changed", then rows such as "Copy to other panel, F5 in both". Type `copy` to narrow the list.
 - Change key on a row: "Press the new key now. Escape cancels." Press a key: "Got Control plus F9". After 10 seconds with no key: "No key heard. The terminal may keep it." A key that is taken: "Ctrl+F5 already sorts by modified time.", then "Take it, swap, or cancel?" The screen reader key: "Insert is the screen reader key." A saved key: "Ctrl+F9 saved for Sort by size".
-- Choose a preset: "Apply Total Commander keys? y or n". The row title then says "Keys, preset Total Commander, 3 changed".
+- Choose a preset: "Apply Total Commander keys? No is the default. y or n". The row title then says "Keys, preset Total Commander, 3 changed".
 - Test keys: "Got Control plus F5. Runs Sort by modified."
 
 <!-- to confirm: all of this subsection waits for the keys lane (W3k) and the wiring lane (W3a, commit 41). -->
@@ -293,7 +293,7 @@ Run this once with NVDA, once with JAWS, and then read the first 40 cells of eac
 6. Type `size over` and stop. You should hear "Filter problem: size needs a number" once, after the pause, not on every key.
 7. Type `modified last week`. Run Say filter from the palette. You hear the real days. On Saturday, October 17, 2026, with weeks that start on Sunday, it is "modified last week, October 4 to 10".
 8. Clear the filter. You hear "Filter off" and the count.
-9. Press Plus and type `*.md`. You hear "N entries will be selected. y or n". Press y: "N selected".
+9. Press Plus and type `*.md`. You hear "N entries will be selected? No is the default. y or n". Press y: "N selected".
 10. Press Alt+L, pick Urgent: "Label urgent added to N items". Press Ctrl+Z: "Undid label urgent on N items". Label again. Open the Labels list. Is the row change from "checking" to "0 missing" noticed? Press Enter on a label, then on an item: you land on the file in its folder.
 11. Press Ctrl+B. The first row says "Add this folder". Press Enter, then Ctrl+B again. The first row says "Remove this folder", and the new bookmark's row starts with its name and "bookmark".
 12. Run Search from the palette. Type `*.md` and press Enter. You hear "Searching diro-demo for *.md", then "Done:" and a count, then what was skipped. Press Down through the results: each row starts with the name. Search for the text `crow` in contents, press F3 on a hit, and hear the viewer open at that line.
@@ -302,7 +302,7 @@ Run this once with NVDA, once with JAWS, and then read the first 40 cells of eac
 15. Open Settings, then Keys. You hear "Keys, preset diroxide defaults, 0 changed". Type `copy` to narrow the list. Choose Sort by size, then Change key, then press Ctrl+F9: "Got Control plus F9". Repeat with F5: "F5 already copies to the other panel", then the choice.
 16. Choose Change key and wait 10 seconds. You hear "No key heard. The terminal may keep it." and the offer to type the name.
 17. Run Test keys. Press Ctrl+V and Ctrl+Enter. In Windows Terminal, Ctrl+V pastes text and does not arrive. Tell the project which keys did not arrive.
-18. Choose the Total Commander preset: "Apply Total Commander keys? y or n". Answer y. Press Shift+F6 on a file: the rename prompt. Press Escape. Choose the diroxide preset again. In a shell, run `diro keys check`.
+18. Choose the Total Commander preset: "Apply Total Commander keys? No is the default. y or n". Answer y. Press Shift+F6 on a file: the rename prompt. Press Escape. Choose the diroxide preset again. In a shell, run `diro keys check`.
 19. In the panel on `out`, run Watch this folder from the palette: "Watching out for new files. Escape stops." Copy a file in slowly. Nothing while it grows, then "Arrived: name, size". Press Escape: "Stopped watching out: 1 arrived".
 
 Questions to answer: Was the meaning of every line inside the first 40 cells? Did the count after the filter pause help, or interrupt? Is 400 milliseconds too short? Did "Waiting for ... to settle" get read aloud even though diroxide does not say it? Was the compare verdict and its counts enough before the change list? Did a key in the Keys list do nothing? Which keys does your terminal not deliver?
