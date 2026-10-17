@@ -833,6 +833,7 @@ name = "diroxide-archive"
 version = "0.1.0-alpha.1"
 dependencies = [
  "bzip2",
+ "crc32fast",
  "diroxide-core",
  "diroxide-ops",
  "diroxide-vfs",

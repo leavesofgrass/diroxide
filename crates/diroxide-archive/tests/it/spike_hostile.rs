@@ -175,3 +175,54 @@ fn the_crates_alone_neither_panic_nor_refuse() {
     assert!(said("local and central names disagree").contains("read 7 bytes"));
     assert!(said("gzip of zeros at over 1,000 to 1").contains("67108864 bytes"));
 }
+
+/// The lying-size cases of the spike through the limiter chain: the
+/// format crate's reader inside `Guarded`, with the member's own claims.
+#[test]
+fn the_limiter_chain_stops_a_member_that_lies_about_its_size() {
+    use diroxide_archive::guard::{Budget, Claims, Guarded, from_io};
+    use diroxide_archive::{Allowances, Limits};
+    use diroxide_vfs::CancelToken;
+    let cases = [
+        (
+            crate::hostile::claims_four_gb(),
+            "big.bin",
+            "shorter than its stated size",
+        ),
+        // The zip crate's own check (9.0.1) stops this one first, in its
+        // words; the chain's is the net behind it for every other codec.
+        (
+            crate::hostile::claims_too_little(),
+            "small.bin",
+            "larger than its declared",
+        ),
+    ];
+    for (bytes, name, words) in cases {
+        let run = guarded(name, move || {
+            let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+            let member = archive.by_name(name).unwrap();
+            let claims = Claims {
+                name: name.to_owned(),
+                size: Some(member.size()),
+                packed: Some(member.compressed_size()),
+                crc32: Some(member.crc32()),
+            };
+            let limits = Limits::strict();
+            let mut reader = Guarded::new(
+                member,
+                claims,
+                limits,
+                Budget::new(&limits),
+                Allowances::all(),
+                CancelToken::new(),
+            );
+            let mut sink = Vec::new();
+            match reader.read_to_end(&mut sink) {
+                Ok(n) => format!("read {n} bytes"),
+                Err(e) => from_io(e).to_string(),
+            }
+        });
+        assert!(run.outcome.contains(words), "{name}: {}", run.outcome);
+        assert!(run.peak < 512 << 20, "{name}: {:.0} MiB", mib(run.peak));
+    }
+}
