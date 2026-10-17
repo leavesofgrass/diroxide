@@ -374,6 +374,21 @@ fn trees_say_what_was_meant() {
 }
 
 #[test]
+fn a_search_knows_how_deep_to_walk() {
+    assert_eq!(parse("depth at most 1 and name *.rs").max_depth(), Some(1));
+    assert_eq!(parse("*.rs and depth under 3").max_depth(), Some(2));
+    assert_eq!(parse("depth 2").max_depth(), Some(2));
+    assert_eq!(
+        parse("depth between 4 and 2 and depth at most 3").max_depth(),
+        Some(3)
+    );
+    assert_eq!(parse("depth at least 2").max_depth(), None);
+    assert_eq!(parse("depth at most 1 or *.rs").max_depth(), None);
+    assert_eq!(parse("not depth at most 1").max_depth(), None);
+    assert_eq!(parse("*.rs").max_depth(), None);
+}
+
+#[test]
 fn groups_are_read_by_their_own_names() {
     assert_eq!(parse("group Image").sentence(), "group is images");
     assert_eq!(parse("group image").expr(), parse("group:images").expr());

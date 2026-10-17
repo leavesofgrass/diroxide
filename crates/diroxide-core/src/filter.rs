@@ -166,6 +166,31 @@ impl Filter {
         })
     }
 
+    /// How deep a walk needs to go: the bound of a depth test the whole
+    /// filter depends on (alone, or one of its top-level and), so a
+    /// search can stop early. `None` when nothing bounds the depth.
+    pub fn max_depth(&self) -> Option<u64> {
+        let parts: Vec<&Expr> = match &self.expr {
+            Expr::And(parts) => parts.iter().collect(),
+            other => vec![other],
+        };
+        parts
+            .into_iter()
+            .filter_map(|part| match part {
+                Expr::Test {
+                    test: Test::Number(number),
+                    ..
+                } if number.field == Field::Depth => match number.op {
+                    NumberOp::Is(a) | NumberOp::AtMost(a) => a.value(),
+                    NumberOp::Under(a) => a.value().map(|v| v.saturating_sub(1)),
+                    NumberOp::Between(a, b) => a.value().max(b.value()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .min()
+    }
+
     /// Whether a test reads files, so the panel asks before it starts and
     /// again for online-only files.
     pub fn reads_content(&self) -> bool {

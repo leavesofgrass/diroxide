@@ -34,6 +34,7 @@ pub use details::{DetailGroup, DetailRow};
 pub use effect::{Effect, PluginCall, Redraw};
 pub use entry::{Attributes, Entry, EntryKind, Link};
 pub use error::{CoreError, Explain, PlaceError};
+pub use filter::{Filter, FilterError, FilterOptions};
 pub use ids::{DialogId, IdSource, JobId, RequestId, Side, TabId};
 pub use job::{
     ConflictAction, ConflictAnswer, ConflictKind, ConflictPolicy, ErrorAction, JobKind, JobOrigin,
@@ -42,7 +43,7 @@ pub use job::{
 pub use keys::{Key, KeyCode, KeyColumn, Layer, Modifiers};
 pub use list::{FrozenSelection, ListModel, ListRow, Move, RowsReplaced};
 pub use message::{Importance, Message, MessageKind};
-pub use pattern::{Pattern, PatternError};
+pub use pattern::{CaseRule, Pattern, PatternError};
 pub use place::{Place, PlaceKind, Remote};
 pub use secret::{Secret, SecretKind, SecretRequest};
 pub use sort::{FolderOrder, NameCase, SortDirection, SortKey, SortSpec};
