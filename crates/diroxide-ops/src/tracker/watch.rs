@@ -190,13 +190,18 @@ impl ArrivalWatch {
         }])
     }
 
-    /// Takes a watch event: the name it names is looked at; a rescan
-    /// lists the folder; the folder gone ends the watch.
+    /// Takes a watch event: the name it names is looked at, and a name
+    /// renamed in settles after the shorter quiet (the plan's half second
+    /// for renamed files, [`Tracker::renamed_in`]); a rescan, or an event
+    /// of a kind this build does not know, lists the folder; the folder
+    /// gone ends the watch.
     pub fn event(&mut self, event: &WatchEvent, now: Timestamp) -> Vec<WatchNote> {
+        let renamed = matches!(event, WatchEvent::RenamedIn(_));
         let events = match event {
             WatchEvent::Created(place)
             | WatchEvent::Changed(place)
-            | WatchEvent::Removed(place) => {
+            | WatchEvent::Removed(place)
+            | WatchEvent::RenamedIn(place) => {
                 let Some(name) = place.name().map(str::to_owned) else {
                     return Vec::new();
                 };
@@ -204,14 +209,20 @@ impl ArrivalWatch {
                     return Vec::new();
                 }
                 let look = self.look(&name, false);
-                self.tracker.observe(&name, look, now)
+                if renamed {
+                    self.tracker.renamed_in(&name, look, now)
+                } else {
+                    self.tracker.observe(&name, look, now)
+                }
             }
-            WatchEvent::Rescan => return self.rescan(now),
             WatchEvent::Gone => {
                 return vec![WatchNote::Ended {
                     line: gone_line(&self.folder),
                 }];
             }
+            WatchEvent::Rescan => return self.rescan(now),
+            // A kind of event this build does not know: list the folder.
+            _ => return self.rescan(now),
         };
         self.notes(events, now)
     }

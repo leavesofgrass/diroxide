@@ -876,6 +876,51 @@ fn the_watch_paces_its_lines_and_sums_up_several() {
     );
 }
 
+/// P3b (W3t's request): the watch calls the tracker's renamed-in rule for
+/// a name renamed into the folder, so a finished file settles in half a
+/// second; the same file created settles in two.
+#[test]
+fn the_watch_settles_a_renamed_in_file_in_half_a_second() {
+    let provider = Arc::new(FakeProvider::new());
+    provider.add_folder(&p("/in"));
+    let mut watch = fake_watch(&provider, None);
+    watch.start(at(0)).unwrap();
+    let arrivals = |notes: Vec<(u64, WatchNote)>| -> Vec<(u64, String)> {
+        notes
+            .into_iter()
+            .filter_map(|(t, n)| match n {
+                WatchNote::Arrived(a) => Some((t, a.name)),
+                _ => None,
+            })
+            .collect()
+    };
+    let report = p("/in/report.pdf");
+    provider.add_file(&report, b"whole report");
+    provider.set_modified(&report, at(1_000));
+    let notes = watch.event(&WatchEvent::RenamedIn(report), at(1_000));
+    assert_eq!(
+        notes,
+        vec![WatchNote::Waiting(Some(
+            "Waiting for report.pdf to settle".to_owned()
+        ))]
+    );
+    assert_eq!(
+        arrivals(run(&mut watch, 1_050, 4_000)),
+        vec![(1_500, "report.pdf".to_owned())],
+        "half a second after the rename"
+    );
+    let scan = p("/in/scan.pdf");
+    provider.add_file(&scan, b"whole scan");
+    provider.set_modified(&scan, at(5_000));
+    watch.event(&WatchEvent::Created(scan), at(5_000));
+    assert_eq!(
+        arrivals(run(&mut watch, 5_050, 9_000)),
+        vec![(7_000, "scan.pdf".to_owned())],
+        "two seconds after it was created"
+    );
+    assert_eq!(watch.arrived(), 2);
+}
+
 #[test]
 fn a_rescan_finds_what_the_events_missed_and_the_folder_gone_ends_the_watch() {
     let provider = Arc::new(FakeProvider::new());

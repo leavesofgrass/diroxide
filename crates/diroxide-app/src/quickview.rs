@@ -431,7 +431,8 @@ impl QuickView {
             return Vec::new();
         };
         match event {
-            WatchEvent::Changed(p) | WatchEvent::Created(p) if *p == shown.place => {}
+            WatchEvent::Changed(p) | WatchEvent::Created(p) | WatchEvent::RenamedIn(p)
+                if *p == shown.place => {}
             WatchEvent::Rescan => {}
             WatchEvent::Removed(p) if *p == shown.place => {
                 let name = shown.name.clone();

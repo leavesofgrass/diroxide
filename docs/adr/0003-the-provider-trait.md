@@ -26,6 +26,7 @@ Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, fr
 Status update, Saturday, October 17, 2026 (the pre-W3a contract step, P3b, from the requests the search, labels and tracker lanes held at their integrations):
 
 - **The local entry builder.** `LocalEntryBuilder` (`new`, `in_folder`, `entry`, `bare`, `fill` and `is_hidden`) makes entries from metadata the way the local provider lists them, for a caller that reads folders itself. The search crate's parallel walker uses it instead of its own copy of the rules, so a search carries owner and group names on Unix, the Finder's hidden flag on macOS and the online-only fact, as a panel row does; one builder serves a whole walk on every thread, with the owner names read once (W3s's request 3).
+- **Renamed in.** `WatchEvent` is `#[non_exhaustive]` and gains `RenamedIn(Place)`, the new name of a rename into the folder, which the local watcher sends where it said `Created` for a rename's new name (on Windows a move from another folder is reported as an addition and stays `Created`); `place()` gives the entry an event names and `is_arrival()` says created or renamed in. Code that does not care treats it as `Created`: the panel lists the folder again as before, the quick view follows a file saved by renaming over it, and an event of a kind a build does not know is a rescan. The arrival tracker's watch calls its built and tested `renamed_in` rule for it, so a file finished elsewhere and renamed into place settles in half a second, not two (W3t's request).
 
 ## Context
 
