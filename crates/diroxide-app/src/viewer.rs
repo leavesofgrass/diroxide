@@ -26,6 +26,7 @@
 //!
 //! The viewer is `Send`, so a frontend may keep it on a worker thread.
 
+mod files;
 mod hexmode;
 mod index;
 mod jump;
@@ -46,6 +47,7 @@ use diroxide_preview::encoding::{SNIFF_BYTES, binary_kind};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
+pub use files::Sibling;
 pub use jump::Jump;
 pub use search::{MAX_HITS, Query};
 pub use source::ViewerSource;
@@ -258,6 +260,7 @@ pub struct Viewer {
     lines: BTreeMap<u64, ShownLine>,
     task: Option<Task>,
     search: Option<search::Search>,
+    siblings: Vec<Sibling>,
 }
 
 impl fmt::Debug for Viewer {
@@ -317,6 +320,7 @@ impl Viewer {
             lines: BTreeMap::new(),
             task: None,
             search: None,
+            siblings: Vec::new(),
         };
         viewer.load()?;
         let said = viewer.opening_lines();
