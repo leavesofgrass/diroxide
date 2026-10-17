@@ -10,9 +10,9 @@ A comparison that is drawn as two columns side by side is hard to hear. This one
 
 ## Which two files
 
-Compare files is in the palette and the File menu. It has no key of its own.
+Compare files is in the palette. It has no key of its own.
 
-<!-- to confirm: the menu place, the key and the palette name are the wiring lane's (W3a, commit 40). -->
+<!-- to confirm: the menu place (the File menu, perhaps), the key and the palette name are the wiring lane's (W3a, commit 40). -->
 
 - If exactly two files are marked in the active panel, those are compared, the first in list order as "before".
 - Otherwise the focused file here is compared with the file of the same name in the other panel.
@@ -22,7 +22,7 @@ Before it starts, the status line says which two: "Comparing report.txt here wit
 
 The direction is from the other panel's file to this panel's file. The report says it: "From the other panel to this panel." Swap turns it around and says so. Nothing is compared again when you swap.
 
-Two folders, a folder and a file, or a file inside an archive are not compared in alpha.3. The message says what to choose: "Could not compare nofile.txt: it does not exist. Check the path." or "Choose two files to compare."
+Two folders, a folder and a file, or a file inside an archive are not compared in alpha.3. The message says what to do: "Could not compare D:/diro-demo: it is not a file. Choose two files to compare." or "Could not compare nofile.txt: it does not exist. Check the path."
 
 ## What you hear, in order
 

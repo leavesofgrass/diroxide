@@ -60,7 +60,7 @@ A field name, an optional colon, then a value. `ext pdf`, `ext:pdf` and `ext is 
 - `type`: the detected type's short name, such as `PDF`. It matches only entries whose type is already known.
 - `group`: a group of file types by extension: `images`, `music`, `video`, `documents`, `archives`, `code` and `text`. The full type model comes with alpha.7.
 - `label`: a label name, or several with commas. [Labels and bookmarks](labels-bookmarks.md) describes labels.
-- `owner`: the owner's name. `usergroup`: the Unix group. (The word `group` always means the group of file types.) Owner and group are compared without regard to case. A Windows listing does not carry owners.
+- `owner`: the name of the file's owner. `usergroup`: the Unix group. (The word `group` always means the group of file types.) Owner and group are compared without regard to case. A Windows listing does not carry owners.
 - `size`: a number with a unit. `depth`: how many folders below the start; direct children are 1.
 - `modified`, `created`, `accessed` and `changed`: dates.
 - `content`: text or a regular expression inside the file: `content:"total due"` or `content:re:"due \d+"`. See "Searching file contents".
@@ -133,6 +133,8 @@ More forms that help: `path "/work/" and draft` (the path holds work and the nam
 The read-back is one sentence in a fixed form: field words, comparison words, units spelled out, dates with their real days, and "match case" or "including hidden" when those apply. Typed forms never matter. You hear the same sentence for `size>1mb` and `size over 1 MB`.
 
 The read-back is the title of the panel's filter, the name of a saved search that has none, the first line of a results list, and what `diro search --explain` prints. Say filter, in the palette, says it on request. Parsing the read-back gives the same filter again; a test checks that.
+
+<!-- to confirm: the Say filter command is the wiring lane's (W3a, commit 35); the palette name and any key are not yet in the catalog. `diro search --explain` is real. -->
 
 ## When a filter has a problem
 
