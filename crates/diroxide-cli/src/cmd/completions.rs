@@ -227,6 +227,7 @@ pub fn command() -> Command {
                         .help("The shell"),
                 ),
         )
+        .subcommand(archive_command())
         .subcommand(no_help(
             Command::new("search")
                 .about("Print the places under ROOT whose names match PATTERN")
@@ -275,6 +276,78 @@ pub fn command() -> Command {
                         .arg(named("name", "The plugin")),
                 )),
         ))
+}
+
+/// `diro archive` as clap describes it, for completion only; keep in step
+/// with `cmd::archive::parse`.
+fn archive_command() -> Command {
+    let archive = |help: &'static str| {
+        Arg::new("archive")
+            .required(true)
+            .value_hint(ValueHint::FilePath)
+            .help(help)
+    };
+    Command::new("archive")
+        .about("List, pack, unpack and test archives")
+        .disable_help_subcommand(true)
+        .subcommand(
+            Command::new("list")
+                .about("List every member, the path first")
+                .arg(flag(
+                    "long",
+                    "Add exact sizes, the packed size, CRC-32 and mode",
+                ))
+                .arg(flag("json", "Write one JSON object a line"))
+                .arg(flag("hidden", "List hidden members too"))
+                .arg(flag("null", "Write only the paths, each ended by NUL").short('0'))
+                .arg(
+                    Arg::new("place")
+                        .required(true)
+                        .value_hint(ValueHint::AnyPath)
+                        .help("The archive, or a folder inside one"),
+                ),
+        )
+        .subcommand(
+            Command::new("pack")
+                .about("Pack items into a new archive; the name gives the format")
+                .arg(
+                    Arg::new("level")
+                        .long("level")
+                        .value_parser(["fastest", "fast", "normal", "maximum", "ultra"])
+                        .help("How hard to compress"),
+                )
+                .arg(flag("password", "Ask for a password, typed twice"))
+                .arg(flag("hide-names", "With --password, hide a 7z's names too"))
+                .arg(flag("not-solid", "Write a 7z that is not solid"))
+                .arg(flag("lines", "With -, read one path a line"))
+                .arg(flag("replace", "Replace an archive of that name"))
+                .arg(archive("The new archive"))
+                .arg(
+                    Arg::new("items")
+                        .required(true)
+                        .num_args(1..)
+                        .value_hint(ValueHint::AnyPath)
+                        .help("What goes in, or - for paths on standard input"),
+                ),
+        )
+        .subcommand(
+            Command::new("unpack")
+                .about("Unpack into the current folder")
+                .arg(
+                    Arg::new("into")
+                        .long("into")
+                        .value_name("FOLDER")
+                        .value_hint(ValueHint::DirPath)
+                        .help("Unpack there instead"),
+                )
+                .arg(flag("replace", "Replace files of the same name"))
+                .arg(archive("The archive, or a member inside one")),
+        )
+        .subcommand(
+            Command::new("test")
+                .about("Read every member and check it")
+                .arg(archive("The archive")),
+        )
 }
 
 #[cfg(test)]
