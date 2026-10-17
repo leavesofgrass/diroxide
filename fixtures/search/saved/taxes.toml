@@ -1,0 +1,11 @@
+format = 1
+name = "Taxes 2025"
+kind = "collection"
+created = "2026-10-03T04:00:00Z"
+
+[[items]]
+place = "sftp://example.org/home/ada/taxes/return.pdf"
+label = "urgent"
+
+[[items]]
+place = "sftp://example.org/home/ada/taxes/receipts"

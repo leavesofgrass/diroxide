@@ -1,144 +1,68 @@
 //! Search, dirsize and duplicates.
 //!
-//! Search walks a place and reports hits as they are found into a results
-//! list that every command can act on. Names match a glob or a regex;
-//! contents match a regex. Dirsize walks with the same walker. Duplicates
-//! go by size, then a fast hash, then a full comparison.
+//! A search is a [`SearchQuery`]: an expression in the one filter language
+//! (`diroxide_core::filter`, the same text the panel filter and select by
+//! pattern take) and a [`Scope`], the part the expression never holds
+//! (where to start, hidden entries, ignore files, links, other drives,
+//! archives, depth). [`run_search`] walks the scope, decides each entry
+//! with the filter's evaluator, cheap facts first and file contents last,
+//! and hands each hit to a [`SearchSink`] as it is found, in arrival
+//! order. A [`SearchControl`] stops, holds and resumes it from any thread.
+//! The [`SearchSummary`] says in words what was found and everything that
+//! was skipped, so nothing is filtered silently.
 //!
-//! Phase 0: a naive walk through the provider, glob names with `*` and `?`,
-//! no content search, no duplicates. Wave 2 (W2b) owns this crate and
-//! brings in ripgrep's crates (`ignore`, `globset`, `grep-regex`,
-//! `grep-searcher`) and `blake3`.
+//! A `content` test reads files the way ripgrep does: a NUL byte makes a
+//! file binary (skipped and counted), a UTF-16 file with its byte-order
+//! mark is read as text, the byte limit stops the read, `^` and `$` are a
+//! line's ends with or without a carriage return, and case follows the
+//! filter. Hits carry their first matching line and the count of the
+//! others, or one hit per line ([`RowShape`]). An online-only file is
+//! skipped and counted unless the scope says to read such files, and then
+//! an [`OnlineGuard`] is asked first.
+//!
+//! Dirsize walks with filters off. Duplicates go by size, then a fast
+//! hash, then a full comparison (alpha.8).
+
+mod content;
+mod dirsize;
+mod engine;
+mod hit;
+mod local_entry;
+mod newest;
+mod query;
+mod saved;
+mod sink;
+mod space;
+mod summary;
+mod walk;
 
 use diroxide_core::format::{count, human_size};
-use diroxide_core::{Entry, Explain, ListModel, ListRow, Place, Timestamp};
+use diroxide_core::{Explain, ListModel, Place, SystemClock};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
-/// How names are matched.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NamePattern {
-    /// A glob: `*` any run of characters, `?` one character; several globs
-    /// separated by commas.
-    Glob(String),
-    /// A regular expression in Rust's `regex` syntax.
-    Regex(String),
-}
-
-/// How contents are matched.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ContentPattern {
-    /// The regular expression.
-    pub regex: String,
-    /// Whether case matters.
-    pub case_sensitive: bool,
-    /// Stop reading a file after this many bytes.
-    pub max_bytes: Option<u64>,
-}
-
-/// What to look for and where.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SearchQuery {
-    /// Where to start.
-    pub root: Place,
-    /// Names to match; `None` matches every name.
-    pub name: Option<NamePattern>,
-    /// Contents to match.
-    pub content: Option<ContentPattern>,
-    /// The smallest size, in bytes.
-    pub min_size: Option<u64>,
-    /// The largest size, in bytes.
-    pub max_size: Option<u64>,
-    /// Modified at or after.
-    pub modified_after: Option<Timestamp>,
-    /// Modified before.
-    pub modified_before: Option<Timestamp>,
-    /// How many folders deep to go; `None` for no limit.
-    pub max_depth: Option<usize>,
-    /// Include hidden entries.
-    pub include_hidden: bool,
-    /// Follow links into folders (never out of the root).
-    pub follow_links: bool,
-    /// Skip what `.gitignore` files ignore.
-    pub respect_ignore_files: bool,
-}
-
-impl SearchQuery {
-    /// A query for names matching a glob under a root, with the defaults:
-    /// any depth, hidden entries skipped, links not followed.
-    pub fn names(root: Place, glob: &str) -> Self {
-        Self {
-            root,
-            name: Some(NamePattern::Glob(glob.to_owned())),
-            content: None,
-            min_size: None,
-            max_size: None,
-            modified_after: None,
-            modified_before: None,
-            max_depth: None,
-            include_hidden: false,
-            follow_links: false,
-            respect_ignore_files: false,
-        }
-    }
-}
-
-/// A matching line in a file.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ContentMatch {
-    /// The line number, from one.
-    pub line_number: u64,
-    /// The line's text.
-    pub text: String,
-}
-
-/// One result.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SearchHit {
-    /// Where it is.
-    pub place: Place,
-    /// What it is.
-    pub entry: Entry,
-    /// The first matching line, for a content search.
-    pub line: Option<ContentMatch>,
-}
-
-/// How a search went.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SearchSummary {
-    /// Hits found.
-    pub hits: u64,
-    /// Folders read.
-    pub folders: u64,
-    /// Folders that could not be read.
-    pub unreadable: u64,
-    /// Whether it was cancelled.
-    pub cancelled: bool,
-}
-
-impl SearchSummary {
-    /// The summary in words: "12 found in 40 folders, 1 folder unreadable".
-    pub fn describe(&self) -> String {
-        let mut text = format!(
-            "{} found in {}",
-            self.hits,
-            count(self.folders, "folder", "folders")
-        );
-        if self.unreadable > 0 {
-            text.push_str(&format!(
-                ", {} unreadable",
-                count(self.unreadable, "folder", "folders")
-            ));
-        }
-        if self.cancelled {
-            text.push_str(", cancelled");
-        }
-        text
-    }
-}
+pub use dirsize::{dirsize_with, size_every_folder};
+pub use engine::run_search;
+pub use hit::{ContentMatch, SearchHit};
+pub use newest::{Day, Newest, newest_files};
+pub use query::{
+    ContentPattern, DEFAULT_ROW_CAP, NamePattern, OnlineOnly, RowShape, SNAPSHOT_FOLDERS, Scope,
+    SearchQuery, quoted,
+};
+pub use saved::{
+    Freshness, SAVED_FOLDER, SAVED_FORMAT, Saved, SavedContent, SavedError, SavedItem, SavedKind,
+    SavedOptions, SavedSort, file_name_for, file_stem_for, stale_check, utc_moment, utc_text,
+};
+pub use sink::{FnSink, OnlineGuard, SearchControl, SearchProgress, SearchSink};
+pub use space::{
+    Grouping, Largest, SPACE_ROWS, SpaceList, SpaceRow, largest_below, percent_words, space_by_age,
+    space_by_kind, space_list,
+};
+pub use summary::{SearchSummary, Skips};
 
 /// The total size of a folder.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DirSize {
     /// Bytes in files.
     pub bytes: u64,
@@ -146,6 +70,25 @@ pub struct DirSize {
     pub files: u64,
     /// Folders counted, not counting the root.
     pub folders: u64,
+    /// Bytes of the files whose data is on this computer (not online
+    /// only).
+    pub on_this_computer: u64,
+    /// Files whose data is not on this computer.
+    pub online_only: u64,
+    /// Links, counted as links and never followed.
+    pub links: u64,
+    /// Folders that could not be read.
+    pub unreadable: u64,
+    /// Folders not entered: other drives, snapshots, loops, deeper than
+    /// 256 levels.
+    pub skipped: u64,
+    /// Whether a file's other hard links were recognized and counted once
+    /// (Unix); elsewhere hard links may be counted more than once.
+    pub hard_links_once: bool,
+    /// Extra hard links to files already counted, left out.
+    pub repeated_links: u64,
+    /// Whether it was stopped before the end.
+    pub cancelled: bool,
 }
 
 impl DirSize {
@@ -170,6 +113,9 @@ pub enum SearchError {
     /// This kind of search is not built yet.
     #[error("{0} is not built yet")]
     NotBuilt(String),
+    /// The scope names no place to search.
+    #[error("there is no place to search")]
+    NoPlaces,
 }
 
 impl Explain for SearchError {
@@ -177,6 +123,7 @@ impl Explain for SearchError {
         match self {
             SearchError::Vfs(inner) => inner.next_step(),
             SearchError::NotBuilt(_) => String::new(),
+            SearchError::NoPlaces => "Choose a folder to search in.".to_owned(),
         }
     }
 }
@@ -215,118 +162,83 @@ fn wildcard(glob: &[char], name: &[char]) -> bool {
     glob[g..].iter().all(|&c| c == '*')
 }
 
-/// Searches, sending each hit to `found` as it is found. Phase 0: names
-/// only, through the provider, depth first.
+/// Searches, sending each hit to `found` as it is found (Phase 0's form):
+/// the system clock in UTC reads the date words, and `ctx`'s cancel token
+/// stops it.
 pub fn search(
     query: &SearchQuery,
     registry: &Registry,
     ctx: &OpContext,
     found: &mut dyn FnMut(SearchHit),
 ) -> Result<SearchSummary, SearchError> {
-    if query.content.is_some() {
-        return Err(SearchError::NotBuilt("content search".to_owned()));
-    }
-    if matches!(query.name, Some(NamePattern::Regex(_))) {
-        return Err(SearchError::NotBuilt("regex name search".to_owned()));
-    }
-    let provider = registry.resolve(&query.root)?;
-    let mut summary = SearchSummary::default();
-    let mut pending = vec![(query.root.clone(), 0usize)];
-    let mut first = true;
-    while let Some((folder, depth)) = pending.pop() {
-        if ctx.cancel.is_cancelled() {
-            summary.cancelled = true;
-            break;
-        }
-        let entries = match provider.list(&folder, ctx) {
-            Ok(entries) => entries,
-            Err(error) if first => return Err(error.into()),
-            Err(_) => {
-                summary.unreadable += 1;
-                continue;
-            }
-        };
-        first = false;
-        summary.folders += 1;
-        for entry in entries {
-            if entry.hidden && !query.include_hidden {
-                continue;
-            }
-            let Ok(place) = folder.join(&entry.name) else {
-                continue;
-            };
-            let name_ok = match &query.name {
-                Some(NamePattern::Glob(globs)) => glob_matches(globs, &entry.name),
-                _ => true,
-            };
-            let size_ok = query
-                .min_size
-                .is_none_or(|min| entry.size.unwrap_or(0) >= min)
-                && query
-                    .max_size
-                    .is_none_or(|max| entry.size.unwrap_or(0) <= max);
-            if entry.kind == diroxide_core::EntryKind::Folder
-                && query.max_depth.is_none_or(|max| depth < max)
-            {
-                pending.push((place.clone(), depth + 1));
-            }
-            if name_ok && size_ok {
-                summary.hits += 1;
-                found(SearchHit {
-                    place,
-                    entry,
-                    line: None,
-                });
-            }
-        }
-    }
-    Ok(summary)
+    let control = SearchControl::new().with_cancel(ctx.cancel.clone());
+    run_search(
+        query,
+        registry,
+        &SystemClock::utc(),
+        &control,
+        &mut FnSink(found),
+    )
 }
 
-/// Adds up the size of a folder. Phase 0: through the provider, without
-/// following links.
+/// Adds up the size of a folder (Phase 0's form): the walk helper with no
+/// filters, links never followed, `ctx`'s cancel token stopping it. See
+/// [`dirsize_with`].
 pub fn dirsize(
     place: &Place,
     registry: &Registry,
     ctx: &OpContext,
 ) -> Result<DirSize, SearchError> {
-    let mut size = DirSize::default();
-    let query = SearchQuery {
-        include_hidden: true,
-        ..SearchQuery::names(place.clone(), "*")
-    };
-    search(&query, registry, ctx, &mut |hit| match hit.entry.kind {
-        diroxide_core::EntryKind::Folder => size.folders += 1,
-        _ => {
-            size.files += 1;
-            size.bytes += hit.entry.size.unwrap_or(0);
-        }
-    })?;
-    Ok(size)
+    dirsize_with(
+        place,
+        registry,
+        &SearchControl::new().with_cancel(ctx.cancel.clone()),
+    )
 }
 
-/// The results as a list: each row the name, then the folder it is in.
+/// The results as a list: each row the name, then what the hit is, then
+/// the folder it is in, in full.
 pub fn results_list(title: &str, hits: &[SearchHit]) -> ListModel {
-    let rows = hits
-        .iter()
-        .map(|hit| {
-            let folder = hit
-                .place
-                .parent()
-                .map(|p| p.to_string())
-                .unwrap_or_default();
-            ListRow::new(hit.place.to_string(), hit.entry.display_name())
-                .with_details([format!("in {folder}")])
-        })
-        .collect();
+    results_list_under(title, None, hits)
+}
+
+/// The results as a list, each row's folder said from the search's start
+/// ("notes.txt, in Documents/q3, 4 KB") when `root` is given.
+pub fn results_list_under(title: &str, root: Option<&Place>, hits: &[SearchHit]) -> ListModel {
+    let rows = hits.iter().map(|hit| hit.row(root)).collect();
     let mut list = ListModel::new(title).with_rows(rows);
     list.set_empty_text("Nothing found");
     list
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    //! Helpers for the unit tests that write.
+
+    use std::path::Path;
+
+    /// A folder for a unit test that writes, under the build's own target
+    /// folder (the test binary lives in `target/<profile>/deps`), never a
+    /// user's folder or the system's temporary folder.
+    pub(crate) fn scratch() -> tempfile::TempDir {
+        let exe = std::env::current_exe().expect("the test's own path");
+        let base = exe
+            .parent()
+            .and_then(Path::parent)
+            .expect("the target folder")
+            .join("search-unit-tmp");
+        std::fs::create_dir_all(&base).expect("a scratch folder");
+        tempfile::Builder::new()
+            .prefix("search-unit-")
+            .tempdir_in(base)
+            .expect("a scratch folder")
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use diroxide_core::filter::Unknown;
 
     #[test]
     fn globs_match_like_a_shell_ignoring_case() {
@@ -358,21 +270,44 @@ mod tests {
     }
 
     #[test]
-    fn content_search_is_not_built_yet() {
-        let mut query = SearchQuery::names(Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap(), "*");
-        query.content = Some(ContentPattern {
-            regex: "x".into(),
-            case_sensitive: false,
-            max_bytes: None,
-        });
-        let err = search(
+    fn content_is_read_and_its_line_carried() {
+        let root = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let query = SearchQuery::names(root.clone(), "lib.rs")
+            .with_content(&ContentPattern::literal("//! Search, dirsize", true))
+            .unwrap();
+        let mut hits = Vec::new();
+        let summary = search(
             &query,
+            &Registry::with_local(),
+            &OpContext::new(),
+            &mut |hit| hits.push(hit),
+        )
+        .unwrap();
+        assert_eq!(hits.len(), 1, "{summary:?}");
+        let line = hits[0].line.as_ref().unwrap();
+        assert_eq!(line.line_number, 1);
+        assert!(line.words().starts_with("line 1: //! Search, dirsize"));
+        assert!(summary.files_read >= 1 && summary.unknown.is_empty());
+        // Made at run time, so the words are in no file, this one included.
+        let absent = format!("{}{}", "zebra", "crumbquux");
+        let missing = SearchQuery::names(root, "lib.rs")
+            .with_content(&ContentPattern::literal(&absent, true))
+            .unwrap();
+        let summary = search(
+            &missing,
             &Registry::with_local(),
             &OpContext::new(),
             &mut |_| {},
         )
-        .unwrap_err();
-        assert_eq!(err.to_string(), "content search is not built yet");
+        .unwrap();
+        assert_eq!(summary.hits, 0);
+        assert!(
+            !summary
+                .unknown
+                .iter()
+                .any(|(why, _)| *why == Unknown::ContentNotRead),
+            "{summary:?}"
+        );
     }
 
     #[test]
@@ -381,6 +316,7 @@ mod tests {
             bytes: 2_100_000,
             files: 40,
             folders: 3,
+            ..DirSize::default()
         };
         assert_eq!(size.describe(), "2.1 MB in 40 files and 3 folders");
         let summary = SearchSummary {
@@ -388,10 +324,26 @@ mod tests {
             folders: 40,
             unreadable: 1,
             cancelled: false,
+            ..SearchSummary::default()
         };
         assert_eq!(
             summary.describe(),
             "12 found in 40 folders, 1 folder unreadable"
         );
+    }
+
+    #[test]
+    fn a_search_needs_a_place() {
+        let query = SearchQuery::everything(Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap())
+            .with_scope(Scope::of(Vec::new()));
+        let error = search(
+            &query,
+            &Registry::with_local(),
+            &OpContext::new(),
+            &mut |_| {},
+        )
+        .unwrap_err();
+        assert_eq!(error, SearchError::NoPlaces);
+        assert_eq!(error.next_step(), "Choose a folder to search in.");
     }
 }

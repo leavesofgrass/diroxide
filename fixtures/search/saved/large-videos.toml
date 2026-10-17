@@ -1,0 +1,24 @@
+format = 1
+name = "Large videos"
+kind = "search"
+created = "2026-10-03T04:00:00Z"
+places = ["sftp://example.org/home/ada/Videos", "sftp://example.org/home/ada/Phone"]
+expression = "group video and size over 1 GB and modified within 2 years"
+
+[content]
+text = "Ada Example"
+regex = false
+case = "smart"
+
+[options]
+hidden = false
+ignore_files = false
+follow_links = false
+one_file_system = true
+archives = false
+depth = 4
+rows = "file"
+
+[sort]
+column = "size"
+direction = "descending"

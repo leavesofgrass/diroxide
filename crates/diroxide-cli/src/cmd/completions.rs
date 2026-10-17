@@ -332,6 +332,7 @@ pub fn command() -> Command {
                 .arg(named("root", "Where to start").value_hint(ValueHint::DirPath))
                 .arg(named("pattern", "Names to match, globs joined by commas")),
         ))
+        .subcommand(search_command())
         .subcommand(no_help(
             Command::new("serve")
                 .about("Serve the app over JSON-RPC on standard input and output")
@@ -378,6 +379,74 @@ pub fn command() -> Command {
 
 /// `diro archive` as clap describes it, for completion only; keep in step
 /// with `cmd::archive::parse`.
+/// `diro search`'s options, as `cmd/search.rs` reads them (W3s).
+fn search_command() -> Command {
+    let valued = |name: &'static str, value: &'static str, help: &'static str| {
+        Arg::new(name)
+            .long(name)
+            .value_name(value)
+            .action(ArgAction::Append)
+            .help(help)
+    };
+    Command::new("search")
+        .about("Find entries by name, kind, size, date and contents")
+        .arg(
+            Arg::new("place")
+                .required(true)
+                .value_hint(ValueHint::DirPath)
+                .help("Where to search"),
+        )
+        .arg(
+            Arg::new("expression")
+                .num_args(0..)
+                .help("The expression, in the filter language"),
+        )
+        .arg(flag("hidden", "Search hidden entries too").short('H'))
+        .arg(flag("ignore-files", "Skip what ignore files list"))
+        .arg(flag("no-ignore", "Read no ignore files").short('I'))
+        .arg(flag("follow", "Follow links to folders inside the place").short('L'))
+        .arg(flag("archives", "Search inside archives"))
+        .arg(valued("max-depth", "N", "Go at most N folders deep").short('d'))
+        .arg(
+            valued(
+                "type",
+                "T",
+                "f file, d folder, l link, x executable, e empty",
+            )
+            .short('t')
+            .value_parser(["f", "d", "l", "x", "e"]),
+        )
+        .arg(valued("extension", "EXT", "This extension").short('e'))
+        .arg(valued("size", "SIZE", "+10M over 10 MB, -1ki under 1 KiB").short('S'))
+        .arg(valued(
+            "changed-within",
+            "WHEN",
+            "A duration such as 2d, or a date",
+        ))
+        .arg(valued(
+            "changed-before",
+            "WHEN",
+            "A date, or a duration such as 1y",
+        ))
+        .arg(valued("exclude", "GLOB", "Leave out names that match").short('E'))
+        .arg(valued("content", "TEXT", "Files that hold this text"))
+        .arg(valued("content-regex", "RE", "Files that hold a match"))
+        .arg(flag("lines", "One row per matching line"))
+        .arg(flag("glob", "Read the expression as one glob").short('g'))
+        .arg(flag(
+            "regex",
+            "Read the expression as one regular expression",
+        ))
+        .arg(flag("full-path", "Match the pattern against the whole path").short('p'))
+        .arg(flag("ignore-case", "Ignore case").short('i'))
+        .arg(flag("case-sensitive", "Match case").short('s'))
+        .arg(flag("null", "Write NUL-separated paths only").short('0'))
+        .arg(flag("json", "Write one JSON object a line"))
+        .arg(flag("explain", "Read the expression back; search nothing"))
+        .arg(valued("threads", "N", "Walk with N threads"))
+        .arg(valued("max-results", "N", "Write at most N hits"))
+}
+
 fn archive_command() -> Command {
     let archive = |help: &'static str| {
         Arg::new("archive")

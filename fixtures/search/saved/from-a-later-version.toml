@@ -1,0 +1,6 @@
+format = 1
+name = "Kept keys"
+kind = "search"
+places = ["sftp://example.org/home/ada"]
+expression = "ext pdf"
+pinned = true

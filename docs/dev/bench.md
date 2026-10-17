@@ -37,6 +37,10 @@ Each line of the output starts with the scenario and its median, then the budget
 - `archive-zip`, `archive-tar` and `archive-7z`: list a zip, a tar and a 7z of 100,000 empty members through the archive provider, timed from the open to the last entry: opening the archive, building its index and listing every member. Each run opens a new provider, so no run reads another's cached index. The archives are packed first by diroxide's own pack runner, outside the timing.
 - `unpack`: unpack a zip holding one 200 MB file through the unpack runner, planned and run, into a new folder each run. The second line gives the rate.
 - `viewer`: open a 256 MB text log in the viewer and draw its first screen of 24 rows, in screen-reader mode, through the app's viewer itself.
+- `search-name`: search the 1 GB search tree (100,000 files in 5,000 folders, written once per run from `bench/search-tree.toml`, the small one with `--quick`) for the 1,000 files whose names hold its hit word, through `diro search --null`. Each run starts `diro`, so the starting time is in the figure. The plan's starting budget is 0.6 seconds warm on Linux and 1.5 seconds on Windows.
+- `search-content`: search the same tree's contents for the hit word, the same way: 1,000 files, the binaries skipped. The starting budget is 1.5 seconds on Linux and 3.75 seconds on Windows.
+
+The search scenarios run `diro search` because xtask may not depend on the search crate yet; each checks that it found exactly the tree's hits.
 
 The archive scenarios call the archive provider and its runners directly, since xtask may depend on the archive crate (P2b, W2g's request 1); before that they ran the `diro` binary, so the first figures below include starting `diro` and writing every path, and the next baseline is the one to compare with.
 
@@ -101,6 +105,41 @@ cargo xtask demo D:/demo
 ```
 
 It writes `course.zip`, `backup.7z` (solid), `logs.tar.xz`, `locked.zip` (AES-256, written by diroxide's own pack runner with a password made up as it runs and said once on its output), `hostile.zip` (one name in it would leave the archive; it is built in memory), `big.bin` (60 MB), `main.rs`, `report.md`, `notes.org`, `big.log` and an empty `out` folder, then lists each with its size and reads every archive back with `diro archive test` and with the unzip, xz, tar and 7z programs it finds on PATH.
+
+## The search spike
+
+The search lane's spike (alpha.3) times the walkers and the search on the 1 GB search tree, compares them with `rg` when `rg` is on PATH, and lists a slow place, a stand-in for a network share, at 1, 2, 4 and 8 threads. Write the tree once, then run the spike on it in an optimized build:
+
+```bash
+cargo xtask search-tree D:\searchtree
+```
+
+```bash
+cargo run --release -p diroxide-search --example spike -- D:\searchtree --json target/bench/search-spike.json
+```
+
+The slow place is the local provider with a pause before every call (5 ms by default, `--delay-ms` to change it); no network share was reachable, and its lines say "a fake network place". The spike reads the tree and writes only the JSON file it is given.
+
+Its figures are kept in `bench/search-spike.toml`, one `[[run]]` for each machine and each state of the search engine. The first, measured on the owner's Windows machine on Saturday, October 17, 2026, in an optimized build, warm, with nothing changed in Windows Security:
+
+- Walk the 105,000 entries with `ignore`'s parallel walker, filters off: 45 ms, about 2.3 million a second.
+- Walk them through the local provider on one thread: 348 ms.
+- Search names for `*quokkaline*` through Phase 0's walk and the new query types: 382 ms, 1,000 found, the first in under a millisecond.
+- Search `ext txt and size over 1 KB and modified within 3 years` the same way: 411 ms, 90,000 found.
+- A slow place with 5 ms before every call: 3,859 items a second on 1 thread, 7,732 on 2, 15,423 on 4 and 30,646 on 8; a stop answered in 2.5 ms.
+- Make 100,000 hits into a results list: 171 ms; 1,000,000: 1.8 seconds.
+
+`rg` was not on PATH, so nothing was compared with it. The plan's starting budgets (a warm name search in 0.6 seconds on Linux and 2.5 times that on Windows, the first hit within 100 ms, 100,000 rows in under a second, the stop answered within a second) already hold; the parallel walker is the one to compare with them next.
+
+The second, on Saturday, October 17, 2026, with the search engine of the search lane (the parallel walker, the evaluator, the content reader), the same tree and build, warm:
+
+- Search names for `*quokkaline*`: 72 ms, the first hit at 1.3 ms; `ext txt and size over 1 KB and modified within 3 years`: 104 ms, 90,000 found.
+- Read every file whole on the parallel walk, nothing matched: 1.5 seconds, the ceiling of a content search on this machine.
+- Search contents for a word in 1,000 files: 1.7 seconds, the first hit at 3 ms; for a word in none: 1.7; for a word in every file: 2.1; a regular expression: 1.8; any case: 1.6. Opening files is what is left: the reader itself runs within the ceiling's reach.
+- The search engine over the slow place, 5 ms before every call: 7,550 entries a second on 2 threads and 29,976 on 8, the first hit at about 29 ms; a stop answered in 0.8 ms.
+- 100,000 hits made into a results list: 308 ms.
+
+Every starting budget of the plan holds on Windows: names well under 1.5 seconds, contents under 3.75 seconds, the first hit under 100 ms, the stop under a second, and a network place over 1,000 items a second on 2 threads. `rg` was again not on PATH; the container run is where it is compared.
 
 ## See also
 

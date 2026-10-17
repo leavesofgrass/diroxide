@@ -10,7 +10,20 @@ publish.workspace = true
 [dependencies]
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
+# Content search reads UTF-16 files that start with a byte-order mark.
+encoding_rs.workspace = true
+# ripgrep's parallel walker, with its standard filters off (the plan's
+# section 5.5 and R14): diroxide decides hidden entries itself.
+ignore.workspace = true
+regex.workspace = true
+# Saved searches: one TOML file each, in the shape collections will read.
+serde.workspace = true
 thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

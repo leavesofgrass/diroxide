@@ -1,0 +1,12 @@
+---
+source: crates/diroxide-search/tests/it/space.rs
+expression: said(&list)
+---
+Space in home, largest first
+Total 68.0 KB. Largest 3 hold 98 percent
+At least 68.0 KB, 1 folder unreadable.
+Videos, folder, 52.0 KB, 76 percent
+Photos, folder, 12.0 KB, 18 percent
+Documents, folder, 2.5 KB, 4 percent
+notes.txt, file, 1.2 KB, 2 percent
+.config, file, 300 bytes, under 1 percent
