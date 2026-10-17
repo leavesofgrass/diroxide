@@ -540,7 +540,9 @@ impl Runtime {
                 self.worker(move |shared| {
                     let sink = forward_sink(request.id, shared, &engine, &control);
                     let event = match engine.plan_with(&request, &control, &sink) {
-                        Ok(plan) => AppEvent::JobFinished(engine.run(&plan, &control, &sink)),
+                        Ok(plan) => {
+                            AppEvent::JobFinished(Box::new(engine.run(&plan, &control, &sink)))
+                        }
                         Err(error) => {
                             AppEvent::Problem(Message::from_error(request.kind.verb(), "", &error))
                         }
@@ -752,7 +754,7 @@ impl Runtime {
             let sink = forward_sink(plan.job, shared, &engine, &control);
             let report = engine.run(&plan, &control, &sink);
             lock(&jobs).remove(&plan.job);
-            shared.send(AppEvent::JobFinished(report));
+            shared.send(AppEvent::JobFinished(Box::new(report)));
         });
     }
 
@@ -1139,7 +1141,7 @@ mod tests {
 
     fn finished(runtime: &mut Runtime) -> diroxide_ops::JobReport {
         next(runtime, |event| match event {
-            AppEvent::JobFinished(report) => Some(report),
+            AppEvent::JobFinished(report) => Some(*report),
             _ => None,
         })
     }
