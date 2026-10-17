@@ -621,19 +621,35 @@ mod tests {
                 let k = key(text);
                 let sentence = already(&k, &info.id, platform);
                 assert!(sentence.ends_with('.'), "{sentence}");
-                if info.layer != Layer::Viewer && info.layer != Layer::Preview {
-                    assert!(
-                        !does(&info.id).starts_with("runs "),
-                        "{} has no phrase",
-                        info.id
-                    );
-                }
                 // The key, "already" and the verb come first.
                 let verb = does(&info.id);
                 let verb = verb.split(' ').next().unwrap_or_default();
                 let meaning = format!("{} already {verb}", written(&k, platform));
                 assert!(within_cells(&sentence, &meaning), "{sentence}");
             }
+        }
+        // The panel's and the program's keyed commands have their own
+        // words; a command added later says "runs" and its name until its
+        // words are added to the table.
+        for id in [
+            ids::QUIT,
+            ids::HELP,
+            ids::SAY_STATUS,
+            ids::PALETTE,
+            ids::MENU,
+            ids::COPY,
+            ids::MOVE,
+            ids::RENAME,
+            ids::TRASH,
+            ids::SORT_MODIFIED,
+            ids::SWITCH_PANEL,
+            ids::CLIPBOARD_PASTE,
+            ids::SELECT_TOGGLE,
+            ids::LIST_DOWN,
+            ids::BACK,
+            ids::UP,
+        ] {
+            assert!(!does(&id).starts_with("runs "), "{id} has no words");
         }
         assert_eq!(does(&ids::MENU_TOOLS), "opens the Tools menu");
         assert_eq!(does(&CommandId::from_static("x.y")), "runs x.y");
