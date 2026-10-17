@@ -54,6 +54,13 @@ static HOOKED: AtomicBool = AtomicBool::new(false);
 static HANDED: AtomicBool = AtomicBool::new(false);
 /// Whether the signal handler is installed (once a process).
 static SIGNALS: AtomicBool = AtomicBool::new(false);
+/// Panics on other threads while diroxide has the terminal, held to be
+/// printed once it is given back: the default hook would write them over
+/// the screen (a document reader that panics under the quick view's
+/// guard, W2e's note).
+static HELD: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// How many held panics are kept; the rest are counted out.
+const HELD_LIMIT: usize = 8;
 
 /// The exit code after a signal: 128 plus the interrupt's number, as
 /// shells report a program a signal ended.
@@ -157,6 +164,23 @@ pub fn restore() {
     let _ = execute!(out, cursor::Show);
     let _ = terminal::disable_raw_mode();
     let _ = out.flush();
+    let mut err = io::stderr();
+    for text in take_held() {
+        let _ = writeln!(err, "{text}");
+    }
+}
+
+/// Keeps a worker's panic to print later, up to the limit.
+fn hold(text: String) {
+    let mut held = HELD.lock().unwrap_or_else(PoisonError::into_inner);
+    if held.len() < HELD_LIMIT {
+        held.push(text);
+    }
+}
+
+/// The panics held, taken once.
+fn take_held() -> Vec<String> {
+    std::mem::take(&mut *HELD.lock().unwrap_or_else(PoisonError::into_inner))
 }
 
 /// Takes the terminal: raw mode, the alternate screen unless inline, the
@@ -182,7 +206,8 @@ fn take(inline: bool) -> io::Result<()> {
 }
 
 /// The thread that draws: a panic there gives the terminal back; a panic
-/// on a worker leaves the screen to the loop.
+/// on a worker leaves the screen to the loop and is held, to be printed
+/// when the terminal is given back.
 static DRAWER: Mutex<Option<thread::ThreadId>> = Mutex::new(None);
 
 fn install_panic_hook() {
@@ -195,6 +220,9 @@ fn install_panic_hook() {
         let drawer = *DRAWER.lock().unwrap_or_else(PoisonError::into_inner);
         if drawer.is_none_or(|id| id == thread::current().id()) {
             restore();
+        } else if ACTIVE.load(Ordering::SeqCst) {
+            hold(format!("A background thread stopped: {info}"));
+            return;
         }
         previous(info);
     }));
@@ -442,6 +470,17 @@ fn event_loop<B: ratatui::backend::Backend>(
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
+
+    #[test]
+    fn a_workers_panic_is_held_up_to_the_limit_and_printed_once() {
+        for n in 0..(HELD_LIMIT + 3) {
+            hold(format!("panic {n}"));
+        }
+        let held = take_held();
+        assert_eq!(held.len(), HELD_LIMIT);
+        assert_eq!(held[0], "panic 0");
+        assert!(take_held().is_empty(), "taken once");
+    }
 
     #[test]
     fn a_signal_gives_the_terminal_back_unless_a_program_has_it() {
