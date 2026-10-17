@@ -40,6 +40,7 @@
 
 mod dates;
 mod error;
+mod eval;
 mod parse;
 mod readback;
 mod token;
@@ -47,6 +48,8 @@ mod tree;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod truth_tests;
 
 use crate::clock::{Clock, Weekday};
 use crate::pattern::CaseRule;
@@ -58,6 +61,7 @@ pub use dates::{
 pub use error::{
     Expected, FilterError, KINDS_SENTENCE, Keyword, PROBLEM_START, Problem, UNITS_SENTENCE,
 };
+pub use eval::{ContentQuery, Evaluator, Lookup, NoLookup, Tally, Truth, Unknown};
 pub use readback::ReadBack;
 pub use tree::{
     Amount, ContentOp, ContentTest, DateOp, DateTest, Decimal, Expr, Field, FieldShape, Flag,
@@ -85,12 +89,14 @@ impl Default for FilterOptions {
     }
 }
 
-/// A filter, read and checked: the text as typed and its tree.
+/// A filter, read and checked: the text as typed, its tree, and its
+/// patterns compiled once.
 #[derive(Clone, Debug)]
 pub struct Filter {
     text: String,
     expr: Expr,
     options: FilterOptions,
+    plan: eval::Node,
 }
 
 impl PartialEq for Filter {
@@ -112,11 +118,38 @@ impl Filter {
         let trimmed = text.trim();
         let lead = text.len() - text.trim_start().len();
         let expr = parse::parse(trimmed, options).map_err(|error| shift(error, lead))?;
+        // Every pattern compiled while reading, so this cannot fail; a
+        // failure is still said in words rather than a panic.
+        let plan = eval::compile(&expr, true).map_err(|error| {
+            let problem = parse::pattern_problem(&error, trimmed);
+            FilterError::new(problem, 1, lead..lead + trimmed.len(), Vec::new())
+        })?;
         Ok(Self {
             text: trimmed.to_owned(),
             expr,
             options: *options,
+            plan,
         })
+    }
+
+    /// The filter ready to test entries, its date words and durations
+    /// read against the clock once.
+    pub fn evaluator(&self, clock: &dyn Clock) -> Evaluator {
+        self.evaluator_at(self.dates(clock))
+    }
+
+    /// The filter ready to test entries at a moment already read.
+    pub fn evaluator_at(&self, dates: DateContext) -> Evaluator {
+        Evaluator::new(&self.plan, &dates)
+    }
+
+    /// Whether a test reads files, so the panel asks before it starts and
+    /// again for online-only files.
+    pub fn reads_content(&self) -> bool {
+        self.expr
+            .tests()
+            .iter()
+            .any(|(test, _)| matches!(test, Test::Content(_)))
     }
 
     /// The text as typed, trimmed.

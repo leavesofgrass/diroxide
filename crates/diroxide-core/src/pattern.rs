@@ -487,7 +487,9 @@ fn strip_re(text: &str) -> Option<&str> {
     head.eq_ignore_ascii_case("re:").then(|| &text[3..])
 }
 
-fn build_regex(source: &str, case: NameCase) -> Result<Regex, PatternError> {
+/// A regular expression built with the size and nesting limits but no
+/// length limit, for patterns diroxide writes itself (escaped text).
+pub(crate) fn build_regex(source: &str, case: NameCase) -> Result<Regex, PatternError> {
     RegexBuilder::new(source)
         .case_insensitive(case == NameCase::Ignore)
         .size_limit(REGEX_SIZE_LIMIT)

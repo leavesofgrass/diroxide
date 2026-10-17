@@ -689,8 +689,8 @@ fn every_problem_line_fits_one_braille_line() {
     }
 }
 
-/// Tests whose texts combine freely in the property test below.
-const TERMS: [&str; 48] = [
+/// Tests whose texts combine freely in the property tests.
+pub(super) const TERMS: [&str; 48] = [
     "report",
     "Report",
     "*.log",
