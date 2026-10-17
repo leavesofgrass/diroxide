@@ -17,6 +17,10 @@ Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2, with W1b
 - **Links in words.** `Capabilities` gains `can_link` (links held and the place writable) and `links_in_words` ("Links can be made here", on Windows with "symbolic links may need Developer Mode", or "Cannot link here: this place holds no links"). The local provider no longer claims links on FAT and exFAT under Windows. The engine refuses a link job where the destination cannot link, before anything is touched.
 - **The trash that copies.** `TrashFacts` gains `copies_across_drives`: on Linux a drive whose own trash cannot be made sends its items to the home trash by copying them. The gate answers the new `TrashGate::Copies`, which `allows()`, with `asks_first(bytes)` above `TRASH_COPY_ASK_BYTES` (64 MB) and `copy_question`. The rule is the pure `copies_across_drives`; the local provider fills the fact on the freedesktop systems and says false elsewhere. ADR-0008's gate is otherwise unchanged; the question is wired into the trash plan by the engine's next brief.
 
+Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, from the requests pairs 1 to 3 held at their integrations):
+
+- **Read only here.** `VfsError::ReadOnlyHere { what, instead }` (built with `read_only_here`) is the refusal of a place this program only reads, with its own class, `ErrorClass::ReadOnlyHere` (no retry, a rule's scope, apart from a read-only drive), and its own next step, the `instead` sentence. `VfsError::sentence` says it whole: "Archives are read only here. Use Pack to make a new one." Every change inside an archive gives it, and the archive crate's `read_only_refusal` reads it (W2a's request 1).
+
 ## Context
 
 diroxide shows local folders, archives, SFTP hosts and whatever plugins serve, through the same panels and the same job engine. Each kind of place needs one interface that the engine and the app can use without knowing which kind it is.

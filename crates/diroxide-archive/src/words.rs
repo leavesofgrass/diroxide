@@ -14,26 +14,25 @@ use crate::sniff::Sniffed;
 /// The refusal for any change inside an archive in this alpha.
 pub const READ_ONLY: &str = "Archives are read only here. Use Pack to make a new one.";
 
-/// The operation words of the provider's read-only refusals, so
-/// [`read_only_refusal`] knows them.
-pub(crate) const READ_ONLY_OPERATION: &str = "change an archive in place";
+/// What the read-only refusal says is read only, in the plural.
+const READ_ONLY_WHAT: &str = "archives";
 
-/// The error every change inside an archive gives.
+/// The read-only refusal's next step: how to get a changed copy.
+const READ_ONLY_INSTEAD: &str = "Use Pack to make a new one.";
+
+/// The error every change inside an archive gives: the read-only
+/// [`VfsError::ReadOnlyHere`], whose sentence is [`READ_ONLY`].
 pub(crate) fn read_only_error() -> VfsError {
-    VfsError::unsupported("archive", READ_ONLY_OPERATION)
+    VfsError::read_only_here(READ_ONLY_WHAT, READ_ONLY_INSTEAD)
 }
 
-/// The sentence to say for an error, when it is the archive provider's
-/// read-only refusal: "Archives are read only here. Use Pack to make a new
-/// one." The app says it in place of the generic "Could not ..." line.
+/// The sentence to say for an error, when it is a read-only refusal such as
+/// the archive provider's: "Archives are read only here. Use Pack to make a
+/// new one." The app says it in place of the generic "Could not ..." line.
+/// It reads [`VfsError::ReadOnlyHere`] through [`VfsError::sentence`].
 pub fn read_only_refusal(error: &VfsError) -> Option<Message> {
     match error {
-        VfsError::Unsupported {
-            provider,
-            operation,
-        } if provider == "archive" && operation == READ_ONLY_OPERATION => {
-            Some(Message::error(READ_ONLY))
-        }
+        VfsError::ReadOnlyHere { .. } => error.sentence().map(Message::error),
         _ => None,
     }
 }
@@ -173,6 +172,16 @@ mod tests {
         assert!(within_cells(READ_ONLY, "Archives are read only here."));
         let said = read_only_refusal(&read_only_error()).unwrap();
         assert_eq!(said.text, READ_ONLY);
+        assert_eq!(read_only_error().sentence().as_deref(), Some(READ_ONLY));
         assert!(read_only_refusal(&VfsError::NotFound).is_none());
+        assert!(
+            read_only_refusal(&VfsError::unsupported("archive", "pack to this format")).is_none()
+        );
+        // The generic line carries the same words, cause then next step.
+        let generic = Message::from_error("rename", "a.txt", &read_only_error());
+        assert_eq!(
+            generic.text,
+            "Could not rename a.txt: archives are read only here. Use Pack to make a new one."
+        );
     }
 }
