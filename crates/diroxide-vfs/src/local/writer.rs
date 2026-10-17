@@ -12,7 +12,7 @@
 //! half-written file is ever left under the real name.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -147,6 +147,17 @@ impl FileWriter for LocalWriter {
             .path()
             .to_str()
             .and_then(|path| Place::parse(path).ok())
+    }
+
+    /// Seeks in the unfinished file, so a 7z is written straight into it.
+    fn seek_to(&mut self, to: SeekFrom) -> Result<u64, VfsError> {
+        match &mut self.file {
+            Some(file) => Ok(file.seek(to)?),
+            None => Err(VfsError::Io {
+                kind: io::ErrorKind::Other,
+                message: "the write was already committed".to_owned(),
+            }),
+        }
     }
 
     fn commit(mut self: Box<Self>, durable: bool) -> Result<(), VfsError> {

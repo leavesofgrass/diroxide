@@ -30,7 +30,7 @@
 //! loop test.
 
 use std::collections::{BTreeMap, HashMap};
-use std::io::{self, Cursor, Read, Write};
+use std::io::{self, Cursor, Read, SeekFrom, Write};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
@@ -171,6 +171,9 @@ pub struct FakeSwitches {
     /// (`rename_replacing`), as on a local drive; off by default, so the
     /// engine's fallbacks are what most tests see.
     pub replace_rename: bool,
+    /// Writers can seek in their unfinished file (`FileWriter::seek_to`),
+    /// as the local one can; off by default, so a writer streams in order.
+    pub seekable_writes: bool,
     /// The time new entries get.
     pub now: Option<Timestamp>,
     /// Slowness.
@@ -214,6 +217,7 @@ struct State {
     aliases: Vec<(String, String)>,
     fault_uses: HashMap<usize, u32>,
     calls: u32,
+    seeks: u32,
     next_inode: u64,
     next_token: u32,
 }
@@ -491,6 +495,12 @@ impl FakeProvider {
         self.state().calls
     }
 
+    /// How many times a writer moved in its unfinished file
+    /// (`FileWriter::seek_to`, with `seekable_writes` on).
+    pub fn seeks(&self) -> u32 {
+        self.state().seeks
+    }
+
     /// Every entry, by its place's text, with its kind and bytes: the
     /// tree's state, for comparing before and after a job.
     pub fn snapshot(&self) -> BTreeMap<String, (EntryKind, Vec<u8>)> {
@@ -754,17 +764,25 @@ struct FakeWriter {
     unfinished: Option<Place>,
     mode: WriteMode,
     buffer: Vec<u8>,
+    /// Where the next bytes go: the end, unless a seek moved it.
+    pos: usize,
+    seekable: bool,
     fail_at: Option<(u64, VfsError)>,
 }
 
 impl Write for FakeWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let end = self.pos + bytes.len();
         if let Some((at, error)) = &self.fail_at
-            && self.buffer.len() as u64 + bytes.len() as u64 > *at
+            && end as u64 > *at
         {
             return Err(io_error(error));
         }
-        self.buffer.extend_from_slice(bytes);
+        if self.buffer.len() < end {
+            self.buffer.resize(end, 0);
+        }
+        self.buffer[self.pos..end].copy_from_slice(bytes);
+        self.pos = end;
         Ok(bytes.len())
     }
 
@@ -784,6 +802,26 @@ impl Drop for FakeWriter {
 impl FileWriter for FakeWriter {
     fn unfinished_place(&self) -> Option<Place> {
         self.unfinished.clone()
+    }
+
+    fn seek_to(&mut self, to: SeekFrom) -> Result<u64, VfsError> {
+        if !self.seekable {
+            return Err(VfsError::UnsupportedFeature {
+                what: "seeking in an unfinished file".to_owned(),
+            });
+        }
+        let at = match to {
+            SeekFrom::Start(n) => i128::from(n),
+            SeekFrom::End(delta) => self.buffer.len() as i128 + i128::from(delta),
+            SeekFrom::Current(delta) => self.pos as i128 + i128::from(delta),
+        };
+        let at = usize::try_from(at).map_err(|_| VfsError::Io {
+            kind: io::ErrorKind::InvalidInput,
+            message: "a seek before the start of the file".to_owned(),
+        })?;
+        self.fake.state().seeks += 1;
+        self.pos = at;
+        Ok(at as u64)
     }
 
     fn commit(mut self: Box<Self>, _durable: bool) -> Result<(), VfsError> {
@@ -970,6 +1008,8 @@ impl Provider for FakeProvider {
             unfinished: Some(unfinished),
             mode,
             buffer: Vec::new(),
+            pos: 0,
+            seekable: switches.seekable_writes,
             fail_at,
         }))
     }

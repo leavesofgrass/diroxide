@@ -1,7 +1,7 @@
 //! The provider trait: everything a kind of place can do.
 
 use std::fmt;
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::ops::ControlFlow;
 
 use diroxide_core::{Attributes, Entry, Place, Timestamp};
@@ -191,6 +191,19 @@ pub trait FileWriter: Write + Send {
     /// it may assume a name.
     fn unfinished_place(&self) -> Option<Place> {
         None
+    }
+
+    /// Moves where the next bytes go in the unfinished file and returns
+    /// the new position from its start, so a format that writes its header
+    /// last (7z) can be written straight into the committing writer (W2b's
+    /// request 1, P2b). Nothing reaches the target before the commit
+    /// either way. The default says this writer cannot seek; a caller then
+    /// writes in order, through a spool of its own.
+    fn seek_to(&mut self, to: SeekFrom) -> Result<u64, VfsError> {
+        let _ = to;
+        Err(VfsError::UnsupportedFeature {
+            what: "seeking in an unfinished file".to_owned(),
+        })
     }
 }
 
@@ -421,9 +434,41 @@ mod tests {
         let boxed: Box<dyn ReadSeek> = Box::new(Cursor::new(vec![1u8, 2, 3]));
         let mut boxed = boxed;
         let mut byte = [0u8; 1];
-        boxed.seek(std::io::SeekFrom::End(-1)).unwrap();
+        boxed.seek(SeekFrom::End(-1)).unwrap();
         boxed.read_exact(&mut byte).unwrap();
         assert_eq!(byte, [3]);
+    }
+
+    /// A writer with only the required methods, for the defaults.
+    struct InOrder(Vec<u8>);
+
+    impl Write for InOrder {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl FileWriter for InOrder {
+        fn commit(self: Box<Self>, _durable: bool) -> Result<(), VfsError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_writer_seeks_only_when_it_says_it_can() {
+        let mut writer: Box<dyn FileWriter> = Box::new(InOrder(Vec::new()));
+        assert!(matches!(
+            writer.seek_to(SeekFrom::Start(0)),
+            Err(VfsError::UnsupportedFeature { .. })
+        ));
+        assert!(writer.unfinished_place().is_none());
+        writer.write_all(b"in order").unwrap();
+        writer.commit(false).unwrap();
     }
 
     #[test]
