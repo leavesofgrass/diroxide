@@ -10,6 +10,8 @@ A label is a name you put on a file or folder, such as Urgent or Review. A label
 
 A row that has a label says so right after its name: "report.pdf, label: urgent, 2.1 MB". With several, "labels: urgent, review". A label name is at most 30 characters, so a row keeps its meaning in the first 40 cells.
 
+On screen the label's word is drawn in the label's color too, through six theme roles, `label_blue`, `label_orange`, `label_purple`, `label_yellow`, `label_gray` and `label_brown`. Each is a text color checked for contrast, never red against green, and a theme or your `[colors]` table can change them. The color is only a second signal. The word comes first and is always there.
+
 The starter labels are Urgent (orange), Waiting (yellow), Review (purple), Done (blue), Keep (brown) and Skip in searches (gray). Skip in searches is special: a place with that label is left out of every search, and the summary says so.
 
 ### Set a label
@@ -32,15 +34,17 @@ Ctrl+1 to Ctrl+7 toggle the first seven labels of the Labels list, in its order.
 
 Labels list, in the palette and in the Edit menu, lists the labels: "Labels, 6 labels". A row puts the name first, then the kind, the count and the color: "Urgent, label, 14 items, 2 missing, orange, Ctrl+1". diroxide counts the missing items in the background, so a row first says "checking". When the count is ready the status line says "Checked 14 labeled items: 2 missing". The count is not spoken again by the row, so look at the row after a moment.
 
-- Enter on a label lists its items: "Urgent, 14 items". Enter on an item shows it in its folder, with the item focused. Delete takes the label off that item. There is no question, and Ctrl+Z puts the label back.
-- An item that was moved or removed says "missing" in its row. Enter on it says "Missing: report.pdf. It was moved or removed; Delete takes its label off."
+- Enter on a label looks up its items and lists them as search results, the same list a search gives: "Looking for 14 items labeled urgent", then "Done: 14 items labeled urgent." Items that were moved or removed are in the list too, and the end line counts them: "Done: 12 items labeled urgent, 2 missing."
+- In that list, Enter shows the item in its folder, with the item focused. The trash key (F8 or Delete) takes the label off the focused item, with no question, and Ctrl+Z puts the label back. The other keys of [the results list](search.md) work too, but rename and labels do not.
+- An item that was moved or removed says "gone since this list was made" in its row. Enter on it says "Missing: report.pdf. It was moved or removed." and the trash key takes its label off.
+- A label that no item has says "No item has the label urgent."
 - With no labels at all: "No labels. Set label makes one."
 
 ### What a label is tied to
 
 A label belongs to a place, the full path of the file. diroxide keeps the labels in `labels.toml` in the state folder.
 
-- A file that is renamed or moved loses its label, even when diroxide itself did it. Label it again. The Labels list shows the old place as missing until you take it off.
+- A file that is renamed or moved loses its label, even when diroxide itself did it. Label it again. The Labels list counts the old place as missing, and the label's results list it as gone, until you take the label off.
 - A label works in a filter: `label urgent`, `label urgent, waiting` for either, or `labeled` for anything with a label. [Search and the filter language](search.md) has the rest. Sort by label is in the Sort list.
 - A label never changes the file itself.
 
@@ -58,18 +62,17 @@ diroxide reads a color word in lowercase from the six above. A color it does not
 
 A bookmark is a folder you want to reach in one step, or a single file or folder you want to open on the spot.
 
-Ctrl+B or Alt+B opens the Bookmarks list. The first row is the action for this folder: "Add this folder", or "Remove this folder" when it is already bookmarked. Then come the bookmarks, each with its name first: "Reports, bookmark, in work, used 12 times", or "sample, bookmark, in Drive D:\, not used yet". A bookmark with an alias says it: "Reports, alias r, in work".
+Ctrl+B or Alt+B opens the Bookmarks list. Inside tmux, Ctrl+B is tmux's own prefix key and arrives only when pressed twice; Alt+B and the Go menu (Alt+G, then K) open the same list. The first row is the action for this folder: "Add this folder", or "Remove this folder" when it is already bookmarked. Then come the bookmarks, each with its name first: "Reports, bookmark, in work, used 12 times", or "sample, bookmark, in Drive D:\, not used yet". A bookmark with an alias says it: "Reports, alias r, in work".
 
 - Enter on a bookmark goes there. Enter on the first row adds or removes this folder: "Bookmarked Reports, in work".
 - An alias is one letter or digit. Press it in the list and diroxide jumps at once. A letter that is no alias moves by name instead.
 - F2 opens the bookmark's settings, one a row: Name, Place, Category, Alias, Sticky and Opens. A sticky bookmark stays at the top. Enter on a row changes it.
 - Delete asks first, and the question starts on No: "Remove bookmark Reports? No is the default. y or n". Then "Removed bookmark Reports".
+- F5 and F6 in the list copy or move the marked items of the panel, or its focused one, into the focused bookmark's folder, planned and confirmed as any copy. The bookmark's use is counted.
 - Typing does not narrow the list. It jumps, as above.
 - Messages: "Alias r is taken by Reports." "An alias is one letter or digit." "Already bookmarked: Reports, in work." "That bookmark is gone."
 
-Without opening the list, the Go menu has Bookmark this folder (Alt+G, then M) and Bookmark the focused item (Alt+G, then E). An item bookmark opens its folder and puts the cursor on the item, so it works for a single file. Bookmarks also appear in the Go to a place list (Ctrl+G), with their kind first, "Bookmark, Reports", beside the recent places. The `bookmarked` word in a filter reads the same store.
-
-<!-- to confirm: the exact wording of a bookmark row in the Go to a place list; the wiring lane (W3a, commit 39) may change it. -->
+Without opening the list, the Go menu has Bookmark this folder (Alt+G, then M) and Bookmark the focused item (Alt+G, then E). An item bookmark opens its folder and puts the cursor on the item, so it works for a single file. Bookmarks also appear in the Go to a place list (Ctrl+G), with their kind first, "Bookmark, Reports, in work", beside the recent places. Tab in that list completes a bookmark's name or place, and the list under the field still narrows over every place. The `bookmarked` word in a filter reads the same store.
 
 Bookmarks live in `bookmarks.toml` in the state folder. A bookmark holds a name, a place, a category, an alias, whether it is sticky, whether it is an item, how many times it was used, and when it was last used. Nothing is removed on its own.
 
@@ -91,11 +94,11 @@ From then on, each time you enter the folder, diroxide applies it and says so af
 
 Forget this folder's view, in the View menu (Alt+V, then G) and the palette, stops it: "View forgotten for work. The usual view returns on leaving." In a folder with none: "work has no saved view."
 
-The views are in `folder-views.toml` in the state folder. A view keeps the columns that were in use when you saved it, because no command sets a panel's columns yet. Nothing is removed on its own.
+A saved view's filter is read in the filter language. A filter that reads file contents is not applied on entering, because it would have to ask first. The views are in `folder-views.toml` in the state folder. A view keeps the columns that were in use when you saved it, because no command sets a panel's columns yet. Nothing is removed on its own.
 
 ## Saved searches
 
-A saved search is a different kind of memory: a filter and a scope, run again when you open it. [Search and the filter language](search.md) describes it. A saved search is a file in the `saved` folder of the state folder, in the plain shape that collections will use with alpha.8.
+A saved search is a different kind of memory: a filter and a scope, run again when you open it. Save this search and Saved searches are in the Search menu (F9, then R, then S and V). [Search and the filter language](search.md) describes them. A saved search is a file in the `saved` folder of the state folder, in the plain shape that collections will use with alpha.8. It can be run and deleted, not renamed or edited.
 
 ## Settings and files
 

@@ -10,19 +10,17 @@ A comparison that is drawn as two columns side by side is hard to hear. This one
 
 ## Which two files
 
-Compare files is in the palette. It has no key of its own.
-
-<!-- to confirm: the menu place (the File menu, perhaps), the key and the palette name are the wiring lane's (W3a, commit 40). -->
+Compare files is in the Search menu's Compare submenu (F9, then R, then O, then F) and in the palette. It has no key of its own. The submenu's letters are f Compare files, p Compare properties, d Select the differences, n Next change and r Previous change. The Total Commander preset puts Select the differences on Shift+F2 ([customizing keys](customizing-keys.md)).
 
 - If exactly two files are marked in the active panel, those are compared, the first in list order as "before".
 - Otherwise the focused file here is compared with the file of the same name in the other panel.
 - If the other panel has no file of that name, it is compared with the other panel's focused file.
 
-Before it starts, the status line says which two: "Comparing report.txt here with report.txt there".
+Before it starts, the status line says which two. For two marked files: "Comparing old.txt with report.txt". For one file in each panel: "Comparing report.txt here with old.txt there".
 
-The direction is from the other panel's file to this panel's file. The report says it: "From the other panel to this panel." Swap turns it around and says so. Nothing is compared again when you swap.
+The direction is from the first file to the second. For one file in each panel, that is from the other panel's file to this panel's, and the report says so: "From the other panel to this panel." For two marked files it names them: "From old.txt to report.txt." Swap turns it around and says so: "Swapped. From this panel to the other panel." Nothing is compared again when you swap.
 
-Two folders, a folder and a file, or a file inside an archive are not compared in alpha.3. The message says what to do: "Could not compare D:/diro-demo: it is not a file. Choose two files to compare." or "Could not compare nofile.txt: it does not exist. Check the path."
+Two folders, a folder and a file, or a file inside an archive are not compared in alpha.3. The message says what to do: "Could not compare D:/diro-demo: it is not a file. Choose two files to compare." or "Mark two files, or focus a file in each panel, to compare." or "No file to compare report.txt with in the other panel. Focus one there, or mark two here."
 
 ## What you hear, in order
 
@@ -56,13 +54,18 @@ The list has one row for each change. A row says what happened, where, and the f
 
 A change inside a very long line is shown as a window around the difference, cut with three dots, so the row stays short. A change of several lines says how many: "Changed lines 40 to 41, 3 lines became 2".
 
-The position is said last, as in any list. Next change is N or F7, and previous change is P or Shift+F7. Home and End go to the first and the last. Each move says the row.
+The change list is a list like any other, and the position is said last: "Changed line 39, was: total due, now: total owed, 2 of 5". Its title is the verdict, at most 40 cells.
 
-<!-- to confirm: N, P, F7, Shift+F7, Home and End are the compare view's keys in the plan; the wiring lane (W3a, commit 40) binds them and sets what the view is called. -->
+- F7 goes to the next change and Shift+F7 to the previous one. N and P do the same while single letters are on. Down and Up, Home and End work as in any list. At the ends: "No change after this one" and "No change before this one".
+- Enter says one change in full. U opens the unified view. S swaps the direction.
+- F3 views the file at the change. Shift+F10 lists the actions on the compare, each with its key.
+- Escape closes the list.
+
+Some terminals send Shift+F7 as another key. P and the actions list are the sure way back. The Compare submenu of the Search menu is there to reach every command, but it cannot open while a compare is open.
 
 ### One change in full
 
-Enter on a row shows that change in full: its header, then the lines before and after, then what differs.
+Enter on a row shows that change in full, as a short list you read line by line: its header, then the lines before and after, then what differs.
 
 - "Change 4 of 5, line 40 before, line 39 after"
 - "Before, line 40: total due"
@@ -73,9 +76,9 @@ Escape goes back one level.
 
 ### The unified view
 
-The unified view lists the changed lines with a few unchanged lines around them, in the order of the file. Each row starts with its kind and line number: "Same 11: Item 11: 33 widgets shipped", "Removed 12: Copyright 2025", "Added 19: ...". A header row says where the next change is: "Change 1 of 5, line 12 before, none after". Long runs of unchanged lines collapse: "9 same lines left out". The context is two lines on each side; it is a setting from 0 to 9.
+U opens the unified view: the changed lines with a few unchanged lines around them, in the order of the file. Its title says the file: "Unified view, report.txt". Each row starts with its kind and line number: "Same 11: Item 11: 33 widgets shipped", "Removed 12: Copyright 2025", "Added 19: ...". A header row says where the next change is: "Change 1 of 5, line 12 before, none after". Long runs of unchanged lines collapse: "9 same lines left out". The context is two lines on each side; it is the `compare.context` setting, 0 to 9.
 
-Enter on a unified row opens the file in the viewer at that line ([the viewer](viewer.md)).
+Enter or F3 on a row opens the viewer at that line ([the viewer](viewer.md)). The unified view is a list, not a mode of the viewer.
 
 ### Sounds the same, and is not
 
@@ -95,38 +98,42 @@ The last four are facts about the whole file. They do not make a change row. Lin
 
 ## Leaving differences out
 
-Six options leave differences out. Each one that is on is said in the report, so a hidden rule never shapes the result in silence.
+Six options leave differences out. Each one that is on is said in the report, so a hidden rule never shapes the result in silence. They are settings, in the Compare group of Settings (Alt+T, then S):
 
-- Line endings: CRLF, LF and CR compare the same. On by default, and not said unless the files differ.
-- Case.
-- Space at the end of a line.
-- A change in the amount of space.
-- All space.
-- Changes whose lines are all blank.
+- `compare.ignore_line_endings` (on): CRLF, LF and CR compare the same. Not said unless the files differ.
+- `compare.ignore_trailing_space` (off): space at the end of a line.
+- `compare.ignore_space_amount` (off): any run of spaces and tabs counts as one.
+- `compare.ignore_all_space` (off): every space and tab.
+- `compare.ignore_blank_lines` (off): changes whose lines are all blank.
+- `compare.ignore_case` (off): capital and small letters.
 
 The line "Ignoring changes in case." and its sibling, "Ignoring changes in trailing spaces, case and blank lines.", say which are on. Lines that differ only in what was ignored are counted: "1 line differs only in what was ignored."
 
-How lines are lined up is also a setting. The default, patience, hears fewer false changes around repeated lines such as closing braces. Histogram suits logs. Myers is the classic and finds the fewest changed lines, which can split a change around a repeated line. The deadline is two seconds. Past it, the result is correct but may list more changes than the least possible, and the report says so.
+Five more settings shape the run:
 
-The settings are listed in [the settings reference](settings-reference.md).
+- `compare.algorithm` (patience): how lines are lined up. Patience hears fewer false changes around repeated lines such as closing braces. `histogram` suits logs. `myers` is the classic and finds the fewest changed lines, which can split a change around a repeated line.
+- `compare.deadline_ms` (2000; 100 to 60000): how long a compare may look for the fewest changes. Past it, the result is correct but may list more changes than the least possible, and the report says so.
+- `compare.text_limit_mib` (16; 1 to 1024): the largest file compared as text in full.
+- `compare.large_files` (ask): what to do with a file over that limit. `ask`, `head` (the first part as text) or `bytes` (byte by byte).
+- `compare.context` (2; 0 to 9): the same lines shown around a change in the unified view.
 
-<!-- to confirm: the setting names, defaults and the Ignore keys and their palette names are the wiring lane's (W3a); copy them from the generated reference after it merges. -->
+[The settings reference](settings-reference.md) lists each with its help.
 
 ## Binary files, big files and changing files
 
 A file that looks binary (the viewer's test, so a UTF-16 file with a byte-order mark counts as text) is compared byte by byte. The report says how much differs and where: "Both 27 bytes; 4 bytes differ in 3 runs." "First difference at byte 1." Each run is a row: "Bytes 1,266 to 1,269 differ, 4 bytes" or "Byte 1,266 differs", and Enter spells it in hex: "was 48 65 6c 6c, now 48 66 6c 6c". Files of different sizes say so: "Sizes: 150 bytes here, 100 bytes there." and "The first 100 bytes are the same; one file goes on past them."
 
-A text file over 16 MiB is too large to compare as text: "Over the limit of 16 MiB. Compare the first 16 MiB as text, compare byte by byte, or cancel." diroxide asks, and the choices are in words. On the command line, `--head` compares the first 16 MiB as text. Without a choice it compares byte by byte.
+A text file over 16 MiB is too large to compare as text: "Over the limit of 16 MiB. Compare the first 16 MiB as text, compare byte by byte, or cancel." With `compare.large_files` on `ask`, diroxide opens a list named Too large with three rows, the focus on the last: "Compare the first 16 MiB as text", "Compare byte by byte" and "Cancel, compare nothing". Cancel says "Nothing was compared." On the command line, `--head` compares the first 16 MiB as text. Without a choice it compares byte by byte.
 
 If a file changes while it is compared, diroxide stops and does not trust the result: "Changed while comparing: report.txt", then "Compare again when they stop changing." If both changed, "Both files changed while comparing."
 
-Escape cancels a running compare, which says "Not compared". A long compare says its progress at the progress interval, "Comparing, 40 percent".
+Escape cancels a running compare, which says "Not compared". A long compare says its progress at the progress interval, "Comparing, 40 percent", or "Comparing, 3.0 MB read" when the size is not known.
 
 ## Compare properties and Select the differences
 
-Compare properties lists the rows that differ between the two entries among size, times, permissions, owner and type. Select the differences looks at the two folders in the panels and marks, in both, the entries only here, the entries only there, and those that differ in size or are newer: "Marked 9: 4 only here, 2 only there". It does not look inside subfolders.
+Compare properties is in the Compare submenu (F9, then R, then O, then P) and the palette. It lists what differs between the two files among size, times, type, permissions and owner, one fact a line, and what is the same: "Properties of report.txt and old.txt: 2 properties differ. Size: 1.2 KB here, 1.1 KB there. Same: type, permissions". It reads the two files from the panels' listings, so both must be listed.
 
-<!-- to confirm: both commands are the wiring lane's (W3a, commit 40); the sentences are from the research plan. -->
+Select the differences (Compare submenu, D; Shift+F2 in the Total Commander preset) looks at the two folders in the panels and marks, in both, the entries only here, the entries only there, and those that differ in size or are newer: "Marked 9: 4 only here, 2 only there, 3 different". When there is nothing to mark: "No differences: both panels hold the same names, sizes and times". It does not look inside subfolders.
 
 ## diro diff
 
@@ -160,6 +167,7 @@ The exit codes are 0 for the same, 1 for different, and 2 for wrong use or troub
 ## Limits
 
 - Only two files at a time. Folders compare with alpha.8.
+- The unified view is a list, not a mode of the viewer. Enter on a row opens the viewer at its line.
 - Text is compared in full up to 16 MiB for each file.
 - Unicode forms are recognized for Latin, Greek, Cyrillic and Hangul. "Sounds alike" covers space characters, dashes, quotes, full-width letters and a short list of Cyrillic and Greek letters that look Latin.
 - When the names do not fit 40 cells, the verdict line cuts the names with three dots. A verdict that cannot keep four cells for names leaves them out, and the next line has them.

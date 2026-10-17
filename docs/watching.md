@@ -25,7 +25,7 @@ In screen-reader mode diroxide says at most one line in each progress interval, 
 
 The status line shows what it is waiting for, "Waiting for scan-004.pdf to settle" or "Waiting for 3 files to settle", but never says it aloud. It is there when you look.
 
-To stop, press Escape or run Watch this folder again. diroxide says "Stopped watching in: 3 arrived". If the folder is removed: "Stopped watching in: the folder is gone". A place that is checked and not watched says so when it starts: "Checking in every 5 seconds: it cannot be watched".
+To stop, press Escape (with no dialog, job or search in front) or run Watch this folder again. diroxide says "Stopped watching in: 3 arrived". If the folder is removed: "Stopped watching in: the folder is gone". A place that is checked and not watched says so when it starts: "Checking in every 5 seconds: it cannot be watched".
 
 Other lines:
 
@@ -66,14 +66,9 @@ The exit codes are 0 when watched until stopped, 1 when the folder could not be 
 ## Limits
 
 - On Linux and macOS there is no check for a program that still holds a file open. A producer that pauses for longer than 2 seconds is said early, and then said again as "Arrived again" with the final size. `--settle SECONDS` in the shell command is the remedy. The app has no quiet-period setting in alpha.3.
-- A file renamed into the folder shortens its wait to half a second. The watcher does not yet say that a name was renamed in, so this rule waits for a later change of the watcher.
-- Escape right after typing letters to find a row stops the watch, because the typed letters are cleared before the watch sees the key.
-- The Cancel command's help does not yet mention watching.
+- A file renamed into the folder waits only half a second, because a producer that writes a file elsewhere and renames it in has finished. On Windows only a rename inside the watched folder gets this; a file moved in from another folder is seen as new and waits the full 2 seconds.
+- Escape pressed to clear letters you typed to find a row also stops the watch, because the typed letters are cleared before the watch sees the key.
 - A network share is checked, not watched, and its wait is long.
-
-<!-- to confirm: the pre-wiring contract step (P3b, item 6) adds a renamed-in event to the watcher. If it merges, this limit goes and the half-second rule is described as working. -->
-
-<!-- to confirm: the last two limits are small fixes the wiring lane (W3a) may make; check them in the final pass. -->
 
 [Known limits](known-limits.md) keeps the list current.
 
