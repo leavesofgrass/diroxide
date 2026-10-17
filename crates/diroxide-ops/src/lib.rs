@@ -19,6 +19,7 @@
 //! refuses the anchors, and asks its preflight questions ([`Preflight`])
 //! before anything is touched.
 
+pub mod access;
 pub mod engine;
 pub mod error;
 pub mod fake;
@@ -42,6 +43,7 @@ mod testing;
 pub mod undo;
 mod walk;
 
+pub use access::{AttributeEdit, AttributeFacts, ModeChange, Recursion, WindowsChange};
 pub use engine::{
     Conflict, ConflictChoice, Engine, ItemError, JobControl, JobReport, JobSink, Reconciliation,
     numbered_name,

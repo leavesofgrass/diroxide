@@ -63,6 +63,13 @@ pub enum OpsError {
     /// "Part 004 is missing. Nothing was joined."
     #[error("{0}")]
     CannotJoin(String),
+    /// A permissions or times job was asked for with nothing to change.
+    #[error("there is no change to make")]
+    NoChange,
+    /// A link was selected for a permissions change: links have none of
+    /// their own. The text is the link's name.
+    #[error("links have no permissions of their own: {0}")]
+    LinkSelected(String),
 }
 
 impl Explain for OpsError {
@@ -85,6 +92,8 @@ impl Explain for OpsError {
             OpsError::NoPartSize => "Choose a part size.".to_owned(),
             OpsError::TooManyParts(_) => "Choose a larger part size.".to_owned(),
             OpsError::CannotJoin(_) => "Check the parts, then join again.".to_owned(),
+            OpsError::NoChange => "Choose what to change.".to_owned(),
+            OpsError::LinkSelected(_) => "Change the target instead.".to_owned(),
         }
     }
 }

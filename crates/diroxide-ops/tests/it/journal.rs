@@ -216,3 +216,40 @@ fn a_split_journals_the_unfinished_name_of_each_part() {
         Some(&p("/b/report.pdf.crc"))
     );
 }
+
+/// A permissions change's inverses travel through the journal, so Undo
+/// after a restart restores the old values.
+#[test]
+fn a_permissions_change_journals_its_inverses() {
+    use diroxide_core::Attributes;
+    use diroxide_ops::{AttributeEdit, ModeChange, Recursion};
+
+    let folder = state();
+    let journal = Journal::new(folder.path());
+    let fake = FakeProvider::new();
+    fake.add_file(&p("/a/x.txt"), b"x");
+    fake.set_attributes_now(&p("/a/x.txt"), Attributes::Unix(0o600));
+    let engine = engine(&fake).with_journal(journal.clone());
+    let edit =
+        AttributeEdit::new(Recursion::ThisItem).with_mode(ModeChange::Bits { on: 0o044, off: 0 });
+    let request = JobRequest::new(JobId::new(40), JobKind::SetAttributes, vec![p("/a/x.txt")]);
+    let plan = engine.plan_attributes(&request, &edit).unwrap();
+    let report = engine.run(&plan, &JobControl::new(), &Answers::default());
+    assert_eq!(report.undo.attributes.len(), 1);
+    let records = journal.records();
+    assert_eq!(records[0].attributes, report.undo.attributes);
+    let mut log = UndoLog::default();
+    log.record(records[0].clone());
+    engine
+        .undo_last(
+            &mut log,
+            JobId::new(41),
+            &JobControl::new(),
+            &Answers::default(),
+        )
+        .unwrap();
+    assert_eq!(
+        fake.entry(&p("/a/x.txt")).unwrap().attributes,
+        Some(Attributes::Unix(0o600))
+    );
+}

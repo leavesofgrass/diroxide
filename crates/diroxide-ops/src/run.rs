@@ -49,6 +49,9 @@ use crate::plan::{Plan, Step, is_read_only};
 use crate::progress::{Estimator, JobProgress};
 use crate::undo::{LeftAs, UndoRecord};
 
+mod access;
+#[cfg(test)]
+mod access_tests;
 mod join;
 #[cfg(test)]
 mod join_tests;
@@ -543,9 +546,14 @@ impl<'a> Run<'a> {
     }
 
     /// The lengths of the undo record, before a step.
-    fn mark(&self) -> (usize, usize, usize) {
+    fn mark(&self) -> (usize, usize, usize, usize) {
         let undo = &self.report.undo;
-        (undo.moves.len(), undo.trashed.len(), undo.created.len())
+        (
+            undo.moves.len(),
+            undo.trashed.len(),
+            undo.created.len(),
+            undo.attributes.len(),
+        )
     }
 
     fn record(
@@ -553,7 +561,7 @@ impl<'a> Run<'a> {
         index: usize,
         subject: &Place,
         outcome: &Outcome,
-        before: (usize, usize, usize),
+        before: (usize, usize, usize, usize),
     ) {
         let word = match outcome {
             Outcome::Done => {
@@ -577,6 +585,7 @@ impl<'a> Run<'a> {
                 moves: undo.moves.get(before.0..).unwrap_or_default().to_vec(),
                 trashed: tail(&undo.trashed, before.1),
                 created: tail(&undo.created, before.2),
+                attributes: undo.attributes.get(before.3..).unwrap_or_default().to_vec(),
                 ..UndoRecord::default()
             };
             let _ = journal.step(index as u64, word, &delta);
@@ -715,17 +724,7 @@ impl<'a> Run<'a> {
             Step::WriteChecksum { of, place } => self.write_checksum(of, place),
             Step::JoinPart { from, to } => self.join_part(from, to),
             Step::Relink { place, request } => self.relink(place, request),
-            Step::SetAttributes { place, change } => {
-                let provider = match self.provider(place) {
-                    Ok(provider) => provider,
-                    Err(stop) => return stop.into(),
-                };
-                let ctx = self.ctx.clone();
-                match self.attempt(place, |_| provider.set_attributes(place, change, &ctx)) {
-                    Ok(_) => Outcome::Done,
-                    Err(stop) => stop.into(),
-                }
-            }
+            Step::SetAttributes { place, change } => self.set_attributes(place, change),
         }
     }
 

@@ -35,6 +35,7 @@ use crate::progress::JobProgress;
 use crate::undo::UndoRecord;
 use crate::walk::{Found, walk};
 
+mod access;
 mod join;
 mod links;
 mod split;
@@ -893,6 +894,8 @@ impl Engine {
             JobKind::Split if request.destination.is_none() => return Err(OpsError::NoDestination),
             JobKind::Split if request.parts.is_none() => return Err(OpsError::NoPartSize),
             JobKind::Join if request.destination.is_none() => return Err(OpsError::NoDestination),
+            // The edit travels beside the request: Engine::plan_attributes.
+            JobKind::SetAttributes | JobKind::SetTimes => return Err(OpsError::NoChange),
             JobKind::Undo => return Err(OpsError::NothingToUndo),
             JobKind::Copy
             | JobKind::Move

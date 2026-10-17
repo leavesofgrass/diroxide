@@ -6,6 +6,7 @@
 use diroxide_core::{
     ConflictPolicy, Entry, EntryKind, JobId, JobKind, JobOrigin, Place, Timestamp,
 };
+use diroxide_vfs::AttributeChange;
 use serde::{Deserialize, Serialize};
 
 use crate::plan::{Plan, Step};
@@ -73,6 +74,11 @@ pub struct UndoRecord {
     /// checks only that each entry is there.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub left: Vec<LeftAs>,
+    /// Attribute and time changes, as each entry's inverse (its old
+    /// values, checked against the new ones), in the order done. Undo
+    /// applies them backwards, and skips an entry changed since.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<(Place, AttributeChange)>,
 }
 
 impl UndoRecord {
@@ -87,7 +93,10 @@ impl UndoRecord {
 
     /// Whether there is nothing to undo.
     pub fn is_empty(&self) -> bool {
-        self.moves.is_empty() && self.trashed.is_empty() && self.created.is_empty()
+        self.moves.is_empty()
+            && self.trashed.is_empty()
+            && self.created.is_empty()
+            && self.attributes.is_empty()
     }
 
     /// The plan that undoes this record: the files it made go first,
@@ -104,7 +113,15 @@ impl UndoRecord {
     /// one first would bring it straight back.
     pub fn undo_plan(&self, job: JobId, folders: &[Place]) -> Plan {
         let mut set_aside: Vec<Place> = Vec::new();
-        let mut steps: Vec<Step> = Vec::new();
+        let mut steps: Vec<Step> = self
+            .attributes
+            .iter()
+            .rev()
+            .map(|(place, change)| Step::SetAttributes {
+                place: place.clone(),
+                change: change.clone(),
+            })
+            .collect();
         let mut emptied: Vec<Step> = Vec::new();
         for place in self.created.iter().rev() {
             if folders.contains(place) {

@@ -17,6 +17,7 @@ use diroxide_core::{
 };
 use diroxide_vfs::{AttributeChange, LinkRequest, TrashGate};
 
+use crate::access::AttributeFacts;
 use crate::join::JoinFacts;
 use crate::split::SplitFacts;
 
@@ -301,6 +302,25 @@ pub enum Preflight {
         /// The parts a Yes joins, in order.
         yes: Vec<Place>,
     },
+    /// A file would run as its owner (setuid). No leaves it out.
+    RunsAsOwner {
+        /// The file.
+        place: Place,
+    },
+    /// Everyone could change these entries: others gain write (a folder
+    /// without the sticky mark). No leaves the job unrun.
+    EveryoneCanChange {
+        /// The first such entry.
+        place: Place,
+        /// How many.
+        items: u64,
+    },
+    /// The owner would lose read (a file) or list or enter (a folder).
+    /// No leaves the job unrun.
+    LosesAccess {
+        /// How many entries.
+        items: u64,
+    },
     /// A part before the last is not the first part's size, and no
     /// checksum file says the size. Yes joins anyway; No cancels the join:
     /// a part is never left out of a join.
@@ -372,6 +392,24 @@ impl Preflight {
             Preflight::OddPart { line, .. } => {
                 vec![line.clone(), Message::question("Join anyway").text]
             }
+            Preflight::RunsAsOwner { place } => vec![
+                Message::question(&format!("Let {} run as its owner (setuid)", name(place))).text,
+            ],
+            Preflight::EveryoneCanChange { place, items } => {
+                let what = if *items == 1 {
+                    name(place)
+                } else {
+                    count(*items, "item", "items")
+                };
+                vec![Message::question(&format!("Let everyone change {what}")).text]
+            }
+            Preflight::LosesAccess { items } => vec![
+                Message::question(&format!(
+                    "You would lose read access to {}. Continue",
+                    count(*items, "item", "items")
+                ))
+                .text,
+            ],
         }
     }
 }
@@ -425,6 +463,8 @@ pub struct PlanFacts {
     pub split: Option<SplitFacts>,
     /// A join's set, sidecar and room, for its rows ([`JoinFacts::rows`]).
     pub join: Option<JoinFacts>,
+    /// A permissions or times job's edit and rows, the recursion first.
+    pub attributes: Option<AttributeFacts>,
 }
 
 impl PlanFacts {
@@ -583,6 +623,8 @@ impl Plan {
                 count(self.steps.len() as u64, "link", "links")
             ),
             JobKind::Undo => format!("Undo {}", count(self.steps.len() as u64, "step", "steps")),
+            JobKind::SetAttributes => format!("Change permissions of {items}"),
+            JobKind::SetTimes => format!("Change the times of {items}"),
             JobKind::Join => match &self.facts.join {
                 Some(join) => format!(
                     "Join {} into {}",
