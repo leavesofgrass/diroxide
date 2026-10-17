@@ -7,6 +7,7 @@
 
 mod journal;
 mod kill;
+mod parts;
 mod props;
 mod support;
 

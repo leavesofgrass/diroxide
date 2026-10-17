@@ -25,6 +25,7 @@ pub mod fake;
 pub mod journal;
 pub mod options;
 pub mod pace;
+pub mod parts;
 pub mod plan;
 mod planner;
 pub mod progress;
@@ -45,6 +46,7 @@ pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, 
 pub use journal::{Interrupted, Journal};
 pub use options::EngineOptions;
 pub use pace::{FakePacer, Pacer, SystemPacer};
+pub use parts::{PartInfo, PartsError, PartsReader};
 pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
 pub use undo::{LeftAs, UndoLog, UndoRecord};
