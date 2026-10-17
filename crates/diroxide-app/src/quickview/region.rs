@@ -221,9 +221,10 @@ impl Region {
         let mut list = ListModel::new("Preview").with_rows(rows);
         list.set_empty_text("Empty preview");
         list.set_help(
-            "Up and Down move by line; H and Shift+H by heading; P and N to the previous and next \
-             file; T by table, then the arrows by cell; L lists the links; slash finds; Escape \
-             returns to the panel.",
+            "Up and Down move by line; H and Shift+H by heading; Alt+P and Alt+N to the previous \
+             and next file; T by table, then the arrows by cell; L lists the links, Enter opens \
+             one; slash finds, n and p go to the next and previous match; Escape returns to the \
+             panel.",
         );
         let mut region = Self {
             list,
@@ -560,7 +561,9 @@ impl QuickView {
             .collect();
         let mut list = ListModel::new(title).with_rows(rows);
         list.set_empty_text("No links");
-        list.set_help("Enter goes to the link; O opens a web or mail address, asked first.");
+        list.set_help(
+            "Enter goes to the link; Enter there opens a web or mail address, asked first.",
+        );
         list
     }
 
@@ -619,6 +622,22 @@ impl QuickView {
                 "No link above"
             })],
         }
+    }
+
+    /// The link on the cursor's row, by id for [`QuickView::open_link`]:
+    /// the one the last link move landed on when it is on this row, else
+    /// the row's first.
+    pub fn link_here(&self) -> Option<String> {
+        let view = self.view()?;
+        let here = self.region.row()?;
+        let links = view.links();
+        let landed = self
+            .region
+            .link_at
+            .filter(|&n| links.get(n).is_some_and(|l| l.row == here));
+        landed
+            .or_else(|| links.iter().position(|l| l.row == here))
+            .map(|n| n.to_string())
     }
 
     /// Asks before opening a link: "Open `https://example.org` in the

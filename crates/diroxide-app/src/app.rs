@@ -23,6 +23,7 @@ mod dialogs;
 mod files;
 mod info;
 mod nav;
+mod preview;
 mod select;
 mod split_join;
 mod viewing;
@@ -369,6 +370,12 @@ enum Purpose {
     ViewerSearch { backward: bool },
     /// The viewer's outline.
     ViewerOutline,
+    /// The preview's find prompt.
+    PreviewFind,
+    /// The preview's links.
+    PreviewLinks,
+    /// The question before opening a link from the preview.
+    PreviewLink,
     /// The settings list.
     Settings,
     /// A setting's choices.
@@ -507,6 +514,8 @@ pub struct App {
     viewer_wait: Option<(RequestId, viewing::SourceFor)>,
     /// The highlighter, one for the run, handed to each viewer.
     highlighter: Option<crate::viewer::highlight::Session>,
+    /// The quick view and the focus in its region.
+    preview: preview::Preview,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -619,9 +628,11 @@ enum Action {
     Yes,
     No,
     Accept,
+    QuickView,
+    OpenInTextweaver,
 }
 
-const ROUTES: [(CommandId, Action); 103] = [
+const ROUTES: [(CommandId, Action); 105] = [
     (ids::QUIT, Action::Quit),
     (ids::QUIT_TO_FOLDER, Action::QuitToFolder),
     (ids::QUIT_KEEP_FOLDER, Action::QuitKeepFolder),
@@ -725,6 +736,8 @@ const ROUTES: [(CommandId, Action); 103] = [
     (ids::YES, Action::Yes),
     (ids::NO, Action::No),
     (ids::ACCEPT, Action::Accept),
+    (ids::QUICK_VIEW, Action::QuickView),
+    (ids::OPEN_IN_TEXTWEAVER, Action::OpenInTextweaver),
 ];
 
 fn route(id: &CommandId) -> Option<Action> {
@@ -810,6 +823,7 @@ impl App {
             viewing: None,
             viewer_wait: None,
             highlighter: None,
+            preview: preview::Preview::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -918,6 +932,9 @@ impl App {
         if self.viewing.is_some() {
             return crate::menu::viewer_bank().key_bar(&self.keymap);
         }
+        if self.in_preview() {
+            return crate::menu::preview_bank().key_bar(&self.keymap);
+        }
         self.active_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
@@ -932,6 +949,9 @@ impl App {
         }
         if self.viewing.is_some() {
             return crate::menu::viewer_bank().key_bar_within(&self.keymap, cells);
+        }
+        if self.in_preview() {
+            return crate::menu::preview_bank().key_bar_within(&self.keymap, cells);
         }
         self.active_bank()
             .map(|bank| bank.key_bar_within(&self.keymap, cells))
@@ -986,8 +1006,11 @@ impl App {
 
     /// Puts a panel's focus on the row with this name (its real name);
     /// whether it was found. App-side hook for the server and the window.
+    /// The quick view follows, as it does a key's move.
     pub fn focus_name(&mut self, side: Side, name: &str) -> bool {
-        self.panel_mut(side).list_mut().focus_id(name)
+        let found = self.panel_mut(side).list_mut().focus_id(name);
+        self.follow_cursor();
+        found
     }
 
     /// Marks or unmarks the rows with these names; returns how many
@@ -1027,6 +1050,9 @@ impl App {
     /// text. The terminal draws this; the window uses the whole line.
     pub fn title_line_within(&self, cells: usize) -> String {
         if let Some(title) = self.viewer_title(cells) {
+            return title;
+        }
+        if let Some(title) = self.preview_title(cells) {
             return title;
         }
         let panel = self.active_panel();
@@ -1153,6 +1179,7 @@ impl App {
     /// takes them.
     pub fn handle(&mut self, event: AppEvent) -> Vec<Effect> {
         let effects = self.handle_event(event);
+        self.follow_cursor();
         self.mark_requests(effects)
     }
 
@@ -1190,7 +1217,12 @@ impl App {
             AppEvent::JobProgress { job, progress } => self.job_progress(job, &progress),
             AppEvent::JobFinished(report) => self.job_finished(*report),
             AppEvent::Asks { ask, question } => self.asks(ask, question),
-            AppEvent::Watched { side, place, event } => self.watched(side, &place, &event),
+            AppEvent::Watched { side, place, event } => {
+                if self.panel(side).place() == &place {
+                    self.quick_view_watch(side, &event);
+                }
+                self.watched(side, &place, &event)
+            }
             AppEvent::NotWatched { side, place } => self.not_watched(side, &place),
             AppEvent::Places(places) => self.places_arrived(places),
             AppEvent::ProgramEnded {
@@ -1216,6 +1248,7 @@ impl App {
     /// [`Effect::AppRequests`] at the end when it queued requests.
     pub fn dispatch(&mut self, command: &Command) -> Vec<Effect> {
         let effects = self.dispatch_command(command);
+        self.follow_cursor();
         self.mark_requests(effects)
     }
 
@@ -1231,6 +1264,14 @@ impl App {
             && let Some(effects) = self.viewer_dispatch(action, &command.id)
         {
             return effects;
+        }
+        if self.dialogs.is_empty()
+            && let Some(effects) = self.preview_dispatch(action, &command.id)
+        {
+            return effects;
+        }
+        if preview::preview_route(&command.id).is_some() {
+            return vec![self.say(Message::status("Close this dialog first."))];
         }
         if viewing::viewer_route(&command.id).is_some() {
             if !self.dialogs.is_empty() {
@@ -1266,6 +1307,8 @@ impl App {
         }
         match action {
             Action::Focus(movement) => self.move_focus(movement),
+            // With the quick view on, Tab goes into its preview region.
+            Action::SwitchPanel if self.quick_view_on() => self.enter_preview(),
             Action::SwitchPanel => self.switch_panel(),
             Action::SwapPanels => self.swap_panels(),
             Action::ShowInOther => self.show_in_other(),
@@ -1343,6 +1386,8 @@ impl App {
             Action::Undo => self.undo(),
             Action::JobHistory => self.job_history(),
             Action::Yes | Action::No | Action::Accept => Vec::new(),
+            Action::QuickView => self.toggle_quick_view(),
+            Action::OpenInTextweaver => self.open_in_textweaver(),
         }
     }
 
@@ -1406,6 +1451,9 @@ impl App {
         }
         if !self.dialogs.is_empty() {
             return self.dialog_key(key);
+        }
+        if self.in_preview() {
+            return self.preview_press(key);
         }
         if self.viewing.is_some() {
             let layers = [

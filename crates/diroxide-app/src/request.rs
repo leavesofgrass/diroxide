@@ -176,6 +176,16 @@ pub enum SpawnKind {
     CommandLine(String),
     /// The editor, on one file.
     Editor(Place),
+    /// A program the tools registry found, with its arguments and no
+    /// shell: "Open in textweaver" (plan commit 64).
+    Program {
+        /// What it is called when it is said: "textweaver".
+        name: String,
+        /// The program.
+        program: std::path::PathBuf,
+        /// Its arguments, each one argument.
+        args: Vec<std::ffi::OsString>,
+    },
 }
 
 /// A program to run with the screen handed over: the run-command prompt,

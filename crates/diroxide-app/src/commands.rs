@@ -404,6 +404,50 @@ pub mod ids {
         VIEWER_INDENT_CHILD = "viewer.indent-child";
         /// Says the function and the blocks the cursor is in
         VIEWER_CONTEXT = "viewer.context";
+        /// Turns the other panel into a live preview of the file under the cursor, or back
+        QUICK_VIEW = "view.quick-view";
+        /// Hands the quick view's file to textweaver for full reading with speech
+        OPEN_IN_TEXTWEAVER = "preview.textweaver";
+        /// Goes back to the file panel, the cursor on its row
+        PREVIEW_LEAVE = "preview.leave";
+        /// Goes to the next heading below, its level said
+        PREVIEW_NEXT_HEADING = "preview.next-heading";
+        /// Goes to the heading above, its level said
+        PREVIEW_PREVIOUS_HEADING = "preview.previous-heading";
+        /// Goes to the next paragraph; a table or a code block is one
+        PREVIEW_NEXT_PARAGRAPH = "preview.next-paragraph";
+        /// Goes to the paragraph above, or the start of this one
+        PREVIEW_PREVIOUS_PARAGRAPH = "preview.previous-paragraph";
+        /// Goes to the next table, its size said
+        PREVIEW_NEXT_TABLE = "preview.next-table";
+        /// Goes to the table above, its size said
+        PREVIEW_PREVIOUS_TABLE = "preview.previous-table";
+        /// In a table, the cell to the left, said with its header
+        PREVIEW_CELL_LEFT = "preview.cell-left";
+        /// In a table, the cell to the right, said with its header
+        PREVIEW_CELL_RIGHT = "preview.cell-right";
+        /// In a table, the cell above, said with its header
+        PREVIEW_CELL_UP = "preview.cell-up";
+        /// In a table, the cell below, said with its header
+        PREVIEW_CELL_DOWN = "preview.cell-down";
+        /// Lists the preview's links, to go to one
+        PREVIEW_LINKS = "preview.links";
+        /// Goes to the next link, said with where it goes
+        PREVIEW_NEXT_LINK = "preview.next-link";
+        /// Goes to the link before, said with where it goes
+        PREVIEW_PREVIOUS_LINK = "preview.previous-link";
+        /// Opens the web or mail address of the link on this line, asked first
+        PREVIEW_OPEN_LINK = "preview.open-link";
+        /// Asks for text and finds it in the preview, the count said
+        PREVIEW_FIND = "preview.find";
+        /// Goes to the next match of the last find in the preview
+        PREVIEW_NEXT_MATCH = "preview.next-match";
+        /// Goes to the match before, of the last find in the preview
+        PREVIEW_PREVIOUS_MATCH = "preview.previous-match";
+        /// Shows the panel's next file in the preview without leaving it
+        PREVIEW_NEXT_FILE = "preview.next-file";
+        /// Shows the panel's file before in the preview without leaving it
+        PREVIEW_PREVIOUS_FILE = "preview.previous-file";
         /// List the plugins.
         PLUGINS = "plugins.list";
         /// Yes, in a question.
@@ -415,7 +459,7 @@ pub mod ids {
     }
 }
 
-use Layer::{Dialog, Global, List, Panel, Viewer};
+use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
 
 const fn command(
     id: CommandId,
@@ -437,7 +481,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 136] = [
+pub static CATALOG: [CommandInfo; 158] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1493,6 +1537,182 @@ pub static CATALOG: [CommandInfo; 136] = [
         Viewer,
         &["x"],
         &["x"],
+    ),
+    command(
+        ids::QUICK_VIEW,
+        "Quick view",
+        "Turns the other panel into a live preview of the file under the cursor, or back to its files.",
+        Global,
+        &["shift+f3"],
+        &["shift+f3"],
+    ),
+    command(
+        ids::OPEN_IN_TEXTWEAVER,
+        "Open in textweaver",
+        "Hands the quick view's file to textweaver for full reading with speech, when it is installed.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::PREVIEW_LEAVE,
+        "Leave the preview",
+        "Goes back to the file panel, the cursor on its row.",
+        Preview,
+        &["escape", "tab"],
+        &["escape", "tab"],
+    ),
+    command(
+        ids::PREVIEW_NEXT_HEADING,
+        "Next heading",
+        "Goes to the next heading below, its level said.",
+        Preview,
+        &["h"],
+        &["h"],
+    ),
+    command(
+        ids::PREVIEW_PREVIOUS_HEADING,
+        "Previous heading",
+        "Goes to the heading above, its level said.",
+        Preview,
+        &["shift+h"],
+        &["shift+h"],
+    ),
+    command(
+        ids::PREVIEW_NEXT_PARAGRAPH,
+        "Next paragraph",
+        "Goes to the next paragraph; a table or a code block is one.",
+        Preview,
+        &["ctrl+down"],
+        &["ctrl+down"],
+    ),
+    command(
+        ids::PREVIEW_PREVIOUS_PARAGRAPH,
+        "Previous paragraph",
+        "Goes to the paragraph above, or the start of this one.",
+        Preview,
+        &["ctrl+up"],
+        &["ctrl+up"],
+    ),
+    command(
+        ids::PREVIEW_NEXT_TABLE,
+        "Next table",
+        "Goes to the next table, its rows and columns said; the cell moves start on its first cell.",
+        Preview,
+        &["t"],
+        &["t"],
+    ),
+    command(
+        ids::PREVIEW_PREVIOUS_TABLE,
+        "Previous table",
+        "Goes to the table above, its rows and columns said.",
+        Preview,
+        &["shift+t"],
+        &["shift+t"],
+    ),
+    command(
+        ids::PREVIEW_CELL_LEFT,
+        "Cell to the left",
+        "In a table, the cell to the left, said with its header.",
+        Preview,
+        &["left"],
+        &["left"],
+    ),
+    command(
+        ids::PREVIEW_CELL_RIGHT,
+        "Cell to the right",
+        "In a table, the cell to the right, said with its header.",
+        Preview,
+        &["right"],
+        &["right"],
+    ),
+    command(
+        ids::PREVIEW_CELL_UP,
+        "Cell above",
+        "In a table, the cell above, said with its header.",
+        Preview,
+        &["shift+up"],
+        &["shift+up"],
+    ),
+    command(
+        ids::PREVIEW_CELL_DOWN,
+        "Cell below",
+        "In a table, the cell below, said with its header.",
+        Preview,
+        &["shift+down"],
+        &["shift+down"],
+    ),
+    command(
+        ids::PREVIEW_LINKS,
+        "Links in the preview",
+        "Lists the preview's links, its text first and where it goes after, to go to one.",
+        Preview,
+        &["l"],
+        &["l"],
+    ),
+    command(
+        ids::PREVIEW_NEXT_LINK,
+        "Next link",
+        "Goes to the next link, said with where it goes.",
+        Preview,
+        &["shift+l"],
+        &["shift+l"],
+    ),
+    command(
+        ids::PREVIEW_PREVIOUS_LINK,
+        "Previous link",
+        "Goes to the link before, said with where it goes.",
+        Preview,
+        &["ctrl+l"],
+        &["ctrl+l"],
+    ),
+    command(
+        ids::PREVIEW_OPEN_LINK,
+        "Open link",
+        "Opens the web or mail address of the link on this line in the browser or the mail program, asked first; never a file.",
+        Preview,
+        &["enter"],
+        &["enter"],
+    ),
+    command(
+        ids::PREVIEW_FIND,
+        "Find in the preview",
+        "Asks for text and finds it in the preview, ignoring case, the count said.",
+        Preview,
+        &["/"],
+        &["/"],
+    ),
+    command(
+        ids::PREVIEW_NEXT_MATCH,
+        "Next match in the preview",
+        "Goes to the next match of the last find in the preview.",
+        Preview,
+        &["n"],
+        &["n"],
+    ),
+    command(
+        ids::PREVIEW_PREVIOUS_MATCH,
+        "Previous match in the preview",
+        "Goes to the match before, of the last find in the preview.",
+        Preview,
+        &["p"],
+        &["p"],
+    ),
+    command(
+        ids::PREVIEW_NEXT_FILE,
+        "Next file in the preview",
+        "Shows the panel's next file in the preview without leaving it; the panel's cursor follows.",
+        Preview,
+        &["alt+n"],
+        &["alt+n"],
+    ),
+    command(
+        ids::PREVIEW_PREVIOUS_FILE,
+        "Previous file in the preview",
+        "Shows the panel's file before in the preview without leaving it; the panel's cursor follows.",
+        Preview,
+        &["alt+p"],
+        &["alt+p"],
     ),
     command(
         ids::PLUGINS,

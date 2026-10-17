@@ -15,7 +15,9 @@
 //! never starts a program.
 //!
 //! Not here: step 8's "Reading" line (not wired; the listing comes
-//! straight away) and the quick view, steps 20 to 25 (plan commit 64).
+//! straight away). The quick view's steps, 20 to 25, run with the quick
+//! view's wait at 100 milliseconds, so the test need not wait half a
+//! second at each stop; spike Q2 has a test of its own below.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -236,7 +238,8 @@ impl Check<'_> {
                 screen.lines
             );
             // A file's blank line is a row too; a panel's row never is.
-            let blank_allowed = self.s.app().viewer_open() && self.s.app().dialog().is_none();
+            let blank_allowed = (self.s.app().viewer_open() || self.s.app().in_preview())
+                && self.s.app().dialog().is_none();
             assert!(
                 blank_allowed || !screen.lines[line].trim().is_empty(),
                 "{:#?}",
@@ -253,10 +256,13 @@ impl Check<'_> {
         for _ in 0..400 {
             self.s.settle(self.clock.now(), Duration::from_secs(20));
             self.s.tick(self.clock.now());
-            if self.s.app().viewer_wants_tick().is_none() {
+            if self.s.app().viewer_wants_tick().is_none()
+                && self.s.app().quick_view_wants_tick().is_none()
+            {
                 break;
             }
-            // The highlighter works on its own thread, in real time.
+            // The highlighter and the quick view work on their own
+            // threads, in real time.
             std::thread::sleep(Duration::from_millis(5));
             self.clock.advance(Duration::from_millis(50));
         }
@@ -297,14 +303,28 @@ impl Check<'_> {
         self.settle()
     }
 
-    fn focus(&mut self, name: &str) {
+    fn focus(&mut self, name: &str) -> Vec<String> {
         let side = self.s.app().active_side();
         assert!(
             self.s.app_mut().focus_name(side, name),
             "{name} is not listed: {:?}",
             self.names()
         );
-        self.settle();
+        self.settle()
+    }
+
+    /// Waits, in real time, for a line that starts so: the folder watch
+    /// and the quick view's render after it take their own time.
+    fn wait_for(&mut self, start: &str) -> Vec<String> {
+        let mut said = Vec::new();
+        for _ in 0..200 {
+            said.extend(self.settle());
+            if any_starts(&said, start) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        said
     }
 
     fn unmark(&mut self, names: &[&str]) {
@@ -357,7 +377,9 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
     let dir = temp();
     let demo = demo(dir.path());
     let out = demo.join("out");
-    let (mut one, mut runtime) = app(place(&demo), place(&out), settings(Layout::SideBySide));
+    let mut quick = settings(Layout::SideBySide);
+    quick.quick_view.wait_ms = 100;
+    let (mut one, mut runtime) = app(place(&demo), place(&out), quick);
     let mut c = Check {
         s: session(&mut one, &mut runtime, 80, 24, true),
         clock: Clock::at_start(),
@@ -655,6 +677,83 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
     assert!(any_contains(&said, "looks binary; hex mode"), "{said:?}");
     c.key("escape");
 
+    // The quick view, in the right panel's place. 20. Shift+F3 on
+    // report.md: on, then its one line.
+    c.focus("report.md");
+    let said = c.key("shift+f3");
+    assert_eq!(said, ["Quick view on", "Preview: report.md, 12 headings"]);
+    // In screen-reader mode the region waits for Tab: its words, not the
+    // document, so a new preview is never read in full.
+    assert_eq!(from_column(&c.line(1), 40), "Preview");
+    assert_eq!(from_column(&c.line(2), 40), "Tab goes into the preview");
+    // 21. Up through five files, quickly: one line when the cursor stops.
+    for _ in 0..5 {
+        c.s.key(Key::parse("up").unwrap(), c.clock.now());
+    }
+    let said = c.settle();
+    let lines: Vec<&String> = said
+        .iter()
+        .filter(|l| l.starts_with("Preview: ") || l.starts_with("No preview: "))
+        .collect();
+    assert_eq!(lines.len(), 1, "{said:?}");
+    let said = c.focus("report.md");
+    assert_eq!(said, ["Preview: report.md, 12 headings"]);
+    // 22. Tab: the title and the row; by heading; the table; a cell.
+    let said = c.key("tab");
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].starts_with("Preview, report.md, "), "{said:?}");
+    assert_eq!(c.line(0), "Preview, report.md");
+    let said = c.key("h");
+    assert_eq!(said, ["Heading 2: Part 1, 2 of 12"]);
+    let said = c.key("t");
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].starts_with("Table 1 of 1, "), "{said:?}");
+    let said = c.key("right");
+    assert_eq!(said, ["Age, header, row 1 of 2, column 2"]);
+    let said = c.key("shift+down");
+    assert_eq!(said, ["Age: 36, row 2 of 2, column 2"]);
+    // 23. Find: the count; Escape: the panel, the cursor on its row.
+    let said = c.key("/");
+    assert!(any_starts(&said, "Find in the preview"), "{said:?}");
+    c.type_text("part");
+    let said = c.key("enter");
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(
+        said[0].starts_with("Match 1 of 22 in the preview"),
+        "{said:?}"
+    );
+    let said = c.key("n");
+    assert!(
+        any_starts(&said, "Match 2 of 22 in the preview"),
+        "{said:?}"
+    );
+    let said = c.key("escape");
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].starts_with("Left panel: demo, "), "{said:?}");
+    assert!(
+        c.focused_line().starts_with("report.md"),
+        "{}",
+        c.focused_line()
+    );
+    // 24. notes.org; report.md changed on disk, said once.
+    let said = c.focus("notes.org");
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].starts_with("Preview: notes.org, Org"), "{said:?}");
+    let said = c.focus("report.md");
+    assert_eq!(said, ["Preview: report.md, 12 headings"]);
+    let mut changed = fs::read_to_string(demo.join("report.md")).unwrap();
+    changed.push_str("\n## Part 12\n\nText of part 12.\n");
+    fs::write(demo.join("report.md"), changed).unwrap();
+    let said = c.wait_for("Preview updated: report.md changed");
+    let updated = said
+        .iter()
+        .filter(|l| l.starts_with("Preview updated: report.md changed"))
+        .count();
+    assert_eq!(updated, 1, "{said:?}");
+    // 25. Shift+F3 again: off.
+    let said = c.key("shift+f3");
+    assert_eq!(said, ["Quick view off"]);
+
     // Split and join. The right panel back on out first.
     c.key("tab");
     c.key("left");
@@ -855,4 +954,108 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
     // 39. Ctrl+Q quits.
     c.s.key(Key::parse("ctrl+q").unwrap(), c.clock.now());
     assert!(c.s.wants_quit());
+}
+
+/// The text of a screen line from a column on: the right panel's half.
+fn from_column(line: &str, column: usize) -> String {
+    line.chars().skip(column).collect()
+}
+
+/// Spike Q2 (research/alpha2-plan.md part 4.9) on the test backend: the
+/// quick view turned on, Tab into its region, a move by heading, Escape
+/// back; the cursor's cell after every frame; one line said for each
+/// change; and in screen-reader mode the preview region frozen while the
+/// focus is in the panel, as the inactive panel is, without the one-line
+/// announcement being lost.
+#[test]
+fn spike_q2_the_preview_region_keeps_the_cursor_and_says_one_line_a_change() {
+    let dir = temp();
+    let work = dir.path().join("work");
+    fs::create_dir_all(&work).unwrap();
+    let mut report = String::from("# Report\n\n");
+    for n in 1..=11 {
+        report.push_str(&format!("## Part {n}\n\nText of part {n}.\n\n"));
+    }
+    fs::write(work.join("report.md"), report).unwrap();
+    fs::write(work.join("notes.txt"), NOTES).unwrap();
+    for screen_reader in [true, false] {
+        let mut quick = settings(Layout::SideBySide);
+        quick.quick_view.wait_ms = 100;
+        let (mut one, mut runtime) = app(place(&work), place(&work), quick);
+        let mut c = Check {
+            s: session(&mut one, &mut runtime, 80, 24, screen_reader),
+            clock: Clock::at_start(),
+            mark: 0,
+        };
+        c.s.start(c.clock.now());
+        c.settle();
+        c.focus("report.md");
+        // On: its own frame says "Quick view on"; the render's line
+        // comes on the next.
+        c.s.key(Key::parse("shift+f3").unwrap(), c.clock.now());
+        c.s.draw(c.clock.now()).unwrap();
+        c.cursor();
+        assert_eq!(c.line(21), "Quick view on");
+        let said = c.settle();
+        assert_eq!(said, ["Quick view on", "Preview: report.md, 12 headings"]);
+        assert_eq!(c.line(21), "Preview: report.md, 12 headings");
+        let title = if screen_reader {
+            "Preview"
+        } else {
+            "Preview, report.md"
+        };
+        assert_eq!(from_column(&c.line(1), 40), title);
+        let region: Vec<String> = (2..21).map(|n| from_column(&c.line(n), 40)).collect();
+        // The cursor moves to notes.txt: one line, on the status line.
+        let said = c.focus("notes.txt");
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert!(said[0].starts_with("Preview: notes.txt"), "{said:?}");
+        assert_eq!(c.line(21), said[0]);
+        let now: Vec<String> = (2..21).map(|n| from_column(&c.line(n), 40)).collect();
+        if screen_reader {
+            // The region waits for Tab; the line was said all the same.
+            assert_eq!(now, region);
+            assert_eq!(now[0], "Tab goes into the preview");
+        } else {
+            assert_ne!(now, region);
+        }
+        let said = c.focus("report.md");
+        assert_eq!(said, ["Preview: report.md, 12 headings"]);
+        // Tab: one line, the cursor on the region's focused row.
+        let said = c.key("tab");
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert!(
+            said[0].starts_with("Preview, report.md, Report"),
+            "{said:?}"
+        );
+        let screen = c.s.screen();
+        assert_eq!(screen.cursor_column, 40);
+        assert!(
+            from_column(&c.focused_line(), 40).starts_with("Report"),
+            "{:#?}",
+            screen.lines
+        );
+        // By heading: one line, the cursor on the heading's row.
+        let said = c.key("h");
+        assert_eq!(said, ["Heading 2: Part 1, 2 of 12"]);
+        assert!(
+            from_column(&c.focused_line(), 40).starts_with("Part 1"),
+            "{}",
+            c.focused_line()
+        );
+        // A move by line: the row is under the cursor; nothing on the
+        // status line changes.
+        let status = c.line(21);
+        let said = c.key("down");
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert_eq!(c.line(21), status);
+        // Escape: back on the panel's row, column 0.
+        let said = c.key("escape");
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert!(said[0].starts_with("Left panel: work, "), "{said:?}");
+        assert_eq!(c.s.screen().cursor_column, 0);
+        assert!(c.focused_line().trim_start().starts_with("report.md"));
+        let said = c.key("shift+f3");
+        assert_eq!(said, ["Quick view off"]);
+    }
 }

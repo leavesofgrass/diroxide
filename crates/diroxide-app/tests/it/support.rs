@@ -229,6 +229,8 @@ pub struct Recorder {
     pub programs: Mutex<Vec<Program>>,
     /// The files opened.
     pub opened: Mutex<Vec<PathBuf>>,
+    /// The web and mail addresses opened.
+    pub addresses: Mutex<Vec<String>>,
 }
 
 impl Launcher for Recorder {
@@ -247,6 +249,11 @@ impl Launcher for Recorder {
 impl Opener for Recorder {
     fn open(&self, path: &Path) -> Result<(), String> {
         self.opened.lock().unwrap().push(path.to_owned());
+        Ok(())
+    }
+
+    fn open_address(&self, address: &str) -> Result<(), String> {
+        self.addresses.lock().unwrap().push(address.to_owned());
         Ok(())
     }
 }

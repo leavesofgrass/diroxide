@@ -1047,6 +1047,7 @@ impl Runtime {
             SpawnKind::Shell => "Shell".to_owned(),
             SpawnKind::CommandLine(_) => "Command".to_owned(),
             SpawnKind::Editor(file) => file.name().unwrap_or("The editor").to_owned(),
+            SpawnKind::Program { name, .. } => name.clone(),
         };
         let editing = match &spawn.kind {
             SpawnKind::Editor(file) => Some(file),
@@ -1134,6 +1135,9 @@ impl Runtime {
                     .clone()
                     .unwrap_or_else(|| self.launcher.editor());
                 (editor, vec![OsString::from(path)])
+            }
+            SpawnKind::Program { program, args, .. } => {
+                (program.clone().into_os_string(), args.clone())
             }
         };
         Ok(Program {
