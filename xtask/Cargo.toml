@@ -18,6 +18,9 @@ serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 toml.workspace = true
+# cargo xtask demo writes locked.zip with AES-256 directly, since diro
+# takes a password only from its terminal.
+zip.workspace = true
 
 [lints]
 workspace = true

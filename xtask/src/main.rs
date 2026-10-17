@@ -16,10 +16,13 @@
 //! - `docs --check`: the documentation rules of plan section 11.
 //! - `sample-folder PATH [--big-mb N]`: the owner's check folder.
 //! - `search-tree PATH [--small]`: the 1 GB search tree of alpha.3.
+//! - `demo PATH`: the owner's demo set for the alpha.2 check, in a new or
+//!   empty folder on drive D:.
 //!
 //! Later waves add `notices`, `icons` and `dist`.
 
 mod bench;
+mod demo;
 mod deps;
 mod docs_check;
 mod keyboard;
@@ -34,7 +37,7 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | keyboard [--check] | logo | bench [--quick] [--only ID] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small]";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | keyboard [--check] | logo | bench [--quick] [--only ID] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH";
 
 fn main() -> ExitCode {
     match run() {
@@ -71,6 +74,7 @@ fn run() -> Result<bool> {
         ["docs", "--check"] | ["docs"] => docs_check::check(&root),
         ["sample-folder", rest @ ..] => sample::sample_folder(rest),
         ["search-tree", rest @ ..] => sample::search_tree(&root, rest),
+        ["demo", rest @ ..] => demo::run(&root, rest),
         _ => {
             eprintln!("{USAGE}");
             Ok(false)

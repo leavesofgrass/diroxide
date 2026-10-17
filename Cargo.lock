@@ -4117,6 +4117,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+ "zip",
 ]
 
 [[package]]

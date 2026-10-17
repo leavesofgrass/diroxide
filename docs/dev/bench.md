@@ -94,6 +94,14 @@ cargo xtask search-tree D:\searchtree
 
 The search tree is the 1 GB, 100,000-file tree of alpha.3's search spike, with a known number of hits; its parameters are in `bench/search-tree.toml`, and `--small` writes a 300-file one.
 
+The demo set of the alpha.2 check goes in a new or empty folder on drive D: with a plain name, and nowhere else:
+
+```bash
+cargo xtask demo D:/demo
+```
+
+It writes `course.zip`, `backup.7z` (solid), `logs.tar.xz`, `locked.zip` (AES-256, with a password made up as it runs and said once on its output), `hostile.zip` (one name in it would leave the archive; it is built in memory), `big.bin` (60 MB), `main.rs`, `report.md`, `notes.org`, `big.log` and an empty `out` folder, then lists each with its size and reads every archive back with `diro archive test` and with the unzip, xz, tar and 7z programs it finds on PATH.
+
 ## See also
 
 - [Building](building.md)
