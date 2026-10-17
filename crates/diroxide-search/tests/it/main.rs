@@ -5,6 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod content;
+mod dirsize;
 mod engine;
 mod fake;
 

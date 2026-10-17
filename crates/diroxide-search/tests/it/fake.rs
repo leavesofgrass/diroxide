@@ -36,6 +36,8 @@ pub struct Fake {
     pub stall: Mutex<Option<(String, Duration)>>,
     /// Files whose data is not on this computer.
     online: Mutex<BTreeSet<String>>,
+    /// Folders whose listing is refused.
+    refused: Mutex<BTreeSet<String>>,
     calls: AtomicU64,
 }
 
@@ -87,6 +89,13 @@ impl Fake {
     /// Marks a file as online only, as a cloud placeholder is.
     pub fn online_only(&self, path: &str) {
         self.online.lock().unwrap().insert(path.to_owned());
+    }
+
+    /// Makes a folder's listing refused, as a folder without the right
+    /// to read it is.
+    pub fn refuse(&self, path: &str) {
+        self.folder(path);
+        self.refused.lock().unwrap().insert(path.to_owned());
     }
 
     /// Makes a link.
@@ -177,6 +186,9 @@ impl Provider for Fake {
             && at == path
         {
             std::thread::sleep(wait);
+        }
+        if self.refused.lock().unwrap().contains(&path) {
+            return Err(VfsError::PermissionDenied);
         }
         let nodes = self.nodes.lock().unwrap().clone();
         match nodes.get(&path) {

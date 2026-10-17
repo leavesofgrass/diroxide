@@ -24,6 +24,7 @@
 //! hash, then a full comparison (alpha.8).
 
 mod content;
+mod dirsize;
 mod engine;
 mod hit;
 mod local_entry;
@@ -33,10 +34,11 @@ mod summary;
 mod walk;
 
 use diroxide_core::format::{count, human_size};
-use diroxide_core::{EntryKind, Explain, ListModel, Place, SystemClock};
+use diroxide_core::{Explain, ListModel, Place, SystemClock};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
+pub use dirsize::{dirsize_with, size_every_folder};
 pub use engine::run_search;
 pub use hit::{ContentMatch, SearchHit};
 pub use query::{
@@ -48,6 +50,7 @@ pub use summary::{SearchSummary, Skips};
 
 /// The total size of a folder.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DirSize {
     /// Bytes in files.
     pub bytes: u64,
@@ -55,6 +58,25 @@ pub struct DirSize {
     pub files: u64,
     /// Folders counted, not counting the root.
     pub folders: u64,
+    /// Bytes of the files whose data is on this computer (not online
+    /// only).
+    pub on_this_computer: u64,
+    /// Files whose data is not on this computer.
+    pub online_only: u64,
+    /// Links, counted as links and never followed.
+    pub links: u64,
+    /// Folders that could not be read.
+    pub unreadable: u64,
+    /// Folders not entered: other drives, snapshots, loops, deeper than
+    /// 256 levels.
+    pub skipped: u64,
+    /// Whether a file's other hard links were recognized and counted once
+    /// (Unix); elsewhere hard links may be counted more than once.
+    pub hard_links_once: bool,
+    /// Extra hard links to files already counted, left out.
+    pub repeated_links: u64,
+    /// Whether it was stopped before the end.
+    pub cancelled: bool,
 }
 
 impl DirSize {
@@ -147,27 +169,19 @@ pub fn search(
     )
 }
 
-/// Adds up the size of a folder. Phase 0: through the provider, without
-/// following links.
+/// Adds up the size of a folder (Phase 0's form): the walk helper with no
+/// filters, links never followed, `ctx`'s cancel token stopping it. See
+/// [`dirsize_with`].
 pub fn dirsize(
     place: &Place,
     registry: &Registry,
     ctx: &OpContext,
 ) -> Result<DirSize, SearchError> {
-    let mut size = DirSize::default();
-    let query = SearchQuery::everything(place.clone()).with_scope(
-        Scope::new(place.clone())
-            .with_hidden(true)
-            .with_row_cap(None),
-    );
-    search(&query, registry, ctx, &mut |hit| match hit.entry.kind {
-        EntryKind::Folder => size.folders += 1,
-        _ => {
-            size.files += 1;
-            size.bytes += hit.entry.size.unwrap_or(0);
-        }
-    })?;
-    Ok(size)
+    dirsize_with(
+        place,
+        registry,
+        &SearchControl::new().with_cancel(ctx.cancel.clone()),
+    )
 }
 
 /// The results as a list: each row the name, then what the hit is, then
@@ -290,6 +304,7 @@ mod tests {
             bytes: 2_100_000,
             files: 40,
             folders: 3,
+            ..DirSize::default()
         };
         assert_eq!(size.describe(), "2.1 MB in 40 files and 3 folders");
         let summary = SearchSummary {
