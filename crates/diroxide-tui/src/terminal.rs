@@ -172,7 +172,12 @@ fn take(inline: bool) -> io::Result<()> {
     if !cfg!(windows) {
         execute!(out, event::EnableBracketedPaste)?;
     }
-    execute!(out, event::DisableMouseCapture, cursor::Show)?;
+    // Mouse capture is never turned on, so there is nothing to turn off:
+    // on Windows, crossterm's DisableMouseCapture fails with "Initial
+    // console modes not set" unless EnableMouseCapture ran first, which
+    // broke the first start on the owner's machine (Friday, October 16,
+    // 2026). Only the cursor is set here.
+    execute!(out, cursor::Show)?;
     Ok(())
 }
 
