@@ -131,6 +131,16 @@ Its figures are kept in `bench/search-spike.toml`, one `[[run]]` for each machin
 
 `rg` was not on PATH, so nothing was compared with it. The plan's starting budgets (a warm name search in 0.6 seconds on Linux and 2.5 times that on Windows, the first hit within 100 ms, 100,000 rows in under a second, the stop answered within a second) already hold; the parallel walker is the one to compare with them next.
 
+The second, on Saturday, October 17, 2026, with the search engine of the search lane (the parallel walker, the evaluator, the content reader), the same tree and build, warm:
+
+- Search names for `*quokkaline*`: 72 ms, the first hit at 1.3 ms; `ext txt and size over 1 KB and modified within 3 years`: 104 ms, 90,000 found.
+- Read every file whole on the parallel walk, nothing matched: 1.5 seconds, the ceiling of a content search on this machine.
+- Search contents for a word in 1,000 files: 1.7 seconds, the first hit at 3 ms; for a word in none: 1.7; for a word in every file: 2.1; a regular expression: 1.8; any case: 1.6. Opening files is what is left: the reader itself runs within the ceiling's reach.
+- The search engine over the slow place, 5 ms before every call: 7,550 entries a second on 2 threads and 29,976 on 8, the first hit at about 29 ms; a stop answered in 0.8 ms.
+- 100,000 hits made into a results list: 308 ms.
+
+Every starting budget of the plan holds on Windows: names well under 1.5 seconds, contents under 3.75 seconds, the first hit under 100 ms, the stop under a second, and a network place over 1,000 items a second on 2 threads. `rg` was again not on PATH; the container run is where it is compared.
+
 ## See also
 
 - [Building](building.md)

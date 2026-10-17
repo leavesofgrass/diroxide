@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 
 use diroxide_core::{Entry, EntryKind, Place, SystemClock};
 use diroxide_search::{
-    SearchControl, SearchHit, SearchProgress, SearchQuery, SearchSink, results_list_under,
+    Scope, SearchControl, SearchHit, SearchProgress, SearchQuery, SearchSink, results_list_under,
     run_search,
 };
 use diroxide_vfs::{
@@ -155,6 +155,28 @@ fn walk_ignore(tree: &Path) -> u64 {
         })
     });
     count.load(Ordering::Relaxed).saturating_sub(1)
+}
+
+/// Every file read whole on the parallel walk, nothing matched: the
+/// ceiling of a content search on this machine. Returns the bytes read.
+fn read_every_file(tree: &Path) -> u64 {
+    let bytes = Arc::new(AtomicU64::new(0));
+    ignore::WalkBuilder::new(tree)
+        .standard_filters(false)
+        .build_parallel()
+        .run(|| {
+            let bytes = Arc::clone(&bytes);
+            Box::new(move |entry| {
+                if let Ok(entry) = entry
+                    && entry.file_type().is_some_and(|t| t.is_file())
+                    && let Ok(data) = std::fs::read(entry.path())
+                {
+                    bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
+                }
+                ignore::WalkState::Continue
+            })
+        });
+    bytes.load(Ordering::Relaxed)
 }
 
 /// A walk of folders through a provider with `threads` workers sharing
@@ -366,6 +388,22 @@ fn main() -> Outcome<()> {
         ),
     });
 
+    let mut runs = Vec::new();
+    let mut read = 0;
+    for _ in 0..args.runs {
+        let started = Instant::now();
+        read = read_every_file(tree);
+        runs.push(millis(started.elapsed()));
+    }
+    let ms = median(runs);
+    lines.push(Line {
+        id: "read-every-file".into(),
+        median_ms: ms,
+        note: format!(
+            "{read} bytes read whole on the parallel walk, nothing matched: the ceiling of a content search here"
+        ),
+    });
+
     let local = LocalProvider::new();
     let mut runs = Vec::new();
     let mut seen = 0;
@@ -474,6 +512,80 @@ fn main() -> Outcome<()> {
         id: "slow-place-stop".into(),
         median_ms: stopped.map_or(0.0, millis),
         note: "from the cancel to the last thread stopped, 2 threads, a fake network place".into(),
+    });
+
+    // The engine itself over the slow place: following links makes every
+    // search take the provider walk, which a network place takes.
+    let mut slow_registry = Registry::new();
+    slow_registry.set_local(Arc::new(SlowPlace {
+        inner: LocalProvider::new(),
+        delay: args.delay,
+        calls: AtomicU64::new(0),
+    }));
+    for threads in [2, 8] {
+        let query = SearchQuery::parse(root.clone(), "name *quokkaline*")?.with_scope(
+            Scope::new(root.clone())
+                .with_follow_links(true)
+                .with_threads(Some(threads)),
+        );
+        let started = Instant::now();
+        let mut sink = Clocked {
+            started,
+            first: None,
+            hits: 0,
+        };
+        let summary = run_search(
+            &query,
+            &slow_registry,
+            &SystemClock::utc(),
+            &SearchControl::new(),
+            &mut sink,
+        )?;
+        let ms = millis(started.elapsed());
+        lines.push(Line {
+            id: format!("slow-search-{threads}"),
+            median_ms: ms,
+            note: format!(
+                "{} found, {} entries a second at {threads} threads through the search engine, first hit at {:.0} ms; a fake network place",
+                sink.hits,
+                rate(summary.entries, ms),
+                sink.first.map_or(ms, millis)
+            ),
+        });
+    }
+    let control = SearchControl::new();
+    let stopper = {
+        let control = control.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            let at = Instant::now();
+            control.cancel();
+            at
+        })
+    };
+    let query = SearchQuery::parse(root.clone(), "name *quokkaline*")?.with_scope(
+        Scope::new(root.clone())
+            .with_follow_links(true)
+            .with_threads(Some(2)),
+    );
+    let mut sink = Clocked {
+        started: Instant::now(),
+        first: None,
+        hits: 0,
+    };
+    run_search(
+        &query,
+        &slow_registry,
+        &SystemClock::utc(),
+        &control,
+        &mut sink,
+    )?;
+    let returned = Instant::now();
+    let cancelled_at = stopper.join().map_err(|_| "the stop thread failed")?;
+    lines.push(Line {
+        id: "slow-search-stop".into(),
+        median_ms: millis(returned.saturating_duration_since(cancelled_at)),
+        note: "from the cancel to the search's return, 2 threads, through the search engine; a fake network place".into(),
     });
 
     for rows in [100_000usize, 1_000_000] {
