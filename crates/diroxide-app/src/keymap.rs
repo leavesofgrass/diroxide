@@ -827,7 +827,11 @@ mod tests {
     fn a_key_a_terminal_may_keep_has_a_menu_as_the_sure_way() {
         let menus = crate::menu::Menus::builtin();
         for binding in Keymap::defaults().bindings() {
-            if tables::terminal_entry(&binding.key).is_some() {
+            // A command that opens a menu is reached by the menu bar (F9).
+            let opens_a_menu = crate::commands::Menu::ALL
+                .iter()
+                .any(|m| m.command() == binding.command);
+            if tables::terminal_entry(&binding.key).is_some() && !opens_a_menu {
                 assert!(
                     menus.reaches(&binding.command),
                     "{} on {} has no menu item",

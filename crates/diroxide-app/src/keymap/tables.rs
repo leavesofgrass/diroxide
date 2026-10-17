@@ -480,7 +480,13 @@ mod tests {
             Some(TerminalKind::Differs)
         );
         assert!(terminal_entry(&key("f5")).is_none());
-        assert!(terminal_entry(&key("ctrl+q")).is_none());
+        // The desktop app's built-in terminal keeps Alt+F and Ctrl+Q (the
+        // owner's first try of alpha.1 there).
+        for text in ["ctrl+q", "alt+f"] {
+            let row = terminal_entry(&key(text)).unwrap_or_else(|| panic!("{text}"));
+            assert_eq!(row.kind, TerminalKind::Program, "{text}");
+            assert_eq!(row.program, "The Claude app's terminal", "{text}");
+        }
     }
 
     #[test]

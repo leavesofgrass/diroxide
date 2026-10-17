@@ -230,7 +230,9 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 
 These keys of the terminal list work in most terminals, but a terminal program may keep them or send another key. Each one's command is also in a menu, the sure way.
 
+- Ctrl+Q for Quit: The Claude app's terminal keeps it; it takes the key for itself, so the key never arrives; the palette's Quit and the F9 menus are the way. Sure way: File menu, Quit.
 - Shift+F1 for Help: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: Help menu, Help.
+- Alt+F for File menu: The Claude app's terminal keeps it; it takes the key for itself, so the key never arrives; the palette's Quit and the F9 menus are the way. Sure way: the command palette.
 - Ctrl+Right for Folder to other panel: macOS keeps it; Mission Control uses Control with the arrows. Sure way: Go menu, Folder to other panel.
 - Ctrl+Left for This folder to other panel: macOS keeps it; Mission Control uses Control with the arrows. Sure way: Go menu, This folder to other panel.
 - Alt+Up for Up one folder: Windows Terminal keeps it; it moves between panes when the window has panes. Sure way: Go menu, Up one folder.
