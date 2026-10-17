@@ -262,6 +262,38 @@ mod tests {
     }
 
     #[test]
+    fn undo_of_a_split_trashes_its_parts_and_of_a_join_the_whole() {
+        let parts: Vec<Place> = (1..=3)
+            .map(|n| p(&format!("/b/report.pdf.{n:03}")))
+            .chain([p("/b/report.pdf.crc")])
+            .collect();
+        let split = UndoRecord {
+            created: parts.clone(),
+            ..UndoRecord::for_job(JobId::new(9), JobKind::Split)
+        };
+        let plan = split.undo_plan(JobId::new(10), &[]);
+        let trashed: Vec<Place> = parts.iter().rev().cloned().collect();
+        assert_eq!(
+            plan.steps,
+            trashed
+                .into_iter()
+                .map(|place| Step::Trash { place })
+                .collect::<Vec<_>>(),
+            "the sidecar first, then the parts, newest first, all to the trash"
+        );
+        let join = UndoRecord {
+            created: vec![p("/c/report.pdf")],
+            ..UndoRecord::for_job(JobId::new(11), JobKind::Join)
+        };
+        assert_eq!(
+            join.undo_plan(JobId::new(12), &[]).steps,
+            vec![Step::Trash {
+                place: p("/c/report.pdf")
+            }]
+        );
+    }
+
+    #[test]
     fn a_record_travels_as_json() {
         let native = Place::parse(if cfg!(windows) { r"D:\b\x" } else { "/b/x" }).unwrap();
         let record = UndoRecord {
