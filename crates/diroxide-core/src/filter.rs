@@ -48,12 +48,12 @@ mod tree;
 #[cfg(test)]
 mod tests;
 
-use crate::clock::Weekday;
+use crate::clock::{Clock, Weekday};
 use crate::pattern::CaseRule;
 
 pub use dates::{
-    CalendarDate, DateProblem, DateValue, DateWord, Duration, Precision, TimeUnit, month_from_name,
-    parse_duration, parse_iso,
+    CalendarDate, DateContext, DateProblem, DateValue, DateWord, Duration, Period, Precision,
+    TimeUnit, month_from_name, parse_duration, parse_iso,
 };
 pub use error::{
     Expected, FilterError, KINDS_SENTENCE, Keyword, PROBLEM_START, Problem, UNITS_SENTENCE,
@@ -134,15 +134,30 @@ impl Filter {
         &self.options
     }
 
-    /// The canonical sentence, which reads back to the same tree.
+    /// The canonical sentence, without the clock: date words are not
+    /// followed by their real days. It reads back to the same tree.
     pub fn sentence(&self) -> String {
-        self.read_back().sentence().to_owned()
+        readback::read_back(&self.expr, &self.options, None)
+            .sentence()
+            .to_owned()
     }
 
-    /// Say filter: the sentence and the details line with exact byte
-    /// counts.
-    pub fn read_back(&self) -> ReadBack {
-        readback::read_back(&self.expr, &self.options)
+    /// Say filter, against the clock: the sentence with each date word's
+    /// real days ("modified last week, October 4 to 10"), and the details
+    /// line with exact byte counts and the moments durations reach back
+    /// to. It reads back to the same tree.
+    pub fn read_back(&self, clock: &dyn Clock) -> ReadBack {
+        self.read_back_at(self.dates(clock))
+    }
+
+    /// Say filter at a moment already read.
+    pub fn read_back_at(&self, dates: DateContext) -> ReadBack {
+        readback::read_back(&self.expr, &self.options, Some(dates))
+    }
+
+    /// The clock read once, with this filter's first day of the week.
+    pub fn dates(&self, clock: &dyn Clock) -> DateContext {
+        DateContext::new(clock, self.options.week_start)
     }
 
     /// Whether a `hidden` test shows hidden entries, which a panel that

@@ -1357,11 +1357,18 @@ impl<'a> Parser<'a> {
             return;
         }
         self.bump();
+        let spelled = |t: &Token| {
+            t.kind == Kind::Word && (month_from_name(&t.text).is_some() || is_digits(t))
+        };
         while let Some(token) = self.peek() {
+            // "to" belongs to the days only when a day or month follows,
+            // so "from last week, October 4 to 10 to today" keeps its
+            // second "to".
+            let to = token.is_word("to") && self.peek_at(1).is_some_and(spelled);
             let part = token.kind == Kind::Word
                 && (month_from_name(&token.text).is_some()
                     || is_digits(token)
-                    || token.is_word("to")
+                    || to
                     || token.is_word("am")
                     || token.is_word("pm")
                     || parse_clock_time(&token.text).is_some());

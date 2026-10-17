@@ -5,6 +5,7 @@
 use proptest::prelude::*;
 
 use super::*;
+use crate::clock::{FixedClock, Timestamp, UtcOffset};
 use crate::entry::EntryKind;
 use crate::error::Explain;
 use crate::sort::NameCase;
@@ -64,17 +65,35 @@ pub(super) fn problem(text: &str) -> FilterError {
     }
 }
 
+/// The moment the plan's examples were written: Sunday, October 11, 2026,
+/// 2:09 PM, Pacific daylight time.
+pub(super) fn written() -> FixedClock {
+    let offset = UtcOffset::from_hours(-7);
+    FixedClock::new(
+        Timestamp::from_civil(2026, 10, 11, 14, 9, 0, offset).unwrap(),
+        offset,
+    )
+}
+
 fn round_trips(text: &str) {
     let filter = parse(text);
-    let sentence = filter.sentence();
-    let again = Filter::parse(&sentence)
-        .unwrap_or_else(|e| panic!("{text} read back as {sentence}: {}", e.sentences()));
+    for sentence in [
+        filter.sentence(),
+        filter.read_back(&written()).sentence().to_owned(),
+    ] {
+        let again = Filter::parse(&sentence)
+            .unwrap_or_else(|e| panic!("{text} read back as {sentence}: {}", e.sentences()));
+        assert_eq!(
+            again.expr(),
+            filter.expr(),
+            "{text} read back as {sentence}"
+        );
+    }
     assert_eq!(
-        again.expr(),
-        filter.expr(),
-        "{text} read back as {sentence}"
+        parse(&filter.sentence()).sentence(),
+        filter.sentence(),
+        "{text}"
     );
-    assert_eq!(again.sentence(), sentence, "{text}");
 }
 
 #[test]
@@ -114,7 +133,7 @@ fn the_twenty_examples_parse_and_read_back_as_one_sentence() {
 fn read_backs(texts: &[&str]) -> String {
     let mut out = String::new();
     for text in texts {
-        let read_back = parse(text).read_back();
+        let read_back = parse(text).read_back(&written());
         out.push_str(&format!("typed: {text}\nsaid: {}\n", read_back.sentence()));
         if !read_back.details().is_empty() {
             out.push_str(&format!("details: {}\n", read_back.details_line()));
@@ -133,7 +152,7 @@ fn the_read_backs_snapshot() {
 #[test]
 fn every_first_clause_fits_one_braille_line() {
     for text in TWENTY.iter().chain(MORE.iter()) {
-        let read_back = parse(text).read_back();
+        let read_back = parse(text).read_back(&written());
         let clause = read_back.first_clause();
         assert!(
             clause.chars().count() <= crate::format::BRAILLE_CELLS,
@@ -151,20 +170,99 @@ fn every_first_clause_fits_one_braille_line() {
 
 #[test]
 fn byte_counts_go_on_the_details_line() {
-    let read_back = parse("size over 100 MB").read_back();
+    let clock = written();
+    let read_back = parse("size over 100 MB").read_back(&clock);
     assert_eq!(read_back.sentence(), "size over 100 MB");
     assert_eq!(read_back.details(), ["100 MB is 100,000,000 bytes."]);
-    let read_back = parse("size between 1 KiB and 1 MiB").read_back();
+    let read_back = parse("size between 1 KiB and 1 MiB").read_back(&clock);
     assert_eq!(
         read_back.details_line(),
         "1 KiB is 1,024 bytes. 1 MiB is 1,048,576 bytes."
     );
-    assert!(parse("size over 500").read_back().details().is_empty());
+    assert!(
+        parse("size over 500")
+            .read_back(&clock)
+            .details()
+            .is_empty()
+    );
     assert_eq!(parse("size over 500").sentence(), "size over 500 bytes");
-    let read_back = parse("size over 1.5 GiB or size under 1.5 GiB").read_back();
+    let read_back = parse("size over 1.5 GiB or size under 1.5 GiB").read_back(&clock);
     assert_eq!(read_back.details(), ["1.5 GiB is 1,610,612,736 bytes."]);
-    let read_back = parse("content:\"x\" first 64 KB").read_back();
+    let read_back = parse("content:\"x\" first 64 KB").read_back(&clock);
     assert_eq!(read_back.details(), ["64 KB is 64,000 bytes."]);
+}
+
+#[test]
+fn date_words_read_back_with_their_real_days() {
+    let clock = written();
+    let said = |text: &str| parse(text).read_back(&clock).sentence().to_owned();
+    assert_eq!(said("modified today"), "modified today, October 11, 2026");
+    assert_eq!(
+        said("modified last week"),
+        "modified last week, October 4 to 10"
+    );
+    assert_eq!(
+        said("modified this week"),
+        "modified this week, October 11 to 17"
+    );
+    assert_eq!(
+        said("created yesterday"),
+        "created yesterday, October 10, 2026"
+    );
+    assert_eq!(
+        said("modified this month"),
+        "modified this month, October 2026"
+    );
+    assert_eq!(
+        said("modified last month"),
+        "modified last month, September 2026"
+    );
+    assert_eq!(said("modified last year"), "modified last year, 2025");
+    assert_eq!(
+        said("modified since last week"),
+        "modified since last week, October 4 to 10"
+    );
+    // A range of date words keeps the sentence short and puts the days on
+    // the details line.
+    let read_back = parse("modified from last week to today").read_back(&clock);
+    assert_eq!(read_back.sentence(), "modified from last week to today");
+    assert_eq!(
+        read_back.details(),
+        [
+            "Last week is October 4 to 10.",
+            "Today is October 11, 2026."
+        ]
+    );
+    let read_back = parse("modified within 3 days").read_back(&clock);
+    assert_eq!(
+        read_back.details(),
+        ["3 days ago: October 8, 2026, 2:09 PM."]
+    );
+    // A Monday start spells other days.
+    let monday = FilterOptions {
+        week_start: Weekday::Monday,
+        ..FilterOptions::default()
+    };
+    let filter = Filter::parse_with("modified last week", &monday).unwrap();
+    assert_eq!(
+        filter.read_back(&clock).sentence(),
+        "modified last week, September 28 to October 4"
+    );
+    // The days read back as nothing more, even the long forms.
+    for text in [
+        "modified last week, October 4 to 10",
+        "modified last week, September 27 to October 3",
+        "modified last week, December 27, 2026 to January 2, 2027",
+        "modified last week, December 20 to 26, 2026",
+        "modified from last week, October 4 to 10 to today, October 11, 2026",
+        "modified this year, 2026 and size over 1 MB",
+    ] {
+        let filter = parse(text);
+        assert!(
+            !filter.sentence().contains("October"),
+            "{text} kept its days in the tree"
+        );
+    }
 }
 
 #[test]
@@ -688,6 +786,11 @@ proptest! {
             .map_err(|e| TestCaseError::fail(format!("{sentence}: {}", e.sentences())))?;
         prop_assert_eq!(again.expr(), filter.expr(), "{} read back as {}", text, sentence);
         prop_assert_eq!(again.sentence(), sentence);
+        // Said against the clock, with the real days, it is the same tree.
+        let spoken = filter.read_back(&written()).sentence().to_owned();
+        let again = Filter::parse(&spoken)
+            .map_err(|e| TestCaseError::fail(format!("{spoken}: {}", e.sentences())))?;
+        prop_assert_eq!(again.expr(), filter.expr(), "{} said as {}", text, spoken);
     }
 
     #[test]

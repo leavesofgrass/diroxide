@@ -9,7 +9,7 @@
 use crate::sort::NameCase;
 
 use super::FilterOptions;
-use super::dates::{DateValue, Precision};
+use super::dates::{DateContext, DateValue, Duration, Precision};
 use super::parse::default_op;
 use super::token::split_head;
 use super::tree::{
@@ -128,11 +128,44 @@ pub(crate) fn quoted(value: &str) -> String {
 /// Writes the sentence.
 pub(crate) struct Writer<'a> {
     pub(crate) options: &'a FilterOptions,
+    pub(crate) dates: Option<DateContext>,
     pub(crate) out: String,
     pub(crate) details: Vec<String>,
 }
 
+/// A phrase with its first letter capital: "Last week".
+fn capital(phrase: &str) -> String {
+    let mut chars = phrase.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
 impl Writer<'_> {
+    fn detail(&mut self, detail: String) {
+        if !self.details.contains(&detail) {
+            self.details.push(detail);
+        }
+    }
+
+    /// The real days of a date word, on the details line: "Last week is
+    /// October 4 to 10."
+    fn date_detail(&mut self, value: &DateValue) {
+        if let (Some(dates), DateValue::Word(word)) = (self.dates, value) {
+            let detail = format!("{} is {}.", capital(word.words()), dates.spelled(*word));
+            self.detail(detail);
+        }
+    }
+
+    /// When a duration ago was, on the details line: "3 days ago:
+    /// October 8, 2026, 2:09 PM."
+    fn duration_detail(&mut self, duration: &Duration) {
+        if let Some(dates) = self.dates {
+            let detail = format!("{duration} ago: {}.", dates.moment(dates.ago(duration)));
+            self.detail(detail);
+        }
+    }
+
     /// Notes an amount's exact byte count for the details line.
     fn count(&mut self, amount: &Amount) {
         let (Some(unit), Some(bytes)) = (amount.unit, amount.value()) else {
@@ -141,10 +174,7 @@ impl Writer<'_> {
         if unit == SizeUnit::Bytes {
             return;
         }
-        let detail = format!("{amount} is {} bytes.", thousands(bytes));
-        if !self.details.contains(&detail) {
-            self.details.push(detail);
-        }
+        self.detail(format!("{amount} is {} bytes.", thousands(bytes)));
     }
 
     pub(crate) fn expr(&mut self, expr: &Expr) {
@@ -336,14 +366,25 @@ impl Writer<'_> {
             | DateOp::Before(value)
             | DateOp::Since(value)
             | DateOp::After(value)
-            | DateOp::OnOrBefore(value) => self.date_value(value),
+            | DateOp::OnOrBefore(value) => {
+                self.date_value(value);
+                // The real days follow the word: "last week, October 4
+                // to 10".
+                if let (Some(dates), DateValue::Word(word)) = (self.dates, value) {
+                    self.out.push_str(", ");
+                    self.out.push_str(&dates.spelled(*word));
+                }
+            }
             DateOp::Between(low, high) => {
                 self.date_value(low);
                 self.out.push_str(" to ");
                 self.date_value(high);
+                self.date_detail(low);
+                self.date_detail(high);
             }
             DateOp::Within(duration) | DateOp::OlderThan(duration) => {
                 self.out.push_str(&duration.to_string());
+                self.duration_detail(duration);
             }
         }
     }
@@ -356,10 +397,16 @@ impl Writer<'_> {
     }
 }
 
-/// A tree read back.
-pub(crate) fn read_back(expr: &Expr, options: &FilterOptions) -> ReadBack {
+/// A tree read back; with a date context, date words are followed by
+/// their real days.
+pub(crate) fn read_back(
+    expr: &Expr,
+    options: &FilterOptions,
+    dates: Option<DateContext>,
+) -> ReadBack {
     let mut writer = Writer {
         options,
+        dates,
         out: String::new(),
         details: Vec::new(),
     };

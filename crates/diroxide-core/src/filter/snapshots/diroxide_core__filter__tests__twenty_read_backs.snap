@@ -23,17 +23,18 @@ said: size from 1 KiB to 1 MiB
 details: 1 KiB is 1,024 bytes. 1 MiB is 1,048,576 bytes.
 
 typed: modified today
-said: modified today
+said: modified today, October 11, 2026
 
 typed: modified last week
-said: modified last week
+said: modified last week, October 4 to 10
 
 typed: ext pdf and modified within 3 days
 said: extension is pdf and modified within 3 days
+details: 3 days ago: October 8, 2026, 2:09 PM.
 
 typed: modified older than 1 year and size over 1 GB
 said: modified older than 1 year and size over 1 GB
-details: 1 GB is 1,000,000,000 bytes.
+details: 1 year ago: October 11, 2025, 2:09 PM. 1 GB is 1,000,000,000 bytes.
 
 typed: kind folder and empty
 said: kind is folder and empty
