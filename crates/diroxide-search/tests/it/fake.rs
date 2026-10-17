@@ -4,13 +4,13 @@
 //! a count of the calls, so a test can see that no thread is still
 //! walking after a search returns. It never touches a disk.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Cursor, Read};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use diroxide_core::{Entry, EntryKind, Link, Place, Timestamp};
+use diroxide_core::{Attributes, Entry, EntryKind, Link, Place, Timestamp};
 use diroxide_vfs::{
     AttributeChange, Capabilities, FileWriter, OpContext, Provider, Registry, VfsError, WriteMode,
 };
@@ -34,6 +34,8 @@ pub struct Fake {
     pub delay: Mutex<Duration>,
     /// A folder whose listing waits this long.
     pub stall: Mutex<Option<(String, Duration)>>,
+    /// Files whose data is not on this computer.
+    online: Mutex<BTreeSet<String>>,
     calls: AtomicU64,
 }
 
@@ -80,6 +82,11 @@ impl Fake {
     /// Makes a file and its folders.
     pub fn file(&self, path: &str, bytes: &[u8]) {
         self.add(path, Node::File(bytes.to_vec(), WHEN));
+    }
+
+    /// Marks a file as online only, as a cloud placeholder is.
+    pub fn online_only(&self, path: &str) {
+        self.online.lock().unwrap().insert(path.to_owned());
     }
 
     /// Makes a link.
@@ -144,6 +151,9 @@ impl Fake {
             }
         };
         entry.hidden = hidden;
+        if self.online.lock().unwrap().contains(path) {
+            entry.attributes = Some(Attributes::Windows(0x40_0000));
+        }
         entry
     }
 }

@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
+# Content search reads UTF-16 files that start with a byte-order mark.
+encoding_rs.workspace = true
 # ripgrep's parallel walker, with its standard filters off (the plan's
 # section 5.5 and R14): diroxide decides hidden entries itself.
 ignore.workspace = true

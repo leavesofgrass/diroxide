@@ -9,6 +9,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Duration;
 
 use diroxide_core::format::grouped;
+use diroxide_core::{Entry, Place};
 use diroxide_vfs::{CancelToken, OpContext};
 
 use crate::summary::counted;
@@ -34,6 +35,16 @@ impl<F: FnMut(crate::SearchHit)> SearchSink for FnSink<F> {
         (self.0)(hit);
         ControlFlow::Continue(())
     }
+}
+
+/// Asked before a content search reads a file whose data is not on this
+/// computer, when the scope says to read such files: reading would
+/// download it. Called on a search thread, which waits for the answer;
+/// the app asks the owner once and keeps the answer for the rest of the
+/// search.
+pub trait OnlineGuard: Send + Sync {
+    /// Whether to read this online-only file.
+    fn allow(&self, place: &Place, entry: &Entry) -> bool;
 }
 
 /// A pause shared by the search's threads.
@@ -69,6 +80,7 @@ impl Pause {
 pub struct SearchControl {
     cancel: CancelToken,
     pause: Pause,
+    guard: Option<Arc<dyn OnlineGuard>>,
 }
 
 impl fmt::Debug for SearchControl {
@@ -76,6 +88,7 @@ impl fmt::Debug for SearchControl {
         f.debug_struct("SearchControl")
             .field("cancelled", &self.is_cancelled())
             .field("paused", &self.is_paused())
+            .field("guard", &self.guard.is_some())
             .finish()
     }
 }
@@ -90,6 +103,13 @@ impl SearchControl {
     /// job's.
     pub fn with_cancel(mut self, cancel: CancelToken) -> Self {
         self.cancel = cancel;
+        self
+    }
+
+    /// The same control, asking `guard` before an online-only file is
+    /// read.
+    pub fn with_guard(mut self, guard: Arc<dyn OnlineGuard>) -> Self {
+        self.guard = Some(guard);
         self
     }
 
@@ -135,6 +155,14 @@ impl SearchControl {
     pub(crate) fn checkpoint(&self) -> bool {
         self.pause.wait(&self.cancel);
         self.cancel.is_cancelled()
+    }
+
+    /// Whether an online-only file may be read: no guard means yes, since
+    /// the scope already said to read them.
+    pub(crate) fn allows(&self, place: &Place, entry: &Entry) -> bool {
+        self.guard
+            .as_ref()
+            .is_none_or(|guard| guard.allow(place, entry))
     }
 }
 

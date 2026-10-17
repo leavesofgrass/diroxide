@@ -390,6 +390,11 @@ fn main() -> Outcome<()> {
             "search-attributes",
             "ext txt and size over 1 KB and modified within 3 years",
         ),
+        ("search-content", "content \"quokkaline\""),
+        ("search-content-none", "content \"zebracrumb\""),
+        ("search-content-every", "content \"marmotfield\""),
+        ("search-content-regex", "content regex \"quokka[a-z]+\""),
+        ("search-content-case", "anycase content \"MARMOTFIELD\""),
     ] {
         let mut runs = Vec::new();
         let mut firsts = Vec::new();

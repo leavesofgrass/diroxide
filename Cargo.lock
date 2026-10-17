@@ -1040,6 +1040,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "diroxide-core",
  "diroxide-vfs",
+ "encoding_rs",
  "ignore",
  "regex",
  "tempfile",

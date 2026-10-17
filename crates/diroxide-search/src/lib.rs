@@ -11,9 +11,19 @@
 //! The [`SearchSummary`] says in words what was found and everything that
 //! was skipped, so nothing is filtered silently.
 //!
+//! A `content` test reads files the way ripgrep does: a NUL byte makes a
+//! file binary (skipped and counted), a UTF-16 file with its byte-order
+//! mark is read as text, the byte limit stops the read, `^` and `$` are a
+//! line's ends with or without a carriage return, and case follows the
+//! filter. Hits carry their first matching line and the count of the
+//! others, or one hit per line ([`RowShape`]). An online-only file is
+//! skipped and counted unless the scope says to read such files, and then
+//! an [`OnlineGuard`] is asked first.
+//!
 //! Dirsize walks with filters off. Duplicates go by size, then a fast
 //! hash, then a full comparison (alpha.8).
 
+mod content;
 mod engine;
 mod hit;
 mod local_entry;
@@ -33,7 +43,7 @@ pub use query::{
     ContentPattern, DEFAULT_ROW_CAP, NamePattern, OnlineOnly, RowShape, SNAPSHOT_FOLDERS, Scope,
     SearchQuery, quoted,
 };
-pub use sink::{FnSink, SearchControl, SearchProgress, SearchSink};
+pub use sink::{FnSink, OnlineGuard, SearchControl, SearchProgress, SearchSink};
 pub use summary::{SearchSummary, Skips};
 
 /// The total size of a folder.
@@ -234,22 +244,39 @@ mod tests {
     }
 
     #[test]
-    fn content_is_left_undecided_until_it_is_read() {
+    fn content_is_read_and_its_line_carried() {
         let root = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
-        let query = SearchQuery::names(root, "lib.rs")
-            .with_content(&ContentPattern::literal("x", false))
+        let query = SearchQuery::names(root.clone(), "lib.rs")
+            .with_content(&ContentPattern::literal("//! Search, dirsize", true))
             .unwrap();
-        let mut hits = 0;
+        let mut hits = Vec::new();
         let summary = search(
             &query,
             &Registry::with_local(),
             &OpContext::new(),
-            &mut |_| hits += 1,
+            &mut |hit| hits.push(hit),
         )
         .unwrap();
-        assert_eq!(hits, 0);
+        assert_eq!(hits.len(), 1, "{summary:?}");
+        let line = hits[0].line.as_ref().unwrap();
+        assert_eq!(line.line_number, 1);
+        assert!(line.words().starts_with("line 1: //! Search, dirsize"));
+        assert!(summary.files_read >= 1 && summary.unknown.is_empty());
+        // Made at run time, so the words are in no file, this one included.
+        let absent = format!("{}{}", "zebra", "crumbquux");
+        let missing = SearchQuery::names(root, "lib.rs")
+            .with_content(&ContentPattern::literal(&absent, true))
+            .unwrap();
+        let summary = search(
+            &missing,
+            &Registry::with_local(),
+            &OpContext::new(),
+            &mut |_| {},
+        )
+        .unwrap();
+        assert_eq!(summary.hits, 0);
         assert!(
-            summary
+            !summary
                 .unknown
                 .iter()
                 .any(|(why, _)| *why == Unknown::ContentNotRead),

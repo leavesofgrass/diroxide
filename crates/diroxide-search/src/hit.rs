@@ -175,6 +175,51 @@ fn top_name(place: &Place) -> String {
     }
 }
 
+/// A line's text for a row: tabs as spaces, hidden characters as question
+/// marks, leading and trailing spaces trimmed, and a long line cut to
+/// `width` characters around the match. Returns the text and the match's
+/// place in it.
+pub(crate) fn excerpt(line: &str, matched: Range<usize>, width: usize) -> (String, Range<usize>) {
+    let start = matched.start.min(line.len());
+    let end = matched.end.clamp(start, line.len());
+    // Characters before the match kept in a cut line.
+    const LEAD: usize = 20;
+    let total = line.chars().count();
+    let (from, to) = if total <= width {
+        (0, line.len())
+    } else {
+        let before = line[..start].chars().count();
+        let first = before.saturating_sub(LEAD);
+        let from = line.char_indices().nth(first).map_or(0, |(i, _)| i);
+        let to = line[from..]
+            .char_indices()
+            .nth(width)
+            .map_or(line.len(), |(i, _)| from + i);
+        (from, to)
+    };
+    let mut text = String::with_capacity(to - from);
+    let mut new_start = None;
+    let mut new_end = None;
+    for (index, c) in line[from..to].char_indices() {
+        let at = from + index;
+        if at == start {
+            new_start = Some(text.len());
+        }
+        if at == end {
+            new_end = Some(text.len());
+        }
+        let shown = if c == '\t' { ' ' } else { c };
+        text.push_str(&display_name(shown.encode_utf8(&mut [0; 4])));
+    }
+    let new_start = new_start.unwrap_or(text.len());
+    let new_end = new_end.unwrap_or(text.len()).max(new_start);
+    let trimmed_start = text.len() - text.trim_start().len();
+    let trimmed = text.trim().to_owned();
+    let shift = |at: usize| at.saturating_sub(trimmed_start).min(trimmed.len());
+    let range = shift(new_start)..shift(new_end);
+    (trimmed, range)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,5 +258,17 @@ mod tests {
         let drive = place(r"D:\");
         let top = SearchHit::new(place(r"D:\a\b.txt"), Entry::new("b.txt", EntryKind::File));
         assert_eq!(top.folder_words(Some(&drive)), r"in D:\a");
+    }
+
+    #[test]
+    fn long_lines_are_cut_around_the_match() {
+        let line = format!("{}total due{}", "x".repeat(500), "y".repeat(500));
+        let (text, range) = excerpt(&line, 500..509, 120);
+        assert_eq!(&text[range.clone()], "total due");
+        assert!(text.chars().count() <= 120);
+        assert_eq!(range.start, 20);
+        let (text, range) = excerpt("\t  total\tdue\u{202e}  ", 3..12, 120);
+        assert_eq!(text, "total due?");
+        assert_eq!(&text[range], "total due");
     }
 }
