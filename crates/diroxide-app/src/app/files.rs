@@ -144,7 +144,7 @@ fn named(places: &[(Place, String)]) -> Vec<String> {
 impl App {
     /// The marked entries, or the focused one, frozen now: their places,
     /// and the plan's first line when the focused row is not among them.
-    fn frozen(&self, side: Side) -> Option<(Vec<Place>, Option<String>)> {
+    pub(super) fn frozen(&self, side: Side) -> Option<(Vec<Place>, Option<String>)> {
         let panel = self.panel(side);
         let frozen = panel.list().freeze();
         if frozen.ids.is_empty() {
@@ -820,7 +820,12 @@ impl App {
             skipped: named(&report.skipped),
             warnings: named(&report.warnings),
         });
-        if report.kind != JobKind::Undo && report.undo.origin != JobOrigin::Undo {
+        // A job that made, moved or trashed nothing (Test archive) leaves
+        // the last undo where it was.
+        if report.kind != JobKind::Undo
+            && report.undo.origin != JobOrigin::Undo
+            && !(report.kind == JobKind::TestArchive && report.undo.is_empty())
+        {
             self.undo.record(report.undo.clone());
         }
         let missing = report

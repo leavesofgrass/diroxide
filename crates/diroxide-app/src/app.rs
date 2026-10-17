@@ -16,6 +16,7 @@
 //! Wave 1 (W1d) owns this module.
 
 mod archive;
+mod archive_forms;
 mod archive_jobs;
 mod dialogs;
 mod files;
@@ -289,6 +290,19 @@ enum Purpose {
     },
     /// Run an archive job on Yes.
     RunArchive(Box<crate::request::ArchivePlan>),
+    /// The pack dialog: its settings.
+    PackForm(Box<archive_forms::PackForm>),
+    /// The pack dialog's name field.
+    PackName(Box<archive_forms::PackForm>),
+    /// A pack setting's choices.
+    PackChoice(Box<archive_forms::PackForm>, archive_forms::PackChoice),
+    /// A new archive password, typed twice.
+    NewPassword {
+        form: Box<archive_forms::PackForm>,
+        first: Option<diroxide_core::Secret>,
+    },
+    /// The unpack dialog: its settings.
+    UnpackForm(Box<archive_forms::UnpackForm>),
     /// The settings list.
     Settings,
     /// A setting's choices.
@@ -453,6 +467,9 @@ enum Action {
     Enter,
     Into,
     OpenAsArchive,
+    Pack,
+    Unpack,
+    TestArchive,
     Up,
     Reload,
     Back,
@@ -518,7 +535,7 @@ enum Action {
     Accept,
 }
 
-const ROUTES: [(CommandId, Action); 93] = [
+const ROUTES: [(CommandId, Action); 96] = [
     (ids::QUIT, Action::Quit),
     (ids::QUIT_TO_FOLDER, Action::QuitToFolder),
     (ids::QUIT_KEEP_FOLDER, Action::QuitKeepFolder),
@@ -552,6 +569,9 @@ const ROUTES: [(CommandId, Action); 93] = [
     (ids::ENTER, Action::Enter),
     (ids::INTO, Action::Into),
     (ids::OPEN_AS_ARCHIVE, Action::OpenAsArchive),
+    (ids::PACK, Action::Pack),
+    (ids::UNPACK, Action::Unpack),
+    (ids::TEST_ARCHIVE, Action::TestArchive),
     (ids::UP, Action::Up),
     (ids::RELOAD, Action::Reload),
     (ids::BACK, Action::Back),
@@ -1125,6 +1145,9 @@ impl App {
             Action::Enter => self.enter(),
             Action::Into => self.into(),
             Action::OpenAsArchive => self.open_as_archive(),
+            Action::Pack => self.pack_dialog(),
+            Action::Unpack => self.unpack_dialog(),
+            Action::TestArchive => self.test_archive(),
             Action::Up => self.up(),
             Action::Reload => self.reload(side),
             Action::Back => self.back(),

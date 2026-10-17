@@ -201,3 +201,108 @@ fn a_copy_into_an_archive_says_it_is_read_only() {
         ["Archives are read only here. Use Pack to make a new one."]
     );
 }
+
+#[test]
+fn the_pack_dialog_is_a_list_of_settings_and_its_question_starts_on_no() {
+    let dir = temp();
+    let demo = demo(dir.path());
+    fs::write(demo.join("main.rs"), "fn main() {}\n").unwrap();
+    fs::write(demo.join("report.md"), "# Report\n").unwrap();
+    let mut s = trash_session(dir.path(), &demo);
+    s.focus("main.rs");
+    s.key("space");
+    s.focus("report.md");
+    s.key("space");
+    let said = s.command(ids::PACK);
+    assert_eq!(said, ["Pack, Pack 2 items into demo.zip, 1 of 9"]);
+    let said = s.key("down");
+    assert_eq!(said, ["Name: demo.zip, 2 of 9"]);
+    let said = s.key("down");
+    assert_eq!(said, ["Format: zip, 3 of 9"]);
+    s.key("enter");
+    assert_eq!(s.dialog_title().as_deref(), Some("Format"));
+    s.key("down");
+    let said = s.key("enter");
+    assert!(
+        said.iter().any(|l| l.starts_with("Pack, Format: 7z")),
+        "{said:?}"
+    );
+    let said = s.key("up");
+    assert_eq!(said, ["Name: demo.7z, 2 of 9"]);
+    s.key("home");
+    let said = s.key("enter");
+    let question = said.last().cloned().unwrap_or_default();
+    assert_eq!(
+        question,
+        "Pack 2 items into demo.7z? No is the default. y or n"
+    );
+    let listing = match s.dialog() {
+        Some(diroxide_app::Dialog::Confirm { listing, .. }) => listing.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        listing
+            .iter()
+            .any(|l| l.starts_with("Format: 7z, level normal")),
+        "{listing:?}"
+    );
+    assert!(
+        listing
+            .iter()
+            .any(|l| l.starts_with("Where: the other panel, ")),
+        "{listing:?}"
+    );
+    let said = s.key("y");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Pack started: 2 items into demo.7z")),
+        "{said:?}"
+    );
+    assert!(said.iter().any(|l| l.contains("all good")), "{said:?}");
+    assert!(demo.join("out").join("demo.7z").exists());
+}
+
+#[test]
+fn unpack_and_test_archive_say_the_runners_lines() {
+    let dir = temp();
+    let demo = demo(dir.path());
+    let mut s = trash_session(dir.path(), &demo);
+    s.focus("course.zip");
+    let said = s.command(ids::TEST_ARCHIVE);
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Archive is sound: 10 members")),
+        "{said:?}"
+    );
+    assert_eq!(s.key("ctrl+z"), ["Nothing to undo"]);
+    let said = s.command(ids::UNPACK);
+    assert_eq!(said, ["Unpack, Unpack course.zip into out, 1 of 6"]);
+    let said = s.key("down");
+    assert!(said[0].starts_with("Where: the other panel, "), "{said:?}");
+    let said = s.key("down");
+    assert_eq!(
+        said,
+        ["Folder: made when several items are at the top, 3 of 6"]
+    );
+    let said = s.key("end");
+    assert_eq!(said, ["Links: left out, each one said, 6 of 6"]);
+    s.key("home");
+    let said = s.key("enter");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Unpack 10 members into course? No is the default. y or n")
+    );
+    let said = s.key("y");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Unpack finished: 10 done")),
+        "{said:?}"
+    );
+    assert!(
+        demo.join("out")
+            .join("course")
+            .join("week1")
+            .join("a.txt")
+            .exists()
+    );
+}

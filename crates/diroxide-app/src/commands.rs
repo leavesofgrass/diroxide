@@ -206,6 +206,12 @@ pub mod ids {
         INTO = "panel.into";
         /// Open the focused file as an archive, by its bytes.
         OPEN_AS_ARCHIVE = "archive.open-as";
+        /// Pack the selection into a new archive.
+        PACK = "archive.pack";
+        /// Unpack the focused archive.
+        UNPACK = "archive.unpack";
+        /// Test the focused archive.
+        TEST_ARCHIVE = "archive.test";
         /// Go up one folder.
         UP = "panel.up";
         /// List the place again.
@@ -351,7 +357,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 93] = [
+pub static CATALOG: [CommandInfo; 96] = [
     command(
         ids::QUIT,
         "Quit",
@@ -615,6 +621,30 @@ pub static CATALOG: [CommandInfo; 93] = [
         Panel,
         &[],
         &[],
+    ),
+    command(
+        ids::PACK,
+        "Pack",
+        "Packs the selection into a new archive in the other panel, after a list of its settings.",
+        Panel,
+        &[],
+        &["alt+f5"],
+    ),
+    command(
+        ids::UNPACK,
+        "Unpack",
+        "Unpacks the focused archive into the other panel, after a list of its settings.",
+        Panel,
+        &[],
+        &["alt+f9"],
+    ),
+    command(
+        ids::TEST_ARCHIVE,
+        "Test archive",
+        "Reads every member of the focused archive and checks it, writing nothing.",
+        Panel,
+        &[],
+        &["alt+shift+f9"],
     ),
     command(
         ids::UP,

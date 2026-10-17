@@ -161,7 +161,17 @@ impl App {
         if let Some(note) = self.flows.get(&job).and_then(|f| f.note.clone()) {
             listing.push(note);
         }
-        listing.extend(plan.rows(true));
+        let other_panel = match plan.as_ref() {
+            ArchivePlan::Pack { plan: pack, .. } => {
+                let other = self
+                    .flows
+                    .get(&job)
+                    .map(|flow| self.panel(flow.side.other()).place().clone());
+                pack.destination.parent() == other
+            }
+            ArchivePlan::Unpack { .. } => true,
+        };
+        listing.extend(plan.rows(other_panel));
         self.open_dialog(
             Dialog::Confirm {
                 question,

@@ -324,6 +324,21 @@ impl App {
                 rest,
             } => effects.extend(self.plan_question_answered(plan, &question, rest, false)),
             Purpose::RunArchive(plan) => effects.extend(self.archive_declined(&plan)),
+            Purpose::PackName(form) => {
+                effects.extend(self.pack_row_reopen(*form, "name"));
+            }
+            Purpose::PackChoice(form, _) => {
+                effects.extend(self.pack_row_reopen(*form, "format"));
+            }
+            Purpose::NewPassword { form, .. } => {
+                effects.extend(self.new_password_cancelled(*form));
+            }
+            Purpose::PackForm(_) => {
+                effects.push(self.say(Message::info("Nothing was packed.")));
+            }
+            Purpose::UnpackForm(_) => {
+                effects.push(self.say(Message::info("Nothing was unpacked.")));
+            }
             Purpose::Filter(side, previous) => {
                 let clock = std::sync::Arc::clone(&self.clock);
                 self.panels[side.index()].set_filter(previous, clock.as_ref());
@@ -570,6 +585,26 @@ impl App {
                 self.close_top()
             }
             Purpose::Secret { ask } => self.secret_enter(ask),
+            Purpose::NewPassword { form, first } => {
+                let typed = match self.dialogs.last() {
+                    Some((_, Dialog::Secret { typed, .. })) => typed.clone(),
+                    _ => return Vec::new(),
+                };
+                self.new_password_entered(*form, first, typed)
+            }
+            Purpose::PackForm(form) => match row {
+                Some(row) => self.pack_row(*form, &row),
+                None => Vec::new(),
+            },
+            Purpose::PackChoice(form, choice) => match row {
+                Some(row) => self.pack_chose(*form, choice, &row),
+                None => Vec::new(),
+            },
+            Purpose::PackName(form) => self.pack_named(*form, &text),
+            Purpose::UnpackForm(form) => match row {
+                Some(row) => self.unpack_row(*form, &row),
+                None => Vec::new(),
+            },
             Purpose::GoPath(side) => {
                 if in_list && let Some(row) = row {
                     return self.take_candidate(&row);
@@ -682,9 +717,13 @@ impl App {
     }
 
     fn secret_key(&mut self, key: Key) -> Vec<Effect> {
-        let Some(Purpose::Secret { ask }) = self.top_purpose().cloned() else {
+        let purpose = self.top_purpose().cloned();
+        if !matches!(
+            purpose,
+            Some(Purpose::Secret { .. } | Purpose::NewPassword { .. })
+        ) {
             return Vec::new();
-        };
+        }
         let show_toggle = key.mods.alt && !key.mods.ctrl && matches!(key.code, KeyCode::Char('s'));
         if show_toggle {
             let mut now_shown = false;
@@ -712,7 +751,10 @@ impl App {
                 }
                 vec![Effect::Redraw(Redraw::All)]
             }
-            KeyCode::Enter if key.mods.is_empty() => self.secret_enter(ask),
+            KeyCode::Enter if key.mods.is_empty() => match purpose {
+                Some(Purpose::Secret { ask }) => self.secret_enter(ask),
+                _ => self.accept(),
+            },
             KeyCode::Escape => self.dialog_escape(),
             _ => {
                 let layers = [Layer::Dialog, Layer::Global];
@@ -1237,6 +1279,7 @@ impl App {
                 }
                 match self.top_purpose().cloned() {
                     Some(Purpose::Secret { ask }) => self.secret_enter(ask),
+                    Some(Purpose::NewPassword { .. }) => self.accept(),
                     _ => Vec::new(),
                 }
             }

@@ -23,7 +23,7 @@ command = "panel.enter"
 access = "o"
 
 [[menu.item]]
-command = "archive.open-as"
+menu = "archive"
 access = "a"
 
 [[menu.item]]
@@ -86,6 +86,28 @@ access = "k"
 [[menu.item]]
 command = "app.quit"
 access = "q"
+
+[[menu]]
+id = "archive"
+title = "Archive"
+access = "a"
+bar = false
+
+[[menu.item]]
+command = "archive.pack"
+access = "p"
+
+[[menu.item]]
+command = "archive.unpack"
+access = "u"
+
+[[menu.item]]
+command = "archive.test"
+access = "t"
+
+[[menu.item]]
+command = "archive.open-as"
+access = "o"
 
 [[menu]]
 id = "edit"
