@@ -75,6 +75,15 @@ pub enum Question {
         /// What is asked.
         request: SecretRequest,
     },
+    /// A content search reached a file whose data is not on this computer,
+    /// and the scope says to read such files: reading downloads it. Asked
+    /// once a search; the answer is [`Reply::Confirm`].
+    OnlineOnly {
+        /// The file's name.
+        name: String,
+        /// Its size, when known.
+        size: Option<u64>,
+    },
     /// An archive limit's question ("Expands to 40 GB from 40 KB. Unpack?
     /// y or n"), asked once per kind in a job, starting on No; the answer
     /// is [`Reply::Confirm`].
@@ -92,6 +101,7 @@ impl Question {
         match self {
             Question::Conflict { job, .. } | Question::Error { job, .. } => Some(*job),
             Question::Secret { job, .. } | Question::Limit { job, .. } => *job,
+            Question::OnlineOnly { .. } => None,
         }
     }
 }
@@ -176,6 +186,14 @@ pub enum SpawnKind {
     CommandLine(String),
     /// The editor, on one file.
     Editor(Place),
+    /// The editor, on one file, at a line (a search result): editors that
+    /// take `+LINE` get it; others open the file.
+    EditorAt {
+        /// The file.
+        file: Place,
+        /// The line, from 1.
+        line: u64,
+    },
     /// A program the tools registry found, with its arguments and no
     /// shell: "Open in textweaver" (plan commit 64).
     Program {
@@ -203,6 +221,18 @@ pub struct Spawn {
     pub cursor: Option<Place>,
     /// The marked entries, or the focused one (`DIRO_SELECTION_FILE`).
     pub selection: Vec<Place>,
+}
+
+/// The app's clock, handed to a worker that reads date words (a content
+/// filter, a search), so "today" means the app's day. Two are equal when
+/// they are the same clock.
+#[derive(Clone, Debug)]
+pub struct SharedClock(pub std::sync::Arc<dyn diroxide_core::Clock>);
+
+impl PartialEq for SharedClock {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 /// A request from the app to its runtime. See the module documentation.
@@ -352,6 +382,125 @@ pub enum Request {
     },
     /// Stop watching for arriving files (W3t).
     StopArrivals,
+    /// Run a search on a worker, stopping the one before (W3a): its hits
+    /// come back in the order found as
+    /// [`AppEvent::SearchFound`](crate::AppEvent::SearchFound), its
+    /// progress as [`AppEvent::SearchProgress`](crate::AppEvent::SearchProgress),
+    /// and its end as [`AppEvent::SearchDone`](crate::AppEvent::SearchDone).
+    Search {
+        /// The search's number.
+        search: u64,
+        /// What to look for and where.
+        query: Box<diroxide_search::SearchQuery>,
+        /// The app's clock, for the date words.
+        clock: SharedClock,
+    },
+    /// Look up a label's items for the results lister (W3a); answered as
+    /// [`AppEvent::LabeledFound`](crate::AppEvent::LabeledFound).
+    StatPlaces {
+        /// The search's number.
+        search: u64,
+        /// The places.
+        places: Vec<Place>,
+    },
+    /// Compare two files on a worker (W3a); answered as
+    /// [`AppEvent::Compared`](crate::AppEvent::Compared), with
+    /// [`AppEvent::CompareProgress`](crate::AppEvent::CompareProgress)
+    /// meanwhile.
+    Compare {
+        /// The request.
+        request: diroxide_core::RequestId,
+        /// The file read from.
+        before: Place,
+        /// The file read to.
+        after: Place,
+        /// What it ignores, its limits.
+        options: diroxide_diff::FileOptions,
+    },
+    /// Write a saved search to the state folder's `saved` folder (W3a).
+    SaveSearch(Box<diroxide_search::Saved>),
+    /// Read the saved searches (W3a); answered as
+    /// [`AppEvent::SavedListed`](crate::AppEvent::SavedListed).
+    ListSaved {
+        /// The request.
+        request: diroxide_core::RequestId,
+    },
+    /// Delete a saved search's file, only inside the `saved` folder (W3a).
+    DeleteSaved(std::path::PathBuf),
+    /// Count a folder's Space list (W3a); answered as
+    /// [`AppEvent::SpaceListed`](crate::AppEvent::SpaceListed).
+    SpaceList {
+        /// The request.
+        request: diroxide_core::RequestId,
+        /// The folder.
+        place: Place,
+        /// By items, by kind or by age.
+        grouping: diroxide_search::Grouping,
+        /// The app's clock, for the ages.
+        clock: SharedClock,
+    },
+    /// Find the largest items below a folder (W3a); answered as
+    /// [`AppEvent::LargestFound`](crate::AppEvent::LargestFound).
+    Largest {
+        /// The results' search number.
+        search: u64,
+        /// The folder.
+        place: Place,
+        /// How many.
+        limit: usize,
+    },
+    /// Size folders (W3a); answered as
+    /// [`AppEvent::DirSized`](crate::AppEvent::DirSized).
+    DirSizes {
+        /// The request.
+        request: diroxide_core::RequestId,
+        /// The folders.
+        places: Vec<Place>,
+    },
+    /// Find the newest files (W3a); answered as
+    /// [`AppEvent::NewestFound`](crate::AppEvent::NewestFound).
+    Newest {
+        /// The results' search number.
+        search: u64,
+        /// Where.
+        scope: Box<diroxide_search::Scope>,
+        /// The day to look before, for Earlier day.
+        before: Option<diroxide_search::Day>,
+        /// The app's clock.
+        clock: SharedClock,
+    },
+    /// Stop the running search: its summary says where it stopped.
+    StopSearch,
+    /// Hold the running search (`true`) or let it go on (`false`).
+    PauseSearch(bool),
+    /// Check a result's file when its row takes the focus (W3a); answered
+    /// as [`AppEvent::StaleChecked`](crate::AppEvent::StaleChecked).
+    CheckStale {
+        /// The search.
+        search: u64,
+        /// The result's row.
+        row: String,
+        /// The result.
+        hit: Box<diroxide_search::SearchHit>,
+    },
+    /// Read the files of a panel's folder for its content filter, on a
+    /// worker (W3a): the filter is run over the folder alone, and the
+    /// names it matched come back as
+    /// [`AppEvent::FilterContents`](crate::AppEvent::FilterContents).
+    FilterContents {
+        /// The request, so a late answer to an old one is dropped.
+        request: diroxide_core::RequestId,
+        /// The panel.
+        side: Side,
+        /// The panel's folder.
+        place: Place,
+        /// The filter.
+        filter: Box<diroxide_core::filter::Filter>,
+        /// Whether hidden files are read too.
+        hidden: bool,
+        /// The app's clock, for the date words.
+        clock: SharedClock,
+    },
 }
 
 #[cfg(test)]

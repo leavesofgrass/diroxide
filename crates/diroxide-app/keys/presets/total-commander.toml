@@ -11,11 +11,11 @@
 # it); Ctrl+S is the filter, as Total Commander's quick filter is. F1 is
 # never a terminal key, so help stays on Shift+F1 and the question mark.
 #
-# Waiting for their commands (alpha.3, then these lines join the preset):
-#   search.find = ["alt+f7", "ctrl+f"]          find files
-#   dir.sizes = "ctrl+l"                         calculate occupied space
-#   select.same-extension, window = "alt+kp-plus"
-#   select.differences = "shift+f2"              compare directories
+# Joined with their commands in alpha.3 (W3a): Alt+F7 and Ctrl+F find
+# files, Ctrl+L calculates occupied space (Folder sizes; Alt+D is the
+# path here), Shift+F2 selects the differences (compare directories), and
+# in the window Alt with plus, on the keypad or the main row, selects the
+# same extension.
 # Later alphas: Ctrl+M multi-rename, Ctrl+T and Ctrl+W tabs, Ctrl+F8 and
 # Alt+F10 trees.
 
@@ -37,6 +37,9 @@ letters = "type-ahead"
 "archive.pack" = "alt+f5"
 "archive.unpack" = ["alt+f6", "alt+f9"]
 "archive.test" = "alt+shift+f9"
+"search.find" = ["alt+f7", "ctrl+f"]
+"dir.sizes" = "ctrl+l"
+"select.differences" = "shift+f2"
 
 [window.global]
 "app.quit" = "alt+f4"
@@ -59,3 +62,8 @@ letters = "type-ahead"
 "archive.pack" = "alt+f5"
 "archive.unpack" = ["alt+f6", "alt+f9"]
 "archive.test" = "alt+shift+f9"
+
+"search.find" = ["alt+f7", "ctrl+f"]
+"dir.sizes" = "ctrl+l"
+"select.differences" = "shift+f2"
+"select.same-extension" = ["alt+kp-plus", "alt+plus"]

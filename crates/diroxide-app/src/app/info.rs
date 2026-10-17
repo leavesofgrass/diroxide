@@ -82,6 +82,14 @@ impl App {
     /// Documents, 40 items"), then the focus and its position, any
     /// filter, the jobs' progress and the file clipboard.
     pub(super) fn say_status(&mut self) -> Vec<Effect> {
+        // The filter prompt says its text, how it reads and the count.
+        if let Some(line) = self.filter_prompt_status() {
+            return vec![self.say(Message::info(line))];
+        }
+        // The results lister says how the search stands first.
+        if let Some(line) = self.results_status() {
+            return vec![self.say(Message::info(line))];
+        }
         if let Some((_, dialog)) = self.dialogs.last() {
             let line = dialog.focus_line();
             return vec![self.say(Message::info(line))];
@@ -107,8 +115,8 @@ impl App {
         if let Some(row) = list.focused() {
             text.push_str(&format!(", on {}, {}", row.label, list.position_text()));
         }
-        if let Some(filter) = panel.filter() {
-            text.push_str(&format!(", filter {}", filter.text()));
+        if let Some(filter) = self.filter_title(side) {
+            text.push_str(&format!(", {filter}"));
         }
         for job in self.jobs.ids() {
             if let Some(detail) = self.jobs.detail(job) {
@@ -153,10 +161,16 @@ impl App {
     pub(super) fn say_key_bar(&mut self) -> Vec<Effect> {
         let viewer_bank = crate::menu::viewer_bank();
         let preview_bank = crate::menu::preview_bank();
+        let results_bank = crate::menu::results_bank();
+        let compare_bank = crate::menu::compare_bank();
         let bank = if self.viewer_open() {
             Some(&viewer_bank)
         } else if self.in_preview() {
             Some(&preview_bank)
+        } else if self.results_shown() {
+            Some(&results_bank)
+        } else if self.compare_shown() {
+            Some(&compare_bank)
         } else {
             self.active_bank()
         };

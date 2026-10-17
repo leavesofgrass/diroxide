@@ -512,6 +512,89 @@ pub mod ids {
         /// in it; again, or Cancel, stops.
         WATCH_FOLDER = "view.watch-folder";
     }
+
+    // The panel filter on the filter language (W3a, plan commit 35).
+    ids! {
+        /// Say the panel's filter read back, with its dates spelled.
+        SAY_FILTER = "view.say-filter";
+        /// Keep the panel's filter aside and show everything.
+        FILTER_STASH = "view.filter-stash";
+        /// Bring back the filter kept aside last.
+        FILTER_RESTORE = "view.filter-restore";
+        /// Show only the folders; again, the filter before it.
+        ONLY_FOLDERS = "view.only-folders";
+        /// Show only the files; again, the filter before it.
+        ONLY_FILES = "view.only-files";
+    }
+
+    // Selection on the filter language (W3a, plan commit 36).
+    ids! {
+        /// Select every entry of a kind or file-type group.
+        SELECT_BY_KIND = "select.by-kind";
+        /// Select by size, through the pattern prompt.
+        SELECT_BY_SIZE = "select.by-size";
+        /// Select by date, through the pattern prompt.
+        SELECT_BY_DATE = "select.by-date";
+        /// Select the focused entry's extension.
+        SELECT_SAME_EXTENSION = "select.same-extension";
+        /// Start a range, then mark it.
+        SELECT_RANGE = "select.range";
+        /// Select a number of rows from the focus.
+        SELECT_NEXT_ROWS = "select.next-rows";
+    }
+
+    // Search (W3a, plan commit 37).
+    ids! {
+        /// Find files: the search dialog (reserved for alpha.3).
+        FIND = "search.find";
+        /// The last search's results again.
+        SEARCH_RESULTS = "search.results";
+        /// Hold the running search, or let it go on.
+        SEARCH_PAUSE = "search.pause";
+        /// Show the focused result in its folder.
+        SEARCH_SHOW_IN_FOLDER = "search.show-in-folder";
+        /// Take the focused result out of the list, the file staying.
+        SEARCH_REMOVE_ROW = "search.remove-row";
+    }
+
+    // Saved searches, the Space list, sizes and newest files (W3a, plan
+    // commit 38).
+    ids! {
+        /// Save the last search under a name.
+        SEARCH_SAVE = "search.save";
+        /// The saved searches; Enter runs one.
+        SEARCH_SAVED = "search.saved";
+        /// What takes the space in this folder, item by item.
+        SPACE_LIST = "search.space";
+        /// What takes the space below this folder, by kind of file.
+        SPACE_BY_KIND = "search.space-by-kind";
+        /// What takes the space below this folder, by age.
+        SPACE_BY_AGE = "search.space-by-age";
+        /// The largest files anywhere below this folder.
+        LARGEST_BELOW = "search.largest";
+        /// The size of the marked folders, or the focused one.
+        DIR_SIZES = "dir.sizes";
+        /// The size of every folder in the panel.
+        SIZE_EVERY_FOLDER = "dir.size-every-folder";
+        /// The files changed on the latest day below this folder.
+        NEWEST_FILES = "search.newest";
+        /// Newest files of the day before the one listed.
+        EARLIER_DAY = "search.earlier-day";
+    }
+
+    // Compare files (W3a, plan commit 40).
+    ids! {
+        /// Compare two files: two marked here, or one in each panel.
+        COMPARE_FILES = "compare.files";
+        /// The properties that differ between two files.
+        COMPARE_PROPERTIES = "compare.properties";
+        /// Mark what differs between the two panels.
+        SELECT_DIFFERENCES = "select.differences";
+        /// The next change in a compare.
+        COMPARE_NEXT = "compare.next";
+        /// The previous change in a compare.
+        COMPARE_PREVIOUS = "compare.previous";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -536,7 +619,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 182] = [
+pub static CATALOG: [CommandInfo; 213] = [
     command(
         ids::QUIT,
         "Quit",
@@ -636,7 +719,7 @@ pub static CATALOG: [CommandInfo; 182] = [
     command(
         ids::CANCEL,
         "Cancel",
-        "Closes the menu or dialog, or stops the job in front.",
+        "Closes the menu or dialog, stops the job in front or the search, or else stops watching the folder or takes the filter off.",
         Global,
         &["escape"],
         &["escape"],
@@ -1058,6 +1141,54 @@ pub static CATALOG: [CommandInfo; 182] = [
         &["ctrl+up"],
     ),
     command(
+        ids::SELECT_BY_KIND,
+        "Select by kind",
+        "Lists the kinds and file-type groups, to select every entry of one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_BY_SIZE,
+        "Select by size",
+        "Opens the pattern prompt on size over, to finish with a size such as 1 MB.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_BY_DATE,
+        "Select by date",
+        "Opens the pattern prompt on modified within, to finish with a time such as 3 days.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_SAME_EXTENSION,
+        "Select same extension",
+        "Selects every file with the focused file's extension.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_RANGE,
+        "Mark range",
+        "Starts a range at the focused row; again, marks every row from there to the focus.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_NEXT_ROWS,
+        "Select next rows",
+        "Asks how many, then marks that many rows from the focus.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
         ids::SELECT_RESTORE,
         "Restore selection",
         "Brings back the selection the last select all, none, invert, pattern, finished job or folder change replaced.",
@@ -1220,7 +1351,7 @@ pub static CATALOG: [CommandInfo; 182] = [
     command(
         ids::FILTER,
         "Filter",
-        "Shows only the names that match what you type; Cancel or Clear filter ends it.",
+        "Shows only what matches what you type, in the filter language, such as size over 1 MB; Cancel or Clear filter ends it.",
         Panel,
         &["ctrl+s"],
         &["ctrl+s"],
@@ -1229,6 +1360,86 @@ pub static CATALOG: [CommandInfo; 182] = [
         ids::FILTER_CLEAR,
         "Clear filter",
         "Shows every name again.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPARE_FILES,
+        "Compare files",
+        "Compares two files: two marked here, or one in each panel, from the other panel's to this one's.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPARE_PROPERTIES,
+        "Compare properties",
+        "Lists what differs between two files' size, times, type, permissions and owner.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_DIFFERENCES,
+        "Select the differences",
+        "Marks, in both panels, what is on one side only and what differs in size or is newer.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPARE_NEXT,
+        "Next change",
+        "In a compare, goes to the next change.",
+        Dialog,
+        &["f7"],
+        &["f7"],
+    ),
+    command(
+        ids::COMPARE_PREVIOUS,
+        "Previous change",
+        "In a compare, goes to the previous change.",
+        Dialog,
+        &["shift+f7"],
+        &["shift+f7"],
+    ),
+    command(
+        ids::SAY_FILTER,
+        "Say filter",
+        "Says the panel's filter in one sentence, with the real days of date words such as last week.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FILTER_STASH,
+        "Stash filter",
+        "Keeps the panel's filter aside and shows everything; Restore filter brings it back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FILTER_RESTORE,
+        "Restore filter",
+        "Brings back the filter kept aside last.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::ONLY_FOLDERS,
+        "Folders only",
+        "Shows only the folders; again, the filter before it comes back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::ONLY_FILES,
+        "Files only",
+        "Shows only the files and archives; again, the filter before it comes back.",
         Panel,
         &[],
         &[],
@@ -1328,6 +1539,126 @@ pub static CATALOG: [CommandInfo; 182] = [
         Panel,
         &[],
         &["ctrl+shift+s"],
+    ),
+    command(
+        ids::FIND,
+        "Find files",
+        "Searches names and contents below this folder or the marked items, the results listed as they are found.",
+        Panel,
+        &["ctrl+f"],
+        &["ctrl+f"],
+    ),
+    command(
+        ids::SEARCH_RESULTS,
+        "Search results",
+        "Opens the last search's results again.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_PAUSE,
+        "Pause search",
+        "In the search results, holds the running search; again, it goes on.",
+        List,
+        &["f2"],
+        &["f2"],
+    ),
+    command(
+        ids::SEARCH_SHOW_IN_FOLDER,
+        "Show in its folder",
+        "In the search results, shows the focused result in its folder.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_REMOVE_ROW,
+        "Remove from results",
+        "In the search results, takes the focused row out of the list; the file stays.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_SAVE,
+        "Save this search",
+        "Keeps the last search under a name, so Saved searches runs it again.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_SAVED,
+        "Saved searches",
+        "Lists the saved searches, each run again when chosen, its date words read anew.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SPACE_LIST,
+        "Space list",
+        "Lists what takes the space in this folder, the largest first, with the percent of the total.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SPACE_BY_KIND,
+        "Space by kind",
+        "Lists the space below this folder by kind of file: images, music, video and the rest.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SPACE_BY_AGE,
+        "Space by age",
+        "Lists the space below this folder by when the files last changed.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LARGEST_BELOW,
+        "Largest items below here",
+        "Lists the largest files anywhere below this folder, as search results.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::DIR_SIZES,
+        "Folder sizes",
+        "Counts the size of the marked folders, or the focused one, everything inside them.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SIZE_EVERY_FOLDER,
+        "Size every folder",
+        "Counts the size of every folder here, then offers to sort by size.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::NEWEST_FILES,
+        "Newest files",
+        "Lists the files changed on the latest day below this folder, as search results.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::EARLIER_DAY,
+        "Earlier day",
+        "In newest files, lists the files of the day before.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::LABEL_SET,

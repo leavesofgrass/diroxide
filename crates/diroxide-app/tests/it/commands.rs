@@ -210,14 +210,20 @@ fn selection_by_every_command() {
         f.s.key("backspace");
     }
     f.s.type_text("*.txt");
-    assert_eq!(f.s.key("enter"), ["Selected 4 matching *.txt. 4 selected."]);
+    // The count comes first, as a question that starts on No (W3a).
+    assert_eq!(
+        f.s.key("enter"),
+        ["4 entries will be selected. No is the default. y or n"]
+    );
+    assert_eq!(f.s.key("y"), ["4 selected"]);
     f.s.key("-");
     f.s.key("backspace");
     f.s.type_text("notes*");
     assert_eq!(
         f.s.key("enter"),
-        ["Unselected 1 matching notes*. 3 selected."]
+        ["1 entry will be unselected. No is the default. y or n"]
     );
+    assert_eq!(f.s.key("y"), ["3 selected"]);
     f.s.key("home");
     f.s.key("ctrl+down");
     assert_eq!(f.s.focused(), "raccoon \u{1f99d}.txt");
@@ -232,10 +238,7 @@ fn selection_by_every_command() {
     assert_eq!(said, ["Select by pattern: *"]);
     f.s.type_text("[bad");
     let said = f.s.key("enter");
-    assert!(
-        said[0].starts_with("Pattern needs care: unclosed bracket."),
-        "{said:?}"
-    );
+    assert!(said[0].starts_with("Filter problem: "), "{said:?}");
 }
 
 #[test]
@@ -348,11 +351,11 @@ fn the_filter_narrows_as_you_type_and_clears() {
     assert_eq!(said, ["Filter, empty"]);
     f.s.type_text("*.txt");
     assert_eq!(f.s.app.active_panel().list().len(), 4);
-    assert_eq!(f.s.key("enter"), ["Filter *.txt: 4 of 8 shown"]);
-    assert_eq!(f.s.command(ids::FILTER_CLEAR), ["Filter cleared: 8 items"]);
+    assert_eq!(f.s.key("enter"), ["Filter on, 4 of 8 shown"]);
+    assert_eq!(f.s.command(ids::FILTER_CLEAR), ["Filter off, 8 shown"]);
     f.s.key("ctrl+s");
     f.s.type_text("pdf");
-    f.s.key("escape");
+    assert_eq!(f.s.key("escape"), ["No filter, 8 shown"]);
     assert_eq!(f.s.app.active_panel().list().len(), 8, "Escape restores");
     assert_eq!(f.s.key("alt+."), ["Hidden files shown"]);
 }
@@ -609,7 +612,7 @@ fn details_context_menu_help_and_the_key_bar() {
 fn the_menus_open_by_bar_letter_and_access_key() {
     let mut f = open();
     let said = f.s.key("f9");
-    assert_eq!(said, ["Menu bar, File, Alt+F, 1 of 8"]);
+    assert_eq!(said, ["Menu bar, File, Alt+F, 1 of 9"]);
     f.s.key("enter");
     assert_eq!(f.s.dialog_title().as_deref(), Some("File menu"));
     f.s.key("right");

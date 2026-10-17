@@ -45,6 +45,8 @@ Its keys come from the manual pages of ranger and vifm, lf's documentation and y
 - O: Sort list. No key before. (view.sort-list)
 - ! or ;: Run a command. No key before. (file.run-command)
 - $: Shell here. No key before. (file.shell-here)
+- Shift+V: Mark range. No key before. (select.range)
+- S: Find files. Was Ctrl+F. (search.find)
 
 ### In any list
 
@@ -90,6 +92,8 @@ Its keys come from the manual pages of ranger and vifm, lf's documentation and y
 - Ctrl+Shift+S or O: Sort list. Was Ctrl+Shift+S. (view.sort-list)
 - ! or ;: Run a command. No key before. (file.run-command)
 - $: Shell here. No key before. (file.shell-here)
+- Shift+V: Mark range. No key before. (select.range)
+- S: Find files. Was Ctrl+F. (search.find)
 
 ### In any list
 

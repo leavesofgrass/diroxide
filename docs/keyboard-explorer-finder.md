@@ -21,6 +21,7 @@ Its keys come from Microsoft's keyboard shortcuts page for File Explorer and App
 
 - Alt+Left or Backspace: Back. Was Alt+Left. (go.back)
 - Left or Alt+Up: Up one folder. Was Left or Backspace or Alt+Up. (panel.up)
+- Ctrl+F or Ctrl+E: Find files. Was Ctrl+F. (search.find)
 
 ## In the window
 
@@ -37,6 +38,7 @@ Its keys come from Microsoft's keyboard shortcuts page for File Explorer and App
 - Ctrl+Shift+A: Select none. Was Ctrl+Shift+A or Keypad Minus. (select.none)
 - *: Invert selection. Was * or Keypad Star. (select.invert)
 - Plus: Select by pattern. Was Plus or Keypad Slash. (select.pattern)
+- Ctrl+F or Ctrl+E: Find files. Was Ctrl+F. (search.find)
 
 ## On macOS, in the window
 

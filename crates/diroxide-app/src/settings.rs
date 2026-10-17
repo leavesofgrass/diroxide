@@ -46,6 +46,26 @@ fn value_details(settings: &Settings, info: &SettingInfo, theme_verdict: &str) -
     details
 }
 
+/// The filter language's options from the settings (W3a): `filter_case`
+/// as the case rule and `week_starts_on` as the first day of the week.
+pub fn filter_options(settings: &Settings) -> diroxide_core::filter::FilterOptions {
+    use diroxide_config::{FilterCase, WeekStart};
+    use diroxide_core::Weekday;
+    use diroxide_core::pattern::CaseRule;
+    diroxide_core::filter::FilterOptions {
+        case: match settings.filter_case {
+            FilterCase::Smart => CaseRule::Smart,
+            FilterCase::Ignore => CaseRule::Ignore,
+            FilterCase::Match => CaseRule::Match,
+        },
+        week_start: match settings.week_starts_on {
+            WeekStart::Sunday => Weekday::Sunday,
+            WeekStart::Monday => Weekday::Monday,
+            WeekStart::Saturday => Weekday::Saturday,
+        },
+    }
+}
+
 /// The id of the Settings list's row that opens the Keys list (W3k).
 pub const KEYS_ROW: &str = "\u{1}keys";
 
@@ -150,9 +170,9 @@ mod tests {
                 .contains("Default: side by side.")
         );
         assert!(
-            setting_help("filter_case")
+            setting_help("plugins.enabled")
                 .unwrap()
-                .ends_with("it comes with alpha.3.")
+                .ends_with("it comes with alpha.4.")
         );
         assert!(setting_help("nothing").is_none());
         let presets = setting_help("split_presets").unwrap();

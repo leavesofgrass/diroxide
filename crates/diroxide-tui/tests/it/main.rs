@@ -8,7 +8,11 @@
 // Test helpers: a failure is the test's.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+// The alpha.3 screens (W3a).
+mod alpha3;
 mod owners_check;
+// The owner's check of alpha.3 (W3a, plan commit 42).
+mod owners_check_alpha3;
 mod support;
 
 use std::ffi::OsString;

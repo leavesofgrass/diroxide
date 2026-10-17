@@ -461,7 +461,7 @@ mod tests {
     fn a_table_of_keys_and_what_is_said() {
         let terminal = Keymap::defaults().for_platform(Platform::Windows);
         let size = ids::SORT_SIZE;
-        let cases: [(&str, &[&str]); 10] = [
+        let cases: [(&str, &[&str]); 11] = [
             ("ctrl+f9", &[]),
             (
                 "ctrl+f5",
@@ -490,8 +490,12 @@ mod tests {
                 ],
             ),
             (
+                "ctrl+t",
+                &["Ctrl+T is kept for New tab, coming in alpha.8. Use it anyway? y or n"],
+            ),
+            (
                 "ctrl+f",
-                &["Ctrl+F is kept for Find files, coming in alpha.3. Use it anyway? y or n"],
+                &["Ctrl+F already runs Find files. Take it, swap, or cancel?"],
             ),
             (
                 "q",

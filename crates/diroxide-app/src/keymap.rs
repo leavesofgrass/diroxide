@@ -1196,10 +1196,10 @@ mod tests {
             ]
         );
         assert_eq!(
-            said("ctrl+f", ids::COPY),
-            ["Ctrl+F is kept for Find files, coming in alpha.3."]
+            said("ctrl+t", ids::COPY),
+            ["Ctrl+T is kept for New tab, coming in alpha.8."]
         );
-        assert!(said("ctrl+f", CommandId::from_static("search.find")).is_empty());
+        assert!(said("ctrl+t", CommandId::from_static("tab.new")).is_empty());
         assert_eq!(
             said("q", ids::COPY),
             ["A letter key works only while letters run commands."]

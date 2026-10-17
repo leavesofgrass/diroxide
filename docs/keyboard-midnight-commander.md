@@ -20,6 +20,7 @@ Its keys come from Midnight Commander's manual, version 4.8.33, and its keymap f
 - Alt+Shift+H: Folder history. No key before. (go.history)
 - Ctrl+L or Alt+D or Alt+C: Go to a path. Was Ctrl+L or Alt+D. (go.path)
 - Ctrl+Left or Alt+I: This folder to other panel. Was Ctrl+Left. (panel.this-in-other)
+- Ctrl+F or Alt+?: Find files. Was Ctrl+F. (search.find)
 
 ## In the window
 
@@ -37,6 +38,9 @@ Its keys come from Midnight Commander's manual, version 4.8.33, and its keymap f
 - Alt+Shift+H: Folder history. No key before. (go.history)
 - Ctrl+L or Alt+D or Alt+C or Ctrl+Enter: Go to a path. Was Ctrl+L or Alt+D or Ctrl+Enter. (go.path)
 - Ctrl+Left or Alt+I: This folder to other panel. Was Ctrl+Left. (panel.this-in-other)
+- Ctrl+F or Alt+?: Find files. Was Ctrl+F. (search.find)
+- Ctrl+Space: Folder sizes. No key before. (dir.sizes)
+- Shift+F10 or Menu: Context menu. Was Shift+F10 or Menu or Ctrl+Space. (file.context-menu)
 
 ## Held back
 

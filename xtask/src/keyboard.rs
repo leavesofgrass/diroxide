@@ -383,7 +383,10 @@ mod tests {
         assert!(page.contains("- Ctrl+V for Paste: Windows Terminal keeps it"));
         assert!(page.contains("Sure way: Edit menu, Paste."));
         assert!(page.contains("Sure way: View menu, Sort submenu, Sort by modified."));
-        assert!(page.contains("- Ctrl+F: Find files, coming in alpha.3.\n"));
+        // Ctrl+F is bound to Find files since alpha.3 (W3a); Ctrl+T stays
+        // kept for tabs.
+        assert!(page.contains("- Ctrl+T: New tab, coming in alpha.8.\n"));
+        assert!(page.contains("- Ctrl+F: Find files. "));
         for info in CATALOG.iter() {
             assert!(page.contains(&format!("({})", info.id)), "{}", info.id);
         }

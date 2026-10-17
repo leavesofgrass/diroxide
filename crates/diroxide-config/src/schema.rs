@@ -116,13 +116,15 @@ pub enum SettingGroup {
     Archives,
     /// Search and the filter.
     Search,
+    /// Comparing files (alpha.3).
+    Compare,
     /// Plugins and components.
     Plugins,
 }
 
 impl SettingGroup {
     /// Every group, in order.
-    pub const ALL: [SettingGroup; 9] = [
+    pub const ALL: [SettingGroup; 10] = [
         SettingGroup::Panels,
         SettingGroup::Keys,
         SettingGroup::Speech,
@@ -131,6 +133,7 @@ impl SettingGroup {
         SettingGroup::Viewer,
         SettingGroup::Archives,
         SettingGroup::Search,
+        SettingGroup::Compare,
         SettingGroup::Plugins,
     ];
 
@@ -145,6 +148,7 @@ impl SettingGroup {
             SettingGroup::Viewer => "Viewer and quick view",
             SettingGroup::Archives => "Archives and split",
             SettingGroup::Search => "Search and filter",
+            SettingGroup::Compare => "Compare",
             SettingGroup::Plugins => "Plugins",
         }
     }
@@ -270,6 +274,18 @@ const HEX_ROWS: &[Choice] = &[
 /// [`crate::presets::BUILTIN_SPLIT_PRESETS`], which a test keeps equal.
 pub const SPLIT_PRESETS_DEFAULT: &str = r#"[{ name = "Email attachment", bytes = 18000000 }, { name = "GitHub file limit", bytes = 104857600 }, { name = "CD", bytes = 737280000, headroom_percent = 1 }, { name = "FAT32's largest file", bytes = 4294967295 }, { name = "DVD", bytes = 4700372992, headroom_percent = 1 }, { name = "Blu-ray", bytes = 25025314816, headroom_percent = 1 }, { name = "Floppy", bytes = 1457664 }]"#;
 
+const COMPARE_ALGORITHMS: &[Choice] = &[
+    choice("patience", "patience, lines that occur once matched first"),
+    choice("histogram", "histogram, like patience with repeats"),
+    choice("myers", "Myers, the fewest changes"),
+];
+
+const LARGE_FILES: &[Choice] = &[
+    choice("ask", "ask each time"),
+    choice("head", "compare their first part as text"),
+    choice("bytes", "compare them byte by byte"),
+];
+
 const WEEK_STARTS: &[Choice] = &[
     choice("sunday", "Sunday"),
     choice("monday", "Monday"),
@@ -280,7 +296,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 80] = [
+pub const SCHEMA: [SettingInfo; 91] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -1063,7 +1079,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         kind: SettingKind::Choice(FILTER_CASES),
         default: "\"smart\"",
         help: "Whether case matters in filters and searches. Smart: only when the text has a capital letter.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "filter_pause_ms",
@@ -1076,7 +1092,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         },
         default: "400",
         help: "How long the filter waits after the last key before it says the count.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "week_starts_on",
@@ -1085,7 +1101,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         kind: SettingKind::Choice(WEEK_STARTS),
         default: "\"sunday\"",
         help: "The day this week and last week start on in filters and searches.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "search_row_cap",
@@ -1098,7 +1114,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         },
         default: "100000",
         help: "The most rows a search lists. The search says when it stopped at the limit.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "search_respect_ignore",
@@ -1107,7 +1123,119 @@ pub const SCHEMA: [SettingInfo; 80] = [
         kind: K::Flag,
         default: "false",
         help: "Leaves out files that .gitignore and similar files name.",
-        arrives: Some("alpha.3"),
+        arrives: None,
+    },
+    // Compare files (alpha.3, W3a from W3d's notes; research/diffing.md).
+    SettingInfo {
+        key: "compare.ignore_line_endings",
+        name: "Ignore line endings",
+        group: G::Compare,
+        kind: K::Flag,
+        default: "true",
+        help: "Compares lines without regard to how they end, so a file from Windows and the same file from Linux are the same text.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.ignore_trailing_space",
+        name: "Ignore trailing spaces",
+        group: G::Compare,
+        kind: K::Flag,
+        default: "false",
+        help: "Leaves out spaces and tabs at the end of a line when comparing.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.ignore_space_amount",
+        name: "Ignore how much space",
+        group: G::Compare,
+        kind: K::Flag,
+        default: "false",
+        help: "Counts any run of spaces and tabs as one space when comparing.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.ignore_all_space",
+        name: "Ignore all spaces",
+        group: G::Compare,
+        kind: K::Flag,
+        default: "false",
+        help: "Leaves out every space and tab when comparing.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.ignore_blank_lines",
+        name: "Ignore blank lines",
+        group: G::Compare,
+        kind: K::Flag,
+        default: "false",
+        help: "Leaves out lines that are empty or only spaces when comparing.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.ignore_case",
+        name: "Ignore case",
+        group: G::Compare,
+        kind: K::Flag,
+        default: "false",
+        help: "Compares capital and small letters as the same.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.algorithm",
+        name: "Line matching",
+        group: G::Compare,
+        kind: SettingKind::Choice(COMPARE_ALGORITHMS),
+        default: "\"patience\"",
+        help: "How the lines of two files are matched. Patience gives changes that read best.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.deadline_ms",
+        name: "Compare time limit",
+        group: G::Compare,
+        kind: SettingKind::Number {
+            min: 100,
+            max: 60_000,
+            unit: "milliseconds",
+        },
+        default: "2000",
+        help: "How long a compare may look for the fewest changes before it settles for a longer list, and says so.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.text_limit_mib",
+        name: "Text compare limit",
+        group: G::Compare,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1024,
+            unit: "MiB",
+        },
+        default: "16",
+        help: "The largest file compared as text in full; a larger one follows Larger files.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.context",
+        name: "Lines around a change",
+        group: G::Compare,
+        kind: SettingKind::Number {
+            min: 0,
+            max: 9,
+            unit: "lines",
+        },
+        default: "2",
+        help: "How many same lines the unified view shows around each change.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.large_files",
+        name: "Larger files",
+        group: G::Compare,
+        kind: SettingKind::Choice(LARGE_FILES),
+        default: "\"ask\"",
+        help: "What a compare does with a file over the text compare limit.",
+        arrives: None,
     },
     SettingInfo {
         key: "plugins.enabled",

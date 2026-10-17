@@ -47,9 +47,10 @@ pub use presets::{
 pub use schema::{Choice, SCHEMA, SettingGroup, SettingInfo, SettingKind};
 pub use session::{Layout, PanelState, SessionState, load_session, save_session};
 pub use settings::{
-    ArchiveSettings, CompletionList, ConfirmSettings, DRIVE_KINDS, FilterCase, HexRow,
-    Highlighting, PluginSettings, QuickViewSettings, ScreenReaderMode, SecretEcho, Settings,
-    SingleLetters, ViewerSettings, WeekStart,
+    ArchiveSettings, CompareAlgorithm, CompareSettings, CompletionList, ConfirmSettings,
+    DRIVE_KINDS, FilterCase, HexRow, Highlighting, LargeFilePolicy, PluginSettings,
+    QuickViewSettings, ScreenReaderMode, SecretEcho, Settings, SingleLetters, ViewerSettings,
+    WeekStart,
 };
 pub use store::{ConfigProblem, Loaded, problems_line, write_atomic, write_reference};
 

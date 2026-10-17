@@ -117,6 +117,8 @@ pub struct Session<'a, B: Backend> {
     viewer_tick_at: Option<Instant>,
     /// When the quick view gets its next slice of time.
     quick_tick_at: Option<Instant>,
+    /// When the app's own timers are due next (the filter's pause).
+    app_tick_at: Option<Instant>,
     /// Whether the quick view was on and the focus in its region, at the
     /// last frame.
     quick_state: (bool, bool),
@@ -184,6 +186,7 @@ impl<'a, B: Backend> Session<'a, B> {
             code,
             viewer_tick_at: None,
             quick_tick_at: None,
+            app_tick_at: None,
             quick_state: (false, false),
             memory: Memory::default(),
             redraw: true,
@@ -517,6 +520,20 @@ impl<'a, B: Backend> Session<'a, B> {
             }
             None => self.quick_tick_at = None,
         }
+        // The app's own timers, on its clock: the filter's pause, after
+        // which the count is said (W3a).
+        match self.app.app_wants_tick() {
+            Some(0) => {
+                self.app_tick_at = None;
+                let effects = self.app.app_tick();
+                self.carry(effects, now);
+                if let Some(ms) = self.app.app_wants_tick() {
+                    self.app_tick_at = Some(now + Duration::from_millis(ms.max(1)));
+                }
+            }
+            Some(ms) => self.app_tick_at = Some(now + Duration::from_millis(ms)),
+            None => self.app_tick_at = None,
+        }
         // The viewer's time: a long scan, the highlighter, Follow.
         match self.app.viewer_wants_tick() {
             Some(ms) => {
@@ -540,6 +557,7 @@ impl<'a, B: Backend> Session<'a, B> {
             self.first_draw_at,
             self.viewer_tick_at,
             self.quick_tick_at,
+            self.app_tick_at,
         ]
         .into_iter()
         .flatten()

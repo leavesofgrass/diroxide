@@ -19,9 +19,9 @@
 # listing format), Ctrl+O (the subshell), Escape then a digit for a
 # function key (Escape cancels here).
 #
-# Waiting for their commands (alpha.3, then these lines join the preset):
-#   search.find = ["ctrl+f", "alt+?"]            find file
-#   dir.sizes, window = "ctrl+space"             directory size
+# Joined with their commands in alpha.3 (W3a): Alt+question mark finds
+# a file beside Ctrl+F, and in the window Ctrl+Space sizes the folder
+# (Folder sizes), the context menu keeping Shift+F10 and the Menu key.
 # Bookmarks keeps Ctrl+B and Alt+B, and in the window gains Ctrl+Backslash
 # (a terminal may send it as Ctrl+4, so the terminal does not bind it).
 
@@ -38,6 +38,7 @@ letters = "type-ahead"
 "go.history" = "alt+shift+h"
 "go.path" = ["ctrl+l", "alt+d", "alt+c"]
 "panel.this-in-other" = ["ctrl+left", "alt+i"]
+"search.find" = ["ctrl+f", "alt+?"]
 
 [window.global]
 "app.quit" = ["f10", "ctrl+q"]
@@ -51,6 +52,9 @@ letters = "type-ahead"
 "go.history" = "alt+shift+h"
 "go.path" = ["ctrl+l", "alt+d", "alt+c", "ctrl+enter"]
 "panel.this-in-other" = ["ctrl+left", "alt+i"]
+"search.find" = ["ctrl+f", "alt+?"]
+"dir.sizes" = "ctrl+space"
+"file.context-menu" = ["shift+f10", "menu"]
 
 [[held_back]]
 keys = "ctrl+x c"
@@ -85,10 +89,12 @@ id = "view.quick-view"
 [[held_back]]
 keys = "ctrl+x d"
 command = "Compare folders, select the differences"
+id = "select.differences"
 
 [[held_back]]
 keys = "ctrl+x ctrl+d"
 command = "Compare files"
+id = "compare.files"
 
 [[held_back]]
 keys = "ctrl+x h"

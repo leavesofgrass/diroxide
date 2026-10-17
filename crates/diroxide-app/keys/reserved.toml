@@ -5,12 +5,6 @@
 #
 # column = "both", "terminal" or "window".
 
-[[key]]
-keys = ["ctrl+f"]
-command = "search.find"
-name = "Find files"
-alpha = "alpha.3"
-column = "both"
 
 [[key]]
 keys = ["ctrl+t"]

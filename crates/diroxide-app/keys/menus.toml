@@ -252,6 +252,27 @@ access = "f"
 command = "view.filter-clear"
 access = "c"
 
+# The filter language (W3a).
+[[menu.item]]
+command = "view.say-filter"
+access = "y"
+
+[[menu.item]]
+command = "view.filter-stash"
+access = "k"
+
+[[menu.item]]
+command = "view.filter-restore"
+access = "e"
+
+[[menu.item]]
+command = "view.only-folders"
+access = "d"
+
+[[menu.item]]
+command = "view.only-files"
+access = "i"
+
 [[menu.item]]
 menu = "sort"
 access = "s"
@@ -606,6 +627,103 @@ access = "r"
 command = "go.forget-place"
 access = "g"
 
+# Search (W3a): Find files and what it finds.
+[[menu]]
+id = "search"
+title = "Search"
+access = "r"
+
+[[menu.item]]
+command = "search.find"
+access = "f"
+
+[[menu.item]]
+command = "search.results"
+access = "r"
+
+[[menu.item]]
+command = "search.pause"
+access = "p"
+
+[[menu.item]]
+command = "search.show-in-folder"
+access = "i"
+
+[[menu.item]]
+command = "search.remove-row"
+access = "m"
+
+[[menu.item]]
+command = "search.save"
+access = "s"
+
+[[menu.item]]
+command = "search.saved"
+access = "v"
+
+[[menu.item]]
+command = "search.space"
+access = "c"
+
+[[menu.item]]
+command = "search.space-by-kind"
+access = "k"
+
+[[menu.item]]
+command = "search.space-by-age"
+access = "a"
+
+[[menu.item]]
+command = "search.largest"
+access = "l"
+
+[[menu.item]]
+command = "dir.sizes"
+access = "z"
+
+[[menu.item]]
+command = "dir.size-every-folder"
+access = "e"
+
+[[menu.item]]
+command = "search.newest"
+access = "n"
+
+[[menu.item]]
+command = "search.earlier-day"
+access = "d"
+
+# Compare (W3a).
+[[menu.item]]
+menu = "compare"
+access = "o"
+
+[[menu]]
+id = "compare"
+title = "Compare"
+access = "o"
+bar = false
+
+[[menu.item]]
+command = "compare.files"
+access = "f"
+
+[[menu.item]]
+command = "compare.properties"
+access = "p"
+
+[[menu.item]]
+command = "select.differences"
+access = "d"
+
+[[menu.item]]
+command = "compare.next"
+access = "n"
+
+[[menu.item]]
+command = "compare.previous"
+access = "r"
+
 [[menu]]
 id = "select"
 title = "Select"
@@ -646,6 +764,31 @@ access = "v"
 [[menu.item]]
 command = "select.restore"
 access = "r"
+
+# Selection on the filter language (W3a).
+[[menu.item]]
+command = "select.by-kind"
+access = "k"
+
+[[menu.item]]
+command = "select.by-size"
+access = "z"
+
+[[menu.item]]
+command = "select.by-date"
+access = "d"
+
+[[menu.item]]
+command = "select.same-extension"
+access = "e"
+
+[[menu.item]]
+command = "select.range"
+access = "g"
+
+[[menu.item]]
+command = "select.next-rows"
+access = "w"
 
 [[menu]]
 id = "tools"

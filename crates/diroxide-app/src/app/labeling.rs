@@ -20,7 +20,6 @@ use crate::commands::ids;
 use crate::dialog::Dialog;
 use crate::entry::{CompletionSource, EntryField};
 use crate::labels::{LabelChange, place_key};
-use crate::panel::place_leaf;
 
 /// How many label changes Undo keeps.
 const LABEL_UNDO_LIMIT: usize = 20;
@@ -348,7 +347,7 @@ impl App {
     }
 
     /// The Labels list's rows, in the labels' order.
-    fn labels_list_model(&self) -> ListModel {
+    pub(super) fn labels_list_model(&self) -> ListModel {
         let store = &self.organize.labels;
         let missing = self.missing_keys();
         let rows = store
@@ -413,10 +412,6 @@ impl App {
         check.unreadable = unreadable;
         let list = self.labels_list_model();
         let shown = self.replace_open_list(|w| matches!(w, Wants::Labels), list);
-        if let Some(label) = self.organize_top_labeled() {
-            let list = self.labeled_model(&label);
-            self.replace_open_list(|w| matches!(w, Wants::Labeled { .. }), list);
-        }
         if !shown {
             return Vec::new();
         }
@@ -432,124 +427,6 @@ impl App {
             Effect::Redraw(diroxide_core::Redraw::All),
             self.say(Message::status(text)),
         ]
-    }
-
-    /// The label whose items list is open, if one is.
-    fn organize_top_labeled(&self) -> Option<String> {
-        self.opens
-            .iter()
-            .rev()
-            .find_map(|open| match &open.purpose {
-                super::Purpose::Organize(wants) => match wants.as_ref() {
-                    Wants::Labeled { label } => Some(label.clone()),
-                    _ => None,
-                },
-                _ => None,
-            })
-    }
-
-    /// A label's items: each place by name, "missing" when it is gone,
-    /// where it is, and its whole place last.
-    fn labeled_model(&self, label: &str) -> ListModel {
-        let store = &self.organize.labels;
-        let missing = self.missing_keys();
-        let places = store.places_with(label);
-        let rows = places
-            .iter()
-            .map(|place| {
-                let mut details = Vec::new();
-                if missing.is_some_and(|gone| gone.contains(&place_key(place))) {
-                    details.push("missing".to_owned());
-                }
-                if let Some(parent) = place.parent() {
-                    details.push(format!("in {}", place_leaf(&parent)));
-                }
-                details.push(diroxide_core::names::display_name(&place.to_string()).into_owned());
-                ListRow::new(place.to_string(), place_leaf(place)).with_details(details)
-            })
-            .collect();
-        let name = store
-            .label(label)
-            .map_or_else(|| label.to_owned(), |l| l.name.clone());
-        let mut list = ListModel::new(format!(
-            "{name}, {}",
-            count(places.len() as u64, "item", "items")
-        ))
-        .with_rows(rows);
-        list.set_empty_text("No items have this label");
-        let remove = self.key(&ids::TRASH);
-        let help = if remove.is_empty() {
-            "Enter shows the item in its folder, Escape goes back.".to_owned()
-        } else {
-            format!(
-                "Enter shows the item in its folder, {remove} takes the label off, Escape goes back."
-            )
-        };
-        list.set_help(help);
-        list
-    }
-
-    /// Enter on the Labels list: the label's items, as a list.
-    pub(super) fn labeled_items(&mut self, label: &str) -> Vec<Effect> {
-        let list = self.labeled_model(label);
-        self.open_organize(
-            Dialog::Choose {
-                list,
-                on_enter: Command::new(ids::LABELS),
-            },
-            Wants::Labeled {
-                label: label.to_owned(),
-            },
-        )
-    }
-
-    /// Enter on a labeled item: its folder in the active panel, the item
-    /// focused; a missing item says so and stays.
-    pub(super) fn show_labeled(&mut self, place: Place) -> Vec<Effect> {
-        let gone = self
-            .missing_keys()
-            .is_some_and(|gone| gone.contains(&place_key(&place)));
-        let name = place_leaf(&place);
-        if gone {
-            let remove = self.key(&ids::TRASH);
-            let text = if remove.is_empty() {
-                format!("Missing: {name}. It was moved or removed.")
-            } else {
-                format!("Missing: {name}. It was moved or removed; {remove} takes its label off.")
-            };
-            return vec![self.say(Message::info(text))];
-        }
-        let side = self.active;
-        let mut effects = self.close_all();
-        match (place.parent(), place.name()) {
-            (Some(parent), Some(name)) => {
-                let name = name.to_owned();
-                effects.extend(self.open(side, parent, Some(name)));
-            }
-            _ => effects.extend(self.open(side, place, None)),
-        }
-        effects
-    }
-
-    /// The key that trashes, in a label's items: takes the label off the
-    /// focused item (one undo step), and the list loses its row.
-    pub(super) fn unlabel_one(&mut self, label: &str, place: Place) -> Vec<Effect> {
-        let one = place
-            .name()
-            .map(|n| diroxide_core::names::display_name(n).into_owned());
-        let side = self.active;
-        let mut effects = self.change_labels(
-            side,
-            LabelChange::Remove(label.to_owned()),
-            vec![place],
-            one,
-        );
-        let list = self.labeled_model(label);
-        self.replace_open_list(|w| matches!(w, Wants::Labeled { .. }), list);
-        let labels = self.labels_list_model();
-        self.replace_open_list(|w| matches!(w, Wants::Labels), labels);
-        effects.push(Effect::Redraw(diroxide_core::Redraw::All));
-        effects
     }
 
     /// The label words of a sort by label when no entry has one.

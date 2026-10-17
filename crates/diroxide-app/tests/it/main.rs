@@ -10,11 +10,21 @@ mod archives;
 mod bookmarks;
 mod braille;
 mod commands;
+// Compare files (W3a).
+mod comparing;
 mod dialogs;
+// The panel filter on the filter language (W3a).
+mod filtering;
 mod keys;
 mod labels;
 mod palette;
 mod preview;
+// Saved searches, the Space list, sizes and newest files (W3a).
+mod search_tools;
+// Search, its dialog and its results (W3a).
+mod searching;
+// Selection on the filter language (W3a).
+mod selecting;
 mod session;
 mod split_join;
 mod viewer;

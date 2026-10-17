@@ -25,6 +25,9 @@ Its keys come from a third-party list of Total Commander's shortcuts and forum p
 - Alt+F5: Pack. No key before. (archive.pack)
 - Alt+F6 or Alt+F9: Unpack. No key before. (archive.unpack)
 - Alt+Shift+F9: Test archive. No key before. (archive.test)
+- Alt+F7 or Ctrl+F: Find files. Was Ctrl+F. (search.find)
+- Ctrl+L: Folder sizes. No key before. (dir.sizes)
+- Shift+F2: Select the differences. No key before. (select.differences)
 
 ## In the window
 
@@ -51,6 +54,10 @@ Its keys come from a third-party list of Total Commander's shortcuts and forum p
 - Alt+F5: Pack. Was Alt+F5. (archive.pack)
 - Alt+F6 or Alt+F9: Unpack. Was Alt+F9. (archive.unpack)
 - Alt+Shift+F9: Test archive. Was Alt+Shift+F9. (archive.test)
+- Alt+F7 or Ctrl+F: Find files. Was Ctrl+F. (search.find)
+- Ctrl+L: Folder sizes. No key before. (dir.sizes)
+- Shift+F2: Select the differences. No key before. (select.differences)
+- Alt+Keypad Plus or Alt+Plus: Select same extension. No key before. (select.same-extension)
 
 ## See also
 

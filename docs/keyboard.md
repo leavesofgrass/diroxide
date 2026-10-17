@@ -16,7 +16,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Alt+O: Say other panel. Says the other panel's place and its focused row. (app.say-other)
 - Ctrl+P: Command palette. Finds any command by name and runs it. (app.palette)
 - F9: Menus. Opens the menu bar. (app.menu)
-- Escape: Cancel. Closes the menu or dialog, or stops the job in front. (app.cancel)
+- Escape: Cancel. Closes the menu or dialog, stops the job in front or the search, or else stops watching the folder or takes the filter off. (app.cancel)
 - Ctrl+Z: Undo. Reverses the last job: a rename, move, copy, new folder or trashing. (edit.undo)
 - Alt+F: File menu. Opens the File menu. (menu.file)
 - Alt+E: Edit menu. Opens the Edit menu. (menu.edit)
@@ -65,12 +65,13 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Ctrl+X: Cut. Puts the selection on the file clipboard, to move when pasted. (clipboard.cut)
 - Ctrl+V: Paste. Copies or moves what is on the file clipboard into this folder. (clipboard.paste)
 - Alt+Period: Show hidden files. Shows or hides hidden files and folders. (view.hidden)
-- Ctrl+S: Filter. Shows only the names that match what you type; Cancel or Clear filter ends it. (view.filter)
+- Ctrl+S: Filter. Shows only what matches what you type, in the filter language, such as size over 1 MB; Cancel or Clear filter ends it. (view.filter)
 - Ctrl+F3: Sort by name. Sorts by name, A to Z; again for Z to A. (view.sort-name)
 - Ctrl+F4: Sort by extension. Sorts by extension, A to Z; again for Z to A. (view.sort-extension)
 - Ctrl+F5: Sort by modified. Sorts by modified time, newest first; again for oldest first. (view.sort-modified)
 - Ctrl+F6: Sort by size. Sorts by size, largest first; again for smallest first. (view.sort-size)
 - Ctrl+F7: Unsorted. Lists in the folder's own order. (view.sort-unsorted)
+- Ctrl+F: Find files. Searches names and contents below this folder or the marked items, the results listed as they are found. (search.find)
 - Alt+L: Set label. Adds a label to the marked items, or the focused one; a new name makes a new label. (label.set)
 - Ctrl+1: Favorite label 1. Adds the first label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-1)
 - Ctrl+2: Favorite label 2. Adds the second label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-2)
@@ -89,6 +90,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Page Down: Next page. Moves the focus down one page. (list.page-down)
 - Home: First row. Moves the focus to the first row. (list.home)
 - End: Last row. Moves the focus to the last row. (list.end)
+- F2: Pause search. In the search results, holds the running search; again, it goes on. (search.pause)
 
 ### In the viewer
 
@@ -144,6 +146,8 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 
 ### In a question
 
+- F7: Next change. In a compare, goes to the next change. (compare.next)
+- Shift+F7: Previous change. In a compare, goes to the previous change. (compare.previous)
 - Y: Yes. Answers yes to the question. (dialog.yes)
 - N: No. Answers no to the question. (dialog.no)
 - Enter: Accept. Chooses the focused answer. (dialog.accept)
@@ -173,12 +177,26 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Test archive. Reads every member of the focused archive and checks it, writing nothing. (archive.test)
 - Folder history. Lists the folders visited, newest first. (go.history)
 - Select none. Clears the selection. (select.none)
+- Select by kind. Lists the kinds and file-type groups, to select every entry of one. (select.by-kind)
+- Select by size. Opens the pattern prompt on size over, to finish with a size such as 1 MB. (select.by-size)
+- Select by date. Opens the pattern prompt on modified within, to finish with a time such as 3 days. (select.by-date)
+- Select same extension. Selects every file with the focused file's extension. (select.same-extension)
+- Mark range. Starts a range at the focused row; again, marks every row from there to the focus. (select.range)
+- Select next rows. Asks how many, then marks that many rows from the focus. (select.next-rows)
 - Restore selection. Brings back the selection the last select all, none, invert, pattern, finished job or folder change replaced. (select.restore)
 - Copy to a place. Copies the selection to a place you choose, recent places first. (file.copy-to)
 - Move to a place. Moves the selection to a place you choose, recent places first. (file.move-to)
 - Run a command. Asks for a command line and runs it in this folder. (file.run-command)
 - Shell here. Opens your shell in this folder; exit it to come back. (file.shell-here)
 - Clear filter. Shows every name again. (view.filter-clear)
+- Compare files. Compares two files: two marked here, or one in each panel, from the other panel's to this one's. (compare.files)
+- Compare properties. Lists what differs between two files' size, times, type, permissions and owner. (compare.properties)
+- Select the differences. Marks, in both panels, what is on one side only and what differs in size or is newer. (select.differences)
+- Say filter. Says the panel's filter in one sentence, with the real days of date words such as last week. (view.say-filter)
+- Stash filter. Keeps the panel's filter aside and shows everything; Restore filter brings it back. (view.filter-stash)
+- Restore filter. Brings back the filter kept aside last. (view.filter-restore)
+- Folders only. Shows only the folders; again, the filter before it comes back. (view.only-folders)
+- Files only. Shows only the files and archives; again, the filter before it comes back. (view.only-files)
 - Sort by created. Sorts by created time, newest first; again for oldest first. (view.sort-created)
 - Sort by accessed. Sorts by accessed time, newest first; again for oldest first. (view.sort-accessed)
 - Sort by kind. Sorts by the kind of file, A to Z; again for Z to A. (view.sort-kind)
@@ -186,6 +204,19 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Sort by owner. Sorts by owner, A to Z; again for Z to A. (view.sort-owner)
 - Sort by label. Sorts by label, A to Z; again for Z to A. (view.sort-label)
 - Sort list. Lists every sort key, the current one marked with its direction. (view.sort-list)
+- Search results. Opens the last search's results again. (search.results)
+- Show in its folder. In the search results, shows the focused result in its folder. (search.show-in-folder)
+- Remove from results. In the search results, takes the focused row out of the list; the file stays. (search.remove-row)
+- Save this search. Keeps the last search under a name, so Saved searches runs it again. (search.save)
+- Saved searches. Lists the saved searches, each run again when chosen, its date words read anew. (search.saved)
+- Space list. Lists what takes the space in this folder, the largest first, with the percent of the total. (search.space)
+- Space by kind. Lists the space below this folder by kind of file: images, music, video and the rest. (search.space-by-kind)
+- Space by age. Lists the space below this folder by when the files last changed. (search.space-by-age)
+- Largest items below here. Lists the largest files anywhere below this folder, as search results. (search.largest)
+- Folder sizes. Counts the size of the marked folders, or the focused one, everything inside them. (dir.sizes)
+- Size every folder. Counts the size of every folder here, then offers to sort by size. (dir.size-every-folder)
+- Newest files. Lists the files changed on the latest day below this folder, as search results. (search.newest)
+- Earlier day. In newest files, lists the files of the day before. (search.earlier-day)
 - Toggle label. Adds a label to the marked items, or takes it off when every one has it. (label.toggle)
 - Clear labels. Takes every label off the marked items, or the focused one. (label.clear)
 - Labels list. Lists the labels with how many items carry each; choosing one lists its items. (label.list)
@@ -224,7 +255,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Ctrl+Shift+P or Ctrl+P: Command palette. Finds any command by name and runs it. (app.palette)
 - F9 or F10: Menus. Opens the menu bar. (app.menu)
 - Ctrl+Comma: Settings. Lists the settings; Help on a setting says what it does. (app.settings)
-- Escape: Cancel. Closes the menu or dialog, or stops the job in front. (app.cancel)
+- Escape: Cancel. Closes the menu or dialog, stops the job in front or the search, or else stops watching the folder or takes the filter off. (app.cancel)
 - Ctrl+Z: Undo. Reverses the last job: a rename, move, copy, new folder or trashing. (edit.undo)
 - Alt+F: File menu. Opens the File menu. (menu.file)
 - Alt+E: Edit menu. Opens the Edit menu. (menu.edit)
@@ -277,13 +308,14 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Ctrl+X: Cut. Puts the selection on the file clipboard, to move when pasted. (clipboard.cut)
 - Ctrl+V: Paste. Copies or moves what is on the file clipboard into this folder. (clipboard.paste)
 - Alt+Period: Show hidden files. Shows or hides hidden files and folders. (view.hidden)
-- Ctrl+S: Filter. Shows only the names that match what you type; Cancel or Clear filter ends it. (view.filter)
+- Ctrl+S: Filter. Shows only what matches what you type, in the filter language, such as size over 1 MB; Cancel or Clear filter ends it. (view.filter)
 - Ctrl+F3: Sort by name. Sorts by name, A to Z; again for Z to A. (view.sort-name)
 - Ctrl+F4: Sort by extension. Sorts by extension, A to Z; again for Z to A. (view.sort-extension)
 - Ctrl+F5: Sort by modified. Sorts by modified time, newest first; again for oldest first. (view.sort-modified)
 - Ctrl+F6: Sort by size. Sorts by size, largest first; again for smallest first. (view.sort-size)
 - Ctrl+F7: Unsorted. Lists in the folder's own order. (view.sort-unsorted)
 - Ctrl+Shift+S: Sort list. Lists every sort key, the current one marked with its direction. (view.sort-list)
+- Ctrl+F: Find files. Searches names and contents below this folder or the marked items, the results listed as they are found. (search.find)
 - Alt+L: Set label. Adds a label to the marked items, or the focused one; a new name makes a new label. (label.set)
 - Ctrl+1: Favorite label 1. Adds the first label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-1)
 - Ctrl+2: Favorite label 2. Adds the second label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-2)
@@ -302,6 +334,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Page Down: Next page. Moves the focus down one page. (list.page-down)
 - Home: First row. Moves the focus to the first row. (list.home)
 - End: Last row. Moves the focus to the last row. (list.end)
+- F2: Pause search. In the search results, holds the running search; again, it goes on. (search.pause)
 
 ### In the viewer
 
@@ -357,6 +390,8 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 
 ### In a question
 
+- F7: Next change. In a compare, goes to the next change. (compare.next)
+- Shift+F7: Previous change. In a compare, goes to the previous change. (compare.previous)
 - Y: Yes. Answers yes to the question. (dialog.yes)
 - N: No. Answers no to the question. (dialog.no)
 - Enter: Accept. Chooses the focused answer. (dialog.accept)
@@ -381,18 +416,45 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Split file. Splits the focused file, or each marked file, into numbered parts in the other panel. (file.split)
 - Join files. Joins numbered parts back into one file in the other panel, from any part. (file.join)
 - Folder history. Lists the folders visited, newest first. (go.history)
+- Select by kind. Lists the kinds and file-type groups, to select every entry of one. (select.by-kind)
+- Select by size. Opens the pattern prompt on size over, to finish with a size such as 1 MB. (select.by-size)
+- Select by date. Opens the pattern prompt on modified within, to finish with a time such as 3 days. (select.by-date)
+- Select same extension. Selects every file with the focused file's extension. (select.same-extension)
+- Mark range. Starts a range at the focused row; again, marks every row from there to the focus. (select.range)
+- Select next rows. Asks how many, then marks that many rows from the focus. (select.next-rows)
 - Restore selection. Brings back the selection the last select all, none, invert, pattern, finished job or folder change replaced. (select.restore)
 - Copy to a place. Copies the selection to a place you choose, recent places first. (file.copy-to)
 - Move to a place. Moves the selection to a place you choose, recent places first. (file.move-to)
 - Run a command. Asks for a command line and runs it in this folder. (file.run-command)
 - Shell here. Opens your shell in this folder; exit it to come back. (file.shell-here)
 - Clear filter. Shows every name again. (view.filter-clear)
+- Compare files. Compares two files: two marked here, or one in each panel, from the other panel's to this one's. (compare.files)
+- Compare properties. Lists what differs between two files' size, times, type, permissions and owner. (compare.properties)
+- Select the differences. Marks, in both panels, what is on one side only and what differs in size or is newer. (select.differences)
+- Say filter. Says the panel's filter in one sentence, with the real days of date words such as last week. (view.say-filter)
+- Stash filter. Keeps the panel's filter aside and shows everything; Restore filter brings it back. (view.filter-stash)
+- Restore filter. Brings back the filter kept aside last. (view.filter-restore)
+- Folders only. Shows only the folders; again, the filter before it comes back. (view.only-folders)
+- Files only. Shows only the files and archives; again, the filter before it comes back. (view.only-files)
 - Sort by created. Sorts by created time, newest first; again for oldest first. (view.sort-created)
 - Sort by accessed. Sorts by accessed time, newest first; again for oldest first. (view.sort-accessed)
 - Sort by kind. Sorts by the kind of file, A to Z; again for Z to A. (view.sort-kind)
 - Sort by attributes. Sorts by permissions or attributes; again to reverse. (view.sort-attributes)
 - Sort by owner. Sorts by owner, A to Z; again for Z to A. (view.sort-owner)
 - Sort by label. Sorts by label, A to Z; again for Z to A. (view.sort-label)
+- Search results. Opens the last search's results again. (search.results)
+- Show in its folder. In the search results, shows the focused result in its folder. (search.show-in-folder)
+- Remove from results. In the search results, takes the focused row out of the list; the file stays. (search.remove-row)
+- Save this search. Keeps the last search under a name, so Saved searches runs it again. (search.save)
+- Saved searches. Lists the saved searches, each run again when chosen, its date words read anew. (search.saved)
+- Space list. Lists what takes the space in this folder, the largest first, with the percent of the total. (search.space)
+- Space by kind. Lists the space below this folder by kind of file: images, music, video and the rest. (search.space-by-kind)
+- Space by age. Lists the space below this folder by when the files last changed. (search.space-by-age)
+- Largest items below here. Lists the largest files anywhere below this folder, as search results. (search.largest)
+- Folder sizes. Counts the size of the marked folders, or the focused one, everything inside them. (dir.sizes)
+- Size every folder. Counts the size of every folder here, then offers to sort by size. (dir.size-every-folder)
+- Newest files. Lists the files changed on the latest day below this folder, as search results. (search.newest)
+- Earlier day. In newest files, lists the files of the day before. (search.earlier-day)
 - Toggle label. Adds a label to the marked items, or takes it off when every one has it. (label.toggle)
 - Clear labels. Takes every label off the marked items, or the focused one. (label.clear)
 - Labels list. Lists the labels with how many items carry each; choosing one lists its items. (label.list)
@@ -438,6 +500,7 @@ These keys of the terminal list work in most terminals, but a terminal program m
 - Menu for Context menu: Windows keeps it; crossterm never delivers the Menu key in a Windows terminal; Shift+F10 is the way. Sure way: File menu, Context menu.
 - Ctrl+C for Copy: Windows Terminal keeps it; it copies text when text is selected. Sure way: Edit menu, Copy.
 - Ctrl+V for Paste: Windows Terminal keeps it; it pastes text, so the key never arrives. Sure way: Edit menu, Paste.
+- Shift+F7 for Previous change: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: Search menu, Compare submenu, Previous change.
 - Ctrl+F3 for Sort by name: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by name.
 - Ctrl+F4 for Sort by extension: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by extension.
 - Ctrl+F5 for Sort by modified: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by modified.
@@ -496,7 +559,6 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 
 ## Kept for later alphas
 
-- Ctrl+F: Find files, coming in alpha.3.
 - Ctrl+T: New tab, coming in alpha.8.
 - Ctrl+W: Close tab, coming in alpha.8.
 - Ctrl+Tab: Next tab, coming in alpha.8, in the window.

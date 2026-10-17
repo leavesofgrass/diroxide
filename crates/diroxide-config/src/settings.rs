@@ -119,6 +119,81 @@ pub enum FilterCase {
     Match,
 }
 
+/// How a compare matches lines (alpha.3).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompareAlgorithm {
+    /// Lines that occur once are matched first.
+    #[default]
+    Patience,
+    /// Like patience, with repeated lines too.
+    Histogram,
+    /// The fewest changes.
+    Myers,
+}
+
+/// What a compare does with a file over the text limit (alpha.3).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LargeFilePolicy {
+    /// Ask each time.
+    #[default]
+    Ask,
+    /// Compare the first part as text.
+    Head,
+    /// Compare byte by byte.
+    Bytes,
+}
+
+/// The `[compare]` table (alpha.3): what a compare ignores, how it
+/// matches lines, its time limit, its text limit, the unified view's
+/// context, and larger files.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CompareSettings {
+    /// Lines compared without their endings.
+    pub ignore_line_endings: bool,
+    /// Spaces at a line's end left out.
+    pub ignore_trailing_space: bool,
+    /// Any run of spaces counted as one.
+    pub ignore_space_amount: bool,
+    /// Every space left out.
+    pub ignore_all_space: bool,
+    /// Blank lines left out.
+    pub ignore_blank_lines: bool,
+    /// Capital and small letters the same.
+    pub ignore_case: bool,
+    /// How lines are matched.
+    pub algorithm: CompareAlgorithm,
+    /// The time a compare may take to find the fewest changes, in
+    /// milliseconds.
+    pub deadline_ms: u64,
+    /// The largest file compared as text in full, in MiB.
+    pub text_limit_mib: u64,
+    /// Same lines around a change in the unified view.
+    pub context: u64,
+    /// What happens to a larger file.
+    pub large_files: LargeFilePolicy,
+}
+
+impl Default for CompareSettings {
+    fn default() -> Self {
+        Self {
+            ignore_line_endings: true,
+            ignore_trailing_space: false,
+            ignore_space_amount: false,
+            ignore_all_space: false,
+            ignore_blank_lines: false,
+            ignore_case: false,
+            algorithm: CompareAlgorithm::Patience,
+            deadline_ms: 2_000,
+            text_limit_mib: 16,
+            context: 2,
+            large_files: LargeFilePolicy::Ask,
+        }
+    }
+}
+
 /// The first day of the week, for "this week" and "last week" (alpha.3).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -493,6 +568,8 @@ pub struct Settings {
     pub search_row_cap: u64,
     /// Whether searches skip ignored files (alpha.3).
     pub search_respect_ignore: bool,
+    /// Comparing files (alpha.3).
+    pub compare: CompareSettings,
     /// Where the components list is read from; empty for the public list
     /// (alpha.4).
     pub components_source: String,
@@ -545,6 +622,7 @@ impl Default for Settings {
             week_starts_on: WeekStart::Sunday,
             search_row_cap: 100_000,
             search_respect_ignore: false,
+            compare: CompareSettings::default(),
             components_source: String::new(),
             plugins: PluginSettings::default(),
             unknown: BTreeMap::new(),

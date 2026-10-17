@@ -20,8 +20,12 @@ mod archive;
 mod archive_forms;
 mod archive_jobs;
 mod bookmarking;
+// Compare files (W3a).
+mod comparing;
 mod dialogs;
 mod files;
+// The panel filter on the filter language (W3a).
+mod filtering;
 mod folder_views;
 mod info;
 mod keys;
@@ -29,7 +33,13 @@ mod labeling;
 mod nav;
 mod organize;
 mod preview;
+// Saved searches, the Space list, sizes and newest files (W3a).
+mod search_tools;
+// Search, its dialog and its results (W3a).
+mod searching;
 mod select;
+// Selection on the filter language (W3a).
+mod selecting;
 mod split_join;
 mod viewing;
 // Watch this folder (W3t).
@@ -59,6 +69,7 @@ use crate::startup::Startup;
 use crate::state::{self, Visits};
 
 pub use files::Clipboard;
+pub use filtering::FilterContents;
 
 /// What the app starts with.
 #[derive(Clone, Debug)]
@@ -227,6 +238,107 @@ pub enum AppEvent {
         /// The facts.
         facts: Box<crate::archives::ArchiveFacts>,
     },
+    /// Hits of a search arrived, in the order found (W3a).
+    SearchFound {
+        /// The search, as [`Request::Search`] numbered it.
+        search: u64,
+        /// The hits.
+        hits: Vec<diroxide_search::SearchHit>,
+    },
+    /// How far a search got (W3a).
+    SearchProgress {
+        /// The search.
+        search: u64,
+        /// How far.
+        progress: diroxide_search::SearchProgress,
+    },
+    /// A search ended (W3a): its summary, or why it could not run.
+    SearchDone {
+        /// The search.
+        search: u64,
+        /// The summary, or why not.
+        result: Result<diroxide_search::SearchSummary, Message>,
+    },
+    /// A compare ended (W3a): what it found, or why not.
+    Compared {
+        /// The request.
+        request: RequestId,
+        /// The comparison, or why not.
+        result: Result<Box<diroxide_diff::FileComparison>, Message>,
+    },
+    /// How far a compare got (W3a), in bytes read of both files.
+    CompareProgress {
+        /// The request.
+        request: RequestId,
+        /// Bytes read so far.
+        done: u64,
+        /// Bytes in all, when known.
+        total: Option<u64>,
+    },
+    /// The saved searches were read (W3a), each file with its search or
+    /// why it could not be read.
+    SavedListed {
+        /// The request.
+        request: RequestId,
+        /// The files found.
+        found: Vec<(std::path::PathBuf, Result<diroxide_search::Saved, String>)>,
+    },
+    /// A Space list was counted (W3a).
+    SpaceListed {
+        /// The request.
+        request: RequestId,
+        /// The list, or why not.
+        result: Result<diroxide_search::SpaceList, Message>,
+    },
+    /// The largest items below a folder were found (W3a).
+    LargestFound {
+        /// The results' search number.
+        search: u64,
+        /// What was found, or why not.
+        result: Result<diroxide_search::Largest, Message>,
+    },
+    /// Folders were sized (W3a), each with its size or why not.
+    DirSized {
+        /// The request.
+        request: RequestId,
+        /// The sizes.
+        sizes: Vec<(Place, Result<diroxide_search::DirSize, Message>)>,
+    },
+    /// Newest files were found (W3a).
+    NewestFound {
+        /// The results' search number.
+        search: u64,
+        /// What was found, or why not.
+        result: Result<diroxide_search::Newest, Message>,
+    },
+    /// A label's items were looked up for the results lister (W3a).
+    LabeledFound {
+        /// The search.
+        search: u64,
+        /// The items there.
+        found: Vec<diroxide_search::SearchHit>,
+        /// The items gone.
+        missing: Vec<Place>,
+        /// How many could not be looked at.
+        unreadable: usize,
+    },
+    /// A result's file was checked when it took the focus (W3a).
+    StaleChecked {
+        /// The search.
+        search: u64,
+        /// The result's row.
+        row: String,
+        /// Whether its file is as the list says.
+        freshness: diroxide_search::Freshness,
+    },
+    /// The files a panel's content filter asked about were read (W3a):
+    /// those that matched, or why not.
+    FilterContents {
+        /// The request it answers.
+        request: RequestId,
+        /// What was read, or why not.
+        result: Result<FilterContents, Message>,
+    },
     /// What the arrival watch of Watch this folder saw (W3t), tagged with
     /// its watch, so a note from a watch already stopped is dropped.
     Arrivals {
@@ -312,10 +424,54 @@ enum Purpose {
     Places(Side),
     /// The folder history.
     History(Side),
-    /// The name filter, live; the filter before it opened.
-    Filter(Side, Option<diroxide_core::Pattern>),
+    /// The filter prompt, live; the filter before it opened.
+    Filter(Side, Option<diroxide_core::filter::Filter>),
+    /// The question before a panel's filter reads files (W3a).
+    FilterContents {
+        side: Side,
+        filter: Box<diroxide_core::filter::Filter>,
+        previous: Option<Box<diroxide_core::filter::Filter>>,
+    },
     /// Select or unselect by pattern.
     Pattern { side: Side, select: bool },
+    /// The count before a pattern's selection changes (W3a).
+    SelectCount {
+        side: Side,
+        select: bool,
+        ids: Vec<String>,
+    },
+    /// Select by kind's list (W3a).
+    SelectKind(Side),
+    /// Select the next rows' count (W3a).
+    NextRows(Side),
+    /// The search dialog: its settings (W3a).
+    SearchForm(Box<searching::SearchForm>),
+    /// One of the search dialog's text settings being typed (W3a).
+    SearchText(Box<searching::SearchForm>, searching::SearchField),
+    /// The results lister (W3a).
+    Results,
+    /// The results' refining filter (W3a).
+    Refine,
+    /// The actions on the results (W3a).
+    ResultsMenu,
+    /// The name to save the last search under (W3a).
+    SaveSearchName,
+    /// The saved searches (W3a).
+    SavedList(Vec<search_tools::SavedRow>),
+    /// The question before a saved search is deleted (W3a).
+    DeleteSaved(std::path::PathBuf, String),
+    /// A Space list (W3a).
+    Space(Box<diroxide_search::SpaceList>),
+    /// The size sort offered after Size every folder (W3a).
+    OfferSizeSort,
+    /// A compare's change list (W3a).
+    Compare(Box<comparing::Compared>),
+    /// A compare's unified view (W3a).
+    Unified(Box<comparing::Compared>),
+    /// The choice for a file too large to compare as text (W3a).
+    CompareLarge(Box<comparing::Pair>),
+    /// The actions on a compare (W3a).
+    CompareMenu,
     /// Copy or move to a place picked from a list.
     PickDestination {
         side: Side,
@@ -554,6 +710,16 @@ pub struct App {
     organize: organize::Organize,
     /// The folder watched for arrivals (W3t).
     watching: watching::WatchState,
+    /// The filter's pause, stashes and content reads (W3a).
+    filtering: filtering::FilterState,
+    /// Where each panel's range started (W3a).
+    selecting: selecting::SelectState,
+    /// The search dialog, the results and their parking (W3a).
+    searching: searching::SearchState,
+    /// What the search tools wait for (W3a).
+    tools: search_tools::ToolsState,
+    /// The compare on its way (W3a).
+    comparing: comparing::CompareState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -866,6 +1032,11 @@ impl App {
             keys: keys::KeysState::new(owner_keys),
             organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
             watching: watching::WatchState::default(),
+            filtering: filtering::FilterState::default(),
+            selecting: selecting::SelectState::default(),
+            searching: searching::SearchState::default(),
+            tools: search_tools::ToolsState::default(),
+            comparing: comparing::CompareState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -977,6 +1148,12 @@ impl App {
         if self.in_preview() {
             return crate::menu::preview_bank().key_bar(&self.keymap);
         }
+        if self.results_shown() {
+            return crate::menu::results_bank().key_bar(&self.keymap);
+        }
+        if self.compare_shown() {
+            return crate::menu::compare_bank().key_bar(&self.keymap);
+        }
         self.active_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
@@ -994,6 +1171,12 @@ impl App {
         }
         if self.in_preview() {
             return crate::menu::preview_bank().key_bar_within(&self.keymap, cells);
+        }
+        if self.results_shown() {
+            return crate::menu::results_bank().key_bar_within(&self.keymap, cells);
+        }
+        if self.compare_shown() {
+            return crate::menu::compare_bank().key_bar_within(&self.keymap, cells);
         }
         self.active_bank()
             .map(|bank| bank.key_bar_within(&self.keymap, cells))
@@ -1104,11 +1287,8 @@ impl App {
             if panel.is_loading() {
                 tail.push_str(", loading");
             }
-            if let Some(filter) = panel.filter() {
-                tail.push_str(&format!(
-                    ", filter {}",
-                    diroxide_core::names::display_name(filter.text())
-                ));
+            if let Some(filter) = self.filter_title(self.active) {
+                tail.push_str(&format!(", {filter}"));
             }
             let sort = panel.sort();
             if *sort != self.settings.sort_spec() {
@@ -1129,11 +1309,8 @@ impl App {
         if panel.is_loading() {
             head.push_str(", loading");
         }
-        if let Some(filter) = panel.filter() {
-            head.push_str(&format!(
-                ", filter {}",
-                diroxide_core::names::display_name(filter.text())
-            ));
+        if let Some(filter) = self.filter_title(self.active) {
+            head.push_str(&format!(", {filter}"));
         }
         let sort = panel.sort();
         let tail = if *sort == self.settings.sort_spec() {
@@ -1297,6 +1474,36 @@ impl App {
                 unreadable,
             } => self.places_checked(request, missing, unreadable),
             AppEvent::Arrivals { watch, note } => self.arrivals(watch, note),
+            AppEvent::FilterContents { request, result } => {
+                self.filter_contents_arrived(request, result)
+            }
+            AppEvent::SearchFound { search, hits } => self.search_found(search, hits),
+            AppEvent::SearchProgress { search, progress } => {
+                self.search_progress(search, &progress)
+            }
+            AppEvent::SearchDone { search, result } => self.search_done(search, result),
+            AppEvent::SavedListed { request, found } => self.saved_listed(request, found),
+            AppEvent::Compared { request, result } => self.compared(request, result),
+            AppEvent::CompareProgress {
+                request,
+                done,
+                total,
+            } => self.compare_progress(request, done, total),
+            AppEvent::SpaceListed { request, result } => self.space_listed(request, result),
+            AppEvent::LargestFound { search, result } => self.largest_found(search, result),
+            AppEvent::DirSized { request, sizes } => self.folders_sized(request, sizes),
+            AppEvent::NewestFound { search, result } => self.newest_found(search, result),
+            AppEvent::LabeledFound {
+                search,
+                found,
+                missing,
+                unreadable,
+            } => self.labeled_found(search, found, missing, unreadable),
+            AppEvent::StaleChecked {
+                search,
+                row,
+                freshness,
+            } => self.stale_checked(search, row, freshness),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }
@@ -1334,6 +1541,26 @@ impl App {
         }
         // Watch this folder, and Cancel while it watches (W3t).
         if let Some(effects) = self.watch_dispatch(command, action) {
+            return effects;
+        }
+        // Say filter, stash and restore, the kind toggles (W3a).
+        if let Some(effects) = self.filtering_dispatch(command) {
+            return effects;
+        }
+        // Select by kind, size, date, extension, range and rows (W3a).
+        if let Some(effects) = self.selecting_dispatch(command) {
+            return effects;
+        }
+        // Find files and the results' commands (W3a).
+        if let Some(effects) = self.search_dispatch(command) {
+            return effects;
+        }
+        // Saved searches, the Space list, sizes and newest files (W3a).
+        if let Some(effects) = self.tools_dispatch(command) {
+            return effects;
+        }
+        // Compare files, its properties and the differences (W3a).
+        if let Some(effects) = self.compare_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

@@ -96,10 +96,9 @@ pub(super) enum Wants {
         one: Option<String>,
         toggle: bool,
     },
-    /// The Labels list.
+    /// The Labels list; Enter opens a label's items as search results
+    /// (W3a).
     Labels,
-    /// One label's items.
-    Labeled { label: String },
     /// The Bookmarks list for a panel.
     Bookmarks { side: Side },
     /// The question before a bookmark is removed.
@@ -262,15 +261,21 @@ impl App {
                 if renames {
                     return Some(self.bookmark_form(side, place, None));
                 }
+                // The copy and move keys copy or move the panel's marked
+                // items, or its focused one, into the bookmark (W3a).
+                let kind = match file_command {
+                    Some(id) if id == ids::COPY => Some(diroxide_core::JobKind::Copy),
+                    Some(id) if id == ids::MOVE => Some(diroxide_core::JobKind::Move),
+                    _ => None,
+                };
+                if let Some(kind) = kind {
+                    return Some(self.send_to_bookmark(side, kind, place));
+                }
                 None
             }
             Wants::History { .. } if removes => {
                 let place = row.and_then(|r| Place::parse(&r).ok())?;
                 Some(self.forget_place(&place))
-            }
-            Wants::Labeled { label } if removes => {
-                let place = row.and_then(|r| Place::parse(&r).ok())?;
-                Some(self.unlabel_one(&label, place))
             }
             _ => None,
         }
@@ -299,12 +304,9 @@ impl App {
                 one,
                 toggle,
             } => self.label_chosen(side, places, one, toggle, row, &text, in_list),
+            // The label's items as search results (W3a).
             Wants::Labels => match row {
-                Some(label) => self.labeled_items(&label),
-                None => Vec::new(),
-            },
-            Wants::Labeled { .. } => match row.and_then(|r| Place::parse(&r).ok()) {
-                Some(place) => self.show_labeled(place),
+                Some(label) => self.labeled_results(&label),
                 None => Vec::new(),
             },
             Wants::Bookmarks { side } => match row {

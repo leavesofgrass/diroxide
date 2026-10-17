@@ -408,6 +408,58 @@ impl App {
         }
     }
 
+    /// The copy or move key in the Bookmarks list: the panel's marked
+    /// items, or its focused one, go into the bookmark's place, planned
+    /// and confirmed as any copy; the bookmark's use is counted (W3a).
+    pub(super) fn send_to_bookmark(
+        &mut self,
+        side: Side,
+        kind: diroxide_core::JobKind,
+        place: Place,
+    ) -> Vec<Effect> {
+        let Some((sources, note)) = self.frozen(side) else {
+            let empty = self.panel(side).list().empty_text().to_owned();
+            return vec![self.say(Message::status(empty))];
+        };
+        let mut effects = self.close_all();
+        self.bookmark_chosen(&place);
+        effects.extend(self.copy_or_move_to(side, kind, sources, note, place));
+        effects
+    }
+
+    /// The rows of a list of places that are not bookmarks, the place's
+    /// own name first, then what it is, then where (W3a): "work, visited
+    /// 3 times, in D:\diroxide". A drive or a top keeps its title.
+    pub(super) fn place_rows_first(&self, list: &mut ListModel) {
+        let rows: Vec<ListRow> = list
+            .rows()
+            .iter()
+            .map(|row| {
+                let place = Place::parse(&row.id).ok();
+                let bookmarked = place
+                    .as_ref()
+                    .is_some_and(|p| self.organize.bookmarks.find(p).is_some());
+                match place.and_then(|p| p.parent().map(|parent| (p, parent))) {
+                    Some((place, parent)) if !bookmarked && row.label == row.id => {
+                        let mut details = row.details.clone();
+                        details.push(format!(
+                            "in {}",
+                            diroxide_core::names::display_name(&parent.to_string())
+                        ));
+                        ListRow::new(row.id.clone(), crate::panel::place_leaf(&place))
+                            .with_details(details)
+                    }
+                    _ => row.clone(),
+                }
+            })
+            .collect();
+        let focus = list.focused().map(|r| r.id.clone());
+        list.set_rows(rows);
+        if let Some(focus) = focus {
+            list.focus_id(&focus);
+        }
+    }
+
     /// A place chosen from the Go to place list: its bookmark's use is
     /// counted, when it has one.
     pub(super) fn bookmark_chosen(&mut self, place: &Place) {

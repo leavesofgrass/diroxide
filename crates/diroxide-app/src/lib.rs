@@ -50,7 +50,7 @@ pub mod views;
 /// draws from [`App::settings`].
 pub mod config {
     pub use diroxide_config::{
-        KeymapConfig, Layout, ScreenReaderMode, SecretEcho, Settings, SingleLetters,
+        KeymapConfig, Layout, Paths, ScreenReaderMode, SecretEcho, Settings, SingleLetters,
     };
 }
 
