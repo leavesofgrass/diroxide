@@ -1,6 +1,6 @@
 # diroxide documentation
 
-diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, keyboard first and accessible first. Its command is `diro`. It is in its first alpha series: the guides here describe what alpha.1 does, and each later alpha adds its own guides.
+diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, keyboard first and accessible first. Its command is `diro`. It is in its first alpha series: the guides here describe what alpha.1 and alpha.2 do, and each later alpha adds its own guides.
 
 This is the index of every diroxide document, grouped by audience:
 
@@ -23,7 +23,7 @@ If you are new, begin with the [quick start](quickstart.md).
 ### Getting started
 
 - [Quick start](quickstart.md): starting, moving, marking, copying, renaming, deleting, undoing and quitting.
-- [Installing diroxide](install.md): building from source today, the one file per platform that comes with alpha.6, and `cargo install diro` at beta.1.
+- [Installing diroxide](install.md): building from source today (a Rust toolchain and a C compiler), the one file per platform that comes with alpha.6, and `cargo install diro` at beta.1.
 - [Using diroxide with a screen reader](screen-readers.md): how diroxide talks to NVDA, JAWS, Orca and VoiceOver, what you should hear, the settings to check, and the Braille display.
 - [Terminals](terminals.md): which terminal to use, the keys terminals keep, Windows Terminal's own keys and how to give them back, the key test, and `diro --inline`, `diro ls` and `diro search` for when the full screen fails.
 - [Troubleshooting](troubleshooting.md): common problems, and how to report a bug.
@@ -34,6 +34,14 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo.
 - [Every key](keyboard.md): the default keys for the terminal and the window, the keys a terminal may keep and the keys screen readers keep, generated from the keymap.
 
+### Archives, files and previews (alpha.2)
+
+- [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, the limits that protect you, and `diro archive`.
+- [The viewer](viewer.md): F3, lines, wrap, jump, search, hex mode, following a log, large files, and code read by ear.
+- [The quick view](quick-view.md): a live preview of the focused file in the other panel, by heading, table and link, and the formats it reads.
+- [Split and join](split-join.md): cutting a big file into parts for mail, GitHub, a disc or FAT32, joining them back, the checksum file, `diro split` and `diro join`.
+- [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, times, and the details list.
+
 ### Settings
 
 - [Settings and where the files live](settings.md): the config and state folders, the settings most people look for, themes, changing keys, menus and banks.
@@ -43,7 +51,6 @@ If you are new, begin with the [quick start](quickstart.md).
 
 These guides are not written yet, because the features they describe are not in alpha.1. Each arrives with the alpha that ships its feature.
 
-- Archives, split and join, the file viewer and the document quick view: comes with alpha.2.
 - Search, filters, labels and bookmarks, the Keys list and file compare: comes with alpha.3.
 - Plugins, writing a plugin, script commands and optional components: comes with alpha.4.
 - SSH and remote places: comes with alpha.5.

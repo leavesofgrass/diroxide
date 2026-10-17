@@ -18,7 +18,12 @@ Until then, the way in is to build from source.
 What you need:
 
 - A Rust toolchain from rustup. The repository pins the exact version in `rust-toolchain.toml`, so rustup downloads the right one the first time you build.
-- The linker Rust needs on your system. On Windows that is the Microsoft C++ Build Tools. On Linux it is a package such as build-essential or gcc. On macOS it is the Xcode command line tools. In alpha.1 diroxide compiles no C or C++ code, so no C compiler is needed for it; Rust only asks the system for a linker.
+- A C compiler, and the linker Rust needs. Since alpha.2 a build of the workspace needs a C compiler. carta, the converter the quick view reads Org and other formats with, brings two small crates, psm and stacker, that compile a little C and assembly so that deeply nested documents cannot overflow the stack. The downloader's secure connection library, ring, compiles C too. `cargo install diro` needs the same when it comes at beta.1. The tools are the ones that also give Rust its linker, so one install covers both:
+  - Windows: the Microsoft C++ Build Tools, with the "Desktop development with C++" workload. They hold the C compiler, the assembler and the linker.
+  - Linux: a C compiler and make. On Debian and Ubuntu that is the `build-essential` package, on Fedora the `gcc` and `make` packages, and on Arch the `base-devel` group. `clang` works in place of gcc.
+  - macOS: the Xcode command line tools, installed with `xcode-select --install`. They hold clang.
+
+Everything else diroxide uses is pure Rust. A C compiler is needed only for those crates, and `cargo xtask native --check` checks that nothing else in the build asks for one.
 
 In the source folder, build the program:
 
@@ -41,6 +46,22 @@ diro --version
 ```
 
 The first line is the program's name and version, `diro 0.1.0-alpha.1`. The next lines name the project and its license.
+
+### A smaller diro
+
+The viewer colors code with a syntax set that adds about 3 MB to the program. A build can leave it out, and the downloader's secure connection library with it:
+
+```bash
+cargo build --release -p diro --no-default-features
+```
+
+In that build the viewer says "Highlighting off: not in this build" for every file, and the commands that need no grammar keep working, such as search, hex mode, the bracket jump and indentation. The downloader falls back to `curl` or `wget` on your PATH. To leave out only the syntax set and keep the downloader's client:
+
+```bash
+cargo build --release -p diro --no-default-features --features fetch
+```
+
+A smaller build still needs a C compiler, for carta. [Building, for contributors](dev/building.md) has the details.
 
 ## The first run of a downloaded file
 

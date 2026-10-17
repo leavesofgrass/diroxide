@@ -7,7 +7,7 @@
 
 diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, in the orthodox style of Worker and Directory Opus. Its command is `diro`. It is designed first for people who use a screen reader or a Braille display, and for anyone who works from the keyboard. Every row says what it is in its first 40 characters, status is always words, color never carries meaning alone, and every delete lists what it will remove and starts on No. It is written for Windows, Linux and macOS, with no X11 code.
 
-Status: alpha. The first alpha, 0.1.0-alpha.1, is in progress: a terminal file manager for local folders, with copy, move, rename, trash and undo. [Known limits](docs/known-limits.md) lists what it does not do yet.
+Status: alpha. The first alpha, 0.1.0-alpha.1, is in progress: a terminal file manager for local folders and archives, with copy, move, rename, trash and undo, a viewer and a quick view; the window comes later. [Known limits](docs/known-limits.md) lists what it does not do yet.
 
 ## Get diro
 
@@ -55,6 +55,7 @@ Plugins, in any language, come with alpha.4.
 
 - [Quick start](docs/quickstart.md) and [installing diroxide](docs/install.md).
 - [The panels](docs/panels.md), [operations and undo](docs/operations.md), [settings](docs/settings.md) and the [settings reference](docs/settings-reference.md).
+- [Archives](docs/archives.md), [the viewer](docs/viewer.md), [the quick view](docs/quick-view.md), [split and join](docs/split-join.md) and [links, permissions and times](docs/links-permissions.md).
 - [Every key](docs/keyboard.md), generated from the keymap.
 - [Terminals](docs/terminals.md) and [troubleshooting](docs/troubleshooting.md).
 - [Known limits](docs/known-limits.md), [privacy](docs/privacy.md) and the [accessibility statement](docs/accessibility.md).

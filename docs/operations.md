@@ -1,6 +1,6 @@
 # Operations and undo
 
-This guide covers everything that changes files: copy, move, rename, make folder, duplicate, delete, the file clipboard and undo. For each one it says the question diroxide asks, what you should hear, and how to reverse it. It also covers the prompts you type into, the jobs line and the Say Status key.
+This guide covers everything that changes files: copy, move, rename, make folder, duplicate, delete, the file clipboard and undo. For each one it says the question diroxide asks, what you should hear, and how to reverse it. It also covers the prompts you type into, the jobs line and the Say Status key. Packing and unpacking archives, splitting and joining files, links, permissions and times are jobs too and follow the same steps; each has its own guide, and a short entry below says where.
 
 ## How every operation works
 
@@ -93,6 +93,22 @@ F7 asks for a name: "New folder in work". The cursor lands on the new folder: "C
 
 Shift+F5 makes a copy of the focused or marked entries in the same folder. It asks "Duplicate report.pdf as" with the free name filled in: `report (2).pdf`. With several rows marked, it steps through them one at a time.
 
+## Archives: pack, unpack and test
+
+Pack makes a new archive from the marked rows, Unpack writes an archive's members to a folder, and Test archive reads every member and checks it. They are jobs, with a plan, a question that starts on No, progress, a result list and Undo. In a terminal they are in the File menu under Archive (Alt+F, then A) and in the palette; in the desktop window they are Alt+F5, Alt+F9 and Alt+Shift+F9. F5 from inside an open archive unpacks the marked members, reading the archive once, with the default settings. Copying, moving, renaming or deleting inside an archive is not possible, and says "Archives are read only here. Use Pack to make a new one." [Archives](archives.md) has the dialogs, the passwords and the limits.
+
+## Split and join
+
+Split file cuts a file into numbered parts (`report.pdf.001`, `report.pdf.002`) in the other panel's folder, with a `.crc` checksum file written last. Join files puts the parts back together from any part, names a gap before it writes anything, checks the result against the checksum file and says the verdict, then offers to move the parts to the trash. Both are jobs with Undo: Ctrl+Z on a split moves the parts to the trash, and on a join moves the whole to the trash. [Split and join](split-join.md) has the sizes and the messages.
+
+## Links
+
+Make symbolic link makes a link to each marked entry in the other panel's folder, absolute or relative, symbolic, hard or junction (File menu, Alt+F then L). Change link target swaps in a new target as one step that Undo reverses (Alt+F then I). Neither has a key of its own. On Windows a link needs Developer Mode or an administrator, and diroxide says so in words: "Cannot link: needs developer mode." [Links, permissions and times](links-permissions.md) has the rest.
+
+## Permissions and times
+
+Change permissions (File menu, Alt+F then W; no key of its own) says the result in words first and the octal number second: "Owner can read and write, group can read, others can read (644)". Its dialog steps owner, group and others through read and write, read only, read, write and run, read and run, and no access. On Windows it changes the attributes. A change can go inside folders, with "Apply to:" as the plan's first row. The plan lists what will change and asks first, and Ctrl+Z reverses it. There is no Change times command in alpha.2. A copy keeps the modified time of files and folders; see [links, permissions and times](links-permissions.md).
+
 ## Delete to the trash: F8 and Delete
 
 F8 and Delete move the marked rows, or the focused row, to the trash. The word is "trash" on every system, including the Recycle Bin on Windows. diroxide lists what it will move and asks: "Move 1 item to the trash, 2.1 KB? No is the default. y or n". A folder is moved as one step. The result says "Moved 3 items to the trash. They can be restored."
@@ -127,7 +143,10 @@ Ctrl+Z undoes the last job. What it can reverse:
 - a move to the trash: the entry is restored (Windows and Linux): "Undid trash: 1 item is back";
 - a made folder: removed, only if it is empty: "Undid make folder: 1 folder removed";
 - a copy or a duplicate: the copies that diroxide made go to the trash, if they have not changed: "Undid copy: 3 copies are in the trash";
-- an overwrite: the replaced file is restored from the trash, if the job trashed it first.
+- an overwrite: the replaced file is restored from the trash, if the job trashed it first;
+- a pack, an unpack, a split and a join: the files the job made go to the trash;
+- a link: the link goes to the trash, and a changed link target goes back to the old link from the trash;
+- a change of permissions, attributes or times: the old values are put back, for each entry that is still as the job left it.
 
 What it cannot reverse: a permanent delete, and a move across drives. Before it reverses each step, diroxide checks that the entry is as the job left it. If it changed since, that step is skipped and the undo says why. If there is nothing to undo, diroxide says "Nothing to undo".
 
@@ -143,9 +162,14 @@ Ctrl+C and Ctrl+X put the marked rows, or the focused row, on diroxide's own cli
 - The clipboard is internal. It does not use the system clipboard, so Explorer and the Finder cannot paste what diroxide copied.
 - Windows Terminal keeps Ctrl+V for pasting text, and Ctrl+C when text is selected. Use Paste in the Edit menu (Alt+E, then P), or unbind the key as [Terminals](terminals.md) shows.
 
+## Copy a path or a name
+
+Copy path and Copy name, in the palette, put the focused entry's full path or its name on the system clipboard, and say it: "Path copied: D:\docs\report.pdf", "Name copied: report.pdf". This is text for other programs, not the file clipboard of Ctrl+C. In a terminal diroxide asks the terminal to set its clipboard (OSC 52), so a terminal that does not allow that will not receive the text. The viewer has the same two commands for the file it shows.
+
 ## Open, edit and run
 
 - Enter on a file opens it with your system's own program for it: "Opening report.pdf". Enter on a program asks first, starting on No: "Run setup.exe? No is the default. y or n".
+- F3 opens the file in the viewer, which is for reading; Escape closes it. [The viewer](viewer.md) has the rest. Shift+F3 turns the other panel into a live preview of the focused file ([the quick view](quick-view.md)).
 - F4 opens the file in your editor with the screen suspended. When you come back, diroxide says "Back in diroxide, Documents". The `editor` setting names the editor; if it is empty, diroxide tries the VISUAL variable, then EDITOR, then the system's text editor.
 - Run a command and Shell here are in the File menu and the palette. Run a command asks "Run in work" and runs your line in your shell, with the active folder as its working folder. Shell here opens your shell in the active folder: "Shell here: exit the shell to come back." Unlike every built-in operation, a command you type is a shell command, so you are responsible for what it does. Nothing from the panels is pasted into your line. Information arrives in environment variables instead: `DIRO_ACTIVE` and `DIRO_OTHER` hold the two panels' folders, `DIRO_CURSOR` the focused entry, and `DIRO_SELECTION_FILE` names a file that lists the selected paths separated by NUL characters. `DIRO_LEVEL` counts how deep diroxide is nested, so a script can tell it runs under diroxide. The shell is the one in `SHELL`, or else PowerShell 7, then Windows PowerShell 5.1, then cmd. Windows cannot start a program in a folder of 259 characters or more, and diroxide says so first: "Cannot start a program in a folder this deep". The same limit holds for opening a file: "Cannot open a file this deep".
 
@@ -169,6 +193,9 @@ Every prompt you type into has completion, with the same keys.
 ## See also
 
 - [The panels](panels.md)
+- [Archives](archives.md)
+- [Split and join](split-join.md)
+- [Links, permissions and times](links-permissions.md)
 - [Terminals](terminals.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Settings and where the files live](settings.md)

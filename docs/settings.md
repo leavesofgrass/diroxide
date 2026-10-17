@@ -22,7 +22,7 @@ In the config folder, alpha.1 uses these files:
 
 Later alphas add more files, such as the tools list and the plugins folder. They are described when they arrive.
 
-The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; and `terminal.log`. Nothing in it needs editing.
+The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and, since alpha.2, a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. Nothing in it needs editing.
 
 ## How diroxide treats these files
 
@@ -53,7 +53,8 @@ If a value is not one diroxide understands, it says so in words at start and use
 Names are in code type. Defaults are in parentheses.
 
 - Layout (`layout`): `side_by_side` (default), `stacked` or `single`. [The panels guide](panels.md) says which suits a screen reader.
-- Screen reader mode (`screen_reader_mode`): `auto` (default), `on` or `off`. It slows the progress line to the interval below, never draws the key bar, redraws the other panel only on demand, and keeps the candidate list closed until you press Tab. diroxide does not detect your screen reader in alpha.1, so `auto` behaves as on. Set `off` for the full look.
+- Screen reader mode (`screen_reader_mode`): `auto` (default), `on` or `off`. It slows the progress line to the interval below, redraws the other panel only on demand, keeps the candidate list closed until you press Tab, and keeps code colors off in the viewer. diroxide does not detect your screen reader yet, so `auto` behaves as on. Set `off` for the full look.
+- Key bar (`key_bar`, on): the line at the bottom that names the function keys in words, "F2 Rename  F3 View  F4 Edit  F5 Copy  F6 Move  F7 Folder  F8 Trash  F9 Menu  Ctrl+Q Quit". It is drawn in every mode, screen-reader mode included, and the width decides how many pairs fit. The Compact setting hides it, and a screen too short to hold it leaves it out. Say key bar, in the Help menu and the palette, reads it. In the Settings list it is the Key bar switch in the Look group.
 - Quiet screen (`quiet_screen`, off): draws as little as possible, so a screen reader that reads every change stays quiet.
 - Progress interval (`progress_interval_seconds`, 10; 1 to 600): in screen-reader mode, the shortest time between two progress lines. A job's start, its end and its questions are said at once.
 - Single letters (`single_letters`): what a key without Control or Alt does in a panel. `type_ahead` (default) jumps to a name, `commands` lets letters run commands for the key presets that come with alpha.3, and `off` does nothing. The Filter command still filters when it is off. Turn it off if you use dictation software.
@@ -68,11 +69,37 @@ Names are in code type. Defaults are in parentheses.
 - Cursor fallback (`cursor_fallback`, off): parks the cursor on the status line instead of the row, for a screen reader that follows it better there.
 - Compact (`compact`, off): hides the key bar and the title line in a terminal, and keeps the status and jobs lines.
 - Editor (`editor`, empty): the program F4 starts, a name on the path or a full path with no arguments. If it is empty, diroxide tries VISUAL, then EDITOR, then the system's text editor.
-- Password echo (`secret_echo`, asterisks) and Passwords shown (`secret_show_toggle`, off): nothing in alpha.1 asks for a password yet, so these wait for the features that do.
+- Password echo (`secret_echo`, asterisks) and Passwords shown (`secret_show_toggle`, off): what the masked password prompt shows for each key, which archives use. `silent` shows nothing. A password is never read back, logged or kept after the job.
+- Code colors (`highlighting`): `auto` (default) colors code in the viewer except in screen-reader mode, `on` colors it always, and `off` never does. The code commands that say each word's kind work whichever you choose. [The viewer](viewer.md) describes them.
 
-How long a copy retries a lost network, how long it waits before it says "stalled", and whether it keeps dates or checks a move are built into the job engine in alpha.1. They are not settings.
+How long a copy retries a lost network, how long it waits before it says "stalled", and whether it keeps dates or checks a move are built into the job engine. They are not settings.
 
-Some settings are kept now and do nothing yet. The reference marks each with the alpha that brings it: the key preset (alpha.3), the filter's case, pause and first day of the week (alpha.3), the search limits (alpha.3), code colors (alpha.2), plugins (alpha.4), the components list (alpha.4), thumbnails (alpha.7), and hiding the menu bar and focus mode in the window (alpha.6).
+### The viewer, the quick view, archives and split sizes
+
+Alpha.2 adds four groups of settings. [The settings reference](settings-reference.md) lists every one with its default and range, under Viewer and quick view and under Archives and split.
+
+- The viewer (`viewer.*`): wrap (`viewer.wrap`, on) and the width it wraps at (`viewer.wrap_width`, 0 for the screen's width, or a number such as 40 for a Braille line), line numbers (`viewer.line_numbers`, off), follow a growing file (`viewer.follow`, off), the hex row (`viewer.hex_row`: `auto` is eight bytes in screen-reader mode and sixteen otherwise), how much of an archive member it keeps decoded (`viewer.member_cache_mib`, 64), and the four caps on code colors (`viewer.highlight_max_kib`, `viewer.highlight_max_lines`, `viewer.highlight_max_line_chars` and `viewer.highlight_deadline_ms`). [The viewer](viewer.md) says what each does.
+- The quick view (`quick_view.*`): how long it waits after the cursor stops (`quick_view.wait_ms`, 500), how much of a file it reads (`quick_view.max_kib`, 1024), how long reading may take (`quick_view.deadline_ms`, 2000), whether it follows changes on disk (`quick_view.follow_changes`, on) and line numbers (`quick_view.line_numbers`, off). [The quick view](quick-view.md) says what each does.
+- Archives (`archives.*`): nineteen settings, the limits that protect you from an archive made to fill a drive or a memory, and the two provider settings, `archives.ask_read_ahead_mib` and `archives.spool_folder`. In the file they are one table, `[archives]`. The defaults suit ordinary use. [Archives](archives.md) lists each limit with the question it asks.
+- Split sizes (`split_presets`): the sizes Split offers, a list of presets. In the Settings list the row opens a list you can read, not a field; in `config.toml` you add your own with `[[split_presets]]` tables. [Split and join](split-join.md) has the built-in sizes and how to add one.
+
+```toml
+[archives]
+max_ratio = 2000
+```
+
+```toml
+[viewer]
+wrap_width = 40
+hex_row = "narrow"
+```
+
+```toml
+[quick_view]
+wait_ms = 800
+```
+
+Some settings are kept now and do nothing yet. The reference marks each with the alpha that brings it: the key preset (alpha.3), the filter's case, pause and first day of the week (alpha.3), the search limits (alpha.3), plugins (alpha.4), the components list (alpha.4), thumbnails (alpha.7), and hiding the menu bar and focus mode in the window (alpha.6).
 
 ## Themes and colors
 
