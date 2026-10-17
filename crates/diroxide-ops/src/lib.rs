@@ -40,6 +40,8 @@ pub mod sidecar;
 pub mod split;
 #[cfg(test)]
 mod testing;
+// The arrival tracker (W3t, plan commit 33).
+pub mod tracker;
 pub mod undo;
 mod walk;
 
