@@ -273,6 +273,25 @@ fn direction_two_diroxide_archives_unpack_in_other_tools() {
             let args: Vec<&std::ffi::OsStr> = args.iter().map(|a| a.as_os_str()).collect();
             let (ok, said) = tool_says(tool, &args);
             assert!(ok, "{tool} on {}: {said}", kind.name);
+            // 7-Zip takes one layer off a compressed tar, leaving the tar
+            // beside it; a second pass unpacks that.
+            if *tool == "7z"
+                && let Some(inner) = kind
+                    .name
+                    .strip_suffix(".gz")
+                    .or(kind.name.strip_suffix(".xz"))
+            {
+                let tar = into.join(inner);
+                let args: Vec<std::ffi::OsString> = vec![
+                    "x".into(),
+                    format!("-o{}", into.display()).into(),
+                    "-y".into(),
+                    tar.clone().into_os_string(),
+                ];
+                let args: Vec<&std::ffi::OsStr> = args.iter().map(|a| a.as_os_str()).collect();
+                let (ok, said) = tool_says(tool, &args);
+                assert!(ok, "{tool} on {} (second layer): {said}", tar.display());
+            }
             assert_eq!(
                 disk_tree(&into.join("course")),
                 expected,
