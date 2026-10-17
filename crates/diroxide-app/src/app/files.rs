@@ -998,19 +998,43 @@ impl App {
                 )
             }
             Question::Limit { question, .. } => self.ask_limit(ask, &question),
-            Question::Secret { job, request } => {
-                let mut effects = Vec::new();
-                if job.is_some() {
-                    effects.push(self.say(catalog::waiting_for_secret(&request.subject)));
-                }
-                let mut dialog = Dialog::secret(request);
-                if let Dialog::Secret { shown, .. } = &mut dialog {
-                    *shown = self.settings.secret_show_toggle;
-                }
-                effects.extend(self.open_dialog(dialog, Purpose::Secret { ask }));
-                effects
+            Question::Secret { job, request } if request.attempt >= 2 => {
+                // The next try: say the last one was wrong first, and ask
+                // whether to try again, starting on No (W2b's notes).
+                let _ = job;
+                let question = with_default_no(diroxide_archive::wrong_password(&request));
+                self.open_dialog(
+                    Dialog::Confirm {
+                        question,
+                        listing: Vec::new(),
+                        on_yes: Command::new(ids::YES),
+                    },
+                    Purpose::WrongPassword { ask, request },
+                )
             }
+            Question::Secret { job, request } => self.secret_prompt(ask, request, job.is_some()),
         }
+    }
+
+    /// The masked prompt for a password a worker waits on (ADR-0009): for a
+    /// job, the jobs line's "Waiting for the password for course.zip."
+    /// first, as a change of state.
+    pub(super) fn secret_prompt(
+        &mut self,
+        ask: AskId,
+        request: diroxide_core::SecretRequest,
+        for_a_job: bool,
+    ) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        if for_a_job {
+            effects.push(self.say(catalog::waiting_for_secret(&request.subject)));
+        }
+        let mut dialog = Dialog::secret(request);
+        if let Dialog::Secret { shown, .. } = &mut dialog {
+            *shown = self.settings.secret_show_toggle;
+        }
+        effects.extend(self.open_dialog(dialog, Purpose::Secret { ask }));
+        effects
     }
 
     /// Escape outside a dialog: stops the job in front.

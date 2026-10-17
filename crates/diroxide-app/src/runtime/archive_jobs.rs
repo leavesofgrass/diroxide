@@ -169,7 +169,18 @@ pub(super) fn run_archive_job(
         cancel: control.cancel.clone(),
     };
     let secrets = secrets_of(shared, map, job);
-    let source: Arc<dyn SecretSource> = secrets.clone();
+    // The plan's secrets hold a password only when the plan needed one and
+    // it worked (a locked 7z's names): the run reuses it, so the job asks
+    // once. Otherwise the run asks the app itself, so each wrong try is
+    // forgotten before the next (the runner's own JobSecrets counts them).
+    let source: Arc<dyn SecretSource> = if secrets.holds_a_password() {
+        secrets.clone()
+    } else {
+        Arc::new(ForwardSecrets {
+            job: Some(job),
+            shared: Arc::clone(shared),
+        })
+    };
     let env = JobEnv::new(engine, archives, job, control, &sink)
         .with_questions(&questions)
         .with_secrets(source);

@@ -318,6 +318,13 @@ impl App {
                 effects.push(self.say(Message::info("No password given.")));
             }
             Purpose::Limit { ask } => self.answer_limit(ask, false),
+            Purpose::WrongPassword { ask, .. } => {
+                self.request(Request::Answer {
+                    ask,
+                    reply: Reply::Secret(None),
+                });
+                effects.push(self.say(Message::info("No password given.")));
+            }
             Purpose::ArchiveQuestion {
                 plan,
                 question,
@@ -372,6 +379,9 @@ impl App {
             Purpose::RunPlan(plan) => effects.extend(self.run_plan(*plan)),
             Purpose::Quit => effects.extend(self.quit_now()),
             Purpose::Limit { ask } => self.answer_limit(ask, true),
+            Purpose::WrongPassword { ask, request } => {
+                effects.extend(self.secret_prompt(ask, request, false));
+            }
             Purpose::ArchiveQuestion {
                 plan,
                 question,
@@ -689,6 +699,7 @@ impl App {
             | Purpose::Quit
             | Purpose::RunProgram(_)
             | Purpose::Limit { .. }
+            | Purpose::WrongPassword { .. }
             | Purpose::ArchiveQuestion { .. }
             | Purpose::RunArchive(_) => self.dialog_escape(),
         }

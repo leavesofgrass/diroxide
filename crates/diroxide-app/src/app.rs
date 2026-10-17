@@ -237,6 +237,12 @@ enum Purpose {
     },
     /// A password.
     Secret { ask: AskId },
+    /// "Wrong password for course.zip. Try again? y or n", before the
+    /// next try's prompt.
+    WrongPassword {
+        ask: AskId,
+        request: diroxide_core::SecretRequest,
+    },
     /// Rename, one entry at a time: the one asked now, the ones after,
     /// and the answers so far.
     Rename {

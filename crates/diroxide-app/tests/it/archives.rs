@@ -306,3 +306,166 @@ fn unpack_and_test_archive_say_the_runners_lines() {
             .exists()
     );
 }
+
+const CANARY: &str = "canary-7f3a-not-a-password";
+
+/// The demo set with `locked.zip` (one AES member) and `locked.7z` (its
+/// names hidden too), both under the canary password.
+fn locked_demo(root: &Path) -> PathBuf {
+    let demo = demo(root);
+    let build = root.join("build");
+    fs::write(build.join("secret.txt"), "the secret\n").unwrap();
+    pack_into(&build, "locked.zip", &["secret.txt"], Some(CANARY));
+    let destination = place(&build.join("locked.7z"));
+    let mut request = PackRequest::new(
+        vec![place(&build.join("secret.txt"))],
+        destination,
+        ArchiveFormat::SevenZ,
+    );
+    request.password = Some(Secret::new(CANARY.to_owned()));
+    request.encrypt_names = true;
+    diroxide_archive::pack(&request, &Registry::with_local(), &OpContext::new()).unwrap();
+    for name in ["locked.zip", "locked.7z"] {
+        fs::rename(build.join(name), demo.join(name)).unwrap();
+    }
+    demo
+}
+
+fn assert_no_canary(s: &Session) {
+    for message in &s.said {
+        assert!(!message.text.contains(CANARY), "{}", message.text);
+    }
+    assert!(!format!("{:?}", s.app.dialogs()).contains(CANARY));
+}
+
+#[test]
+fn a_wrong_password_says_so_first_then_the_prompt_comes_back() {
+    let dir = temp();
+    let demo = locked_demo(dir.path());
+    let mut s = trash_session(dir.path(), &demo);
+    s.focus("locked.zip");
+    s.key("enter");
+    s.focus("secret.txt");
+    s.key("f5");
+    let said = s.key("y");
+    assert!(
+        said.iter()
+            .any(|l| l == "Waiting for the password for locked.zip."),
+        "{said:?}"
+    );
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Password for locked.zip (hidden):")
+    );
+    s.type_text("not it");
+    let said = s.key("enter");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Wrong password for locked.zip. Try again? No is the default. y or n")
+    );
+    let said = s.key("y");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Password for locked.zip (hidden):")
+    );
+    s.type_text(CANARY);
+    let said = s.key("enter");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Unpack finished: 1 done")),
+        "{said:?}"
+    );
+    assert_eq!(
+        fs::read_to_string(demo.join("out").join("secret.txt")).unwrap(),
+        "the secret\n"
+    );
+    assert_no_canary(&s);
+}
+
+#[test]
+fn escape_at_the_prompt_gives_no_password_and_skips() {
+    let dir = temp();
+    let demo = locked_demo(dir.path());
+    let mut s = trash_session(dir.path(), &demo);
+    s.focus("locked.zip");
+    s.key("enter");
+    s.focus("secret.txt");
+    s.key("f5");
+    s.key("y");
+    let said = s.key("escape");
+    assert!(said.iter().any(|l| l == "No password given."), "{said:?}");
+    assert!(!demo.join("out").join("secret.txt").exists());
+}
+
+#[test]
+fn a_locked_7z_asks_on_entering_and_again_after_leaving() {
+    let dir = temp();
+    let demo = locked_demo(dir.path());
+    let mut s = trash_session(dir.path(), &demo);
+    s.focus("locked.7z");
+    let said = s.key("enter");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Password for locked.7z (hidden):")
+    );
+    s.type_text(CANARY);
+    let said = s.key("enter");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Opened locked.7z: 1 item")),
+        "{said:?}"
+    );
+    s.key("left");
+    assert_eq!(s.focused(), "locked.7z");
+    // Leaving made the provider forget it: entering asks again.
+    let said = s.key("enter");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Password for locked.7z (hidden):")
+    );
+    s.key("escape");
+    assert_no_canary(&s);
+}
+
+/// A limit from the `[archives]` settings asks its question once, starting
+/// on No, and yes lets the job go on.
+#[test]
+fn a_limit_from_the_settings_asks_once_and_starts_on_no() {
+    let dir = temp();
+    let demo = demo(dir.path());
+    let build = dir.path().join("build");
+    fs::write(build.join("zeros.bin"), vec![0u8; 256 * 1024]).unwrap();
+    fs::write(build.join("more.bin"), vec![0u8; 256 * 1024]).unwrap();
+    pack_into(&build, "zeros.zip", &["zeros.bin", "more.bin"], None);
+    fs::rename(build.join("zeros.zip"), demo.join("zeros.zip")).unwrap();
+    let bin = dir.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let (registry, _trash) = crate::support::registry_with_trash(&bin);
+    let mut settings = crate::support::settings();
+    settings.archives.max_ratio = 4;
+    settings.archives.ratio_floor_mib = 0;
+    let mut s = Session::open(
+        place(&demo),
+        place(&demo.join("out")),
+        registry,
+        Setup {
+            settings,
+            ..Setup::default()
+        },
+    );
+    s.focus("zeros.zip");
+    s.key("enter");
+    s.key("ctrl+a");
+    s.key("f5");
+    let said = s.key("y");
+    let question = said.last().cloned().unwrap_or_default();
+    assert!(question.starts_with("Expands to "), "{said:?}");
+    assert!(question.ends_with("No is the default. y or n"), "{said:?}");
+    let said = s.key("y");
+    // Asked once for its kind: the second member goes on without asking.
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Unpack finished: 2 done")),
+        "{said:?}"
+    );
+}
