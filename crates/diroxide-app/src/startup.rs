@@ -76,14 +76,17 @@ impl Default for Startup {
 impl Startup {
     /// The palette's recent commands, newest first.
     pub fn palette_recent(&self) -> Vec<CommandId> {
-        self.histories
-            .get(state::keys::PALETTE)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| CommandId::new(id.clone()).ok())
-                    .collect()
-            })
-            .unwrap_or_default()
+        self.palette().recent().to_vec()
+    }
+
+    /// The palette with its remembered uses, from its history lines.
+    pub fn palette(&self) -> crate::palette::Palette {
+        crate::palette::Palette::from_lines(
+            self.histories
+                .get(state::keys::PALETTE)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+        )
     }
 }
 

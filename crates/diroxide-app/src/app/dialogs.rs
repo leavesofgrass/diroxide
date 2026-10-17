@@ -522,13 +522,9 @@ impl App {
                 let Some(id) = row.and_then(|r| CommandId::new(r).ok()) else {
                     return vec![self.say(Message::status("No command matches"))];
                 };
-                self.palette.record(&id);
-                let recent: Vec<String> = self
-                    .palette
-                    .recent()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect();
+                let now = self.now().unix_seconds();
+                self.palette.record_at(&id, now);
+                let recent: Vec<String> = self.palette.to_lines();
                 self.histories
                     .insert(state::keys::PALETTE.to_owned(), recent.clone());
                 self.request(Request::SaveHistory {

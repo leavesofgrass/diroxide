@@ -767,7 +767,7 @@ impl App {
         for record in startup.undo.iter().cloned() {
             undo.record(record);
         }
-        let palette = Palette::with_recent(startup.palette_recent());
+        let palette = startup.palette();
         let visits = Visits::from_lines(
             startup
                 .histories

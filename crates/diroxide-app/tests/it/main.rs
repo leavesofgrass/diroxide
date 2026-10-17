@@ -11,6 +11,7 @@ mod braille;
 mod commands;
 mod dialogs;
 mod keys;
+mod palette;
 mod preview;
 mod session;
 mod split_join;
