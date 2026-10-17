@@ -335,6 +335,26 @@ pub fn command() -> Command {
                 .arg(named("after", "The after file").value_hint(ValueHint::FilePath)),
         )
         .subcommand(search_command())
+        .subcommand(
+            Command::new("watch")
+                .about("Say each file that settles in a folder; Ctrl+C stops")
+                .arg(
+                    Arg::new("settle")
+                        .long("settle")
+                        .value_name("SECONDS")
+                        .help("Wait this long with no change, 0.5 to 3600; 2 by default"),
+                )
+                .arg(
+                    flag("print0", "Write NUL-separated paths only")
+                        .visible_alias("null")
+                        .short('0'),
+                )
+                .arg(
+                    Arg::new("place")
+                        .value_hint(ValueHint::DirPath)
+                        .help("The folder to watch; the current folder by default"),
+                ),
+        )
         .subcommand(no_help(
             Command::new("serve")
                 .about("Serve the app over JSON-RPC on standard input and output")

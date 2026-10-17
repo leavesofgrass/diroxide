@@ -3,7 +3,8 @@
 //! in the config files, the menus and banks, the session to restore, the
 //! interrupted jobs of the last session and the undo records of the
 //! finished ones (from the undo journal), the prompts' histories, the home
-//! folder, and the clock with the local offset.
+//! folder, the labels, bookmarks and folder views (W3l), and the clock
+//! with the local offset.
 //!
 //! [`load`] does the reading (I/O), so the app's core stays free of it;
 //! tests build a [`Startup`] by hand or load one from a temporary state
@@ -52,6 +53,13 @@ pub struct Startup {
     /// The owner's `keymap.toml` lines, which the Keys list shows as
     /// changed and writes to (W3k).
     pub keymap: KeymapConfig,
+    /// The labels and the labeled places (`labels.toml`; the starter set
+    /// on a first start).
+    pub labels: crate::labels::LabelStore,
+    /// The bookmarks (`bookmarks.toml`).
+    pub bookmarks: crate::bookmarks::Bookmarks,
+    /// The folders' own views (`folder-views.toml`).
+    pub views: crate::views::FolderViews,
 }
 
 impl Default for Startup {
@@ -69,6 +77,9 @@ impl Default for Startup {
             home: None,
             first_run: false,
             keymap: KeymapConfig::default(),
+            labels: crate::labels::LabelStore::starter(),
+            bookmarks: crate::bookmarks::Bookmarks::new(),
+            views: crate::views::FolderViews::new(),
         }
     }
 }
@@ -176,6 +187,12 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     let home = dirs::home_dir()
         .and_then(|home| home.into_os_string().into_string().ok())
         .and_then(|home| Place::parse(&home).ok());
+    let labels = crate::labels::load(paths);
+    problems.extend(labels.problems);
+    let bookmarks = crate::bookmarks::load(paths);
+    problems.extend(bookmarks.problems);
+    let views = crate::views::load(paths);
+    problems.extend(views.problems);
     Startup {
         problems,
         menus,
@@ -189,6 +206,9 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         home,
         first_run,
         keymap: config.keymap.clone(),
+        labels: labels.value,
+        bookmarks: bookmarks.value,
+        views: views.value,
     }
 }
 

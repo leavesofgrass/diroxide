@@ -71,6 +71,15 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Ctrl+F5: Sort by modified. Sorts by modified time, newest first; again for oldest first. (view.sort-modified)
 - Ctrl+F6: Sort by size. Sorts by size, largest first; again for smallest first. (view.sort-size)
 - Ctrl+F7: Unsorted. Lists in the folder's own order. (view.sort-unsorted)
+- Alt+L: Set label. Adds a label to the marked items, or the focused one; a new name makes a new label. (label.set)
+- Ctrl+1: Favorite label 1. Adds the first label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-1)
+- Ctrl+2: Favorite label 2. Adds the second label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-2)
+- Ctrl+3: Favorite label 3. Adds the third label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-3)
+- Ctrl+4: Favorite label 4. Adds the fourth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-4)
+- Ctrl+5: Favorite label 5. Adds the fifth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-5)
+- Ctrl+6: Favorite label 6. Adds the sixth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-6)
+- Ctrl+7: Favorite label 7. Adds the seventh label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-7)
+- Ctrl+B or Alt+B: Bookmarks. Lists the bookmarks; the first row adds or removes this folder, and an alias letter jumps. (go.bookmarks)
 
 ### In any list
 
@@ -177,6 +186,16 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Sort by owner. Sorts by owner, A to Z; again for Z to A. (view.sort-owner)
 - Sort by label. Sorts by label, A to Z; again for Z to A. (view.sort-label)
 - Sort list. Lists every sort key, the current one marked with its direction. (view.sort-list)
+- Toggle label. Adds a label to the marked items, or takes it off when every one has it. (label.toggle)
+- Clear labels. Takes every label off the marked items, or the focused one. (label.clear)
+- Labels list. Lists the labels with how many items carry each; choosing one lists its items. (label.list)
+- Bookmark this folder. Adds the active panel's folder to the bookmarks. (bookmark.add)
+- Bookmark the focused item. Adds the focused file or folder as a bookmark that opens its folder with it focused. (bookmark.add-item)
+- History list. Lists the folders visited in every session, most used first, to go back to one. (go.history-list)
+- Forget this place. Takes the active panel's folder out of the History list and path jump. (go.forget-place)
+- Save view for this folder. Keeps this folder's sort, filter, hidden files and columns, applied each time it opens. (view.save-view)
+- Forget this folder's view. Stops applying this folder's saved view; the usual view returns on leaving it. (view.forget-view)
+- Watch this folder. Says each new file in this folder once it stops changing; again stops watching. (view.watch-folder)
 - Show in folder. Closes the viewer with the file's row focused in its folder. (viewer.show-in-folder)
 - Copy viewed file's path. Puts the viewed file's full path on the system clipboard. (viewer.copy-path)
 - Copy viewed file's name. Puts the viewed file's name on the system clipboard. (viewer.copy-name)
@@ -265,6 +284,15 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Ctrl+F6: Sort by size. Sorts by size, largest first; again for smallest first. (view.sort-size)
 - Ctrl+F7: Unsorted. Lists in the folder's own order. (view.sort-unsorted)
 - Ctrl+Shift+S: Sort list. Lists every sort key, the current one marked with its direction. (view.sort-list)
+- Alt+L: Set label. Adds a label to the marked items, or the focused one; a new name makes a new label. (label.set)
+- Ctrl+1: Favorite label 1. Adds the first label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-1)
+- Ctrl+2: Favorite label 2. Adds the second label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-2)
+- Ctrl+3: Favorite label 3. Adds the third label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-3)
+- Ctrl+4: Favorite label 4. Adds the fourth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-4)
+- Ctrl+5: Favorite label 5. Adds the fifth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-5)
+- Ctrl+6: Favorite label 6. Adds the sixth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-6)
+- Ctrl+7: Favorite label 7. Adds the seventh label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-7)
+- Ctrl+B or Alt+B: Bookmarks. Lists the bookmarks; the first row adds or removes this folder, and an alias letter jumps. (go.bookmarks)
 
 ### In any list
 
@@ -365,6 +393,16 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Sort by attributes. Sorts by permissions or attributes; again to reverse. (view.sort-attributes)
 - Sort by owner. Sorts by owner, A to Z; again for Z to A. (view.sort-owner)
 - Sort by label. Sorts by label, A to Z; again for Z to A. (view.sort-label)
+- Toggle label. Adds a label to the marked items, or takes it off when every one has it. (label.toggle)
+- Clear labels. Takes every label off the marked items, or the focused one. (label.clear)
+- Labels list. Lists the labels with how many items carry each; choosing one lists its items. (label.list)
+- Bookmark this folder. Adds the active panel's folder to the bookmarks. (bookmark.add)
+- Bookmark the focused item. Adds the focused file or folder as a bookmark that opens its folder with it focused. (bookmark.add-item)
+- History list. Lists the folders visited in every session, most used first, to go back to one. (go.history-list)
+- Forget this place. Takes the active panel's folder out of the History list and path jump. (go.forget-place)
+- Save view for this folder. Keeps this folder's sort, filter, hidden files and columns, applied each time it opens. (view.save-view)
+- Forget this folder's view. Stops applying this folder's saved view; the usual view returns on leaving it. (view.forget-view)
+- Watch this folder. Says each new file in this folder once it stops changing; again stops watching. (view.watch-folder)
 - Show in folder. Closes the viewer with the file's row focused in its folder. (viewer.show-in-folder)
 - Copy viewed file's path. Puts the viewed file's full path on the system clipboard. (viewer.copy-path)
 - Copy viewed file's name. Puts the viewed file's name on the system clipboard. (viewer.copy-name)
@@ -405,6 +443,14 @@ These keys of the terminal list work in most terminals, but a terminal program m
 - Ctrl+F5 for Sort by modified: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by modified.
 - Ctrl+F6 for Sort by size: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by size.
 - Ctrl+F7 for Unsorted: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Unsorted.
+- Ctrl+1 for Favorite label 1: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 1.
+- Ctrl+2 for Favorite label 2: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 2.
+- Ctrl+3 for Favorite label 3: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 3.
+- Ctrl+4 for Favorite label 4: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 4.
+- Ctrl+5 for Favorite label 5: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 5.
+- Ctrl+6 for Favorite label 6: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 6.
+- Ctrl+7 for Favorite label 7: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 7.
+- Ctrl+B for Bookmarks: tmux keeps it; it is tmux's prefix key, so the key arrives only when pressed twice. Sure way: Go menu, Bookmarks.
 - Shift+F3 for Quick view: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: View menu, Quick view.
 - Ctrl+Down for Next paragraph: macOS keeps it; Mission Control uses Control with the arrows. Sure way: View menu, Preview submenu, Next paragraph.
 - Ctrl+Up for Previous paragraph: macOS keeps it; Mission Control uses Control with the arrows. Sure way: View menu, Preview submenu, Previous paragraph.
@@ -451,8 +497,6 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 ## Kept for later alphas
 
 - Ctrl+F: Find files, coming in alpha.3.
-- Ctrl+B or Alt+B: Bookmarks, coming in alpha.3.
-- Alt+L: Set label, coming in alpha.3.
 - Ctrl+T: New tab, coming in alpha.8.
 - Ctrl+W: Close tab, coming in alpha.8.
 - Ctrl+Tab: Next tab, coming in alpha.8, in the window.

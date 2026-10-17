@@ -7,15 +7,20 @@ mod support;
 
 mod access;
 mod archives;
+mod bookmarks;
 mod braille;
 mod commands;
 mod dialogs;
 mod keys;
+mod labels;
 mod palette;
 mod preview;
 mod session;
 mod split_join;
 mod viewer;
+mod views;
+// Watch this folder (W3t).
+mod watching;
 
 use diroxide_app::{App, AppEvent, AppOptions, Runtime};
 use diroxide_core::{Effect, Key, Place, Side};

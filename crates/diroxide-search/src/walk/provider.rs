@@ -5,14 +5,18 @@
 //!
 //! The boundary rule: a link to a folder is followed only when its target
 //! lies inside the place the search started in, judged on the real paths
-//! (a local link is resolved by the system, a remote one by its text), and
-//! never back into a folder it is in. Every link not followed is counted
-//! with why. A folder seen before (a hard-linked folder, a bind mount) is
-//! not entered again; a folder on another drive, a snapshot folder, a
+//! (a local link is resolved by the system, a remote one by its text).
+//! What a followed link reaches is walked, its paths its own, even when
+//! the same folder is also reached another way. A loop is a folder that is
+//! one of the walked path's own ancestors: a link back into a folder it is
+//! in (by real path), or a bind mount of an ancestor (by volume and inode,
+//! where the provider gives them); it is caught on the ancestor chain, not
+//! by a set of every folder seen, and not entered. Every link not followed
+//! is counted with why; a folder on another drive, a snapshot folder, a
 //! marked place and a folder past the depth limit are not entered, each
 //! counted.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -55,6 +59,36 @@ impl Real {
     }
 }
 
+/// One folder of the walked path, and its parent: the chain a loop is
+/// caught on.
+#[derive(Debug)]
+struct Ancestor {
+    /// Its volume and inode, where the provider gives them (Unix
+    /// listings).
+    id: Option<(u64, u64)>,
+    /// Where it really is, when links are followed.
+    real: Real,
+    parent: Option<Arc<Ancestor>>,
+}
+
+impl Ancestor {
+    /// This folder and every folder above it on the walked path.
+    fn chain(&self) -> impl Iterator<Item = &Ancestor> {
+        std::iter::successors(Some(self), |a| a.parent.as_deref())
+    }
+
+    /// Whether a folder with this identity is on the chain already.
+    fn holds_id(&self, id: (u64, u64)) -> bool {
+        self.chain().any(|a| a.id == Some(id))
+    }
+
+    /// Whether a link to `target` leads back into the walked path: the
+    /// target is a folder of the chain, or a real folder above this one.
+    fn leads_back(&self, target: &Real) -> bool {
+        self.real.is_within(target) || self.chain().any(|a| a.real == *target)
+    }
+}
+
 /// A folder waiting to be listed.
 struct Job {
     place: Place,
@@ -63,7 +97,8 @@ struct Job {
     /// Its names below the start, for the ignore files.
     names: Vec<String>,
     ignores: Option<Arc<IgnoreLevel>>,
-    real: Real,
+    /// The folder itself, at the end of its walked path.
+    ancestry: Arc<Ancestor>,
 }
 
 struct Queue {
@@ -78,10 +113,6 @@ struct Shared<'a> {
     queue: Mutex<Queue>,
     ready: Condvar,
     stop: AtomicBool,
-    /// Folders entered, by volume and inode where the provider gives them.
-    seen: Mutex<HashSet<(u64, u64)>>,
-    /// Folders entered through a link, by where they really are.
-    targets: Mutex<HashSet<Real>>,
     root_volume: Option<u64>,
     root_real: Real,
     stats: Mutex<WalkStats>,
@@ -202,20 +233,16 @@ where
                 depth: 0,
                 names: Vec::new(),
                 ignores: None,
-                real: root_real.clone(),
+                ancestry: Arc::new(Ancestor {
+                    id: root_entry.volume.zip(root_entry.inode),
+                    real: root_real.clone(),
+                    parent: None,
+                }),
             }]),
             busy: 0,
         }),
         ready: Condvar::new(),
         stop: AtomicBool::new(false),
-        seen: Mutex::new(
-            root_entry
-                .volume
-                .zip(root_entry.inode)
-                .into_iter()
-                .collect(),
-        ),
-        targets: Mutex::new(HashSet::from([root_real.clone()])),
         root_volume: root_entry.volume,
         root_real,
         stats: Mutex::new(WalkStats::default()),
@@ -319,13 +346,17 @@ fn work<V: Visitor>(shared: &Shared<'_>, mut visitor: V) {
                 }
                 _ => None,
             };
-            let next = next.map(|(place, provider, real)| Job {
+            let next = next.map(|(place, provider, real, id)| Job {
                 place,
                 provider,
                 depth,
                 names,
                 ignores: ignores.clone(),
-                real,
+                ancestry: Arc::new(Ancestor {
+                    id,
+                    real,
+                    parent: Some(Arc::clone(&job.ancestry)),
+                }),
             });
             stats.entries += 1;
             let candidate = Candidate {
@@ -346,7 +377,9 @@ fn work<V: Visitor>(shared: &Shared<'_>, mut visitor: V) {
     lock(&shared.stats).add(&stats);
 }
 
-type Next = Option<(Place, Arc<dyn Provider>, Real)>;
+/// A folder to enter: its place, its provider, where it really is, and
+/// its volume and inode when known.
+type Next = Option<(Place, Arc<dyn Provider>, Real, Option<(u64, u64)>)>;
 
 fn enter_folder(
     shared: &Shared<'_>,
@@ -371,16 +404,16 @@ fn enter_folder(
         }
         return None;
     }
-    if let (Some(volume), Some(inode)) = (entry.volume, entry.inode)
-        && !lock(&shared.seen).insert((volume, inode))
-    {
+    let id = entry.volume.zip(entry.inode);
+    if id.is_some_and(|id| job.ancestry.holds_id(id)) {
         stats.skips.loops += 1;
         return None;
     }
     Some((
         place.clone(),
         Arc::clone(&job.provider),
-        job.real.child(&entry.name),
+        job.ancestry.real.child(&entry.name),
+        id,
     ))
 }
 
@@ -425,7 +458,7 @@ fn enter_link(
         stats.skips.links_outside += 1;
         return None;
     }
-    if job.real.is_within(&target) || !lock(&shared.targets).insert(target.clone()) {
+    if job.ancestry.leads_back(&target) {
         stats.skips.loops += 1;
         return None;
     }
@@ -435,7 +468,7 @@ fn enter_link(
         }
         return None;
     }
-    Some((place.clone(), Arc::clone(&job.provider), target))
+    Some((place.clone(), Arc::clone(&job.provider), target, None))
 }
 
 fn enter_archive(shared: &Shared<'_>, place: &Place, depth: u32, stats: &mut WalkStats) -> Next {
@@ -444,10 +477,47 @@ fn enter_archive(shared: &Shared<'_>, place: &Place, depth: u32, stats: &mut Wal
     }
     let inside = place.clone().into_archive();
     match shared.registry.resolve(&inside) {
-        Ok(provider) => Some((inside, provider, Real::Untracked)),
+        Ok(provider) => Some((inside, provider, Real::Untracked, None)),
         Err(_) => {
             stats.unreadable += 1;
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(path: &str, id: Option<(u64, u64)>, parent: Option<Arc<Ancestor>>) -> Arc<Ancestor> {
+        Arc::new(Ancestor {
+            id,
+            real: Real::Path(PathBuf::from(path)),
+            parent,
+        })
+    }
+
+    #[test]
+    fn loops_are_caught_on_the_ancestor_chain_and_nowhere_else() {
+        let root = at("/r", Some((1, 10)), None);
+        let sub = at("/r/sub", Some((1, 11)), Some(Arc::clone(&root)));
+        // A bind mount of the start below sub repeats an ancestor.
+        assert!(sub.holds_id((1, 10)));
+        assert!(sub.holds_id((1, 11)));
+        // The same folder reached another way is not an ancestor: walked.
+        assert!(!sub.holds_id((1, 12)));
+        // A link back to the start, or to the folder it is in.
+        assert!(sub.leads_back(&Real::Path(PathBuf::from("/r"))));
+        assert!(sub.leads_back(&Real::Path(PathBuf::from("/r/sub"))));
+        // A link to a sibling, or to a folder below, is walked.
+        assert!(!sub.leads_back(&Real::Path(PathBuf::from("/r/other"))));
+        assert!(!sub.leads_back(&Real::Path(PathBuf::from("/r/sub/deeper"))));
+        // Through a link: /r/a/to-b, where to-b is really /r/b. A link
+        // inside it back to /r/a closes a loop; one to /r/c does not.
+        let a = at("/r/a", None, Some(Arc::clone(&root)));
+        let to_b = at("/r/b", None, Some(a));
+        assert!(to_b.leads_back(&Real::Path(PathBuf::from("/r/a"))));
+        assert!(!to_b.leads_back(&Real::Path(PathBuf::from("/r/c"))));
+        assert!(!to_b.holds_id((1, 11)));
     }
 }

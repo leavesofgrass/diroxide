@@ -15,6 +15,9 @@ diroxide-app.workspace = true
 diroxide-archive.workspace = true
 diroxide-core.workspace = true
 diroxide-ops.workspace = true
+# The bench's search scenarios run the search engine itself (W3s's
+# request 2, as P2b did for the archive scenarios).
+diroxide-search.workspace = true
 diroxide-vfs.workspace = true
 resvg.workspace = true
 serde.workspace = true

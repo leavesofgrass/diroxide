@@ -322,6 +322,36 @@ pub enum Request {
     /// Write the Keys list's change to `keymap.toml`, one line at a time,
     /// keeping the owner's comments (W3k); a failure comes back in words.
     EditKeymap(Box<crate::keymap::file::KeymapEdit>),
+    /// Write the labels to `labels.toml` in the state folder (W3l).
+    SaveLabels(Box<crate::labels::LabelStore>),
+    /// Write the bookmarks to `bookmarks.toml` in the state folder (W3l).
+    SaveBookmarks(Box<crate::bookmarks::Bookmarks>),
+    /// Write the folder views to `folder-views.toml` in the state folder
+    /// (W3l).
+    SaveViews(Box<crate::views::FolderViews>),
+    /// Find which of these places are gone, on a worker, for the Labels
+    /// list's missing counts (W3l); answered as
+    /// [`AppEvent::PlacesChecked`](crate::AppEvent::PlacesChecked).
+    CheckPlaces {
+        /// The request, so a late answer to an old one is dropped.
+        request: diroxide_core::RequestId,
+        /// The places to look for.
+        places: Vec<Place>,
+    },
+    /// Watch a folder for arriving files, on a thread of the runtime,
+    /// replacing an earlier watch (W3t); its notes come back as
+    /// [`AppEvent::Arrivals`](crate::AppEvent::Arrivals) tagged with
+    /// `watch`.
+    WatchArrivals {
+        /// The watch's number.
+        watch: u64,
+        /// The folder.
+        place: Place,
+        /// The least time between two paced lines.
+        pace: std::time::Duration,
+    },
+    /// Stop watching for arriving files (W3t).
+    StopArrivals,
 }
 
 #[cfg(test)]

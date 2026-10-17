@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use diroxide_core::{Attributes, Place};
-use diroxide_vfs::{
-    AttributeChange, LinkKind, LinkRequest, LocalProvider, OpContext, Provider, Registry,
-};
+use diroxide_vfs::{AttributeChange, LocalProvider, OpContext, Provider, Registry};
+#[cfg(windows)]
+use diroxide_vfs::{LinkKind, LinkRequest};
 
 use super::*;
 use crate::query::SNAPSHOT_FOLDERS;
@@ -302,6 +302,58 @@ fn followed_links_stay_inside_the_start_and_loops_are_caught() {
     assert_eq!(stats.skips.links_outside, 1);
     assert_eq!(stats.skips.loops, 2, "{stats:?}");
     assert_eq!(stats.skips.links_not_followed, 0);
+}
+
+#[test]
+fn what_a_followed_link_reaches_is_walked_and_links_to_each_other_end() {
+    let dir = scratch();
+    let root = dir.path().join("root");
+    write(
+        &root.join("a").join("x.txt"),
+        "x
+",
+    );
+    write(
+        &root.join("b").join("y.txt"),
+        "y
+",
+    );
+    let links = link(&root.join("a").join("to-b"), &root.join("b"))
+        && link(&root.join("b").join("to-a"), &root.join("a"))
+        && link(&root.join("also-b"), &root.join("b"));
+    if !links {
+        eprintln!("Links could not be made here: test skipped.");
+        return;
+    }
+    let fixture = Fixture {
+        _dir: dir,
+        root,
+        links,
+    };
+    let (seen, stats) = walk_with(
+        &fixture,
+        &Options {
+            hidden: false,
+            ignore_files: false,
+            follow_links: true,
+            max_depth: None,
+            provider_walk: true,
+        },
+    );
+    // Two links to b: both walked, each path its own.
+    for path in [
+        "b/y.txt",
+        "a/to-b/y.txt",
+        "also-b/y.txt",
+        "b/to-a/x.txt",
+        "also-b/to-a/x.txt",
+    ] {
+        assert!(seen.contains(path), "{path} in {seen:?}");
+    }
+    // a/to-b/to-a, b/to-a/to-b and also-b/to-a/to-b each lead back into
+    // their own path: three loops, and the walk ends.
+    assert_eq!(stats.skips.loops, 3, "{stats:?}");
+    assert!(!seen.iter().any(|p| p.contains("to-a/to-b/")), "{seen:?}");
 }
 
 #[test]

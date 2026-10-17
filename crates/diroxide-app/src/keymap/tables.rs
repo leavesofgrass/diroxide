@@ -628,7 +628,7 @@ mod tests {
         assert_eq!(table_problems(), &[] as &[String]);
         assert!(terminal_table().len() >= 30);
         assert!(screen_reader_table().len() >= 10);
-        assert!(reserved_table().len() >= 8);
+        assert!(reserved_table().len() >= 7);
     }
 
     #[test]
@@ -767,7 +767,7 @@ mod tests {
 
     #[test]
     fn the_later_alphas_keys_are_reserved() {
-        for text in ["ctrl+b", "alt+b", "ctrl+f", "ctrl+t", "ctrl+w"] {
+        for text in ["ctrl+f", "ctrl+t", "ctrl+w"] {
             assert!(
                 reserved_entry(&key(text), KeyColumn::Terminal).is_some(),
                 "{text}"

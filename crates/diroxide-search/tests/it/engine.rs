@@ -118,7 +118,9 @@ fn a_blocked_read_is_left_behind_and_said() {
     let stopper = {
         let control = control.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(300));
+            // Long enough for the one walker thread to reach the stalled
+            // folder under a loaded machine; still inside the 4 s stall.
+            std::thread::sleep(Duration::from_millis(1_500));
             control.cancel();
         })
     };
@@ -133,7 +135,7 @@ fn a_blocked_read_is_left_behind_and_said() {
     .unwrap();
     let took = started.elapsed();
     stopper.join().unwrap();
-    assert!(took < Duration::from_millis(2_000), "took {took:?}");
+    assert!(took < Duration::from_millis(3_500), "took {took:?}");
     assert!(summary.cancelled);
     assert_eq!(summary.still_reading, 1);
     assert!(

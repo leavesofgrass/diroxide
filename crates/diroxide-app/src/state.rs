@@ -223,6 +223,14 @@ impl Visits {
             .collect()
     }
 
+    /// Forgets a folder: Forget this place (W3l). Returns whether it was
+    /// kept.
+    pub fn forget(&mut self, place: &Place) -> bool {
+        let before = self.visits.len();
+        self.visits.retain(|v| &v.place != place);
+        self.visits.len() != before
+    }
+
     /// How many folders are kept.
     pub fn len(&self) -> usize {
         self.visits.len()

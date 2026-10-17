@@ -19,15 +19,21 @@ mod access_dialogs;
 mod archive;
 mod archive_forms;
 mod archive_jobs;
+mod bookmarking;
 mod dialogs;
 mod files;
+mod folder_views;
 mod info;
 mod keys;
+mod labeling;
 mod nav;
+mod organize;
 mod preview;
 mod select;
 mod split_join;
 mod viewing;
+// Watch this folder (W3t).
+mod watching;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -221,6 +227,25 @@ pub enum AppEvent {
         /// The facts.
         facts: Box<crate::archives::ArchiveFacts>,
     },
+    /// What the arrival watch of Watch this folder saw (W3t), tagged with
+    /// its watch, so a note from a watch already stopped is dropped.
+    Arrivals {
+        /// The watch, as [`Request::WatchArrivals`] numbered it.
+        watch: u64,
+        /// What it saw.
+        note: diroxide_ops::tracker::WatchNote,
+    },
+    /// The places a [`Request::CheckPlaces`] asked about were looked for
+    /// (W3l): the ones gone, and how many could not be read.
+    PlacesChecked {
+        /// The request it answers.
+        request: RequestId,
+        /// The places that are gone.
+        missing: Vec<Place>,
+        /// How many could not be looked at (a drive that is not there, no
+        /// permission).
+        unreadable: usize,
+    },
     /// A dialog was answered.
     Answer {
         /// The dialog.
@@ -385,6 +410,9 @@ enum Purpose {
     SettingText(String),
     /// A list to read: details, help, problems.
     Read,
+    /// The labels, bookmarks, folder views and History list (W3l): what
+    /// their dialogs are for.
+    Organize(Box<organize::Wants>),
     /// The job history.
     JobHistory,
     /// One job's items.
@@ -521,6 +549,11 @@ pub struct App {
     preview: preview::Preview,
     /// Change key's capture, the Keys list and the presets (W3k).
     keys: keys::KeysState,
+    /// The labels, bookmarks and folder views, and what their lists wait
+    /// for (W3l).
+    organize: organize::Organize,
+    /// The folder watched for arrivals (W3t).
+    watching: watching::WatchState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -831,6 +864,8 @@ impl App {
             highlighter: None,
             preview: preview::Preview::default(),
             keys: keys::KeysState::new(owner_keys),
+            organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
+            watching: watching::WatchState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1173,8 +1208,18 @@ impl App {
             let state = session.panel_mut(side);
             state.place = Some(panel.place().clone());
             state.focused = panel.list().focused().map(|r| r.id.clone());
-            state.sort = panel.sort().clone();
-            state.show_hidden = panel.shows_hidden();
+            // While a folder's own view is applied, the panel's usual
+            // view is what it has elsewhere, so that is what is kept (W3l).
+            match &self.organize.usual[side.index()] {
+                Some(usual) => {
+                    state.sort = usual.sort.clone();
+                    state.show_hidden = usual.show_hidden;
+                }
+                None => {
+                    state.sort = panel.sort().clone();
+                    state.show_hidden = panel.shows_hidden();
+                }
+            }
             state.history = panel.history().to_vec();
         }
         session
@@ -1246,6 +1291,12 @@ impl App {
                 result,
             } => self.viewer_source(request, place, result),
             AppEvent::ArchiveFinished { report, lines } => self.archive_finished(*report, lines),
+            AppEvent::PlacesChecked {
+                request,
+                missing,
+                unreadable,
+            } => self.places_checked(request, missing, unreadable),
+            AppEvent::Arrivals { watch, note } => self.arrivals(watch, note),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }
@@ -1275,6 +1326,14 @@ impl App {
         if self.dialogs.is_empty()
             && let Some(effects) = self.preview_dispatch(action, &command.id)
         {
+            return effects;
+        }
+        // The labels, bookmarks, folder views and History list (W3l).
+        if let Some(effects) = self.organize_dispatch(command) {
+            return effects;
+        }
+        // Watch this folder, and Cancel while it watches (W3t).
+        if let Some(effects) = self.watch_dispatch(command, action) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

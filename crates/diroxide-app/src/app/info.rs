@@ -115,6 +115,10 @@ impl App {
                 text.push_str(&format!(". {detail}"));
             }
         }
+        // Watch this folder (W3t).
+        if let Some(watch) = self.watch_status() {
+            text.push_str(&format!(". {watch}"));
+        }
         if let Some(clipboard) = &self.clipboard {
             let what = if clipboard.cut { "to move" } else { "to copy" };
             text.push_str(&format!(

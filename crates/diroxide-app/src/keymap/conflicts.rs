@@ -257,10 +257,25 @@ pub fn does(command: &CommandId) -> String {
         "view.sort-label" => "sorts by label",
         "view.sort-list" => "opens the Sort list",
         "view.quick-view" => "turns the quick view on or off",
+        "view.save-view" => "saves this folder's view",
+        "view.forget-view" => "forgets this folder's view",
+        "view.watch-folder" => "watches this folder",
+        "label.set" => "sets a label",
+        "label.toggle" => "toggles a label",
+        "label.clear" => "clears the labels",
+        "label.list" => "opens the Labels list",
+        "go.bookmarks" => "opens the bookmarks",
+        "bookmark.add" => "bookmarks this folder",
+        "bookmark.add-item" => "bookmarks the focused item",
+        "go.history-list" => "opens the History list",
+        "go.forget-place" => "forgets this place",
         "dialog.yes" => "answers yes",
         "dialog.no" => "answers no",
         "dialog.accept" => "chooses the focused answer",
         id => {
+            if let Some(n) = id.strip_prefix("label.favorite-") {
+                return format!("gives favorite label {n}");
+            }
             if let Some(menu) = id.strip_prefix("menu.") {
                 let title = commands::Menu::ALL
                     .iter()
@@ -521,7 +536,7 @@ mod tests {
             said(&mac, Layer::Global, "ctrl+b", &free),
             [
                 "tmux keeps Ctrl+B: it is tmux's prefix key, so the key arrives only when pressed twice.",
-                "Ctrl+B is kept for Bookmarks, coming in alpha.3. Use it anyway? y or n"
+                "Ctrl+B already opens the bookmarks. Take it, or cancel?"
             ]
         );
     }
@@ -648,6 +663,8 @@ mod tests {
             ids::LIST_DOWN,
             ids::BACK,
             ids::UP,
+            ids::BOOKMARKS,
+            ids::LABEL_SET,
         ] {
             assert!(!does(&id).starts_with("runs "), "{id} has no words");
         }

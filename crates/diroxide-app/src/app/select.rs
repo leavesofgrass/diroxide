@@ -395,7 +395,7 @@ impl App {
         };
         if !entries.is_empty() && !entries.iter().any(has) {
             let note = match key {
-                SortKey::Label => "No labels yet; labels come with alpha.3".to_owned(),
+                SortKey::Label => self.no_labels_here_note(),
                 other => format!("No entry here has its {}", other.word()),
             };
             text = format!("{text}. {note}.");
