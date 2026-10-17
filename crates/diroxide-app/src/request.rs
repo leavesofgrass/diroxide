@@ -75,6 +75,15 @@ pub enum Question {
         /// What is asked.
         request: SecretRequest,
     },
+    /// A content search reached a file whose data is not on this computer,
+    /// and the scope says to read such files: reading downloads it. Asked
+    /// once a search; the answer is [`Reply::Confirm`].
+    OnlineOnly {
+        /// The file's name.
+        name: String,
+        /// Its size, when known.
+        size: Option<u64>,
+    },
     /// An archive limit's question ("Expands to 40 GB from 40 KB. Unpack?
     /// y or n"), asked once per kind in a job, starting on No; the answer
     /// is [`Reply::Confirm`].
@@ -92,6 +101,7 @@ impl Question {
         match self {
             Question::Conflict { job, .. } | Question::Error { job, .. } => Some(*job),
             Question::Secret { job, .. } | Question::Limit { job, .. } => *job,
+            Question::OnlineOnly { .. } => None,
         }
     }
 }
@@ -176,6 +186,14 @@ pub enum SpawnKind {
     CommandLine(String),
     /// The editor, on one file.
     Editor(Place),
+    /// The editor, on one file, at a line (a search result): editors that
+    /// take `+LINE` get it; others open the file.
+    EditorAt {
+        /// The file.
+        file: Place,
+        /// The line, from 1.
+        line: u64,
+    },
     /// A program the tools registry found, with its arguments and no
     /// shell: "Open in textweaver" (plan commit 64).
     Program {
@@ -364,6 +382,41 @@ pub enum Request {
     },
     /// Stop watching for arriving files (W3t).
     StopArrivals,
+    /// Run a search on a worker, stopping the one before (W3a): its hits
+    /// come back in the order found as
+    /// [`AppEvent::SearchFound`](crate::AppEvent::SearchFound), its
+    /// progress as [`AppEvent::SearchProgress`](crate::AppEvent::SearchProgress),
+    /// and its end as [`AppEvent::SearchDone`](crate::AppEvent::SearchDone).
+    Search {
+        /// The search's number.
+        search: u64,
+        /// What to look for and where.
+        query: Box<diroxide_search::SearchQuery>,
+        /// The app's clock, for the date words.
+        clock: SharedClock,
+    },
+    /// Look up a label's items for the results lister (W3a); answered as
+    /// [`AppEvent::LabeledFound`](crate::AppEvent::LabeledFound).
+    StatPlaces {
+        /// The search's number.
+        search: u64,
+        /// The places.
+        places: Vec<Place>,
+    },
+    /// Stop the running search: its summary says where it stopped.
+    StopSearch,
+    /// Hold the running search (`true`) or let it go on (`false`).
+    PauseSearch(bool),
+    /// Check a result's file when its row takes the focus (W3a); answered
+    /// as [`AppEvent::StaleChecked`](crate::AppEvent::StaleChecked).
+    CheckStale {
+        /// The search.
+        search: u64,
+        /// The result's row.
+        row: String,
+        /// The result.
+        hit: Box<diroxide_search::SearchHit>,
+    },
     /// Read the files of a panel's folder for its content filter, on a
     /// worker (W3a): the filter is run over the folder alone, and the
     /// names it matched come back as

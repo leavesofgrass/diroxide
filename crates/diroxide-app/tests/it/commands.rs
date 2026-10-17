@@ -612,7 +612,7 @@ fn details_context_menu_help_and_the_key_bar() {
 fn the_menus_open_by_bar_letter_and_access_key() {
     let mut f = open();
     let said = f.s.key("f9");
-    assert_eq!(said, ["Menu bar, File, Alt+F, 1 of 8"]);
+    assert_eq!(said, ["Menu bar, File, Alt+F, 1 of 9"]);
     f.s.key("enter");
     assert_eq!(f.s.dialog_title().as_deref(), Some("File menu"));
     f.s.key("right");

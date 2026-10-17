@@ -627,6 +627,32 @@ access = "r"
 command = "go.forget-place"
 access = "g"
 
+# Search (W3a): Find files and what it finds.
+[[menu]]
+id = "search"
+title = "Search"
+access = "r"
+
+[[menu.item]]
+command = "search.find"
+access = "f"
+
+[[menu.item]]
+command = "search.results"
+access = "r"
+
+[[menu.item]]
+command = "search.pause"
+access = "p"
+
+[[menu.item]]
+command = "search.show-in-folder"
+access = "i"
+
+[[menu.item]]
+command = "search.remove-row"
+access = "m"
+
 [[menu]]
 id = "select"
 title = "Select"

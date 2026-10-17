@@ -563,6 +563,33 @@ pub fn viewer_bank() -> Bank {
     }
 }
 
+/// The key bar in the search results (W3a): Escape stops first, then the
+/// panel's file keys as they act on the results.
+pub fn results_bank() -> Bank {
+    let buttons = [
+        ("Stop", ids::CANCEL),
+        ("Pause", ids::SEARCH_PAUSE),
+        ("View", ids::VIEW),
+        ("Edit", ids::EDIT),
+        ("Copy", ids::COPY),
+        ("Move", ids::MOVE),
+        ("Trash", ids::TRASH),
+        ("Refine", ids::FILTER),
+        ("Actions", ids::CONTEXT_MENU),
+        ("Status", ids::SAY_STATUS),
+    ];
+    Bank {
+        name: "Search results".to_owned(),
+        buttons: buttons
+            .into_iter()
+            .map(|(label, id)| Button {
+                label: label.to_owned(),
+                commands: vec![Command::new(id)],
+            })
+            .collect(),
+    }
+}
+
 /// The key bar in the quick view's preview region (plan commit 64): its
 /// own keys, Escape first.
 pub fn preview_bank() -> Bank {
@@ -654,13 +681,14 @@ mod tests {
         let config: MenusConfig = toml::from_str(BUILTIN_MENUS_TOML).unwrap();
         let (menus, problems) = Menus::from_config(&config);
         assert_eq!(problems, Vec::new());
-        assert_eq!(menus.bar().count(), 8);
+        // The Search menu joined the bar with alpha.3 (W3a).
+        assert_eq!(menus.bar().count(), 9);
         let keymap = Keymap::defaults();
         let edit = menus.list("edit", &keymap, &local()).unwrap();
         assert_eq!(edit.title(), "Edit menu");
         assert_eq!(edit.announce_focus(), "Undo, Ctrl+Z, 1 of 11");
         let bar = menus.bar_list(&keymap);
-        assert_eq!(bar.announce_focus(), "File, Alt+F, 1 of 8");
+        assert_eq!(bar.announce_focus(), "File, Alt+F, 1 of 9");
         let view = menus.list("view", &keymap, &local()).unwrap();
         assert!(view.rows().iter().any(|r| r.spoken() == "Sort, submenu"));
     }

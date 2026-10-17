@@ -17,6 +17,8 @@ mod keys;
 mod labels;
 mod palette;
 mod preview;
+// Search, its dialog and its results (W3a).
+mod searching;
 // Selection on the filter language (W3a).
 mod selecting;
 mod session;

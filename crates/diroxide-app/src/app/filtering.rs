@@ -228,23 +228,28 @@ impl App {
     /// milliseconds: while the filter prompt waits for its pause; never
     /// otherwise. The pause runs on the app's clock.
     pub fn app_wants_tick(&self) -> Option<u64> {
-        let pause = self.filtering.pause.as_ref()?;
-        let waited = millis_between(pause.at, self.now());
-        Some(self.settings.filter_pause_ms.saturating_sub(waited))
+        let pause = self.filtering.pause.as_ref().map(|pause| {
+            let waited = millis_between(pause.at, self.now());
+            self.settings.filter_pause_ms.saturating_sub(waited)
+        });
+        // The focused search result's check, after a short rest.
+        let stale = self.stale_wants_tick();
+        match (pause, stale) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
     }
 
     /// Gives the app's own timers their time: after the filter's pause,
     /// its count line or its problem is said.
     pub fn app_tick(&mut self) -> Vec<Effect> {
+        self.stale_tick();
         let due = self
             .filtering
             .pause
             .as_ref()
             .is_some_and(|p| millis_between(p.at, self.now()) >= self.settings.filter_pause_ms);
-        if !due {
-            return Vec::new();
-        }
-        let effects = self.pause_over();
+        let effects = if due { self.pause_over() } else { Vec::new() };
         self.follow_cursor();
         self.mark_requests(effects)
     }

@@ -66,6 +66,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Ctrl+V: Paste. Copies or moves what is on the file clipboard into this folder. (clipboard.paste)
 - Alt+Period: Show hidden files. Shows or hides hidden files and folders. (view.hidden)
 - Ctrl+S: Filter. Shows only what matches what you type, in the filter language, such as size over 1 MB; Cancel or Clear filter ends it. (view.filter)
+- Ctrl+F: Find files. Searches names and contents below this folder or the marked items, the results listed as they are found. (search.find)
 - Ctrl+F3: Sort by name. Sorts by name, A to Z; again for Z to A. (view.sort-name)
 - Ctrl+F4: Sort by extension. Sorts by extension, A to Z; again for Z to A. (view.sort-extension)
 - Ctrl+F5: Sort by modified. Sorts by modified time, newest first; again for oldest first. (view.sort-modified)
@@ -89,6 +90,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Page Down: Next page. Moves the focus down one page. (list.page-down)
 - Home: First row. Moves the focus to the first row. (list.home)
 - End: Last row. Moves the focus to the last row. (list.end)
+- F2: Pause search. In the search results, holds the running search; again, it goes on. (search.pause)
 
 ### In the viewer
 
@@ -185,6 +187,9 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Run a command. Asks for a command line and runs it in this folder. (file.run-command)
 - Shell here. Opens your shell in this folder; exit it to come back. (file.shell-here)
 - Clear filter. Shows every name again. (view.filter-clear)
+- Search results. Opens the last search's results again. (search.results)
+- Show in its folder. In the search results, shows the focused result in its folder. (search.show-in-folder)
+- Remove from results. In the search results, takes the focused row out of the list; the file stays. (search.remove-row)
 - Say filter. Says the panel's filter in one sentence, with the real days of date words such as last week. (view.say-filter)
 - Stash filter. Keeps the panel's filter aside and shows everything; Restore filter brings it back. (view.filter-stash)
 - Restore filter. Brings back the filter kept aside last. (view.filter-restore)
@@ -289,6 +294,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Ctrl+V: Paste. Copies or moves what is on the file clipboard into this folder. (clipboard.paste)
 - Alt+Period: Show hidden files. Shows or hides hidden files and folders. (view.hidden)
 - Ctrl+S: Filter. Shows only what matches what you type, in the filter language, such as size over 1 MB; Cancel or Clear filter ends it. (view.filter)
+- Ctrl+F: Find files. Searches names and contents below this folder or the marked items, the results listed as they are found. (search.find)
 - Ctrl+F3: Sort by name. Sorts by name, A to Z; again for Z to A. (view.sort-name)
 - Ctrl+F4: Sort by extension. Sorts by extension, A to Z; again for Z to A. (view.sort-extension)
 - Ctrl+F5: Sort by modified. Sorts by modified time, newest first; again for oldest first. (view.sort-modified)
@@ -313,6 +319,7 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Page Down: Next page. Moves the focus down one page. (list.page-down)
 - Home: First row. Moves the focus to the first row. (list.home)
 - End: Last row. Moves the focus to the last row. (list.end)
+- F2: Pause search. In the search results, holds the running search; again, it goes on. (search.pause)
 
 ### In the viewer
 
@@ -404,6 +411,9 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Run a command. Asks for a command line and runs it in this folder. (file.run-command)
 - Shell here. Opens your shell in this folder; exit it to come back. (file.shell-here)
 - Clear filter. Shows every name again. (view.filter-clear)
+- Search results. Opens the last search's results again. (search.results)
+- Show in its folder. In the search results, shows the focused result in its folder. (search.show-in-folder)
+- Remove from results. In the search results, takes the focused row out of the list; the file stays. (search.remove-row)
 - Say filter. Says the panel's filter in one sentence, with the real days of date words such as last week. (view.say-filter)
 - Stash filter. Keeps the panel's filter aside and shows everything; Restore filter brings it back. (view.filter-stash)
 - Restore filter. Brings back the filter kept aside last. (view.filter-restore)
@@ -518,7 +528,6 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 
 ## Kept for later alphas
 
-- Ctrl+F: Find files, coming in alpha.3.
 - Ctrl+T: New tab, coming in alpha.8.
 - Ctrl+W: Close tab, coming in alpha.8.
 - Ctrl+Tab: Next tab, coming in alpha.8, in the window.

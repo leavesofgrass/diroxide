@@ -1098,7 +1098,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         },
         default: "100000",
         help: "The most rows a search lists. The search says when it stopped at the limit.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "search_respect_ignore",
@@ -1107,7 +1107,7 @@ pub const SCHEMA: [SettingInfo; 80] = [
         kind: K::Flag,
         default: "false",
         help: "Leaves out files that .gitignore and similar files name.",
-        arrives: Some("alpha.3"),
+        arrives: None,
     },
     SettingInfo {
         key: "plugins.enabled",

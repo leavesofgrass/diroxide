@@ -652,7 +652,6 @@ Search result limit. The most rows a search lists. The search says when it stopp
 
 - Holds: a number of rows, 1000 to 10000000.
 - Default: `100000`.
-- Comes with alpha.3.
 
 ### search_respect_ignore
 
@@ -660,7 +659,6 @@ Search skips ignored files. Leaves out files that .gitignore and similar files n
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with alpha.3.
 
 ## Plugins
 

@@ -542,6 +542,20 @@ pub mod ids {
         /// Select a number of rows from the focus.
         SELECT_NEXT_ROWS = "select.next-rows";
     }
+
+    // Search (W3a, plan commit 37).
+    ids! {
+        /// Find files: the search dialog (reserved for alpha.3).
+        FIND = "search.find";
+        /// The last search's results again.
+        SEARCH_RESULTS = "search.results";
+        /// Hold the running search, or let it go on.
+        SEARCH_PAUSE = "search.pause";
+        /// Show the focused result in its folder.
+        SEARCH_SHOW_IN_FOLDER = "search.show-in-folder";
+        /// Take the focused result out of the list, the file staying.
+        SEARCH_REMOVE_ROW = "search.remove-row";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -566,7 +580,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 193] = [
+pub static CATALOG: [CommandInfo; 198] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1308,6 +1322,46 @@ pub static CATALOG: [CommandInfo; 193] = [
         "Clear filter",
         "Shows every name again.",
         Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FIND,
+        "Find files",
+        "Searches names and contents below this folder or the marked items, the results listed as they are found.",
+        Panel,
+        &["ctrl+f"],
+        &["ctrl+f"],
+    ),
+    command(
+        ids::SEARCH_RESULTS,
+        "Search results",
+        "Opens the last search's results again.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_PAUSE,
+        "Pause search",
+        "In the search results, holds the running search; again, it goes on.",
+        List,
+        &["f2"],
+        &["f2"],
+    ),
+    command(
+        ids::SEARCH_SHOW_IN_FOLDER,
+        "Show in its folder",
+        "In the search results, shows the focused result in its folder.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SEARCH_REMOVE_ROW,
+        "Remove from results",
+        "In the search results, takes the focused row out of the list; the file stays.",
+        List,
         &[],
         &[],
     ),

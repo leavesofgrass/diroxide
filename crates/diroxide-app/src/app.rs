@@ -24,7 +24,6 @@ mod dialogs;
 mod files;
 // The panel filter on the filter language (W3a).
 mod filtering;
-// Selection on the filter language (W3a).
 mod folder_views;
 mod info;
 mod keys;
@@ -32,7 +31,10 @@ mod labeling;
 mod nav;
 mod organize;
 mod preview;
+// Search, its dialog and its results (W3a).
+mod searching;
 mod select;
+// Selection on the filter language (W3a).
 mod selecting;
 mod split_join;
 mod viewing;
@@ -232,6 +234,47 @@ pub enum AppEvent {
         /// The facts.
         facts: Box<crate::archives::ArchiveFacts>,
     },
+    /// Hits of a search arrived, in the order found (W3a).
+    SearchFound {
+        /// The search, as [`Request::Search`] numbered it.
+        search: u64,
+        /// The hits.
+        hits: Vec<diroxide_search::SearchHit>,
+    },
+    /// How far a search got (W3a).
+    SearchProgress {
+        /// The search.
+        search: u64,
+        /// How far.
+        progress: diroxide_search::SearchProgress,
+    },
+    /// A search ended (W3a): its summary, or why it could not run.
+    SearchDone {
+        /// The search.
+        search: u64,
+        /// The summary, or why not.
+        result: Result<diroxide_search::SearchSummary, Message>,
+    },
+    /// A label's items were looked up for the results lister (W3a).
+    LabeledFound {
+        /// The search.
+        search: u64,
+        /// The items there.
+        found: Vec<diroxide_search::SearchHit>,
+        /// The items gone.
+        missing: Vec<Place>,
+        /// How many could not be looked at.
+        unreadable: usize,
+    },
+    /// A result's file was checked when it took the focus (W3a).
+    StaleChecked {
+        /// The search.
+        search: u64,
+        /// The result's row.
+        row: String,
+        /// Whether its file is as the list says.
+        freshness: diroxide_search::Freshness,
+    },
     /// The files a panel's content filter asked about were read (W3a):
     /// those that matched, or why not.
     FilterContents {
@@ -345,6 +388,16 @@ enum Purpose {
     SelectKind(Side),
     /// Select the next rows' count (W3a).
     NextRows(Side),
+    /// The search dialog: its settings (W3a).
+    SearchForm(Box<searching::SearchForm>),
+    /// One of the search dialog's text settings being typed (W3a).
+    SearchText(Box<searching::SearchForm>, searching::SearchField),
+    /// The results lister (W3a).
+    Results,
+    /// The results' refining filter (W3a).
+    Refine,
+    /// The actions on the results (W3a).
+    ResultsMenu,
     /// Copy or move to a place picked from a list.
     PickDestination {
         side: Side,
@@ -587,6 +640,8 @@ pub struct App {
     filtering: filtering::FilterState,
     /// Where each panel's range started (W3a).
     selecting: selecting::SelectState,
+    /// The search dialog, the results and their parking (W3a).
+    searching: searching::SearchState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -901,6 +956,7 @@ impl App {
             watching: watching::WatchState::default(),
             filtering: filtering::FilterState::default(),
             selecting: selecting::SelectState::default(),
+            searching: searching::SearchState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1012,6 +1068,9 @@ impl App {
         if self.in_preview() {
             return crate::menu::preview_bank().key_bar(&self.keymap);
         }
+        if self.results_shown() {
+            return crate::menu::results_bank().key_bar(&self.keymap);
+        }
         self.active_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
@@ -1029,6 +1088,9 @@ impl App {
         }
         if self.in_preview() {
             return crate::menu::preview_bank().key_bar_within(&self.keymap, cells);
+        }
+        if self.results_shown() {
+            return crate::menu::results_bank().key_bar_within(&self.keymap, cells);
         }
         self.active_bank()
             .map(|bank| bank.key_bar_within(&self.keymap, cells))
@@ -1329,6 +1391,22 @@ impl App {
             AppEvent::FilterContents { request, result } => {
                 self.filter_contents_arrived(request, result)
             }
+            AppEvent::SearchFound { search, hits } => self.search_found(search, hits),
+            AppEvent::SearchProgress { search, progress } => {
+                self.search_progress(search, &progress)
+            }
+            AppEvent::SearchDone { search, result } => self.search_done(search, result),
+            AppEvent::LabeledFound {
+                search,
+                found,
+                missing,
+                unreadable,
+            } => self.labeled_found(search, found, missing, unreadable),
+            AppEvent::StaleChecked {
+                search,
+                row,
+                freshness,
+            } => self.stale_checked(search, row, freshness),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }
@@ -1374,6 +1452,10 @@ impl App {
         }
         // Select by kind, size, date, extension, range and rows (W3a).
         if let Some(effects) = self.selecting_dispatch(command) {
+            return effects;
+        }
+        // Find files and the results' commands (W3a).
+        if let Some(effects) = self.search_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

@@ -416,6 +416,8 @@ pub struct Runtime {
     archive_secrets: archive_jobs::JobSecretsMap,
     /// The arrival watch of Watch this folder (W3t): dropping it stops it.
     arrivals: Option<diroxide_ops::tracker::WatchRun>,
+    /// The running search and its control (W3a).
+    search: Option<(u64, diroxide_search::SearchControl)>,
 }
 
 impl fmt::Debug for Runtime {
@@ -469,6 +471,7 @@ impl Runtime {
             archive_settings,
             archive_secrets: Arc::new(Mutex::new(HashMap::new())),
             arrivals: None,
+            search: None,
         }
     }
 
@@ -1056,6 +1059,62 @@ impl Runtime {
                 self.watch_arrivals(watch, place, pace);
             }
             Request::StopArrivals => self.arrivals = None,
+            Request::Search {
+                search,
+                query,
+                clock,
+            } => self.start_search(search, *query, clock),
+            Request::StatPlaces { search, places } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let ctx = OpContext::new();
+                    let mut found = Vec::new();
+                    let mut missing = Vec::new();
+                    let mut unreadable = 0;
+                    for place in places {
+                        match registry
+                            .resolve(&place)
+                            .and_then(|provider| provider.stat(&place, &ctx))
+                        {
+                            Ok(entry) => found.push(diroxide_search::SearchHit::new(place, entry)),
+                            Err(diroxide_vfs::VfsError::NotFound) => missing.push(place),
+                            Err(_) => unreadable += 1,
+                        }
+                    }
+                    shared.send(AppEvent::LabeledFound {
+                        search,
+                        found,
+                        missing,
+                        unreadable,
+                    });
+                });
+            }
+            Request::StopSearch => {
+                if let Some((_, control)) = &self.search {
+                    control.cancel();
+                }
+            }
+            Request::PauseSearch(pause) => {
+                if let Some((_, control)) = &self.search {
+                    if pause {
+                        control.pause();
+                    } else {
+                        control.resume();
+                    }
+                }
+            }
+            Request::CheckStale { search, row, hit } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let freshness =
+                        diroxide_search::stale_check(&hit, &registry, &OpContext::new());
+                    shared.send(AppEvent::StaleChecked {
+                        search,
+                        row,
+                        freshness,
+                    });
+                });
+            }
             Request::FilterContents {
                 request,
                 side: _,
@@ -1107,6 +1166,52 @@ impl Runtime {
                 self.queue.push_back(failed(line));
             }
         }
+    }
+
+    /// Starts a search on a worker, stopping the one before. Its hits go
+    /// to the app in batches (at most a tenth of a second apart), its
+    /// progress at most four times a second; an online-only file asks the
+    /// app once when the scope says to read such files.
+    fn start_search(
+        &mut self,
+        search: u64,
+        query: diroxide_search::SearchQuery,
+        clock: crate::request::SharedClock,
+    ) {
+        use diroxide_search::{OnlineOnly, SearchControl, run_search};
+        if let Some((_, old)) = self.search.take() {
+            old.cancel();
+        }
+        let mut control = SearchControl::new();
+        if query.scope.online_only == OnlineOnly::Read {
+            let asker = OnlineAsker {
+                shared: Arc::clone(&self.shared),
+                cancel: control.cancel_token().clone(),
+                answer: Mutex::new(None),
+            };
+            control = control.with_guard(Arc::new(asker));
+        }
+        self.search = Some((search, control.clone()));
+        let registry = Arc::clone(&self.registry);
+        self.worker(move |shared| {
+            let place = query
+                .scope
+                .places
+                .first()
+                .map(crate::panel::place_leaf)
+                .unwrap_or_default();
+            let mut sink = BatchSink {
+                shared: Arc::clone(shared),
+                search,
+                batch: Vec::new(),
+                sent: Instant::now(),
+                progress_sent: None,
+            };
+            let result = run_search(&query, &registry, clock.0.as_ref(), &control, &mut sink);
+            sink.flush();
+            let result = result.map_err(|error| Message::from_error("search", &place, &error));
+            shared.send(AppEvent::SearchDone { search, result });
+        });
     }
 
     /// Notes a running job's control, so Cancel reaches it.
@@ -1170,11 +1275,13 @@ impl Runtime {
         let what = match &spawn.kind {
             SpawnKind::Shell => "Shell".to_owned(),
             SpawnKind::CommandLine(_) => "Command".to_owned(),
-            SpawnKind::Editor(file) => file.name().unwrap_or("The editor").to_owned(),
+            SpawnKind::Editor(file) | SpawnKind::EditorAt { file, .. } => {
+                file.name().unwrap_or("The editor").to_owned()
+            }
             SpawnKind::Program { name, .. } => name.clone(),
         };
         let editing = match &spawn.kind {
-            SpawnKind::Editor(file) => Some(file),
+            SpawnKind::Editor(file) | SpawnKind::EditorAt { file, .. } => Some(file),
             _ => None,
         };
         if let Some(refusal) = limits::program_refusal(&spawn.folder, editing) {
@@ -1244,6 +1351,26 @@ impl Runtime {
                 let (shell, mut args) = self.launcher.shell();
                 args.push(OsString::from(line));
                 (shell, args)
+            }
+            SpawnKind::EditorAt { file, line } => {
+                let path = file.local_path().ok_or_else(|| {
+                    Message::could_not(
+                        "edit",
+                        file.name().unwrap_or("it"),
+                        "only files on this computer can be edited",
+                        "",
+                    )
+                })?;
+                let editor = self
+                    .editor
+                    .clone()
+                    .unwrap_or_else(|| self.launcher.editor());
+                let mut args = Vec::new();
+                if takes_line(&editor) {
+                    args.push(OsString::from(format!("+{line}")));
+                }
+                args.push(OsString::from(path));
+                (editor, args)
             }
             SpawnKind::Editor(file) => {
                 let path = file.local_path().ok_or_else(|| {
@@ -1371,6 +1498,89 @@ impl Runtime {
     }
 }
 
+/// A search's sink: hits in batches, progress thinned, both sent to the
+/// app tagged with the search's number.
+struct BatchSink {
+    shared: Arc<Shared>,
+    search: u64,
+    batch: Vec<diroxide_search::SearchHit>,
+    sent: Instant,
+    progress_sent: Option<Instant>,
+}
+
+impl BatchSink {
+    const BATCH: usize = 256;
+    const EVERY: Duration = Duration::from_millis(100);
+    const PROGRESS_EVERY: Duration = Duration::from_millis(250);
+
+    fn flush(&mut self) {
+        if self.batch.is_empty() {
+            return;
+        }
+        let hits = std::mem::take(&mut self.batch);
+        self.sent = Instant::now();
+        self.shared.send(AppEvent::SearchFound {
+            search: self.search,
+            hits,
+        });
+    }
+}
+
+impl diroxide_search::SearchSink for BatchSink {
+    fn found(&mut self, hit: diroxide_search::SearchHit) -> std::ops::ControlFlow<()> {
+        self.batch.push(hit);
+        if self.batch.len() >= Self::BATCH || self.sent.elapsed() >= Self::EVERY {
+            self.flush();
+        }
+        std::ops::ControlFlow::Continue(())
+    }
+
+    fn progress(&mut self, progress: &diroxide_search::SearchProgress) {
+        if self.sent.elapsed() >= Self::EVERY {
+            self.flush();
+        }
+        if self
+            .progress_sent
+            .is_some_and(|at| at.elapsed() < Self::PROGRESS_EVERY)
+        {
+            return;
+        }
+        self.progress_sent = Some(Instant::now());
+        self.shared.send(AppEvent::SearchProgress {
+            search: self.search,
+            progress: progress.clone(),
+        });
+    }
+}
+
+/// Asks the app, once a search, whether online-only files may be read,
+/// which downloads them; the answer holds for the rest of the search.
+struct OnlineAsker {
+    shared: Arc<Shared>,
+    cancel: CancelToken,
+    answer: Mutex<Option<bool>>,
+}
+
+impl diroxide_search::OnlineGuard for OnlineAsker {
+    fn allow(&self, _place: &Place, entry: &diroxide_core::Entry) -> bool {
+        let mut answer = lock(&self.answer);
+        if let Some(yes) = *answer {
+            return yes;
+        }
+        let question = Question::OnlineOnly {
+            name: entry.name.clone(),
+            size: entry.size,
+        };
+        let yes = matches!(
+            self.shared
+                .ask(question, &self.cancel, Reply::Confirm(false)),
+            Reply::Confirm(true)
+        );
+        *answer = Some(yes);
+        yes
+    }
+}
+
 /// Runs a panel's content filter over its folder alone, depth 1, every
 /// hit kept: the names that matched, and what could not be decided.
 fn filter_contents(
@@ -1403,6 +1613,33 @@ fn filter_contents(
         matched,
         unknown: summary.unknown,
     })
+}
+
+/// Whether an editor takes `+LINE` before the file: vi and its family,
+/// nano, Emacs, Micro, Kakoune, joe, ne and mcedit.
+fn takes_line(editor: &std::ffi::OsStr) -> bool {
+    let name = Path::new(editor)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    matches!(
+        name.as_str(),
+        "vi" | "vim"
+            | "nvim"
+            | "gvim"
+            | "view"
+            | "nano"
+            | "pico"
+            | "emacs"
+            | "emacsclient"
+            | "micro"
+            | "kak"
+            | "joe"
+            | "jstar"
+            | "ne"
+            | "mcedit"
+            | "testeditor"
+    )
 }
 
 /// Reads a file for the viewer: a seekable read where the provider has one

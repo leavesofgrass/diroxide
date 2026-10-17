@@ -79,6 +79,22 @@ impl App {
         vec![Effect::OpenDialog(id), self.say(message)]
     }
 
+    /// Opens a dialog for a purpose and says a line of its own instead of
+    /// its name (the results lister's "Searching work for *.txt").
+    pub(super) fn open_dialog_saying(
+        &mut self,
+        dialog: Dialog,
+        purpose: Purpose,
+        message: Message,
+    ) -> Vec<Effect> {
+        let id = self.ids.dialog();
+        self.dialogs.push((id, dialog));
+        self.tabbed = None;
+        let opened = self.now();
+        self.opens.push(Open { purpose, opened });
+        vec![Effect::OpenDialog(id), self.say(message)]
+    }
+
     /// Closes the dialog on top; the focus returns where it was.
     pub(super) fn close_top(&mut self) -> Vec<Effect> {
         // A secret dialog's typed text is wiped as it is dropped here.
@@ -144,6 +160,13 @@ impl App {
 
     /// A key with a dialog open.
     pub(super) fn dialog_key(&mut self, key: Key) -> Vec<Effect> {
+        // The results lister's and the search dialog's own keys (W3a).
+        if let Some(effects) = self.results_key(&key) {
+            return effects;
+        }
+        if let Some(effects) = self.search_form_key(&key) {
+            return effects;
+        }
         // The labels', bookmarks' and History lists' own keys (W3l).
         if let Some(effects) = self.organize_key(&key) {
             return effects;
@@ -185,6 +208,7 @@ impl App {
             Action::Focus(movement) => {
                 if let Some(list) = self.dialog_list_mut() {
                     if list.move_focus(movement) {
+                        self.results_focus_moved();
                         return self.list_focus_said();
                     }
                     let edge = if matches!(movement, Move::Up | Move::PageUp | Move::Home) {
@@ -383,6 +407,13 @@ impl App {
             }
             Purpose::Keys(purpose) => effects.extend(self.keys_escape(*purpose)),
             Purpose::Organize(wants) => effects.extend(self.organize_escape(*wants)),
+            Purpose::SearchText(form, field) => {
+                effects.extend(self.search_text_escaped(*form, field));
+            }
+            Purpose::SearchForm(_) => {
+                effects.push(self.say(Message::info("Nothing was searched.")));
+            }
+            Purpose::Results => effects.extend(self.results_closed()),
             _ => {}
         }
         effects
@@ -792,6 +823,31 @@ impl App {
                 }
                 self.pattern_entered(side, select, &text)
             }
+            Purpose::SearchForm(form) => match row {
+                Some(row) => self.search_form_row(*form, &row),
+                None => Vec::new(),
+            },
+            Purpose::SearchText(form, field) => {
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                self.search_text_entered(*form, field, &text)
+            }
+            Purpose::Results => self.open_result(),
+            Purpose::Refine => {
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                self.refine_entered(&text)
+            }
+            Purpose::ResultsMenu => match row.and_then(|r| CommandId::new(r).ok()) {
+                Some(id) => {
+                    let mut effects = self.close_top();
+                    effects.extend(self.results_action(&id));
+                    effects
+                }
+                None => Vec::new(),
+            },
             Purpose::SelectKind(side) => match row {
                 Some(row) => self.select_kind_chosen(side, &row),
                 None => Vec::new(),

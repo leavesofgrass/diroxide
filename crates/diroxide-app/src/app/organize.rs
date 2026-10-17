@@ -96,10 +96,9 @@ pub(super) enum Wants {
         one: Option<String>,
         toggle: bool,
     },
-    /// The Labels list.
+    /// The Labels list; Enter opens a label's items as search results
+    /// (W3a).
     Labels,
-    /// One label's items.
-    Labeled { label: String },
     /// The Bookmarks list for a panel.
     Bookmarks { side: Side },
     /// The question before a bookmark is removed.
@@ -268,10 +267,6 @@ impl App {
                 let place = row.and_then(|r| Place::parse(&r).ok())?;
                 Some(self.forget_place(&place))
             }
-            Wants::Labeled { label } if removes => {
-                let place = row.and_then(|r| Place::parse(&r).ok())?;
-                Some(self.unlabel_one(&label, place))
-            }
             _ => None,
         }
     }
@@ -299,12 +294,9 @@ impl App {
                 one,
                 toggle,
             } => self.label_chosen(side, places, one, toggle, row, &text, in_list),
+            // The label's items as search results (W3a).
             Wants::Labels => match row {
-                Some(label) => self.labeled_items(&label),
-                None => Vec::new(),
-            },
-            Wants::Labeled { .. } => match row.and_then(|r| Place::parse(&r).ok()) {
-                Some(place) => self.show_labeled(place),
+                Some(label) => self.labeled_results(&label),
                 None => Vec::new(),
             },
             Wants::Bookmarks { side } => match row {

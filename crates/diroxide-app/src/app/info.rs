@@ -86,6 +86,10 @@ impl App {
         if let Some(line) = self.filter_prompt_status() {
             return vec![self.say(Message::info(line))];
         }
+        // The results lister says how the search stands first.
+        if let Some(line) = self.results_status() {
+            return vec![self.say(Message::info(line))];
+        }
         if let Some((_, dialog)) = self.dialogs.last() {
             let line = dialog.focus_line();
             return vec![self.say(Message::info(line))];
@@ -157,10 +161,13 @@ impl App {
     pub(super) fn say_key_bar(&mut self) -> Vec<Effect> {
         let viewer_bank = crate::menu::viewer_bank();
         let preview_bank = crate::menu::preview_bank();
+        let results_bank = crate::menu::results_bank();
         let bank = if self.viewer_open() {
             Some(&viewer_bank)
         } else if self.in_preview() {
             Some(&preview_bank)
+        } else if self.results_shown() {
+            Some(&results_bank)
         } else {
             self.active_bank()
         };

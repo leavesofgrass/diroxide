@@ -1192,6 +1192,23 @@ impl App {
                 )
             }
             Question::Limit { question, .. } => self.ask_limit(ask, &question),
+            Question::OnlineOnly { name, size } => {
+                let size = size
+                    .map(|s| format!(", {}", diroxide_core::format::human_size(s)))
+                    .unwrap_or_default();
+                let name = diroxide_core::names::display_name(&name).into_owned();
+                let question = with_default_no(Message::question(&format!(
+                    "{name} is online only{size}. Download online-only files to search them"
+                )));
+                self.open_dialog(
+                    Dialog::Confirm {
+                        question,
+                        listing: Vec::new(),
+                        on_yes: Command::new(ids::YES),
+                    },
+                    Purpose::Limit { ask },
+                )
+            }
             Question::Secret { job, request } if request.attempt >= 2 => {
                 // The next try: say the last one was wrong first, and ask
                 // whether to try again, starting on No (W2b's notes).

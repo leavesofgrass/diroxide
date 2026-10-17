@@ -296,6 +296,28 @@ impl App {
         )
     }
 
+    /// A file in the viewer from outside a panel (a search result): its
+    /// siblings are the files to step through, and the viewer goes to the
+    /// line a result names once it is open.
+    pub(super) fn view_place_at(
+        &mut self,
+        place: Place,
+        size: Option<u64>,
+        siblings: Vec<Sibling>,
+    ) -> Vec<Effect> {
+        let side = self.active;
+        let row = place.name().unwrap_or_default().to_owned();
+        self.read_viewer_source(
+            place,
+            size,
+            SourceFor::Open {
+                side,
+                row,
+                siblings,
+            },
+        )
+    }
+
     fn read_viewer_source(
         &mut self,
         place: Place,
@@ -331,7 +353,12 @@ impl App {
         }
         let source = match result {
             Ok(source) => source,
-            Err(message) => return vec![self.say(message)],
+            Err(message) => {
+                // A result that could not open leaves the results open.
+                self.take_park_on_open();
+                self.take_view_line();
+                return vec![self.say(message)];
+            }
         };
         let said = match why {
             SourceFor::Open {
@@ -358,6 +385,14 @@ impl App {
                     .get_or_insert_with(highlight::Session::new)
                     .clone();
                 said.extend(viewer.set_highlighter(session));
+                // A search result: the viewer at its line, the results
+                // aside until it closes (W3a).
+                if let Some(line) = self.take_view_line() {
+                    said.extend(viewer.jump(&line.to_string()));
+                }
+                if self.take_park_on_open() {
+                    self.park_results();
+                }
                 self.viewing = Some(Viewing {
                     viewer: Box::new(viewer),
                     side,
@@ -486,12 +521,18 @@ impl App {
             .name()
             .filter(|n| self.panel(side).entry(n).is_some())
             .map_or(viewing.row.clone(), str::to_owned);
-        self.panel_mut(side).list_mut().focus_id(&row);
+        // A search result's viewer leaves the panel's focus alone (W3a).
+        if !self.results_parked() {
+            self.panel_mut(side).list_mut().focus_id(&row);
+        }
         self.active = side;
-        vec![
+        let mut effects = vec![
             Effect::Redraw(Redraw::All),
             self.say(Message::info(format!("Viewer closed: {name}"))),
-        ]
+        ];
+        // The search results it came from come back (W3a).
+        effects.extend(self.unpark_results());
+        effects
     }
 
     fn viewer_command(&mut self, command: ViewerCommand) -> Vec<Effect> {

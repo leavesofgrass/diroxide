@@ -127,3 +127,59 @@ fn a_filter_problem_is_said_after_the_pause_never_on_each_key() {
     assert_eq!(said.len(), 2, "{said:?}");
     assert!(said[1].starts_with("Word 3. "), "{said:?}");
 }
+
+#[test]
+fn a_search_lists_its_results_with_the_cursor_on_the_first_row() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    let (mut app, mut runtime, _app_clock) = app_with_clock(&work, settings());
+    let clock = Clock::at_start();
+    let mut s = session(&mut app, &mut runtime, 80, 24, true);
+    start(&mut s, &clock);
+    press(&mut s, &clock, "ctrl+f");
+    // The dialog covers the body: its name, then the rows, the focus on
+    // the name row's first cell.
+    let screen = s.screen();
+    let title = line_of(&screen, "Search");
+    let row = line_of(&screen, "Name or filter: every entry");
+    assert!(row > title);
+    cursor_at(&s, 0, row);
+    type_text(&mut s, &clock, "*.txt");
+    let prompt = line_of(&s.screen(), "Name or filter: *.txt");
+    cursor_at(&s, "Name or filter: *.txt".len(), prompt);
+    let before = s.said().len();
+    press(&mut s, &clock, "enter");
+    let said = said_since(&s, before);
+    assert_eq!(said[0], "Searching work for *.txt", "{said:?}");
+    assert!(
+        said.iter().any(|t| t.starts_with("Done: 4 found in ")),
+        "{said:?}"
+    );
+    let screen = s.screen();
+    let title = line_of(&screen, "Results: name matches *.txt");
+    // The first result is the focused row, its first cell under the cursor.
+    assert!(
+        screen.lines[title + 1].contains(".txt, in work"),
+        "{:#?}",
+        screen.lines
+    );
+    cursor_at(&s, 0, title + 1);
+    // The key bar names the results' keys.
+    assert!(
+        screen.lines[23].starts_with("Escape Stop"),
+        "{:#?}",
+        screen.lines
+    );
+    press(&mut s, &clock, "down");
+    cursor_at(&s, 0, title + 2);
+    // The viewer at the match, and back to the same row.
+    press(&mut s, &clock, "f3");
+    assert!(s.app().viewer_open());
+    press(&mut s, &clock, "escape");
+    let screen = s.screen();
+    let title = line_of(&screen, "Results: name matches *.txt");
+    cursor_at(&s, 0, title + 2);
+    press(&mut s, &clock, "escape");
+    assert!(s.app().dialog().is_none());
+    cursor_at(&s, 0, 2);
+}

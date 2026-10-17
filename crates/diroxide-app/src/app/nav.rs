@@ -617,7 +617,9 @@ impl App {
                 text = &text[1..text.len() - 1];
             }
         }
-        let text = if cfg!(windows) {
+        // On Windows a typed slash is a backslash, except in a place with
+        // a scheme ("sftp://host/path"), whose slashes are its own.
+        let text = if cfg!(windows) && !text.contains("://") {
             text.replace('/', "\\")
         } else {
             text.to_owned()
