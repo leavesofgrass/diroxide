@@ -2,11 +2,13 @@
 //! the cursor in every state, a key's press and release, the three
 //! layouts with hostile, emoji and Japanese names, the inactive panel in
 //! screen-reader mode, the repeated message, the key test's timeout, the
-//! settled resize, attributes without color, and the editor's handover.
+//! settled resize, attributes without color, the editor's handover, the
+//! key bar, the viewer, and the owner's check of alpha.2 (`owners_check`).
 
 // Test helpers: a failure is the test's.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod owners_check;
 mod support;
 
 use std::ffi::OsString;

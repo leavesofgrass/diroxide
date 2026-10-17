@@ -18,6 +18,24 @@ use diroxide_core::place::PathStyle;
 use diroxide_core::{EntryKind, Place};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 
+/// The archive formats and a pack's request, for a frontend that names a
+/// format or makes an archive without a dialog.
+pub use diroxide_archive::{ArchiveFormat, PackRequest};
+
+/// Packs files on this computer into a new archive with diroxide's own
+/// runner, asking nothing (a password travels in the request): for a
+/// frontend's tests and for a demo set made without a dialog. The error
+/// says what could not be packed, in words.
+pub fn pack_local(request: &PackRequest) -> Result<(), diroxide_core::Message> {
+    diroxide_archive::pack(request, &Registry::with_local(), &OpContext::new()).map_err(|error| {
+        let name = request
+            .destination
+            .name()
+            .map_or_else(|| request.destination.to_string(), str::to_owned);
+        diroxide_core::Message::from_error("pack", &name, &error)
+    })
+}
+
 /// What the runtime learned about an archive while it listed a place in
 /// it, sent to the app before the listing: the words for the title line
 /// and the line said on opening it.
