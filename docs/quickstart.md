@@ -77,6 +77,16 @@ Shift+Delete deletes for good. It lists every path first, spelling out hidden ch
 
 Ctrl+F3 sorts by name, Ctrl+F4 by extension, Ctrl+F5 by modified time, Ctrl+F6 by size and Ctrl+F7 not at all. The same key again reverses. The status line says the result first: "Sorted by size, largest first". Your cursor stays on the same entry.
 
+## Open an archive
+
+Move to a zip, a 7z, a tar or another archive and press Enter. It opens like a folder, and the status line says "Opened course.zip: 10 items, 48 KB." Move around as you do in any folder. Left, at the top of the archive, goes back to the folder that holds it. Mark members and press F5 to copy them out to the other panel. Nothing in an archive can be changed: "Archives are read only here. Use Pack to make a new one." To make a new archive from marked files, run Pack from the palette. [Archives](archives.md) has the rest.
+
+## Read a file
+
+Press F3 on a file to read it in the viewer. Up and Down move a line, Ctrl+D says where you are, slash searches, and Escape closes the viewer with your cursor back on the file's row. Press Shift+F3 to turn the other panel into a live preview of the file under your cursor, and Shift+F3 again to turn it off. [The viewer](viewer.md) and [the quick view](quick-view.md) have the rest.
+
+<!-- to confirm with the wiring (W2f): that Pack is in the palette under this name, and the first-start lines at the top of this guide, which now also say "Ctrl+Q quits" and name the key bar. -->
+
 ## Find any command
 
 - Ctrl+P opens the command palette. Type part of a command's name and press Enter. Each entry says its name first and its key after it.
@@ -101,6 +111,8 @@ diro init bash
 
 - [The panels](panels.md): layouts, moving, sorting, filtering and marking.
 - [Operations and undo](operations.md): every operation, its question and how to reverse it.
+- [Archives](archives.md), [the viewer](viewer.md) and [the quick view](quick-view.md): opening, packing, reading and previewing.
+- [Split and join](split-join.md): big files in parts.
 - [Using diroxide with a screen reader](screen-readers.md): the settings to check in NVDA and JAWS, and what you should hear.
 - [Settings](settings.md): where the files live and what to change.
 - [Troubleshooting](troubleshooting.md), when something does not work.
