@@ -22,7 +22,7 @@
 //!   devices and other special entries never made, times kept, a
 //!   folder's after its contents.
 //! - **Questions and passwords asked on the job's thread**: a limit's
-//!   question through [`ArchiveQuestions`], once per kind; a wrong password
+//!   question through [`crate::ArchiveQuestions`], once per kind; a wrong password
 //!   tried again up to three times; members already done are never read
 //!   again.
 //!

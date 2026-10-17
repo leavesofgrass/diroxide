@@ -11,8 +11,14 @@
 //! The read side (W2a): the name rules ([`names`]), the limits
 //! ([`limits`]), the format sniffer, the limiter chain, the index, and a
 //! reader per format, all pure Rust (`zip`, `sevenz-rust2`, `tar`,
-//! `flate2`, `lzma-rust2`). The pack and unpack runners are the write
-//! side's (W2b).
+//! `flate2`, `lzma-rust2`).
+//!
+//! The write side (W2b), jobs that speak the engine's sink, control and
+//! report ([`JobEnv`]): the unpack plan and its one-pass runner
+//! ([`plan_unpack`], [`run_unpack()`]), Test archive ([`test_archive()`]), the
+//! pack plan and its runner with a writer per format ([`plan_pack`],
+//! [`run_pack()`]), the passwords of one job ([`JobSecrets`]), and split
+//! archives opened as one through the parts reader.
 
 pub mod error;
 pub mod format;

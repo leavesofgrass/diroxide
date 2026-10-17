@@ -243,7 +243,7 @@ impl diroxide_ops::JobSink for Quiet {
 /// policy says otherwise; a password is asked of `ctx` only through the
 /// request), with the default limits. `Ok` once the archive is in place.
 /// The app plans and runs a pack itself ([`crate::plan_pack`],
-/// [`crate::run_pack`]) to show the plan and the progress.
+/// [`crate::run_pack()`]) to show the plan and the progress.
 pub fn pack(request: &PackRequest, registry: &Registry, ctx: &OpContext) -> Result<(), VfsError> {
     let registry = std::sync::Arc::new(registry.clone());
     let engine = diroxide_ops::Engine::new(registry.clone());
