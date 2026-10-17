@@ -265,6 +265,16 @@ impl Viewer {
         })
     }
 
+    /// Puts the cursor on a line, on the row that holds a byte of its shown
+    /// text.
+    pub(super) fn land_on_column(&mut self, line: u64, column: usize) {
+        let part = self.parts(line).map_or(0, |parts| {
+            parts.iter().rposition(|p| p.from <= column).unwrap_or(0)
+        });
+        self.cursor = RowPos { line, part };
+        self.keep_cursor_visible();
+    }
+
     /// Scrolls so the cursor's row is on the screen, as little as needed.
     pub(super) fn keep_cursor_visible(&mut self) {
         let parts = self.part_count(self.cursor.line).max(1);

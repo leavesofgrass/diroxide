@@ -29,6 +29,7 @@
 mod index;
 mod jump;
 mod rows;
+mod search;
 mod source;
 mod text;
 mod wrap;
@@ -45,6 +46,7 @@ use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
 pub use jump::Jump;
+pub use search::{MAX_HITS, Query};
 pub use source::ViewerSource;
 pub use wrap::CONTINUED;
 
@@ -213,6 +215,11 @@ enum Task {
     Line { line: u64, landing: Landing },
     /// Land on the line that holds a byte.
     Offset { offset: u64, landing: Landing },
+    /// Scan for the last search's matches, then land on one.
+    Search {
+        direction: search::Direction,
+        fresh: bool,
+    },
 }
 
 /// What to say on landing.
@@ -247,6 +254,7 @@ pub struct Viewer {
     follow: bool,
     lines: BTreeMap<u64, ShownLine>,
     task: Option<Task>,
+    search: Option<search::Search>,
 }
 
 impl fmt::Debug for Viewer {
@@ -303,6 +311,7 @@ impl Viewer {
             follow: settings.follow,
             lines: BTreeMap::new(),
             task: None,
+            search: None,
         };
         viewer.load()?;
         let said = viewer.opening_lines();
@@ -324,6 +333,7 @@ impl Viewer {
         self.index = LineIndex::new(self.form.start(), self.form.newline);
         self.lines.clear();
         self.task = None;
+        self.reset_search();
         let budget = if self.source.is_complete() && self.source.available() <= INDEX_AT_OPEN {
             u64::MAX
         } else {
@@ -496,10 +506,37 @@ impl Viewer {
 
     fn start_task(&mut self, task: Task) -> Vec<Message> {
         self.task = Some(task.clone());
-        self.run_task(task, COMMAND_BUDGET)
+        let said = self.run_task(task.clone(), COMMAND_BUDGET);
+        if self.task.is_none() {
+            return said;
+        }
+        // Still scanning: say so once, so a large file is never silent.
+        let working = match task {
+            Task::Line { line: u64::MAX, .. } => "Finding the last line".to_owned(),
+            Task::Line { line, .. } => format!("Finding line {}", grouped(line + 1)),
+            Task::Offset { offset, .. } => format!("Finding offset {}", grouped(offset)),
+            Task::Search { .. } => match self.search_text() {
+                Some(text) => format!("Searching for {text}"),
+                None => "Searching".to_owned(),
+            },
+        };
+        vec![Message::status(working).with_importance(diroxide_core::Importance::Normal)]
     }
 
     fn run_task(&mut self, task: Task, budget: u64) -> Vec<Message> {
+        if let Task::Search { direction, fresh } = task {
+            return match self.run_search(direction, fresh, budget) {
+                Ok(None) => Vec::new(),
+                Ok(Some(said)) => {
+                    self.task = None;
+                    said
+                }
+                Err(error) => {
+                    self.task = None;
+                    vec![ViewerError::from(error).message(&self.name)]
+                }
+            };
+        }
         let result = match task {
             Task::Line { line, landing } => self
                 .find_line(line, budget)
@@ -508,6 +545,7 @@ impl Viewer {
                 .index
                 .line_of(&mut self.source, offset, budget)
                 .map(|found| found.map(|line| (line, false, landing))),
+            Task::Search { .. } => Ok(None),
         };
         match result {
             Ok(None) => Vec::new(),
@@ -571,6 +609,7 @@ impl Viewer {
         }
         self.source.raise_cap(cap);
         self.index.reopen();
+        self.reset_search();
         // The last line may have been cut by the old cap.
         if let Some((&last, _)) = self.lines.iter().next_back() {
             self.lines.remove(&last);

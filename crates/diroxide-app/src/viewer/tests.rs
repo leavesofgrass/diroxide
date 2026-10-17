@@ -193,7 +193,12 @@ fn the_end_of_a_large_file_is_found_in_slices() {
     let mut viewer = memory(&bytes);
     assert_eq!(viewer.line_count(), None, "too large to index at open");
     assert!(viewer.status().starts_with("Line 1, 0 percent"));
-    assert!(viewer.end().is_empty(), "the first slice does not reach it");
+    let said = texts(&viewer.end());
+    assert_eq!(
+        said,
+        ["Finding the last line"],
+        "the first slice does not reach it"
+    );
     assert!(viewer.is_busy());
     let said = texts(&viewer.finish());
     assert_eq!(said, ["Line 2,000,000 of 2,000,000, the last"]);
@@ -362,7 +367,7 @@ fn a_jump_says_where_it_landed() {
 #[test]
 fn a_far_jump_in_a_large_file_lands_after_the_scan() {
     let mut viewer = memory(&numbered(2_000_000));
-    assert!(viewer.jump("1,500,000").is_empty());
+    assert_eq!(texts(&viewer.jump("1,500,000")), ["Finding line 1,500,000"]);
     assert!(viewer.is_busy());
     let said = texts(&viewer.finish());
     assert_eq!(said, ["At line 1,500,000"], "the total is not known yet");
@@ -422,5 +427,67 @@ fn follow_says_how_many_lines_arrived() {
     assert_eq!(
         texts(&stream.toggle_follow()),
         ["Follow works on files on disk only"]
+    );
+}
+
+#[test]
+fn search_counts_every_match_and_wraps_around() {
+    let (mut viewer, _) = open("text/notes.txt");
+    viewer.set_size(80, 5);
+    assert_eq!(
+        texts(&viewer.search("hello", false)),
+        ["Match 1 of 5, line 11"]
+    );
+    assert_eq!(viewer.cursor().line, 10);
+    assert_eq!(texts(&viewer.next_match()), ["Match 2 of 5, line 11"]);
+    viewer.next_match();
+    viewer.next_match();
+    assert_eq!(texts(&viewer.next_match()), ["Match 5 of 5, line 12"]);
+    assert_eq!(
+        texts(&viewer.next_match()),
+        ["Search wrapped to the top, match 1 of 5"]
+    );
+    assert_eq!(
+        texts(&viewer.previous_match()),
+        ["Search wrapped to the bottom, match 5 of 5"]
+    );
+    let row = viewer.rows().into_iter().find(|r| r.focused).unwrap();
+    assert_eq!(viewer.match_ranges(&row.text).len(), 3);
+    assert_eq!(
+        texts(&viewer.search("zebra", false)),
+        ["No match for zebra."]
+    );
+    assert_eq!(
+        texts(&viewer.search("Hello", false)),
+        ["No match for Hello."]
+    );
+    viewer.jump("end");
+    assert_eq!(
+        texts(&viewer.search("hello", true)),
+        ["Match 5 of 5, line 12"],
+        "backward from the end"
+    );
+    viewer.home();
+    assert_eq!(
+        texts(&viewer.search("week|Sunday", false)),
+        ["Match 1 of 2, line 1"]
+    );
+    let said = viewer.search("(", false);
+    assert_eq!(texts(&said), ["Pattern needs care: bad expression"]);
+    let mut fresh = memory(b"x\n");
+    assert_eq!(texts(&fresh.next_match()), ["No search yet"]);
+}
+
+#[test]
+fn a_search_of_a_large_file_says_it_is_searching_then_the_count() {
+    let mut viewer = memory(&numbered(2_000_000));
+    let said = texts(&viewer.search("^line 1999999$", false));
+    assert_eq!(said, ["Searching for ^line 1999999$"]);
+    assert!(viewer.is_busy());
+    let said = texts(&viewer.finish());
+    assert_eq!(said, ["Match 1 of 1, line 1,999,999"]);
+    assert_eq!(
+        viewer.rows().iter().find(|r| r.focused).unwrap().text,
+        "line 1999999"
     );
 }

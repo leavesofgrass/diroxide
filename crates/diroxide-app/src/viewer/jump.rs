@@ -238,6 +238,7 @@ impl Viewer {
             return Vec::new();
         }
         self.index.reopen();
+        self.reset_search();
         // The last line may have grown.
         if let Some((&last, _)) = self.lines.iter().next_back() {
             self.lines.remove(&last);
