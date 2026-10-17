@@ -34,8 +34,13 @@ Each line of the output starts with the scenario and its median, then the budget
 - `copy`: copy a 1 GB file through the job engine, planned and run, with the default options. The second line gives the rate.
 - `copy-system`: copy the same file with the system's own copy call, for reference. The gap between the two is the engine's cost.
 - `slow-place`: copy 40 files from the slow place on the fake provider: every call waits 2 ms and one call, 80 calls into the run, stalls for 400 ms. The second line says in how many runs the job said it had stalled; it should be every run.
+- `archive-zip`, `archive-tar` and `archive-7z`: list a zip, a tar and a 7z of 100,000 empty members with `diro archive list -0`, timed from the process's start to its last path, so the time is what a user waits for at a shell: starting `diro`, opening the archive, building its index and writing every path. The archives are packed first with `diro archive pack`, outside the timing.
+- `unpack`: unpack a zip holding one 200 MB file with `diro archive unpack`, into a new folder each run. The second line gives the rate.
+- `viewer`: open a 256 MB text log in the viewer and draw its first screen of 24 rows, in screen-reader mode, through the app's viewer itself.
 
-The sizes and budgets are in `bench/params.toml`; `--quick` uses its small sizes.
+The archive scenarios run the `diro` binary, which the bench builds first with its own profile (`cargo build --release -p diro` for an optimized bench), because xtask may not depend on the archive crate yet; once it may, they can call the provider and the runners directly.
+
+The sizes and budgets are in `bench/params.toml`; `--quick` uses its small sizes. The new scenarios have no budgets yet: they report, and the ratchet compares them with the baseline once one is saved.
 
 ## Where the numbers go
 
@@ -48,6 +53,22 @@ cargo run --release -p xtask -- bench --save-baseline
 ```
 
 A baseline is saved only from an optimized, full run of every scenario.
+
+## The archive scenarios' first figures
+
+Measured on the owner's Windows machine on Saturday, October 17, 2026, in an optimized full run, with another builder at work beside it; the median of three runs each:
+
+- List 100,000 entries in a zip: 265 ms.
+- List 100,000 entries in a tar: 266 ms.
+- List 100,000 entries in a 7z: 263 ms.
+- Unpack a zip of 200 MB: 500 ms, 400 MB a second.
+- View the first screen of a 256 MB log: 8.6 ms.
+
+The same run put the Wave 1 scenarios between 12 and 39 percent off the saved Windows baseline in both directions, which is the other builder's noise, so the baseline was not saved from it. Save it on a quiet machine, with nothing else building:
+
+```bash
+cargo run --release -p xtask -- bench --save-baseline
+```
 
 ## The ratchet
 
