@@ -8,6 +8,8 @@ homepage.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The split sidecar's CRC-32 (W2c).
+crc32fast.workspace = true
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
 serde.workspace = true

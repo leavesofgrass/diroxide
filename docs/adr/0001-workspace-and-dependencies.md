@@ -11,6 +11,12 @@ Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b): the plugin b
 - `blake3` always has `cc` as a build dependency, even with its `pure` feature, so the gate fails the day a crate uses it. Before the duplicate finder (alpha.8) uses it, the owner decides: a second allow entry, or a pure-Rust hash in its place.
 - `deny.toml` gains `CDLA-Permissive-2.0` (webpki-roots, under `fetch`), the `libbz2-rs-sys` exception, and three advisory ignores with their reasons. The regex crates build at `opt-level = 3` in debug builds.
 
+Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2): pure Rust is a goal, not a rule (the owner, answer 46), so the native gate's allow list is now the inventory, each entry with its reason in words, added in the same commit as its dependency.
+
+- **carta carries C.** `carta` 0.0.11 depends on `stacker`, whose `psm` builds a small assembly file, and `stacker` itself compiles one C file, both for growing the stack on deeply nested documents. No pure-Rust reader covers Org, reStructuredText, MediaWiki, DokuWiki and Jira (answer 27), so the inventory gains two entries: `cc` under `psm` through `stacker` and `carta`, and `cc` under `stacker` through `carta`. The machine's C compiler (MSVC on Windows, the base image's gcc in the container) builds them. Fallback: carta behind the plugin boundary, as answer 27 already allows.
+- **Depended on, not only declared.** So the license, duplicate and native gates read them, the crates that will use the alpha.2 dependencies now name them: `diroxide-archive` takes `zip` 9.0.1 (with `aes-crypto`), `sevenz-rust2`, `tar`, `flate2`, `lzma-rust2` and `bzip2`; `diroxide-ops` takes `crc32fast`; `diroxide-preview` takes `encoding_rs`, `syntect` (parsing with the fancy-regex engine), `two-face`, `pulldown-cmark`, `carta` (five readers, default features off) and `serde`. `cargo tree -d` shows one `lzma-rust2`, 0.21.0. `scraper` waits for spike C1's path A. `syntect` and `fancy-regex` build at `opt-level = 3` in debug builds.
+- **The container** installs the archivers its header already named (`xz-utils`, `bzip2`, `zip`, `unzip`, `libarchive-tools`) and `curl` and `wget`, for W2b's cross-checks and the downloader's fallback tests.
+
 ## Context
 
 diroxide is built by waves of agents, one or two at a time, each owning crates. The workspace has to keep their work apart, keep builds lean on the owner's machine (shared with textweaver), and make the license and dependency rules checkable by a machine rather than by memory.

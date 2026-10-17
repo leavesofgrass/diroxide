@@ -8,8 +8,16 @@ homepage.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The format crates (W2a and W2b), all pure Rust; depended on from the
+# alpha.2 contract step so the license and native gates read them.
+bzip2.workspace = true
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
+flate2.workspace = true
+lzma-rust2.workspace = true
+sevenz-rust2.workspace = true
+tar.workspace = true
+zip.workspace = true
 
 [lints]
 workspace = true
