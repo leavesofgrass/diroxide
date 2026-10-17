@@ -1,10 +1,14 @@
 //! Subcommands that print and return: `ls`, `completions`, search and
 //! plugin tooling. W1e owns this folder; W3b owns `plugin.rs`; W1d adds
-//! `keys.rs` and `init.rs`.
+//! `keys.rs` and `init.rs`; W2g adds `archive.rs`, `split.rs` and
+//! `join.rs`.
 
+pub mod archive;
 pub mod completions;
 pub mod init;
+pub mod join;
 pub mod keys;
 pub mod ls;
 pub mod plugin;
 pub mod search;
+pub mod split;

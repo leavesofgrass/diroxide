@@ -10,10 +10,18 @@ publish.workspace = true
 [dependencies]
 clap.workspace = true
 clap_complete.workspace = true
+# The masked password prompt and the y-or-n questions of the archive,
+# split and join subcommands read keys from the terminal, not from
+# standard input, which stays free for lists of paths.
+crossterm.workspace = true
 diroxide-app.workspace = true
+# diro archive, split and join (W2g): the archive provider, its runners,
+# and the engine's split and join.
+diroxide-archive.workspace = true
 diroxide-config.workspace = true
 diroxide-core.workspace = true
 diroxide-filetype.workspace = true
+diroxide-ops.workspace = true
 diroxide-plugins.workspace = true
 diroxide-search.workspace = true
 diroxide-tui.workspace = true
@@ -23,7 +31,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-diroxide-ops.workspace = true
 diroxide-theme.workspace = true
 ratatui.workspace = true
 tempfile.workspace = true

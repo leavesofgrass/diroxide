@@ -33,6 +33,13 @@ slow_per_call_ms = 2
 slow_stall_after_calls = 80
 slow_stall_ms = 400
 stall_after_ms = 150
+# The archive scenarios (alpha.2, W2g): a zip, a tar and a 7z of this many
+# empty members listed through diro archive list; a zip of one file of
+# unpack_bytes unpacked through diro archive unpack; the viewer's first
+# screen of a text log of viewer_bytes.
+archive_entries = 100000
+unpack_bytes = 200000000
+viewer_bytes = 256000000
 
 # The quick run (--quick), for tests and a first look: the same scenarios
 # on small trees.
@@ -45,3 +52,6 @@ slow_per_call_ms = 1
 slow_stall_after_calls = 20
 slow_stall_ms = 300
 stall_after_ms = 100
+archive_entries = 2000
+unpack_bytes = 4000000
+viewer_bytes = 2000000

@@ -858,7 +858,9 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "clap",
  "clap_complete",
+ "crossterm",
  "diroxide-app",
+ "diroxide-archive",
  "diroxide-config",
  "diroxide-core",
  "diroxide-filetype",
@@ -4115,6 +4117,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+ "zip",
 ]
 
 [[package]]

@@ -14,6 +14,18 @@
 //!   reference.
 //! - `slow-place`: copy from W1b's slow place on the fake provider, every
 //!   call slow and one call stalled, and check that the stall is said.
+//! - `archive-zip`, `archive-tar`, `archive-7z`: list 100,000 members of a
+//!   zip, a tar and a 7z with `diro archive list -0`, the process timed
+//!   from its start to its last path (alpha.2).
+//! - `unpack`: unpack a zip of one 200 MB file with `diro archive
+//!   unpack`, the rate said.
+//! - `viewer`: open a 256 MB text log in the viewer and draw its first
+//!   screen, in screen-reader mode.
+//!
+//! The archive scenarios run the `diro` binary, built first with the
+//! bench's own profile: the archive provider and its runners are reached
+//! through `diro archive`, the command line a user times, until xtask may
+//! depend on the archive crate itself.
 //!
 //! The budgets are for an optimized build: `cargo run --release -p xtask
 //! -- bench`. The medians go to `target/bench/result.json` and are said
@@ -25,7 +37,9 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime};
@@ -64,6 +78,12 @@ pub struct Sizes {
     pub slow_stall_ms: u64,
     /// The engine's stall detector, in milliseconds.
     pub stall_after_ms: u64,
+    /// Members of the listed zip, tar and 7z.
+    pub archive_entries: usize,
+    /// Bytes of the one file in the unpacked zip.
+    pub unpack_bytes: u64,
+    /// Bytes of the log the viewer opens.
+    pub viewer_bytes: u64,
 }
 
 /// The starting budgets, in milliseconds.
@@ -168,13 +188,26 @@ pub struct Options {
 }
 
 /// The scenario ids, in the order they run.
-pub const SCENARIOS: [&str; 6] = [
+pub const SCENARIOS: [&str; 11] = [
     "list",
     "stat",
     "list-stat",
     "copy",
     "copy-system",
     "slow-place",
+    "archive-zip",
+    "archive-tar",
+    "archive-7z",
+    "unpack",
+    "viewer",
+];
+
+/// The archive listings: their id, the archive's name and its kind in
+/// words.
+const ARCHIVE_LISTINGS: [(&str, &str, &str); 3] = [
+    ("archive-zip", "list.zip", "zip"),
+    ("archive-tar", "list.tar", "tar"),
+    ("archive-7z", "list.7z", "7z"),
 ];
 
 const USAGE: &str = "Usage: cargo xtask bench [--quick] [--only ID] [--save-baseline] [--gate]";
@@ -210,7 +243,7 @@ pub fn parse(args: &[&str]) -> Result<Options> {
 }
 
 /// The target folder: `CARGO_TARGET_DIR`, or `target` under the root.
-fn target_folder(root: &Path) -> PathBuf {
+pub(crate) fn target_folder(root: &Path) -> PathBuf {
     std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
@@ -549,7 +582,276 @@ pub fn run_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
             format!("stall said in {heard} of {} runs", said.len()),
         ));
     }
+
+    if wanted(
+        setting,
+        &["archive-zip", "archive-tar", "archive-7z", "unpack"],
+    ) {
+        outcomes.extend(archive_scenarios(setting)?);
+    }
+
+    if wanted(setting, &["viewer"]) {
+        let folder = setting.work.join("viewer");
+        fs::create_dir(&folder)
+            .with_context(|| format!("{} could not be made", folder.display()))?;
+        let log = folder.join("big.log");
+        let size = human_size(sizes.viewer_bytes);
+        println!("bench: writing a text log of {size} for the viewer.");
+        log_file(&log, sizes.viewer_bytes)?;
+        let place = place_of(&log)?;
+        let times = measure(runs, |_| {
+            let started = Instant::now();
+            let (mut viewer, _said) = diroxide_app::viewer::Viewer::open(
+                &registry,
+                &place,
+                Some(sizes.viewer_bytes),
+                diroxide_app::viewer::ViewerOptions::default(),
+            )
+            .map_err(|e| anyhow::anyhow!("the viewer could not open the log: {e}"))?;
+            viewer.set_size(80, 24);
+            let rows = viewer.rows();
+            let elapsed = started.elapsed();
+            if rows.len() < 24 || !rows[0].text.starts_with("2026-10-16") {
+                bail!("the viewer's first screen has {} rows", rows.len());
+            }
+            Ok(elapsed)
+        })?;
+        fs::remove_file(&log).with_context(|| format!("{} could not be removed", log.display()))?;
+        outcomes.push(outcome(
+            "viewer",
+            format!("View the first screen of a {size} log"),
+            times,
+            None,
+            "24 rows, screen-reader mode".to_owned(),
+        ));
+    }
     Ok(outcomes)
+}
+
+/// Builds `diro` with this bench's own profile (release for an optimized
+/// bench) and returns its path in the target folder.
+pub fn diro_binary(root: &Path) -> Result<PathBuf> {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let mut command = Command::new(cargo);
+    command
+        .current_dir(root)
+        .args(["build", "--quiet", "--package", "diro", "--bin", "diro"]);
+    if OPTIMIZED {
+        command.arg("--release");
+    }
+    let status = command
+        .status()
+        .context("cargo could not be started to build diro")?;
+    if !status.success() {
+        bail!("diro could not be built: cargo ended with {status}");
+    }
+    let profile = if OPTIMIZED { "release" } else { "debug" };
+    let path = target_folder(root)
+        .join(profile)
+        .join(format!("diro{}", std::env::consts::EXE_SUFFIX));
+    if !path.is_file() {
+        bail!("diro was built, but {} is not there", path.display());
+    }
+    Ok(path)
+}
+
+/// Runs `diro` with these arguments in `folder`, standard input given,
+/// and returns what it wrote; fails unless it ends with 0.
+pub fn run_diro(diro: &Path, folder: &Path, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
+    let mut child = Command::new(diro)
+        .current_dir(folder)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("{} could not be started", diro.display()))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(input)
+            .context("diro's standard input could not be written")?;
+    }
+    let output = child
+        .wait_with_output()
+        .context("diro could not be waited for")?;
+    if !output.status.success() {
+        bail!(
+            "diro {} ended with {}: {}{}",
+            args.join(" "),
+            output.status,
+            String::from_utf8_lossy(&output.stdout).trim(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(output.stdout)
+}
+
+/// The workspace's root: the parent of this crate's folder.
+pub fn workspace_root() -> Result<PathBuf> {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(Path::to_path_buf)
+        .context("the workspace root could not be found")
+}
+
+/// The archive scenarios: a zip, a tar and a 7z of empty members, packed
+/// with `diro archive pack` and listed with `diro archive list -0`; a zip
+/// of one large file unpacked with `diro archive unpack`.
+fn archive_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
+    let sizes = setting.sizes;
+    let runs = setting.params.runs;
+    let mut outcomes = Vec::new();
+    println!("bench: building diro for the archive scenarios.");
+    let diro = diro_binary(&workspace_root()?)?;
+    let folder = setting.work.join("archive");
+    let members = folder.join("members");
+    fs::create_dir_all(&members)
+        .with_context(|| format!("{} could not be made", members.display()))?;
+    let listings: Vec<_> = ARCHIVE_LISTINGS
+        .iter()
+        .filter(|(id, _, _)| wanted(setting, &[id]))
+        .collect();
+    if !listings.is_empty() {
+        let entries = grouped(sizes.archive_entries as u64);
+        println!("bench: writing {entries} empty files to pack.");
+        let names = sample::flat_folder(&members, sizes.archive_entries)?;
+        let mut list = Vec::new();
+        for name in &names {
+            list.extend_from_slice(name.as_bytes());
+            list.push(0);
+        }
+        for (id, archive, kind) in listings {
+            println!("bench: packing them into a {kind}.");
+            let target = format!("../{archive}");
+            run_diro(&diro, &members, &["archive", "pack", &target, "-"], &list)?;
+            let path = folder.join(archive);
+            let path_text = path
+                .to_str()
+                .with_context(|| format!("{} is not valid Unicode", path.display()))?;
+            let times = measure(runs, |_| {
+                let started = Instant::now();
+                let listed = run_diro(&diro, &folder, &["archive", "list", "-0", path_text], b"")?;
+                let elapsed = started.elapsed();
+                let count = listed.iter().filter(|b| **b == 0).count();
+                if count != sizes.archive_entries {
+                    bail!("the {kind} listed {count} members, not {entries}");
+                }
+                Ok(elapsed)
+            })?;
+            fs::remove_file(&path)
+                .with_context(|| format!("{} could not be removed", path.display()))?;
+            outcomes.push(outcome(
+                id,
+                format!("List {entries} entries in a {kind}"),
+                times,
+                None,
+                "with diro archive list -0, from its start to its end".to_owned(),
+            ));
+        }
+        for name in &names {
+            let path = members.join(name);
+            fs::remove_file(&path)
+                .with_context(|| format!("{} could not be removed", path.display()))?;
+        }
+    }
+    if wanted(setting, &["unpack"]) {
+        let source = members.join("unpack.bin");
+        let size = human_size(sizes.unpack_bytes);
+        println!("bench: writing a file of {size} and packing it into a zip.");
+        sample::big_file(&source, sizes.unpack_bytes, None)?;
+        run_diro(
+            &diro,
+            &members,
+            &["archive", "pack", "../unpack.zip", "unpack.bin"],
+            b"",
+        )?;
+        fs::remove_file(&source)
+            .with_context(|| format!("{} could not be removed", source.display()))?;
+        let times = measure(runs, |run| {
+            let target = folder.join(format!("unpack-{run}"));
+            fs::create_dir(&target)
+                .with_context(|| format!("{} could not be made", target.display()))?;
+            let target_text = target
+                .to_str()
+                .with_context(|| format!("{} is not valid Unicode", target.display()))?;
+            let started = Instant::now();
+            run_diro(
+                &diro,
+                &folder,
+                &["archive", "unpack", "unpack.zip", "--into", target_text],
+                b"",
+            )?;
+            let elapsed = started.elapsed();
+            let unpacked = target.join("unpack.bin");
+            let length = fs::metadata(&unpacked)
+                .with_context(|| format!("{} was not unpacked", unpacked.display()))?
+                .len();
+            if length != sizes.unpack_bytes {
+                bail!(
+                    "the unpacked file has {length} bytes, not {}",
+                    sizes.unpack_bytes
+                );
+            }
+            fs::remove_file(&unpacked)
+                .with_context(|| format!("{} could not be removed", unpacked.display()))?;
+            fs::remove_dir(&target)
+                .with_context(|| format!("{} could not be removed", target.display()))?;
+            Ok(elapsed)
+        })?;
+        let zip = folder.join("unpack.zip");
+        fs::remove_file(&zip).with_context(|| format!("{} could not be removed", zip.display()))?;
+        let seconds = median(&times) / 1000.0;
+        let note = if seconds > 0.0 {
+            format!(
+                "{} a second, with diro archive unpack",
+                human_size((sizes.unpack_bytes as f64 / seconds) as u64)
+            )
+        } else {
+            String::new()
+        };
+        outcomes.push(outcome(
+            "unpack",
+            format!("Unpack a zip of {size}"),
+            times,
+            None,
+            note,
+        ));
+    }
+    Ok(outcomes)
+}
+
+/// One line of the bench's and the demo's logs, in the shape of a
+/// server's log, about 60 bytes, starting with the date.
+pub fn log_line(n: u64) -> String {
+    let level = match n % 7 {
+        0 => "WARN",
+        3 => "DEBUG",
+        _ => "INFO",
+    };
+    format!(
+        "2026-10-16 14:{:02}:{:02} {level} request {n:07} served in {} ms\n",
+        (n / 60) % 60,
+        n % 60,
+        n % 97 + 3
+    )
+}
+
+/// Writes a text log of whole lines, at least `bytes` bytes.
+pub fn log_file(path: &Path, bytes: u64) -> Result<()> {
+    let file =
+        fs::File::create(path).with_context(|| format!("{} could not be made", path.display()))?;
+    let mut out = std::io::BufWriter::with_capacity(1 << 20, file);
+    let mut written = 0u64;
+    let mut n = 1u64;
+    while written < bytes {
+        let line = log_line(n);
+        out.write_all(line.as_bytes())
+            .with_context(|| format!("{} could not be written", path.display()))?;
+        written += line.len() as u64;
+        n += 1;
+    }
+    out.flush()
+        .with_context(|| format!("{} could not be written", path.display()))
 }
 
 /// Removes the one file a copy run made, then its folder: only what the
@@ -781,6 +1083,24 @@ mod tests {
         assert_eq!(params.full.copy_bytes, 1_000_000_000);
         assert_eq!(params.budgets_ms.list_windows, 800);
         assert_eq!(params.budgets_ms.list_other, 300);
+        assert_eq!(params.full.archive_entries, 100_000);
+        assert_eq!(params.full.unpack_bytes, 200_000_000);
+        assert_eq!(params.full.viewer_bytes, 256_000_000);
+    }
+
+    #[test]
+    fn log_lines_start_with_the_date_and_read_well() {
+        assert_eq!(
+            log_line(1),
+            "2026-10-16 14:00:01 INFO request 0000001 served in 4 ms\n"
+        );
+        assert!(log_line(7).contains(" WARN "));
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("big.log");
+        log_file(&log, 10_000).unwrap();
+        let text = fs::read_to_string(&log).unwrap();
+        assert!(text.len() >= 10_000 && text.len() < 10_100);
+        assert!(text.ends_with('\n'));
     }
 
     #[test]
