@@ -18,8 +18,9 @@
 # bookmarks, so Ctrl+B pages up in the window. t sets a label (ranger's
 # tag) and T clears the labels.
 #
-# Waiting for their commands (alpha.3, then these lines join the preset):
-#   go.jump = "z"     select.visual = "shift+v"     search.find = "s"
+# Joined with their commands in alpha.3 (W3a): V marks a range, as
+# visual mode does (Mark range, twice), and s finds files; Ctrl+F still
+# pages down. Waiting for its command: go.jump = "z".
 # Later alphas: the g goto family (go home, go to the trash) and the tab
 # keys (gt, gT, yazi's t).
 
@@ -67,6 +68,8 @@ letters = "commands"
 "view.sort-list" = "o"
 "file.run-command" = ["!", ";"]
 "file.shell-here" = "$"
+"select.range" = "shift+v"
+"search.find" = "s"
 
 [window.global]
 "app.palette" = ["ctrl+shift+p", "ctrl+p", ":"]
@@ -108,6 +111,8 @@ letters = "commands"
 "view.sort-list" = ["ctrl+shift+s", "o"]
 "file.run-command" = ["!", ";"]
 "file.shell-here" = "$"
+"select.range" = "shift+v"
+"search.find" = "s"
 
 [[held_back]]
 keys = "g g"

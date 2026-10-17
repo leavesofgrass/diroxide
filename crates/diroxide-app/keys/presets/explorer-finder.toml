@@ -25,8 +25,8 @@
 # the Finder's tag keys; the system may keep some of them for Mission
 # Control, which the owner's check should hear.
 #
-# Waiting for their commands (alpha.3, then these lines join the preset):
-#   search.find = ["ctrl+f", "ctrl+e"]
+# Joined with its command in alpha.3 (W3a): Ctrl+E finds files beside
+# Ctrl+F, as Explorer's search box.
 
 [preset]
 name = "Explorer and Finder"
@@ -41,6 +41,7 @@ letters = "type-ahead"
 [terminal.panel]
 "go.back" = ["alt+left", "backspace"]
 "panel.up" = ["left", "alt+up"]
+"search.find" = ["ctrl+f", "ctrl+e"]
 
 [window.global]
 "view.quick-view" = ["alt+p", "shift+f3"]
@@ -53,6 +54,7 @@ letters = "type-ahead"
 "select.none" = "ctrl+shift+a"
 "select.invert" = "*"
 "select.pattern" = "plus"
+"search.find" = ["ctrl+f", "ctrl+e"]
 
 # The Finder, on macOS: Command where these say meta.
 
