@@ -26,6 +26,13 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "filter_pattern"
+path = "fuzz_targets/filter_pattern.rs"
+test = false
+doc = false
+bench = false
+
 # Its own workspace, so the main one never builds it.
 [workspace]
 members = ["."]
