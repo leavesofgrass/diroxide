@@ -149,6 +149,28 @@ fn replay(target: &str, bytes: &[u8]) {
     }
 }
 
+/// The bytes with what the zip writer takes from the platform zeroed: in
+/// each central directory header, the system half of "version made by"
+/// (DOS on Windows, Unix elsewhere) and the two DOS attribute bytes of the
+/// external attributes (the folder bit on Windows). Seeds are written as
+/// generated, so a checked-in zip carries its generating platform's bytes
+/// and the comparison still holds on every other; nothing else differs.
+fn platform_free(bytes: &[u8]) -> Vec<u8> {
+    let mut out = bytes.to_vec();
+    let mut i = 0;
+    while i + 42 <= out.len() {
+        if out[i..i + 4] == [b'P', b'K', 1, 2] {
+            out[i + 5] = 0;
+            out[i + 38] = 0;
+            out[i + 39] = 0;
+            i += 42;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
 #[test]
 fn the_checked_in_seeds_are_the_generators() {
     let write = std::env::var_os("DIRO_WRITE_SEEDS").is_some_and(|v| v == "1");
@@ -166,7 +188,12 @@ fn the_checked_in_seeds_are_the_generators() {
         }
         let on_disk = std::fs::read(&path)
             .unwrap_or_else(|e| panic!("{}: {e}; run with DIRO_WRITE_SEEDS=1", path.display()));
-        assert_eq!(on_disk, bytes, "{} is not the generator's", path.display());
+        assert_eq!(
+            platform_free(&on_disk),
+            platform_free(&bytes),
+            "{} is not the generator's",
+            path.display()
+        );
         total += bytes.len();
     }
     assert!(total < 1 << 20, "seeds stay under 1 MB in all: {total}");
