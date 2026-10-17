@@ -41,6 +41,7 @@
 mod dates;
 mod error;
 mod eval;
+mod lint;
 mod parse;
 mod readback;
 mod token;
@@ -62,6 +63,7 @@ pub use error::{
     Expected, FilterError, KINDS_SENTENCE, Keyword, PROBLEM_START, Problem, UNITS_SENTENCE,
 };
 pub use eval::{ContentQuery, Evaluator, Lookup, NoLookup, Tally, Truth, Unknown};
+pub use lint::{Lint, LintContext, LintKind};
 pub use readback::ReadBack;
 pub use tree::{
     Amount, ContentOp, ContentTest, DateOp, DateTest, Decimal, Expr, Field, FieldShape, Flag,
@@ -141,6 +143,23 @@ impl Filter {
     /// The filter ready to test entries at a moment already read.
     pub fn evaluator_at(&self, dates: DateContext) -> Evaluator {
         Evaluator::new(&self.plan, &dates)
+    }
+
+    /// What probably was not meant, each said once after the typing
+    /// pause: two globs one name cannot match, a word nearly a field,
+    /// tests that never all hold, a label not in the list, a backward
+    /// range.
+    pub fn lints(&self, context: &LintContext<'_>, clock: &dyn Clock) -> Vec<Lint> {
+        lint::lints(&self.expr, &self.options, context, self.dates(clock))
+    }
+
+    /// The problem with this filter in a one-folder panel, where a depth
+    /// test means nothing: "Filter problem: depth works in searches".
+    pub fn panel_problem(&self) -> Option<FilterError> {
+        self.expr.tests().into_iter().find_map(|(test, at)| {
+            (test.field() == Some(Field::Depth))
+                .then(|| FilterError::new(Problem::DepthInPanel, at.word(), at.span(), Vec::new()))
+        })
     }
 
     /// Whether a test reads files, so the panel asks before it starts and

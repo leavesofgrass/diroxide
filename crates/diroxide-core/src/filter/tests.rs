@@ -628,6 +628,164 @@ fn more_errors_are_said_in_words() {
     assert!(Filter::parse(&depth).is_ok());
 }
 
+/// Texts that each give one error, for the message snapshot.
+const MISTAKES: [&str; 40] = [
+    "",
+    "size over MB",
+    "size over",
+    "sise over 10 MB",
+    "size over 10 mbb",
+    "size over 10 m",
+    "size over 10k",
+    "depth 1 KB",
+    "size over 99999999999 TB",
+    "size between 1 MB",
+    "a and",
+    "and a",
+    "not",
+    "(a or)",
+    "a or b c",
+    "(a or b",
+    "a )",
+    "()",
+    "modified sometime",
+    "modified before 10/11/2026",
+    "modified 2026-02-29",
+    "modified within 3",
+    "modified 3 days",
+    "modified within today",
+    "modified last",
+    "re:(a",
+    "re:x(?=y)",
+    "re:(.)\\1",
+    "[abc",
+    "*.txt | *.md",
+    "a & b",
+    "\"open",
+    "content:",
+    "hidden, empty",
+    "case size over 1",
+    "kind pipe",
+    "state is open",
+    "> 10",
+    "photo:x",
+    "ext",
+];
+
+/// Texts that read, but carry a lint, for the message snapshot.
+const LINTED: [&str; 12] = [
+    "*.txt *.md",
+    "*.txt and *.md",
+    "sise 10 MB",
+    "modifed today",
+    "kind folder and kind file",
+    "ext pdf ext txt",
+    "size over 10 MB and size under 1 MB",
+    "hidden and not hidden",
+    "modified today and modified last week",
+    "label urgnt",
+    "label zzz",
+    "size between 5 MB and 1 MB",
+];
+
+/// The starter labels (plan question 71).
+fn starter_labels() -> Vec<String> {
+    [
+        "Urgent",
+        "Waiting",
+        "Review",
+        "Done",
+        "Keep",
+        "Skip in searches",
+    ]
+    .map(str::to_owned)
+    .to_vec()
+}
+
+#[test]
+fn every_message_snapshot() {
+    let mut errors = String::new();
+    for text in MISTAKES {
+        let error = problem(text);
+        errors.push_str(&format!("typed: {text}\nsaid: {}\n\n", error.sentences()));
+        assert!(error::fits_one_line(&error.line()), "{}", error.line());
+    }
+    insta::assert_snapshot!("error_messages", errors);
+    let labels = starter_labels();
+    let context = LintContext { labels: &labels };
+    let mut lints = String::new();
+    for text in LINTED {
+        let found = parse(text).lints(&context, &written());
+        assert_eq!(found.len(), 1, "{text}: {found:?}");
+        for lint in found {
+            lints.push_str(&format!("typed: {text}\nsaid: {}\n\n", lint.sentences()));
+            assert!(
+                lint.line().chars().count() <= crate::format::BRAILLE_CELLS,
+                "{}",
+                lint.line()
+            );
+        }
+    }
+    insta::assert_snapshot!("lint_messages", lints);
+}
+
+#[test]
+fn lints_say_what_was_probably_meant() {
+    let labels = starter_labels();
+    let context = LintContext { labels: &labels };
+    let lints = |text: &str| parse(text).lints(&context, &written());
+    let kinds = |text: &str| -> Vec<LintKind> {
+        lints(text).into_iter().map(|l| l.kind().clone()).collect()
+    };
+    assert_eq!(
+        lints("*.txt *.md")[0].sentences(),
+        "Both patterns must match one name. Use a comma or or."
+    );
+    assert_eq!(kinds("*.txt, *.md"), []);
+    assert_eq!(kinds("IMG_* *.jpg"), []);
+    assert_eq!(kinds("*.TXT *.txt"), [], "case ignored by one of them");
+    assert_eq!(kinds("src/ *.md"), []);
+    assert_eq!(
+        kinds("sise 10 MB"),
+        [LintKind::MaybeField {
+            word: "sise".into(),
+            field: Field::Size
+        }]
+    );
+    assert_eq!(kinds("nmae report"), [], "report is not a value");
+    assert_eq!(kinds("kind file and kind archive"), []);
+    assert_eq!(kinds("size over 1 MB and size under 10 MB"), []);
+    assert_eq!(
+        kinds("label urgent and label done"),
+        [],
+        "an entry has many labels"
+    );
+    assert_eq!(kinds("label Urgent"), []);
+    assert_eq!(kinds("hidden or not hidden"), []);
+    assert_eq!(
+        kinds("modified before 2026-01-01 and modified since 2026-06"),
+        [LintKind::Contradiction]
+    );
+    assert_eq!(
+        kinds("(kind folder and kind file) or empty"),
+        [LintKind::Contradiction]
+    );
+    assert_eq!(
+        lints("label urgnt")[0].sentences(),
+        "No label named urgnt. Did you mean Urgent?"
+    );
+    assert_eq!(
+        parse("label urgnt").lints(&LintContext::default(), &written()),
+        []
+    );
+    assert_eq!(lints("kind folder and kind file")[0].word(), 1);
+    // A depth test means nothing in a one-folder panel.
+    let error = parse("depth at most 1 and *.rs").panel_problem().unwrap();
+    assert_eq!(error.line(), "Filter problem: depth works in searches");
+    assert_eq!(error.word(), 1);
+    assert!(parse("*.rs").panel_problem().is_none());
+}
+
 #[test]
 fn every_problem_line_fits_one_braille_line() {
     let fields = Field::ALL.map(Problem::NeedsValue);

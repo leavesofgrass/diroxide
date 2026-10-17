@@ -420,6 +420,19 @@ pub(crate) fn read_back(
     }
 }
 
+/// A part of a filter in words, without the whole filter's notes: for a
+/// sentence that names two of its tests.
+pub(crate) fn clause(expr: &Expr, options: &FilterOptions) -> String {
+    let mut writer = Writer {
+        options,
+        dates: None,
+        out: String::new(),
+        details: Vec::new(),
+    };
+    writer.expr(expr);
+    writer.out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

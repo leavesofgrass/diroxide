@@ -570,13 +570,23 @@ impl<'a> Parser<'a> {
                 at: Spot::new(first.word, first.span.start..last.span.end),
             }
         };
+        // A test of one value is placed from its field word; the values of
+        // a list each keep their own word.
+        let whole = |parser: &Self, expr: Expr| match expr {
+            Expr::Test { test, .. } => single(parser, test),
+            list => list,
+        };
         let expr = match field.shape() {
             FieldShape::Text => {
                 let op = self.text_op(field);
                 let all = op == Some(TextOp::IsNot);
-                self.list_of(field, all, false, |p| p.text_value(field, op, case))?
+                let list = self.list_of(field, all, false, |p| p.text_value(field, op, case))?;
+                whole(self, list)
             }
-            FieldShape::Kind => self.kind_term()?,
+            FieldShape::Kind => {
+                let list = self.kind_term()?;
+                whole(self, list)
+            }
             FieldShape::Size | FieldShape::Count => {
                 let test = self.number_term(field)?;
                 single(self, test)

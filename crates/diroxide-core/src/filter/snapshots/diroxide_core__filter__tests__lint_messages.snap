@@ -1,0 +1,39 @@
+---
+source: crates/diroxide-core/src/filter/tests.rs
+expression: lints
+---
+typed: *.txt *.md
+said: Both patterns must match one name. Use a comma or or.
+
+typed: *.txt and *.md
+said: Both patterns must match one name. Use a comma or or.
+
+typed: sise 10 MB
+said: No field named sise. Did you mean size?
+
+typed: modifed today
+said: No field named modifed. Did you mean modified?
+
+typed: kind folder and kind file
+said: Nothing can match this filter. kind is folder and kind is file cannot both be true.
+
+typed: ext pdf ext txt
+said: Nothing can match this filter. extension is pdf and extension is txt cannot both be true.
+
+typed: size over 10 MB and size under 1 MB
+said: Nothing can match this filter. size over 10 MB and size under 1 MB cannot both be true.
+
+typed: hidden and not hidden
+said: Nothing can match this filter. hidden and not hidden cannot both be true.
+
+typed: modified today and modified last week
+said: Nothing can match this filter. modified today and modified last week cannot both be true.
+
+typed: label urgnt
+said: No label named urgnt. Did you mean Urgent?
+
+typed: label zzz
+said: No label named zzz. Labels: Urgent, Waiting, Review, Done, Keep, Skip in searches.
+
+typed: size between 5 MB and 1 MB
+said: The range runs from high to low. It is read as from 1 MB to 5 MB.
