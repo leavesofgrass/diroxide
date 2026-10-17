@@ -1,0 +1,52 @@
+---
+source: crates/diroxide-core/src/filter/tests.rs
+expression: read_backs(&MORE)
+---
+typed: path "/work/" and draft
+said: path contains /work/ and name contains draft
+
+typed: name like "rprt"
+said: name like rprt
+
+typed: bookmarked or label urgent
+said: bookmarked or label is urgent
+
+typed: selected and size under 1 KB
+said: selected and size under 1 KB
+details: 1 KB is 1,000 bytes.
+
+typed: owner alice
+said: owner is alice
+
+typed: *.pdf, not draft*
+said: name matches *.pdf and not name matches draft*
+
+typed: not *.tmp
+said: not name matches *.tmp
+
+typed: src/
+said: name contains src/
+
+typed: /
+said: name contains /
+
+typed: */
+said: name matches */
+
+typed: RE:\.(jpe?g|png)$
+said: name regex \.(jpe?g|png)$
+
+typed: not re:^\.
+said: not name regex ^\.
+
+typed: *(1)*
+said: name matches *(1)*
+
+typed: report 2026
+said: name contains report and name contains 2026
+
+typed: *.pdf; *.docx
+said: name matches *.pdf or *.docx
+
+typed: [!a-c]*
+said: name matches [!a-c]*

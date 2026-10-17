@@ -1,0 +1,129 @@
+---
+source: crates/diroxide-core/src/filter/tests.rs
+expression: errors
+---
+typed: group imges
+said: Filter problem: unknown group 'imges'. Word 2. Did you mean images?
+
+typed: group pictures
+said: Filter problem: unknown group 'pictures'. Word 2. Groups: images, music, video, documents, archives, code, text.
+
+typed: 
+said: Filter problem: the filter is empty. Word 1. Type a word, or a pattern such as *.pdf.
+
+typed: size over MB
+said: Filter problem: size needs a number. Word 3. Try size over 10 MB.
+
+typed: size over
+said: Filter problem: size needs a number. Word 3. Try size over 10 MB.
+
+typed: sise over 10 MB
+said: Filter problem: unknown field 'sise'. Word 1. Did you mean size?
+
+typed: size over 10 mbb
+said: Filter problem: unknown unit 'mbb'. Word 4. Units: B, KB, MB, GB, TB, KiB, MiB, GiB, TiB.
+
+typed: size over 10 m
+said: Filter problem: write MB or MiB. Word 4. MB is 1,000,000 bytes; MiB is 1,048,576.
+
+typed: size over 10k
+said: Filter problem: write KB or KiB. Word 3. KB is 1,000 bytes; KiB is 1,024.
+
+typed: depth 1 KB
+said: Filter problem: depth has no unit. Word 3. Try depth at most 2.
+
+typed: size over 99999999999 TB
+said: Filter problem: number too large. Word 3. Use a larger unit, or a smaller number.
+
+typed: size between 1 MB
+said: Filter problem: between needs and. Word 5. Try size between 1 MB and 5 MB.
+
+typed: a and
+said: Filter problem: nothing after and. Word 3. Add a test, such as *.txt.
+
+typed: and a
+said: Filter problem: nothing before and. Word 1. Start with a test, such as *.txt.
+
+typed: not
+said: Filter problem: nothing after not. Word 2. Add a test, such as *.txt.
+
+typed: (a or)
+said: Filter problem: nothing after or. Word 4. Add a test, such as *.txt.
+
+typed: a or b c
+said: Filter problem: and mixed with or. Word 4. Put brackets around one of them.
+
+typed: (a or b
+said: Filter problem: unclosed bracket. Word 1. Add ) to close it.
+
+typed: a )
+said: Filter problem: extra closing bracket. Word 2. Remove it, or add ( before it.
+
+typed: ()
+said: Filter problem: empty brackets. Word 2. Put a test inside, or remove them.
+
+typed: modified sometime
+said: Filter problem: date not understood. Word 2. Try today, last week or 2026-10-01.
+
+typed: modified before 10/11/2026
+said: Filter problem: write the year first. Word 3. Dates are written year, month, day, such as 2026-10-11.
+
+typed: modified 2026-02-29
+said: Filter problem: no such day. Word 2. Check the month and the day.
+
+typed: modified within 3
+said: Filter problem: time unit needed. Word 4. Try 3 days, 2 weeks or 1 year.
+
+typed: modified 3 days
+said: Filter problem: say within or older than. Word 3. Try modified within 3 days.
+
+typed: modified within today
+said: Filter problem: duration needed. Word 3. Try within 3 days or older than 1 year.
+
+typed: modified last
+said: Filter problem: date not understood. Word 3. Try today, last week or 2026-10-01.
+
+typed: re:(a
+said: Filter problem: bad regular expression. Word 1. The pattern is not valid: unclosed group.
+
+typed: re:x(?=y)
+said: Filter problem: look-around not allowed. Word 1. Match the text around it too: for a v before a digit, write v\d.
+
+typed: re:(.)\1
+said: Filter problem: backreference refused. Word 1. List the cases instead, such as (aa|bb|cc).
+
+typed: [abc
+said: Filter problem: unclosed [ in pattern. Word 1. Close it with ], or write [[] for [.
+
+typed: *.txt | *.md
+said: Filter problem: write or, not |. Word 2. Quote it if | is part of a name.
+
+typed: a & b
+said: Filter problem: write and, not &. Word 2. Quote it if & is part of a name.
+
+typed: "open
+said: Filter problem: unclosed quote. Word 1. Add a closing quote.
+
+typed: content:
+said: Filter problem: content needs text. Word 2. Try content:"total due".
+
+typed: hidden, empty
+said: Filter problem: comma not allowed here. Word 2. Commas join names, extensions and labels; use or.
+
+typed: case size over 1
+said: Filter problem: case works on text. Word 2. Put case before a name or content test.
+
+typed: kind pipe
+said: Filter problem: unknown kind 'pipe'. Word 2. Kinds: folder, file, link, archive, special, item.
+
+typed: state is open
+said: Filter problem: state means selected. Word 3. Write selected.
+
+typed: > 10
+said: Filter problem: > needs a field. Word 1. Try size > 10 MB.
+
+typed: photo:x
+said: Filter problem: unknown field 'photo'. Word 1. Quote it to match it in names.
+
+typed: ext
+said: Filter problem: extension needs a word. Word 2. Try ext pdf.

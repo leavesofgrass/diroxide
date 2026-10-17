@@ -883,6 +883,7 @@ dependencies = [
 name = "diroxide-core"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "insta",
  "proptest",
  "regex",
  "serde",

@@ -1,0 +1,68 @@
+---
+source: crates/diroxide-core/src/filter/tests.rs
+expression: read_backs(&TWENTY)
+---
+typed: report
+said: name contains report
+
+typed: *.log
+said: name matches *.log
+
+typed: *.txt, *.md
+said: name matches *.txt or *.md
+
+typed: re:"^IMG_\d{4}"
+said: name regex ^IMG_\d{4}, match case
+
+typed: size over 100 MB
+said: size over 100 MB
+details: 100 MB is 100,000,000 bytes.
+
+typed: size between 1 KiB and 1 MiB
+said: size from 1 KiB to 1 MiB
+details: 1 KiB is 1,024 bytes. 1 MiB is 1,048,576 bytes.
+
+typed: modified today
+said: modified today, October 11, 2026
+
+typed: modified last week
+said: modified last week, October 4 to 10
+
+typed: ext pdf and modified within 3 days
+said: extension is pdf and modified within 3 days
+details: 3 days ago: October 8, 2026, 2:09 PM.
+
+typed: modified older than 1 year and size over 1 GB
+said: modified older than 1 year and size over 1 GB
+details: 1 year ago: October 11, 2025, 2:09 PM. 1 GB is 1,000,000,000 bytes.
+
+typed: kind folder and empty
+said: kind is folder and empty
+
+typed: kind link and broken
+said: kind is link and broken
+
+typed: needs-care
+said: needs-care
+
+typed: label urgent and not label done
+said: label is urgent and not label is done
+
+typed: group images and size over 5 MB
+said: group is images and size over 5 MB
+details: 5 MB is 5,000,000 bytes.
+
+typed: content:"total due"
+said: content contains "total due"
+
+typed: content:re:"due \d+" and ext txt,md
+said: content regex "due \d+" and (extension is txt or extension is md)
+
+typed: hidden and kind file
+said: hidden and kind is file, including hidden
+
+typed: depth at most 1 and name *.rs
+said: depth at most 1 and name matches *.rs
+
+typed: (ext jpg or ext png) and not name thumb*
+said: (extension is jpg or extension is png) and not name matches thumb*
