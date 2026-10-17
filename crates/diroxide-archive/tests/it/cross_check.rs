@@ -1,7 +1,10 @@
-//! The cross-check of the zip listing against `7z l -slt` (research
-//! archives.md section 11, direction one). It runs only when
-//! `DIRO_CROSS_CHECK=1` is set and `7z` is on PATH (the container has
-//! 7-Zip 25.01); otherwise it says why it did not run and passes.
+//! The cross-checks of listings and headers (research/archives.md section
+//! 11): the zip listing against `7z l -slt` (direction one), and packed
+//! archives against `unzip -t`, `7z t`, `tar -tvf` with no owner names,
+//! `gzip -t` and `xz -t` (direction two); the helpers the whole suite in
+//! `cross_suite` shares. Each runs only when `DIRO_CROSS_CHECK=1` is set
+//! and its tool is on PATH (the container has 7-Zip 25.01); otherwise it
+//! says why it did not run and passes.
 
 use std::collections::BTreeMap;
 use std::process::Command;
@@ -119,8 +122,9 @@ pub fn version_of(tool: &str, flag: &str) -> String {
                 .find(|line| !line.trim().is_empty())
                 .unwrap_or("")
                 .trim();
-            // The version, not the sentence after it.
-            line.split("  ")
+            // The version, not the sentence or the library list after it.
+            let line = line.split("  ").next().unwrap_or(line);
+            line.split(" zlib/")
                 .next()
                 .unwrap_or(line)
                 .trim_end_matches('.')
@@ -153,11 +157,22 @@ pub fn pack_on_disk(
     format: diroxide_archive::ArchiveFormat,
     password: Option<&str>,
 ) -> std::path::PathBuf {
+    pack_on_disk_with(source, name, format, password, |_| {})
+}
+
+/// [`pack_on_disk`], with the request changed first (solid, level).
+pub fn pack_on_disk_with(
+    source: &std::path::Path,
+    name: &str,
+    format: diroxide_archive::ArchiveFormat,
+    password: Option<&str>,
+    change: impl FnOnce(&mut diroxide_archive::PackRequest),
+) -> std::path::PathBuf {
     use diroxide_archive::{JobEnv, PackRequest, plan_pack, run_pack};
     let (registry, archives) = ArchiveProvider::install(Registry::with_local(), Limits::default());
     let engine = diroxide_ops::Engine::new(registry.clone());
     let destination = source.parent().unwrap().join(name);
-    let request = PackRequest {
+    let mut request = PackRequest {
         password: password.map(|p| diroxide_core::Secret::new(p.to_owned())),
         encrypt_names: password.is_some(),
         ..PackRequest::new(
@@ -166,6 +181,7 @@ pub fn pack_on_disk(
             format,
         )
     };
+    change(&mut request);
     let job = diroxide_core::JobId::new(7);
     let plan = plan_pack(&registry, &request, job, &OpContext::new()).unwrap();
     let control = diroxide_ops::JobControl::new();
