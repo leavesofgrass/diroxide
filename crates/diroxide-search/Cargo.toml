@@ -16,7 +16,10 @@ encoding_rs.workspace = true
 # section 5.5 and R14): diroxide decides hidden entries itself.
 ignore.workspace = true
 regex.workspace = true
+# Saved searches: one TOML file each, in the shape collections will read.
+serde.workspace = true
 thiserror.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

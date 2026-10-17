@@ -28,7 +28,9 @@ mod dirsize;
 mod engine;
 mod hit;
 mod local_entry;
+mod newest;
 mod query;
+mod saved;
 mod sink;
 mod space;
 mod summary;
@@ -42,9 +44,14 @@ use thiserror::Error;
 pub use dirsize::{dirsize_with, size_every_folder};
 pub use engine::run_search;
 pub use hit::{ContentMatch, SearchHit};
+pub use newest::{Day, Newest, newest_files};
 pub use query::{
     ContentPattern, DEFAULT_ROW_CAP, NamePattern, OnlineOnly, RowShape, SNAPSHOT_FOLDERS, Scope,
     SearchQuery, quoted,
+};
+pub use saved::{
+    Freshness, SAVED_FOLDER, SAVED_FORMAT, Saved, SavedContent, SavedError, SavedItem, SavedKind,
+    SavedOptions, SavedSort, file_name_for, file_stem_for, stale_check, utc_moment, utc_text,
 };
 pub use sink::{FnSink, OnlineGuard, SearchControl, SearchProgress, SearchSink};
 pub use space::{
