@@ -53,7 +53,7 @@ pub enum KeysArgs {
 /// The help for `diro keys`, one line each, meaning first.
 pub fn help_text() -> String {
     [
-        "diro keys: check or print the keys, as keymap.toml holds them.",
+        "diro keys: check, print or choose the keys: keymap.toml and the presets.",
         "",
         "Usage:",
         "diro keys check [FILE]   say each problem in FILE, or check the presets and keymap.toml",
@@ -65,7 +65,7 @@ pub fn help_text() -> String {
         "Exit codes:",
         "0  clean, printed, applied or tested",
         "1  problems found; each is a line",
-        "2  wrong use, the file cannot be read, or no terminal for test or probe",
+        "2  wrong use, a file that cannot be read, an unknown preset, or no terminal",
     ]
     .join("\n")
 }
