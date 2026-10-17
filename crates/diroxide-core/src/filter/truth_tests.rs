@@ -603,3 +603,41 @@ proptest! {
         });
     }
 }
+
+/// P3b (W3s's request 4): an undecided content answer names its reason,
+/// binary or online only, and the reason reads in the summary.
+#[test]
+fn an_undecided_content_answer_names_its_reason() {
+    struct Skipping;
+    impl Lookup for Skipping {
+        fn content(&self, entry: &Entry, _: &ContentQuery) -> Truth {
+            match entry.name.as_str() {
+                "photo.raw" => Truth::Unknown(Unknown::Binary),
+                "cloud.txt" => Truth::Unknown(Unknown::OnlineOnly),
+                _ => Truth::No,
+            }
+        }
+    }
+    let clock = written();
+    let filter = Filter::parse("content:total").unwrap();
+    let evaluator = filter.evaluator(&clock);
+    let mut tally = Tally::default();
+    for name in ["photo.raw", "cloud.txt", "notes.txt"] {
+        tally.add(evaluator.test(&Entry::new(name, EntryKind::File), &Skipping));
+    }
+    assert_eq!(
+        tally.unknown_sentence().as_deref(),
+        Some("2 unknown, 1 binary file not searched, 1 online-only file not read")
+    );
+    // Neither the test nor its negation matches, and the reason stays.
+    let negated = Filter::parse("not content:total").unwrap();
+    assert_eq!(
+        negated
+            .evaluator(&clock)
+            .test(&Entry::new("photo.raw", EntryKind::File), &Skipping),
+        Truth::Unknown(Unknown::Binary)
+    );
+    for why in [Unknown::Binary, Unknown::OnlineOnly] {
+        assert!(why.words().len() <= 40, "{why}");
+    }
+}

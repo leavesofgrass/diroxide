@@ -127,10 +127,12 @@ struct Facts<'a> {
 }
 
 impl Facts<'_> {
-    fn skip(&self, what: impl FnOnce(&mut Skips)) -> Truth {
+    /// Counts a read skipped for `why` in the summary's skips, and answers
+    /// the content test with that reason.
+    fn skip(&self, why: Unknown, what: impl FnOnce(&mut Skips)) -> Truth {
         what(&mut self.contents.skips.borrow_mut());
         self.read.borrow_mut().skipped = true;
-        Truth::Unknown(Unknown::ContentNotRead)
+        Truth::Unknown(why)
     }
 
     fn reader_key(query: &ContentQuery) -> ReaderKey {
@@ -199,7 +201,7 @@ impl Lookup for Facts<'_> {
                     .is_none_or(|place| !self.contents.control.allows(&place, entry)),
             };
             if refused {
-                return self.skip(|skips| {
+                return self.skip(Unknown::OnlineOnly, |skips| {
                     skips.online_only += 1;
                     skips.online_only_bytes += size;
                 });
@@ -222,8 +224,7 @@ impl Lookup for Facts<'_> {
                 .map(|read| read as Box<dyn std::io::Read>),
         };
         let Some(file) = opened else {
-            self.skip(|skips| skips.unreadable_files += 1);
-            return Truth::Unknown(Unknown::Unreadable);
+            return self.skip(Unknown::Unreadable, |skips| skips.unreadable_files += 1);
         };
         let stop = || self.contents.control.checkpoint();
         match reader.search(file, self.contents.keep, &stop) {
@@ -239,13 +240,10 @@ impl Lookup for Facts<'_> {
                         Truth::Yes
                     }
                     Found::Nothing => Truth::No,
-                    Found::Binary => self.skip(|skips| skips.binary += 1),
+                    Found::Binary => self.skip(Unknown::Binary, |skips| skips.binary += 1),
                 }
             }
-            Err(_) => {
-                self.skip(|skips| skips.unreadable_files += 1);
-                Truth::Unknown(Unknown::Unreadable)
-            }
+            Err(_) => self.skip(Unknown::Unreadable, |skips| skips.unreadable_files += 1),
         }
     }
 }
@@ -581,5 +579,100 @@ fn deliver(
                 return false;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use diroxide_core::{Attributes, FixedClock, Place, Timestamp, UtcOffset};
+
+    /// A folder for a unit test that writes, under the build's own target
+    /// folder, never a user's folder or the system's temporary folder.
+    fn scratch() -> tempfile::TempDir {
+        let exe = std::env::current_exe().unwrap();
+        let base = exe
+            .parent()
+            .and_then(std::path::Path::parent)
+            .unwrap()
+            .join("search-unit-tmp");
+        std::fs::create_dir_all(&base).unwrap();
+        tempfile::Builder::new()
+            .prefix("search-unit-")
+            .tempdir_in(base)
+            .unwrap()
+    }
+
+    /// The content answer for one local file, with the skips it counted
+    /// and whether the read was counted as a skip.
+    fn answer(root: &std::path::Path, entry: Entry) -> (Truth, Skips, bool) {
+        let control = SearchControl::new();
+        let contents = Contents {
+            readers: RefCell::new(HashMap::new()),
+            skips: RefCell::new(Skips::default()),
+            keep: 1,
+            online: OnlineOnly::Skip,
+            follow_links: false,
+            root_real: None,
+            control: &control,
+        };
+        let start = Root::new(Place::parse(root.to_str().unwrap()).unwrap());
+        let candidate = Candidate {
+            location: Location::Local(root.join(&entry.name)),
+            entry,
+            depth: 1,
+        };
+        let facts = Facts {
+            candidate: &candidate,
+            root: &start,
+            contents: &contents,
+            read: RefCell::new(Read::default()),
+        };
+        let clock = FixedClock::new(Timestamp::from_unix(0, 0), UtcOffset::from_hours(0));
+        let filter = Filter::parse("content:\"total due\"").unwrap();
+        let truth = filter.evaluator(&clock).test(&candidate.entry, &facts);
+        let skipped = facts.read.borrow().skipped;
+        (truth, contents.skips.take(), skipped)
+    }
+
+    /// P3b (W3s's request 4): a read the search skips answers with its
+    /// reason, binary or online only, and is counted once, as a skip, so
+    /// the summary says which.
+    #[test]
+    fn a_skipped_read_names_its_reason() {
+        let folder = scratch();
+        let root = folder.path();
+        std::fs::write(root.join("photo.raw"), b"total due\0\x01\x02").unwrap();
+        std::fs::write(root.join("notes.txt"), b"nothing owed\n").unwrap();
+        let (truth, skips, skipped) = answer(root, Entry::new("photo.raw", EntryKind::File));
+        assert_eq!(truth, Truth::Unknown(Unknown::Binary));
+        assert_eq!((skips.binary, skipped), (1, true));
+        let mut cloud = Entry::new("cloud.txt", EntryKind::File).with_size(10);
+        // The Windows recall-on-data-access bit: online only on every
+        // platform's reading of the attributes.
+        cloud.attributes = Some(Attributes::Windows(0x40_0000));
+        let (truth, skips, skipped) = answer(root, cloud);
+        assert_eq!(truth, Truth::Unknown(Unknown::OnlineOnly));
+        assert_eq!((skips.online_only, skips.online_only_bytes), (1, 10));
+        assert!(skipped);
+        let (truth, skips, skipped) = answer(root, Entry::new("notes.txt", EntryKind::File));
+        assert_eq!(truth, Truth::No);
+        assert_eq!((skips.binary, skips.online_only, skipped), (0, 0, false));
+        let (truth, skips, _) = answer(root, Entry::new("missing.txt", EntryKind::File));
+        assert_eq!(truth, Truth::Unknown(Unknown::Unreadable));
+        assert_eq!(skips.unreadable_files, 1);
+        let summary = SearchSummary {
+            skipped: Skips {
+                binary: 1,
+                online_only: 1,
+                online_only_bytes: 10,
+                ..Skips::default()
+            },
+            ..SearchSummary::default()
+        };
+        assert_eq!(
+            summary.sentence(),
+            "0 found. 1 binary file skipped. 1 online-only file skipped, 10 bytes."
+        );
     }
 }

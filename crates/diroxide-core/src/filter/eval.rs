@@ -60,6 +60,11 @@ pub enum Unknown {
     ContentNotRead,
     /// The file could not be read.
     Unreadable,
+    /// The file is binary, so its text was not searched (P3b).
+    Binary,
+    /// The file is online only: reading it would download it, and that
+    /// was not allowed (P3b).
+    OnlineOnly,
 }
 
 impl Unknown {
@@ -81,6 +86,8 @@ impl Unknown {
             Unknown::LinkNotChecked => "link not checked",
             Unknown::ContentNotRead => "content not read",
             Unknown::Unreadable => "file not readable",
+            Unknown::Binary => "binary file not searched",
+            Unknown::OnlineOnly => "online-only file not read",
         }
     }
 }

@@ -29,6 +29,7 @@ Status update, Saturday, October 17, 2026 (the pre-wiring contract step, P2b, fr
 Status update, Saturday, October 17, 2026 (the pre-W3a contract step, P3b, from the requests the search, labels and tracker lanes held at their integrations):
 
 - **Needs care.** The filter's `needs-care` is also true for a name the provider could not read as Unicode, as the row already says "name needs care"; the search crate had set the flag itself for such names, and now reads the provider's entries (W3s's request 3).
+- **Undecided content answers name their reason.** The filter's `Unknown` gains `Binary` ("binary file not searched") and `OnlineOnly` ("online-only file not read"), after the reasons it had, so their order is kept and the enum stays non-exhaustive. The search crate's content lookup answers with them where it answered "content not read"; each such read is counted once, as a skip, whose sentences say which ("2 binary files skipped."), and a `Tally` over a panel says them in its unknown sentence (W3s's request 4).
 
 ## Context
 
