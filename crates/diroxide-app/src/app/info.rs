@@ -82,6 +82,14 @@ impl App {
     /// Documents, 40 items"), then the focus and its position, any
     /// filter, the jobs' progress and the file clipboard.
     pub(super) fn say_status(&mut self) -> Vec<Effect> {
+        // The filter prompt says its text, how it reads and the count.
+        if let Some(line) = self.filter_prompt_status() {
+            return vec![self.say(Message::info(line))];
+        }
+        // The results lister says how the search stands first.
+        if let Some(line) = self.results_status() {
+            return vec![self.say(Message::info(line))];
+        }
         if let Some((_, dialog)) = self.dialogs.last() {
             let line = dialog.focus_line();
             return vec![self.say(Message::info(line))];
@@ -107,8 +115,8 @@ impl App {
         if let Some(row) = list.focused() {
             text.push_str(&format!(", on {}, {}", row.label, list.position_text()));
         }
-        if let Some(filter) = panel.filter() {
-            text.push_str(&format!(", filter {}", filter.text()));
+        if let Some(filter) = self.filter_title(side) {
+            text.push_str(&format!(", {filter}"));
         }
         for job in self.jobs.ids() {
             if let Some(detail) = self.jobs.detail(job) {
@@ -153,10 +161,16 @@ impl App {
     pub(super) fn say_key_bar(&mut self) -> Vec<Effect> {
         let viewer_bank = crate::menu::viewer_bank();
         let preview_bank = crate::menu::preview_bank();
+        let results_bank = crate::menu::results_bank();
+        let compare_bank = crate::menu::compare_bank();
         let bank = if self.viewer_open() {
             Some(&viewer_bank)
         } else if self.in_preview() {
             Some(&preview_bank)
+        } else if self.results_shown() {
+            Some(&results_bank)
+        } else if self.compare_shown() {
+            Some(&compare_bank)
         } else {
             self.active_bank()
         };
@@ -513,6 +527,12 @@ impl App {
     /// Enter on a setting: a switch flips; a choice opens its choices with
     /// "Back to default" last; anything else opens a field.
     pub(super) fn setting_chosen(&mut self, key: &str) -> Vec<Effect> {
+        if key == settings::KEYS_ROW {
+            return self.open_keys_list();
+        }
+        if key == "preset" {
+            return self.preset_chooser();
+        }
         let Some(info) = settings::setting(key) else {
             return Vec::new();
         };
@@ -688,11 +708,8 @@ impl App {
     /// What a changed setting changes at once.
     fn after_setting(&mut self, key: &str) {
         match key {
-            "single_letters" => {
-                let full = keymap::Keymap::defaults_for(self.keymap.column())
-                    .for_platform(self.keymap.platform());
-                self.keymap = full.with_single_letters(self.settings.single_letters);
-            }
+            // Built again from the layers, so the owner's lines stay.
+            "single_letters" => self.rebuild_keymap(),
             "screen_reader_mode" => {
                 self.screen_reader = !matches!(
                     self.settings.screen_reader_mode,
@@ -844,6 +861,9 @@ impl App {
     /// this after ten seconds without a key (research/alpha3-plan.md, the
     /// key test), so a key the terminal never sends cannot trap the user.
     pub fn end_key_test(&mut self, idle_seconds: u64) -> Vec<Effect> {
+        if self.capturing_key() {
+            return self.capture_timed_out();
+        }
         if !self.key_test {
             return Vec::new();
         }

@@ -617,7 +617,9 @@ impl App {
                 text = &text[1..text.len() - 1];
             }
         }
-        let text = if cfg!(windows) {
+        // On Windows a typed slash is a backslash, except in a place with
+        // a scheme ("sftp://host/path"), whose slashes are its own.
+        let text = if cfg!(windows) && !text.contains("://") {
             text.replace('/', "\\")
         } else {
             text.to_owned()
@@ -636,7 +638,9 @@ impl App {
         if self.places.is_empty() {
             self.request(Request::Places);
         }
-        let field = EntryField::new("Go to a place", CompletionSource::Places)
+        // Tab completes a bookmark by its name or its place (W3a); the
+        // list under the field narrows over every place as you type.
+        let field = EntryField::new("Go to a place", CompletionSource::Bookmarks)
             .with_history(state::keys::PLACES);
         let mut effects =
             self.open_dialog(crate::dialog::Dialog::edit(field), Purpose::Places(side));

@@ -878,9 +878,11 @@ dependencies = [
  "diroxide-archive",
  "diroxide-config",
  "diroxide-core",
+ "diroxide-diff",
  "diroxide-filetype",
  "diroxide-ops",
  "diroxide-preview",
+ "diroxide-search",
  "diroxide-theme",
  "diroxide-tools",
  "diroxide-vfs",
@@ -892,6 +894,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]

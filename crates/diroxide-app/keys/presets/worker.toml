@@ -1,0 +1,130 @@
+# Worker: for people who know Worker's keys (research/alpha3-plan.md,
+# "Preset: Worker", from research/worker-parity.md section 2.4 alone,
+# never Worker's own files). In a terminal Worker's keypad keys arrive as
+# the main row's characters, so the terminal column gives the characters
+# Worker's meanings (plus selects all, minus selects none, star inverts)
+# and the window column gives them to the keypad; the keypad keys work
+# under NVDA only with Num Lock on. Select by pattern and unselect by
+# pattern have no terminal key: the Select menu and the palette reach
+# them, and the pattern prompt's default star makes Enter select all.
+#
+# Same as Worker without a change: Tab, Space (for Worker's Insert), F2
+# to F8, Delete, Ctrl+R, Ctrl+U, Ctrl+F (find), Ctrl+S (Worker's quick
+# search; the filter here), Shift+Up and Shift+Down, Return, Left and
+# Right. Alt+T sorts by modified time in a panel, as in Worker; the Tools
+# menu is then F9 and T.
+#
+# Kept despite the source: Shift+F5 duplicates (Worker's opens the copy
+# options); F9 opens the menus (Worker's F9 is help mode, which is the
+# question mark and then a key here); Ctrl+D is Say status, so Worker's
+# bookmark filter key is not carried, and Details gives Alt+Enter to the
+# folder history in the window and takes Ctrl+I there, Worker's info
+# mode (a terminal sends Ctrl+I as Tab, so the terminal keeps Alt+Enter
+# for Details). In the window F1 opens the palette, as
+# Worker's command menu, and help moves to Shift+F1.
+#
+# Not carried: the Ctrl+B and Ctrl+V panel modes (they are other
+# commands here), Ctrl+H search
+# history (a terminal sends it as Backspace), Ctrl+Return and
+# Ctrl+Shift+Return (the window has Ctrl+Enter for the path), Ctrl+Space,
+# Insert (the screen readers' key) and Shift+Return.
+#
+# Waiting for their commands (alpha.3, then these lines join the preset):
+#   go.jump = "/"
+# Bookmarks keeps Ctrl+B and Alt+B and gains Ctrl+Backslash in the window;
+# Set label is Alt+L, as in Worker, in the defaults already.
+
+[preset]
+name = "Worker"
+description = "For people who know Worker's keys: the keypad selects, Backspace goes back, Alt+N and Alt+T sort."
+source = "the project's survey of Worker's features, its key bindings, never Worker's own files"
+letters = "type-ahead"
+
+[terminal.global]
+"app.quit" = ["ctrl+q", "alt+q"]
+
+[terminal.panel]
+"select.all" = ["ctrl+a", "plus"]
+"select.none" = "-"
+"select.pattern" = "none"
+"select.unpattern" = "none"
+"go.back" = ["alt+left", "backspace"]
+"panel.up" = ["left", "alt+up"]
+"view.hidden" = ["alt+.", "`", "^"]
+"view.sort-name" = ["ctrl+f3", "alt+n"]
+"view.sort-modified" = ["ctrl+f5", "alt+t"]
+"file.shell-here" = "ctrl+e"
+"panel.this-in-other" = ["ctrl+left", "ctrl+o"]
+
+[window.global]
+"app.quit" = ["ctrl+q", "alt+q"]
+"app.palette" = ["ctrl+shift+p", "ctrl+p", "f1"]
+"app.help" = "shift+f1"
+
+[window.panel]
+"go.bookmarks" = ["ctrl+b", "alt+b", "ctrl+\\"]
+"select.all" = ["ctrl+a", "kp-plus"]
+"select.none" = ["ctrl+shift+a", "kp-minus"]
+"select.invert" = ["*", "kp-multiply"]
+"select.pattern" = ["plus", "kp-divide"]
+"select.unpattern" = ["-", "shift+kp-divide"]
+"go.back" = ["alt+left", "backspace"]
+"panel.up" = ["left", "alt+up"]
+"go.history" = "alt+enter"
+"file.details" = "ctrl+i"
+"view.hidden" = ["alt+.", "`", "^"]
+"view.sort-name" = ["ctrl+f3", "alt+n"]
+"view.sort-modified" = ["ctrl+f5", "alt+t"]
+"file.shell-here" = "ctrl+e"
+"panel.this-in-other" = ["ctrl+left", "ctrl+o"]
+"panel.show-in-other" = ["ctrl+right", "ctrl+shift+o"]
+"clipboard.copy" = ["ctrl+c", "ctrl+shift+c"]
+"clipboard.cut" = ["ctrl+x", "ctrl+shift+x"]
+"clipboard.paste" = ["ctrl+v", "ctrl+shift+v"]
+
+[[held_back]]
+keys = "ctrl+x ctrl+x"
+command = "Start a program"
+id = "file.run-command"
+
+[[held_back]]
+keys = "ctrl+x s"
+command = "Make a symbolic link"
+id = "file.link"
+
+[[held_back]]
+keys = "ctrl+x ctrl+s"
+command = "Change a link's target"
+id = "file.relink"
+
+[[held_back]]
+keys = "ctrl+x c"
+command = "Change permissions"
+id = "file.permissions"
+
+[[held_back]]
+keys = "ctrl+x o"
+command = "Change the owner, with alpha.7"
+
+[[held_back]]
+keys = "ctrl+x l"
+command = "The command log, the job history here"
+id = "jobs.history"
+
+[[held_back]]
+keys = "ctrl+x n"
+command = "Newest files"
+
+[[held_back]]
+keys = "ctrl+l 1"
+command = "The first layout"
+id = "app.layout"
+
+[[held_back]]
+keys = "ctrl+l 2"
+command = "The second layout"
+id = "app.layout"
+
+[[held_back]]
+keys = "ctrl+l ctrl+l"
+command = "Center the row, which means nothing by ear"

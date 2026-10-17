@@ -375,7 +375,16 @@ mod properties {
         /// headings, tables on their rows.
         #[test]
         fn any_text_reads_into_rows_that_hold(text in markdownish()) {
-            holds(&markdown::read(&text));
+            // The app reads Markdown under the guard's thread with an 8 MiB
+            // stack; a test thread's default stack overflowed once on a
+            // deeply nested random text, so the read runs the same way here.
+            let rows = std::thread::Builder::new()
+                .stack_size(8 << 20)
+                .spawn(move || markdown::read(&text))
+                .unwrap()
+                .join()
+                .unwrap();
+            holds(&rows);
         }
     }
 }

@@ -205,6 +205,13 @@ pub(crate) fn fill_platform(entry: &mut Entry, metadata: &Metadata, context: &En
     entry.volume = context.volume;
 }
 
+/// Whether an entry is hidden by this platform's rule: the hidden
+/// attribute, which only the metadata holds (a leading dot hides nothing
+/// on Windows), so without it the answer is no.
+pub(crate) fn is_hidden(_name: &std::ffi::OsStr, metadata: Option<&Metadata>) -> bool {
+    metadata.is_some_and(|m| m.file_attributes() & ATTRIBUTE_HIDDEN != 0)
+}
+
 /// The facts a stat reads through a handle: the identity, the link count
 /// and the change time. Missing facts stay unknown; a stat never fails
 /// for them.

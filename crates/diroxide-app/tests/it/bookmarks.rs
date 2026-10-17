@@ -236,3 +236,52 @@ fn the_bookmarked_fact_reads_the_store() {
     assert_eq!(lookup.bookmarked(&photos), Some(true));
     assert_eq!(lookup.bookmarked(&notes), Some(false));
 }
+
+#[test]
+fn the_copy_key_in_the_bookmarks_copies_into_the_bookmark() {
+    let mut f = open();
+    // Bookmark the Backup folder, then copy notes.txt into it from the
+    // Bookmarks list (W3a).
+    f.s.focus("Backup");
+    f.s.command(ids::BOOKMARK_ITEM);
+    f.s.focus("notes.txt");
+    f.s.key("ctrl+b");
+    f.s.key("end");
+    let said = f.s.key("f5");
+    assert!(
+        said.iter().any(|t| t.starts_with("Copy 1 item to Backup")),
+        "{said:?}"
+    );
+    f.s.key("y");
+    assert!(f.work.join("Backup").join("notes.txt").exists());
+}
+
+#[test]
+fn go_to_a_place_names_each_place_first_and_tab_completes_a_bookmark() {
+    let mut f = open();
+    f.s.focus("Photos");
+    f.s.command(ids::BOOKMARK_ITEM);
+    f.s.key("ctrl+g");
+    let rows: Vec<String> = match f.s.dialog() {
+        Some(Dialog::Edit {
+            candidates: Some(list),
+            ..
+        }) => list.rows().iter().map(|r| r.spoken()).collect(),
+        other => panic!("{other:?}"),
+    };
+    // A visited folder: its own name first, then what it is, then where.
+    assert!(
+        rows.iter()
+            .any(|r| r.starts_with("work, visited ") && r.contains(", in ")),
+        "{rows:?}"
+    );
+    assert!(
+        rows.iter().any(|r| r.starts_with("Bookmark, Photos")),
+        "{rows:?}"
+    );
+    // Tab finds a bookmark by its name.
+    f.s.type_text("photos");
+    let said = f.s.key("tab");
+    assert!(last(&said).starts_with("completed to "), "{said:?}");
+    assert!(last(&said).ends_with("Photos"), "{said:?}");
+}

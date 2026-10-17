@@ -246,6 +246,76 @@ fn row_role(app: &App, side: Side, index: usize, row: &ListRow, focused: bool) -
     }
 }
 
+/// A panel row's runs: the row in its role, and each label's word in that
+/// label's role (W3a, P3b's label roles). The word is in the row in every
+/// theme and without color; its color is a second signal, never the only
+/// one. A marked row keeps its own role whole.
+#[allow(clippy::too_many_arguments)]
+fn row_runs(
+    app: &App,
+    side: Side,
+    index: usize,
+    row: &ListRow,
+    role: PanelRole,
+    x: u16,
+    width: u16,
+    text: String,
+) -> Line {
+    let entry = app
+        .panel(side)
+        .entries()
+        .get(index)
+        .filter(|e| e.name == row.id);
+    let labels = match entry {
+        Some(e) if !e.labels.is_empty() && role != PanelRole::MarkedRow => &e.labels,
+        _ => return vec![Run::new(x, width, text, role)],
+    };
+    let start = ["label: ", "labels: "]
+        .iter()
+        .find_map(|lead| text.find(&format!(", {lead}")).map(|i| i + 2 + lead.len()));
+    let Some(mut from) = start else {
+        return vec![Run::new(x, width, text, role)];
+    };
+    let mut spans: Vec<(usize, usize, PanelRole)> = Vec::new();
+    for name in labels {
+        let Some(label_role) = app.labels().role_of(name) else {
+            continue;
+        };
+        let word = clean(&diroxide_app::labels::in_sentence(&display_name(name)));
+        if let Some(found) = text[from..].find(word.as_str()) {
+            let at = from + found;
+            spans.push((at, at + word.len(), label_role));
+            from = at + word.len();
+        }
+    }
+    if spans.is_empty() {
+        return vec![Run::new(x, width, text, role)];
+    }
+    let right = x.saturating_add(width);
+    let mut runs = Vec::new();
+    let mut cx = x;
+    let mut pos = 0;
+    let mut push = |part: &str, part_role: PanelRole, cx: &mut u16, last: bool| {
+        if part.is_empty() || *cx >= right {
+            return;
+        }
+        let w = if last {
+            right - *cx
+        } else {
+            (cells(part) as u16).min(right - *cx)
+        };
+        runs.push(Run::new(*cx, w, part, part_role));
+        *cx += w;
+    };
+    for (at, end, label_role) in spans {
+        push(&text[pos..at], role, &mut cx, false);
+        push(&text[at..end], label_role, &mut cx, false);
+        pos = end;
+    }
+    push(&text[pos..], role, &mut cx, true);
+    runs
+}
+
 /// Lines of a region and the line and column of its focus, relative to
 /// the region's top.
 struct Region {
@@ -322,11 +392,12 @@ fn panel_region(
                     focus = Some((x, lines.len()));
                 }
                 let role = row_role(app, side, i, row, is_focus);
-                let mut run = Run::new(x, width, row_text(row, look.screen_reader), role);
+                let text = row_text(row, look.screen_reader);
                 if is_focus {
-                    run = run.filled();
+                    lines.push(vec![Run::new(x, width, text, role).filled()]);
+                } else {
+                    lines.push(row_runs(app, side, i, row, role, x, width, text));
                 }
-                lines.push(vec![run]);
             }
         }
     }

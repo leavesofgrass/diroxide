@@ -8,6 +8,11 @@
 //!   own rename or removal on Windows; its parent's does. Either way the
 //!   panel hears [`WatchEvent::Gone`] at once ("Folder is gone"), and the
 //!   folder's watches are dropped, since their paths are stale.
+//! - **Renames say which name is new.** The new name of a rename into
+//!   the folder is [`WatchEvent::RenamedIn`] (P3b): a file finished
+//!   elsewhere and renamed into place, such as `report.pdf.part` renamed
+//!   to `report.pdf`. On Windows a move from another folder is reported
+//!   as an addition, so it is [`WatchEvent::Created`].
 //! - **Debounced.** Events wait for 200 ms of quiet, or one second at
 //!   most; up to 50 in a window are passed on one by one, more become one
 //!   [`WatchEvent::Rescan`]. On Windows the count is the only overflow
@@ -159,17 +164,17 @@ fn child_event(kind: &EventKind, index: usize, place: Place, path: &Path) -> Opt
         EventKind::Create(_) => WatchEvent::Created(place),
         EventKind::Remove(_) => WatchEvent::Removed(place),
         EventKind::Modify(ModifyKind::Name(RenameMode::From)) => WatchEvent::Removed(place),
-        EventKind::Modify(ModifyKind::Name(RenameMode::To)) => WatchEvent::Created(place),
+        EventKind::Modify(ModifyKind::Name(RenameMode::To)) => WatchEvent::RenamedIn(place),
         EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
             if index == 0 {
                 WatchEvent::Removed(place)
             } else {
-                WatchEvent::Created(place)
+                WatchEvent::RenamedIn(place)
             }
         }
         EventKind::Modify(ModifyKind::Name(_)) => {
             if exists() {
-                WatchEvent::Created(place)
+                WatchEvent::RenamedIn(place)
             } else {
                 WatchEvent::Removed(place)
             }
@@ -522,8 +527,38 @@ mod tests {
         );
         assert_eq!(
             child_event(&both, 1, place.clone(), path),
-            Some(WatchEvent::Created(place.clone()))
+            Some(WatchEvent::RenamedIn(place.clone()))
         );
+        // The new name of a rename is renamed in (P3b); the old one went
+        // away; a rename the system does not pair is read by whether the
+        // name is there.
+        let to = EventKind::Modify(ModifyKind::Name(RenameMode::To));
+        assert_eq!(
+            child_event(&to, 0, place.clone(), path),
+            Some(WatchEvent::RenamedIn(place.clone()))
+        );
+        let from = EventKind::Modify(ModifyKind::Name(RenameMode::From));
+        assert_eq!(
+            child_event(&from, 0, place.clone(), path),
+            Some(WatchEvent::Removed(place.clone()))
+        );
+        let unpaired = EventKind::Modify(ModifyKind::Name(RenameMode::Any));
+        assert_eq!(
+            child_event(
+                &unpaired,
+                0,
+                place.clone(),
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+            ),
+            Some(WatchEvent::RenamedIn(place.clone()))
+        );
+        assert_eq!(
+            child_event(&unpaired, 0, place.clone(), path),
+            Some(WatchEvent::Removed(place.clone()))
+        );
+        assert!(WatchEvent::RenamedIn(place.clone()).is_arrival());
+        assert_eq!(WatchEvent::RenamedIn(place.clone()).place(), Some(&place));
+        assert_eq!(WatchEvent::Rescan.place(), None);
         let read = EventKind::Access(AccessKind::Read);
         assert_eq!(child_event(&read, 0, place.clone(), path), None);
         let any = EventKind::Any;

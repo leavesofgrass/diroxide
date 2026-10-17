@@ -79,6 +79,22 @@ impl App {
         vec![Effect::OpenDialog(id), self.say(message)]
     }
 
+    /// Opens a dialog for a purpose and says a line of its own instead of
+    /// its name (the results lister's "Searching work for *.txt").
+    pub(super) fn open_dialog_saying(
+        &mut self,
+        dialog: Dialog,
+        purpose: Purpose,
+        message: Message,
+    ) -> Vec<Effect> {
+        let id = self.ids.dialog();
+        self.dialogs.push((id, dialog));
+        self.tabbed = None;
+        let opened = self.now();
+        self.opens.push(Open { purpose, opened });
+        vec![Effect::OpenDialog(id), self.say(message)]
+    }
+
     /// Closes the dialog on top; the focus returns where it was.
     pub(super) fn close_top(&mut self) -> Vec<Effect> {
         // A secret dialog's typed text is wiped as it is dropped here.
@@ -108,7 +124,7 @@ impl App {
 
     /// Whether the top dialog opened less than the settle time ago, so a
     /// confirming key is ignored.
-    fn settling(&self) -> bool {
+    pub(super) fn settling(&self) -> bool {
         self.opens.last().is_some_and(|open| {
             millis_between(open.opened, self.now()) < self.settings.dialog_settle_ms
         })
@@ -144,6 +160,22 @@ impl App {
 
     /// A key with a dialog open.
     pub(super) fn dialog_key(&mut self, key: Key) -> Vec<Effect> {
+        // The results lister's and the search dialog's own keys (W3a).
+        if let Some(effects) = self.results_key(&key) {
+            return effects;
+        }
+        if let Some(effects) = self.search_form_key(&key) {
+            return effects;
+        }
+        if let Some(effects) = self.saved_key(&key) {
+            return effects;
+        }
+        if let Some(effects) = self.space_key(&key) {
+            return effects;
+        }
+        if let Some(effects) = self.compare_key(&key) {
+            return effects;
+        }
         // The labels', bookmarks' and History lists' own keys (W3l).
         if let Some(effects) = self.organize_key(&key) {
             return effects;
@@ -185,6 +217,7 @@ impl App {
             Action::Focus(movement) => {
                 if let Some(list) = self.dialog_list_mut() {
                     if list.move_focus(movement) {
+                        self.results_focus_moved();
                         return self.list_focus_said();
                     }
                     let edge = if matches!(movement, Move::Up | Move::PageUp | Move::Home) {
@@ -284,6 +317,7 @@ impl App {
                     | Purpose::Places(_)
                     | Purpose::PickDestination { .. }
                     | Purpose::TypedPlan(..)
+                    | Purpose::Keys(_)
             ) || matches!(&purpose, Purpose::Organize(w) if w.list_always());
             if candidates.is_some() && !list_always {
                 *candidates = None;
@@ -360,10 +394,18 @@ impl App {
             Purpose::UnpackForm(_) => {
                 effects.push(self.say(Message::info("Nothing was unpacked.")));
             }
-            Purpose::Filter(side, previous) => {
-                let clock = std::sync::Arc::clone(&self.clock);
-                self.panels[side.index()].set_filter(previous, clock.as_ref());
-                effects.push(self.redraw_panel(side));
+            Purpose::Filter(side, previous) => effects.extend(self.filter_escaped(side, previous)),
+            Purpose::FilterContents { side, previous, .. } => {
+                effects.extend(self.filter_contents_declined(side, previous.map(|f| *f)));
+            }
+            Purpose::SelectCount { .. } => {
+                effects.push(self.say(Message::info("Nothing changed.")));
+            }
+            Purpose::DeleteSaved(..) => {
+                effects.push(self.say(Message::info("Nothing deleted.")));
+            }
+            Purpose::CompareLarge(_) => {
+                effects.push(self.say(Message::info("Nothing was compared.")));
             }
             Purpose::Rename {
                 side, rest, done, ..
@@ -378,7 +420,15 @@ impl App {
                     effects.extend(self.duplicate_prompt(side, next.clone(), more.to_vec()));
                 }
             }
+            Purpose::Keys(purpose) => effects.extend(self.keys_escape(*purpose)),
             Purpose::Organize(wants) => effects.extend(self.organize_escape(*wants)),
+            Purpose::SearchText(form, field) => {
+                effects.extend(self.search_text_escaped(*form, field));
+            }
+            Purpose::SearchForm(_) => {
+                effects.push(self.say(Message::info("Nothing was searched.")));
+            }
+            Purpose::Results => effects.extend(self.results_closed()),
             _ => {}
         }
         effects
@@ -422,7 +472,18 @@ impl App {
                 effects.push(self.say(Message::info(format!("Running {name}"))));
                 effects.push(Effect::OpenExternally(place));
             }
+            Purpose::Keys(purpose) => effects.extend(self.keys_yes(*purpose)),
             Purpose::Organize(wants) => effects.extend(self.organize_yes(*wants)),
+            Purpose::FilterContents {
+                side,
+                filter,
+                previous,
+            } => effects.extend(self.read_filter_contents(side, *filter, previous.map(|f| *f))),
+            Purpose::SelectCount { side, select, ids } => {
+                effects.extend(self.select_counted(side, select, ids));
+            }
+            Purpose::DeleteSaved(path, name) => effects.extend(self.delete_saved(path, &name)),
+            Purpose::OfferSizeSort => effects.extend(self.sort_by_size_now()),
             _ => {}
         }
         effects
@@ -525,13 +586,9 @@ impl App {
                 let Some(id) = row.and_then(|r| CommandId::new(r).ok()) else {
                     return vec![self.say(Message::status("No command matches"))];
                 };
-                self.palette.record(&id);
-                let recent: Vec<String> = self
-                    .palette
-                    .recent()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect();
+                let now = self.now().unix_seconds();
+                self.palette.record_at(&id, now);
+                let recent: Vec<String> = self.palette.to_lines();
                 self.histories
                     .insert(state::keys::PALETTE.to_owned(), recent.clone());
                 self.request(Request::SaveHistory {
@@ -771,21 +828,76 @@ impl App {
                 effects.extend(self.duplicate_answer(side, current, rest, &text));
                 effects
             }
-            Purpose::Filter(side, _) => {
-                let mut effects = self.close_top();
-                effects.extend(self.filter_done(side, &text));
-                effects
+            Purpose::Filter(side, previous) => {
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                self.filter_enter(side, &text, previous)
             }
             Purpose::Pattern { side, select } => {
-                let mut effects = self.close_top();
-                effects.extend(self.apply_pattern(side, select, &text));
-                effects
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                self.pattern_entered(side, select, &text)
             }
+            Purpose::SearchForm(form) => match row {
+                Some(row) => self.search_form_row(*form, &row),
+                None => Vec::new(),
+            },
+            Purpose::SearchText(form, field) => {
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                self.search_text_entered(*form, field, &text)
+            }
+            Purpose::Results => self.open_result(),
+            Purpose::SaveSearchName => self.save_search_named(&text),
+            Purpose::Compare(compared) => match row {
+                Some(row) => self.change_detail(*compared, &row),
+                None => Vec::new(),
+            },
+            Purpose::Unified(compared) => self.unified_view_line(*compared),
+            Purpose::CompareLarge(pair) => match row {
+                Some(row) => self.large_chosen(*pair, &row),
+                None => Vec::new(),
+            },
+            Purpose::CompareMenu => match row {
+                Some(row) => self.compare_action(&row),
+                None => Vec::new(),
+            },
+            Purpose::SavedList(rows) => match row {
+                Some(row) => self.saved_chosen(rows, &row),
+                None => Vec::new(),
+            },
+            Purpose::Space(space) => match row {
+                Some(row) => self.space_row(*space, &row),
+                None => Vec::new(),
+            },
+            Purpose::Refine => {
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                self.refine_entered(&text)
+            }
+            Purpose::ResultsMenu => match row.and_then(|r| CommandId::new(r).ok()) {
+                Some(id) => {
+                    let mut effects = self.close_top();
+                    effects.extend(self.results_action(&id));
+                    effects
+                }
+                None => Vec::new(),
+            },
+            Purpose::SelectKind(side) => match row {
+                Some(row) => self.select_kind_chosen(side, &row),
+                None => Vec::new(),
+            },
+            Purpose::NextRows(side) => self.next_rows_typed(side, &text),
             Purpose::RunCommand(side) => {
                 let mut effects = self.close_top();
                 effects.extend(self.run_line(side, &text));
                 effects
             }
+            Purpose::Keys(purpose) => self.keys_accept(*purpose, row.as_deref(), &text),
             Purpose::Organize(wants) => self.organize_accept(*wants, row, text, in_list),
             Purpose::RunPlan(_)
             | Purpose::Quit
@@ -797,6 +909,10 @@ impl App {
             | Purpose::TrashParts(_)
             | Purpose::JunctionInstead { .. }
             | Purpose::PreviewLink
+            | Purpose::FilterContents { .. }
+            | Purpose::SelectCount { .. }
+            | Purpose::DeleteSaved(..)
+            | Purpose::OfferSizeSort
             | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }
@@ -1088,15 +1204,24 @@ impl App {
         };
         match self.top_purpose().cloned() {
             Some(Purpose::Filter(side, _)) => {
-                let mut effects = vec![self.redraw_panel(side)];
-                if let Some(line) = self.filter_live(side, &text) {
-                    effects.push(self.say(Message::status(line)));
+                if let Some((
+                    _,
+                    Dialog::Edit {
+                        candidates,
+                        in_list,
+                        ..
+                    },
+                )) = self.dialogs.last_mut()
+                {
+                    *candidates = None;
+                    *in_list = false;
                 }
-                effects
+                self.filter_typed(side, &text)
             }
             Some(Purpose::Palette | Purpose::Places(_) | Purpose::PickDestination { .. }) => {
                 self.refresh_candidates()
             }
+            Some(Purpose::Keys(purpose)) if purpose.is_list() => self.keys_list_typed(),
             Some(Purpose::Organize(wants)) if wants.list_always() => self.refresh_candidates(),
             _ => {
                 if let Some((
@@ -1140,8 +1265,10 @@ impl App {
                     .filter(|c| terms_in_order(&text, &c.text) || terms_in_order(&text, &c.kind))
                     .collect();
                 let mut list = candidate_list("Places", &found);
-                // Bookmarks say their kind first (W3l).
+                // Bookmarks say their kind first (W3l); the other places
+                // their own name first (W3a).
                 self.bookmark_rows_first(&mut list);
+                self.place_rows_first(&mut list);
                 list
             }
             Some(Purpose::PickDestination { side, .. }) => {
@@ -1150,7 +1277,10 @@ impl App {
                     .into_iter()
                     .filter(|c| terms_in_order(&text, &c.text))
                     .collect();
-                candidate_list("Destinations", &found)
+                let mut list = candidate_list("Destinations", &found);
+                self.bookmark_rows_first(&mut list);
+                self.place_rows_first(&mut list);
+                list
             }
             Some(Purpose::Organize(wants)) => match self.organize_candidates(&wants, &text) {
                 Some(list) => list,
@@ -1257,6 +1387,17 @@ impl App {
                     .unwrap_or_default()
             }
             CompletionSource::Values(values) => crate::entry::value_candidates(&values),
+            CompletionSource::Filter => {
+                let cursor = match self.dialogs.last() {
+                    Some((_, Dialog::Edit { field, .. })) => field.cursor(),
+                    _ => 0,
+                };
+                let (start, candidates) = self.filter_completions(&text, cursor);
+                if let Some(Dialog::Edit { field, .. }) = self.top_dialog_mut() {
+                    field.set_stem_start(start);
+                }
+                candidates
+            }
             CompletionSource::Labels => crate::entry::label_candidates(&self.organize.labels),
             CompletionSource::Bookmarks => {
                 crate::entry::bookmark_candidates(&self.organize.bookmarks)

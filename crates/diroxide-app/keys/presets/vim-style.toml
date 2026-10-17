@@ -1,0 +1,149 @@
+# vim-style: for people who want h, j, k and l (research/alpha3-plan.md,
+# "Preset: vim-style (ranger, lf, yazi, vifm)"). Single letters run
+# commands: typing no longer jumps to names, and slash opens the filter.
+# The preset only adds: the Norton row and the CUA keys stay, so a
+# mistake with a letter never takes the other keys away.
+#
+# The four managers disagree on d: lf and ranger cut with it, yazi and
+# vifm delete. This preset follows yazi and vifm, to the trash, and the
+# Keys list lets anyone swap. Adapted from their two-letter keys: gg is
+# g, dd is d, yy is y, pp is p; ranger's zh and vifm's za are the period;
+# cw is r; the sort prefixes are the Sort list on o. Ctrl+F pages down;
+# Ctrl+B pages up in the window only, since tmux keeps Ctrl+B for its
+# prefix in a terminal. Ctrl+D stays Say status and Ctrl+U swaps the
+# panels, so the half-page keys are not carried.
+#
+# The quote and the backquote open the bookmarks, as ranger's and lf's
+# marks do, and m bookmarks this folder; Ctrl+B and Alt+B then leave the
+# bookmarks, so Ctrl+B pages up in the window. t sets a label (ranger's
+# tag) and T clears the labels.
+#
+# Joined with their commands in alpha.3 (W3a): V marks a range, as
+# visual mode does (Mark range, twice), and s finds files; Ctrl+F still
+# pages down. Waiting for its command: go.jump = "z".
+# Later alphas: the g goto family (go home, go to the trash) and the tab
+# keys (gt, gT, yazi's t).
+
+[preset]
+name = "vim-style"
+description = "For people who want h, j, k and l: single letters run commands, as in ranger, lf, yazi and vifm."
+source = "the manual pages of ranger and vifm, lf's documentation and yazi's quick start"
+letters = "commands"
+
+[terminal.global]
+"app.palette" = ["ctrl+p", ":"]
+"app.quit" = ["ctrl+q", "q"]
+"app.quit-to-folder" = "shift+q"
+"jobs.history" = "w"
+
+[terminal.list]
+"list.down" = ["down", "j"]
+"list.up" = ["up", "k"]
+"list.home" = ["home", "g"]
+"list.end" = ["end", "shift+g"]
+"list.page-down" = ["pagedown", "ctrl+f"]
+
+[terminal.panel]
+"go.bookmarks" = ["'", "`"]
+"bookmark.add" = "m"
+"label.set" = ["alt+l", "t"]
+"label.clear" = "shift+t"
+"panel.up" = ["left", "backspace", "alt+up", "h"]
+"panel.into" = ["right", "l"]
+"go.back" = ["alt+left", "shift+h"]
+"go.forward" = ["alt+right", "shift+l"]
+"select.invert" = ["*", "v"]
+"select.none" = "u"
+"clipboard.copy" = ["ctrl+c", "y"]
+"clipboard.cut" = ["ctrl+x", "x"]
+"clipboard.paste" = ["ctrl+v", "p"]
+"file.trash" = ["f8", "delete", "d"]
+"file.delete-permanently" = ["shift+delete", "shift+d"]
+"file.rename" = ["f2", "r"]
+"folder.make" = ["f7", "a"]
+"file.edit" = ["f4", "e"]
+"file.view" = ["f3", "i"]
+"view.hidden" = ["alt+.", "."]
+"view.filter" = ["ctrl+s", "/", "f"]
+"view.sort-list" = "o"
+"file.run-command" = ["!", ";"]
+"file.shell-here" = "$"
+"select.range" = "shift+v"
+"search.find" = "s"
+
+[window.global]
+"app.palette" = ["ctrl+shift+p", "ctrl+p", ":"]
+"app.help" = ["f1", "?"]
+"app.quit" = ["ctrl+q", "q"]
+"app.quit-to-folder" = "shift+q"
+"jobs.history" = "w"
+
+[window.list]
+"list.down" = ["down", "j"]
+"list.up" = ["up", "k"]
+"list.home" = ["home", "g"]
+"list.end" = ["end", "shift+g"]
+"list.page-down" = ["pagedown", "ctrl+f"]
+"list.page-up" = ["pageup", "ctrl+b"]
+
+[window.panel]
+"go.bookmarks" = ["'", "`"]
+"bookmark.add" = "m"
+"label.set" = ["alt+l", "t"]
+"label.clear" = "shift+t"
+"panel.up" = ["left", "backspace", "alt+up", "h"]
+"panel.into" = ["right", "l"]
+"go.back" = ["alt+left", "shift+h"]
+"go.forward" = ["alt+right", "shift+l"]
+"select.invert" = ["*", "kp-multiply", "v"]
+"select.none" = ["ctrl+shift+a", "kp-minus", "u"]
+"clipboard.copy" = ["ctrl+c", "y"]
+"clipboard.cut" = ["ctrl+x", "x"]
+"clipboard.paste" = ["ctrl+v", "p"]
+"file.trash" = ["f8", "delete", "d"]
+"file.delete-permanently" = ["shift+delete", "shift+d"]
+"file.rename" = ["f2", "r"]
+"folder.make" = ["f7", "ctrl+shift+n", "a"]
+"file.edit" = ["f4", "e"]
+"file.view" = ["f3", "i"]
+"view.hidden" = ["alt+.", "."]
+"view.filter" = ["ctrl+s", "/", "f"]
+"view.sort-list" = ["ctrl+shift+s", "o"]
+"file.run-command" = ["!", ";"]
+"file.shell-here" = "$"
+"select.range" = "shift+v"
+"search.find" = "s"
+
+[[held_back]]
+keys = "g g"
+command = "First row, as g here"
+id = "list.home"
+
+[[held_back]]
+keys = "d d"
+command = "Move to trash, as d here"
+id = "file.trash"
+
+[[held_back]]
+keys = "y y"
+command = "Copy, as y here"
+id = "clipboard.copy"
+
+[[held_back]]
+keys = "p p"
+command = "Paste, as p here"
+id = "clipboard.paste"
+
+[[held_back]]
+keys = "c w"
+command = "Rename, as r here"
+id = "file.rename"
+
+[[held_back]]
+keys = "z h"
+command = "Show hidden files, as the period here"
+id = "view.hidden"
+
+[[held_back]]
+keys = "g t"
+command = "Next tab, with alpha.8"

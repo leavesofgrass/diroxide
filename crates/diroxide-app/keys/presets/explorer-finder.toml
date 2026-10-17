@@ -1,0 +1,79 @@
+# Explorer and Finder: for people who know Windows Explorer or the macOS
+# Finder rather than the Norton row (research/alpha3-plan.md, "Preset:
+# Windows Explorer and the Finder"; Microsoft's and Apple's keyboard
+# shortcut pages). Mostly the window column; the terminal column changes
+# only where an Explorer key is one a terminal can send. F5 and F6 still
+# copy and move, because a two-panel manager cannot give them up
+# (Explorer's F5 refresh is Ctrl+R here).
+#
+# Already Explorer's and unchanged: F2, Ctrl+L, Alt+D, Alt+Left, Alt+Right,
+# Alt+Up, Delete, Shift+Delete, Ctrl+Shift+N, Ctrl+A, Ctrl+C, Ctrl+X,
+# Ctrl+V, Ctrl+Z. Not carried: F4 (Explorer's address bar; F4 edits here,
+# and Ctrl+L and Alt+D are the address bar), F6 (Explorer cycles its panes;
+# F6 moves here), Ctrl+Y (redo), Ctrl+Shift+1 to 9 (views), and Explorer's
+# Ctrl+D, which deletes: Ctrl+D is Say status here.
+#
+# On macOS, the [macos.*] tables give the Finder's Command keys to the
+# window column ("meta" is Command there). Command+D, the Finder's
+# Duplicate, is not carried: on macOS Command+D is Say status. Space stays
+# select or unselect, where it is Quick Look in the Finder, and Return
+# opens, where it renames in the Finder. Held for later: Command+K
+# (connect to a server, alpha.5), Command+T (tabs, alpha.8), Command+J
+# (view options), Command+1 to 4 (views), Option+Command+V (move here).
+#
+# On macOS the first seven favorite labels are on Control with a digit,
+# the Finder's tag keys; the system may keep some of them for Mission
+# Control, which the owner's check should hear.
+#
+# Joined with its command in alpha.3 (W3a): Ctrl+E finds files beside
+# Ctrl+F, as Explorer's search box.
+
+[preset]
+name = "Explorer and Finder"
+description = "For people who know Windows Explorer or the Finder: Backspace goes back, Alt+P previews, and on macOS the Finder's Command keys."
+source = "Microsoft's keyboard shortcuts page for File Explorer and Apple's Mac keyboard shortcuts page for the Finder"
+letters = "type-ahead"
+
+[terminal.global]
+"view.quick-view" = ["alt+p", "shift+f3"]
+"menu.plugins" = "alt+u"
+
+[terminal.panel]
+"go.back" = ["alt+left", "backspace"]
+"panel.up" = ["left", "alt+up"]
+"search.find" = ["ctrl+f", "ctrl+e"]
+
+[window.global]
+"view.quick-view" = ["alt+p", "shift+f3"]
+"menu.plugins" = "alt+u"
+
+[window.panel]
+"go.back" = ["alt+left", "backspace"]
+"panel.up" = ["left", "alt+up"]
+"select.all" = "ctrl+a"
+"select.none" = "ctrl+shift+a"
+"select.invert" = "*"
+"select.pattern" = "plus"
+"search.find" = ["ctrl+f", "ctrl+e"]
+
+# The Finder, on macOS: Command where these say meta.
+
+[macos.window.global]
+"view.quick-view" = ["shift+f3", "meta+y"]
+
+[macos.window.panel]
+"label.favorite-1" = "ctrl+1"
+"label.favorite-2" = "ctrl+2"
+"label.favorite-3" = "ctrl+3"
+"label.favorite-4" = "ctrl+4"
+"label.favorite-5" = "ctrl+5"
+"label.favorite-6" = "ctrl+6"
+"label.favorite-7" = "ctrl+7"
+"file.trash" = ["f8", "delete", "meta+backspace"]
+"go.path" = ["meta+l", "alt+d", "meta+enter", "meta+shift+g"]
+"go.back" = ["alt+left", "meta+["]
+"go.forward" = ["alt+right", "meta+]"]
+"panel.up" = ["left", "backspace", "meta+up"]
+"go.home" = ["alt+home", "meta+shift+h"]
+"file.details" = ["alt+enter", "meta+i"]
+"view.hidden" = ["alt+.", "meta+shift+."]

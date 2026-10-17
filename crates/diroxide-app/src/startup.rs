@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 
-use diroxide_config::{Config, ConfigProblem, Layout, Paths, SessionState};
+use diroxide_config::{Config, ConfigProblem, KeymapConfig, Layout, Paths, SessionState};
 use diroxide_core::{CommandId, Place, SystemClock, UtcOffset};
 use diroxide_ops::{Interrupted, Journal, UndoRecord};
 
@@ -50,6 +50,9 @@ pub struct Startup {
     pub home: Option<Place>,
     /// Whether this is the first start (no session was ever saved).
     pub first_run: bool,
+    /// The owner's `keymap.toml` lines, which the Keys list shows as
+    /// changed and writes to (W3k).
+    pub keymap: KeymapConfig,
     /// The labels and the labeled places (`labels.toml`; the starter set
     /// on a first start).
     pub labels: crate::labels::LabelStore,
@@ -73,6 +76,7 @@ impl Default for Startup {
             histories: BTreeMap::new(),
             home: None,
             first_run: false,
+            keymap: KeymapConfig::default(),
             labels: crate::labels::LabelStore::starter(),
             bookmarks: crate::bookmarks::Bookmarks::new(),
             views: crate::views::FolderViews::new(),
@@ -83,14 +87,17 @@ impl Default for Startup {
 impl Startup {
     /// The palette's recent commands, newest first.
     pub fn palette_recent(&self) -> Vec<CommandId> {
-        self.histories
-            .get(state::keys::PALETTE)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| CommandId::new(id.clone()).ok())
-                    .collect()
-            })
-            .unwrap_or_default()
+        self.palette().recent().to_vec()
+    }
+
+    /// The palette with its remembered uses, from its history lines.
+    pub fn palette(&self) -> crate::palette::Palette {
+        crate::palette::Palette::from_lines(
+            self.histories
+                .get(state::keys::PALETTE)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+        )
     }
 }
 
@@ -108,9 +115,11 @@ pub fn local_offset() -> UtcOffset {
     UtcOffset::from_seconds(seconds)
 }
 
-/// The terminal column's keymap with the owner's `keymap.toml` applied.
+/// The terminal column's keymap: the defaults, the preset the `preset`
+/// setting chooses, then the owner's `keymap.toml`.
 pub fn terminal_keymap(config: &Config, platform: Platform) -> Keymap {
-    keymap::keymaps(&config.keymap, platform).0
+    let preset = keymap::presets::chosen(&config.settings.preset);
+    keymap::presets::keymaps(&config.keymap, preset, platform).0
 }
 
 /// The undo records to start with: the journal's finished records, oldest
@@ -137,6 +146,9 @@ pub fn pair_undo_records(records: Vec<UndoRecord>) -> Vec<UndoRecord> {
 pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     let mut problems = config.problems.clone();
     problems.extend(keymap::app_keymap_problems(&config.keymap, platform));
+    if let Some(said) = keymap::presets::unknown_preset(&config.settings.preset) {
+        problems.push(ConfigProblem::new(Paths::SETTINGS, said));
+    }
     let (menus, menu_problems) = Menus::load(config.menus.as_ref());
     problems.extend(menu_problems);
     let (banks, bank_problems) = menu::banks(&config.banks);
@@ -193,6 +205,7 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         histories: state::load_histories(paths),
         home,
         first_run,
+        keymap: config.keymap.clone(),
         labels: labels.value,
         bookmarks: bookmarks.value,
         views: views.value,

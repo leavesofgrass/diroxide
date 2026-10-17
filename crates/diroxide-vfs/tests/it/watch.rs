@@ -149,9 +149,40 @@ fn unfinished_names_are_never_passed_on() {
     let unfinished = place_of(&folder).join(".diro-part-0000cafe").unwrap();
     assert!(!seen.iter().any(|event| matches!(
         event,
-        WatchEvent::Created(p) | WatchEvent::Changed(p) | WatchEvent::Removed(p) if *p == unfinished
+        WatchEvent::Created(p)
+            | WatchEvent::Changed(p)
+            | WatchEvent::Removed(p)
+            | WatchEvent::RenamedIn(p) if *p == unfinished
     )));
     assert!(!seen.is_empty(), "the whole file was heard");
+}
+
+/// P3b (W3t's request): a file finished under another name and renamed
+/// into place is heard as renamed in, under its new name.
+#[test]
+fn a_rename_into_place_is_heard_as_renamed_in() {
+    let folder = scratch();
+    fs::write(folder.path().join("report.pdf.part"), b"whole report").unwrap();
+    let (_handle, events) = watch(&place_of(&folder));
+    fs::rename(
+        folder.path().join("report.pdf.part"),
+        folder.path().join("report.pdf"),
+    )
+    .unwrap();
+    let seen = gather(
+        &events,
+        Duration::from_millis(1500),
+        Duration::from_secs(10),
+    );
+    let report = place_of(&folder).join("report.pdf").unwrap();
+    assert!(
+        seen.contains(&WatchEvent::RenamedIn(report.clone())) || seen.contains(&WatchEvent::Rescan),
+        "{seen:?}"
+    );
+    assert!(
+        !seen.contains(&WatchEvent::Created(report)),
+        "a rename is not a new file: {seen:?}"
+    );
 }
 
 #[test]

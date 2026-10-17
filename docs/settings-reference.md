@@ -110,7 +110,6 @@ Key preset. The set of keys under your own keys in keymap.toml: diroxide, or a p
 
 - Holds: text.
 - Default: `"diroxide"`.
-- Comes with alpha.3.
 
 ## Speech and Braille
 
@@ -629,7 +628,6 @@ Filter case. Whether case matters in filters and searches. Smart: only when the 
 - `smart`: case matters only with a capital.
 - `ignore`: case never matters.
 - `match`: case always matters.
-- Comes with alpha.3.
 
 ### filter_pause_ms
 
@@ -637,7 +635,6 @@ Filter pause. How long the filter waits after the last key before it says the co
 
 - Holds: a number of milliseconds, 0 to 5000.
 - Default: `400`.
-- Comes with alpha.3.
 
 ### week_starts_on
 
@@ -648,7 +645,6 @@ First day of the week. The day this week and last week start on in filters and s
 - `sunday`: Sunday.
 - `monday`: Monday.
 - `saturday`: Saturday.
-- Comes with alpha.3.
 
 ### search_row_cap
 
@@ -656,7 +652,6 @@ Search result limit. The most rows a search lists. The search says when it stopp
 
 - Holds: a number of rows, 1000 to 10000000.
 - Default: `100000`.
-- Comes with alpha.3.
 
 ### search_respect_ignore
 
@@ -664,7 +659,91 @@ Search skips ignored files. Leaves out files that .gitignore and similar files n
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with alpha.3.
+
+## Compare
+
+### compare.ignore_line_endings
+
+Ignore line endings. Compares lines without regard to how they end, so a file from Windows and the same file from Linux are the same text.
+
+- Holds: true or false.
+- Default: `true`.
+
+### compare.ignore_trailing_space
+
+Ignore trailing spaces. Leaves out spaces and tabs at the end of a line when comparing.
+
+- Holds: true or false.
+- Default: `false`.
+
+### compare.ignore_space_amount
+
+Ignore how much space. Counts any run of spaces and tabs as one space when comparing.
+
+- Holds: true or false.
+- Default: `false`.
+
+### compare.ignore_all_space
+
+Ignore all spaces. Leaves out every space and tab when comparing.
+
+- Holds: true or false.
+- Default: `false`.
+
+### compare.ignore_blank_lines
+
+Ignore blank lines. Leaves out lines that are empty or only spaces when comparing.
+
+- Holds: true or false.
+- Default: `false`.
+
+### compare.ignore_case
+
+Ignore case. Compares capital and small letters as the same.
+
+- Holds: true or false.
+- Default: `false`.
+
+### compare.algorithm
+
+Line matching. How the lines of two files are matched. Patience gives changes that read best.
+
+- Holds: one of patience, histogram or myers.
+- Default: `"patience"`.
+- `patience`: patience, lines that occur once matched first.
+- `histogram`: histogram, like patience with repeats.
+- `myers`: Myers, the fewest changes.
+
+### compare.deadline_ms
+
+Compare time limit. How long a compare may look for the fewest changes before it settles for a longer list, and says so.
+
+- Holds: a number of milliseconds, 100 to 60000.
+- Default: `2000`.
+
+### compare.text_limit_mib
+
+Text compare limit. The largest file compared as text in full; a larger one follows Larger files.
+
+- Holds: a number of MiB, 1 to 1024.
+- Default: `16`.
+
+### compare.context
+
+Lines around a change. How many same lines the unified view shows around each change.
+
+- Holds: a number of lines, 0 to 9.
+- Default: `2`.
+
+### compare.large_files
+
+Larger files. What a compare does with a file over the text compare limit.
+
+- Holds: one of ask, head or bytes.
+- Default: `"ask"`.
+- `ask`: ask each time.
+- `head`: compare their first part as text.
+- `bytes`: compare them byte by byte.
 
 ## Plugins
 
@@ -767,6 +846,12 @@ The roles the `[colors]` table can color, each as `role = "#rrggbb"`. Every role
 - `token_tag`: tag in markup.
 - `token_attribute`: attribute in markup.
 - `token_problem`: problem in code.
+- `label_blue`: blue label.
+- `label_orange`: orange label.
+- `label_purple`: purple label.
+- `label_yellow`: yellow label.
+- `label_gray`: gray label.
+- `label_brown`: brown label.
 
 ## Columns
 

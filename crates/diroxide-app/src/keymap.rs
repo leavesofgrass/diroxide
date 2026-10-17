@@ -13,10 +13,15 @@
 //! kept for a later alpha, and a key another command already has, which
 //! the Keys list offers as "take it, swap, or cancel".
 
+pub mod capture;
+pub mod conflicts;
+pub mod file;
+pub mod keys_list;
 pub mod names;
+pub mod presets;
 pub mod tables;
 
-pub use names::{Platform, spoken, written};
+pub use names::{Platform, for_file, spoken, written};
 
 use diroxide_config::{ConfigProblem, KeyOverride, KeymapConfig, Paths, SingleLetters};
 use diroxide_core::{CommandId, Key, KeyCode, KeyColumn, Layer};
@@ -546,6 +551,79 @@ impl Keymap {
         }
     }
 
+    /// Binds `key` to `command` in `layer` after the owner's choice, as
+    /// Change key does, and returns the lines that changed, each a layer
+    /// and a command, for `keymap.toml`. `add` keeps the command's other
+    /// keys; otherwise the key replaces them in the layer. `taken` is the
+    /// binding the conflict analysis found holding the key, in any layer
+    /// that meets this one ([`conflicts::holder`]): taking removes the key
+    /// from it; swapping also gives it this command's old first key in the
+    /// layer. Cancel and Insert change nothing.
+    pub fn bind(
+        &mut self,
+        layer: Layer,
+        key: Key,
+        command: &CommandId,
+        add: bool,
+        taken: Option<(Layer, CommandId)>,
+        choice: KeyChoice,
+    ) -> Vec<(Layer, CommandId)> {
+        if choice == KeyChoice::Cancel || key.code == KeyCode::Insert {
+            return Vec::new();
+        }
+        let old = self
+            .bindings
+            .iter()
+            .find(|b| b.layer == layer && &b.command == command && b.key != key)
+            .map(|b| b.key);
+        let mut changed = vec![(layer, command.clone())];
+        self.bindings.retain(|b| {
+            let replaced = !add && b.layer == layer && &b.command == command;
+            let same_layer_holder = b.layer == layer && b.key == key;
+            !(replaced || same_layer_holder)
+        });
+        if let Some((other_layer, other)) = taken {
+            self.bindings
+                .retain(|b| !(b.layer == other_layer && b.key == key && b.command == other));
+            if choice == KeyChoice::Swap
+                && !add
+                && let Some(old) = old
+            {
+                self.bindings
+                    .retain(|b| !(b.layer == other_layer && b.key == old));
+                self.bindings.push(Binding {
+                    layer: other_layer,
+                    key: old,
+                    command: other.clone(),
+                });
+            }
+            changed.push((other_layer, other));
+        }
+        self.bindings.push(Binding {
+            layer,
+            key,
+            command: command.clone(),
+        });
+        changed
+    }
+
+    /// Takes one key away from a command in a layer; whether it had it.
+    pub fn unbind(&mut self, layer: Layer, key: &Key, command: &CommandId) -> bool {
+        let before = self.bindings.len();
+        self.bindings
+            .retain(|b| !(b.layer == layer && b.key == *key && &b.command == command));
+        self.bindings.len() != before
+    }
+
+    /// The keys of a command in one layer, in order.
+    pub fn keys_in(&self, layer: Layer, command: &CommandId) -> Vec<Key> {
+        self.bindings
+            .iter()
+            .filter(|b| b.layer == layer && &b.command == command)
+            .map(|b| b.key)
+            .collect()
+    }
+
     /// The keymap as `keymap.toml` lines: every catalog command, with
     /// "none" for one that has no key in this column.
     pub fn lines(&self) -> Vec<KeyOverride> {
@@ -854,6 +932,43 @@ mod tests {
     }
 
     #[test]
+    fn a_terminal_binding_of_a_key_a_terminal_loses_is_flagged() {
+        // The key-delivery matrix feeds the terminal table: binding any key
+        // a terminal keeps or merges, in the terminal column, is said.
+        let terminal = Keymap::defaults();
+        let mut checked = 0;
+        for row in tables::delivery_table()
+            .iter()
+            .filter(|r| r.states.iter().any(|s| s.lost()))
+        {
+            checked += 1;
+            let concerns = terminal.concerns(Layer::Panel, &row.key, &ids::SAY_KEY_BAR);
+            assert!(
+                concerns.iter().any(|c| matches!(
+                    c,
+                    KeyConcern::ScreenReaderKey
+                        | KeyConcern::TerminalCannot { .. }
+                        | KeyConcern::TerminalProgram { .. }
+                        | KeyConcern::ArrivesDifferently { .. }
+                )),
+                "{} binds silently",
+                row.key
+            );
+        }
+        assert!(checked >= 25, "{checked}");
+        let merged =
+            KeymapConfig::from_toml("[terminal.panel]\n\"app.say-key-bar\" = \"ctrl+i\"\n")
+                .unwrap();
+        assert_eq!(
+            check_keymap(&merged, Platform::Windows)
+                .iter()
+                .map(|p| p.text.as_str())
+                .collect::<Vec<_>>(),
+            ["The terminal cannot send Ctrl+I: terminals send it as Tab, line 2."]
+        );
+    }
+
+    #[test]
     fn a_key_a_terminal_may_keep_has_a_menu_as_the_sure_way() {
         let menus = crate::menu::Menus::builtin();
         for binding in Keymap::defaults().bindings() {
@@ -1081,10 +1196,10 @@ mod tests {
             ]
         );
         assert_eq!(
-            said("ctrl+f", ids::COPY),
-            ["Ctrl+F is kept for Find files, coming in alpha.3."]
+            said("ctrl+t", ids::COPY),
+            ["Ctrl+T is kept for New tab, coming in alpha.8."]
         );
-        assert!(said("ctrl+f", CommandId::from_static("search.find")).is_empty());
+        assert!(said("ctrl+t", CommandId::from_static("tab.new")).is_empty());
         assert_eq!(
             said("q", ids::COPY),
             ["A letter key works only while letters run commands."]
@@ -1111,6 +1226,7 @@ mod tests {
                     let sentence = concern.sentence(k, p);
                     let meaning = sentence.split(':').next().unwrap_or(&sentence);
                     let meaning = meaning.split(" already").next().unwrap_or(meaning);
+                    let meaning = meaning.split(", coming").next().unwrap_or(meaning);
                     assert!(within_cells(&sentence, meaning), "{sentence}");
                 }
             }

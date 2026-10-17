@@ -1,0 +1,12 @@
+# The diroxide defaults: the keys of the command catalog, with no change.
+# Every other preset is written the same way: a [preset] table, then the
+# lines it changes in keymap.toml's own tables ([terminal.panel],
+# [window.global] and the rest), then the key sequences its source uses,
+# held back as [[held_back]] tables, since a key here is one key with its
+# modifiers. A command a preset does not list keeps its default key.
+
+[preset]
+name = "diroxide defaults"
+description = "The keys most people know: the CUA keys, Explorer's and the Finder's, and the Norton row."
+source = "diroxide's own command catalog, with the keys most people know (the plan's section on keys)"
+letters = "type-ahead"

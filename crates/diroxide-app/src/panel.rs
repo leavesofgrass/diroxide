@@ -8,8 +8,11 @@
 //!   after a listing (W1e's bench: 5 to 7 seconds per 100,000 entries).
 //! - Sorting is core's comparer over a [`SortSpec`]; the focus stays on
 //!   its entry after a resort.
-//! - The filter is the pattern module's first rung (words that contain,
-//!   globs with commas, `re:`, `not`, a trailing slash for folders).
+//! - The filter is the one filter language (`diroxide_core::filter`,
+//!   W3a): the panel evaluates it over its listing, three-valued, with
+//!   the facts beyond an entry from its own lookup (the path,
+//!   depth 1, the selection, the bookmarks and the contents read for it),
+//!   and keeps the count of entries it could not decide.
 //! - Marks travel by row id through every refresh, resort and filter;
 //!   when the focused row's id is gone, or marks are lost, the panel says
 //!   so through [`Refreshed`], so the app can announce it.
@@ -22,6 +25,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 use diroxide_config::{ColumnKind, Settings};
+use diroxide_core::filter::{ContentQuery, Filter, Lookup, Tally, Truth, Unknown};
 use diroxide_core::format::human_size;
 use diroxide_core::names::display_name;
 use diroxide_core::{
@@ -107,7 +111,15 @@ pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> Lis
         details.push(labels);
     }
     for column in columns {
-        let detail = column.cell(entry, clock);
+        let mut detail = column.cell(entry, clock);
+        // A folder whose size was counted says it where a file's size goes.
+        if detail.is_empty()
+            && *column == ColumnKind::Size
+            && entry.kind == EntryKind::Folder
+            && let Some(size) = entry.size
+        {
+            detail = human_size(size);
+        }
         if !detail.is_empty() {
             details.push(detail);
         }
@@ -213,6 +225,66 @@ pub struct Refreshed {
     pub focus_was: Option<String>,
 }
 
+/// What a panel's content test learned when the app read the files for
+/// it: the names of the files whose contents matched, and why the others
+/// could not be decided (a binary file, an online-only one), by name.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ContentAnswers {
+    /// The files that hold what the filter looks for.
+    pub matched: HashSet<String>,
+    /// The files that could not be decided, and why.
+    pub undecided: HashMap<String, Unknown>,
+}
+
+/// A panel's filter and the facts the app gave it.
+#[derive(Clone, Debug)]
+struct PanelFilter {
+    filter: Filter,
+    bookmarks: Option<crate::bookmarks::Bookmarks>,
+    content: Option<ContentAnswers>,
+}
+
+/// The facts a panel knows beyond each entry, for the filter language:
+/// the path from its place, depth 1 (a panel lists one folder), the
+/// selection from its list, the bookmarks through
+/// [`crate::bookmarks::BookmarkLookup`], and the contents the app read
+/// for it. A folder's emptiness is not known in a panel.
+struct PanelLookup<'a> {
+    place: &'a Place,
+    selected: &'a HashSet<&'a str>,
+    bookmarks: Option<&'a crate::bookmarks::Bookmarks>,
+    content: Option<&'a ContentAnswers>,
+}
+
+impl Lookup for PanelLookup<'_> {
+    fn path(&self, entry: &Entry) -> Option<String> {
+        self.place.join(&entry.name).ok().map(|p| p.to_string())
+    }
+
+    fn depth(&self, _entry: &Entry) -> Option<u32> {
+        Some(1)
+    }
+
+    fn selected(&self, entry: &Entry) -> Option<bool> {
+        Some(self.selected.contains(entry.name.as_str()))
+    }
+
+    fn bookmarked(&self, entry: &Entry) -> Option<bool> {
+        let bookmarks = self.bookmarks?;
+        crate::bookmarks::BookmarkLookup::new(self.place, bookmarks).bookmarked(entry)
+    }
+
+    fn content(&self, entry: &Entry, _query: &ContentQuery) -> Truth {
+        let Some(answers) = self.content else {
+            return Truth::Unknown(Unknown::ContentNotRead);
+        };
+        if let Some(why) = answers.undecided.get(&entry.name) {
+            return Truth::Unknown(*why);
+        }
+        Truth::of(answers.matched.contains(&entry.name))
+    }
+}
+
 /// One panel.
 #[derive(Clone, Debug)]
 pub struct Panel {
@@ -224,7 +296,11 @@ pub struct Panel {
     sort: SortSpec,
     show_hidden: bool,
     columns: Vec<ColumnKind>,
-    filter: Option<Pattern>,
+    /// Folder sizes counted here, by name, until the panel leaves.
+    counted: HashMap<String, u64>,
+    filter: Option<PanelFilter>,
+    /// What the filter could not decide at the last refresh.
+    tally: Tally,
     history: Vec<Place>,
     forward: Vec<Place>,
     memory: HashMap<Place, Memory>,
@@ -248,7 +324,9 @@ impl Panel {
             sort: settings.sort_spec(),
             show_hidden: settings.show_hidden,
             columns: settings.column_kinds(),
+            counted: HashMap::new(),
             filter: None,
+            tally: Tally::default(),
             history: Vec::new(),
             forward: Vec::new(),
             memory: HashMap::new(),
@@ -315,9 +393,22 @@ impl Panel {
         &self.sort
     }
 
-    /// The filter, when one is set.
-    pub fn filter(&self) -> Option<&Pattern> {
-        self.filter.as_ref()
+    /// The filter, when one is set: the one filter language (W3a), whose
+    /// [`Filter::text`] is the text as typed.
+    pub fn filter(&self) -> Option<&Filter> {
+        self.filter.as_ref().map(|f| &f.filter)
+    }
+
+    /// What the filter could not decide at the last refresh, for the count
+    /// line: "3 unknown, folder size not counted".
+    pub fn filter_tally(&self) -> &Tally {
+        &self.tally
+    }
+
+    /// Whether the files' contents were read for the filter, so its
+    /// content test decides.
+    pub fn filter_contents_read(&self) -> bool {
+        self.filter.as_ref().is_some_and(|f| f.content.is_some())
     }
 
     /// What the place can do, once a listing said it.
@@ -486,6 +577,8 @@ impl Panel {
             self.list.move_focus(Move::Home);
             self.list.set_title(place_title(&self.place));
             self.filter = None;
+            self.tally = Tally::default();
+            self.counted.clear();
             self.capabilities = None;
             self.watching = Watching::Unknown;
             self.list.set_rows(Vec::new());
@@ -556,6 +649,12 @@ impl Panel {
             if entry.type_name.is_none() {
                 entry.type_name = types.short_name(entry);
             }
+            // A folder's size counted here stays with it (W3a).
+            if entry.kind == EntryKind::Folder
+                && let Some(size) = self.counted.get(&entry.name)
+            {
+                entry.size = Some(*size);
+            }
             // Every provider's names are checked the same way, so a row
             // says "name needs care" whatever served it.
             if !entry.needs_care {
@@ -583,10 +682,64 @@ impl Panel {
         self.refresh(clock)
     }
 
-    /// Sets or clears the filter.
+    /// Sets or clears the filter from alpha.1's pattern: its text is read
+    /// in the filter language, where it means the same (a name that
+    /// starts with a bracket is read as one quoted name).
     pub fn set_filter(&mut self, filter: Option<Pattern>, clock: &dyn Clock) -> RowsReplaced {
-        self.filter = filter;
+        let filter = filter.and_then(|pattern| {
+            let text = pattern.text();
+            Filter::parse(text)
+                .or_else(|_| Filter::parse(&format!("\"{}\"", text.replace('"', "\"\""))))
+                .ok()
+        });
+        self.set_language_filter(filter, clock)
+    }
+
+    /// Sets or clears the filter in the one filter language. Nothing
+    /// beyond the entry is known yet but the place and the selection; see
+    /// [`Panel::set_filter_facts`].
+    pub fn set_language_filter(
+        &mut self,
+        filter: Option<Filter>,
+        clock: &dyn Clock,
+    ) -> RowsReplaced {
+        self.set_filter_and_facts(filter, None, None, clock)
+    }
+
+    /// Sets or clears the filter with the facts the app holds, in one
+    /// refresh: see [`Panel::set_filter_facts`].
+    pub fn set_filter_and_facts(
+        &mut self,
+        filter: Option<Filter>,
+        bookmarks: Option<crate::bookmarks::Bookmarks>,
+        content: Option<ContentAnswers>,
+        clock: &dyn Clock,
+    ) -> RowsReplaced {
+        self.filter = filter.map(|filter| PanelFilter {
+            filter,
+            bookmarks,
+            content,
+        });
         self.refresh(clock)
+    }
+
+    /// Gives the filter the facts the app holds: the bookmarks, for
+    /// `bookmarked`, and what the files' contents held, once they were
+    /// read ([`ContentAnswers`]). Without a filter it does nothing.
+    pub fn set_filter_facts(
+        &mut self,
+        bookmarks: Option<crate::bookmarks::Bookmarks>,
+        content: Option<ContentAnswers>,
+        clock: &dyn Clock,
+    ) -> RowsReplaced {
+        match self.filter.as_mut() {
+            Some(filter) => {
+                filter.bookmarks = bookmarks;
+                filter.content = content;
+                self.refresh(clock)
+            }
+            None => RowsReplaced::default(),
+        }
     }
 
     /// The details each row says after its name.
@@ -602,14 +755,71 @@ impl Panel {
     }
 
     /// How many entries the filter lets through of those hidden rules
-    /// allow, and of how many: (shown, all).
+    /// allow, and of how many: (shown, all). A filter with a `hidden`
+    /// test lets hidden entries through, so they count.
     pub fn filter_counts(&self) -> (usize, usize) {
+        let hidden = self.hidden_shown();
         let visible = self
             .all_entries
             .iter()
-            .filter(|e| self.show_hidden || !e.hidden)
+            .filter(|e| hidden || !e.hidden)
             .count();
         (self.entries.len(), visible)
+    }
+
+    /// Notes the sizes of folders counted here (Folder sizes, Size every
+    /// folder): their rows say the size, and the size sort uses it, until
+    /// the panel leaves the folder.
+    pub fn set_folder_sizes(
+        &mut self,
+        sizes: &HashMap<String, u64>,
+        clock: &dyn Clock,
+    ) -> RowsReplaced {
+        for (name, size) in sizes {
+            self.counted.insert(name.clone(), *size);
+        }
+        for entry in &mut self.all_entries {
+            if entry.kind == EntryKind::Folder
+                && let Some(size) = self.counted.get(&entry.name)
+            {
+                entry.size = Some(*size);
+            }
+        }
+        self.refresh(clock)
+    }
+
+    /// The ids of the rows shown whose entries a filter matches, in row
+    /// order, with the panel's own facts and the bookmarks: what select by
+    /// pattern marks.
+    pub fn matching_ids(
+        &self,
+        filter: &Filter,
+        bookmarks: Option<&crate::bookmarks::Bookmarks>,
+        clock: &dyn Clock,
+    ) -> Vec<String> {
+        let selected: HashSet<&str> = self.list.selected_ids().into_iter().collect();
+        let lookup = PanelLookup {
+            place: &self.place,
+            selected: &selected,
+            bookmarks,
+            content: None,
+        };
+        let evaluator = filter.evaluator(clock);
+        self.entries
+            .iter()
+            .filter(|e| evaluator.matches(e, &lookup))
+            .map(|e| e.name.clone())
+            .collect()
+    }
+
+    /// Whether hidden entries are listed: the panel's setting, or a filter
+    /// that asks for them.
+    fn hidden_shown(&self) -> bool {
+        self.show_hidden
+            || self
+                .filter
+                .as_ref()
+                .is_some_and(|f| f.filter.shows_hidden())
     }
 
     /// The rows, in order, whose labels start with `prefix`, ignoring
@@ -641,17 +851,37 @@ impl Panel {
     }
 
     fn refresh(&mut self, clock: &dyn Clock) -> RowsReplaced {
-        let mut shown: Vec<Entry> = self
-            .all_entries
-            .iter()
-            .filter(|e| self.show_hidden || !e.hidden)
-            .filter(|e| {
-                self.filter
-                    .as_ref()
-                    .is_none_or(|f| f.matches(&e.name, e.is_folder_like()))
-            })
-            .cloned()
-            .collect();
+        let hidden = self.hidden_shown();
+        let mut tally = Tally::default();
+        let mut shown: Vec<Entry> = match &self.filter {
+            None => self
+                .all_entries
+                .iter()
+                .filter(|e| hidden || !e.hidden)
+                .cloned()
+                .collect(),
+            Some(filter) => {
+                let selected: HashSet<&str> = self.list.selected_ids().into_iter().collect();
+                let lookup = PanelLookup {
+                    place: &self.place,
+                    selected: &selected,
+                    bookmarks: filter.bookmarks.as_ref(),
+                    content: filter.content.as_ref(),
+                };
+                let evaluator = filter.filter.evaluator(clock);
+                self.all_entries
+                    .iter()
+                    .filter(|e| hidden || !e.hidden)
+                    .filter(|e| {
+                        let truth = evaluator.test(e, &lookup);
+                        tally.add(truth);
+                        truth.is_yes()
+                    })
+                    .cloned()
+                    .collect()
+            }
+        };
+        self.tally = tally;
         diroxide_core::sort::sort_entries(&mut shown, &self.sort);
         let rows = shown
             .iter()

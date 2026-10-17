@@ -49,7 +49,9 @@ pub mod views;
 /// crate may depend only on core, app and theme (`cargo xtask deps`), and
 /// draws from [`App::settings`].
 pub mod config {
-    pub use diroxide_config::{Layout, ScreenReaderMode, SecretEcho, Settings};
+    pub use diroxide_config::{
+        KeymapConfig, Layout, Paths, ScreenReaderMode, SecretEcho, Settings, SingleLetters,
+    };
 }
 
 pub use app::{App, AppEvent, AppOptions, Clipboard};

@@ -46,18 +46,48 @@ fn value_details(settings: &Settings, info: &SettingInfo, theme_verdict: &str) -
     details
 }
 
+/// The filter language's options from the settings (W3a): `filter_case`
+/// as the case rule and `week_starts_on` as the first day of the week.
+pub fn filter_options(settings: &Settings) -> diroxide_core::filter::FilterOptions {
+    use diroxide_config::{FilterCase, WeekStart};
+    use diroxide_core::Weekday;
+    use diroxide_core::pattern::CaseRule;
+    diroxide_core::filter::FilterOptions {
+        case: match settings.filter_case {
+            FilterCase::Smart => CaseRule::Smart,
+            FilterCase::Ignore => CaseRule::Ignore,
+            FilterCase::Match => CaseRule::Match,
+        },
+        week_start: match settings.week_starts_on {
+            WeekStart::Sunday => Weekday::Sunday,
+            WeekStart::Monday => Weekday::Monday,
+            WeekStart::Saturday => Weekday::Saturday,
+        },
+    }
+}
+
+/// The id of the Settings list's row that opens the Keys list (W3k).
+pub const KEYS_ROW: &str = "\u{1}keys";
+
 /// The Settings list, one row per setting in schema order: the name, then
 /// the value in words. Each row's id is the setting's key, so F1 on it
-/// gives [`setting_help`] and Enter can change it.
+/// gives [`setting_help`] and Enter can change it. The Keys list's row,
+/// "Keys list, every command and its key", comes before the keys'
+/// settings; its id is [`KEYS_ROW`].
 pub fn settings_list(settings: &Settings) -> ListModel {
     let line = theme_line(settings, None);
     let verdict = line.split_once(", ").map_or("", |(_, v)| v).to_owned();
-    let rows = SCHEMA
-        .iter()
-        .map(|info| {
-            ListRow::new(info.key, info.name).with_details(value_details(settings, info, &verdict))
-        })
-        .collect();
+    let mut rows = Vec::with_capacity(SCHEMA.len() + 1);
+    for info in &SCHEMA {
+        if info.key == "single_letters" {
+            rows.push(
+                ListRow::new(KEYS_ROW, "Keys list").with_details(["every command and its key"]),
+            );
+        }
+        rows.push(
+            ListRow::new(info.key, info.name).with_details(value_details(settings, info, &verdict)),
+        );
+    }
     let mut list = ListModel::new("Settings").with_rows(rows);
     list.set_help("Up and Down choose, Enter changes, F1 says what a setting does, Escape closes.");
     list
@@ -108,15 +138,21 @@ mod tests {
     fn the_list_says_each_setting_and_its_value() {
         let settings = Settings::default();
         let list = settings_list(&settings);
-        assert_eq!(list.len(), SCHEMA.len());
+        assert_eq!(list.len(), SCHEMA.len() + 1, "and the Keys list's row");
         assert_eq!(
             list.announce_focus(),
-            format!("Layout, side by side, 1 of {}", SCHEMA.len())
+            format!("Layout, side by side, 1 of {}", SCHEMA.len() + 1)
+        );
+        let keys = list.rows().iter().position(|r| r.id == KEYS_ROW).unwrap();
+        assert_eq!(list.rows()[keys + 1].id, "single_letters");
+        assert_eq!(
+            list.rows()[keys].spoken(),
+            "Keys list, every command and its key"
         );
         let theme = list.rows().iter().find(|r| r.id == "theme").unwrap();
         assert_eq!(theme.spoken(), "Theme, galaxy, meets AA");
         let preset = list.rows().iter().find(|r| r.id == "preset").unwrap();
-        assert_eq!(preset.spoken(), "Key preset, diroxide, comes with alpha.3");
+        assert_eq!(preset.spoken(), "Key preset, diroxide");
         for row in list.rows() {
             assert!(within_cells(&row.spoken(), &row.label), "{}", row.spoken());
         }
@@ -134,9 +170,9 @@ mod tests {
                 .contains("Default: side by side.")
         );
         assert!(
-            setting_help("filter_case")
+            setting_help("plugins.enabled")
                 .unwrap()
-                .ends_with("it comes with alpha.3.")
+                .ends_with("it comes with alpha.4.")
         );
         assert!(setting_help("nothing").is_none());
         let presets = setting_help("split_presets").unwrap();

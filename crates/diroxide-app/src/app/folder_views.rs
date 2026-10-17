@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use diroxide_core::{Command, Effect, Message, Pattern, Place, Redraw, Side};
+use diroxide_core::{Command, Effect, Message, Place, Redraw, Side};
 
 use super::App;
 use super::organize::{Look, Wants};
@@ -81,11 +81,20 @@ impl App {
                 columns,
             },
         );
+        // The folder's filter, in the filter language (W3a).
         if let Some(text) = &view.filter
-            && let Ok(pattern) = Pattern::parse(text)
+            && let Ok(Some(filter)) = self.read_filter(text)
+            && filter.panel_problem().is_none()
+            && !filter.reads_content()
         {
             let clock = Arc::clone(&self.clock);
-            self.panels[side.index()].set_filter(Some(pattern), clock.as_ref());
+            let bookmarks = self.organize.bookmarks.clone();
+            self.panels[side.index()].set_filter_and_facts(
+                Some(filter),
+                Some(bookmarks),
+                None,
+                clock.as_ref(),
+            );
         }
         Some(view.sentence(usual_hidden))
     }

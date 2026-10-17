@@ -226,25 +226,33 @@ fn the_labels_list_counts_missing_items_and_lists_a_labels_items() {
     );
     let rows = f.s.app.dialog().map(|(_, d)| d.focus_line());
     assert!(rows.is_some());
-    // Enter lists the label's items, the missing ones said so.
-    f.s.key("enter");
-    assert_eq!(f.s.dialog_title().as_deref(), Some("Urgent, 3 items"));
-    let line = f.s.dialog().unwrap().focus_line();
-    assert!(line.starts_with("budget.xlsx, missing, in work"), "{line}");
+    // Enter lists the label's items as search results (W3a), the
+    // missing ones said so.
     let said = f.s.key("enter");
-    assert!(last(&said).starts_with("Missing: budget.xlsx."), "{said:?}");
-    f.s.key("end");
+    assert_eq!(said[0], "Looking for 3 items labeled urgent", "{said:?}");
+    assert_eq!(last(&said), "Done: 1 item labeled urgent, 2 missing.");
+    assert_eq!(f.s.dialog_title().as_deref(), Some("Results: label urgent"));
     let line = f.s.dialog().unwrap().focus_line();
-    assert!(line.starts_with("report.pdf, in work"), "{line}");
+    assert!(line.starts_with("report.pdf, in "), "{line}");
+    f.s.key("down");
+    let line = f.s.dialog().unwrap().focus_line();
+    assert!(line.starts_with("budget.xlsx, missing, in "), "{line}");
+    let said = f.s.key("enter");
+    assert_eq!(
+        last(&said),
+        "budget.xlsx, gone since this list was made. Nothing was done."
+    );
+    f.s.key("home");
     f.s.key("enter");
     assert_eq!(f.s.dialog(), None);
     assert_eq!(f.s.focused(), "report.pdf");
-    // The trash key in a label's items takes the label off that item.
+    // The trash key in a label's results takes the label off that item.
     f.s.command(ids::LABELS);
     f.s.key("enter");
+    f.s.key("down");
     let said = f.s.key("delete");
     assert_eq!(last(&said), "Label urgent removed from budget.xlsx");
-    assert_eq!(f.s.dialog_title().as_deref(), Some("Urgent, 2 items"));
+    assert!(f.s.app.dialog().unwrap().1.focus_line().ends_with("of 2"));
     f.s.key("escape");
     assert_eq!(f.s.dialog_title().as_deref(), Some("Labels, 6 labels"));
     f.s.key("escape");

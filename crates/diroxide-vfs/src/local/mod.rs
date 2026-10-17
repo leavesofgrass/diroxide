@@ -7,6 +7,8 @@
 //!   Windows, the leading dot elsewhere), online-only and sparse files
 //!   recognized ([`crate::facts`]). Unfinished `.diro-part-` files are left
 //!   out of listings; [`LocalProvider::unfinished`] lists them.
+//!   [`LocalEntryBuilder`] makes the same entries for a caller that reads
+//!   folders itself, such as the search crate's parallel walker.
 //! - **Long paths.** The standard library lists, reads, copies, renames
 //!   and removes at any depth; the extended-length prefix is never built
 //!   by hand for it, and never shown.
@@ -49,6 +51,7 @@ use crate::sys;
 use crate::trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
 use crate::volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
 use crate::{limits, walk};
+pub use entry::LocalEntryBuilder;
 use entry::{EntryContext, entry_from};
 
 /// The places for the go-to-place list: the drives on Windows (from the
@@ -591,17 +594,7 @@ fn remove_read_only(
 /// The context of a single stat: the owner names on Unix; nothing more is
 /// shared with siblings.
 fn stat_context() -> EntryContext {
-    #[cfg(unix)]
-    {
-        EntryContext {
-            owners: Some(owners::Owners::shared()),
-            ..EntryContext::default()
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        EntryContext::default()
-    }
+    EntryContext::shared()
 }
 
 #[cfg(test)]

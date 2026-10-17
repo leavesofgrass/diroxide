@@ -21,6 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use diroxide_core::{Entry, EntryKind};
+use diroxide_vfs::LocalEntryBuilder;
 use ignore::{DirEntry, ParallelVisitor, ParallelVisitorBuilder, WalkBuilder, WalkState};
 
 use super::{Candidate, Location, Visitor, WalkPlan, WalkStats};
@@ -71,7 +72,13 @@ where
     let counts = Arc::clone(&pruned);
     builder.filter_entry(move |dent: &DirEntry| {
         if !hidden {
-            let metadata = if cfg!(windows) {
+            // The hidden attribute is in the folder read on Windows; the
+            // Finder's flag needs a look on macOS, taken for folders only,
+            // which prune whole subtrees (a file with the flag is caught
+            // when its metadata is read).
+            let metadata = if cfg!(windows)
+                || (cfg!(target_os = "macos") && dent.file_type().is_some_and(|t| t.is_dir()))
+            {
                 dent.metadata().ok()
             } else {
                 None
@@ -109,9 +116,10 @@ where
     let root_device: Option<u64> = None;
     // The folders walked so far by their volume and inode, where entries
     // carry them, for the loop check on each folder's own ancestors.
+    let entries = LocalEntryBuilder::new();
     let mut walked = HashMap::new();
     if let Ok(metadata) = std::fs::metadata(root_path) {
-        let root = entry_from(OsStr::new(""), root_path, None, Some(&metadata));
+        let root = entry_from(&entries, OsStr::new(""), root_path, None, Some(&metadata));
         if let Some(id) = root.volume.zip(root.inode) {
             walked.insert(root_path.to_path_buf(), id);
         }
@@ -124,6 +132,7 @@ where
         root_device,
         root_path,
         walked: &walked,
+        entries: &entries,
     };
     builder.build_parallel().visit(&mut threads);
     let mut stats = stats.into_inner().unwrap_or_else(PoisonError::into_inner);
@@ -142,6 +151,7 @@ struct Threads<'a, F> {
     root_device: Option<u64>,
     root_path: &'a Path,
     walked: &'a Mutex<HashMap<PathBuf, (u64, u64)>>,
+    entries: &'a LocalEntryBuilder,
 }
 
 impl<'s, F, V> ParallelVisitorBuilder<'s> for Threads<'s, F>
@@ -158,6 +168,7 @@ where
             root_device: self.root_device,
             root_path: self.root_path,
             walked: self.walked,
+            entries: self.entries,
         })
     }
 }
@@ -172,6 +183,8 @@ struct Thread<'a, V: Visitor> {
     root_device: Option<u64>,
     root_path: &'a Path,
     walked: &'a Mutex<HashMap<PathBuf, (u64, u64)>>,
+    /// Makes entries as the local provider lists them.
+    entries: &'a LocalEntryBuilder,
 }
 
 impl<V: Visitor> Drop for Thread<'_, V> {
@@ -210,11 +223,18 @@ impl<V: Visitor> ParallelVisitor for Thread<'_, V> {
             None
         };
         let entry = entry_from(
+            self.entries,
             dent.file_name(),
             dent.path(),
             dent.file_type(),
             metadata.as_ref(),
         );
+        if !self.plan.hidden && entry.hidden {
+            // Hidden only by what the metadata says (the Finder's flag on
+            // macOS), which the walk's own test could not see.
+            self.stats.skips.hidden += 1;
+            return WalkState::Skip;
+        }
         let mut descend = true;
         if is_dir {
             if self.other_device(metadata.as_ref()) {
