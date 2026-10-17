@@ -431,35 +431,77 @@ impl Bank {
         ListModel::new(format!("{} bank", self.name)).with_rows(rows)
     }
 
-    /// The key bar: the bank as one line, labels first, each with its key
-    /// from the live keymap: "Rename F2, View F3, Edit F4". A button whose
-    /// command has no key is left out, since the bar names keys.
+    /// The key bar: the bank's buttons as pairs on one line, each key
+    /// first and its label after, two spaces between pairs, as the
+    /// orthodox managers draw it: "F2 Rename  F3 View  F4 Edit". Keys come
+    /// from the live keymap; a button whose command has no key is left
+    /// out, since the bar names keys (answer 49).
     pub fn key_bar(&self, keymap: &Keymap) -> String {
+        self.pairs(keymap).join(KEY_BAR_GAP)
+    }
+
+    /// The key bar cut to `cells`: whole pairs only, the first ones first,
+    /// so the most common operations always show; the rest are said by
+    /// Say Key Bar. The gap between pairs narrows to one space before a
+    /// pair is left out, so the whole default bank fits 80 columns.
+    pub fn key_bar_within(&self, keymap: &Keymap, cells: usize) -> String {
+        let pairs = self.pairs(keymap);
+        let wide = fit(&pairs, KEY_BAR_GAP, cells);
+        let narrow = fit(&pairs, " ", cells);
+        if narrow.1 > wide.1 { narrow.0 } else { wide.0 }
+    }
+
+    /// The pairs of the key bar: "F2 Rename".
+    pub fn pairs(&self, keymap: &Keymap) -> Vec<String> {
         self.buttons
             .iter()
             .filter_map(|button| {
                 let key = keymap.key_text(&button.commands.first()?.id);
-                (!key.is_empty()).then(|| format!("{} {key}", button.label))
+                (!key.is_empty()).then(|| format!("{key} {}", button.label))
             })
-            .collect::<Vec<_>>()
-            .join(", ")
+            .collect()
     }
 
-    /// The key bar as Say Key Bar says it, keys spoken in words: "Rename,
-    /// F2. View, F3."
+    /// The key bar as Say Key Bar says it, every pair, keys spoken in
+    /// words: "Key bar: F2 Rename, F3 View, Control plus Q Quit."
     pub fn key_bar_spoken(&self, keymap: &Keymap) -> String {
-        self.buttons
+        let pairs: Vec<String> = self
+            .buttons
             .iter()
             .filter_map(|button| {
                 let key = keymap.spoken_key(&button.commands.first()?.id);
-                (!key.is_empty()).then(|| format!("{}, {key}.", button.label))
+                (!key.is_empty()).then(|| format!("{key} {}", button.label))
             })
-            .collect::<Vec<_>>()
-            .join(" ")
+            .collect();
+        if pairs.is_empty() {
+            return String::new();
+        }
+        format!("Key bar: {}.", pairs.join(", "))
     }
 }
 
-/// The default bank: the function keys, as the key bar shows them.
+/// What stands between two pairs of the key bar.
+pub const KEY_BAR_GAP: &str = "  ";
+
+/// The pairs that fit `cells` with `gap` between them, and how many.
+fn fit(pairs: &[String], gap: &str, cells: usize) -> (String, usize) {
+    let mut line = String::new();
+    let mut fitted = 0;
+    for pair in pairs {
+        let between = if line.is_empty() { "" } else { gap };
+        if line.chars().count() + between.len() + pair.chars().count() > cells {
+            break;
+        }
+        line.push_str(between);
+        line.push_str(pair);
+        fitted += 1;
+    }
+    (line, fitted)
+}
+
+/// The default bank: the most common operations first, as the key bar
+/// shows them: "F2 Rename  F3 View  F4 Edit  F5 Copy  F6 Move  F7 Folder
+/// F8 Trash  F9 Menu  Ctrl+Q Quit" (answer 49).
 pub fn default_bank() -> Bank {
     let buttons = [
         ("Rename", ids::RENAME),
@@ -469,7 +511,8 @@ pub fn default_bank() -> Bank {
         ("Move", ids::MOVE),
         ("Folder", ids::MAKE_FOLDER),
         ("Trash", ids::TRASH),
-        ("Menus", ids::MENU),
+        ("Menu", ids::MENU),
+        ("Quit", ids::QUIT),
     ];
     Bank {
         name: "Function keys".to_owned(),
@@ -688,14 +731,29 @@ access = \"F\"
         let (banks, problems) = banks(&BanksConfig::default());
         assert!(problems.is_empty());
         let bank = &banks[0];
-        assert_eq!(bank.list(&keymap).announce_focus(), "Rename, F2, 1 of 8");
+        assert_eq!(bank.list(&keymap).announce_focus(), "Rename, F2, 1 of 9");
         assert_eq!(
             bank.key_bar(&keymap),
-            "Rename F2, View F3, Edit F4, Copy F5, Move F6, Folder F7, Trash F8, Menus F9"
+            "F2 Rename  F3 View  F4 Edit  F5 Copy  F6 Move  F7 Folder  F8 Trash  F9 Menu  Ctrl+Q Quit"
         );
-        assert!(
-            bank.key_bar_spoken(&keymap)
-                .starts_with("Rename, F2. View, F3.")
+        assert_eq!(
+            bank.key_bar_within(&keymap, 40),
+            "F2 Rename  F3 View  F4 Edit  F5 Copy"
+        );
+        assert_eq!(bank.key_bar_within(&keymap, 8), "");
+        assert_eq!(
+            bank.key_bar_within(&keymap, 80),
+            "F2 Rename F3 View F4 Edit F5 Copy F6 Move F7 Folder F8 Trash F9 Menu Ctrl+Q Quit",
+            "the gap narrows before a pair is left out"
+        );
+        assert_eq!(
+            bank.key_bar_within(&keymap, 100),
+            bank.key_bar(&keymap),
+            "two spaces where everything fits"
+        );
+        assert_eq!(
+            bank.key_bar_spoken(&keymap),
+            "Key bar: F2 Rename, F3 View, F4 Edit, F5 Copy, F6 Move, F7 Folder, F8 Trash, F9 Menu, Control plus Q Quit."
         );
         let rebound = Keymap::defaults().with_overrides(&KeymapConfig {
             overrides: vec![KeyOverride {
@@ -707,7 +765,7 @@ access = \"F\"
             }],
             problems: Vec::new(),
         });
-        assert!(bank.key_bar(&rebound).contains("Copy F12"));
+        assert!(bank.key_bar(&rebound).contains("F12 Copy"));
         let menus = Menus::builtin();
         let edit = menus.list("edit", &rebound, &local()).unwrap();
         assert!(

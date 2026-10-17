@@ -6,8 +6,9 @@
 //! From the top: the title line (the active place first; hidden in compact
 //! mode), the body (the panels in their layout, or the list dialog on top),
 //! the minibuffer when a text field is open (the prompt, then its
-//! candidates), the key bar (sighted mode only), the status line and the
-//! jobs line.
+//! candidates), the status line, the jobs line, and the key bar on the last
+//! line in every mode (answer 49; off with the `key_bar` setting or in
+//! compact mode).
 //!
 //! The rules (ADR-0007 as amended; R4 section 3.2; research/alpha1-plan.md
 //! part three):
@@ -750,10 +751,12 @@ pub(crate) fn build(app: &App, look: &Look, status: &str, memory: &mut Memory) -
         clean(status)
     };
     let jobs = clean(&app.jobs().line());
-    let bar = if look.screen_reader || look.compact {
+    // The key bar on the last line in every mode, screen-reader mode too
+    // (answer 49): whole pairs, as many as the width holds.
+    let bar = if look.compact {
         String::new()
     } else {
-        clean(&app.key_bar())
+        clean(&app.key_bar_within(usize::from(width)))
     };
     let mut show_title = !look.compact;
     let mut show_bar = !bar.is_empty();
@@ -800,9 +803,6 @@ pub(crate) fn build(app: &App, look: &Look, status: &str, memory: &mut Memory) -
     if let Some(mini) = &mini {
         lines.extend(mini.lines.iter().cloned());
     }
-    if show_bar {
-        lines.push(vec![Run::new(0, width, bar, PanelRole::KeyBar)]);
-    }
     let status_line = lines.len();
     lines.push(vec![
         Run::new(0, width, status, PanelRole::StatusLine).filled(),
@@ -813,6 +813,9 @@ pub(crate) fn build(app: &App, look: &Look, status: &str, memory: &mut Memory) -
         PanelRole::Progress
     };
     lines.push(vec![Run::new(0, width, jobs, jobs_role).filled()]);
+    if show_bar {
+        lines.push(vec![Run::new(0, width, bar, PanelRole::KeyBar)]);
+    }
     lines.truncate(height);
     lines.resize(height, Vec::new());
     let parked = (0, status_line.min(height - 1) as u16);

@@ -154,6 +154,8 @@ pub mod ids {
         SAY_OTHER = "app.say-other";
         /// Say the key bar.
         SAY_KEY_BAR = "app.say-key-bar";
+        /// Show the next bank on the key bar.
+        SWITCH_BANK = "app.switch-bank";
         /// Open the command palette.
         PALETTE = "app.palette";
         /// Open the menus.
@@ -347,7 +349,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 91] = [
+pub static CATALOG: [CommandInfo; 92] = [
     command(
         ids::QUIT,
         "Quit",
@@ -400,6 +402,14 @@ pub static CATALOG: [CommandInfo; 91] = [
         ids::SAY_KEY_BAR,
         "Say key bar",
         "Says the function keys and what each one does.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SWITCH_BANK,
+        "Switch bank",
+        "Shows the next bank of buttons on the key bar.",
         Global,
         &[],
         &[],

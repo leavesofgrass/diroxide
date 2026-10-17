@@ -154,6 +154,10 @@ command = "app.next-theme"
 access = "t"
 
 [[menu.item]]
+command = "app.switch-bank"
+access = "b"
+
+[[menu.item]]
 command = "panel.reload"
 access = "r"
 

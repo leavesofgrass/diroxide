@@ -345,6 +345,8 @@ pub struct App {
     flows: HashMap<JobId, Flow>,
     menus: Menus,
     banks: Vec<Bank>,
+    /// The bank the key bar shows.
+    bank: usize,
     palette: Palette,
     histories: BTreeMap<String, Vec<String>>,
     visits: Visits,
@@ -452,6 +454,7 @@ enum Action {
     SayStatus,
     SayOther,
     SayKeyBar,
+    SwitchBank,
     Palette,
     MenuBar,
     Menu,
@@ -468,7 +471,7 @@ enum Action {
     Accept,
 }
 
-const ROUTES: [(CommandId, Action); 91] = [
+const ROUTES: [(CommandId, Action); 92] = [
     (ids::QUIT, Action::Quit),
     (ids::QUIT_TO_FOLDER, Action::QuitToFolder),
     (ids::QUIT_KEEP_FOLDER, Action::QuitKeepFolder),
@@ -476,6 +479,7 @@ const ROUTES: [(CommandId, Action); 91] = [
     (ids::SAY_STATUS, Action::SayStatus),
     (ids::SAY_OTHER, Action::SayOther),
     (ids::SAY_KEY_BAR, Action::SayKeyBar),
+    (ids::SWITCH_BANK, Action::SwitchBank),
     (ids::PALETTE, Action::Palette),
     (ids::MENU, Action::MenuBar),
     (ids::SETTINGS, Action::Settings),
@@ -618,6 +622,7 @@ impl App {
             flows: HashMap::new(),
             menus: startup.menus,
             banks: startup.banks,
+            bank: 0,
             palette,
             histories: startup.histories,
             visits,
@@ -736,12 +741,31 @@ impl App {
         &self.menus
     }
 
-    /// The key bar's bank: the first bank.
+    /// The key bar: the active bank's pairs on one line, key first, the
+    /// most common operations first ("F2 Rename  F3 View  F4 Edit"). The
+    /// terminal draws it on its last line in every mode (answer 49); see
+    /// [`App::key_bar_within`] for a line of fixed width.
     pub fn key_bar(&self) -> String {
-        self.banks
-            .first()
+        self.active_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
+    }
+
+    /// The key bar cut to `cells`, whole pairs only, the first first; the
+    /// rest are said by Say Key Bar. Empty when the `key_bar` setting is
+    /// off.
+    pub fn key_bar_within(&self, cells: usize) -> String {
+        if !self.settings.key_bar {
+            return String::new();
+        }
+        self.active_bank()
+            .map(|bank| bank.key_bar_within(&self.keymap, cells))
+            .unwrap_or_default()
+    }
+
+    /// The bank the key bar shows: the first, until Switch bank.
+    pub fn active_bank(&self) -> Option<&Bank> {
+        self.banks.get(self.bank).or_else(|| self.banks.first())
     }
 
     /// Whether the key test is on: the frontend sends every key, as it
@@ -1052,6 +1076,7 @@ impl App {
             Action::SayStatus => self.say_status(),
             Action::SayOther => self.say_other(),
             Action::SayKeyBar => self.say_key_bar(),
+            Action::SwitchBank => self.switch_bank(),
             Action::Palette => self.open_palette(),
             Action::MenuBar => self.open_menu_bar(),
             Action::Menu => self.open_menu_by_command(&command.id),

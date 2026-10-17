@@ -575,7 +575,19 @@ fn details_context_menu_help_and_the_key_bar() {
     );
     f.s.key("escape");
     let said = f.s.command(ids::SAY_KEY_BAR);
-    assert!(said[0].starts_with("Rename, F2."), "{said:?}");
+    assert!(
+        said[0].starts_with("Key bar: F2 Rename, F3 View, F4 Edit, F5 Copy"),
+        "{said:?}"
+    );
+    assert!(said[0].ends_with("Control plus Q Quit."), "{said:?}");
+    assert_eq!(
+        f.s.app.key_bar_within(40),
+        "F2 Rename  F3 View  F4 Edit  F5 Copy"
+    );
+    assert_eq!(
+        f.s.command(ids::SWITCH_BANK),
+        ["Only one bank: Function keys."]
+    );
     assert_eq!(f.s.key("f3"), ["The viewer comes with alpha.2."]);
     assert_eq!(f.s.command(ids::PLUGINS), ["Plugins come with alpha.4."]);
 }

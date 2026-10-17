@@ -280,7 +280,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 79] = [
+pub const SCHEMA: [SettingInfo; 80] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -577,6 +577,15 @@ pub const SCHEMA: [SettingInfo; 79] = [
         kind: K::Flag,
         default: "false",
         help: "Hides the key bar and the title line in a terminal. The status and jobs lines stay.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "key_bar",
+        name: "Key bar",
+        group: G::Look,
+        kind: K::Flag,
+        default: "true",
+        help: "Shows the common keys and what each one does on the last line of a terminal, in every mode. Say Key Bar reads it aloud.",
         arrives: None,
     },
     SettingInfo {

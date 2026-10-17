@@ -135,14 +135,36 @@ impl App {
         vec![self.say(Message::info(text))]
     }
 
+    /// Say Key Bar: every pair of the active bank, keys in words: "Key
+    /// bar: F2 Rename, F3 View, ... Control plus Q Quit."
     pub(super) fn say_key_bar(&mut self) -> Vec<Effect> {
         let text = self
-            .banks
-            .first()
+            .active_bank()
             .map(|bank| bank.key_bar_spoken(&self.keymap))
             .filter(|text| !text.is_empty())
             .unwrap_or_else(|| "The key bar is empty.".to_owned());
         vec![self.say(Message::info(text))]
+    }
+
+    /// Switch bank: the next bank on the key bar, its name and its first
+    /// pairs said ("Bank: Archives. F2 Pack, F3 Unpack").
+    pub(super) fn switch_bank(&mut self) -> Vec<Effect> {
+        if self.banks.len() < 2 {
+            let name = self
+                .active_bank()
+                .map_or_else(|| "none".to_owned(), |bank| bank.name.clone());
+            return vec![self.say(Message::info(format!("Only one bank: {name}.")))];
+        }
+        self.bank = (self.bank + 1) % self.banks.len();
+        let text = match self.active_bank() {
+            Some(bank) => {
+                let pairs = bank.pairs(&self.keymap);
+                let first: Vec<&str> = pairs.iter().take(3).map(String::as_str).collect();
+                format!("Bank: {}. {}", bank.name, first.join(", "))
+            }
+            None => "The key bar is empty.".to_owned(),
+        };
+        vec![Effect::Redraw(Redraw::All), self.say(Message::info(text))]
     }
 
     /// Help where the focus is: the list's or the field's help first, then

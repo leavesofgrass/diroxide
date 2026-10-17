@@ -96,6 +96,7 @@ fn the_schema_covers_every_setting_this_wave_and_the_reserved_ones() {
         "auto_hide_menu",
         "focus_mode",
         "compact",
+        "key_bar",
         "highlighting",
         "thumbnails",
         "cursor_fallback",
