@@ -1,7 +1,7 @@
 //! Link plans (research/alpha2-plan.md commit 26): links made relative or
 //! absolute, and changing where a link points.
 
-use diroxide_core::{ConflictPolicy, EntryKind, JobId, JobKind, JobRequest, Place};
+use diroxide_core::{ConflictPolicy, EntryKind, JobKind, JobRequest, Place};
 use diroxide_vfs::{LinkKind, LinkRequest, OpContext};
 
 use super::Planner;
@@ -46,15 +46,17 @@ impl Planner<'_> {
 }
 
 impl Engine {
-    /// Plans links of a chosen kind and form: one in the destination for
-    /// each source, absolute or relative to the link's folder. Refused
-    /// before anything is listed where the destination holds no links.
-    pub fn plan_links_as(
-        &self,
-        request: &JobRequest,
-        kind: LinkKind,
-        form: LinkForm,
-    ) -> Result<Plan, OpsError> {
+    /// Plans links as the request's [`LinkEdit`](diroxide_core::LinkEdit)
+    /// says (`JobRequest::link`; symbolic and absolute without one): one in
+    /// the destination for each source, absolute or relative to the link's
+    /// folder. An edit that retargets plans [`Engine::plan_relink`]
+    /// instead. Refused before anything is listed where the destination
+    /// holds no links.
+    pub fn plan_links_as(&self, request: &JobRequest) -> Result<Plan, OpsError> {
+        let edit = request.link_edit();
+        if edit.retarget {
+            return self.plan_relink(request);
+        }
         if request.destination.is_none() {
             return Err(OpsError::NoDestination);
         }
@@ -65,24 +67,28 @@ impl Engine {
         let control = JobControl::new();
         let mut planner = Planner::new(self, request, &control, &quiet);
         planner.plan.kind = JobKind::Link;
-        planner.link(kind, form)?;
+        planner.link(edit.kind, edit.form)?;
         Ok(planner.finish())
     }
 
-    /// Plans changing where the link at `link` points, to `target`, in the
-    /// form asked: one step that makes the new link beside the old and
-    /// renames it over the old one in one step where the place can
-    /// (`replace_rename`), or else sends the old one to the trash and gives
-    /// the new one its name; Undo brings the old link back either way.
-    /// Refused where the place holds no links, can neither replace in one
-    /// step nor keep the old one in a trash, or `link` is not a link.
-    pub fn plan_relink(
-        &self,
-        job: JobId,
-        link: &Place,
-        target: &Place,
-        form: LinkForm,
-    ) -> Result<Plan, OpsError> {
+    /// Plans changing where the request's one source link points, to its
+    /// destination, in the form of its [`LinkEdit`](diroxide_core::LinkEdit)
+    /// (absolute without one), as job `request.id`: one step that makes the
+    /// new link beside the old and renames it over the old one in one step
+    /// where the place can (`replace_rename`), or else sends the old one to
+    /// the trash and gives the new one its name; Undo brings the old link
+    /// back either way. Refused where the place holds no links, can neither
+    /// replace in one step nor keep the old one in a trash, or the source
+    /// is not a link.
+    pub fn plan_relink(&self, request: &JobRequest) -> Result<Plan, OpsError> {
+        let [link] = request.sources.as_slice() else {
+            return Err(OpsError::NothingSelected);
+        };
+        let target = request
+            .destination
+            .as_ref()
+            .ok_or(OpsError::NoDestination)?;
+        let (job, form) = (request.id, request.link_edit().form);
         let ctx = OpContext::new();
         let provider = self.registry().resolve(link)?;
         let entry = provider.stat(link, &ctx)?;

@@ -2,7 +2,7 @@
 //! link's target changed in one undoable step, the privilege said in
 //! words, and the refusals before planning.
 
-use diroxide_core::{EntryKind, JobId, JobKind, JobRequest};
+use diroxide_core::{EntryKind, JobId, JobKind, JobRequest, LinkEdit};
 use diroxide_vfs::{LinkKind, VfsError};
 
 use crate::engine::JobControl;
@@ -29,6 +29,13 @@ fn link_request(sources: &[&str]) -> JobRequest {
     .to(p("/proj/links"))
 }
 
+/// A request to change where the link at `link` points, to `target`.
+fn relink_request(job: u64, link: &str, target: &str, form: LinkForm) -> JobRequest {
+    JobRequest::new(JobId::new(job), JobKind::Link, vec![p(link)])
+        .to(p(target))
+        .linking(LinkEdit::retarget(form))
+}
+
 fn sep(text: &str) -> String {
     if cfg!(windows) {
         text.replace('/', "\\")
@@ -41,13 +48,11 @@ fn sep(text: &str) -> String {
 fn a_relative_link_points_the_way_from_its_folder() {
     let fake = tree();
     let engine = engine(&fake);
-    let plan = engine
-        .plan_links_as(
-            &link_request(&["/proj/data/x.txt", "/proj/data/sub"]),
-            LinkKind::Symbolic,
-            LinkForm::Relative,
-        )
-        .unwrap();
+    let request = link_request(&["/proj/data/x.txt", "/proj/data/sub"])
+        .linking(LinkEdit::new(LinkKind::Symbolic, LinkForm::Relative));
+    let plan = engine.plan_links_as(&request).unwrap();
+    // The edit travels in the request (P2b): the plain plan reads it too.
+    assert_eq!(engine.plan(&request).unwrap(), plan);
     let targets: Vec<String> = plan
         .steps
         .iter()
@@ -68,9 +73,8 @@ fn a_relative_link_points_the_way_from_its_folder() {
     assert_eq!(made.link.unwrap().points_to, Some(EntryKind::Folder));
     let absolute = engine
         .plan_links_as(
-            &link_request(&["/proj/data/x.txt"]),
-            LinkKind::Symbolic,
-            LinkForm::Absolute,
+            &link_request(&["/proj/data/x.txt"])
+                .linking(LinkEdit::new(LinkKind::Symbolic, LinkForm::Absolute)),
         )
         .unwrap();
     assert!(matches!(
@@ -79,9 +83,8 @@ fn a_relative_link_points_the_way_from_its_folder() {
     ));
     let junction = engine
         .plan_links_as(
-            &link_request(&["/proj/data/sub"]),
-            LinkKind::Junction,
-            LinkForm::Relative,
+            &link_request(&["/proj/data/sub"])
+                .linking(LinkEdit::new(LinkKind::Junction, LinkForm::Relative)),
         )
         .unwrap();
     assert_eq!(
@@ -96,15 +99,27 @@ fn changing_a_links_target_is_one_step_and_undo_brings_the_old_one_back() {
     fake.add_link(&p("/proj/links/latest"), "old-target", false);
     let engine = engine(&fake);
     let plan = engine
-        .plan_relink(
-            JobId::new(27),
-            &p("/proj/links/latest"),
-            &p("/proj/data/x.txt"),
+        .plan_relink(&relink_request(
+            27,
+            "/proj/links/latest",
+            "/proj/data/x.txt",
             LinkForm::Relative,
-        )
+        ))
         .unwrap();
     assert_eq!(plan.steps.len(), 1);
     assert_eq!(plan.summary(), "Change where 1 link points");
+    let request = relink_request(
+        27,
+        "/proj/links/latest",
+        "/proj/data/x.txt",
+        LinkForm::Relative,
+    );
+    assert_eq!(
+        engine.plan(&request).unwrap(),
+        plan,
+        "a retargeting request plans the same"
+    );
+    assert_eq!(engine.plan_links_as(&request).unwrap(), plan);
     assert!(plan.listing()[0].starts_with("point the link "));
     let report = engine.run(&plan, &JobControl::new(), &Script::default());
     assert!(report.failed.is_empty(), "{:?}", report.failed);
@@ -140,12 +155,12 @@ fn a_place_that_replaces_in_one_step_changes_a_link_atomically() {
     fake.add_link(&p("/proj/links/latest"), "old-target", false);
     let engine = engine(&fake);
     let plan = engine
-        .plan_relink(
-            JobId::new(29),
-            &p("/proj/links/latest"),
-            &p("/proj/data/x.txt"),
+        .plan_relink(&relink_request(
+            29,
+            "/proj/links/latest",
+            "/proj/data/x.txt",
             LinkForm::Absolute,
-        )
+        ))
         .unwrap();
     assert_eq!(plan.steps.len(), 1);
     let report = engine.run(&plan, &JobControl::new(), &Script::default());
@@ -177,12 +192,12 @@ fn a_place_that_replaces_in_one_step_changes_a_link_atomically() {
     // Neither a trash nor a one-step rename: refused before planning.
     fake.switches_mut().replace_rename = false;
     assert_eq!(
-        engine.plan_relink(
-            JobId::new(31),
-            &p("/proj/links/latest"),
-            &p("/proj/data/x.txt"),
+        engine.plan_relink(&relink_request(
+            31,
+            "/proj/links/latest",
+            "/proj/data/x.txt",
             LinkForm::Absolute
-        ),
+        )),
         Err(OpsError::CannotLink(
             "Cannot change a link here: no trash keeps the old one".into()
         ))
@@ -198,12 +213,12 @@ fn a_refused_one_step_rename_falls_back_to_the_trash() {
     fake.add_link(&p("/proj/links/latest"), "old-target", false);
     let engine = engine(&fake);
     let plan = engine
-        .plan_relink(
-            JobId::new(32),
-            &p("/proj/links/latest"),
-            &p("/proj/data/x.txt"),
+        .plan_relink(&relink_request(
+            32,
+            "/proj/links/latest",
+            "/proj/data/x.txt",
             LinkForm::Absolute,
-        )
+        ))
         .unwrap();
     fake.switches_mut().call_faults.push(
         CallFault::new(
@@ -254,32 +269,26 @@ fn places_without_links_or_trash_refuse_before_planning() {
     fake.switches_mut().no_trash = true;
     let engine = engine(&fake);
     assert_eq!(
-        engine.plan_relink(
-            JobId::new(1),
-            &p("/proj/links/latest"),
-            &p("/proj/data/x.txt"),
+        engine.plan_relink(&relink_request(
+            1,
+            "/proj/links/latest",
+            "/proj/data/x.txt",
             LinkForm::Absolute
-        ),
+        )),
         Err(OpsError::CannotLink(
             "Cannot change a link here: no trash keeps the old one".into()
         ))
     );
     fake.switches_mut().no_trash = false;
     assert!(matches!(
-        engine.plan_relink(
-            JobId::new(1),
-            &p("/proj/data/x.txt"),
-            &p("/proj/data/sub"),
-            LinkForm::Absolute
-        ),
+        engine.plan_relink(&relink_request(1, "/proj/data/x.txt", "/proj/data/sub", LinkForm::Absolute)),
         Err(OpsError::NameRefused(line)) if line == "Not a link: x.txt"
     ));
     fake.switches_mut().no_links = true;
     assert_eq!(
         engine.plan_links_as(
-            &link_request(&["/proj/data/x.txt"]),
-            LinkKind::Symbolic,
-            LinkForm::Relative
+            &link_request(&["/proj/data/x.txt"])
+                .linking(LinkEdit::new(LinkKind::Symbolic, LinkForm::Relative))
         ),
         Err(OpsError::CannotLink(
             "Cannot link here: this place holds no links".into()

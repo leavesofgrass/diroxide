@@ -204,6 +204,19 @@ pub enum CommandTextError {
         /// Why the value is not a place.
         error: PlaceError,
     },
+    /// An argument whose value is not one of its kind, such as an attribute
+    /// job's `recursion=all` ([`crate::access`]): "Not a value for
+    /// recursion: all. Write this_item, files_and_folders, files_only or
+    /// folders_only."
+    #[error("Not a value for {name}: {value}. {error}")]
+    BadValue {
+        /// The argument's name.
+        name: String,
+        /// The value as written.
+        value: String,
+        /// What to write instead.
+        error: crate::access::ValueTextError,
+    },
 }
 
 impl Command {

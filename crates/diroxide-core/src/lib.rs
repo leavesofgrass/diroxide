@@ -8,6 +8,7 @@
 //! This crate does no I/O. It is finished in Phase 0 and changes only through
 //! a contract change request (docs/adr/0002-the-core-model.md).
 
+pub mod access;
 pub mod catalog;
 pub mod clock;
 pub mod command;
@@ -28,6 +29,10 @@ pub mod place;
 pub mod secret;
 pub mod sort;
 
+pub use access::{
+    AttributeEdit, LinkEdit, LinkForm, LinkKind, ModeChange, Recursion, ValueTextError,
+    WindowsChange,
+};
 pub use clock::{CivilTime, Clock, FixedClock, SystemClock, Timestamp, UtcOffset, Weekday};
 pub use command::{ArgValue, Command, CommandId, CommandTextError};
 pub use details::{DetailGroup, DetailRow};

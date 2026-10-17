@@ -266,15 +266,14 @@ fn order(planned: Vec<Planned>) -> Vec<Step> {
 
 impl Engine {
     /// Plans a permissions, attributes or times job: the request names the
-    /// entries (and `SetAttributes` or `SetTimes` as its kind), the edit
-    /// what changes and where. A selected link is refused; a change that
-    /// goes inside folders is refused at a drive root or a protected
-    /// folder; the rows say the change in words, the recursion first.
-    pub fn plan_attributes(
-        &self,
-        request: &JobRequest,
-        edit: &AttributeEdit,
-    ) -> Result<Plan, OpsError> {
+    /// entries (and `SetAttributes` or `SetTimes` as its kind), and its
+    /// edit (`JobRequest::attributes`, P2b) what changes and where; a
+    /// request without one is refused as `NoChange`. A selected link is
+    /// refused; a change that goes inside folders is refused at a drive
+    /// root or a protected folder; the rows say the change in words, the
+    /// recursion first.
+    pub fn plan_attributes(&self, request: &JobRequest) -> Result<Plan, OpsError> {
+        let edit = request.attributes.as_ref().ok_or(OpsError::NoChange)?;
         if request.sources.is_empty() {
             return Err(OpsError::NothingSelected);
         }

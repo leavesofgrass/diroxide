@@ -913,8 +913,10 @@ impl Engine {
             JobKind::Split if request.destination.is_none() => return Err(OpsError::NoDestination),
             JobKind::Split if request.parts.is_none() => return Err(OpsError::NoPartSize),
             JobKind::Join if request.destination.is_none() => return Err(OpsError::NoDestination),
-            // The edit travels beside the request: Engine::plan_attributes.
-            JobKind::SetAttributes | JobKind::SetTimes => return Err(OpsError::NoChange),
+            // The edit travels in the request (P2b): Engine::plan_attributes,
+            // and a link edit that retargets: Engine::plan_relink.
+            JobKind::SetAttributes | JobKind::SetTimes => return self.plan_attributes(request),
+            JobKind::Link if request.link_edit().retarget => return self.plan_relink(request),
             JobKind::Undo => return Err(OpsError::NothingToUndo),
             JobKind::Copy
             | JobKind::Move
@@ -945,7 +947,10 @@ impl Engine {
             JobKind::MakeFolder => planner.make_folder()?,
             JobKind::Split => planner.split()?,
             JobKind::Join => planner.join()?,
-            _ => planner.link(LinkKind::Symbolic, LinkForm::Absolute)?,
+            _ => {
+                let edit = request.link_edit();
+                planner.link(edit.kind, edit.form)?;
+            }
         }
         let mut progress = JobProgress::start(request.kind, 0, None);
         progress.items_done = planner.counted;

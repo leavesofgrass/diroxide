@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use diroxide_core::{JobId, JobKind, JobRequest, Place};
+use diroxide_core::{JobId, JobKind, JobRequest, LinkEdit, Place};
 use diroxide_ops::links::{LinkForm, NEEDS_DEVELOPER_MODE};
 use diroxide_ops::{Engine, JobControl};
 use diroxide_vfs::{LinkKind, Registry};
@@ -37,10 +37,9 @@ fn relative_links_resolve_after_their_folder_moves_or_say_the_privilege() {
             place_of(&project.join("data").join("sub")),
         ],
     )
-    .to(place_of(&project.join("links")));
-    let plan = engine
-        .plan_links_as(&request, LinkKind::Symbolic, LinkForm::Relative)
-        .unwrap();
+    .to(place_of(&project.join("links")))
+    .linking(LinkEdit::new(LinkKind::Symbolic, LinkForm::Relative));
+    let plan = engine.plan_links_as(&request).unwrap();
     let report = engine.run(&plan, &JobControl::new(), &Answers::default());
     if let Some((_, why)) = report.failed.first() {
         assert_eq!(why, NEEDS_DEVELOPER_MODE, "{:?}", report.failed);

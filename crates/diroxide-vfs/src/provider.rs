@@ -86,18 +86,9 @@ pub enum CopyHint {
     ServerSide,
 }
 
-/// What kind of link to make.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum LinkKind {
-    /// A symbolic link, absolute or relative as its target is written. On
-    /// Windows it may need Developer Mode, which the error says in words.
-    Symbolic,
-    /// A Windows directory junction: needs no privilege, folders only, an
-    /// absolute target.
-    Junction,
-    /// A hard link: a second name for the same file, on one volume.
-    Hard,
-}
+// What kind of link to make: moved into core with P2b (W2c's request 3),
+// so a job request carries it; re-exported under its old path.
+pub use diroxide_core::access::LinkKind;
 
 /// A link to make: its kind, and its target as it will be stored.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
