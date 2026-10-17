@@ -32,8 +32,11 @@
 //! [`QuickView::wants_tick`], and [`QuickView::watch_event`] to the
 //! panel's watch.
 
+mod region;
 mod worker;
 
+#[cfg(test)]
+mod region_tests;
 #[cfg(test)]
 mod tests;
 
@@ -51,6 +54,8 @@ use diroxide_preview::doc::{self, DocKind, DocView, Guard, ReadOptions, SHOWING_
 use diroxide_preview::highlight::{Caps, Job, Session};
 use diroxide_vfs::{CancelToken, Registry, WatchEvent};
 
+use region::Region;
+pub use region::{LinkTarget, Outcome, QuickViewRequest};
 use worker::{Answer, Rendered, Request, Shared, Worker};
 
 /// What the quick view reads from the settings.
@@ -206,6 +211,8 @@ pub struct QuickView {
     session: Option<Session>,
     job: Option<Job>,
     renders: u64,
+    region: Region,
+    siblings: Vec<(Place, Entry)>,
 }
 
 impl QuickView {
@@ -230,6 +237,8 @@ impl QuickView {
             session: None,
             job: None,
             renders: 0,
+            region: Region::default(),
+            siblings: Vec::new(),
         }
     }
 
@@ -365,6 +374,7 @@ impl QuickView {
         self.cancel_in_flight();
         self.shown = None;
         self.job = None;
+        self.rebuild_region(false);
         vec![Message::info("Quick view off")]
     }
 
@@ -419,6 +429,7 @@ impl QuickView {
                 let name = shown.name.clone();
                 self.shown = None;
                 self.job = None;
+                self.rebuild_region(false);
                 if self.target.as_ref().is_some_and(|t| t.place == *p) {
                     self.target = None;
                 }
@@ -427,6 +438,7 @@ impl QuickView {
             WatchEvent::Gone => {
                 self.shown = None;
                 self.job = None;
+                self.rebuild_region(false);
                 return Vec::new();
             }
             _ => return Vec::new(),
@@ -448,6 +460,21 @@ impl QuickView {
             reason: Reason::Changed,
         });
         Vec::new()
+    }
+
+    /// Shows an entry at once, without the wait (the region's previous
+    /// and next file).
+    fn show_now(&mut self, place: &Place, entry: &Entry, now: Instant) {
+        if self.in_flight.as_ref().is_some_and(|f| f.place != *place) {
+            self.cancel_in_flight();
+        }
+        self.target = Some(Target {
+            place: place.clone(),
+            entry: entry.clone(),
+            since: now,
+            now: true,
+            reason: Reason::Moved,
+        });
     }
 
     /// Carries on: takes the renders that are done (a stale one is
@@ -570,6 +597,7 @@ impl QuickView {
             }
             Rendered::Superseded => return Vec::new(),
         };
+        let same = self.shown.as_ref().is_some_and(|s| s.place == answer.place);
         self.shown = Some(Shown {
             place: answer.place,
             name,
@@ -577,6 +605,7 @@ impl QuickView {
             size,
             capped,
         });
+        self.rebuild_region(same && flight.reason == Reason::Changed);
         self.start_colors(size);
         said
     }
