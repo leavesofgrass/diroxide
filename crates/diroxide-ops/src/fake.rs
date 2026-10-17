@@ -185,6 +185,10 @@ pub struct FakeSwitches {
     pub corrupt: Vec<Place>,
     /// The place cannot keep a created time, as on Linux.
     pub no_created_time: bool,
+    /// The trash takes items by copying them to another drive's trash,
+    /// as a Linux drive whose own trash cannot be made: the gate answers
+    /// [`TrashGate::Copies`].
+    pub trash_copies_across: bool,
     /// What the trash's own post-check answers after it has taken an
     /// item: `GoneNotInTrash` is a trash that lost it, `NotChecked` a
     /// plugin's trash that cannot tell. `None` answers `InTrash`.
@@ -501,6 +505,15 @@ impl FakeProvider {
             .filter(|node| diroxide_vfs::names::is_unfinished(&node.entry.name))
             .map(|node| node.place.to_string())
             .collect()
+    }
+
+    /// Sets the size an entry lists, whatever its bytes: a large file in a
+    /// test without its bytes in memory.
+    pub fn set_listed_size(&self, place: &Place, size: u64) {
+        let key = self.node_key(place);
+        if let Some(node) = self.state().nodes.get_mut(&key) {
+            node.entry.size = Some(size);
+        }
     }
 
     /// Sets an entry's modified time, as if it had changed.
@@ -1055,6 +1068,9 @@ impl Provider for FakeProvider {
             return Ok(TrashGate::NoTrashHere(
                 switches.volume_kind.unwrap_or(VolumeKind::Unknown),
             ));
+        }
+        if switches.trash_copies_across {
+            return Ok(TrashGate::Copies);
         }
         Ok(TrashGate::Allowed)
     }

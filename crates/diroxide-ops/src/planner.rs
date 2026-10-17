@@ -29,10 +29,16 @@ use diroxide_vfs::{
 
 use crate::engine::{Engine, JobControl, JobSink, Quiet};
 use crate::error::OpsError;
+use crate::links::LinkForm;
 use crate::plan::{Plan, Preflight, Step};
 use crate::progress::JobProgress;
 use crate::undo::UndoRecord;
 use crate::walk::{Found, walk};
+
+mod access;
+mod join;
+mod links;
+mod split;
 
 /// Why an anchor is being checked: what the job would do to it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -496,6 +502,8 @@ impl<'a> Planner<'a> {
     /// question offers the listed permanent delete as its own job.
     fn trash(&mut self) -> Result<(), OpsError> {
         let mut refused: Vec<(TrashGate, Place)> = Vec::new();
+        let mut copies: Vec<Place> = Vec::new();
+        let mut copied_bytes: u64 = 0;
         let request = self.request;
         for source in &request.sources {
             self.anchor(source, Removal::Recoverable)?;
@@ -535,6 +543,17 @@ impl<'a> Planner<'a> {
                 }
             }
             if gate.allows() {
+                // The trash takes it by copying it to another drive: a big
+                // item asks first (P2's open point; TrashGate::asks_first).
+                let bytes: u64 = found
+                    .iter()
+                    .filter(|item| item.entry.kind != EntryKind::Folder)
+                    .filter_map(|item| item.entry.size)
+                    .sum();
+                if gate.asks_first(bytes) {
+                    copies.push(source.clone());
+                    copied_bytes += bytes;
+                }
                 self.plan.expected.insert(source.clone(), entry);
                 self.plan.steps.push(Step::Trash {
                     place: source.clone(),
@@ -545,6 +564,12 @@ impl<'a> Planner<'a> {
             }
         }
         self.plan.facts.counted = true;
+        if !copies.is_empty() {
+            self.plan.facts.questions.push(Preflight::TrashCopies {
+                places: copies,
+                bytes: copied_bytes,
+            });
+        }
         if let Some((gate, _)) = refused.first() {
             let gate = *gate;
             self.plan.facts.questions.push(Preflight::NoTrash {
@@ -750,7 +775,7 @@ impl<'a> Planner<'a> {
 
     /// Links: one link in the destination for each source, pointing at
     /// the source's full place.
-    fn link(&mut self, kind: LinkKind) -> Result<(), OpsError> {
+    fn link(&mut self, kind: LinkKind, form: LinkForm) -> Result<(), OpsError> {
         let folder = self.destination()?;
         self.folder(&folder)?;
         let capabilities = self.provider(&folder)?.capabilities(&folder);
@@ -768,11 +793,12 @@ impl<'a> Planner<'a> {
             self.check_new_name(&folder, &name)?;
             let entry = self.stat(source)?;
             let place = folder.join(&name).map_err(VfsError::from)?;
+            let target = self.link_target(&place, source, kind, form);
             self.plan.steps.push(Step::Link {
                 place,
                 request: LinkRequest {
                     kind,
-                    target: source.to_string(),
+                    target,
                     target_is_folder: entry.kind == EntryKind::Folder,
                 },
             });
@@ -884,6 +910,11 @@ impl Engine {
             JobKind::Rename if request.renames.is_empty() && request.new_name.is_none() => {
                 return Err(OpsError::NoName);
             }
+            JobKind::Split if request.destination.is_none() => return Err(OpsError::NoDestination),
+            JobKind::Split if request.parts.is_none() => return Err(OpsError::NoPartSize),
+            JobKind::Join if request.destination.is_none() => return Err(OpsError::NoDestination),
+            // The edit travels beside the request: Engine::plan_attributes.
+            JobKind::SetAttributes | JobKind::SetTimes => return Err(OpsError::NoChange),
             JobKind::Undo => return Err(OpsError::NothingToUndo),
             JobKind::Copy
             | JobKind::Move
@@ -892,7 +923,9 @@ impl Engine {
             | JobKind::DeletePermanently
             | JobKind::Rename
             | JobKind::MakeFolder
-            | JobKind::Link => {}
+            | JobKind::Link
+            | JobKind::Split
+            | JobKind::Join => {}
             other => return Err(OpsError::NotBuilt(other.verb().to_owned())),
         }
         if request.sources.is_empty()
@@ -910,7 +943,9 @@ impl Engine {
             JobKind::DeletePermanently => planner.delete()?,
             JobKind::Rename => planner.rename()?,
             JobKind::MakeFolder => planner.make_folder()?,
-            _ => planner.link(LinkKind::Symbolic)?,
+            JobKind::Split => planner.split()?,
+            JobKind::Join => planner.join()?,
+            _ => planner.link(LinkKind::Symbolic, LinkForm::Absolute)?,
         }
         let mut progress = JobProgress::start(request.kind, 0, None);
         progress.items_done = planner.counted;
@@ -957,7 +992,7 @@ impl Engine {
         let control = JobControl::new();
         let mut planner = Planner::new(self, request, &control, &quiet);
         planner.plan.kind = JobKind::Link;
-        planner.link(kind)?;
+        planner.link(kind, LinkForm::Absolute)?;
         Ok(planner.finish())
     }
 
@@ -1204,6 +1239,51 @@ mod tests {
         assert_eq!(
             refused.facts.left_out[0].1,
             "this removable drive has no trash"
+        );
+    }
+
+    #[test]
+    fn a_trash_that_copies_across_drives_asks_first_for_a_big_item() {
+        let fake = tree();
+        fake.add_file(&p("/a/big.iso"), b"pretend");
+        fake.set_listed_size(&p("/a/big.iso"), 3_200_000_000);
+        fake.switches_mut().trash_copies_across = true;
+        let engine = engine(&fake);
+        let plan = engine
+            .plan(&request(JobKind::Trash, &["/a/big.iso", "/a/notes.txt"]))
+            .unwrap();
+        assert_eq!(plan.steps.len(), 2, "both go to the trash after a yes");
+        let Some(Preflight::TrashCopies { places, bytes }) = plan.facts.questions.first() else {
+            panic!("{:?}", plan.facts.questions);
+        };
+        assert_eq!(
+            places,
+            &vec![p("/a/big.iso")],
+            "the small item does not ask"
+        );
+        assert_eq!(*bytes, 3_200_000_000);
+        let lines = plan.facts.questions[0].lines();
+        assert_eq!(
+            lines[0],
+            "Trashing copies 3.2 GB to another drive. Go on? y or n"
+        );
+        assert!(within_cells(&lines[0], "Trashing copies 3.2 GB"));
+        let mut answered = plan.clone();
+        answered.leave_out(&p("/a/big.iso"), "kept: the trash would copy it");
+        assert_eq!(
+            answered.steps,
+            vec![Step::Trash {
+                place: p("/a/notes.txt")
+            }],
+            "No leaves it where it is"
+        );
+        fake.switches_mut().trash_copies_across = false;
+        let plain = engine
+            .plan(&request(JobKind::Trash, &["/a/big.iso"]))
+            .unwrap();
+        assert!(
+            plain.facts.questions.is_empty(),
+            "a trash on the same drive asks nothing"
         );
     }
 

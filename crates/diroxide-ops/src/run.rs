@@ -49,6 +49,19 @@ use crate::plan::{Plan, Step, is_read_only};
 use crate::progress::{Estimator, JobProgress};
 use crate::undo::{LeftAs, UndoRecord};
 
+mod access;
+#[cfg(test)]
+mod access_tests;
+mod join;
+#[cfg(test)]
+mod join_tests;
+mod links;
+#[cfg(test)]
+mod links_tests;
+mod split;
+#[cfg(test)]
+mod split_tests;
+
 /// What one step came to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Outcome {
@@ -186,6 +199,8 @@ pub(crate) struct Run<'a> {
     lost: Vec<(Place, String)>,
     journal: Option<JournalWriter>,
     paused_said: bool,
+    split: Option<split::SplitState>,
+    join: Option<join::JoinState>,
 }
 
 /// The reason a step is skipped when its entry changed since the plan.
@@ -248,6 +263,8 @@ impl<'a> Run<'a> {
             lost: Vec::new(),
             journal: None,
             paused_said: false,
+            split: None,
+            join: None,
         }
     }
 
@@ -510,7 +527,10 @@ impl<'a> Run<'a> {
                 None => self.step(step),
             };
             self.record(index, step.subject(), &outcome, before);
-            self.shared.progress().items_done += 1;
+            // A split's sidecar is not one of its parts.
+            if !matches!(step, Step::WriteChecksum { .. }) {
+                self.shared.progress().items_done += 1;
+            }
             if outcome == Outcome::Cancelled {
                 self.report.cancelled = true;
                 break;
@@ -526,9 +546,14 @@ impl<'a> Run<'a> {
     }
 
     /// The lengths of the undo record, before a step.
-    fn mark(&self) -> (usize, usize, usize) {
+    fn mark(&self) -> (usize, usize, usize, usize) {
         let undo = &self.report.undo;
-        (undo.moves.len(), undo.trashed.len(), undo.created.len())
+        (
+            undo.moves.len(),
+            undo.trashed.len(),
+            undo.created.len(),
+            undo.attributes.len(),
+        )
     }
 
     fn record(
@@ -536,7 +561,7 @@ impl<'a> Run<'a> {
         index: usize,
         subject: &Place,
         outcome: &Outcome,
-        before: (usize, usize, usize),
+        before: (usize, usize, usize, usize),
     ) {
         let word = match outcome {
             Outcome::Done => {
@@ -560,6 +585,7 @@ impl<'a> Run<'a> {
                 moves: undo.moves.get(before.0..).unwrap_or_default().to_vec(),
                 trashed: tail(&undo.trashed, before.1),
                 created: tail(&undo.created, before.2),
+                attributes: undo.attributes.get(before.3..).unwrap_or_default().to_vec(),
                 ..UndoRecord::default()
             };
             let _ = journal.step(index as u64, word, &delta);
@@ -587,6 +613,8 @@ impl<'a> Run<'a> {
     }
 
     fn finish(&mut self) {
+        self.finish_split();
+        self.finish_join();
         let folders = std::mem::take(&mut self.folders);
         for (place, source) in folders.iter().rev() {
             if let Ok(provider) = self.engine.registry().resolve(place) {
@@ -614,6 +642,9 @@ impl<'a> Run<'a> {
     fn reconcile(&mut self) {
         let mut planned = self.plan.planned_results();
         planned.retain(|place| !self.gone.iter().any(|gone| place.is_within(gone)));
+        // A join's parts all make one whole: count it once.
+        let mut seen = HashSet::new();
+        planned.retain(|place| seen.insert(place.clone()));
         for made in &self.made {
             if !planned.contains(&made.place) {
                 planned.push(made.place.clone());
@@ -684,17 +715,16 @@ impl<'a> Run<'a> {
             Step::Restore { place } => self.restore(place),
             Step::Remove { place } => self.remove(place, false),
             Step::RemoveEmptyFolder { place } => self.remove(place, true),
-            Step::SetAttributes { place, change } => {
-                let provider = match self.provider(place) {
-                    Ok(provider) => provider,
-                    Err(stop) => return stop.into(),
-                };
-                let ctx = self.ctx.clone();
-                match self.attempt(place, |_| provider.set_attributes(place, change, &ctx)) {
-                    Ok(_) => Outcome::Done,
-                    Err(stop) => stop.into(),
-                }
-            }
+            Step::SplitPart {
+                from,
+                to,
+                offset,
+                length,
+            } => self.split_part(from, to, *offset, *length),
+            Step::WriteChecksum { of, place } => self.write_checksum(of, place),
+            Step::JoinPart { from, to } => self.join_part(from, to),
+            Step::Relink { place, request } => self.relink(place, request),
+            Step::SetAttributes { place, change } => self.set_attributes(place, change),
         }
     }
 
@@ -1781,12 +1811,7 @@ impl<'a> Run<'a> {
     }
 
     fn link(&mut self, place: &Place, request: &LinkRequest) -> Outcome {
-        let provider = match self.provider(place) {
-            Ok(provider) => provider,
-            Err(stop) => return stop.into(),
-        };
-        let ctx = self.ctx.clone();
-        match self.attempt(place, |_| provider.create_link(place, request, &ctx)) {
+        match self.make_link(place, request) {
             Ok(()) => {
                 self.report.undo.created.push(place.clone());
                 let kind = if request.kind == LinkKind::Hard {
@@ -1797,7 +1822,7 @@ impl<'a> Run<'a> {
                 self.made(place, kind, None);
                 Outcome::Done
             }
-            Err(stop) => stop.into(),
+            Err(outcome) => outcome,
         }
     }
 

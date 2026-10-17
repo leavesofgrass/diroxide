@@ -75,6 +75,9 @@ impl JobProgress {
                 format!("{word}: counting, {} so far", self.items_done)
             }
             JobState::Counting => format!("{word}: counting"),
+            JobState::Running if matches!(self.kind, JobKind::Split | JobKind::Join) => {
+                self.parts_line(word)
+            }
             JobState::Running => match self.seconds_left {
                 Some(seconds) => format!("{word} {percent} percent, {}", time_left(seconds)),
                 None => format!("{word} {percent} percent"),
@@ -85,6 +88,25 @@ impl JobProgress {
             JobState::Verifying => format!("Verifying {percent} percent"),
             JobState::Finished => format!("{word} finished"),
         }
+    }
+
+    /// A split's or a join's line, by parts: "Splitting 4 of 12 parts, 1.4
+    /// of 4.0 GB", the part at work counted; the estimate only where the
+    /// line still fits 40 cells.
+    fn parts_line(&self, word: &str) -> String {
+        let total = self.items_total.max(1);
+        let current = (self.items_done + 1).min(total);
+        let mut line = format!("{word} {current} of {}", count(total, "part", "parts"));
+        if let Some(bytes) = self.bytes_total.filter(|&bytes| bytes > 0) {
+            line.push_str(&format!(", {}", bytes_of(self.bytes_done, bytes)));
+        }
+        if let Some(seconds) = self.seconds_left {
+            let longer = format!("{line}, {}", time_left(seconds));
+            if longer.chars().count() <= diroxide_core::format::BRAILLE_CELLS {
+                return longer;
+            }
+        }
+        line
     }
 
     /// The detail line: "12 of 300 items, 1.2 of 4.0 GB, 48 MB a second".

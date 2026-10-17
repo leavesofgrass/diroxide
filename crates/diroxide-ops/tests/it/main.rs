@@ -5,8 +5,11 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod interop;
 mod journal;
 mod kill;
+mod links;
+mod parts;
 mod props;
 mod support;
 

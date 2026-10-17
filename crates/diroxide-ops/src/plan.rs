@@ -17,6 +17,10 @@ use diroxide_core::{
 };
 use diroxide_vfs::{AttributeChange, LinkRequest, TrashGate};
 
+use crate::access::AttributeFacts;
+use crate::join::JoinFacts;
+use crate::split::SplitFacts;
+
 /// One step of a plan, acting on one entry.
 ///
 /// A copy step on a folder makes the folder at its target, or merges into
@@ -99,6 +103,42 @@ pub enum Step {
         /// What changes.
         change: AttributeChange,
     },
+    /// Write one part of a split: `length` bytes of `from`, starting at
+    /// `offset`, as the new file `to` ([`crate::split`]).
+    SplitPart {
+        /// The file split.
+        from: Place,
+        /// The part.
+        to: Place,
+        /// Where the part starts in the file.
+        offset: u64,
+        /// The part's bytes.
+        length: u64,
+    },
+    /// Write a split's `.crc` sidecar, after its last part, once the file
+    /// split is checked unchanged ([`crate::sidecar`]).
+    WriteChecksum {
+        /// The file split.
+        of: Place,
+        /// The sidecar.
+        place: Place,
+    },
+    /// Add one part to a join's whole, in order; the last part's step
+    /// commits the whole and checks it ([`crate::join`]).
+    JoinPart {
+        /// The part.
+        from: Place,
+        /// The whole.
+        to: Place,
+    },
+    /// Change where a link points: the new link made beside it, the old
+    /// one to the trash, the new one given its name ([`crate::links`]).
+    Relink {
+        /// The link.
+        place: Place,
+        /// The new link's kind and target.
+        request: LinkRequest,
+    },
 }
 
 impl Step {
@@ -111,11 +151,14 @@ impl Step {
             | Step::RenameHop { from, .. } => from,
             Step::MakeFolder { place }
             | Step::Link { place, .. }
+            | Step::Relink { place, .. }
             | Step::Trash { place }
             | Step::Restore { place }
             | Step::Remove { place }
             | Step::RemoveEmptyFolder { place }
             | Step::SetAttributes { place, .. } => place,
+            Step::SplitPart { from, .. } | Step::JoinPart { from, .. } => from,
+            Step::WriteChecksum { of, .. } => of,
         }
     }
 
@@ -128,10 +171,13 @@ impl Step {
             | Step::Move { to, .. }
             | Step::Rename { to, .. }
             | Step::RenameHop { to, .. } => Some(to),
-            Step::MakeFolder { place } | Step::Link { place, .. } | Step::Restore { place } => {
-                Some(place)
-            }
+            Step::MakeFolder { place }
+            | Step::Link { place, .. }
+            | Step::Relink { place, .. }
+            | Step::Restore { place } => Some(place),
             Step::SetAttributes { place, .. } => Some(place),
+            Step::SplitPart { to, .. } | Step::JoinPart { to, .. } => Some(to),
+            Step::WriteChecksum { place, .. } => Some(place),
             Step::Trash { .. } | Step::Remove { .. } | Step::RemoveEmptyFolder { .. } => None,
         }
     }
@@ -145,6 +191,7 @@ impl Step {
                 | Step::Trash { .. }
                 | Step::Remove { .. }
                 | Step::RemoveEmptyFolder { .. }
+                | Step::Relink { .. }
         )
     }
 
@@ -178,6 +225,22 @@ impl Step {
             Step::SetAttributes { place, .. } => {
                 format!("change the attributes of {}", spell(place))
             }
+            Step::SplitPart { to, length, .. } => format!(
+                "write the part {}, {}",
+                spell(to),
+                crate::part_names::size_words(*length)
+            ),
+            Step::WriteChecksum { place, .. } => {
+                format!("write the checksum file {}", spell(place))
+            }
+            Step::JoinPart { from, to } => {
+                format!("add the part {} to {}", spell(from), spell(to))
+            }
+            Step::Relink { place, request } => format!(
+                "point the link {} to {}",
+                spell(place),
+                spell_out(&request.target)
+            ),
         }
     }
 }
@@ -221,6 +284,61 @@ pub enum Preflight {
         gate: TrashGate,
         /// The items left out of the trash job.
         places: Vec<Place>,
+    },
+    /// The trash would take these items by copying them to another
+    /// drive's trash (a Linux drive whose own trash cannot be made), and
+    /// they are large: "Trashing copies 3.2 GB to another drive. Go on? y
+    /// or n". No leaves them where they are.
+    TrashCopies {
+        /// The items the trash would copy.
+        places: Vec<Place>,
+        /// Their bytes.
+        bytes: u64,
+    },
+    /// A split makes more than 999 parts, more than three digits number;
+    /// No leaves the file out.
+    ManyParts {
+        /// The file.
+        place: Place,
+        /// The parts it makes.
+        parts: u64,
+    },
+    /// Two sets of parts could be meant (both 000 and 001, or two ways of
+    /// numbering). The plan joins the set a No means; Yes plans the join
+    /// again with `yes` as the request's sources.
+    WhichParts {
+        /// The question, ending "y or n".
+        question: String,
+        /// The parts a Yes joins, in order.
+        yes: Vec<Place>,
+    },
+    /// A file would run as its owner (setuid). No leaves it out.
+    RunsAsOwner {
+        /// The file.
+        place: Place,
+    },
+    /// Everyone could change these entries: others gain write (a folder
+    /// without the sticky mark). No leaves the job unrun.
+    EveryoneCanChange {
+        /// The first such entry.
+        place: Place,
+        /// How many.
+        items: u64,
+    },
+    /// The owner would lose read (a file) or list or enter (a folder).
+    /// No leaves the job unrun.
+    LosesAccess {
+        /// How many entries.
+        items: u64,
+    },
+    /// A part before the last is not the first part's size, and no
+    /// checksum file says the size. Yes joins anyway; No cancels the join:
+    /// a part is never left out of a join.
+    OddPart {
+        /// The part.
+        place: Place,
+        /// The fact: "Part 007 is 18 KB, expected 20 MB."
+        line: String,
     },
 }
 
@@ -266,6 +384,50 @@ impl Preflight {
                 }
                 lines
             }
+            Preflight::TrashCopies { places, bytes } => {
+                let mut lines = vec![catalog::trash_copies_across(*bytes).text];
+                lines.push(format!(
+                    "It takes as long as copying {}.",
+                    count(places.len() as u64, "item", "items")
+                ));
+                lines
+            }
+            Preflight::ManyParts { place, parts } => vec![
+                Message::question(&format!(
+                    "This makes {} parts. Go on",
+                    diroxide_core::format::grouped(*parts)
+                ))
+                .text,
+                format!(
+                    "Splitting {}: past 999, parts are 1000 and up.",
+                    name(place)
+                ),
+            ],
+            Preflight::WhichParts { question, yes } => vec![
+                question.clone(),
+                format!("Yes joins {}.", count(yes.len() as u64, "part", "parts")),
+            ],
+            Preflight::OddPart { line, .. } => {
+                vec![line.clone(), Message::question("Join anyway").text]
+            }
+            Preflight::RunsAsOwner { place } => vec![
+                Message::question(&format!("Let {} run as its owner (setuid)", name(place))).text,
+            ],
+            Preflight::EveryoneCanChange { place, items } => {
+                let what = if *items == 1 {
+                    name(place)
+                } else {
+                    count(*items, "item", "items")
+                };
+                vec![Message::question(&format!("Let everyone change {what}")).text]
+            }
+            Preflight::LosesAccess { items } => vec![
+                Message::question(&format!(
+                    "You would lose read access to {}. Continue",
+                    count(*items, "item", "items")
+                ))
+                .text,
+            ],
         }
     }
 }
@@ -315,6 +477,12 @@ pub struct PlanFacts {
     pub whole: Vec<(usize, usize)>,
     /// Who asked for the job, for the journal and the undo record.
     pub origin: JobOrigin,
+    /// A split's parts and room, for its rows ([`SplitFacts::rows`]).
+    pub split: Option<SplitFacts>,
+    /// A join's set, sidecar and room, for its rows ([`JoinFacts::rows`]).
+    pub join: Option<JoinFacts>,
+    /// A permissions or times job's edit and rows, the recursion first.
+    pub attributes: Option<AttributeFacts>,
 }
 
 impl PlanFacts {
@@ -457,11 +625,43 @@ impl Plan {
                 "Make {}",
                 count(self.steps.len() as u64, "folder", "folders")
             ),
+            JobKind::Link
+                if self
+                    .steps
+                    .iter()
+                    .any(|step| matches!(step, Step::Relink { .. })) =>
+            {
+                format!(
+                    "Change where {} points",
+                    count(self.steps.len() as u64, "link", "links")
+                )
+            }
             JobKind::Link => format!(
                 "Make {}{to}",
                 count(self.steps.len() as u64, "link", "links")
             ),
             JobKind::Undo => format!("Undo {}", count(self.steps.len() as u64, "step", "steps")),
+            JobKind::SetAttributes => format!("Change permissions of {items}"),
+            JobKind::SetTimes => format!("Change the times of {items}"),
+            JobKind::Join => match &self.facts.join {
+                Some(join) => format!(
+                    "Join {} into {}",
+                    count(join.set.parts.len() as u64, "part", "parts"),
+                    join.name()
+                ),
+                None => format!("Join {}", count(self.steps.len() as u64, "part", "parts")),
+            },
+            JobKind::Split => {
+                let split = self.facts.split.clone().unwrap_or_default();
+                let parts = count(split.parts(), "part", "parts");
+                match split.files.as_slice() {
+                    [one] => format!("Split {} into {parts}", one.name()),
+                    files => format!(
+                        "Split {} into {parts}",
+                        count(files.len() as u64, "file", "files")
+                    ),
+                }
+            }
             other => {
                 let verb = other.verb();
                 let mut first = verb.chars();
@@ -619,9 +819,11 @@ impl Plan {
         if self.steps.len() != before {
             self.facts.left_out.push((place.clone(), reason.to_owned()));
             self.facts.questions.retain(|question| match question {
-                Preflight::TooLarge { place: p, .. } | Preflight::NameRefused { place: p, .. } => {
-                    !p.is_within(place)
-                }
+                Preflight::TooLarge { place: p, .. }
+                | Preflight::NameRefused { place: p, .. }
+                | Preflight::ManyParts { place: p, .. }
+                | Preflight::RunsAsOwner { place: p } => !p.is_within(place),
+                Preflight::TrashCopies { places, .. } => !places.iter().all(|p| p.is_within(place)),
                 _ => true,
             });
             self.facts.whole.clear();

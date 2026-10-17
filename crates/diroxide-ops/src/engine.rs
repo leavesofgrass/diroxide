@@ -355,6 +355,11 @@ pub struct JobReport {
     pub reconciliation: Option<Reconciliation>,
     /// What the Undo command can reverse.
     pub undo: UndoRecord,
+    /// A join's whole and its verdict, said after the summary; a verified
+    /// join's [`JoinOutcome::trash_offer`] asks about the parts.
+    ///
+    /// [`JoinOutcome::trash_offer`]: crate::join::JoinOutcome::trash_offer
+    pub joined: Option<crate::join::JoinOutcome>,
 }
 
 impl JobReport {
@@ -370,6 +375,7 @@ impl JobReport {
             cancelled: false,
             reconciliation: None,
             undo: UndoRecord::for_job(job, kind),
+            joined: None,
         }
     }
 
@@ -497,14 +503,16 @@ impl Engine {
     pub fn run(&self, plan: &Plan, control: &JobControl, sink: &dyn JobSink) -> JobReport {
         let by_bytes = matches!(
             plan.kind,
-            JobKind::Copy | JobKind::Duplicate | JobKind::Move
+            JobKind::Copy | JobKind::Duplicate | JobKind::Move | JobKind::Split | JobKind::Join
         ) && plan.facts.counted
             && plan.facts.bytes > 0;
-        let mut progress = JobProgress::start(
-            plan.kind,
-            plan.steps.len() as u64,
-            by_bytes.then_some(plan.facts.bytes),
-        );
+        // A split counts its parts, not its sidecars.
+        let items = match &plan.facts.split {
+            Some(split) if plan.kind == JobKind::Split => split.parts(),
+            _ => plan.steps.len() as u64,
+        };
+        let mut progress =
+            JobProgress::start(plan.kind, items, by_bytes.then_some(plan.facts.bytes));
         progress.state = JobState::Running;
         let shared = Shared::new(progress);
         let stall = self.options.stall_after;

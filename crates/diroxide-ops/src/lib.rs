@@ -19,32 +19,46 @@
 //! refuses the anchors, and asks its preflight questions ([`Preflight`])
 //! before anything is touched.
 
+pub mod access;
 pub mod engine;
 pub mod error;
 pub mod fake;
+pub mod join;
 pub mod journal;
+pub mod links;
 pub mod options;
 pub mod pace;
+pub mod part_names;
+pub mod parts;
 pub mod plan;
 mod planner;
 pub mod progress;
 mod run;
 #[cfg(test)]
 mod run_tests;
+pub mod sidecar;
+pub mod split;
 #[cfg(test)]
 mod testing;
 pub mod undo;
 mod walk;
 
+pub use access::{AttributeEdit, AttributeFacts, ModeChange, Recursion, WindowsChange};
 pub use engine::{
     Conflict, ConflictChoice, Engine, ItemError, JobControl, JobReport, JobSink, Reconciliation,
     numbered_name,
 };
 pub use error::OpsError;
 pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, SlowPlace};
+pub use join::{JoinFacts, JoinOutcome, Verdict};
 pub use journal::{Interrupted, Journal};
+pub use links::LinkForm;
 pub use options::EngineOptions;
 pub use pace::{FakePacer, Pacer, SystemPacer};
+pub use part_names::{Discovery, PartSet, SetProblem};
+pub use parts::{PartInfo, PartsError, PartsReader};
 pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
+pub use sidecar::{Sidecar, SidecarRead};
+pub use split::{SplitFacts, SplitFile};
 pub use undo::{LeftAs, UndoLog, UndoRecord};
