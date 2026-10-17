@@ -21,8 +21,9 @@
 #
 # Waiting for their commands (alpha.3, then these lines join the preset):
 #   search.find = ["ctrl+f", "alt+?"]            find file
-#   go.bookmarks, window = ["ctrl+b", "alt+b", "ctrl+\\"]
 #   dir.sizes, window = "ctrl+space"             directory size
+# Bookmarks keeps Ctrl+B and Alt+B, and in the window gains Ctrl+Backslash
+# (a terminal may send it as Ctrl+4, so the terminal does not bind it).
 
 [preset]
 name = "Midnight Commander"
@@ -43,6 +44,7 @@ letters = "type-ahead"
 "app.menu" = "f9"
 
 [window.panel]
+"go.bookmarks" = ["ctrl+b", "alt+b", "ctrl+\\"]
 "select.unpattern" = ["\\", "-"]
 "go.back" = ["alt+left", "alt+y"]
 "go.forward" = ["alt+right", "alt+u"]
@@ -91,6 +93,7 @@ command = "Compare files"
 [[held_back]]
 keys = "ctrl+x h"
 command = "Add a bookmark"
+id = "bookmark.add"
 
 [[held_back]]
 keys = "ctrl+x j"

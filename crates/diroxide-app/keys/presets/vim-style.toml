@@ -13,10 +13,13 @@
 # prefix in a terminal. Ctrl+D stays Say status and Ctrl+U swaps the
 # panels, so the half-page keys are not carried.
 #
+# The quote and the backquote open the bookmarks, as ranger's and lf's
+# marks do, and m bookmarks this folder; Ctrl+B and Alt+B then leave the
+# bookmarks, so Ctrl+B pages up in the window. t sets a label (ranger's
+# tag) and T clears the labels.
+#
 # Waiting for their commands (alpha.3, then these lines join the preset):
-#   go.bookmarks = ["'", "`"]     bookmark.add = "m"     go.jump = "z"
-#   select.visual = "shift+v"     search.find = "s"
-#   label.set = "t"               label.clear = "shift+t"
+#   go.jump = "z"     select.visual = "shift+v"     search.find = "s"
 # Later alphas: the g goto family (go home, go to the trash) and the tab
 # keys (gt, gT, yazi's t).
 
@@ -40,6 +43,10 @@ letters = "commands"
 "list.page-down" = ["pagedown", "ctrl+f"]
 
 [terminal.panel]
+"go.bookmarks" = ["'", "`"]
+"bookmark.add" = "m"
+"label.set" = ["alt+l", "t"]
+"label.clear" = "shift+t"
 "panel.up" = ["left", "backspace", "alt+up", "h"]
 "panel.into" = ["right", "l"]
 "go.back" = ["alt+left", "shift+h"]
@@ -77,6 +84,10 @@ letters = "commands"
 "list.page-up" = ["pageup", "ctrl+b"]
 
 [window.panel]
+"go.bookmarks" = ["'", "`"]
+"bookmark.add" = "m"
+"label.set" = ["alt+l", "t"]
+"label.clear" = "shift+t"
 "panel.up" = ["left", "backspace", "alt+up", "h"]
 "panel.into" = ["right", "l"]
 "go.back" = ["alt+left", "shift+h"]

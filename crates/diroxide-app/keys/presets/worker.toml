@@ -30,9 +30,9 @@
 # Insert (the screen readers' key) and Shift+Return.
 #
 # Waiting for their commands (alpha.3, then these lines join the preset):
-#   go.bookmarks = ["ctrl+b", "alt+b"], window also "ctrl+\\"
 #   go.jump = "/"
-#   label.set = "alt+l" is the default already
+# Bookmarks keeps Ctrl+B and Alt+B and gains Ctrl+Backslash in the window;
+# Set label is Alt+L, as in Worker, in the defaults already.
 
 [preset]
 name = "Worker"
@@ -62,6 +62,7 @@ letters = "type-ahead"
 "app.help" = "shift+f1"
 
 [window.panel]
+"go.bookmarks" = ["ctrl+b", "alt+b", "ctrl+\\"]
 "select.all" = ["ctrl+a", "kp-plus"]
 "select.none" = ["ctrl+shift+a", "kp-minus"]
 "select.invert" = ["*", "kp-multiply"]

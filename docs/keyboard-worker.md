@@ -40,6 +40,7 @@ Its keys come from the project's survey of Worker's features, its key bindings, 
 
 ### In a panel
 
+- Ctrl+B or Alt+B or Ctrl+\: Bookmarks. Was Ctrl+B or Alt+B. (go.bookmarks)
 - Ctrl+A or Keypad Plus: Select all. Was Ctrl+A or Keypad Plus. (select.all)
 - Ctrl+Shift+A or Keypad Minus: Select none. Was Ctrl+Shift+A or Keypad Minus. (select.none)
 - * or Keypad Star: Invert selection. Was * or Keypad Star. (select.invert)

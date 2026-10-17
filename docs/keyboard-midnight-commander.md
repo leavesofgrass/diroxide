@@ -30,6 +30,7 @@ Its keys come from Midnight Commander's manual, version 4.8.33, and its keymap f
 
 ### In a panel
 
+- Ctrl+B or Alt+B or Ctrl+\: Bookmarks. Was Ctrl+B or Alt+B. (go.bookmarks)
 - \ or Minus: Unselect by pattern. Was Minus. (select.unpattern)
 - Alt+Left or Alt+Y: Back. Was Alt+Left. (go.back)
 - Alt+Right or Alt+U: Forward. Was Alt+Right. (go.forward)

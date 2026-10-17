@@ -21,9 +21,12 @@
 # (connect to a server, alpha.5), Command+T (tabs, alpha.8), Command+J
 # (view options), Command+1 to 4 (views), Option+Command+V (move here).
 #
+# On macOS the first seven favorite labels are on Control with a digit,
+# the Finder's tag keys; the system may keep some of them for Mission
+# Control, which the owner's check should hear.
+#
 # Waiting for their commands (alpha.3, then these lines join the preset):
 #   search.find = ["ctrl+f", "ctrl+e"]
-#   label.favorite-1 to label.favorite-7, macOS window = control+1 to 7
 
 [preset]
 name = "Explorer and Finder"
@@ -57,6 +60,13 @@ letters = "type-ahead"
 "view.quick-view" = ["shift+f3", "meta+y"]
 
 [macos.window.panel]
+"label.favorite-1" = "ctrl+1"
+"label.favorite-2" = "ctrl+2"
+"label.favorite-3" = "ctrl+3"
+"label.favorite-4" = "ctrl+4"
+"label.favorite-5" = "ctrl+5"
+"label.favorite-6" = "ctrl+6"
+"label.favorite-7" = "ctrl+7"
 "file.trash" = ["f8", "delete", "meta+backspace"]
 "go.path" = ["meta+l", "alt+d", "meta+enter", "meta+shift+g"]
 "go.back" = ["alt+left", "meta+["]

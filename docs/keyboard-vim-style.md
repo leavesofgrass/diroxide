@@ -21,6 +21,10 @@ Its keys come from the manual pages of ranger and vifm, lf's documentation and y
 
 ### In a panel
 
+- ' or `: Bookmarks. Was Ctrl+B or Alt+B. (go.bookmarks)
+- M: Bookmark this folder. No key before. (bookmark.add)
+- Alt+L or T: Set label. Was Alt+L. (label.set)
+- Shift+T: Clear labels. No key before. (label.clear)
 - Left or Backspace or Alt+Up or H: Up one folder. Was Left or Backspace or Alt+Up. (panel.up)
 - Right or L: Into folder. Was Right. (panel.into)
 - Alt+Left or Shift+H: Back. Was Alt+Left. (go.back)
@@ -62,6 +66,10 @@ Its keys come from the manual pages of ranger and vifm, lf's documentation and y
 
 ### In a panel
 
+- ' or `: Bookmarks. Was Ctrl+B or Alt+B. (go.bookmarks)
+- M: Bookmark this folder. No key before. (bookmark.add)
+- Alt+L or T: Set label. Was Alt+L. (label.set)
+- Shift+T: Clear labels. No key before. (label.clear)
 - Left or Backspace or Alt+Up or H: Up one folder. Was Left or Backspace or Alt+Up. (panel.up)
 - Right or L: Into folder. Was Right. (panel.into)
 - Alt+Left or Shift+H: Back. Was Alt+Left. (go.back)

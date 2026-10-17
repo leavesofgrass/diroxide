@@ -48,6 +48,13 @@ On macOS the window has these keys as well, the Finder's.
 
 ### In a panel
 
+- Ctrl+1: Favorite label 1. Was Cmd+1. (label.favorite-1)
+- Ctrl+2: Favorite label 2. Was Cmd+2. (label.favorite-2)
+- Ctrl+3: Favorite label 3. Was Cmd+3. (label.favorite-3)
+- Ctrl+4: Favorite label 4. Was Cmd+4. (label.favorite-4)
+- Ctrl+5: Favorite label 5. Was Cmd+5. (label.favorite-5)
+- Ctrl+6: Favorite label 6. Was Cmd+6. (label.favorite-6)
+- Ctrl+7: Favorite label 7. Was Cmd+7. (label.favorite-7)
 - F8 or Delete or Cmd+Backspace: Move to trash. Was F8 or Delete. (file.trash)
 - Cmd+L or Option+D or Cmd+Enter or Cmd+Shift+G: Go to a path. Was Cmd+L or Option+D or Cmd+Enter. (go.path)
 - Option+Left or Cmd+[: Back. Was Option+Left. (go.back)
