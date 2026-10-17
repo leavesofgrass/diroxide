@@ -8,6 +8,7 @@ mod content;
 mod dirsize;
 mod engine;
 mod fake;
+mod space;
 
 use diroxide_core::Place;
 use diroxide_search::dirsize;

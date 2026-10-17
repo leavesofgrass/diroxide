@@ -86,6 +86,11 @@ impl Fake {
         self.add(path, Node::File(bytes.to_vec(), WHEN));
     }
 
+    /// Makes a file changed at a moment.
+    pub fn file_at(&self, path: &str, bytes: &[u8], modified: Timestamp) {
+        self.add(path, Node::File(bytes.to_vec(), modified));
+    }
+
     /// Marks a file as online only, as a cloud placeholder is.
     pub fn online_only(&self, path: &str) {
         self.online.lock().unwrap().insert(path.to_owned());

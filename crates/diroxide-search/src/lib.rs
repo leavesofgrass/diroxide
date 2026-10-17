@@ -30,6 +30,7 @@ mod hit;
 mod local_entry;
 mod query;
 mod sink;
+mod space;
 mod summary;
 mod walk;
 
@@ -46,6 +47,10 @@ pub use query::{
     SearchQuery, quoted,
 };
 pub use sink::{FnSink, OnlineGuard, SearchControl, SearchProgress, SearchSink};
+pub use space::{
+    Grouping, Largest, SPACE_ROWS, SpaceList, SpaceRow, largest_below, percent_words, space_by_age,
+    space_by_kind, space_list,
+};
 pub use summary::{SearchSummary, Skips};
 
 /// The total size of a folder.

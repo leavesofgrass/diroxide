@@ -1,0 +1,10 @@
+---
+source: crates/diroxide-search/tests/it/space.rs
+expression: said(&age)
+---
+Space in home, by age
+Total 68.0 KB. Largest 3 hold all
+At least 68.0 KB, 1 folder unreadable.
+Changed in the last year, 5 files, 62.5 KB, 92 percent
+Not changed in two years, 1 file, 3.0 KB, 4 percent
+Not changed in a year, 1 file, 2.5 KB, 4 percent

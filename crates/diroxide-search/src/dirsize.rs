@@ -16,7 +16,7 @@ use std::ops::ControlFlow;
 use std::sync::mpsc::channel;
 
 use diroxide_core::format::human_size;
-use diroxide_core::{EntryKind, Place};
+use diroxide_core::{Entry, EntryKind, Place};
 use diroxide_vfs::walk::{SkipReason, WalkEvent, WalkOptions, walk};
 use diroxide_vfs::{Registry, VfsError, facts};
 
@@ -81,6 +81,17 @@ pub fn dirsize_with(
     registry: &Registry,
     control: &SearchControl,
 ) -> Result<DirSize, SearchError> {
+    walk_files(place, registry, control, &mut |_, _, _| {})
+}
+
+/// The walk behind dirsize, telling `file` about every file it counts
+/// (each hard-linked file once): its place, its entry and its depth.
+pub(crate) fn walk_files(
+    place: &Place,
+    registry: &Registry,
+    control: &SearchControl,
+    file: &mut dyn FnMut(&Place, &Entry, usize),
+) -> Result<DirSize, SearchError> {
     let provider = registry.resolve(place)?;
     let ctx = control.op_context();
     let mut size = DirSize {
@@ -99,7 +110,11 @@ pub fn dirsize_with(
             }
             match event {
                 WalkEvent::Enter { depth, .. } if depth > 0 => size.folders += 1,
-                WalkEvent::Item { entry, .. } => match entry.kind {
+                WalkEvent::Item {
+                    place: at,
+                    entry,
+                    depth,
+                } => match entry.kind {
                     EntryKind::File | EntryKind::Archive => {
                         let repeated = entry.hard_links.is_some_and(|n| n > 1)
                             && entry
@@ -117,6 +132,7 @@ pub fn dirsize_with(
                             } else {
                                 size.on_this_computer = size.on_this_computer.saturating_add(bytes);
                             }
+                            file(at, entry, depth);
                         }
                     }
                     EntryKind::Link => size.links += 1,

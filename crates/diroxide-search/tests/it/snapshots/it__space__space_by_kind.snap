@@ -1,0 +1,12 @@
+---
+source: crates/diroxide-search/tests/it/space.rs
+expression: said(&kind)
+---
+Space in home, by kind
+Total 68.0 KB. Largest 3 hold 98 percent
+At least 68.0 KB, 1 folder unreadable.
+Video, 2 files, 52.0 KB, 76 percent
+Images, 2 files, 12.0 KB, 18 percent
+Documents, 1 file, 2.5 KB, 4 percent
+Text, 1 file, 1.2 KB, 2 percent
+Other files, 1 file, 300 bytes, under 1 percent
