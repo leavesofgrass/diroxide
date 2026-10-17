@@ -62,6 +62,15 @@ pub trait Opener: Send + Sync {
     /// Opens the file; the error is for the log, never shown (spike four
     /// found the crates' error text unreadable).
     fn open(&self, path: &Path) -> Result<(), String>;
+
+    /// Opens a web or mail address with the system's browser or mail
+    /// program, with no shell. The runtime has checked it first: only
+    /// `https://`, `http://` and `mailto:` addresses, whole and plain,
+    /// arrive here. An opener for files only refuses.
+    fn open_address(&self, address: &str) -> Result<(), String> {
+        let _ = address;
+        Err("this opener opens files only".to_owned())
+    }
 }
 
 /// The system opener, through the `opener` crate: ShellExecute on
@@ -72,6 +81,10 @@ pub struct SystemOpener;
 impl Opener for SystemOpener {
     fn open(&self, path: &Path) -> Result<(), String> {
         opener::open(path).map_err(|e| e.to_string())
+    }
+
+    fn open_address(&self, address: &str) -> Result<(), String> {
+        opener::open(address).map_err(|e| e.to_string())
     }
 }
 
@@ -636,6 +649,10 @@ impl Runtime {
                 self.open(place.clone());
                 true
             }
+            Effect::OpenAddress(address) => {
+                self.open_address(address.clone());
+                true
+            }
             Effect::SetClipboard(_) => {
                 self.queue.push_back(AppEvent::Problem(Message::could_not(
                     "copy",
@@ -713,6 +730,37 @@ impl Runtime {
                     &name,
                     "the system has no program for it, or the program failed",
                     "Try Edit, or Run a command",
+                )));
+            }
+        });
+    }
+
+    /// Opens a web or mail address on a worker, after checking it again
+    /// by the safe opener rule: anything but a whole, plain `https://`,
+    /// `http://` or `mailto:` address is refused and said.
+    fn open_address(&mut self, address: String) {
+        let shown = diroxide_core::names::spell_out(&address).into_owned();
+        let what = match crate::quickview::LinkTarget::of(&address) {
+            crate::quickview::LinkTarget::Web(_) => "the browser",
+            crate::quickview::LinkTarget::Mail(_) => "the mail program",
+            crate::quickview::LinkTarget::Refused(_) => {
+                self.queue.push_back(AppEvent::Problem(Message::could_not(
+                    "open",
+                    &shown,
+                    "only web and mail addresses open from here",
+                    "",
+                )));
+                return;
+            }
+        };
+        let opener = Arc::clone(&self.opener);
+        self.worker(move |shared| {
+            if opener.open_address(&address).is_err() {
+                shared.send(AppEvent::Problem(Message::could_not(
+                    "open",
+                    &shown,
+                    &format!("{what} did not start"),
+                    "Copy the address and open it yourself",
                 )));
             }
         });
@@ -1514,6 +1562,7 @@ mod tests {
     struct Recorder {
         programs: Mutex<Vec<Program>>,
         opened: Mutex<Vec<PathBuf>>,
+        addresses: Mutex<Vec<String>>,
     }
 
     impl Launcher for Recorder {
@@ -1534,6 +1583,42 @@ mod tests {
             lock(&self.opened).push(path.to_owned());
             Ok(())
         }
+
+        fn open_address(&self, address: &str) -> Result<(), String> {
+            lock(&self.addresses).push(address.to_owned());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn an_address_opens_only_when_it_is_a_web_or_mail_address() {
+        let recorder = Arc::new(Recorder::default());
+        let mut runtime = Runtime::with_local().with_opener(recorder.clone());
+        for address in ["https://example.org/docs", "mailto:someone@example.org"] {
+            runtime.execute(&Effect::OpenAddress(address.to_owned()));
+            assert!(runtime.settle().is_empty());
+        }
+        for refused in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "C:\\x.exe",
+            "https://a b",
+        ] {
+            runtime.execute(&Effect::OpenAddress(refused.to_owned()));
+            let events = runtime.settle();
+            assert!(
+                matches!(
+                    events.as_slice(),
+                    [AppEvent::Problem(m)] if m.text.contains("only web and mail addresses open from here")
+                ),
+                "{refused}: {events:?}"
+            );
+        }
+        assert_eq!(
+            *lock(&recorder.addresses),
+            ["https://example.org/docs", "mailto:someone@example.org"]
+        );
+        assert!(lock(&recorder.opened).is_empty());
     }
 
     #[test]
