@@ -15,6 +15,7 @@ pub mod details;
 pub mod effect;
 pub mod entry;
 pub mod error;
+pub mod filter;
 pub mod format;
 pub mod ids;
 pub mod job;
