@@ -4,8 +4,6 @@ This guide covers archives: opening one like a folder, copying files out of it, 
 
 What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha.2 had been heard on a screen reader when this guide was written, so every "you should hear" line is what diroxide is built to say. If your experience differs, that is a finding.
 
-<!-- to confirm with the wiring (W2f): the command names in the palette and the File menu, the keys, the order of the rows in each dialog, and which of the rows named here are lists you change with Enter. -->
-
 ## What diroxide reads and writes
 
 - Read and write: zip, 7z, tar, tar.gz (also `.tgz`), tar.xz (also `.txz`) and xz, which holds one file.
@@ -15,20 +13,18 @@ What this guide says about the dialogs and the spoken lines comes from their des
 - A split archive, such as `backup.7z.001` with its parts beside it, opens as one archive. See [split and join](split-join.md).
 - Not read: bzip2 or Zstandard compression on its own, lzip, RAR, ISO images and spanned zip sets (`.z01`, `.z02`). diroxide says why in words, for example "it uses the RAR format, which is not supported". These come later, through the 7z program when it is installed. [Known limits](known-limits.md) lists them.
 
-The format comes from the file's first bytes, not only its name. A zip named `data.dat` opens as a zip. When the bytes and the name disagree, the title says which format it found: "a.zip, 7z archive, in D:\docs". Open as archive, in the palette, opens a file by its bytes even when its name says nothing.
+The format comes from the file's first bytes, not only its name. A zip named `data.dat` opens as a zip. When the bytes and the name disagree, the title says which format it found: "a.zip, 7z archive, in D:\docs". Open as archive opens a file by its bytes even when its name says nothing. It is in the File menu under Archive (Alt+F, then A, then O) and in the palette, and it has no key of its own.
 
 ## Opening and leaving an archive
 
 Enter or Right on an archive opens it in the panel. Nothing is extracted to browse: diroxide reads the list of members and opens each file only when you ask.
 
-- The title puts the kind first: "course.zip, archive, in D:\docs". Inside a folder of the archive it is "week1, in course.zip". For an archive inside an archive: "inner.zip, archive, in course.zip". For a split set: "backup.7z.001, archive of 12 parts".
-- The status line says what opened: "Opened course.zip: 10 items, 48 KB."
-- Left, Backspace and Alt+Up go up one folder, and at the top of the archive they go back to the folder that holds it, with the cursor on the archive.
-- The path of a member is written with an exclamation mark: `course.zip!week1/a.txt`. You can type it in Go to a path, and `diro ls`, `diro archive list` and the other subcommands take it too.
+- The title puts the kind first: "course.zip, archive, in D:\docs". Inside a folder of the archive it is "week1, in course.zip, left panel", the folder, where it is, then which panel. The window title says "week1, in course.zip - diroxide". For an archive inside an archive: "inner.zip, archive, in course.zip". For a split set: "backup.7z.001, archive of 12 parts".
+- The status line says what opened, with the archive's size: "Opened course.zip: 10 items, 1.8 KB." Entering a folder inside says "week1, 3 items, in course.zip".
+- Left, Backspace and Alt+Up go up one folder. At the top of the archive they go back to the folder that holds it, with the cursor on the archive, so Right enters it again.
+- The path of a member is written with an exclamation mark: `course.zip!week1/a.txt`. `diro ls`, `diro archive list` and the other subcommands take it.
 
-<!-- to confirm with the wiring: that Left at the top of an archive puts the cursor on the archive, that Go to a path takes the exclamation-mark form, and the exact status lines. -->
-
-A tar.gz, a tar.xz and a solid 7z can only be read from the start, so listing one takes time. diroxide reads it as a job you can cancel, says "Reading backup.tar.xz: 3.2 of 14.0 GB" (at most every ten seconds in screen-reader mode), and keeps the list for the session. Escape cancels. Opening one member of such an archive on its own may mean reading a lot first, so diroxide asks: "Read 3.2 GB first to open note.txt? y or n". The question starts on No. The size that triggers it is the `archives.ask_read_ahead_mib` setting.
+A tar.gz, a tar.xz and a solid 7z can only be read from the start, so listing a big one takes time, and diroxide keeps the list for the session. It does not yet say how far it has read. Opening one member of such an archive on its own may mean reading a lot first, so diroxide asks: "Read 3.2 GB first to open note.txt? No is the default. y or n". The size that triggers it is the `archives.ask_read_ahead_mib` setting.
 
 ## What a row says
 
@@ -40,9 +36,7 @@ A member's row says its name first, then what it is, then its size, and its posi
 - "README, case clash with readme, text": two names that differ only by case. On a drive that ignores case they would collide.
 - "a.txt, appears twice, last copy shown": the archive holds two members with one name. The last one wins, as it does for most programs.
 
-Junk that archive tools add, such as `__MACOSX` folders and `._` files, is hidden like a hidden file. A name that would leave the archive, such as `../x`, is never listed as a member. When you unpack, it is named and skipped: "Skipped ../x: name leaves the archive."
-
-<!-- to confirm with the wiring: that Show hidden files (Alt+Period) lists the junk entries in the panel, as the --hidden option of diro archive list does. -->
+Junk that archive tools add, such as `__MACOSX` folders and `._` files, is marked hidden. A name that would leave the archive, such as `../x`, is never listed as a member. When you unpack, it is named and skipped: "Skipped ../x: name leaves the archive."
 
 ## Archives are read only here
 
@@ -52,7 +46,7 @@ To get a changed archive, pack a new one. Adding to an archive, deleting from it
 
 ## Copy a file out
 
-Mark members and press F5 with the other panel on a folder. This is the ordinary copy, with the ordinary question and the usual list when a name is taken ([operations and undo](operations.md) has them). diroxide sends a copy whose sources are all inside one archive to the unpack job, so copying five thousand files out of a tar.gz reads the archive once.
+Mark members and press F5 with the other panel on a folder. diroxide unpacks them, reading the archive once, so copying five thousand files out of a tar.gz is one pass. The question is the unpack question: "Unpack 4 members into out? No is the default. y or n". The job says "Unpack finished: 4 done." F5 out of an archive always uses the default unpack settings, which are the ones the Unpack dialog starts with below. There is no "copy with options" yet. To choose the settings, use Unpack.
 
 Ctrl+Z undoes it: the files diroxide made go to the trash.
 
@@ -60,82 +54,74 @@ To view a member without copying it, press F3 on it. The title names both: "note
 
 ## Unpack
 
-Unpack writes the members of an archive to a folder. Use it on an archive in the panel, or on marked members inside an open archive. The destination is the other panel's folder, or the folder you are in with the "here" form.
+Unpack writes the members of the focused archive to the other panel's folder. It is Alt+F9 in the desktop window. In a terminal it is File, Archive, Unpack (F9 or Alt+F, then A, then U), or the palette. On an archive that is not open it unpacks all of it. Inside an open archive, mark members first and it unpacks those.
 
-<!-- to confirm with the wiring: the exact command names (Unpack to other panel, Unpack here), their keys, and whether the dialog is a list of settings. -->
+The dialog is a list. Its first row says what will happen and runs it on Enter: "Unpack hostile.zip into out". Every other row is "label: value", and Enter changes the row:
 
-The dialog is a short list. Each row is "label: value", and Enter changes the row:
+- "Where:" the other panel's folder.
+- "Folder:" whether diroxide makes a folder named after the archive: "made when several items are at the top", "always made" or "never made". The default keeps anything from scattering into the folder you chose, and does not make `name/name/` when there is one top folder.
+- "Paths:" "kept", or "names only, folders left out". Names only makes clashes likely, so it asks before it replaces anything.
+- "When a name is taken:" ask, skip it, replace it (the old one to the trash), keep both, rename the new one, or replace it if newer. Undo can bring a replaced file back.
+- "Links:" "left out, each one said" or "safe ones restored".
 
-- The first row says the plan: "Unpack 10 members into course".
-- "Where:" the destination folder.
-- "Folder:" whether diroxide makes a folder named after the archive. By default it does when the archive has several things at its top, so nothing scatters into the folder you chose, and it does not make `name/name/` when there is one top folder. You can choose always or never.
-- "Paths:" kept, or names only (folders left out). Names only makes clashes likely, so it asks before it replaces anything.
-- "Writes 118 files, 40 MB. 12 GB free on D:." If the job needs more room than there is, the row becomes a refusal: "Needs 40 GB, only 12 GB free on D:." and nothing is written.
-- "When a name is taken:" ask, skip, replace it, keep both, rename the new one, or replace it if newer. A replaced file goes to the trash first, so Undo can bring it back.
-- "Password: asked for 3 locked members", when there are any.
+Enter on the first row makes the plan ("Planning the unpack"). The plan lists its rows under the question, which starts on No: "Unpack 4 members into out? No is the default. y or n". The rows say the room: "Writes 118 files, 40 MB. 12 GB free on D:." If the job needs more room than there is, the row becomes a refusal, "Needs 40 GB, only 12 GB free on D:.", and nothing is written. When members are locked: "Password: asked for 3 locked members".
 
-Then the question, starting on No: "Unpack 10 members into course? y or n".
+An unpack is one pass over the archive, in the archive's own order, so a solid 7z is read block by block and a tar.xz of five thousand files is read once. The result puts problems first: "Unpack finished: 2 done, 1 skipped." Each skipped member has a line, the name first. Ctrl+Z undoes an unpack: the files it made go to the trash.
 
-An unpack is one pass over the archive, in the archive's own order, so a solid 7z is read block by block and a tar.xz of five thousand files is read once. The result puts problems first: "Unpack finished: 118 done, 2 skipped." Ctrl+Z undoes an unpack: the files it made go to the trash. Each skipped member has a line, the name first:
-
-- "Skipped ../x: name leaves the archive."
-- "Skipped latest: link not followed." A link in an archive is not made unless you turn on restoring safe links. Then it is made only if it stays inside the folder you unpack to and the drive can hold links; otherwise the line says "link leaves the archive" or "this drive holds no links".
+- "Skipped ../escape.txt: name leaves the archive."
+- "Skipped latest: link not followed." A link in an archive is not made unless "Links: safe ones restored" is chosen. Then it is made only if it stays inside the folder you unpack to and the drive can hold links; otherwise the line says "link leaves the archive" or "this drive holds no links".
 - "Skipped, link not followed: a-very-long-name.txt." A long name moves to the end so the reason stays in the first 40 characters.
 - "Renamed 3 names: unsafe characters." The drive could not hold the name, so diroxide changed it.
 - A device or other special entry is not unpacked: "device or special entry, not unpacked".
+- "file and folder share the name, folder kept", when two members need one name.
 
 diroxide never writes outside the destination. An archive that holds a link and then a file written through that link cannot send the file anywhere else, because links are made last and only when they stay inside. A member's modified time is kept, and a folder's is set after its contents. Permissions are made safe: no set-id or sticky bit, no write for the group or others, and run only where the owner has it. Owners recorded in the archive are never applied.
 
-<!-- to confirm with the wiring: where the restore safe links choice is offered in the unpack dialog, and its default (off). -->
-
-When two members would need one name, diroxide says so and keeps the folder: "file and folder share the name, folder kept".
+Not an archive: on a file that is not one, Unpack says "Not an archive. Unpack needs an archive file."
 
 ## Pack
 
-Pack makes a new archive from the marked rows, or the focused row. It never changes an existing archive: it writes under a temporary name, tests the result, and only then gives it its name. A cancel, or a failed test, leaves any older file of that name untouched.
+Pack makes a new archive from the marked rows, or the focused row, in the other panel's folder. It is Alt+F5 in the desktop window. In a terminal it is File, Archive, Pack (F9 or Alt+F, then A, then P), or the palette. It never changes an existing archive: it writes under a temporary name, tests the result, and only then gives it its name. A cancel, or a failed test, leaves any older file of that name untouched.
 
-<!-- to confirm with the wiring: the command names (Pack to zip, Pack to 7z, Pack to tar.gz, Pack to tar.xz) and keys, which rows are lists, whether Pack here and One archive per item are in the dialog, and the presets (Share by email, Backup, Linux). In the window the plan names Alt+F5; the terminal uses the File menu and the palette. -->
+The dialog is a list. The first row says what will happen and runs it on Enter: "Pack 2 items into demo.zip". The other rows, in order:
 
-The pack dialog is a list of "label: value" rows. A row that does not apply stays in the list and says why, so you never have to guess what is missing:
-
-- "Pack 12 items into reports.zip": the plan, first.
-- "Format: zip, level normal (6 of 9)". The formats are zip (the default, because everyone can open it), 7z, tar, tar.gz, tar.xz and xz, which takes one file only. The levels are fastest, fast, normal, maximum and ultra, each said with its number. A tar says "Format: tar, no compression".
+- "Name: demo.zip". Enter opens a field. The name starts as the folder's name, or the single item's. Changing the extension changes the format.
+- "Format: zip". Enter opens the choices: zip (the default, because everyone can open it), 7z, tar, tar.gz, tar.xz and xz, which takes one file only.
+- "Level: normal (6 of 9)". The levels are fastest, fast, normal, maximum and ultra, each said with its number. A tar has none.
 - "Where: the other panel, D:\backup".
-- "Password: none (zip names stay visible)". A zip password is always AES-256. For a 7z the row says "Password: AES-256, names hidden", and hiding names is on whenever there is a password. For a tar or an xz it says "Password: not for tar; use 7z".
-- "Solid: on, blocks up to 1 GiB" for a 7z, which is how a 7z gets small, at the price of reading a block to open one file. "Solid: not for zip" for the others.
-- "Reads 300 files, 48 MB. 12 GB free on D:." The room is shown and does not stop you.
-- "Paths: relative to their folder". The other choices are full without the drive, and names only.
-- "Owner names: left out" for tar archives. A tar usually records who owns each file; diroxide leaves that out so the archive does not carry names or numbers, and the choice can be switched.
-- "Leaves out: *.tmp" when you list patterns to skip.
-- "Unpacks as one: xz keeps no name" when you pack one file to an xz with a name that is not the file's name plus `.xz`. An xz holds no file name, so it takes its name from the archive when it is unpacked.
+- "Password: none (zip names stay visible)". Enter asks for one. A zip password is always AES-256 ("Password: AES-256 (zip names visible)"). For a 7z it says "Password: AES-256". For a tar or an xz: "Password: not for tar; use 7z".
+- "Hide names: not for zip". For a 7z with a password, "Hide names: on" is the default, so the member names are encrypted too. Without a password: "Hide names: needs a password".
+- "Solid: not for zip". For a 7z, "Solid: on" is how it gets small, at the price of reading a block to open one file. "Solid: off" reads each file alone.
 - "Test after packing: on". The new archive is read back and every checksum is checked.
 
-Then the question, starting on No: "Pack 12 items into reports.zip? y or n".
+A row that does not apply stays in the list and says why, so you never have to guess what is missing.
 
-If you set a password, diroxide asks for it in the masked prompt, typed twice: "New password for reports.zip (hidden):". There is no way to recover a forgotten password.
+The password is asked in a masked prompt, twice: "New password for demo.7z (hidden):", then "Same password again for demo.7z". Two that differ get "The two passwords differ. Nothing was changed. Try again." and an empty one "A password cannot be empty." When they match: "Password set. It is kept only for this pack." Escape in the prompt says "No password set." There is no way to recover a forgotten password.
 
-The progress line is the job engine's: "Packing: counting, 120 so far" first, then "Packing 30 percent, 2 minutes left". Say Status (Ctrl+D) adds the detail: "12 of 300 items, 1.2 of 4.0 GB, 48 MB a second". The end says "Pack finished: 300 done, 2 skipped." and then "Checked 300 of 300 entries, all good." Ctrl+Z puts the new archive in the trash.
+Enter on the first row makes the plan ("Planning the pack") and asks the question, starting on No: "Pack 2 items into demo.zip? No is the default. y or n". The plan lists its rows under it: the format and level ("Format: zip, level normal (6 of 9)"), where it goes, the password, the solid choice, "Reads 300 files, 48 MB. 12 GB free on D:." (the room is shown and does not stop you), "Paths: relative to their folder", "Owner names: left out" for a tar (a tar usually records who owns each file, and diroxide leaves that out), and "Test after packing: on". Packing one file to an xz under a name that is not the file's name plus `.xz` adds "Unpacks as one: xz keeps no name", because an xz holds no file name and takes it from the archive.
+
+The job says "Pack started: 2 items into demo.zip". The progress line is the job engine's: "Packing: counting, 120 so far" first, then "Packing 30 percent, 2 minutes left". Say Status (Ctrl+D) adds the detail: "12 of 300 items, 1.2 of 4.0 GB, 48 MB a second". The end puts the result and the check in one line: "Pack finished: 2 done. Checked 2 of 2 entries, all good." Ctrl+Z puts the new archive in the trash.
 
 Packing to an existing name asks the usual question about a taken name. The old archive goes to the trash if you choose to replace it.
 
 ## Test an archive
 
-Test archive reads every member and checks every checksum, and writes nothing. Use it on an archive in the panel, from the palette or the File menu.
+Test archive reads every member and checks every checksum, and writes nothing. It is Alt+Shift+F9 in the desktop window; in a terminal File, Archive, Test archive (Alt+F, then A, then T), or the palette. It has no dialog. On a file that is not an archive it says "Not an archive. Test archive needs an archive file."
 
-- "Archive is sound: 10 members."
+- "Test started: demo.zip", then "Archive is sound: 2 members."
 - "2 members damaged: first is week1/a.txt". The result list names every damaged member.
 - A locked archive asks for its password. With none, the test says what it could not check: "Not checked: 3 of 4 members."
 - A 7z cannot tell a wrong password from damaged data, so it says both.
 
-Pack runs the same test on its own result, which is where "Checked 300 of 300 entries, all good." comes from.
+Pack runs the same test on its own result, which is where "Checked 2 of 2 entries, all good." comes from.
 
 ## Passwords
 
+- When the prompt comes depends on the archive. A zip lists without asking, because zip does not hide names. The prompt comes when you press F3 or F5 on a locked member. A 7z with encrypted names cannot be listed at all without the password, so it asks when you open it: "Could not open a.7z: a password is needed. Enter the password and try again."
 - The prompt names its purpose and hides what you type: "Password for course.zip (hidden):". It never reads your typing back. By default it shows an asterisk for each key, which proves a key registered; the `secret_echo` setting can make it silent, and `secret_show_toggle` starts the field with the text shown, which anyone near can read.
-- A wrong password gets up to three tries. Each retry is a question starting on No: "Wrong password for course.zip. Try again? y or n". For a 7z: "Wrong password or damaged data. Try again? y or n". Escape or no skips the locked members and says so: "No password given. Skipped 10 members of course.zip." After three wrong tries: "Gave up on course.zip after 3 wrong passwords. Skipped."
-- A locked 7z with encrypted names cannot be listed without the password: "Could not open a.7z: a password is needed. Enter the password and try again."
+- A wrong password gets up to three tries. Each retry is a question starting on No: "Wrong password for course.zip. Try again? No is the default. y or n". For a 7z: "Wrong password or damaged data. Try again? No is the default. y or n". Escape or no skips the locked members and says so: "No password given. Skipped 10 members of course.zip." After three wrong tries: "Gave up on course.zip after 3 wrong passwords. Skipped."
 - An archive with ZipCrypto, the old zip password, is read, with a warning: "Weak encryption in a.zip (ZipCrypto)." diroxide never writes it.
-- One password serves a whole job, and diroxide forgets it when the job ends. A password is never written to the log, the jobs list, a script or the undo record, and it is never taken on a command line. [Privacy](privacy.md) has more.
+- One password serves a whole job, and diroxide forgets it when the job ends. Leaving a locked 7z makes diroxide forget its password, and entering it again asks again. A password is never written to the log, the jobs list, a script or the undo record, and it is never taken on a command line. [Privacy](privacy.md) has more.
 
 ## Archives inside archives
 
@@ -147,11 +133,11 @@ A hostile or broken archive can claim to be small and expand to fill a drive, or
 
 A question: something large but possibly real. The question puts the fact first, ends in "y or n", and starts on No:
 
-- "Expands to 40 GB from 40 KB. Read huge.bin? y or n". One member grows far more than any normal file would (the ratio and the amount are `archives.max_ratio` and `archives.ratio_floor_mib`).
-- "Expands to more than 34.4 GB. Go on? y or n". The whole job passes the total it asks at (`archives.ask_total_gib`).
-- "big.bin is 9.1 GB. Read it? y or n". A single member is larger than `archives.max_member_gib`.
-- "Needs 400 MB of memory for a.7z. Go on? y or n". A 7z or xz asks for a large dictionary (`archives.ask_dictionary_mib`).
-- "Read 3.2 GB first to open note.txt? y or n", described above.
+- "Expands to 40 GB from 40 KB. Read huge.bin? No is the default. y or n". One member grows far more than any normal file would (the ratio and the amount are `archives.max_ratio` and `archives.ratio_floor_mib`).
+- "Expands to more than 34.4 GB. Go on? No is the default. y or n". The whole job passes the total it asks at (`archives.ask_total_gib`).
+- "big.bin is 9.1 GB. Read it? No is the default. y or n". A single member is larger than `archives.max_member_gib`.
+- "Needs 400 MB of memory for a.7z. Go on? No is the default. y or n". A 7z or xz asks for a large dictionary (`archives.ask_dictionary_mib`).
+- "Read 3.2 GB first to open note.txt? No is the default. y or n", described above.
 
 A refusal: something past any real use. It says what, in the usual shape: "Could not open bomb.zip: it passes the limit for bytes unpacked: 1 TB." The hard limits are the total (`archives.max_total_gib`), the dictionary (`archives.max_dictionary_mib`), the header and the list of members (`archives.max_header_mib`, `archives.max_index_mib`), the number of members (`archives.max_entries`, a million), the length of a name (`archives.max_name_bytes` and `archives.max_component_bytes`) and the memory of a decoder (`archives.max_memory_mib`).
 
@@ -161,7 +147,7 @@ An archive that is damaged says where: "it is damaged: its data ends early". A m
 
 ## From a shell
 
-These subcommands do the same jobs without the panels, and each prints one plain line a member, the path first. They read passwords only in a terminal, never from the command line.
+These subcommands do the same jobs without the panels, and each prints one plain line a member, the path first. They read passwords only in a terminal, never from the command line. They use the built-in default limits. Only the program in the terminal or the window reads the `[archives]` table of your settings.
 
 ```bash
 diro archive list course.zip
@@ -195,7 +181,7 @@ The Archives and split group of [the settings reference](settings-reference.md) 
 
 ## Known gaps
 
-[Known limits](known-limits.md) lists everything alpha.2 does not do with archives. The ones you are most likely to meet: no adding to or changing an existing archive, no RAR or ISO, zip times read as UTC, and the names of older zips in Shift-JIS and other legacy encodings are not chosen yet.
+[Known limits](known-limits.md) lists everything alpha.2 does not do with archives. The ones you are most likely to meet: no adding to or changing an existing archive, no RAR or ISO, no progress line while a big tar.xz is listed, zip times read as UTC, and the names of older zips in Shift-JIS and other legacy encodings are not chosen yet.
 
 ## See also
 
