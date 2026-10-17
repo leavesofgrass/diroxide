@@ -199,7 +199,7 @@ pub fn command() -> Command {
         )
         .subcommand(
             Command::new("keys")
-                .about("Check or print the keys, as keymap.toml holds them")
+                .about("Check, print or choose the keys, as keymap.toml and the presets hold them")
                 .disable_help_subcommand(true)
                 .subcommand(
                     Command::new("check")
@@ -215,6 +215,14 @@ pub fn command() -> Command {
                 )
                 .subcommand(
                     Command::new("test").about("Say what each key sends and runs; Escape ends it"),
+                )
+                .subcommand(
+                    Command::new("probe").about("Ask for each key in turn and print what arrived"),
+                )
+                .subcommand(
+                    Command::new("preset")
+                        .about("List the key presets, or apply NAME; your own keys stay on top")
+                        .arg(Arg::new("name").help("The preset")),
                 ),
         )
         .subcommand(

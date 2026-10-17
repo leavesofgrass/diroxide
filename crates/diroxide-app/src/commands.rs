@@ -492,6 +492,18 @@ pub mod ids {
         NO = "dialog.no";
         /// The focused answer, in a dialog.
         ACCEPT = "dialog.accept";
+        /// Change a command's key (W3k): with a `command` argument, the
+        /// capture waits for that command's new key; without one, the Keys
+        /// list opens.
+        KEYS_CHANGE = "keys.change";
+        /// The Keys list (W3k).
+        KEYS_LIST = "keys.list";
+        /// Reset all keys (W3k).
+        KEYS_RESET_ALL = "keys.reset-all";
+        /// The single-letter switch (W3k).
+        KEYS_SINGLE_LETTERS = "keys.single-letters";
+        /// The preset chooser (W3k).
+        KEYS_PRESET = "keys.preset";
     }
 
     // The arrival tracker's command (W3t, plan commit 34).
@@ -524,7 +536,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 177] = [
+pub static CATALOG: [CommandInfo; 182] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1909,6 +1921,47 @@ pub static CATALOG: [CommandInfo; 177] = [
         Preview,
         &["alt+p"],
         &["alt+p"],
+    ),
+    // Keys (W3k): Change key and the Keys list.
+    command(
+        ids::KEYS_LIST,
+        "Keys list",
+        "Lists every command with its keys in both columns; type to narrow it, and change any key.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::KEYS_PRESET,
+        "Key presets",
+        "Chooses a set of keys modeled on another file manager; your own keys stay on top.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::KEYS_RESET_ALL,
+        "Reset all keys",
+        "Takes every change of yours out of keymap.toml, after asking; the preset stays.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::KEYS_SINGLE_LETTERS,
+        "Single letters",
+        "Chooses what a key without Control or Alt does in a panel: jump to a name, run a command, or nothing.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::KEYS_CHANGE,
+        "Change a key",
+        "Waits for a command's new key, says it back, and says what it already does.",
+        Global,
+        &[],
+        &[],
     ),
     command(
         ids::PLUGINS,

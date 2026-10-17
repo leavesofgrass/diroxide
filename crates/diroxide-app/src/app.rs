@@ -24,6 +24,7 @@ mod dialogs;
 mod files;
 mod folder_views;
 mod info;
+mod keys;
 mod labeling;
 mod nav;
 mod organize;
@@ -416,6 +417,8 @@ enum Purpose {
     JobHistory,
     /// One job's items.
     JobItems,
+    /// A dialog of Change key, the Keys list or the presets (W3k).
+    Keys(Box<keys::KeysPurpose>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -544,6 +547,8 @@ pub struct App {
     highlighter: Option<crate::viewer::highlight::Session>,
     /// The quick view and the focus in its region.
     preview: preview::Preview,
+    /// Change key's capture, the Keys list and the presets (W3k).
+    keys: keys::KeysState,
     /// The labels, bookmarks and folder views, and what their lists wait
     /// for (W3l).
     organize: organize::Organize,
@@ -786,6 +791,7 @@ impl App {
     pub fn new(options: AppOptions) -> Self {
         let mut settings = options.settings;
         let startup = options.startup;
+        let owner_keys = startup.keymap.clone();
         if let Some(layout) = startup.layout {
             settings.layout = layout;
         }
@@ -794,7 +800,7 @@ impl App {
         for record in startup.undo.iter().cloned() {
             undo.record(record);
         }
-        let palette = Palette::with_recent(startup.palette_recent());
+        let palette = startup.palette();
         let visits = Visits::from_lines(
             startup
                 .histories
@@ -857,6 +863,7 @@ impl App {
             viewer_wait: None,
             highlighter: None,
             preview: preview::Preview::default(),
+            keys: keys::KeysState::new(owner_keys),
             organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
             watching: watching::WatchState::default(),
         };
@@ -1001,7 +1008,7 @@ impl App {
     /// Whether the key test is on: the frontend sends every key, as it
     /// came, and the app says what it is.
     pub fn key_test_active(&self) -> bool {
-        self.key_test
+        self.key_test || self.capturing_key()
     }
 
     /// Sets how many rows Page Up and Page Down move in each panel: the
@@ -1338,6 +1345,9 @@ impl App {
             }
             return self.viewer_closed_command();
         }
+        if keys::is_keys_command(&command.id) {
+            return self.keys_dispatch(command);
+        }
         let Some(action) = action else {
             let message =
                 Message::could_not("run", command.id.as_str(), "no command has that id", "");
@@ -1505,6 +1515,9 @@ impl App {
     }
 
     fn press(&mut self, key: Key) -> Vec<Effect> {
+        if self.capturing_key() {
+            return self.capture_press(key);
+        }
         if self.key_test {
             return self.key_test_press(key);
         }

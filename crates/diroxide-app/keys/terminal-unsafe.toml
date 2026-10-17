@@ -214,6 +214,20 @@ why = "it takes the key for itself, so the key never arrives; the palette's Quit
 source = "the owner's first try of alpha.1 in the desktop app's built-in terminal, Friday, October 16, 2026; the owner's key probe there adds the rest"
 
 [[key]]
+keys = ["ctrl+b"]
+kind = "program"
+program = "tmux"
+why = "it is tmux's prefix key, so the key arrives only when pressed twice"
+source = "R4 4.2 (R1's note); terminal-delivery.toml"
+
+[[key]]
+keys = ["menu"]
+kind = "program"
+program = "Windows"
+why = "crossterm never delivers the Menu key in a Windows terminal; Shift+F10 is the way"
+source = "W1d-2's notes; terminal-delivery.toml"
+
+[[key]]
 pattern = "ctrl+alt+digit"
 kind = "program"
 program = "Windows Terminal"

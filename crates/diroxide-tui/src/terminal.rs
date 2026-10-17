@@ -7,9 +7,12 @@
 //!   reads keys as key records, where the paste markers would arrive as
 //!   typed characters). The keyboard enhancement protocol is asked about
 //!   once and the answer goes to the log, never to the screen; diroxide
-//!   never turns it on and never relies on it (R4 section 4.3). crossterm
-//!   reads the answer itself within two seconds, so the reply never shows
-//!   as typed characters.
+//!   never relies on it (R4 section 4.3). It turns it on only while Change
+//!   key waits for one key, when the terminal has it, so that key is
+//!   reported exactly, and off again as soon as the key came (the alpha.3
+//!   plan, the capture engine); giving the terminal back turns it off too.
+//!   crossterm reads the answer itself within two seconds, so the reply
+//!   never shows as typed characters.
 //! - **Leaving.** On a normal quit, on an error, on a panic (a panic hook
 //!   restores the screen before the message prints) and on a signal (a
 //!   terminate signal, a hang-up and an interrupt on Unix; Ctrl+Break and
@@ -54,6 +57,9 @@ static HOOKED: AtomicBool = AtomicBool::new(false);
 static HANDED: AtomicBool = AtomicBool::new(false);
 /// Whether the signal handler is installed (once a process).
 static SIGNALS: AtomicBool = AtomicBool::new(false);
+/// Whether the keyboard enhancement protocol is on (only while a capture
+/// waits for a key).
+static ENHANCED: AtomicBool = AtomicBool::new(false);
 /// Panics on other threads while diroxide has the terminal, held to be
 /// printed once it is given back: the default hook would write them over
 /// the screen (a document reader that panics under the quick view's
@@ -155,6 +161,9 @@ pub fn restore() {
         return;
     }
     let mut out = io::stdout();
+    if ENHANCED.swap(false, Ordering::SeqCst) {
+        let _ = execute!(out, event::PopKeyboardEnhancementFlags);
+    }
     if !cfg!(windows) {
         let _ = execute!(out, event::DisableBracketedPaste);
     }
@@ -284,9 +293,26 @@ fn spawn_reader(sender: Sender<Incoming>, gate: Gate, stop: Arc<AtomicBool>) -> 
     })
 }
 
+/// Turns the keyboard enhancement protocol on or off: on while a capture
+/// waits for a key, so the terminal reports that key exactly (Tab and
+/// Ctrl+I, Enter and Ctrl+M told apart).
+fn set_exact_keys(on: bool) {
+    let mut out = io::stdout();
+    if on {
+        let flags = event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES;
+        if execute!(out, event::PushKeyboardEnhancementFlags(flags)).is_ok() {
+            ENHANCED.store(true, Ordering::SeqCst);
+        }
+    } else if ENHANCED.swap(false, Ordering::SeqCst) {
+        let _ = execute!(out, event::PopKeyboardEnhancementFlags);
+    }
+    let _ = out.flush();
+}
+
 /// The log's lines about the terminal: what the keyboard enhancement
-/// query found. Written to the state folder, never shown.
-fn probe_lines(inline: bool) -> Vec<String> {
+/// query found. Written to the state folder, never shown. With them,
+/// whether the terminal has the protocol.
+fn probe_lines(inline: bool) -> (Vec<String>, bool) {
     let mut lines = vec![format!(
         "Terminal: {}, raw mode, mouse capture off.",
         if inline {
@@ -295,8 +321,10 @@ fn probe_lines(inline: bool) -> Vec<String> {
             "alternate screen"
         }
     )];
-    let answer = match terminal::supports_keyboard_enhancement() {
-        Ok(true) => "the terminal can report keys exactly; diroxide does not turn it on".to_owned(),
+    let asked = terminal::supports_keyboard_enhancement();
+    let supported = matches!(asked, Ok(true));
+    let answer = match asked {
+        Ok(true) => "the terminal can report keys exactly; diroxide turns it on only while Change key waits for a key".to_owned(),
         Ok(false) if cfg!(windows) => {
             "not asked on Windows, where keys arrive as key records".to_owned()
         }
@@ -308,7 +336,7 @@ fn probe_lines(inline: bool) -> Vec<String> {
         "Color: {:?}.",
         diroxide_theme::ColorSupport::detect()
     ));
-    lines
+    (lines, supported)
 }
 
 fn write_log(path: Option<&PathBuf>, lines: &[String]) {
@@ -337,7 +365,7 @@ pub(crate) fn run(
     let inline = options.inline;
     // The query reads the terminal's answer in raw mode itself; it runs
     // before the reader thread starts, so nothing else reads the reply.
-    let mut probe = probe_lines(inline);
+    let (mut probe, exact_keys) = probe_lines(inline);
     probe.push(signals);
     write_log(log.as_ref(), &probe);
     // The guard first: a failure halfway through taking the terminal
@@ -381,6 +409,19 @@ pub(crate) fn run(
             let _ = out.write_all(crate::session::osc52(text).as_bytes());
             let _ = out.flush();
         }));
+    // Change key tells the owner which kind of terminal it heard; on
+    // Windows the keys arrive as key records, not yet probed.
+    let reports = if cfg!(windows) {
+        diroxide_app::keymap::capture::KeyReports::Unknown
+    } else if exact_keys {
+        diroxide_app::keymap::capture::KeyReports::Exact
+    } else {
+        diroxide_app::keymap::capture::KeyReports::Merged
+    };
+    session.app_mut().set_key_reports(reports);
+    if exact_keys {
+        session = session.with_keyboard_sink(Box::new(set_exact_keys));
+    }
     let resumed = session.resumed_flag();
     let hook_gate = Arc::clone(&gate);
     session_runtime_hook(&mut session, hook_gate, resumed, inline);

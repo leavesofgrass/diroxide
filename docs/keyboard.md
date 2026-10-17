@@ -204,6 +204,11 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
 - Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
 - Open in textweaver. Hands the quick view's file to textweaver for full reading with speech, when it is installed. (preview.textweaver)
+- Keys list. Lists every command with its keys in both columns; type to narrow it, and change any key. (keys.list)
+- Key presets. Chooses a set of keys modeled on another file manager; your own keys stay on top. (keys.preset)
+- Reset all keys. Takes every change of yours out of keymap.toml, after asking; the preset stays. (keys.reset-all)
+- Single letters. Chooses what a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. (keys.single-letters)
+- Change a key. Waits for a command's new key, says it back, and says what it already does. (keys.change)
 - Plugins. Lists the plugins and what they may do. Plugins come with alpha.4. (plugins.list)
 
 ## In the window
@@ -406,6 +411,11 @@ The window arrives with alpha.6; these are its keys. On macOS the window uses Co
 - Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
 - Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
 - Open in textweaver. Hands the quick view's file to textweaver for full reading with speech, when it is installed. (preview.textweaver)
+- Keys list. Lists every command with its keys in both columns; type to narrow it, and change any key. (keys.list)
+- Key presets. Chooses a set of keys modeled on another file manager; your own keys stay on top. (keys.preset)
+- Reset all keys. Takes every change of yours out of keymap.toml, after asking; the preset stays. (keys.reset-all)
+- Single letters. Chooses what a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. (keys.single-letters)
+- Change a key. Waits for a command's new key, says it back, and says what it already does. (keys.change)
 - Plugins. Lists the plugins and what they may do. Plugins come with alpha.4. (plugins.list)
 
 ## Keys a terminal may keep
@@ -425,6 +435,7 @@ These keys of the terminal list work in most terminals, but a terminal program m
 - Shift+F5 for Duplicate: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: File menu, Duplicate.
 - Alt+Enter for Details: Windows Terminal keeps it; it goes full screen. Sure way: File menu, Details.
 - Shift+F10 for Context menu: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: File menu, Context menu.
+- Menu for Context menu: Windows keeps it; crossterm never delivers the Menu key in a Windows terminal; Shift+F10 is the way. Sure way: File menu, Context menu.
 - Ctrl+C for Copy: Windows Terminal keeps it; it copies text when text is selected. Sure way: Edit menu, Copy.
 - Ctrl+V for Paste: Windows Terminal keeps it; it pastes text, so the key never arrives. Sure way: Edit menu, Paste.
 - Ctrl+F3 for Sort by name: macOS keeps it; the system uses Ctrl+F3 to Ctrl+F8 for the Dock, the menu bar and windows. Sure way: View menu, Sort submenu, Sort by name.
@@ -439,6 +450,7 @@ These keys of the terminal list work in most terminals, but a terminal program m
 - Ctrl+5 for Favorite label 5: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 5.
 - Ctrl+6 for Favorite label 6: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 6.
 - Ctrl+7 for Favorite label 7: Many Unix terminals send it as the digit alone or as another control key. Sure way: Edit menu, Labels submenu, Favorite label 7.
+- Ctrl+B for Bookmarks: tmux keeps it; it is tmux's prefix key, so the key arrives only when pressed twice. Sure way: Go menu, Bookmarks.
 - Shift+F3 for Quick view: Some terminals send Shift with F1 to F12 as F13 to F24. Sure way: View menu, Quick view.
 - Ctrl+Down for Next paragraph: macOS keeps it; Mission Control uses Control with the arrows. Sure way: View menu, Preview submenu, Next paragraph.
 - Ctrl+Up for Previous paragraph: macOS keeps it; Mission Control uses Control with the arrows. Sure way: View menu, Preview submenu, Previous paragraph.
@@ -494,5 +506,10 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 
 ## See also
 
+- [The Total Commander preset](keyboard-total-commander.md)
+- [The Midnight Commander preset](keyboard-midnight-commander.md)
+- [The Explorer and Finder preset](keyboard-explorer-finder.md)
+- [The Worker preset](keyboard-worker.md)
+- [The vim-style preset](keyboard-vim-style.md)
 - [Settings reference](settings-reference.md)
 - [The documentation index](README.md)

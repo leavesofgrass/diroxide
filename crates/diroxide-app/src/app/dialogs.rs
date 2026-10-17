@@ -108,7 +108,7 @@ impl App {
 
     /// Whether the top dialog opened less than the settle time ago, so a
     /// confirming key is ignored.
-    fn settling(&self) -> bool {
+    pub(super) fn settling(&self) -> bool {
         self.opens.last().is_some_and(|open| {
             millis_between(open.opened, self.now()) < self.settings.dialog_settle_ms
         })
@@ -284,6 +284,7 @@ impl App {
                     | Purpose::Places(_)
                     | Purpose::PickDestination { .. }
                     | Purpose::TypedPlan(..)
+                    | Purpose::Keys(_)
             ) || matches!(&purpose, Purpose::Organize(w) if w.list_always());
             if candidates.is_some() && !list_always {
                 *candidates = None;
@@ -378,6 +379,7 @@ impl App {
                     effects.extend(self.duplicate_prompt(side, next.clone(), more.to_vec()));
                 }
             }
+            Purpose::Keys(purpose) => effects.extend(self.keys_escape(*purpose)),
             Purpose::Organize(wants) => effects.extend(self.organize_escape(*wants)),
             _ => {}
         }
@@ -422,6 +424,7 @@ impl App {
                 effects.push(self.say(Message::info(format!("Running {name}"))));
                 effects.push(Effect::OpenExternally(place));
             }
+            Purpose::Keys(purpose) => effects.extend(self.keys_yes(*purpose)),
             Purpose::Organize(wants) => effects.extend(self.organize_yes(*wants)),
             _ => {}
         }
@@ -525,13 +528,9 @@ impl App {
                 let Some(id) = row.and_then(|r| CommandId::new(r).ok()) else {
                     return vec![self.say(Message::status("No command matches"))];
                 };
-                self.palette.record(&id);
-                let recent: Vec<String> = self
-                    .palette
-                    .recent()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect();
+                let now = self.now().unix_seconds();
+                self.palette.record_at(&id, now);
+                let recent: Vec<String> = self.palette.to_lines();
                 self.histories
                     .insert(state::keys::PALETTE.to_owned(), recent.clone());
                 self.request(Request::SaveHistory {
@@ -786,6 +785,7 @@ impl App {
                 effects.extend(self.run_line(side, &text));
                 effects
             }
+            Purpose::Keys(purpose) => self.keys_accept(*purpose, row.as_deref(), &text),
             Purpose::Organize(wants) => self.organize_accept(*wants, row, text, in_list),
             Purpose::RunPlan(_)
             | Purpose::Quit
@@ -1097,6 +1097,7 @@ impl App {
             Some(Purpose::Palette | Purpose::Places(_) | Purpose::PickDestination { .. }) => {
                 self.refresh_candidates()
             }
+            Some(Purpose::Keys(purpose)) if purpose.is_list() => self.keys_list_typed(),
             Some(Purpose::Organize(wants)) if wants.list_always() => self.refresh_candidates(),
             _ => {
                 if let Some((

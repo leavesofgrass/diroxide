@@ -417,6 +417,153 @@ fn the_key_test_ends_after_ten_seconds_without_a_key() {
 }
 
 #[test]
+fn a_capture_takes_one_press_and_ten_seconds_end_it_in_words() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    let (mut app, mut runtime) = app(place(&work), place(&work), settings(Layout::Single));
+    let mut clock = Clock::at_start();
+    let toggles = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&toggles);
+    let mut s = session(&mut app, &mut runtime, 80, 24, true)
+        .with_keyboard_sink(Box::new(move |on| seen.lock().unwrap().push(on)));
+    start(&mut s, &clock);
+
+    // Change key on Sort by size: the prompt opens and the enhancement
+    // protocol goes on while it waits.
+    let change = |id: &str| {
+        Command::new(ids::KEYS_CHANGE)
+            .with_arg("command", diroxide_core::ArgValue::Text(id.to_owned()))
+    };
+    s.command(change("view.sort-size"), clock.now());
+    s.draw(clock.now()).unwrap();
+    assert!(s.app().capturing_key());
+    assert_eq!(
+        s.app().dialog().unwrap().1.title(),
+        "Press the new key now. Escape cancels."
+    );
+    // A release and a modifier alone are passed over; the paste is
+    // refused and the wait goes on.
+    s.key_event(
+        &key_event(TermCode::Enter, KeyEventKind::Release),
+        clock.now(),
+    );
+    s.key_event(
+        &KeyEvent {
+            code: TermCode::Modifier(crossterm::event::ModifierKeyCode::LeftControl),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        },
+        clock.now(),
+    );
+    s.paste("hello", clock.now());
+    s.draw(clock.now()).unwrap();
+    assert!(s.app().capturing_key());
+    assert!(
+        s.said()
+            .iter()
+            .any(|m| m.text == "Pasted text is not a key. Press one key.")
+    );
+    // The first press is taken and said back in words.
+    s.key_event(
+        &KeyEvent {
+            code: TermCode::F(9),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        },
+        clock.now(),
+    );
+    settle(&mut s, &clock);
+    assert!(!s.app().capturing_key());
+    let said: Vec<&str> = s.said().iter().map(|m| m.text.as_str()).collect();
+    assert!(said.contains(&"Got Control plus F9"), "{said:?}");
+    assert!(
+        said.contains(&"Ctrl+F9 saved for Sort by size."),
+        "{said:?}"
+    );
+    assert_eq!(*toggles.lock().unwrap(), [true, false]);
+
+    // Ten seconds without a key end the capture in words and offer the
+    // typed name, an equal way in.
+    s.command(change("view.sort-name"), clock.now());
+    s.tick(clock.now());
+    assert_eq!(
+        s.next_deadline(),
+        Some(clock.now() + Duration::from_secs(10))
+    );
+    clock.advance(Duration::from_secs(10));
+    s.tick(clock.now());
+    s.draw(clock.now()).unwrap();
+    assert!(!s.app().capturing_key());
+    assert!(
+        s.said()
+            .iter()
+            .any(|m| m.text == "No key heard. The terminal may keep it.")
+    );
+    let (_, dialog) = s.app().dialog().unwrap();
+    assert_eq!(dialog.title(), "Type the key's name, such as ctrl+f5");
+    type_text(&mut s, &clock, "ctrl+f12");
+    press(&mut s, &clock, "enter");
+    assert!(
+        s.said()
+            .iter()
+            .any(|m| m.text == "Ctrl+F12 saved for Sort by name."),
+        "{:?}",
+        s.said()
+    );
+    assert_eq!(*toggles.lock().unwrap(), [true, false, true, false]);
+}
+
+#[test]
+fn the_keys_list_puts_each_rows_meaning_in_forty_cells_and_the_cursor_on_it() {
+    let dir = temp();
+    let work = fixture(dir.path());
+    for screen_reader in [true, false] {
+        let (mut app, mut runtime) = app(place(&work), place(&work), settings(Layout::Single));
+        let clock = Clock::at_start();
+        let mut s = session(&mut app, &mut runtime, 80, 24, screen_reader);
+        start(&mut s, &clock);
+        s.command(Command::new(ids::KEYS_LIST), clock.now());
+        settle(&mut s, &clock);
+        let screen = s.screen();
+        let title = line_of(&screen, "Keys, preset diroxide defaults, 0 changed");
+        cursor_at(
+            &s,
+            "Keys, preset diroxide defaults, 0 changed: ".len(),
+            title,
+        );
+        type_text(&mut s, &clock, "copy");
+        press(&mut s, &clock, "down");
+        let screen = s.screen();
+        let title = line_of(&screen, "Keys, preset diroxide defaults, 0 changed: copy");
+        assert!(
+            screen.lines[title + 1].starts_with("Copy path, no key"),
+            "{:#?}",
+            screen.lines
+        );
+        cursor_at(&s, 0, title + 1);
+        // Each row drawn says its name and its first key in 40 cells.
+        for line in screen.lines[title + 1..]
+            .iter()
+            .take_while(|l| l.starts_with("Copy"))
+        {
+            let meaning = line.split(", ").take(2).collect::<Vec<_>>().join(", ");
+            let meaning = meaning.split(" or ").next().unwrap_or(&meaning);
+            assert!(diroxide_core::format::within_cells(line, meaning), "{line}");
+        }
+        // Enter: the row's actions, the focus on Change key.
+        press(&mut s, &clock, "enter");
+        let screen = s.screen();
+        let actions = line_of(&screen, "Change key, press the new key");
+        cursor_at(&s, 0, actions);
+        press(&mut s, &clock, "escape");
+        press(&mut s, &clock, "escape");
+        assert!(s.app().dialog().is_none());
+    }
+}
+
+#[test]
 fn a_resize_is_drawn_once_the_size_is_still() {
     let dir = temp();
     let work = fixture(dir.path());

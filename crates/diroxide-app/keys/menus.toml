@@ -668,6 +668,32 @@ access = "j"
 command = "app.key-test"
 access = "k"
 
+[[menu.item]]
+menu = "keys"
+access = "e"
+
+[[menu]]
+id = "keys"
+title = "Keys"
+access = "e"
+bar = false
+
+[[menu.item]]
+command = "keys.list"
+access = "l"
+
+[[menu.item]]
+command = "keys.preset"
+access = "p"
+
+[[menu.item]]
+command = "keys.reset-all"
+access = "r"
+
+[[menu.item]]
+command = "keys.single-letters"
+access = "s"
+
 [[menu]]
 id = "plugins"
 title = "Plugins"

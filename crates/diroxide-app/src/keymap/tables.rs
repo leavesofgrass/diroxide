@@ -4,6 +4,12 @@
 //! (`screen-readers.toml`), and the keys reserved for later alphas
 //! (`reserved.toml`). The keymap's checks, `diro keys check`, the Keys list
 //! of alpha.3 and the keyboard page all read them from here.
+//!
+//! Beside them, the key-delivery matrix (`terminal-delivery.toml`): what
+//! Windows Terminal, the desktop app's built-in terminal, tmux and the
+//! classic console do with each key the presets use, delivered, kept,
+//! merged with another key, or still to probe. Every key a terminal there
+//! keeps or merges is on the terminal table, which the tests check.
 
 use std::sync::OnceLock;
 
@@ -18,6 +24,128 @@ pub const TERMINAL_UNSAFE_TOML: &str = include_str!("../../keys/terminal-unsafe.
 pub const SCREEN_READERS_TOML: &str = include_str!("../../keys/screen-readers.toml");
 /// The reserved keys' text.
 pub const RESERVED_TOML: &str = include_str!("../../keys/reserved.toml");
+/// The key-delivery matrix's text.
+pub const TERMINAL_DELIVERY_TOML: &str = include_str!("../../keys/terminal-delivery.toml");
+
+/// A terminal of the key-delivery matrix.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Terminal {
+    /// Windows Terminal on Windows 11.
+    WindowsTerminal,
+    /// The desktop app's built-in terminal.
+    BuiltIn,
+    /// tmux with its default settings.
+    Tmux,
+    /// The classic Windows console (conhost).
+    ConsoleHost,
+}
+
+impl Terminal {
+    /// Every terminal of the matrix, in its columns' order.
+    pub const ALL: [Terminal; 4] = [
+        Terminal::WindowsTerminal,
+        Terminal::BuiltIn,
+        Terminal::Tmux,
+        Terminal::ConsoleHost,
+    ];
+
+    /// The terminal's field in `terminal-delivery.toml`.
+    pub const fn field(self) -> &'static str {
+        match self {
+            Terminal::WindowsTerminal => "windows_terminal",
+            Terminal::BuiltIn => "built_in",
+            Terminal::Tmux => "tmux",
+            Terminal::ConsoleHost => "console_host",
+        }
+    }
+
+    /// The terminal's name as said inside a sentence: "Windows Terminal",
+    /// "the built-in terminal".
+    pub const fn name(self) -> &'static str {
+        match self {
+            Terminal::WindowsTerminal => "Windows Terminal",
+            Terminal::BuiltIn => "the built-in terminal",
+            Terminal::Tmux => "tmux",
+            Terminal::ConsoleHost => "the classic console",
+        }
+    }
+}
+
+/// What a terminal does with a key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Delivery {
+    /// It arrives as itself.
+    Delivered,
+    /// The terminal keeps it; diroxide never sees it.
+    Kept,
+    /// It arrives as this other key.
+    Merged(Key),
+    /// Not tried yet.
+    ToProbe,
+}
+
+impl Delivery {
+    fn parse(text: &str) -> Option<Self> {
+        match text.trim() {
+            "delivered" => Some(Delivery::Delivered),
+            "kept" => Some(Delivery::Kept),
+            "to probe" => Some(Delivery::ToProbe),
+            other => other
+                .strip_prefix("merged with ")
+                .and_then(|key| Key::parse(key).ok())
+                .map(Delivery::Merged),
+        }
+    }
+
+    /// Whether the key never arrives as itself.
+    pub const fn lost(self) -> bool {
+        matches!(self, Delivery::Kept | Delivery::Merged(_))
+    }
+}
+
+/// One key of the delivery matrix.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeliveryRow {
+    /// The key.
+    pub key: Key,
+    /// What each terminal does with it, in [`Terminal::ALL`]'s order.
+    pub states: [Delivery; 4],
+    /// Where the known values come from.
+    pub source: String,
+    /// What a value cannot say ("only while text is selected"), or empty.
+    pub note: String,
+}
+
+impl DeliveryRow {
+    /// What one terminal does with the key.
+    pub fn state(&self, terminal: Terminal) -> Delivery {
+        let index = Terminal::ALL
+            .iter()
+            .position(|t| *t == terminal)
+            .unwrap_or_default();
+        self.states[index]
+    }
+
+    /// The row in words, the key first, for the guides and `diro keys`:
+    /// "Ctrl+V: Windows Terminal keeps it; the built-in terminal to probe;
+    /// tmux to probe; the classic console to probe."
+    pub fn words(&self, platform: Platform) -> String {
+        let key = super::names::written(&self.key, platform);
+        let mut parts: Vec<String> = Vec::new();
+        for (terminal, state) in Terminal::ALL.iter().zip(self.states) {
+            let what = match state {
+                Delivery::Delivered => "delivers it".to_owned(),
+                Delivery::Kept => "keeps it".to_owned(),
+                Delivery::Merged(other) => {
+                    format!("sends {}", super::names::written(&other, platform))
+                }
+                Delivery::ToProbe => "to probe".to_owned(),
+            };
+            parts.push(format!("{} {what}", terminal.name()));
+        }
+        format!("{key}: {}.", parts.join("; "))
+    }
+}
 
 /// A family of keys named by a rule rather than listed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -227,6 +355,19 @@ struct RawReserved {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawDelivery {
+    key: String,
+    windows_terminal: String,
+    built_in: String,
+    tmux: String,
+    console_host: String,
+    source: String,
+    #[serde(default)]
+    note: String,
+}
+
+#[derive(Deserialize)]
 struct RawFile<T> {
     key: Vec<T>,
 }
@@ -237,7 +378,52 @@ struct Tables {
     terminal: Vec<TerminalEntry>,
     readers: Vec<ReaderEntry>,
     reserved: Vec<ReservedEntry>,
+    delivery: Vec<DeliveryRow>,
     problems: Vec<String>,
+}
+
+fn read_delivery(problems: &mut Vec<String>) -> Vec<DeliveryRow> {
+    let file = "terminal-delivery.toml";
+    let raw = match toml::from_str::<RawFile<RawDelivery>>(TERMINAL_DELIVERY_TOML) {
+        Ok(raw) => raw,
+        Err(e) => {
+            problems.push(format!("{file}: {e}"));
+            return Vec::new();
+        }
+    };
+    let mut rows = Vec::new();
+    for row in raw.key {
+        let Ok(key) = Key::parse(&row.key) else {
+            problems.push(format!("{file}: not a key {}", row.key));
+            continue;
+        };
+        let texts = [
+            &row.windows_terminal,
+            &row.built_in,
+            &row.tmux,
+            &row.console_host,
+        ];
+        let mut states = [Delivery::ToProbe; 4];
+        let mut usable = true;
+        for (state, text) in states.iter_mut().zip(texts) {
+            match Delivery::parse(text) {
+                Some(found) => *state = found,
+                None => {
+                    problems.push(format!("{file}: {} has an unknown value {text}", row.key));
+                    usable = false;
+                }
+            }
+        }
+        if usable {
+            rows.push(DeliveryRow {
+                key,
+                states,
+                source: row.source,
+                note: row.note,
+            });
+        }
+    }
+    rows
 }
 
 fn parse_keys(file: &str, texts: &[String], problems: &mut Vec<String>) -> Vec<Key> {
@@ -355,10 +541,12 @@ fn read_tables() -> Tables {
         }
         Err(e) => problems.push(format!("{file}: {e}")),
     }
+    let delivery = read_delivery(&mut problems);
     Tables {
         terminal,
         readers,
         reserved,
+        delivery,
         problems,
     }
 }
@@ -383,7 +571,17 @@ pub fn reserved_table() -> &'static [ReservedEntry] {
     &tables().reserved
 }
 
-/// What could not be read from the three files, in words; empty in a
+/// The key-delivery matrix, in file order.
+pub fn delivery_table() -> &'static [DeliveryRow] {
+    &tables().delivery
+}
+
+/// The delivery matrix's row for a key.
+pub fn delivery_of(key: &Key) -> Option<&'static DeliveryRow> {
+    delivery_table().iter().find(|row| row.key == *key)
+}
+
+/// What could not be read from the data files, in words; empty in a
 /// correct build.
 pub fn table_problems() -> &'static [String] {
     &tables().problems
@@ -504,6 +702,67 @@ mod tests {
         assert_eq!(reader_entries(&key("ctrl+alt+x"), Platform::MacOs).len(), 1);
         assert!(reader_entries(&key("ctrl+alt+x"), Platform::Windows).is_empty());
         assert!(reader_entries(&key("f5"), Platform::Other).is_empty());
+    }
+
+    #[test]
+    fn the_delivery_matrix_reads_cleanly_and_names_each_key_once() {
+        assert!(delivery_table().len() >= 60, "{}", delivery_table().len());
+        let mut seen = std::collections::HashSet::new();
+        for row in delivery_table() {
+            assert!(seen.insert(row.key), "{} is listed twice", row.key);
+            assert!(!row.source.is_empty(), "{}", row.key);
+        }
+        let paste = delivery_of(&key("ctrl+v")).unwrap();
+        assert_eq!(paste.state(Terminal::WindowsTerminal), Delivery::Kept);
+        assert_eq!(paste.state(Terminal::Tmux), Delivery::ToProbe);
+        assert_eq!(
+            paste.words(Platform::Windows),
+            "Ctrl+V: Windows Terminal keeps it; the built-in terminal to probe; tmux to probe; the classic console to probe."
+        );
+        for text in ["ctrl+q", "alt+f"] {
+            assert_eq!(
+                delivery_of(&key(text)).unwrap().state(Terminal::BuiltIn),
+                Delivery::Kept,
+                "{text}"
+            );
+        }
+        assert_eq!(
+            delivery_of(&key("ctrl+i")).unwrap().state(Terminal::Tmux),
+            Delivery::Merged(key("tab"))
+        );
+        assert_eq!(
+            delivery_of(&key("kp-plus"))
+                .unwrap()
+                .state(Terminal::ConsoleHost),
+            Delivery::Merged(key("plus"))
+        );
+        assert!(delivery_of(&key("ctrl+k")).is_none());
+    }
+
+    #[test]
+    fn every_key_a_terminal_keeps_or_merges_is_on_the_terminal_table() {
+        let mut lost = 0;
+        for row in delivery_table() {
+            for (terminal, state) in Terminal::ALL.iter().zip(row.states) {
+                if !state.lost() {
+                    continue;
+                }
+                lost += 1;
+                let entry = terminal_entry(&row.key).unwrap_or_else(|| {
+                    panic!(
+                        "{} is lost in {} but not on terminal-unsafe.toml",
+                        row.key,
+                        terminal.name()
+                    )
+                });
+                // A key that arrives as another can never be told apart,
+                // so the terminal column must never use it.
+                if matches!(state, Delivery::Merged(_)) {
+                    assert_eq!(entry.kind, TerminalKind::Unsafe, "{}", row.key);
+                }
+            }
+        }
+        assert!(lost >= 30, "{lost}");
     }
 
     #[test]
