@@ -84,9 +84,8 @@ Alpha.3 adds settings for the filter language, search, compare and the key prese
 - Search result limit (`search_row_cap`, 100000; 1000 to 10000000): the most rows a search lists. The count goes on past it.
 - Search skips ignored files (`search_respect_ignore`, off): leaves out what `.gitignore` and similar files name. A file manager is not a code search, so it is off.
 - Key preset (`preset`, diroxide): the set of keys under your own changes. Choose it in the Keys list or with `diro keys`. [Customizing keys](customizing-keys.md) describes the presets.
-- Compare: the options that leave differences out, the line algorithm, the time limit, the text limit, the lines of context and what to do with a file that is too large. They have defaults that suit most files. [Compare files](compare.md) says what each does.
-
-<!-- to confirm: the compare setting names and their defaults are the wiring lane's schema (W3a, commit 42). Replace this bullet with the real names from the generated reference after it merges. -->
+- Compare (`compare.*`): eleven settings, in one table, `[compare]`. Six leave differences out: `compare.ignore_line_endings` (on), `compare.ignore_trailing_space`, `compare.ignore_space_amount`, `compare.ignore_all_space`, `compare.ignore_blank_lines` and `compare.ignore_case` (all off). `compare.algorithm` is patience, histogram or myers (patience). `compare.deadline_ms` (2000) is how long a compare looks for the fewest changes, `compare.text_limit_mib` (16) the largest file compared as text, `compare.large_files` (ask, head or bytes) what to do past that, and `compare.context` (2; 0 to 9) the lines shown around a change. [Compare files](compare.md) says what each does.
+- Label colors (`label_blue`, `label_orange`, `label_purple`, `label_yellow`, `label_gray` and `label_brown`): the theme roles that color a label's word. They are keys of the `[colors]` table, like the other roles.
 
 ### The viewer, the quick view, archives and split sizes
 

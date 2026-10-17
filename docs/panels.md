@@ -68,9 +68,7 @@ Ctrl+L or Alt+D opens the path field with the current path in it. Type or paste 
 
 ## Go to a place, and path jump
 
-Ctrl+G opens Go to a place: a prompt with a list under it of your home folder, the drives on Windows or the mounts on Linux and macOS, and the folders you have visited, the ones you use most first. Each candidate says its folder first and what it is after it, such as "home folder" or "visited 12 times". A drive says its type in words ("disk", "removable drive" or "network drive") and its free space. diroxide does not wake an idle drive to read it. Your bookmarks are in the list too, with their kind first, such as "Bookmark, Reports".
-
-<!-- to confirm: the exact wording of a bookmark candidate in the Go to a place list; the wiring lane (W3a, commit 39) may change it. -->
+Ctrl+G opens Go to a place: a prompt with a list under it of your home folder, the drives on Windows or the mounts on Linux and macOS, and the folders you have visited, the ones you use most first. Each candidate says its folder first and what it is after it, such as "home folder" or "visited 12 times". A drive says its type in words ("disk", "removable drive" or "network drive") and its free space. diroxide does not wake an idle drive to read it. Your bookmarks are in the list too, with their kind first, such as "Bookmark, Reports, in work".
 
 Type a few words to narrow the list. This is path jump. Each word has to appear in the path, in the order you typed them, and the last word has to appear in the last folder's name. Case does not matter. Your home folder is left out of the visited list, because it is one key away. Enter goes to the chosen folder.
 
@@ -104,19 +102,16 @@ There are two ways to narrow down a long folder.
 - Type to find. With single-letter keys on, typing a letter or a digit finds a row by name. The cursor jumps to the first row, from where you are, whose name starts with what you typed, and the status line says the row and the count: "report.pdf, 1 of 3 matches". Typing more narrows the match; the same letter again goes to the next row that starts with it. After a pause of about a second, the next letter starts a new search. When nothing starts with your text, diroxide says "No name starts with" and the text. The `single_letters` setting chooses what typing does: find by name (`type_ahead`, the default), `commands` for the vim-style key preset ([customizing keys](customizing-keys.md)), or `off`. Turn it off if you use dictation software, which types letters.
 - Ctrl+S opens the Filter prompt, whether single-letter keys are on or off. The filter hides every row that does not match.
 
-The filter speaks the filter language, the same one that select by pattern, Search and saved searches use. It is more than a name pattern. It can test size, dates, kind, labels, owner and more, and join tests with and, or and not. [Search and the filter language](search.md) is the guide to it, with twenty examples.
-
-<!-- to confirm: until the wiring lane (W3a, commit 35) puts the language behind Ctrl+S, the panel reads the first-rung pattern language and says "3 of 12 match" as you type. Check the typing, the count after the pause, Enter, the title line and clearing against the merged build. -->
-
-These are the habits you need most:
+The filter speaks the filter language, the same one that select by pattern, Find files and saved searches use. It is more than a name pattern. It can test size, dates, kind, labels, owner and more, and join tests with and, or and not. [Search and the filter language](search.md) is the guide to it, with twenty examples. These are the habits you need most:
 
 - While you type, the list narrows silently. After you stop for 400 milliseconds (the `filter_pause_ms` setting), one line says the count and the first match: "37 matches, first report.pdf". With none: "No matches".
 - A bare word matches names that contain it. A word with `*`, `?` or `[` is a glob for the whole name: `*.pdf`. A comma means either: `*.pdf, *.docx`. `not` leaves out what follows: `*.pdf, not draft*`.
 - `size over 1 MB`, `modified last week`, `kind folder`, `label urgent` and `hidden` are tests of their own. A space between tests means and. Mixing and with or needs brackets.
 - `re:` makes the rest a regular expression: `re:^IMG_\d{4}`.
 - Case is smart: it is ignored unless the text has a capital letter.
-- A filter that cannot be read is explained in one line, once, after the pause: "Filter problem: size needs a number". The second line says what to try.
-- Enter keeps the filter, and the title line names it. To clear it, use Clear filter in the View menu or the palette, or open the prompt, delete the text and press Enter.
+- A filter that cannot be read is explained in two parts, each once, after the pause: "Filter problem: size needs a number", then "Word 3. Try size over 10 MB."
+- Enter keeps the filter: "Filter on, 4 of 9 shown". The title line names it: "filter: size over 1 KB and name matches *.log". Escape in the panel takes it off: "Filter off, 9 shown". So does Clear filter in the View menu or the palette.
+- Say filter (View menu, Alt+V, then Y) reads the filter back in a sentence, with the real days of words such as last week. Stash filter and Restore filter keep a filter aside and bring it back. Folders only and Files only show one kind with a single command.
 - Filters you used in alpha.1 keep their meaning. A comma now binds tighter than a space, so `report 2026, *.pdf` means report, and also 2026 or a PDF. A name that starts with a bracket or an exclamation mark has to be quoted.
 
 Hidden files have their own switch: Show hidden files, on Alt+Period, in the View menu and the palette. diroxide says "Hidden files shown" or "Hidden files not shown". It is not Ctrl+H, because terminals confuse that key with Backspace. Hidden means a name that starts with a dot on Linux and macOS, the hidden flag on macOS, and the hidden attribute on Windows. A name such as `.gitignore` is not hidden on Windows.
@@ -126,12 +121,12 @@ Hidden files have their own switch: Show hidden files, on Alt+Period, in the Vie
 Marking picks the rows a command will act on. With no marks, a command acts on the focused row.
 
 - Space marks the focused row and moves down: "Selected report.pdf. 1 selected." Space on a marked row unmarks it: "Not selected report.pdf. 0 selected."
-- Ctrl+A marks every row, and diroxide says "40 items selected". Select none, invert, select by pattern and unselect by pattern are in the Select menu (Alt+S) and the palette. In the terminal, star inverts the marks, plus asks for a pattern to select and minus asks for a pattern to unselect, when single-letter keys are on. The prompt starts with `*`, so plus and then Enter marks everything. The prompt takes the filter language, so `size over 1 MB` and `modified last week` work as well as `*.pdf`. The result is a sentence: "Selected 12 matching *.pdf. 15 selected." ([Search and the filter language](search.md) describes the language.)
+- Ctrl+A marks every row, and diroxide says "40 items selected". Select none, invert, select by pattern and unselect by pattern are in the Select menu (Alt+S) and the palette. In the terminal, star inverts the marks, plus asks for a pattern to select and minus asks for a pattern to unselect, when single-letter keys are on. The prompt starts with `*`, so plus and then Enter marks everything. The prompt takes the filter language, so `size over 1 MB` and `modified last week` work as well as `*.pdf`. Before it marks anything it counts and asks, starting on No: "4 entries will be selected. No is the default. y or n", and then says "4 selected". ([Search and the filter language](search.md) describes the language.)
 - Ctrl+Down and Ctrl+Up go to the next and previous marked row, saying "No selected row below" or "No selected row above" at the ends.
 - Ctrl+D says the marks with their size: "3 selected, 4.2 MB. Documents, 40 items, on report.pdf, 3 of 40". Folders are not sized until a later alpha.
 - Restore selection (in the Select menu and the palette) brings back the marks that a select all, none, invert, pattern, finished job or change of folder replaced: "Selection restored: 31 selected."
 
-<!-- to confirm: the wiring lane (W3a, commit 36) changes this to a count before the action, "12 entries will be selected? No is the default. y or n", then "12 selected". Replace the sentence after it merges. -->
+The Select menu has more ways to mark: by kind, by size, by date, the same extension, a range, and the next few rows. [Search and the filter language](search.md) describes them.
 
 Marks belong to rows, not to positions. If the folder is listed again, the marks stay on the same names. If a marked row has disappeared, diroxide says how many marks were lost, and if the focused row has gone it says that the focus moved. After a job, only the entries that failed stay marked, so the marks show what to try again.
 

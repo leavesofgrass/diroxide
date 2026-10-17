@@ -130,9 +130,7 @@ On Linux the trash follows the freedesktop standard. On macOS the trash works, b
 
 ### In a list of search results
 
-A search's results are real files, so Delete in that list moves the real files to the trash, with the usual list of their full paths first and the question starting on No. Removing a row from the list without touching the file is a separate command. A row whose file is gone since the list was made says "gone since this list was made", and the action is refused in words. [Search and the filter language](search.md) has the rest.
-
-<!-- to confirm: the results list and its commands are the wiring lane's (W3a, commit 37). Check these sentences against the merged build. -->
+A search's results are real files, so F8 or Delete in that list moves the real files to the trash, with the usual question starting on No, and Shift+Delete deletes them for good. F5 and F6 copy and move them to the other panel. Rename and labels do not work from the list; show the result in its folder first (Backspace). Removing a row from the list without touching the file is a separate command, Remove from results. A row whose file is gone since the list was made says "gone since this list was made", and the action is refused in words. In a label's results the trash key takes the label off the item and does not touch the file. [Search and the filter language](search.md) has the rest.
 
 ## Delete for good: Shift+Delete
 

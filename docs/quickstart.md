@@ -79,11 +79,9 @@ Ctrl+F3 sorts by name, Ctrl+F4 by extension, Ctrl+F5 by modified time, Ctrl+F6 b
 
 ## Filter and search
 
-Press Ctrl+S and type what you want to see. `report` shows names that hold report. `*.pdf` shows PDFs. `size over 1 MB` shows big files, and `modified last week` shows what changed then. You hear nothing while you type. When you stop, one line says the count and the first match: "37 matches, first report.pdf". Enter keeps the filter, and Clear filter in the View menu ends it.
+Press Ctrl+S and type what you want to see. `report` shows names that hold report. `*.pdf` shows PDFs. `size over 1 MB` shows big files, and `modified last week` shows what changed then. You hear nothing while you type. When you stop, one line says the count and the first match: "37 matches, first report.pdf". Enter keeps the filter: "Filter on, 4 of 9 shown". Escape in the panel takes it off: "Filter off, 9 shown".
 
-To look inside folders below this one, run Search from the palette (Ctrl+P, then "search"). Give it the same words. Results arrive as a list of real files, and Escape stops it: "Stopped at 214 found." [Search and the filter language](search.md) has the whole language and `diro search` for the shell.
-
-<!-- to confirm: Ctrl+F is the proposed key for Search; the wiring lane (W3a, commit 37) has not bound it. The filter wording waits for commit 35. -->
+To look inside folders below this one, press Ctrl+F. Find files opens a list of settings named Search, with the focus on its Name or filter row. Type a letter to open that field, give it the same words, and press Enter: "Searching work for *.txt". Results arrive as a list of real files, and Escape stops it: "Stopped at 214 found." [Search and the filter language](search.md) has the whole language and `diro search` for the shell.
 
 ## Label and bookmark
 
@@ -91,7 +89,7 @@ Alt+L puts a label on the marked rows, or the focused row: type `urgent` and pre
 
 ## Compare two files
 
-Mark two files and run Compare files from the palette. diroxide says the answer first, "5 changes between old.txt and report.txt", then the counts, then one row for each change. [Compare files](compare.md) explains it, and `diro diff` does the same in a shell.
+Mark two files and run Compare files from the palette (Ctrl+P, then "compare"). diroxide says the answer first, "5 changes between old.txt and report.txt", then the counts, then one row for each change. [Compare files](compare.md) explains it, and `diro diff` does the same in a shell.
 
 ## Open an archive
 
@@ -104,7 +102,7 @@ Press F3 on a file to read it in the viewer. Up and Down move a line, Ctrl+D say
 ## Find any command
 
 - Ctrl+P opens the command palette. Type part of a command's name and press Enter. Each entry says its name first and its key after it.
-- F9 opens the menu bar. Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. Every menu item shows its live key. The Plugins menu only says that plugins come with alpha.4.
+- F9 opens the menu bar. Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. The Search menu has no Alt letter, because Alt+S is Select; open it with F9, then R. Every menu item shows its live key. The Plugins menu only says that plugins come with alpha.4.
 - Shift+F1 or the question mark opens help: a list of commands with their keys.
 
 ## Quit
