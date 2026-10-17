@@ -1,4 +1,13 @@
-//! Integration tests of the archive provider's contract.
+//! Integration tests of the archive provider: its contract, the archives
+//! built in memory, and the spikes of research/alpha2-plan.md part four.
+
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod build;
+mod hostile;
+mod memory;
+mod spike_hostile;
+mod spike_listing;
 
 use std::sync::Arc;
 

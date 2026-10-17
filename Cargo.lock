@@ -834,11 +834,15 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "bzip2",
  "diroxide-core",
+ "diroxide-ops",
  "diroxide-vfs",
  "flate2",
  "lzma-rust2",
+ "proptest",
  "sevenz-rust2",
+ "sysinfo",
  "tar",
+ "tempfile",
  "zip",
 ]
 
