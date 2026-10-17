@@ -43,6 +43,9 @@ pub mod keys {
     pub const DESTINATIONS: &str = "destinations";
     /// The palette's recent commands.
     pub const PALETTE: &str = "palette";
+    /// The folders packs wrote into, for the sweep of temporary archives
+    /// at start.
+    pub const PACK_FOLDERS: &str = "pack-folders";
 }
 
 #[derive(Serialize, Deserialize, Default)]

@@ -7,9 +7,11 @@
 //! ("Documents, left panel, in D:\work"), the panels in the layout the
 //! settings name (side by side, the default; stacked, the fallback for
 //! screen-reader users and narrow sessions; single), the minibuffer when a
-//! text field is open (the prompt, then its candidates), the key bar in
-//! sighted mode, the status line that says the key fact first, and the
-//! jobs line. The hardware cursor sits at the focused row's first cell on
+//! text field is open (the prompt, then its candidates), the status line
+//! that says the key fact first, the jobs line, and the key bar on the last
+//! line in every mode, screen-reader mode included (answer 49: the keys
+//! were unclear in the screen itself, and a bar of the common operations
+//! makes them plain). The hardware cursor sits at the focused row's first cell on
 //! every frame in every state; a prompt keeps it at the insertion point;
 //! the `cursor_fallback` setting parks it on the status line.
 //!
@@ -70,8 +72,8 @@ pub struct TuiOptions {
     /// The theme.
     pub theme: Theme,
     /// Behave for a screen reader: the inactive panel redrawn only on
-    /// demand, no key bar, candidates listed only on request, progress at
-    /// its interval.
+    /// demand, candidates listed only on request, progress at its
+    /// interval.
     pub screen_reader: bool,
     /// The terminal's width in columns, for [`render`].
     pub width: u16,
@@ -161,7 +163,7 @@ pub fn render(app: &App, options: &TuiOptions) -> Screen {
         ColorSupport::NoColor,
     );
     let mut buffer = Buffer::empty(Rect::new(0, 0, built.width, built.height));
-    view::paint(&built, &styles, &mut buffer);
+    view::paint(&built, &styles, &viewer::CodeStyles::plain(), &mut buffer);
     Screen {
         lines: (0..built.height)
             .map(|y| view::line_text(&buffer, y))
@@ -252,7 +254,12 @@ mod tests {
             screen.lines
         );
         assert!(screen.lines.iter().all(|l| l.chars().count() <= 80));
-        assert_eq!(screen.lines.last().unwrap(), "No jobs");
+        assert_eq!(screen.lines[22], "No jobs");
+        assert!(
+            screen.lines[23].starts_with("F2 Rename F3 View"),
+            "{:?}",
+            screen.lines
+        );
         assert_eq!(screen.lines.len(), 24);
     }
 

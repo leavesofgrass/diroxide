@@ -5,10 +5,14 @@
 
 mod support;
 
+mod access;
+mod archives;
 mod braille;
 mod commands;
 mod dialogs;
 mod session;
+mod split_join;
+mod viewer;
 
 use diroxide_app::{App, AppEvent, AppOptions, Runtime};
 use diroxide_core::{Effect, Key, Place, Side};

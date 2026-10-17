@@ -274,6 +274,13 @@ Compact. Hides the key bar and the title line in a terminal. The status and jobs
 - Holds: true or false.
 - Default: `false`.
 
+### key_bar
+
+Key bar. Shows the common keys and what each one does on the last line of a terminal, in every mode. Say Key Bar reads it aloud.
+
+- Holds: true or false.
+- Default: `true`.
+
 ### highlighting
 
 Code colors. Colors code in the viewer. Auto colors it except in screen reader mode.

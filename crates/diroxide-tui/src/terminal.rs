@@ -347,6 +347,11 @@ pub(crate) fn run(
         .with_themes_dir(themes_dir)
         .with_title_sink(Box::new(|title| {
             let _ = execute!(io::stdout(), terminal::SetTitle(title));
+        }))
+        .with_clipboard_sink(Box::new(|text| {
+            let mut out = io::stdout();
+            let _ = out.write_all(crate::session::osc52(text).as_bytes());
+            let _ = out.flush();
         }));
     let resumed = session.resumed_flag();
     let hook_gate = Arc::clone(&gate);

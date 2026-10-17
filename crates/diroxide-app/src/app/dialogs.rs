@@ -317,6 +317,44 @@ impl App {
                 });
                 effects.push(self.say(Message::info("No password given.")));
             }
+            Purpose::Limit { ask } => self.answer_limit(ask, false),
+            Purpose::TrashParts(_) => {
+                effects.push(self.say(Message::info("The parts stay where they are.")));
+            }
+            Purpose::WrongPassword { ask, .. } => {
+                self.request(Request::Answer {
+                    ask,
+                    reply: Reply::Secret(None),
+                });
+                effects.push(self.say(Message::info("No password given.")));
+            }
+            Purpose::ArchiveQuestion {
+                plan,
+                question,
+                rest,
+            } => effects.extend(self.plan_question_answered(plan, &question, rest, false)),
+            Purpose::RunArchive(plan) => effects.extend(self.archive_declined(&plan)),
+            Purpose::PlanQuestion {
+                plan,
+                question,
+                rest,
+                forced,
+            } => effects.extend(self.plan_preflight_answered(plan, &question, rest, forced, false)),
+            Purpose::PackName(form) => {
+                effects.extend(self.pack_row_reopen(*form, "name"));
+            }
+            Purpose::PackChoice(form, _) => {
+                effects.extend(self.pack_row_reopen(*form, "format"));
+            }
+            Purpose::NewPassword { form, .. } => {
+                effects.extend(self.new_password_cancelled(*form));
+            }
+            Purpose::PackForm(_) => {
+                effects.push(self.say(Message::info("Nothing was packed.")));
+            }
+            Purpose::UnpackForm(_) => {
+                effects.push(self.say(Message::info("Nothing was unpacked.")));
+            }
             Purpose::Filter(side, previous) => {
                 let clock = std::sync::Arc::clone(&self.clock);
                 self.panels[side.index()].set_filter(previous, clock.as_ref());
@@ -349,6 +387,26 @@ impl App {
         match purpose {
             Purpose::RunPlan(plan) => effects.extend(self.run_plan(*plan)),
             Purpose::Quit => effects.extend(self.quit_now()),
+            Purpose::Limit { ask } => self.answer_limit(ask, true),
+            Purpose::TrashParts(parts) => effects.extend(self.trash_parts(parts)),
+            Purpose::JunctionInstead { targets, folder } => {
+                effects.extend(self.make_junctions(targets, folder));
+            }
+            Purpose::WrongPassword { ask, request } => {
+                effects.extend(self.secret_prompt(ask, request, false));
+            }
+            Purpose::ArchiveQuestion {
+                plan,
+                question,
+                rest,
+            } => effects.extend(self.plan_question_answered(plan, &question, rest, true)),
+            Purpose::RunArchive(plan) => effects.extend(self.run_archive(*plan)),
+            Purpose::PlanQuestion {
+                plan,
+                question,
+                rest,
+                forced,
+            } => effects.extend(self.plan_preflight_answered(plan, &question, rest, forced, true)),
             Purpose::RunProgram(place) => {
                 let name = place
                     .name()
@@ -537,7 +595,31 @@ impl App {
                 Some(index) => self.job_items(index),
                 None => Vec::new(),
             },
-            Purpose::Read | Purpose::JobItems => {
+            Purpose::LinkForm(form) => match row {
+                Some(row) => self.link_row(*form, &row),
+                None => Vec::new(),
+            },
+            Purpose::AccessForm(form) => match row {
+                Some(row) => self.access_row(*form, &row),
+                None => Vec::new(),
+            },
+            Purpose::Relink { side, link } => {
+                if in_list && let Some(row) = row {
+                    return self.take_candidate(&row);
+                }
+                let mut effects = self.close_top();
+                effects.extend(self.relink(side, link, &text));
+                effects
+            }
+            Purpose::Read | Purpose::JobItems | Purpose::Details(_) => {
+                if row
+                    .as_deref()
+                    .is_some_and(|r| r.starts_with(super::info::HEADING_ROW) || r == "help")
+                {
+                    // A heading or the help line of the keyboard list: Enter
+                    // stays on it.
+                    return Vec::new();
+                }
                 if let Some(id) = row.and_then(|r| CommandId::new(r).ok())
                     && commands::info(&id).is_some()
                 {
@@ -548,6 +630,60 @@ impl App {
                 self.close_top()
             }
             Purpose::Secret { ask } => self.secret_enter(ask),
+            Purpose::NewPassword { form, first } => {
+                let typed = match self.dialogs.last() {
+                    Some((_, Dialog::Secret { typed, .. })) => typed.clone(),
+                    _ => return Vec::new(),
+                };
+                self.new_password_entered(*form, first, typed)
+            }
+            Purpose::PackForm(form) => match row {
+                Some(row) => self.pack_row(*form, &row),
+                None => Vec::new(),
+            },
+            Purpose::PackChoice(form, choice) => match row {
+                Some(row) => self.pack_chose(*form, choice, &row),
+                None => Vec::new(),
+            },
+            Purpose::PackName(form) => self.pack_named(*form, &text),
+            Purpose::SplitSize {
+                side,
+                files,
+                destination,
+                note,
+            } => match row {
+                Some(row) => self.split_size_chosen(side, files, destination, note, &row),
+                None => Vec::new(),
+            },
+            Purpose::SplitTyped {
+                side,
+                files,
+                destination,
+                note,
+                equal,
+            } => self.split_typed(side, files, destination, note, equal, &text),
+            Purpose::ViewerJump => {
+                let mut effects = self.close_top();
+                effects.extend(self.viewer_jump(&text));
+                effects
+            }
+            Purpose::ViewerSearch { backward } => {
+                let mut effects = self.close_top();
+                effects.extend(self.viewer_search(&text, backward));
+                effects
+            }
+            Purpose::ViewerOutline => match row {
+                Some(row) => {
+                    let mut effects = self.close_top();
+                    effects.extend(self.viewer_outline_go(&row));
+                    effects
+                }
+                None => Vec::new(),
+            },
+            Purpose::UnpackForm(form) => match row {
+                Some(row) => self.unpack_row(*form, &row),
+                None => Vec::new(),
+            },
             Purpose::GoPath(side) => {
                 if in_list && let Some(row) = row {
                     return self.take_candidate(&row);
@@ -628,7 +764,16 @@ impl App {
                 effects.extend(self.run_line(side, &text));
                 effects
             }
-            Purpose::RunPlan(_) | Purpose::Quit | Purpose::RunProgram(_) => self.dialog_escape(),
+            Purpose::RunPlan(_)
+            | Purpose::Quit
+            | Purpose::RunProgram(_)
+            | Purpose::Limit { .. }
+            | Purpose::WrongPassword { .. }
+            | Purpose::ArchiveQuestion { .. }
+            | Purpose::PlanQuestion { .. }
+            | Purpose::TrashParts(_)
+            | Purpose::JunctionInstead { .. }
+            | Purpose::RunArchive(_) => self.dialog_escape(),
         }
     }
 
@@ -655,9 +800,13 @@ impl App {
     }
 
     fn secret_key(&mut self, key: Key) -> Vec<Effect> {
-        let Some(Purpose::Secret { ask }) = self.top_purpose().cloned() else {
+        let purpose = self.top_purpose().cloned();
+        if !matches!(
+            purpose,
+            Some(Purpose::Secret { .. } | Purpose::NewPassword { .. })
+        ) {
             return Vec::new();
-        };
+        }
         let show_toggle = key.mods.alt && !key.mods.ctrl && matches!(key.code, KeyCode::Char('s'));
         if show_toggle {
             let mut now_shown = false;
@@ -685,7 +834,10 @@ impl App {
                 }
                 vec![Effect::Redraw(Redraw::All)]
             }
-            KeyCode::Enter if key.mods.is_empty() => self.secret_enter(ask),
+            KeyCode::Enter if key.mods.is_empty() => match purpose {
+                Some(Purpose::Secret { ask }) => self.secret_enter(ask),
+                _ => self.accept(),
+            },
             KeyCode::Escape => self.dialog_escape(),
             _ => {
                 let layers = [Layer::Dialog, Layer::Global];
@@ -952,7 +1104,10 @@ impl App {
             _ => return Vec::new(),
         };
         let list = match self.top_purpose().cloned() {
-            Some(Purpose::Palette) => self.palette.list(&text, &self.keymap),
+            Some(Purpose::Palette) => {
+                self.palette
+                    .list_with(&text, &self.keymap, Some(&self.menus))
+            }
             Some(Purpose::Places(side)) => {
                 let all = self.place_candidates(side, false);
                 let found: Vec<Candidate> = all
@@ -972,12 +1127,20 @@ impl App {
             _ => return Vec::new(),
         };
         let shown = list.len() as u64;
+        // The palette says its first match with its key, so the key is
+        // heard while typing, before Down enters the list (answer 49).
+        let said = match (self.top_purpose(), list.focused()) {
+            (Some(Purpose::Palette), Some(first)) if !text.is_empty() => {
+                format!("{}. {}", first.spoken(), count(shown, "match", "matches"))
+            }
+            _ => count(shown, "match", "matches"),
+        };
         if let Some((_, Dialog::Edit { candidates, .. })) = self.dialogs.last_mut() {
             *candidates = Some(list);
         }
         vec![
             Effect::Redraw(Redraw::All),
-            Effect::Announce(Message::status(count(shown, "match", "matches"))),
+            Effect::Announce(Message::status(said)),
         ]
     }
 
@@ -1014,7 +1177,7 @@ impl App {
         let candidates = match source {
             CompletionSource::Paths => {
                 let side = match self.top_purpose() {
-                    Some(Purpose::GoPath(side)) => *side,
+                    Some(Purpose::GoPath(side) | Purpose::Relink { side, .. }) => *side,
                     _ => self.active,
                 };
                 let folder_text = &text[..text.len() - stem.len()];
@@ -1199,6 +1362,7 @@ impl App {
                 }
                 match self.top_purpose().cloned() {
                     Some(Purpose::Secret { ask }) => self.secret_enter(ask),
+                    Some(Purpose::NewPassword { .. }) => self.accept(),
                     _ => Vec::new(),
                 }
             }

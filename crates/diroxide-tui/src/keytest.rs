@@ -15,7 +15,6 @@ use std::time::Duration;
 use crossterm::event::{self, Event, KeyCode as TermCode, KeyEvent, KeyEventKind};
 use crossterm::terminal;
 use diroxide_app::keymap::{self, Keymap};
-use diroxide_core::Layer;
 
 use crate::{TuiError, keys};
 
@@ -32,10 +31,9 @@ pub fn line(keymap: &Keymap, event: &KeyEvent) -> String {
     if event.kind == KeyEventKind::Release {
         return format!("Released. {sent}");
     }
-    let layers = [Layer::Panel, Layer::List, Layer::Global];
     let said = match keys::to_key(event) {
         Some(key) => {
-            let mut said = keymap::key_test(keymap, &layers, &key);
+            let mut said = keymap::key_test_everywhere(keymap, &key, false);
             if key.mods.ctrl
                 && key.mods.alt
                 && let diroxide_core::KeyCode::Char(c) = key.code

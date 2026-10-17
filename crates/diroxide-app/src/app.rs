@@ -15,11 +15,17 @@
 //!
 //! Wave 1 (W1d) owns this module.
 
+mod access_dialogs;
+mod archive;
+mod archive_forms;
+mod archive_jobs;
 mod dialogs;
 mod files;
 mod info;
 mod nav;
 mod select;
+mod split_join;
+mod viewing;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -171,6 +177,48 @@ pub enum AppEvent {
         /// Its exit code, or why it could not start.
         result: Result<Option<i32>, String>,
     },
+    /// An archive job was planned, or could not be (the sentence says
+    /// why).
+    ArchivePlanned {
+        /// The job.
+        job: JobId,
+        /// The plan, or why not.
+        result: Result<Box<crate::request::ArchivePlan>, Message>,
+    },
+    /// An archive's entries were counted for the details list.
+    ArchiveEntries {
+        /// The archive.
+        place: Place,
+        /// "Entries: 10 items", or why not.
+        line: Result<String, Message>,
+    },
+    /// A file's bytes for the viewer were read, or could not be (the
+    /// sentence says why).
+    ViewerSource {
+        /// The request it answers.
+        request: RequestId,
+        /// The file.
+        place: Place,
+        /// The bytes, or why not.
+        result: Result<crate::viewer::ViewerSource, Message>,
+    },
+    /// An archive job ended: its report, and the runner's lines, the
+    /// summary first ("Unpack finished: 4 done.", "Checked 300 of 300
+    /// entries, all good.").
+    ArchiveFinished {
+        /// The report.
+        report: Box<JobReport>,
+        /// The runner's lines.
+        lines: Vec<String>,
+    },
+    /// What a listed place inside an archive is: its title's words and
+    /// the opening line (sent before its listing).
+    ArchiveOpened {
+        /// The listing request it belongs to.
+        request: RequestId,
+        /// The facts.
+        facts: Box<crate::archives::ArchiveFacts>,
+    },
     /// A dialog was answered.
     Answer {
         /// The dialog.
@@ -209,6 +257,12 @@ enum Purpose {
     },
     /// A password.
     Secret { ask: AskId },
+    /// "Wrong password for course.zip. Try again? y or n", before the
+    /// next try's prompt.
+    WrongPassword {
+        ask: AskId,
+        request: diroxide_core::SecretRequest,
+    },
     /// Rename, one entry at a time: the one asked now, the ones after,
     /// and the answers so far.
     Rename {
@@ -252,6 +306,69 @@ enum Purpose {
     ContextMenu,
     /// The Sort list.
     SortList,
+    /// An archive limit's question.
+    Limit { ask: AskId },
+    /// One of an archive plan's limit questions, before its confirmation.
+    ArchiveQuestion {
+        plan: Box<crate::request::ArchivePlan>,
+        question: diroxide_archive::Question,
+        rest: Vec<diroxide_archive::Question>,
+    },
+    /// Run an archive job on Yes.
+    RunArchive(Box<crate::request::ArchivePlan>),
+    /// One of a plan's questions, before its confirmation.
+    PlanQuestion {
+        plan: Box<Plan>,
+        question: Box<diroxide_ops::Preflight>,
+        rest: Vec<diroxide_ops::Preflight>,
+        forced: bool,
+    },
+    /// The pack dialog: its settings.
+    PackForm(Box<archive_forms::PackForm>),
+    /// The pack dialog's name field.
+    PackName(Box<archive_forms::PackForm>),
+    /// A pack setting's choices.
+    PackChoice(Box<archive_forms::PackForm>, archive_forms::PackChoice),
+    /// A new archive password, typed twice.
+    NewPassword {
+        form: Box<archive_forms::PackForm>,
+        first: Option<diroxide_core::Secret>,
+    },
+    /// The unpack dialog: its settings.
+    UnpackForm(Box<archive_forms::UnpackForm>),
+    /// Split file's sizes.
+    SplitSize {
+        side: Side,
+        files: Vec<Place>,
+        destination: Place,
+        note: Option<String>,
+    },
+    /// Split file's number of parts or part size.
+    SplitTyped {
+        side: Side,
+        files: Vec<Place>,
+        destination: Place,
+        note: Option<String>,
+        equal: bool,
+    },
+    /// The offer to trash a verified join's parts.
+    TrashParts(Vec<Place>),
+    /// The link dialog.
+    LinkForm(Box<access_dialogs::LinkSettings>),
+    /// The junction offered after the privilege's refusal.
+    JunctionInstead { targets: Vec<Place>, folder: Place },
+    /// Change link target's prompt.
+    Relink { side: Side, link: Place },
+    /// The permissions dialog.
+    AccessForm(Box<access_dialogs::AccessForm>),
+    /// The details of an entry.
+    Details(Place),
+    /// The viewer's jump prompt.
+    ViewerJump,
+    /// The viewer's search prompt.
+    ViewerSearch { backward: bool },
+    /// The viewer's outline.
+    ViewerOutline,
     /// The settings list.
     Settings,
     /// A setting's choices.
@@ -300,6 +417,13 @@ enum Then {
     Renamed(Vec<(String, String)>),
     /// Clear the file clipboard (a cut was pasted).
     ClearClipboard,
+    /// Links made: a folder link the privilege refused is offered a
+    /// junction.
+    Linked {
+        targets: Vec<Place>,
+        folder: Place,
+        form: diroxide_core::access::LinkForm,
+    },
     /// Say what an undo brought back.
     Undid(Option<diroxide_core::JobKind>),
     /// The permanent delete the trash could not take: its plan is shown
@@ -345,6 +469,8 @@ pub struct App {
     flows: HashMap<JobId, Flow>,
     menus: Menus,
     banks: Vec<Bank>,
+    /// The bank the key bar shows.
+    bank: usize,
     palette: Palette,
     histories: BTreeMap<String, Vec<String>>,
     visits: Visits,
@@ -366,6 +492,21 @@ pub struct App {
     session: Option<diroxide_config::SessionState>,
     restore: [Option<String>; 2],
     kept: Vec<Kept>,
+    /// What the runtime said about the archive each panel shows.
+    archive_facts: [Option<crate::archives::ArchiveFacts>; 2],
+    /// Archive facts waiting for their listing, by request.
+    pending_archive: Vec<(RequestId, crate::archives::ArchiveFacts)>,
+    /// Whether each panel's last listing entered its archive from outside.
+    archive_entered: [bool; 2],
+    /// The runner's lines of the archive job ending now, which its result
+    /// says instead of the report's summary.
+    finish_lines: Option<Vec<String>>,
+    /// The open viewer.
+    viewing: Option<viewing::Viewing>,
+    /// The viewer source being read, and what for.
+    viewer_wait: Option<(RequestId, viewing::SourceFor)>,
+    /// The highlighter, one for the run, handed to each viewer.
+    highlighter: Option<crate::viewer::highlight::Session>,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -404,6 +545,17 @@ enum Action {
     ThisInOther,
     Enter,
     Into,
+    OpenAsArchive,
+    Split,
+    Join,
+    MakeLink,
+    Relink,
+    Permissions,
+    CopyPath,
+    CopyName,
+    Pack,
+    Unpack,
+    TestArchive,
     Up,
     Reload,
     Back,
@@ -452,6 +604,7 @@ enum Action {
     SayStatus,
     SayOther,
     SayKeyBar,
+    SwitchBank,
     Palette,
     MenuBar,
     Menu,
@@ -468,7 +621,7 @@ enum Action {
     Accept,
 }
 
-const ROUTES: [(CommandId, Action); 91] = [
+const ROUTES: [(CommandId, Action); 103] = [
     (ids::QUIT, Action::Quit),
     (ids::QUIT_TO_FOLDER, Action::QuitToFolder),
     (ids::QUIT_KEEP_FOLDER, Action::QuitKeepFolder),
@@ -476,6 +629,7 @@ const ROUTES: [(CommandId, Action); 91] = [
     (ids::SAY_STATUS, Action::SayStatus),
     (ids::SAY_OTHER, Action::SayOther),
     (ids::SAY_KEY_BAR, Action::SayKeyBar),
+    (ids::SWITCH_BANK, Action::SwitchBank),
     (ids::PALETTE, Action::Palette),
     (ids::MENU, Action::MenuBar),
     (ids::SETTINGS, Action::Settings),
@@ -500,6 +654,17 @@ const ROUTES: [(CommandId, Action); 91] = [
     (ids::THIS_IN_OTHER, Action::ThisInOther),
     (ids::ENTER, Action::Enter),
     (ids::INTO, Action::Into),
+    (ids::OPEN_AS_ARCHIVE, Action::OpenAsArchive),
+    (ids::MAKE_LINK, Action::MakeLink),
+    (ids::RELINK, Action::Relink),
+    (ids::PERMISSIONS, Action::Permissions),
+    (ids::COPY_PATH, Action::CopyPath),
+    (ids::COPY_NAME, Action::CopyName),
+    (ids::SPLIT, Action::Split),
+    (ids::JOIN, Action::Join),
+    (ids::PACK, Action::Pack),
+    (ids::UNPACK, Action::Unpack),
+    (ids::TEST_ARCHIVE, Action::TestArchive),
     (ids::UP, Action::Up),
     (ids::RELOAD, Action::Reload),
     (ids::BACK, Action::Back),
@@ -618,6 +783,7 @@ impl App {
             flows: HashMap::new(),
             menus: startup.menus,
             banks: startup.banks,
+            bank: 0,
             palette,
             histories: startup.histories,
             visits,
@@ -637,6 +803,13 @@ impl App {
             session: startup.session,
             restore: [None, None],
             kept: Vec::new(),
+            archive_facts: [None, None],
+            pending_archive: Vec::new(),
+            archive_entered: [false, false],
+            finish_lines: None,
+            viewing: None,
+            viewer_wait: None,
+            highlighter: None,
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -650,6 +823,7 @@ impl App {
     /// the listing of both panels.
     pub fn start(&mut self) -> Vec<Effect> {
         let mut effects = self.startup_lines();
+        self.sweep_at_start();
         for side in Side::BOTH {
             let place = self.panel(side).place().clone();
             let focus = self.restored_focus(side);
@@ -736,12 +910,37 @@ impl App {
         &self.menus
     }
 
-    /// The key bar's bank: the first bank.
+    /// The key bar: the active bank's pairs on one line, key first, the
+    /// most common operations first ("F2 Rename  F3 View  F4 Edit"). The
+    /// terminal draws it on its last line in every mode (answer 49); see
+    /// [`App::key_bar_within`] for a line of fixed width.
     pub fn key_bar(&self) -> String {
-        self.banks
-            .first()
+        if self.viewing.is_some() {
+            return crate::menu::viewer_bank().key_bar(&self.keymap);
+        }
+        self.active_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
+    }
+
+    /// The key bar cut to `cells`, whole pairs only, the first first; the
+    /// rest are said by Say Key Bar. Empty when the `key_bar` setting is
+    /// off.
+    pub fn key_bar_within(&self, cells: usize) -> String {
+        if !self.settings.key_bar {
+            return String::new();
+        }
+        if self.viewing.is_some() {
+            return crate::menu::viewer_bank().key_bar_within(&self.keymap, cells);
+        }
+        self.active_bank()
+            .map(|bank| bank.key_bar_within(&self.keymap, cells))
+            .unwrap_or_default()
+    }
+
+    /// The bank the key bar shows: the first, until Switch bank.
+    pub fn active_bank(&self) -> Option<&Bank> {
+        self.banks.get(self.bank).or_else(|| self.banks.first())
     }
 
     /// Whether the key test is on: the frontend sends every key, as it
@@ -827,8 +1026,33 @@ impl App {
     /// the panel always fit; the whole path is Go to a path's default
     /// text. The terminal draws this; the window uses the whole line.
     pub fn title_line_within(&self, cells: usize) -> String {
+        if let Some(title) = self.viewer_title(cells) {
+            return title;
+        }
         let panel = self.active_panel();
         let place = panel.loading_place().unwrap_or(panel.place());
+        if place.kind() == diroxide_core::PlaceKind::Archive {
+            let mut tail = String::new();
+            if panel.is_loading() {
+                tail.push_str(", loading");
+            }
+            if let Some(filter) = panel.filter() {
+                tail.push_str(&format!(
+                    ", filter {}",
+                    diroxide_core::names::display_name(filter.text())
+                ));
+            }
+            let sort = panel.sort();
+            if *sort != self.settings.sort_spec() {
+                if sort.key == diroxide_core::SortKey::Unsorted {
+                    tail.push_str(", not sorted");
+                } else {
+                    tail.push_str(&format!(", sorted by {}", sort.key.word()));
+                }
+            }
+            let side_words = format!("{} panel", self.active.word());
+            return self.archive_title_line(place, &side_words, &tail, cells);
+        }
         let mut head = format!(
             "{}, {} panel",
             crate::panel::place_leaf(place),
@@ -881,6 +1105,11 @@ impl App {
     /// reader that speaks changed text says the row once (R4 section
     /// 5.1). A focus move keeps the last message.
     pub fn status_line(&self) -> String {
+        if self.status.is_empty()
+            && let Some(viewer) = self.viewer()
+        {
+            return viewer.status();
+        }
         if self.status.is_empty() {
             let panel = self.active_panel();
             let list = panel.list();
@@ -969,6 +1198,15 @@ impl App {
                 folder,
                 result,
             } => self.program_ended(&what, &folder, result),
+            AppEvent::ArchiveOpened { request, facts } => self.archive_opened(request, *facts),
+            AppEvent::ArchivePlanned { job, result } => self.archive_planned(job, result),
+            AppEvent::ArchiveEntries { place, line } => self.archive_entries_counted(&place, line),
+            AppEvent::ViewerSource {
+                request,
+                place,
+                result,
+            } => self.viewer_source(request, place, result),
+            AppEvent::ArchiveFinished { report, lines } => self.archive_finished(*report, lines),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }
@@ -988,7 +1226,19 @@ impl App {
         {
             self.quick = None;
         }
-        let Some(action) = route(&command.id) else {
+        let action = route(&command.id);
+        if self.dialogs.is_empty()
+            && let Some(effects) = self.viewer_dispatch(action, &command.id)
+        {
+            return effects;
+        }
+        if viewing::viewer_route(&command.id).is_some() {
+            if !self.dialogs.is_empty() {
+                return vec![self.say(Message::status("Close this dialog first."))];
+            }
+            return self.viewer_closed_command();
+        }
+        let Some(action) = action else {
             let message =
                 Message::could_not("run", command.id.as_str(), "no command has that id", "");
             return vec![self.say(message)];
@@ -997,6 +1247,23 @@ impl App {
             return self.dialog_command(action, command);
         }
         let side = self.active;
+        // A change inside an archive is refused in words (W2a, P2b): an
+        // archive is read only here, and Pack makes a new one.
+        let changes_here = matches!(
+            action,
+            Action::MakeFolder
+                | Action::Trash
+                | Action::DeletePermanently
+                | Action::Rename
+                | Action::Duplicate
+                | Action::Paste
+                | Action::Move
+                | Action::MoveTo
+                | Action::ClipCut
+        );
+        if changes_here && let Some(refused) = self.read_only_refusal(side) {
+            return refused;
+        }
         match action {
             Action::Focus(movement) => self.move_focus(movement),
             Action::SwitchPanel => self.switch_panel(),
@@ -1005,6 +1272,17 @@ impl App {
             Action::ThisInOther => self.this_in_other(),
             Action::Enter => self.enter(),
             Action::Into => self.into(),
+            Action::OpenAsArchive => self.open_as_archive(),
+            Action::MakeLink => self.link_dialog(),
+            Action::Relink => self.relink_prompt(),
+            Action::Permissions => self.permissions_dialog(),
+            Action::CopyPath => self.copy_path_or_name(false),
+            Action::CopyName => self.copy_path_or_name(true),
+            Action::Split => self.split_dialog(),
+            Action::Join => self.join_files(),
+            Action::Pack => self.pack_dialog(),
+            Action::Unpack => self.unpack_dialog(),
+            Action::TestArchive => self.test_archive(),
             Action::Up => self.up(),
             Action::Reload => self.reload(side),
             Action::Back => self.back(),
@@ -1022,7 +1300,7 @@ impl App {
             Action::SelectNext => self.next_selected(true),
             Action::SelectPrevious => self.next_selected(false),
             Action::SelectRestore => self.restore_selection(),
-            Action::View => vec![self.say(Message::info("The viewer comes with alpha.2."))],
+            Action::View => self.view_file(),
             Action::Edit => self.edit_file(),
             Action::Copy => self.copy_or_move(diroxide_core::JobKind::Copy),
             Action::Move => self.copy_or_move(diroxide_core::JobKind::Move),
@@ -1052,6 +1330,7 @@ impl App {
             Action::SayStatus => self.say_status(),
             Action::SayOther => self.say_other(),
             Action::SayKeyBar => self.say_key_bar(),
+            Action::SwitchBank => self.switch_bank(),
             Action::Palette => self.open_palette(),
             Action::MenuBar => self.open_menu_bar(),
             Action::Menu => self.open_menu_by_command(&command.id),
@@ -1127,6 +1406,24 @@ impl App {
         }
         if !self.dialogs.is_empty() {
             return self.dialog_key(key);
+        }
+        if self.viewing.is_some() {
+            let layers = [
+                diroxide_core::Layer::Viewer,
+                diroxide_core::Layer::List,
+                diroxide_core::Layer::Global,
+            ];
+            return match self.keymap.lookup(&layers, &key) {
+                Lookup::Command(id) => {
+                    self.status.clear();
+                    self.dispatch(&Command::new(id))
+                }
+                // A panel's key says the viewer is in the way.
+                Lookup::NoMatch => match self.keymap.lookup(&[diroxide_core::Layer::Panel], &key) {
+                    Lookup::Command(id) => self.dispatch(&Command::new(id)),
+                    Lookup::NoMatch => Vec::new(),
+                },
+            };
         }
         let layers = [
             diroxide_core::Layer::Panel,

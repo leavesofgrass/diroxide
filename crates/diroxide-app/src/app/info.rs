@@ -22,6 +22,12 @@ use crate::request::{Request, SpawnKind};
 use crate::settings;
 use crate::state;
 
+/// The keyboard list's first row: the help for where the focus is.
+const HELP_ROW: &str = "help";
+
+/// The start of a heading row's id in the keyboard list.
+pub(super) const HEADING_ROW: &str = "heading:";
+
 fn read_list(title: impl Into<String>, rows: Vec<ListRow>) -> ListModel {
     let mut list = ListModel::new(title).with_rows(rows);
     list.set_help("Up and Down read, Escape closes.");
@@ -135,14 +141,41 @@ impl App {
         vec![self.say(Message::info(text))]
     }
 
+    /// Say Key Bar: every pair of the active bank, keys in words: "Key
+    /// bar: F2 Rename, F3 View, ... Control plus Q Quit."
     pub(super) fn say_key_bar(&mut self) -> Vec<Effect> {
-        let text = self
-            .banks
-            .first()
+        let viewer_bank = crate::menu::viewer_bank();
+        let bank = if self.viewer_open() {
+            Some(&viewer_bank)
+        } else {
+            self.active_bank()
+        };
+        let text = bank
             .map(|bank| bank.key_bar_spoken(&self.keymap))
             .filter(|text| !text.is_empty())
             .unwrap_or_else(|| "The key bar is empty.".to_owned());
         vec![self.say(Message::info(text))]
+    }
+
+    /// Switch bank: the next bank on the key bar, its name and its first
+    /// pairs said ("Bank: Archives. F2 Pack, F3 Unpack").
+    pub(super) fn switch_bank(&mut self) -> Vec<Effect> {
+        if self.banks.len() < 2 {
+            let name = self
+                .active_bank()
+                .map_or_else(|| "none".to_owned(), |bank| bank.name.clone());
+            return vec![self.say(Message::info(format!("Only one bank: {name}.")))];
+        }
+        self.bank = (self.bank + 1) % self.banks.len();
+        let text = match self.active_bank() {
+            Some(bank) => {
+                let pairs = bank.pairs(&self.keymap);
+                let first: Vec<&str> = pairs.iter().take(3).map(String::as_str).collect();
+                format!("Bank: {}. {}", bank.name, first.join(", "))
+            }
+            None => "The key bar is empty.".to_owned(),
+        };
+        vec![Effect::Redraw(Redraw::All), self.say(Message::info(text))]
     }
 
     /// Help where the focus is: the list's or the field's help first, then
@@ -183,21 +216,8 @@ impl App {
             let line = if first.is_empty() { title } else { first };
             return vec![self.say(Message::info(line))];
         }
-        let mut rows = vec![ListRow::new("help", first)];
-        for info in CATALOG
-            .iter()
-            .filter(|i| matches!(i.layer, Layer::Panel | Layer::List | Layer::Global))
-        {
-            let key = self.keymap.key_text(&info.id);
-            let row = ListRow::new(info.id.as_str(), info.name);
-            rows.push(if key.is_empty() {
-                row.with_details([info.help])
-            } else {
-                row.with_details([key, info.help.to_owned()])
-            });
-        }
-        let mut list = ListModel::new(format!("Help, {title}")).with_rows(rows);
-        list.set_help("Up and Down read, Enter runs a command, Escape closes.");
+        let _ = title;
+        let list = self.keyboard_list(first);
         self.open_dialog(
             Dialog::Choose {
                 list,
@@ -205,6 +225,70 @@ impl App {
             },
             Purpose::Read,
         )
+    }
+
+    /// The keyboard page as a list (answer 49), from the live keymap, so a
+    /// key is found from inside the program: the help for where the focus
+    /// is first, then a heading for each layer as `docs/keyboard.md` has
+    /// them ("Everywhere", "In a panel", "In the viewer"), each command a
+    /// row with its name first, then its keys and what it does ("Copy to
+    /// other panel, F5, Copies the selection to the other panel's
+    /// folder."), and last the commands with no key, with the menu that
+    /// holds them. Letters jump by name; Enter runs a command.
+    pub(super) fn keyboard_list(&self, first: String) -> ListModel {
+        let mut rows = vec![ListRow::new(HELP_ROW, first)];
+        let layers = [
+            (Layer::Global, "Everywhere"),
+            (Layer::Panel, "In a panel"),
+            (Layer::List, "In any list"),
+            (Layer::Viewer, "In the viewer"),
+            (Layer::Dialog, "In a question"),
+        ];
+        let mut keyless: Vec<&commands::CommandInfo> = Vec::new();
+        for (layer, heading) in layers {
+            let mut lines = Vec::new();
+            for info in CATALOG.iter().filter(|i| i.layer == layer) {
+                let keys: Vec<String> = self
+                    .keymap
+                    .bindings()
+                    .iter()
+                    .filter(|b| b.layer == layer && b.command == info.id)
+                    .map(|b| keymap::written(&b.key, self.keymap.platform()))
+                    .collect();
+                if keys.is_empty() {
+                    keyless.push(info);
+                    continue;
+                }
+                lines.push(
+                    ListRow::new(info.id.as_str(), info.name)
+                        .with_details([keys.join(" or "), info.help.to_owned()]),
+                );
+            }
+            if !lines.is_empty() {
+                rows.push(ListRow::new(format!("{HEADING_ROW}{heading}"), heading));
+                rows.extend(lines);
+            }
+        }
+        if !keyless.is_empty() {
+            let heading = "By the palette and the menus";
+            rows.push(ListRow::new(format!("{HEADING_ROW}{heading}"), heading));
+            for info in keyless {
+                let way = self
+                    .menus
+                    .holder_of(&info.id)
+                    .map_or_else(|| "the palette".to_owned(), |m| format!("{m} menu"));
+                rows.push(
+                    ListRow::new(info.id.as_str(), info.name)
+                        .with_details([way, info.help.to_owned()]),
+                );
+            }
+        }
+        let commands = count(CATALOG.len() as u64, "command", "commands");
+        let mut list = ListModel::new(format!("Keyboard, {commands}")).with_rows(rows);
+        list.set_help(
+            "Up and Down read, a letter jumps to a command by name, Enter runs it, Escape closes.",
+        );
+        list
     }
 
     /// Details of the focused entry, one fact a row, each said first.
@@ -217,7 +301,19 @@ impl App {
         };
         let clock = self.clock.as_ref();
         let name = entry.display_name().into_owned();
-        let mut lines = vec![format!("Name: {name}")];
+        // The item information list (plan commit 66): the preview's detail
+        // rows first, the type and the size in words with the exact bytes,
+        // then the name and what the panel knows.
+        let file_type = self
+            .types
+            .detect(&entry.name, &[])
+            .and_then(|d| self.types.get(&d.type_id));
+        let mut lines: Vec<String> = diroxide_preview::detail_rows(entry, file_type)
+            .into_iter()
+            .map(|row| format!("{}: {}", row.label, row.value))
+            .collect();
+        let archive = entry.kind == diroxide_core::EntryKind::Archive;
+        lines.push(format!("Name: {name}"));
         if entry.needs_care {
             let issues = diroxide_vfs::check_name(&entry.name, &panel.names());
             for issue in issues {
@@ -228,21 +324,10 @@ impl App {
                 diroxide_core::names::spell_out(&entry.name)
             ));
         }
-        lines.push(format!(
-            "Kind: {}",
-            entry
-                .type_name
-                .clone()
-                .unwrap_or_else(|| entry.kind.word().to_owned())
-        ));
-        match (entry.is_folder_like(), entry.size) {
-            (true, _) => lines.push("Size: folder size not computed".to_owned()),
-            (false, Some(size)) => lines.push(format!(
-                "Size: {}, {} bytes",
-                diroxide_core::format::human_size(size),
-                crate::messages::grouped(size)
-            )),
-            (false, None) => lines.push("Size: not known".to_owned()),
+        if entry.kind == diroxide_core::EntryKind::Folder {
+            lines.push("Size: folder size not computed".to_owned());
+        } else if entry.size.is_none() {
+            lines.push("Size: not known".to_owned());
         }
         lines.push(format!("Modified: {}", time_words(entry.modified, clock)));
         lines.push(format!("Created: {}", time_words(entry.created, clock)));
@@ -270,13 +355,17 @@ impl App {
             diroxide_core::names::spell_out(&place.to_string())
         ));
         let list = read_list(format!("Details of {name}"), text_rows(lines));
-        self.open_dialog(
+        let effects = self.open_dialog(
             Dialog::Choose {
                 list,
                 on_enter: Command::new(ids::DETAILS),
             },
-            Purpose::Read,
-        )
+            Purpose::Details(place.clone()),
+        );
+        if archive {
+            self.request(Request::ArchiveEntries(place));
+        }
+        effects
     }
 
     /// The context menu as a list: what the File menu offers here, and the
@@ -337,7 +426,7 @@ impl App {
 
     pub(super) fn open_palette(&mut self) -> Vec<Effect> {
         let field = EntryField::new("Command palette", CompletionSource::Commands);
-        let list = self.palette.list("", &self.keymap);
+        let list = self.palette.list_with("", &self.keymap, Some(&self.menus));
         let dialog = Dialog::Edit {
             field,
             candidates: Some(list),
@@ -453,6 +542,7 @@ impl App {
                     Purpose::SettingValue(key.to_owned()),
                 )
             }
+            SettingKind::SplitPresets => self.split_presets_list(),
             SettingKind::Theme => {
                 let mut rows: Vec<ListRow> = settings::theme_names()
                     .into_iter()
@@ -714,8 +804,12 @@ impl App {
     }
 
     pub(super) fn key_test_press(&mut self, key: Key) -> Vec<Effect> {
-        let layers = [Layer::Panel, Layer::List, Layer::Global];
-        let mut text = keymap::key_test(&self.keymap, &layers, &key);
+        let layers = if self.viewer_open() {
+            [Layer::Viewer, Layer::List, Layer::Global]
+        } else {
+            [Layer::Panel, Layer::List, Layer::Global]
+        };
+        let mut text = keymap::key_test_everywhere(&self.keymap, &key, self.viewer_open());
         // AltGr on Windows arrives as Control plus Alt (crossterm issue
         // 820): such a key types its character in a text field.
         if key.mods.ctrl
@@ -724,7 +818,11 @@ impl App {
         {
             text.push_str(&format!(" In a text field it types {c}."));
         }
-        if self.keymap.lookup(&layers, &key) == keymap::Lookup::Command(ids::CANCEL) {
+        let ends = matches!(
+            self.keymap.lookup(&layers, &key),
+            keymap::Lookup::Command(id) if id == ids::CANCEL || id == ids::CLOSE_VIEWER
+        );
+        if ends {
             self.key_test = false;
             text.push_str(" Key test ended.");
         }

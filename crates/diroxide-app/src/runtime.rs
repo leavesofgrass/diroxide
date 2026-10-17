@@ -33,7 +33,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use diroxide_config::Paths;
+use diroxide_archive::{Allowances, ArchiveError, ArchiveProvider, JobSecrets};
+use diroxide_config::{ArchiveSettings, Paths};
 use diroxide_core::{
     ConflictAction, ConflictAnswer, Effect, ErrorAction, JobId, JobState, Message, Place,
     RequestId, Secret, SecretRequest, Side,
@@ -45,6 +46,8 @@ use diroxide_vfs::{
     CancelToken, OpContext, ProgressSink, ProgressUpdate, Registry, SecretSource, WatchHandle,
     limits,
 };
+
+mod archive_jobs;
 
 use crate::app::{App, AppEvent};
 use crate::request::{AskId, Question, Reply, Request, Spawn, SpawnKind};
@@ -390,6 +393,14 @@ pub struct Runtime {
     hook: Option<TerminalHook>,
     /// The `editor` setting, when it names a program.
     editor: Option<OsString>,
+    /// The archive provider in the registry, for the pack, unpack and test
+    /// runners and for forgetting a locked archive.
+    archives: Option<Arc<ArchiveProvider>>,
+    /// The `[archives]` settings the provider was made from, when this
+    /// runtime made it: a changed table makes it again.
+    archive_settings: Option<ArchiveSettings>,
+    /// The passwords of archive jobs between their plan and their run.
+    archive_secrets: archive_jobs::JobSecretsMap,
 }
 
 impl fmt::Debug for Runtime {
@@ -408,6 +419,18 @@ impl Runtime {
     /// written to disk but what jobs do).
     pub fn new(registry: Arc<Registry>) -> Self {
         let (sender, receiver) = mpsc::channel();
+        // A registry that cannot open archives gets the archive provider,
+        // at the `[archives]` defaults until the app's settings arrive
+        // (see `carry_out`).
+        let (registry, archives, archive_settings) = if crate::archives::serves_archives(&registry)
+        {
+            (registry, None, None)
+        } else {
+            let settings = ArchiveSettings::default();
+            let (registry, provider) =
+                crate::archives::install(&registry, crate::archives::provider(&settings, None));
+            (registry, Some(provider), Some(settings))
+        };
         Self {
             engine: Engine::new(Arc::clone(&registry)),
             registry,
@@ -427,7 +450,48 @@ impl Runtime {
             launcher: Arc::new(SystemLauncher),
             hook: None,
             editor: None,
+            archives,
+            archive_settings,
+            archive_secrets: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// The same runtime with an archive provider the caller installed in
+    /// the registry itself (tests, a frontend with its own limits): the
+    /// runners use it, and the settings no longer remake it.
+    pub fn with_archive_provider(mut self, provider: Arc<ArchiveProvider>) -> Self {
+        self.archives = Some(provider);
+        self.archive_settings = None;
+        self
+    }
+
+    /// The archive provider, when the registry has one this runtime knows.
+    pub fn archives(&self) -> Option<&Arc<ArchiveProvider>> {
+        self.archives.as_ref()
+    }
+
+    /// Makes the archive provider again from the `[archives]` table when
+    /// it changed, the spool folder from the state folder; a provider the
+    /// caller installed is left as it is. The cached indexes go with the
+    /// old provider.
+    pub fn apply_archive_settings(&mut self, settings: &ArchiveSettings) {
+        let Some(current) = &self.archive_settings else {
+            return;
+        };
+        if current == settings {
+            return;
+        }
+        let provider = crate::archives::provider(settings, self.paths.as_ref());
+        let (registry, provider) = crate::archives::install(&self.registry, provider);
+        let mut engine =
+            Engine::new(Arc::clone(&registry)).with_options(self.engine.options().clone());
+        if let Some(journal) = self.engine.journal() {
+            engine = engine.with_journal(journal.clone());
+        }
+        self.engine = engine;
+        self.registry = registry;
+        self.archives = Some(provider);
+        self.archive_settings = Some(settings.clone());
     }
 
     /// Sets the editor from the `editor` setting: a program's name on the
@@ -451,6 +515,9 @@ impl Runtime {
         self.engine = self
             .engine
             .with_journal(Journal::new(paths.state_dir.clone()));
+        if let (Some(provider), Some(settings)) = (&self.archives, &self.archive_settings) {
+            provider.set_spool_dir(Some(settings.spool_dir(&paths)));
+        }
         self.paths = Some(paths);
         self
     }
@@ -584,6 +651,12 @@ impl Runtime {
 
     fn list(&self, request: RequestId, place: Place) {
         let registry = Arc::clone(&self.registry);
+        if place.kind() == diroxide_core::PlaceKind::Archive
+            && let Some(archives) = self.archives.clone()
+        {
+            self.worker(move |shared| list_archive(shared, &registry, &archives, request, place));
+            return;
+        }
         self.worker(move |shared| {
             let progress = Arc::new(ListingProgress {
                 request,
@@ -737,7 +810,143 @@ impl Runtime {
                 }
             }
             Request::Spawn(spawn) => self.spawn(&spawn),
+            Request::PlanUnpack { job, request } => {
+                let Some(archives) = self.archives.clone() else {
+                    self.queue.push_back(AppEvent::ArchivePlanned {
+                        job,
+                        result: Err(archive_jobs::no_archives("unpack")),
+                    });
+                    return;
+                };
+                let registry = Arc::clone(&self.registry);
+                let map = Arc::clone(&self.archive_secrets);
+                self.worker(move |shared| {
+                    archive_jobs::plan_unpack_job(
+                        shared, &registry, &archives, &map, job, &request,
+                    );
+                });
+            }
+            Request::PlanPack { job, request } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    archive_jobs::plan_pack_job(shared, &registry, job, &request);
+                });
+            }
+            Request::RunArchive(plan) => {
+                let Some(archives) = self.archives.clone() else {
+                    self.queue
+                        .push_back(AppEvent::Problem(archive_jobs::no_archives("run")));
+                    return;
+                };
+                let engine = self.engine.clone();
+                let map = Arc::clone(&self.archive_secrets);
+                let job = plan.job();
+                let control = self.register(job);
+                let jobs = Arc::clone(&self.jobs);
+                self.worker(move |shared| {
+                    archive_jobs::run_archive_job(
+                        shared, &engine, &archives, &map, &control, &plan,
+                    );
+                    lock(&jobs).remove(&job);
+                });
+            }
+            Request::TestArchive { job, archive } => {
+                let Some(archives) = self.archives.clone() else {
+                    self.queue
+                        .push_back(AppEvent::Problem(archive_jobs::no_archives("test")));
+                    return;
+                };
+                let engine = self.engine.clone();
+                let control = self.register(job);
+                let jobs = Arc::clone(&self.jobs);
+                self.worker(move |shared| {
+                    archive_jobs::test_archive_job(
+                        shared, &engine, &archives, &control, job, &archive,
+                    );
+                    lock(&jobs).remove(&job);
+                });
+            }
+            Request::OpenViewer {
+                request,
+                place,
+                size,
+                cap,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let result = open_viewer_source(shared, &registry, &place, size, cap);
+                    shared.send(AppEvent::ViewerSource {
+                        request,
+                        place,
+                        result,
+                    });
+                });
+            }
+            Request::ArchiveEntries(place) => {
+                let Some(archives) = self.archives.clone() else {
+                    return;
+                };
+                self.worker(move |shared| {
+                    let source: Arc<dyn SecretSource> = Arc::new(ForwardSecrets {
+                        job: None,
+                        shared: Arc::clone(shared),
+                    });
+                    let secrets = JobSecrets::new(source);
+                    let opened = secrets.with_tries(&OpContext::new(), |ctx| {
+                        archives.open_archive(&place, ctx, Allowances::default())
+                    });
+                    secrets.forget();
+                    let line = match opened {
+                        Ok(opened) => {
+                            let summary = opened.index().summary();
+                            Ok(format!(
+                                "Entries: {}",
+                                diroxide_core::format::count(
+                                    summary.members + summary.folders,
+                                    "item",
+                                    "items"
+                                )
+                            ))
+                        }
+                        Err(error) => Err(error.message("count", "the entries")),
+                    };
+                    shared.send(AppEvent::ArchiveEntries { place, line });
+                });
+            }
+            Request::DropArchiveJob(job) => {
+                // Dropping the job's secrets wipes its password.
+                lock(&self.archive_secrets).remove(&job);
+            }
+            Request::ForgetArchive(container) => {
+                if let Some(archives) = &self.archives {
+                    archives.forget(&container);
+                }
+            }
+            Request::Sweep { folders } => {
+                let registry = Arc::clone(&self.registry);
+                let spool = match (&self.paths, &self.archive_settings) {
+                    (Some(paths), Some(settings)) => Some(settings.spool_dir(paths)),
+                    (Some(paths), None) => Some(paths.spool_dir()),
+                    _ => None,
+                };
+                // Nothing is said: what is swept is the program's own.
+                thread::spawn(move || {
+                    crate::archives::sweep(&registry, spool.as_deref(), &folders);
+                });
+            }
         }
+    }
+
+    /// Notes a running job's control, so Cancel reaches it.
+    fn register(&self, job: JobId) -> JobControl {
+        let control = JobControl::new();
+        lock(&self.jobs).insert(
+            job,
+            RunningJob {
+                control: control.clone(),
+            },
+        );
+        control
     }
 
     fn run(&mut self, plan: Plan) {
@@ -946,6 +1155,7 @@ impl Runtime {
     /// batch, and any still waiting at its end (from an app call that does
     /// not mark them) after it.
     pub fn carry_out(&mut self, app: &mut App, effects: Vec<Effect>) -> Vec<Effect> {
+        self.apply_archive_settings(&app.settings().archives);
         let mut screen = Vec::new();
         for effect in effects {
             if effect == Effect::AppRequests {
@@ -983,6 +1193,130 @@ impl Runtime {
                 .collect();
         }
     }
+}
+
+/// Reads a file for the viewer: a seekable read where the provider has one
+/// (a local file, a stored member, a spooled one), else a stream kept up to
+/// `cap`; a locked member asks its password through the app, three tries.
+fn open_viewer_source(
+    shared: &Arc<Shared>,
+    registry: &Registry,
+    place: &Place,
+    size: Option<u64>,
+    cap: u64,
+) -> Result<crate::viewer::ViewerSource, Message> {
+    let source: Arc<dyn SecretSource> = Arc::new(ForwardSecrets {
+        job: None,
+        shared: Arc::clone(shared),
+    });
+    let secrets = JobSecrets::new(source);
+    let ctx = OpContext::new();
+    let opened = secrets.with_tries(&ctx, |ctx| {
+        let provider = registry.resolve(place)?;
+        match provider.open_seekable(place, ctx) {
+            Ok(reader) => crate::viewer::ViewerSource::seekable(reader)
+                .map_err(|e| ArchiveError::Vfs(diroxide_vfs::VfsError::from(e))),
+            Err(diroxide_vfs::VfsError::WrongPassword) => {
+                Err(ArchiveError::Vfs(diroxide_vfs::VfsError::WrongPassword))
+            }
+            Err(_) => {
+                let reader = provider.read(place, ctx)?;
+                Ok(crate::viewer::ViewerSource::stream(reader, size, cap))
+            }
+        }
+    });
+    opened.map_err(|error| {
+        let name = place
+            .name()
+            .map(diroxide_core::names::display_name)
+            .unwrap_or_default()
+            .into_owned();
+        error.message("view", &name)
+    })
+}
+
+/// Lists a place inside an archive on a worker: the archive opened with
+/// its password asked through the app (three tries, "Wrong password"
+/// first from the second) and each limit's question asked once per kind,
+/// then the folder listed with the cap's line; the facts go to the app
+/// first, then the listing.
+fn list_archive(
+    shared: &Arc<Shared>,
+    registry: &Registry,
+    archives: &ArchiveProvider,
+    request: RequestId,
+    place: Place,
+) {
+    let progress = Arc::new(ListingProgress {
+        request,
+        shared: Arc::clone(shared),
+    });
+    let source: Arc<dyn SecretSource> = Arc::new(ForwardSecrets {
+        job: None,
+        shared: Arc::clone(shared),
+    });
+    let secrets = JobSecrets::new(source);
+    let ctx = OpContext::new().with_progress(progress);
+    let Some((container, _)) = place.archive() else {
+        return;
+    };
+    let container = container.clone();
+    let mut allow = Allowances::default();
+    let outcome = loop {
+        let attempt = secrets.with_tries(&ctx, |ctx| {
+            let opened = archives.open_archive(&container, ctx, allow)?;
+            let listing = archives.list_folder(&place, ctx, allow)?;
+            Ok((opened, listing))
+        });
+        match attempt {
+            Err(ArchiveError::Ask(question)) => {
+                let asked = Question::Limit {
+                    job: None,
+                    question: question.clone(),
+                };
+                match shared.ask(asked, &ctx.cancel, Reply::Confirm(false)) {
+                    Reply::Confirm(true) => allow = allow.with(question.kind),
+                    _ => break Err(question.as_error()),
+                }
+            }
+            other => break other.map_err(ArchiveError::into_vfs),
+        }
+    };
+    let locked = secrets.asked() > 0;
+    secrets.forget();
+    let result = match outcome {
+        Ok((opened, listing)) => {
+            if let Ok(provider) = registry.resolve(&place) {
+                shared.send(AppEvent::PlaceFacts {
+                    place: place.clone(),
+                    capabilities: provider.capabilities(&place),
+                });
+            }
+            let mut notes = Vec::new();
+            if listing.capped() {
+                notes.push(diroxide_archive::capped_line());
+            }
+            let facts = crate::archives::ArchiveFacts {
+                place: place.clone(),
+                container: container.clone(),
+                title: archives.title(&place),
+                opened: opened.opened_line(),
+                notes,
+                locked,
+            };
+            shared.send(AppEvent::ArchiveOpened {
+                request,
+                facts: Box::new(facts),
+            });
+            Ok(listing.entries)
+        }
+        Err(error) => Err(error),
+    };
+    shared.send(AppEvent::Listed {
+        request,
+        place,
+        result,
+    });
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

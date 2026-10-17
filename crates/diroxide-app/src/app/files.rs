@@ -51,6 +51,11 @@ fn start_line(plan: &Plan) -> String {
         JobKind::Rename => "Rename",
         JobKind::MakeFolder => "Make folder",
         JobKind::Undo => "Undo",
+        JobKind::Split => "Split",
+        JobKind::Join => "Join",
+        JobKind::Link => "Link",
+        JobKind::SetAttributes => "Change permissions",
+        JobKind::SetTimes => "Change times",
         _ => "Job",
     };
     let items = count(plan.entries(), "item", "items");
@@ -91,6 +96,23 @@ fn confirmation_lines(plan: &Plan) -> Vec<String> {
     }
     if let Some(caution) = plan.caution() {
         lines.push(caution.to_owned());
+    }
+    // What a split, a join or a change of permissions will do, in its own
+    // rows (W2c's notes): "12 parts of 20 MB, the last 3.1 MB".
+    if let Some(split) = &plan.facts.split {
+        lines.extend(split.rows());
+        lines.extend(
+            split
+                .files
+                .iter()
+                .map(diroxide_ops::SplitFile::details_line),
+        );
+    }
+    if let Some(join) = &plan.facts.join {
+        lines.extend(join.rows());
+    }
+    if let Some(attributes) = &plan.facts.attributes {
+        lines.extend(attributes.rows.iter().cloned());
     }
     lines
 }
@@ -144,7 +166,7 @@ fn named(places: &[(Place, String)]) -> Vec<String> {
 impl App {
     /// The marked entries, or the focused one, frozen now: their places,
     /// and the plan's first line when the focused row is not among them.
-    fn frozen(&self, side: Side) -> Option<(Vec<Place>, Option<String>)> {
+    pub(super) fn frozen(&self, side: Side) -> Option<(Vec<Place>, Option<String>)> {
         let panel = self.panel(side);
         let frozen = panel.list().freeze();
         if frozen.ids.is_empty() {
@@ -164,7 +186,7 @@ impl App {
     }
 
     /// Asks the engine for a plan; what happens next is the flow's.
-    fn plan_job(
+    pub(super) fn plan_job(
         &mut self,
         side: Side,
         request: JobRequest,
@@ -203,6 +225,18 @@ impl App {
         note: Option<String>,
         destination: Place,
     ) -> Vec<Effect> {
+        // Nothing is written into an archive here (copying in is alpha.8):
+        // say so, and name Pack (plan commit 60).
+        if destination.kind() == diroxide_core::PlaceKind::Archive {
+            return vec![self.say(Message::error(super::archive::READ_ONLY))];
+        }
+        // Out of an archive, a copy is an unpack of those members: one pass
+        // over a sequential archive, whatever the count.
+        if kind == JobKind::Copy
+            && self.panel(side).place().kind() == diroxide_core::PlaceKind::Archive
+        {
+            return self.copy_out(side, sources, note, destination);
+        }
         if destination == *self.panel(side).place() && kind == JobKind::Move {
             let text = format!(
                 "Move needs another folder: both panels show {}.",
@@ -570,6 +604,23 @@ impl App {
         };
         let side = self.active;
         let destination = self.panel(side).place().clone();
+        if destination.kind() == diroxide_core::PlaceKind::Archive {
+            return vec![self.say(Message::error(super::archive::READ_ONLY))];
+        }
+        if !clipboard.cut
+            && let Some(first) = clipboard.places.first()
+            && let Some((container, _)) = first.archive()
+        {
+            // Copies out of one archive: an unpack of those members.
+            let container = container.clone();
+            let request = clipboard
+                .places
+                .iter()
+                .all(|p| p.archive().is_some_and(|(c, _)| *c == container));
+            if request {
+                return self.copy_out(side, clipboard.places, None, destination);
+            }
+        }
         if clipboard
             .places
             .iter()
@@ -627,6 +678,15 @@ impl App {
                         Message::error(format!("{sentence}. {}", error.next_step()))
                     }
                     OpsError::NothingToUndo => Message::info("Nothing to undo"),
+                    // These say the whole sentence themselves: "Part 004 is
+                    // missing. Nothing was joined."
+                    OpsError::CannotJoin(sentence)
+                    | OpsError::TooManyParts(sentence)
+                    | OpsError::CannotLink(sentence) => Message::error(sentence.clone()),
+                    // The read-only refusal is a sentence of its own (P2b).
+                    OpsError::Vfs(inner) if inner.sentence().is_some() => {
+                        Message::error(inner.sentence().unwrap_or_default())
+                    }
                     _ => Message::from_error(flow.kind.verb(), "", &error),
                 };
                 return vec![Effect::Redraw(Redraw::JobsLine), self.say(message)];
@@ -640,6 +700,7 @@ impl App {
         let mut forced = false;
         let questions = std::mem::take(&mut plan.facts.questions);
         let mut kept = Vec::new();
+        let mut asked = Vec::new();
         for question in questions {
             match &question {
                 Preflight::TooLarge { place, .. } => {
@@ -666,11 +727,141 @@ impl App {
                     continue;
                 }
                 Preflight::NotEnoughRoom { .. } => forced = true,
+                // Asked one at a time before the confirmation, each with
+                // what its No does (W2c's notes).
+                Preflight::ManyParts { .. }
+                | Preflight::WhichParts { .. }
+                | Preflight::OddPart { .. }
+                | Preflight::RunsAsOwner { .. }
+                | Preflight::EveryoneCanChange { .. }
+                | Preflight::LosesAccess { .. }
+                | Preflight::TrashCopies { .. } => {
+                    asked.push(question);
+                    continue;
+                }
                 _ => forced = true,
             }
             kept.push(question);
         }
         plan.facts.questions = kept;
+        if !asked.is_empty() {
+            let first = asked.remove(0);
+            effects.extend(self.ask_plan_preflight(plan, first, asked, forced));
+            return effects;
+        }
+        effects.extend(self.finish_planning(job, plan, forced));
+        effects
+    }
+
+    /// One of a plan's questions, before its confirmation: the line that
+    /// asks, starting on No, with the plan's other lines under it.
+    fn ask_plan_preflight(
+        &mut self,
+        plan: Box<Plan>,
+        question: Preflight,
+        rest: Vec<Preflight>,
+        forced: bool,
+    ) -> Vec<Effect> {
+        let lines = question.lines();
+        let asks = lines
+            .iter()
+            .rposition(|l| l.ends_with("y or n"))
+            .unwrap_or(0);
+        let text = lines.get(asks).cloned().unwrap_or_default();
+        let listing: Vec<String> = lines
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != asks)
+            .map(|(_, l)| l.clone())
+            .collect();
+        let message = with_default_no(Message::new(
+            text,
+            diroxide_core::Importance::High,
+            diroxide_core::MessageKind::Question,
+        ));
+        self.open_dialog(
+            Dialog::Confirm {
+                question: message,
+                listing,
+                on_yes: Command::new(ids::YES),
+            },
+            Purpose::PlanQuestion {
+                plan,
+                question: Box::new(question),
+                rest,
+                forced,
+            },
+        )
+    }
+
+    /// The answer to one of a plan's questions: a file left out, the job
+    /// cancelled, or the join planned again with the other set; then the
+    /// next question, or the confirmation.
+    pub(super) fn plan_preflight_answered(
+        &mut self,
+        mut plan: Box<Plan>,
+        question: &Preflight,
+        mut rest: Vec<Preflight>,
+        forced: bool,
+        yes: bool,
+    ) -> Vec<Effect> {
+        let job = plan.job;
+        let cancel = |app: &mut App, words: &str| {
+            app.flows.remove(&job);
+            app.jobs.finish(job);
+            vec![
+                Effect::Redraw(Redraw::JobsLine),
+                app.say(Message::info(words.to_owned())),
+            ]
+        };
+        match question {
+            Preflight::ManyParts { place, .. } if !yes => {
+                plan.leave_out(place, "too many parts");
+            }
+            Preflight::RunsAsOwner { place } if !yes => {
+                plan.leave_out(place, "would run as its owner");
+            }
+            Preflight::TrashCopies { places, .. } if !yes => {
+                for place in places {
+                    plan.leave_out(place, "left where it is");
+                }
+            }
+            // A part is never left out of a join: No cancels it.
+            Preflight::OddPart { .. } if !yes => return cancel(self, "Nothing was joined."),
+            Preflight::EveryoneCanChange { .. } | Preflight::LosesAccess { .. } if !yes => {
+                return cancel(self, "Nothing changed.");
+            }
+            Preflight::WhichParts { yes: parts, .. } if yes => {
+                // Yes joins the other set: planned again with it.
+                let destination = plan
+                    .facts
+                    .join
+                    .as_ref()
+                    .and_then(|j| j.output.parent())
+                    .or_else(|| plan.facts.destination.clone());
+                let mut request = JobRequest::new(job, JobKind::Join, parts.clone());
+                if let Some(destination) = destination {
+                    request = request.to(destination);
+                }
+                self.request(Request::Plan(Box::new(request)));
+                return Vec::new();
+            }
+            _ => {}
+        }
+        if !rest.is_empty() {
+            let next = rest.remove(0);
+            return self.ask_plan_preflight(plan, next, rest, forced);
+        }
+        self.finish_planning(job, plan, forced)
+    }
+
+    /// A plan whose questions are answered: nothing left to do said, the
+    /// typed confirmation of a big plan, the confirmation, or the run.
+    fn finish_planning(&mut self, job: JobId, plan: Box<Plan>, forced: bool) -> Vec<Effect> {
+        let Some(flow) = self.flows.get(&job).cloned() else {
+            return Vec::new();
+        };
+        let mut effects = Vec::new();
         if plan.steps.is_empty() {
             self.flows.remove(&job);
             self.jobs.finish(job);
@@ -787,7 +978,12 @@ impl App {
             skipped: named(&report.skipped),
             warnings: named(&report.warnings),
         });
-        if report.kind != JobKind::Undo && report.undo.origin != JobOrigin::Undo {
+        // A job that made, moved or trashed nothing (Test archive) leaves
+        // the last undo where it was.
+        if report.kind != JobKind::Undo
+            && report.undo.origin != JobOrigin::Undo
+            && !(report.kind == JobKind::TestArchive && report.undo.is_empty())
+        {
             self.undo.record(report.undo.clone());
         }
         let missing = report
@@ -823,11 +1019,18 @@ impl App {
                     Some(JobKind::Copy) => "copy",
                     Some(JobKind::Duplicate) => "duplicate",
                     Some(JobKind::MakeFolder) => "make folder",
+                    Some(JobKind::Unpack) => "unpack",
+                    Some(JobKind::Pack) => "pack",
+                    Some(JobKind::Split) => "split",
+                    Some(JobKind::Join) => "join",
                     _ => "job",
                 };
                 let how = match kind {
                     Some(JobKind::Copy | JobKind::Duplicate) => {
                         format!("{} in the trash", count(done, "copy is", "copies are"))
+                    }
+                    Some(JobKind::Unpack | JobKind::Pack | JobKind::Split | JobKind::Join) => {
+                        format!("{} in the trash", count(done, "item is", "items are"))
                     }
                     Some(JobKind::MakeFolder) => {
                         format!("{} removed", count(done, "folder", "folders"))
@@ -837,6 +1040,15 @@ impl App {
                 format!("Undid {noun}: {how}")
             }
             _ if clean && report.kind == JobKind::Trash => catalog::moved_to_trash(done).text,
+            _ if self.finish_lines.is_some() => {
+                self.finish_lines.take().unwrap_or_default().join(" ")
+            }
+            // A join says its verdict: "Joined big.bin: checksum matches."
+            _ if report.joined.is_some() => report
+                .joined
+                .as_ref()
+                .map(diroxide_ops::JoinOutcome::sentence)
+                .unwrap_or_default(),
             _ => {
                 let mut text = report.summary();
                 if let Some(reconciliation) = report.reconciliation.as_ref().filter(|_| missing) {
@@ -876,6 +1088,22 @@ impl App {
             let keep = if each == side { focus.clone() } else { None }
                 .or_else(|| panel.list().focused().map(|r| r.id.clone()));
             effects.extend(self.open_as(each, place, keep, Load::AfterJob));
+        }
+        if clean && let Some(outcome) = report.joined.clone() {
+            effects.extend(self.offer_trash_parts(&outcome));
+        }
+        // A link Windows refused for the privilege: a junction instead,
+        // which needs none (folders only).
+        let refused = report.failed.iter().any(|(_, why)| {
+            why.contains(diroxide_ops::links::NEEDS_DEVELOPER_MODE.trim_end_matches('.'))
+        });
+        if refused
+            && let Then::Linked {
+                targets, folder, ..
+            } = then
+            && !targets.is_empty()
+        {
+            effects.extend(self.offer_junction(targets, folder));
         }
         effects
     }
@@ -949,19 +1177,44 @@ impl App {
                     Purpose::ItemError { ask, choices },
                 )
             }
-            Question::Secret { job, request } => {
-                let mut effects = Vec::new();
-                if job.is_some() {
-                    effects.push(self.say(catalog::waiting_for_secret(&request.subject)));
-                }
-                let mut dialog = Dialog::secret(request);
-                if let Dialog::Secret { shown, .. } = &mut dialog {
-                    *shown = self.settings.secret_show_toggle;
-                }
-                effects.extend(self.open_dialog(dialog, Purpose::Secret { ask }));
-                effects
+            Question::Limit { question, .. } => self.ask_limit(ask, &question),
+            Question::Secret { job, request } if request.attempt >= 2 => {
+                // The next try: say the last one was wrong first, and ask
+                // whether to try again, starting on No (W2b's notes).
+                let _ = job;
+                let question = with_default_no(diroxide_archive::wrong_password(&request));
+                self.open_dialog(
+                    Dialog::Confirm {
+                        question,
+                        listing: Vec::new(),
+                        on_yes: Command::new(ids::YES),
+                    },
+                    Purpose::WrongPassword { ask, request },
+                )
             }
+            Question::Secret { job, request } => self.secret_prompt(ask, request, job.is_some()),
         }
+    }
+
+    /// The masked prompt for a password a worker waits on (ADR-0009): for a
+    /// job, the jobs line's "Waiting for the password for course.zip."
+    /// first, as a change of state.
+    pub(super) fn secret_prompt(
+        &mut self,
+        ask: AskId,
+        request: diroxide_core::SecretRequest,
+        for_a_job: bool,
+    ) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        if for_a_job {
+            effects.push(self.say(catalog::waiting_for_secret(&request.subject)));
+        }
+        let mut dialog = Dialog::secret(request);
+        if let Dialog::Secret { shown, .. } = &mut dialog {
+            *shown = self.settings.secret_show_toggle;
+        }
+        effects.extend(self.open_dialog(dialog, Purpose::Secret { ask }));
+        effects
     }
 
     /// Escape outside a dialog: stops the job in front.
