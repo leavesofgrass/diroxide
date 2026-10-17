@@ -363,6 +363,7 @@ fn a_file_changed_on_disk_renders_once_and_says_so() {
     );
     assert_eq!(bench.settle(620), ["Preview updated: notes.md changed"]);
     assert_eq!(bench.view.view().unwrap().outline().len(), 2);
+    assert_eq!(bench.view.shown().unwrap().size, Some(14), "asked again");
     assert!(bench.settle(5000).is_empty(), "once");
     assert_eq!(bench.log.reads().len(), 2);
     assert_eq!(

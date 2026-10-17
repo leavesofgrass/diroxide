@@ -185,15 +185,16 @@ impl Worker {
             .spawn(move || {
                 let _alive = alive;
                 while let Ok(request) = requests.recv() {
+                    let mut entry = request.entry.clone();
                     let rendered = if shared.latest.is_current(request.generation) {
-                        render(&shared, &request)
+                        render(&shared, &request, &mut entry)
                     } else {
                         Rendered::Superseded
                     };
                     let answer = Answer {
                         generation: request.generation,
                         place: request.place,
-                        entry: request.entry,
+                        entry,
                         rendered,
                     };
                     if answers.send(answer).is_err() {
@@ -212,12 +213,12 @@ impl Worker {
 
 /// Reads the previewed file, and only it, at most the cap, and makes its
 /// view; a folder, a link or an archive is said in words, and so is a
-/// known kind of file that is not text (a picture, a PDF).
-fn render(shared: &Shared, request: &Request) -> Rendered {
-    let mut entry = request.entry.clone();
+/// known kind of file that is not text (a picture, a PDF). A changed
+/// file's size is asked again, into `entry`.
+fn render(shared: &Shared, request: &Request, entry: &mut Entry) -> Rendered {
     let name = entry.name.clone();
     if !matches!(entry.kind, EntryKind::File) {
-        return Rendered::NoPreview(diroxide_preview::details(&entry, None));
+        return Rendered::NoPreview(diroxide_preview::details(entry, None));
     }
     let ctx = OpContext::new().with_cancel(request.cancel.clone());
     let provider = match shared.registry.resolve(&request.place) {
@@ -251,12 +252,12 @@ fn render(shared: &Shared, request: &Request) -> Rendered {
         bytes.extend_from_slice(&chunk[..n]);
         if !sniffed && bytes.len() >= SNIFF_BYTES.min(CHUNK) {
             sniffed = true;
-            if let Some(words) = not_text(shared, &entry, &bytes) {
+            if let Some(words) = not_text(shared, entry, &bytes) {
                 return Rendered::NoPreview(words);
             }
         }
     }
-    if !sniffed && let Some(words) = not_text(shared, &entry, &bytes) {
+    if !sniffed && let Some(words) = not_text(shared, entry, &bytes) {
         return Rendered::NoPreview(words);
     }
     let capped = bytes.len() as u64 > shared.max_bytes;
