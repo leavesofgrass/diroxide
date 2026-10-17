@@ -49,6 +49,10 @@ use crate::plan::{Plan, Step, is_read_only};
 use crate::progress::{Estimator, JobProgress};
 use crate::undo::{LeftAs, UndoRecord};
 
+mod split;
+#[cfg(test)]
+mod split_tests;
+
 /// What one step came to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Outcome {
@@ -186,6 +190,7 @@ pub(crate) struct Run<'a> {
     lost: Vec<(Place, String)>,
     journal: Option<JournalWriter>,
     paused_said: bool,
+    split: Option<split::SplitState>,
 }
 
 /// The reason a step is skipped when its entry changed since the plan.
@@ -248,6 +253,7 @@ impl<'a> Run<'a> {
             lost: Vec::new(),
             journal: None,
             paused_said: false,
+            split: None,
         }
     }
 
@@ -510,7 +516,10 @@ impl<'a> Run<'a> {
                 None => self.step(step),
             };
             self.record(index, step.subject(), &outcome, before);
-            self.shared.progress().items_done += 1;
+            // A split's sidecar is not one of its parts.
+            if !matches!(step, Step::WriteChecksum { .. }) {
+                self.shared.progress().items_done += 1;
+            }
             if outcome == Outcome::Cancelled {
                 self.report.cancelled = true;
                 break;
@@ -587,6 +596,7 @@ impl<'a> Run<'a> {
     }
 
     fn finish(&mut self) {
+        self.finish_split();
         let folders = std::mem::take(&mut self.folders);
         for (place, source) in folders.iter().rev() {
             if let Ok(provider) = self.engine.registry().resolve(place) {
@@ -684,9 +694,13 @@ impl<'a> Run<'a> {
             Step::Restore { place } => self.restore(place),
             Step::Remove { place } => self.remove(place, false),
             Step::RemoveEmptyFolder { place } => self.remove(place, true),
-            Step::SplitPart { .. } | Step::WriteChecksum { .. } => {
-                Outcome::Failed("a split is not run in this version".to_owned())
-            }
+            Step::SplitPart {
+                from,
+                to,
+                offset,
+                length,
+            } => self.split_part(from, to, *offset, *length),
+            Step::WriteChecksum { of, place } => self.write_checksum(of, place),
             Step::SetAttributes { place, change } => {
                 let provider = match self.provider(place) {
                     Ok(provider) => provider,

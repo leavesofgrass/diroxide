@@ -174,3 +174,45 @@ fn a_journal_that_cannot_be_written_is_a_warning_not_a_stop() {
             .starts_with("the undo journal could not be written")
     );
 }
+
+/// A split's journal names the unfinished file of the part being written,
+/// so an interrupted split says what it left beside its target.
+#[test]
+fn a_split_journals_the_unfinished_name_of_each_part() {
+    let folder = state();
+    let journal = Journal::new(folder.path());
+    let fake = FakeProvider::new();
+    fake.add_file(&p("/a/report.pdf"), &[9u8; 50]);
+    fake.add_folder(&p("/b"));
+    let engine = engine(&fake).with_journal(journal.clone());
+    let request = JobRequest::new(JobId::new(30), JobKind::Split, vec![p("/a/report.pdf")])
+        .to(p("/b"))
+        .split_into(diroxide_core::job::PartSize::Bytes(20));
+    let plan = engine.plan(&request).unwrap();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let looker = Arc::clone(&seen);
+    let watched = journal.clone();
+    let sink = Answers::default().on_progress(move |progress| {
+        if progress.bytes_done == 40 && looker.lock().unwrap().is_empty() {
+            looker.lock().unwrap().extend(watched.interrupted());
+        }
+    });
+    let report = engine.run(&plan, &JobControl::new(), &sink);
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    let during = seen.lock().unwrap().clone();
+    assert_eq!(during.len(), 1, "the split, unfinished while it ran");
+    assert_eq!(during[0].kind, JobKind::Split);
+    let (target, unfinished) = &during[0].unfinished[0];
+    assert_eq!(target, &p("/b/report.pdf.002"));
+    assert_eq!(unfinished.parent(), Some(p("/b")));
+    assert!(
+        diroxide_vfs::names::is_unfinished(unfinished.name().unwrap()),
+        "{unfinished}"
+    );
+    assert_eq!(during[0].record.created, vec![p("/b/report.pdf.001")]);
+    assert!(journal.interrupted().is_empty(), "finished at the end");
+    assert_eq!(
+        journal.records()[0].created.last(),
+        Some(&p("/b/report.pdf.crc"))
+    );
+}

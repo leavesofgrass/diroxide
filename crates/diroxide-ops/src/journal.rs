@@ -63,6 +63,12 @@ enum Line {
         #[serde(default)]
         created: Vec<diroxide_core::Place>,
     },
+    /// A write begun: its target and the unfinished name its bytes go to
+    /// until the commit (`FileWriter::unfinished_place`).
+    Writing {
+        writing: diroxide_core::Place,
+        unfinished: diroxide_core::Place,
+    },
 }
 
 /// A job the last session did not finish, as its journal tells it.
@@ -80,6 +86,10 @@ pub struct Interrupted {
     pub done: u64,
     /// What it did that can be undone.
     pub record: UndoRecord,
+    /// The write it was in the middle of, as (target, unfinished name):
+    /// the unfinished file is the job's, left beside its target. It is
+    /// never removed on its own; the next start lists it.
+    pub unfinished: Vec<(diroxide_core::Place, diroxide_core::Place)>,
 }
 
 impl Interrupted {
@@ -133,6 +143,20 @@ impl JournalWriter {
             moves: delta.moves.clone(),
             trashed: delta.trashed.clone(),
             created: delta.created.clone(),
+        })
+    }
+
+    /// Appends a write begun: the target, and the unfinished name its
+    /// bytes go to until the commit, so an interrupted job's journal says
+    /// which unfinished file belongs to which target.
+    pub(crate) fn writing(
+        &mut self,
+        target: &diroxide_core::Place,
+        unfinished: &diroxide_core::Place,
+    ) -> io::Result<()> {
+        self.line(&Line::Writing {
+            writing: target.clone(),
+            unfinished: unfinished.clone(),
         })
     }
 
@@ -227,8 +251,10 @@ impl Journal {
                 origin: header.origin,
                 ..UndoRecord::for_job(header.job, header.kind)
             },
+            unfinished: Vec::new(),
         };
         let mut ended = false;
+        let mut writing = None;
         for line in lines {
             let Ok(text) = line else { break };
             match serde_json::from_str::<Line>(&text) {
@@ -240,6 +266,7 @@ impl Journal {
                     ..
                 }) => {
                     job.finished += 1;
+                    writing = None;
                     if outcome == "done" {
                         job.done += 1;
                     }
@@ -250,10 +277,16 @@ impl Journal {
                 Ok(Line::End { left, .. }) => {
                     job.record.left = left;
                     ended = true;
+                    writing = None;
                 }
+                Ok(Line::Writing {
+                    writing: target,
+                    unfinished,
+                }) => writing = Some((target, unfinished)),
                 Err(_) => break,
             }
         }
+        job.unfinished.extend(writing);
         Some((job, ended))
     }
 

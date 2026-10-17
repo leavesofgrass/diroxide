@@ -497,14 +497,16 @@ impl Engine {
     pub fn run(&self, plan: &Plan, control: &JobControl, sink: &dyn JobSink) -> JobReport {
         let by_bytes = matches!(
             plan.kind,
-            JobKind::Copy | JobKind::Duplicate | JobKind::Move
+            JobKind::Copy | JobKind::Duplicate | JobKind::Move | JobKind::Split | JobKind::Join
         ) && plan.facts.counted
             && plan.facts.bytes > 0;
-        let mut progress = JobProgress::start(
-            plan.kind,
-            plan.steps.len() as u64,
-            by_bytes.then_some(plan.facts.bytes),
-        );
+        // A split counts its parts, not its sidecars.
+        let items = match &plan.facts.split {
+            Some(split) if plan.kind == JobKind::Split => split.parts(),
+            _ => plan.steps.len() as u64,
+        };
+        let mut progress =
+            JobProgress::start(plan.kind, items, by_bytes.then_some(plan.facts.bytes));
         progress.state = JobState::Running;
         let shared = Shared::new(progress);
         let stall = self.options.stall_after;
