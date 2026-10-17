@@ -666,7 +666,9 @@ fn flag_truth(flag: Flag, entry: &Entry, lookup: &dyn Lookup) -> Truth {
     let file = matches!(entry.kind, EntryKind::File | EntryKind::Archive);
     match flag {
         Flag::Hidden => Truth::of(entry.hidden),
-        Flag::NeedsCare => Truth::of(entry.needs_care),
+        // As a row says it: a name the provider could not read as
+        // Unicode needs care too.
+        Flag::NeedsCare => Truth::of(entry.needs_care || entry.name_not_unicode),
         Flag::Labeled => Truth::of(!entry.labels.is_empty()),
         Flag::ReadOnly => match attributes {
             Some(Attributes::Windows(bits)) => Truth::of(bits & WINDOWS_READ_ONLY != 0),

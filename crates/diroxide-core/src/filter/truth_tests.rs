@@ -290,6 +290,12 @@ fn truth_tables_over_known_and_unknown_facts() {
         truth_alone("needs-care", &Entry::new("C\u{F03A}", EntryKind::Folder)),
         Y
     );
+    // A name that is not Unicode needs care, as its row says (P3b).
+    let mut lossy = Entry::new("report\u{FFFD}.txt", EntryKind::File);
+    lossy.needs_care = false;
+    lossy.name_not_unicode = true;
+    assert_eq!(truth_alone("needs-care", &lossy), Y);
+    assert_eq!(truth_alone("not needs-care", &lossy), N);
     assert_eq!(
         truth_alone("empty", &fixture("empty-dir")),
         U(Unknown::FolderNotListed)

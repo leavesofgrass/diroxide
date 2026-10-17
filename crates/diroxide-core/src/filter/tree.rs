@@ -296,7 +296,8 @@ pub enum Flag {
     /// A file whose contents are only online (a cloud placeholder).
     OnlineOnly,
     /// A name that needs care: hidden or reserved characters, trailing
-    /// dots or spaces, a device name.
+    /// dots or spaces, a device name, or a name that is not Unicode, as a
+    /// panel row says "name needs care".
     NeedsCare,
     /// Marked in the panel.
     Selected,

@@ -22,7 +22,7 @@ use diroxide_core::filter::{
     ContentQuery, Evaluator, Field, Filter, Flag, Lookup, Test, Truth, Unknown,
 };
 use diroxide_core::{Clock, Entry, EntryKind};
-use diroxide_vfs::{Registry, VfsError, VolumeKind, facts};
+use diroxide_vfs::{LocalEntryBuilder, Registry, VfsError, VolumeKind, facts};
 
 use crate::content::{Found, MOST_LINES, Reader};
 use crate::hit::{ContentMatch, SearchHit};
@@ -261,6 +261,8 @@ struct Decide<'a> {
     tx: SyncSender<Message>,
     unknown: HashMap<Unknown, u64>,
     odd_names: u64,
+    /// Fills in a hit's facts when the walk did not read them.
+    entries: LocalEntryBuilder,
 }
 
 impl Drop for Decide<'_> {
@@ -336,7 +338,7 @@ impl Visitor for Decide<'_> {
             && let Location::Local(path) = &candidate.location
             && let Ok(metadata) = std::fs::symlink_metadata(path)
         {
-            local_entry::fill(&mut entry, &metadata);
+            local_entry::fill(&self.entries, &mut entry, &metadata);
         }
         let hit = SearchHit::new(place, entry).with_depth(candidate.depth);
         match read.lines {
@@ -406,6 +408,7 @@ fn spawn_walk(
                     .as_ref()
                     .filter(|_| scope.follow_links)
                     .and_then(|path| std::fs::canonicalize(path).ok());
+                let entries = LocalEntryBuilder::new();
                 let make = || Decide {
                     evaluator: evaluator.as_ref(),
                     root: &start.root,
@@ -427,6 +430,7 @@ fn spawn_walk(
                     tx: tx.clone(),
                     unknown: HashMap::new(),
                     odd_names: 0,
+                    entries: entries.clone(),
                 };
                 let message = match walk::run(&plan, &registry, &make) {
                     Ok(stats) => Message::Walked(stats),
