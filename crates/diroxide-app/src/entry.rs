@@ -36,6 +36,11 @@ pub enum CompletionSource {
     History,
     /// A fixed list, such as a setting's choices.
     Values(Vec<String>),
+    /// The labels' names (W3l): the Set label prompt.
+    Labels,
+    /// The bookmarks (W3l): each completes to its place, its name said
+    /// after it.
+    Bookmarks,
 }
 
 /// One candidate: the text inserted, and its kind said after it
@@ -415,6 +420,26 @@ pub fn value_candidates(values: &[String]) -> Vec<Candidate> {
     values
         .iter()
         .map(|value| Candidate::new(value.clone(), "choice"))
+        .collect()
+}
+
+/// The label source: every label by name, its color said after it as a
+/// word ("Urgent, label, orange"), in the Labels list's order.
+pub fn label_candidates(store: &crate::labels::LabelStore) -> Vec<Candidate> {
+    store
+        .labels()
+        .iter()
+        .map(|label| Candidate::new(label.name.clone(), format!("label, {}", label.color.word())))
+        .collect()
+}
+
+/// The bookmark source: each bookmark's place, its name after it
+/// ("D:\work\Reports, bookmark Reports"), sticky ones first.
+pub fn bookmark_candidates(bookmarks: &crate::bookmarks::Bookmarks) -> Vec<Candidate> {
+    bookmarks
+        .ordered()
+        .into_iter()
+        .map(|b| Candidate::new(b.place.to_string(), format!("bookmark {}", b.name)))
         .collect()
 }
 

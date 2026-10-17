@@ -204,6 +204,8 @@ impl App {
             effects.push(self.redraw_panel(side));
         }
         if refreshed.moved {
+            // The folder's own view, or the usual one back (W3l).
+            let view_line = self.folder_view_on_entering(side);
             let place = self.panel(side).place().clone();
             if place.kind() == diroxide_core::PlaceKind::Local {
                 let now = self.now().unix_seconds();
@@ -214,9 +216,12 @@ impl App {
                 side,
                 place: Some(place),
             });
-            if active && let Some(line) = self.archive_landing(side) {
+            if active && let Some(mut line) = self.archive_landing(side) {
                 // Inside an archive: "Opened course.zip: 10 items, 48 KB."
                 // at its root, "week1, 3 items, in course.zip" below it.
+                if let Some(view) = &view_line {
+                    line = format!("{}. {view}", line.trim_end_matches('.'));
+                }
                 effects.push(Effect::Redraw(Redraw::TitleLine));
                 effects.push(self.say(Message::info(line)));
                 return effects;
@@ -235,6 +240,9 @@ impl App {
                         ", in {}",
                         diroxide_core::names::display_name(&parent.to_string())
                     ));
+                }
+                if let Some(view) = view_line {
+                    text.push_str(&format!(". {view}"));
                 }
                 effects.push(Effect::Redraw(Redraw::TitleLine));
                 effects.push(self.say(Message::info(text)));

@@ -15,8 +15,9 @@
 //! (`app`, `panel`, `dialog`, `jobs`, `runtime`, `request`, `startup`,
 //! `state`); later waves add their own files: W2d owns `viewer`, W2e owns
 //! `quickview`; W2f wires the archives (`archives`), the viewer, the quick
-//! view and the alpha.2 dialogs; W3l owns `labels` and `bookmarks` (the
-//! label and bookmark stores) and their wiring in `app`.
+//! view and the alpha.2 dialogs; W3l owns `labels`, `bookmarks` and
+//! `views` (the label, bookmark and folder-view stores and the History
+//! list) and their wiring in `app`.
 //!
 //! [`Effect`]: diroxide_core::Effect
 
@@ -40,6 +41,7 @@ pub mod settings;
 pub mod startup;
 pub mod state;
 pub mod viewer;
+pub mod views;
 
 /// The configuration types a frontend reads through the app: the terminal
 /// crate may depend only on core, app and theme (`cargo xtask deps`), and

@@ -3,8 +3,8 @@
 //! in the config files, the menus and banks, the session to restore, the
 //! interrupted jobs of the last session and the undo records of the
 //! finished ones (from the undo journal), the prompts' histories, the home
-//! folder, the labels and bookmarks (W3l), and the clock with the local
-//! offset.
+//! folder, the labels, bookmarks and folder views (W3l), and the clock
+//! with the local offset.
 //!
 //! [`load`] does the reading (I/O), so the app's core stays free of it;
 //! tests build a [`Startup`] by hand or load one from a temporary state
@@ -55,6 +55,8 @@ pub struct Startup {
     pub labels: crate::labels::LabelStore,
     /// The bookmarks (`bookmarks.toml`).
     pub bookmarks: crate::bookmarks::Bookmarks,
+    /// The folders' own views (`folder-views.toml`).
+    pub views: crate::views::FolderViews,
 }
 
 impl Default for Startup {
@@ -73,6 +75,7 @@ impl Default for Startup {
             first_run: false,
             labels: crate::labels::LabelStore::starter(),
             bookmarks: crate::bookmarks::Bookmarks::new(),
+            views: crate::views::FolderViews::new(),
         }
     }
 }
@@ -176,6 +179,8 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     problems.extend(labels.problems);
     let bookmarks = crate::bookmarks::load(paths);
     problems.extend(bookmarks.problems);
+    let views = crate::views::load(paths);
+    problems.extend(views.problems);
     Startup {
         problems,
         menus,
@@ -190,6 +195,7 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         first_run,
         labels: labels.value,
         bookmarks: bookmarks.value,
+        views: views.value,
     }
 }
 

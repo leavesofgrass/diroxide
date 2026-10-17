@@ -378,14 +378,7 @@ impl App {
     /// The bookmarks as Go to place candidates, first: each its place,
     /// its name after it.
     pub(super) fn bookmark_place_candidates(&self) -> Vec<crate::entry::Candidate> {
-        self.organize
-            .bookmarks
-            .ordered()
-            .into_iter()
-            .map(|b| {
-                crate::entry::Candidate::new(b.place.to_string(), format!("bookmark {}", b.name))
-            })
-            .collect()
+        crate::entry::bookmark_candidates(&self.organize.bookmarks)
     }
 
     /// In the Go to place list, a bookmarked place's row says its kind

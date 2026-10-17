@@ -91,7 +91,7 @@ impl App {
             "Set label on"
         };
         let label = format!("{verb} {}", Self::targets_words(&places, one.as_deref()));
-        let field = EntryField::new(label, CompletionSource::None);
+        let field = EntryField::new(label, CompletionSource::Labels);
         let mut effects = self.open_organize(
             Dialog::edit(field),
             Wants::Label {

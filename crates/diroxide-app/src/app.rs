@@ -22,6 +22,7 @@ mod archive_jobs;
 mod bookmarking;
 mod dialogs;
 mod files;
+mod folder_views;
 mod info;
 mod labeling;
 mod nav;
@@ -398,7 +399,8 @@ enum Purpose {
     SettingText(String),
     /// A list to read: details, help, problems.
     Read,
-    /// The labels and bookmarks (W3l): what their dialogs are for.
+    /// The labels, bookmarks, folder views and History list (W3l): what
+    /// their dialogs are for.
     Organize(Box<organize::Wants>),
     /// The job history.
     JobHistory,
@@ -532,7 +534,8 @@ pub struct App {
     highlighter: Option<crate::viewer::highlight::Session>,
     /// The quick view and the focus in its region.
     preview: preview::Preview,
-    /// The labels and bookmarks, and what their lists wait for (W3l).
+    /// The labels, bookmarks and folder views, and what their lists wait
+    /// for (W3l).
     organize: organize::Organize,
 }
 
@@ -842,7 +845,7 @@ impl App {
             viewer_wait: None,
             highlighter: None,
             preview: preview::Preview::default(),
-            organize: organize::Organize::new(startup.labels, startup.bookmarks),
+            organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1185,8 +1188,18 @@ impl App {
             let state = session.panel_mut(side);
             state.place = Some(panel.place().clone());
             state.focused = panel.list().focused().map(|r| r.id.clone());
-            state.sort = panel.sort().clone();
-            state.show_hidden = panel.shows_hidden();
+            // While a folder's own view is applied, the panel's usual
+            // view is what it has elsewhere, so that is what is kept (W3l).
+            match &self.organize.usual[side.index()] {
+                Some(usual) => {
+                    state.sort = usual.sort.clone();
+                    state.show_hidden = usual.show_hidden;
+                }
+                None => {
+                    state.sort = panel.sort().clone();
+                    state.show_hidden = panel.shows_hidden();
+                }
+            }
             state.history = panel.history().to_vec();
         }
         session
@@ -1294,7 +1307,7 @@ impl App {
         {
             return effects;
         }
-        // The labels and bookmarks (W3l).
+        // The labels, bookmarks, folder views and History list (W3l).
         if let Some(effects) = self.organize_dispatch(command) {
             return effects;
         }

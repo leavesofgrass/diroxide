@@ -1257,6 +1257,10 @@ impl App {
                     .unwrap_or_default()
             }
             CompletionSource::Values(values) => crate::entry::value_candidates(&values),
+            CompletionSource::Labels => crate::entry::label_candidates(&self.organize.labels),
+            CompletionSource::Bookmarks => {
+                crate::entry::bookmark_candidates(&self.organize.bookmarks)
+            }
             CompletionSource::None => {
                 return vec![self.say(Message::status("No completion here"))];
             }

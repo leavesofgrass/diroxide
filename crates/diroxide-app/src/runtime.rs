@@ -1006,6 +1006,18 @@ impl Runtime {
                     )));
                 }
             }
+            Request::SaveViews(views) => {
+                if let Some(paths) = &self.paths
+                    && let Err(error) = crate::views::save(paths, &views)
+                {
+                    self.queue.push_back(AppEvent::Problem(Message::could_not(
+                        "save",
+                        "the folder views",
+                        &error,
+                        "",
+                    )));
+                }
+            }
             Request::CheckPlaces { request, places } => {
                 let registry = Arc::clone(&self.registry);
                 self.worker(move |shared| {

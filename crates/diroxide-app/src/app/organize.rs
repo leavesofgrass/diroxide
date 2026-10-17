@@ -1,8 +1,8 @@
-//! The labels and bookmarks in the app (W3l,
-//! plan commits 22 to 24): what the app holds for them, their commands'
+//! The labels, bookmarks, folder views and History list in the app (W3l,
+//! plan commits 22 to 25): what the app holds for them, their commands'
 //! routes, what their dialogs are for, and the hooks the app's dispatch,
-//! keys, dialogs and undo call. The behavior is in `labeling` and
-//! `bookmarking`.
+//! keys, dialogs and undo call. The behavior is in `labeling`,
+//! `bookmarking` and `folder_views`.
 //!
 //! The rules are the app's: every list and question is a dialog under the
 //! contract (modal, named, Escape closes, the focus returns); every row
@@ -12,8 +12,9 @@
 
 use std::collections::HashSet;
 
+use diroxide_config::ColumnKind;
 use diroxide_core::{
-    Command, CommandId, Effect, Key, Layer, ListModel, Message, Place, RequestId, Side,
+    Command, CommandId, Effect, Key, Layer, ListModel, Message, Place, RequestId, Side, SortSpec,
 };
 
 use super::{App, Purpose, typed};
@@ -22,8 +23,9 @@ use crate::commands::ids;
 use crate::dialog::Dialog;
 use crate::keymap::Lookup;
 use crate::labels::{LabelStore, LabelUndo};
+use crate::views::FolderViews;
 
-/// What the app holds for the labels and bookmarks.
+/// What the app holds for the labels, bookmarks and folder views.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Organize {
     /// The labels and the labeled places.
@@ -36,14 +38,20 @@ pub(super) struct Organize {
     pub(super) check: Option<Check>,
     /// The bookmarks.
     pub(super) bookmarks: Bookmarks,
+    /// The folders' own views.
+    pub(super) views: FolderViews,
+    /// Each panel's usual view while a folder's own view is applied, put
+    /// back on leaving that folder.
+    pub(super) usual: [Option<Look>; 2],
 }
 
 impl Organize {
     /// What the app starts with.
-    pub(super) fn new(labels: LabelStore, bookmarks: Bookmarks) -> Self {
+    pub(super) fn new(labels: LabelStore, bookmarks: Bookmarks, views: FolderViews) -> Self {
         Self {
             labels,
             bookmarks,
+            views,
             ..Self::default()
         }
     }
@@ -58,6 +66,14 @@ pub(super) struct Check {
     pub(super) missing: Option<HashSet<String>>,
     /// How many places could not be looked at.
     pub(super) unreadable: usize,
+}
+
+/// A panel's view: what a folder's own view changes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Look {
+    pub(super) sort: SortSpec,
+    pub(super) show_hidden: bool,
+    pub(super) columns: Vec<ColumnKind>,
 }
 
 /// A bookmark setting typed in a field.
@@ -96,6 +112,8 @@ pub(super) enum Wants {
         place: Place,
         field: BookmarkField,
     },
+    /// The History list for a panel.
+    History { side: Side },
 }
 
 impl Wants {
@@ -117,9 +135,13 @@ enum Do {
     Bookmarks,
     BookmarkFolder,
     BookmarkItem,
+    History,
+    ForgetPlace,
+    SaveView,
+    ForgetView,
 }
 
-const ROUTES: [(CommandId, Do); 14] = [
+const ROUTES: [(CommandId, Do); 18] = [
     (ids::LABEL_SET, Do::SetLabel),
     (ids::LABEL_TOGGLE, Do::ToggleLabel),
     (ids::LABEL_CLEAR, Do::ClearLabels),
@@ -134,6 +156,10 @@ const ROUTES: [(CommandId, Do); 14] = [
     (ids::BOOKMARKS, Do::Bookmarks),
     (ids::BOOKMARK_ADD, Do::BookmarkFolder),
     (ids::BOOKMARK_ITEM, Do::BookmarkItem),
+    (ids::HISTORY_LIST, Do::History),
+    (ids::FORGET_PLACE, Do::ForgetPlace),
+    (ids::SAVE_VIEW, Do::SaveView),
+    (ids::FORGET_VIEW, Do::ForgetView),
 ];
 
 fn route(id: &CommandId) -> Option<Do> {
@@ -144,7 +170,7 @@ fn route(id: &CommandId) -> Option<Do> {
 }
 
 impl App {
-    /// Runs a command of the labels or the bookmarks;
+    /// Runs a command of the labels, bookmarks, views or the History list;
     /// `None` when the command is another's. With a dialog or the viewer
     /// open it says what is in the way, as the panel's commands do.
     pub(super) fn organize_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
@@ -171,6 +197,13 @@ impl App {
             Do::Bookmarks => self.bookmarks_command(side, command),
             Do::BookmarkFolder => self.bookmark_folder(side),
             Do::BookmarkItem => self.bookmark_item(side),
+            Do::History => self.history_list(side),
+            Do::ForgetPlace => {
+                let place = self.panel(side).place().clone();
+                self.forget_place(&place)
+            }
+            Do::SaveView => self.save_view(side),
+            Do::ForgetView => self.forget_view(side),
         })
     }
 
@@ -189,8 +222,8 @@ impl App {
 
     /// A key in one of these lists before the dialog's own keys: an alias
     /// letter jumps in the Bookmarks list; the keys that trash a file
-    /// remove the focused bookmark, or take the label off the focused
-    /// item; the key that renames a file edits the
+    /// remove the focused bookmark, forget the focused place, or take the
+    /// label off the focused item; the key that renames a file edits the
     /// focused bookmark. `None` when the key is the dialog's.
     pub(super) fn organize_key(&mut self, key: &Key) -> Option<Vec<Effect>> {
         let wants = self.organize_top()?;
@@ -230,6 +263,10 @@ impl App {
                     return Some(self.bookmark_form(side, place, None));
                 }
                 None
+            }
+            Wants::History { .. } if removes => {
+                let place = row.and_then(|r| Place::parse(&r).ok())?;
+                Some(self.forget_place(&place))
             }
             Wants::Labeled { label } if removes => {
                 let place = row.and_then(|r| Place::parse(&r).ok())?;
@@ -285,6 +322,14 @@ impl App {
             Wants::BookmarkText { side, place, field } => {
                 self.bookmark_text_typed(side, place, field, &text)
             }
+            Wants::History { side } => match row.and_then(|r| Place::parse(&r).ok()) {
+                Some(place) => {
+                    let mut effects = self.close_all();
+                    effects.extend(self.open(side, place, None));
+                    effects
+                }
+                None => Vec::new(),
+            },
             Wants::RemoveBookmark { .. } => self.dialog_escape(),
         }
     }
@@ -359,6 +404,12 @@ impl App {
         self.request(crate::request::Request::SaveBookmarks(Box::new(bookmarks)));
     }
 
+    /// Saves the folder views through the runtime.
+    pub(super) fn save_views(&mut self) {
+        let views = self.organize.views.clone();
+        self.request(crate::request::Request::SaveViews(Box::new(views)));
+    }
+
     /// The labels' names, for the filter language's lints and completion
     /// (`LintContext` and `CompletionContext`): the wiring lane passes
     /// these.
@@ -374,6 +425,11 @@ impl App {
     /// The bookmarks.
     pub fn bookmarks(&self) -> &Bookmarks {
         &self.organize.bookmarks
+    }
+
+    /// The folders' own views.
+    pub fn folder_views(&self) -> &FolderViews {
+        &self.organize.views
     }
 
     /// The filter language's `bookmarked` fact (and the entry's whole

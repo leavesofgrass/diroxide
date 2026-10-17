@@ -16,6 +16,7 @@ mod preview;
 mod session;
 mod split_join;
 mod viewer;
+mod views;
 
 use diroxide_app::{App, AppEvent, AppOptions, Runtime};
 use diroxide_core::{Effect, Key, Place, Side};

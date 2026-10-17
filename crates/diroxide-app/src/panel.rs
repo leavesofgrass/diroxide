@@ -589,6 +589,18 @@ impl Panel {
         self.refresh(clock)
     }
 
+    /// The details each row says after its name.
+    pub fn columns(&self) -> &[ColumnKind] {
+        &self.columns
+    }
+
+    /// Changes the details each row says after its name (a folder's own
+    /// view, W3l); the focus and the marks stay by id.
+    pub fn set_columns(&mut self, columns: Vec<ColumnKind>, clock: &dyn Clock) -> RowsReplaced {
+        self.columns = columns;
+        self.refresh(clock)
+    }
+
     /// How many entries the filter lets through of those hidden rules
     /// allow, and of how many: (shown, all).
     pub fn filter_counts(&self) -> (usize, usize) {

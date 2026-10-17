@@ -366,6 +366,14 @@ pub mod ids {
         BOOKMARK_ADD = "bookmark.add";
         /// Bookmark the focused item, opening its folder on it.
         BOOKMARK_ITEM = "bookmark.add-item";
+        /// The History list: the folders visited in every session.
+        HISTORY_LIST = "go.history-list";
+        /// Take this folder out of the history.
+        FORGET_PLACE = "go.forget-place";
+        /// Save this folder's own view.
+        SAVE_VIEW = "view.save-view";
+        /// Stop applying this folder's own view.
+        FORGET_VIEW = "view.forget-view";
         /// Closes the viewer and goes back to the file's row
         CLOSE_VIEWER = "viewer.close";
         /// Moves to the token before, or the byte before in hex mode, and says it
@@ -509,7 +517,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 172] = [
+pub static CATALOG: [CommandInfo; 176] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1410,6 +1418,38 @@ pub static CATALOG: [CommandInfo; 172] = [
         ids::BOOKMARK_ITEM,
         "Bookmark the focused item",
         "Adds the focused file or folder as a bookmark that opens its folder with it focused.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::HISTORY_LIST,
+        "History list",
+        "Lists the folders visited in every session, most used first, to go back to one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FORGET_PLACE,
+        "Forget this place",
+        "Takes the active panel's folder out of the History list and path jump.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SAVE_VIEW,
+        "Save view for this folder",
+        "Keeps this folder's sort, filter, hidden files and columns, applied each time it opens.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FORGET_VIEW,
+        "Forget this folder's view",
+        "Stops applying this folder's saved view; the usual view returns on leaving it.",
         Panel,
         &[],
         &[],

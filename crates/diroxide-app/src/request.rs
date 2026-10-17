@@ -323,6 +323,9 @@ pub enum Request {
     SaveLabels(Box<crate::labels::LabelStore>),
     /// Write the bookmarks to `bookmarks.toml` in the state folder (W3l).
     SaveBookmarks(Box<crate::bookmarks::Bookmarks>),
+    /// Write the folder views to `folder-views.toml` in the state folder
+    /// (W3l).
+    SaveViews(Box<crate::views::FolderViews>),
     /// Find which of these places are gone, on a worker, for the Labels
     /// list's missing counts (W3l); answered as
     /// [`AppEvent::PlacesChecked`](crate::AppEvent::PlacesChecked).

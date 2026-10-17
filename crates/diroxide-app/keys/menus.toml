@@ -288,6 +288,14 @@ access = "o"
 menu = "preview"
 access = "p"
 
+[[menu.item]]
+command = "view.save-view"
+access = "w"
+
+[[menu.item]]
+command = "view.forget-view"
+access = "g"
+
 [[menu]]
 id = "preview"
 title = "Preview"
@@ -584,6 +592,14 @@ access = "m"
 [[menu.item]]
 command = "bookmark.add-item"
 access = "e"
+
+[[menu.item]]
+command = "go.history-list"
+access = "r"
+
+[[menu.item]]
+command = "go.forget-place"
+access = "g"
 
 [[menu]]
 id = "select"
