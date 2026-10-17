@@ -4,7 +4,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 
-use diroxide_core::{JobId, JobKind, JobRequest};
+use diroxide_core::{JobId, JobKind, JobOrigin, JobRequest};
 use diroxide_ops::journal::KEEP_FINISHED;
 use diroxide_ops::{FakeProvider, JobControl, Journal, UndoLog};
 
@@ -76,6 +76,40 @@ fn the_journal_is_written_before_the_first_step_and_read_back_after() {
         !fake.exists(&p("/b/0.txt")),
         "undone from the journal's record"
     );
+}
+
+/// An undo of a trash restores and records nothing, yet its journal must
+/// still come back after a restart, so the app can take away the record
+/// it reversed (W1d-1's contract request 3).
+#[test]
+fn a_finished_job_with_nothing_to_undo_is_still_returned() {
+    let folder = state();
+    let journal = Journal::new(folder.path());
+    let fake = tree();
+    let engine = engine(&fake).with_journal(journal.clone());
+    let trash = JobRequest::new(JobId::new(1), JobKind::Trash, vec![p("/a/0.txt")]);
+    let plan = engine.plan(&trash).unwrap();
+    let report = engine.run(&plan, &JobControl::new(), &Answers::default());
+    assert!(report.failed.is_empty(), "{report:?}");
+    let mut log = UndoLog::default();
+    log.record(report.undo);
+    let undo = engine
+        .undo_last(
+            &mut log,
+            JobId::new(2),
+            &JobControl::new(),
+            &Answers::default(),
+        )
+        .unwrap();
+    assert!(undo.failed.is_empty(), "{undo:?}");
+    assert!(fake.exists(&p("/a/0.txt")), "restored");
+    let records = journal.records();
+    assert_eq!(records.len(), 2, "the undo's empty record is returned too");
+    assert_eq!(records[0].job, Some(JobId::new(1)));
+    assert!(!records[0].is_empty());
+    assert_eq!(records[1].job, Some(JobId::new(2)));
+    assert_eq!(records[1].origin, JobOrigin::Undo);
+    assert!(records[1].is_empty(), "{:?}", records[1]);
 }
 
 #[test]
