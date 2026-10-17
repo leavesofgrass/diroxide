@@ -19,6 +19,11 @@
 //! labels of the list are the favorites, toggled by Control with a digit
 //! as the Finder does.
 //!
+//! A label's color reaches the screen through the theme's six label
+//! roles ([`LabelColor::role`], P3b): a frontend colors the label's word
+//! in a row with its role, and the row's words stay as they are, the name
+//! first and the color's word after it.
+//!
 //! W3l owns this module. The app's commands are in `app::labeling`.
 
 use std::collections::{BTreeMap, HashMap};
@@ -26,6 +31,7 @@ use std::collections::{BTreeMap, HashMap};
 use diroxide_config::{ConfigProblem, Loaded, Paths};
 use diroxide_core::format::count;
 use diroxide_core::{Entry, Place, PlaceKind};
+use diroxide_theme::PanelRole;
 use serde::{Deserialize, Serialize};
 
 /// The labels file in the state folder.
@@ -82,6 +88,20 @@ impl LabelColor {
             LabelColor::Yellow => "yellow",
             LabelColor::Gray => "gray",
             LabelColor::Brown => "brown",
+        }
+    }
+
+    /// The theme role that colors a label's word in this color: a text
+    /// color checked for contrast on the page in every theme (P3b, W3l's
+    /// request 1). The word is said first; the color is the extra.
+    pub const fn role(self) -> PanelRole {
+        match self {
+            LabelColor::Blue => PanelRole::LabelBlue,
+            LabelColor::Orange => PanelRole::LabelOrange,
+            LabelColor::Purple => PanelRole::LabelPurple,
+            LabelColor::Yellow => PanelRole::LabelYellow,
+            LabelColor::Gray => PanelRole::LabelGray,
+            LabelColor::Brown => PanelRole::LabelBrown,
         }
     }
 
@@ -344,6 +364,14 @@ impl LabelStore {
     pub fn label(&self, name: &str) -> Option<&Label> {
         let wanted = name.trim().to_lowercase();
         self.labels.iter().find(|l| l.name.to_lowercase() == wanted)
+    }
+
+    /// The theme role that colors a label's word, by the label's name,
+    /// ignoring case: for the Labels list's rows (whose ids are the
+    /// names), the Set label list and a panel row's "label: urgent". `None`
+    /// for a name the store does not hold.
+    pub fn role_of(&self, name: &str) -> Option<PanelRole> {
+        self.label(name).map(|label| label.color.role())
     }
 
     /// The label a favorite key toggles: 1 is the first.
@@ -825,7 +853,17 @@ mod tests {
         );
         for color in LabelColor::ALL {
             assert!(!["red", "green"].contains(&color.word()));
+            // Its theme role is named for it (P3b).
+            assert_eq!(
+                color.role().key().strip_prefix("label_"),
+                Some(color.word())
+            );
         }
+        let roles: Vec<PanelRole> = LabelColor::ALL.iter().map(|c| c.role()).collect();
+        assert_eq!(roles, PanelRole::LABELS, "one role each, in the same order");
+        assert_eq!(store.role_of("urgent"), Some(PanelRole::LabelOrange));
+        assert_eq!(store.role_of("Done"), Some(PanelRole::LabelBlue));
+        assert_eq!(store.role_of("nothing"), None);
         assert_eq!(LabelColor::from_word("red"), None);
         assert_eq!(LabelColor::from_word("Green"), None);
         assert_eq!(LabelColor::from_word("grey"), Some(LabelColor::Gray));
