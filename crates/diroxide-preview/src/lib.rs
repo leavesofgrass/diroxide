@@ -9,9 +9,13 @@
 //! classes and their per-line runs ([`classes`]), the entry's detail rows
 //! on every preview ([`detail_rows`]), and serialization, so a preview
 //! can cross a process boundary (a plugin's previewer, `diro serve`).
-//! Wave 2 brings the viewer's `encoding` and `highlight` modules (W2d)
-//! and the quick view's `doc` modules (W2e); Wave 5 (W5b) adds the
-//! image, audio, video, document and archive previewers.
+//! Wave 2 brings the viewer's modules (W2d): [`encoding`], carried from
+//! textweaver, which decides a file's encoding and tells text from
+//! binary; [`hex`], the one hex row function every place that shows bytes
+//! uses; [`highlight`], syntect as a tokenizer into the token classes,
+//! with its caps, its worker and its deadline, the symbols and the
+//! validity lines. The quick view's `doc` modules follow (W2e); Wave 5
+//! (W5b) adds the image, audio, video, document and archive previewers.
 
 pub mod classes;
 pub mod encoding;
