@@ -254,7 +254,7 @@ pub fn sevenz(data: &[u8]) {
         }
     }
     let mut visited = 0u64;
-    let _ = backend.visit(password.as_ref(), &cancel, &mut |_, reader| {
+    let _ = backend.visit(password.as_ref(), &cancel, &|_| true, &mut |_, reader| {
         visited += 1;
         let mut capped = std::io::Read::take(reader, limits.max_member_size);
         let _ = std::io::copy(&mut capped, &mut std::io::sink());

@@ -6,6 +6,7 @@
 mod build;
 mod cross_check;
 mod hostile;
+mod jobs;
 mod memory;
 mod nested;
 mod odd_names;
@@ -20,6 +21,7 @@ mod spike_sequential;
 mod split_sets;
 mod tar_read;
 mod unpack_plan;
+mod unpack_run;
 mod world;
 mod xz_read;
 mod zip_read;

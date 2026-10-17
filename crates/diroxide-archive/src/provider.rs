@@ -229,6 +229,7 @@ impl Opened {
         allow: Allowances,
         budget: Budget,
         limits: &Limits,
+        wanted: &dyn Fn(u32) -> bool,
         each: &mut Visitor<'_>,
     ) -> Result<(), ArchiveError> {
         let index = &self.index;
@@ -257,9 +258,10 @@ impl Opened {
                 }
             }
             let encrypted = (0..index.len() as u32).any(|id| {
-                index
-                    .record(id)
-                    .is_some_and(|r| r.flags.contains(RecordFlags::ENCRYPTED))
+                wanted(id)
+                    && index
+                        .record(id)
+                        .is_some_and(|r| r.flags.contains(RecordFlags::ENCRYPTED))
             });
             let password = match (sevenz.password(), encrypted) {
                 (Some(password), _) => Some(password.clone()),
@@ -272,7 +274,7 @@ impl Opened {
             };
             let mut visit_one = |file: usize, reader: &mut dyn Read| -> Result<bool, VfsError> {
                 match record_of.get(file).copied() {
-                    Some(id) if id != u32::MAX => {
+                    Some(id) if id != u32::MAX && wanted(id) => {
                         let mut guarded = Guarded::new(
                             reader,
                             claims_of(id),
@@ -286,7 +288,12 @@ impl Opened {
                     _ => Ok(true),
                 }
             };
-            sevenz.visit(password.as_ref(), &ctx.cancel, &mut visit_one)?;
+            let wanted_file = |file: usize| {
+                record_of
+                    .get(file)
+                    .is_some_and(|&id| id != u32::MAX && wanted(id))
+            };
+            sevenz.visit(password.as_ref(), &ctx.cancel, &wanted_file, &mut visit_one)?;
             return Ok(());
         }
         let in_order = Allowances {
@@ -295,6 +302,9 @@ impl Opened {
         };
         for id in self.archive_order() {
             ctx.check()?;
+            if !wanted(id) {
+                continue;
+            }
             let Some(record) = index.record(id).copied() else {
                 continue;
             };
@@ -826,7 +836,25 @@ impl ArchiveProvider {
         each: &mut Visitor<'_>,
     ) -> Result<(), ArchiveError> {
         let budget = budget.unwrap_or_else(|| Budget::new(&self.limits));
-        opened.visit_records(ctx, allow, budget, &self.limits, each)
+        opened.visit_records(ctx, allow, budget, &self.limits, &|_| true, each)
+    }
+
+    /// [`ArchiveProvider::visit_opened`] over the records `wanted` says
+    /// yes to: the others are never opened (a zip's, a plain tar's) or are
+    /// decoded and set aside without a call (a solid block's, a compressed
+    /// tar's). What a runner that has done some members already uses to
+    /// go on with the rest.
+    pub fn visit_some(
+        &self,
+        opened: &Opened,
+        ctx: &OpContext,
+        allow: Allowances,
+        budget: Option<Budget>,
+        wanted: &dyn Fn(u32) -> bool,
+        each: &mut Visitor<'_>,
+    ) -> Result<(), ArchiveError> {
+        let budget = budget.unwrap_or_else(|| Budget::new(&self.limits));
+        opened.visit_records(ctx, allow, budget, &self.limits, wanted, each)
     }
 
     /// Opens an archive from any seekable bytes, under this provider's

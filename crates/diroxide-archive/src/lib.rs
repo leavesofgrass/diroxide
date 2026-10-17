@@ -19,6 +19,7 @@ pub mod format;
 pub mod fuzzing;
 pub mod guard;
 pub mod index;
+pub mod job;
 pub mod limits;
 pub mod names;
 mod pipe;
@@ -28,6 +29,7 @@ mod read_tar;
 mod read_xz;
 mod read_zip;
 pub mod request;
+pub mod run_unpack;
 pub mod secrets;
 pub mod sniff;
 mod source;
@@ -42,12 +44,14 @@ pub use index::{
     Index, IndexBuilder, IndexCache, IndexSummary, Locator, MAX_LISTED, Member, Record,
     RecordFlags, RecordKind, capped_line, member_row,
 };
+pub use job::{ArchiveQuestions, JobEnv, NoQuestions};
 pub use limits::{Limits, limit_words};
 pub use names::{
     MemberPath, NameFlags, NameRefusal, is_junk, member_path, nesting_depth, normalize_member_name,
 };
 pub use provider::{ArchiveProvider, Listing, Opened, Visitor, capabilities_for};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
+pub use run_unpack::{UnpackOutcome, run_unpack, safe_mode};
 pub use secrets::{JobSecrets, new_password_request};
 pub use sniff::{Signature, Sniffed, decide, sniff_signature};
 pub use unpack::{
