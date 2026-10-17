@@ -13,6 +13,8 @@
 //! - `diro init SHELL`: the shell function that moves the shell where diro
 //!   left it, through `--cwd-file`.
 //! - `diro archive list|pack|unpack|test`: archives from a shell.
+//! - `diro split FILE` and `diro join PART`: split a file into numbered
+//!   parts with a `.crc` sidecar, and put them back together.
 //! - `diro plugin list|new|enable|disable|run|log`: plugin tooling.
 //! - `diro --version`, `diro --help`.
 //!
@@ -62,6 +64,10 @@ pub enum Invocation {
     Init(cmd::init::InitArgs),
     /// List, pack, unpack or test an archive.
     Archive(cmd::archive::ArchiveArgs),
+    /// Split a file into numbered parts.
+    Split(cmd::split::SplitArgs),
+    /// Join a split file's parts.
+    Join(cmd::join::JoinArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -128,6 +134,8 @@ pub fn help_text() -> String {
         "diro archive pack ARCHIVE ITEM...  pack items into a new archive",
         "diro archive unpack ARCHIVE  unpack into the current folder, or --into FOLDER",
         "diro archive test ARCHIVE  read every member of an archive and check it",
+        "diro split FILE --preset NAME  split into numbered parts; or --size N, --parts N",
+        "diro join PART            join a split file's parts back into one file",
         "diro plugin list          list the plugins",
         "diro --version            print the version",
         "diro --help               print this help",
@@ -237,6 +245,8 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "keys" => cmd::keys::parse(&args[1..]).map(Invocation::Keys),
         "init" => cmd::init::parse(&args[1..]).map(Invocation::Init),
         "archive" => cmd::archive::parse(&args[1..]).map(Invocation::Archive),
+        "split" => cmd::split::parse(&args[1..]).map(Invocation::Split),
+        "join" => cmd::join::parse(&args[1..]).map(Invocation::Join),
         _ => parse_open(&args).map(Invocation::Open),
     }
 }
@@ -267,6 +277,8 @@ pub fn run(
         Invocation::Keys(args) => cmd::keys::run(&args, open::paths(false).as_ref(), out),
         Invocation::Init(args) => cmd::init::run(args, out),
         Invocation::Archive(args) => cmd::archive::run(&args, input, out),
+        Invocation::Split(args) => cmd::split::run(&args, out),
+        Invocation::Join(args) => cmd::join::run(&args, out),
     }
 }
 

@@ -228,6 +228,60 @@ pub fn command() -> Command {
                 ),
         )
         .subcommand(archive_command())
+        .subcommand(
+            Command::new("split")
+                .about("Split a file into numbered parts with a .crc checksum file")
+                .arg(
+                    Arg::new("preset")
+                        .long("preset")
+                        .value_name("NAME")
+                        .help("Parts of a preset's size, by name"),
+                )
+                .arg(
+                    Arg::new("size")
+                        .long("size")
+                        .value_name("N")
+                        .help("Parts of N bytes, or with a unit: 20MB, 100MiB"),
+                )
+                .arg(
+                    Arg::new("parts")
+                        .long("parts")
+                        .value_name("N")
+                        .help("N equal parts"),
+                )
+                .arg(flag("presets", "List the presets"))
+                .arg(
+                    Arg::new("into")
+                        .long("into")
+                        .value_name("FOLDER")
+                        .value_hint(ValueHint::DirPath)
+                        .help("Write the parts there"),
+                )
+                .arg(flag("replace", "Replace parts of the same names"))
+                .arg(
+                    Arg::new("file")
+                        .value_hint(ValueHint::FilePath)
+                        .help("The file to split"),
+                ),
+        )
+        .subcommand(
+            Command::new("join")
+                .about("Join a split file's parts back into one file")
+                .arg(
+                    Arg::new("into")
+                        .long("into")
+                        .value_name("FOLDER")
+                        .value_hint(ValueHint::DirPath)
+                        .help("Write the whole there"),
+                )
+                .arg(flag("replace", "Replace a file of the same name"))
+                .arg(
+                    Arg::new("part")
+                        .required(true)
+                        .value_hint(ValueHint::FilePath)
+                        .help("Any part of the set"),
+                ),
+        )
         .subcommand(no_help(
             Command::new("search")
                 .about("Print the places under ROOT whose names match PATTERN")
