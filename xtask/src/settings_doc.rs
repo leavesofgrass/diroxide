@@ -4,7 +4,8 @@
 //! edits it by hand.
 
 use diroxide_app::settings::{
-    ColumnKind, DRIVE_KINDS, PanelRole, SCHEMA, SettingGroup, SettingKind, theme_names,
+    BUILTIN_SPLIT_PRESETS, ColumnKind, DRIVE_KINDS, PanelRole, SCHEMA, SettingGroup, SettingKind,
+    theme_names,
 };
 
 /// The page, relative to the workspace root.
@@ -25,7 +26,21 @@ pub fn generate() -> String {
             page.push_str(&format!("\n### {}\n\n", info.key));
             page.push_str(&format!("{}. {}\n\n", info.name, info.help));
             page.push_str(&format!("- Holds: {}.\n", info.kind.words()));
-            page.push_str(&format!("- Default: `{}`.\n", info.default));
+            if info.kind == SettingKind::SplitPresets {
+                page.push_str("- Default: the built-in presets, each with its source:\n");
+                for builtin in &BUILTIN_SPLIT_PRESETS {
+                    let preset = builtin.preset();
+                    page.push_str(&format!(
+                        "  - {}. {}. {}.\n",
+                        preset.row_text(),
+                        preset.details_line(),
+                        builtin.source
+                    ));
+                }
+                page.push_str("- Add your own, after the built-in ones:\n\n```toml\n[[split_presets]]\nname = \"Zip disk\"\nbytes = 100663296\n```\n\n");
+            } else {
+                page.push_str(&format!("- Default: `{}`.\n", info.default));
+            }
             if let SettingKind::Choice(choices) = info.kind {
                 for choice in choices {
                     page.push_str(&format!("- `{}`: {}.\n", choice.value, choice.words));
@@ -75,6 +90,12 @@ mod tests {
         assert!(page.contains("- `focused_row`: focused row.\n"));
         assert!(page.contains("- `octal`: Octal mode.\n"));
         assert!(page.contains("- Comes with alpha.3.\n"));
+        assert!(page.contains("\n### archives.max_entries\n"));
+        assert!(page.contains("  - GitHub file limit, 100 MiB. Parts of 104,857,600 bytes. 104,857,600 bytes: GitHub blocks"));
+        assert!(
+            !page.contains("bytes = 18000000"),
+            "no TOML table on one line"
+        );
         assert!(!page.contains('|'));
         assert!(page.ends_with("(README.md)\n"));
     }

@@ -20,6 +20,9 @@ use toml::{Table, Value};
 use crate::columns::ColumnKind;
 use crate::error::ConfigError;
 use crate::paths::Paths;
+use crate::presets::{
+    SplitPreset, builtin_split_presets, check_preset, merge_split_presets, unknown_preset_keys,
+};
 use crate::schema::{SCHEMA, SettingInfo, SettingKind};
 use crate::session::Layout;
 use crate::store::{ConfigProblem, Loaded};
@@ -155,6 +158,195 @@ impl Default for ConfirmSettings {
     }
 }
 
+/// How many bytes a row of hex shows in the viewer (alpha.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HexRow {
+    /// Eight in screen reader mode, sixteen otherwise.
+    #[default]
+    Auto,
+    /// Eight: the offset, the bytes and their letters fit 40 cells.
+    Narrow,
+    /// Sixteen.
+    Wide,
+}
+
+impl HexRow {
+    /// The bytes a row shows, in or out of screen reader mode.
+    pub const fn bytes_per_row(self, screen_reader: bool) -> usize {
+        match self {
+            HexRow::Narrow => 8,
+            HexRow::Wide => 16,
+            HexRow::Auto if screen_reader => 8,
+            HexRow::Auto => 16,
+        }
+    }
+}
+
+/// The `[viewer]` table (alpha.2, W2d): wrapping, line numbers, follow,
+/// hex rows, the decoded-bytes cache for files inside archives, and the
+/// highlighting caps of R17.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ViewerSettings {
+    /// Wrap long lines, each continuation marked.
+    pub wrap: bool,
+    /// Where lines wrap, in characters; 0 for the screen's width.
+    pub wrap_width: u64,
+    /// Start each line with its number.
+    pub line_numbers: bool,
+    /// Read more of a growing file and stay at its end.
+    pub follow: bool,
+    /// The bytes of a hex row.
+    pub hex_row: HexRow,
+    /// How much of a file inside an archive is kept decoded, in MiB.
+    pub member_cache_mib: u64,
+    /// No code colors for a file larger than this, in KiB.
+    pub highlight_max_kib: u64,
+    /// No code colors for a file with more lines than this.
+    pub highlight_max_lines: u64,
+    /// No code colors on a line longer than this, in characters.
+    pub highlight_max_line_chars: u64,
+    /// How long highlighting may take before it stops for the session,
+    /// in milliseconds.
+    pub highlight_deadline_ms: u64,
+}
+
+impl Default for ViewerSettings {
+    fn default() -> Self {
+        Self {
+            wrap: true,
+            wrap_width: 0,
+            line_numbers: false,
+            follow: false,
+            hex_row: HexRow::Auto,
+            member_cache_mib: 64,
+            highlight_max_kib: 512,
+            highlight_max_lines: 10_000,
+            highlight_max_line_chars: 2_000,
+            highlight_deadline_ms: 2_000,
+        }
+    }
+}
+
+/// The `[quick_view]` table (alpha.2, W2e): the wait after the cursor
+/// stops, how much is read and for how long, following changes on disk,
+/// and line numbers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct QuickViewSettings {
+    /// The wait after the cursor stops, in milliseconds.
+    pub wait_ms: u64,
+    /// The most of a file read, in KiB.
+    pub max_kib: u64,
+    /// How long reading a document may take, in milliseconds.
+    pub deadline_ms: u64,
+    /// Show the file again when it changes on disk.
+    pub follow_changes: bool,
+    /// Line numbers for plain text and code.
+    pub line_numbers: bool,
+}
+
+impl Default for QuickViewSettings {
+    fn default() -> Self {
+        Self {
+            wait_ms: 500,
+            max_kib: 1_024,
+            deadline_ms: 2_000,
+            follow_changes: true,
+            line_numbers: false,
+        }
+    }
+}
+
+/// One mebibyte, for the `_mib` settings.
+pub const MIB: u64 = 1 << 20;
+/// One gibibyte, for the `_gib` settings.
+pub const GIB: u64 = 1 << 30;
+
+/// The `[archives]` table (alpha.2, W2a): the limits that keep a hostile
+/// archive from filling the disk or the memory, with the starting numbers
+/// of research/archives.md section 6. Each field is one field of the
+/// archive provider's `Limits`, in the unit its name ends with; the app
+/// builds the provider's limits from these, through
+/// [`ArchiveSettings::mib`] and [`ArchiveSettings::gib`].
+/// "Ask" limits are questions asked once per job; the others refuse with
+/// the reason in words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ArchiveSettings {
+    /// Ask before one member larger than this, in GiB.
+    pub max_member_gib: u64,
+    /// Ask before an operation writes out more than this in all, in GiB.
+    pub ask_total_gib: u64,
+    /// Refuse an operation that expands to more than this, in GiB.
+    pub max_total_gib: u64,
+    /// Ask when a member grows more than this many times its packed size.
+    pub max_ratio: u64,
+    /// What a member writes before its ratio is judged, in MiB.
+    pub ratio_floor_mib: u64,
+    /// Ask before a dictionary larger than this, in MiB.
+    pub ask_dictionary_mib: u64,
+    /// Refuse a dictionary larger than this, in MiB.
+    pub max_dictionary_mib: u64,
+    /// Refuse a header or central directory larger than this, in MiB.
+    pub max_header_mib: u64,
+    /// Refuse an index that takes more memory than this, in MiB.
+    pub max_index_mib: u64,
+    /// Refuse an archive with more members than this.
+    pub max_entries: u64,
+    /// Skip a member whose name is longer than this, in bytes.
+    pub max_name_bytes: u64,
+    /// Skip a member with a name part longer than this, in bytes.
+    pub max_component_bytes: u64,
+    /// Skip a link whose target is longer than this, in bytes.
+    pub max_link_target_bytes: u64,
+    /// Refuse an operation that needs more memory than this, in MiB.
+    pub max_memory_mib: u64,
+    /// Spool an inner archive in memory up to this, in MiB.
+    pub spool_memory_mib: u64,
+    /// Spool on disk up to this per operation, in GiB.
+    pub spool_disk_gib: u64,
+    /// How many archives deep a place may go.
+    pub max_nesting: u64,
+}
+
+impl Default for ArchiveSettings {
+    fn default() -> Self {
+        Self {
+            max_member_gib: 8,
+            ask_total_gib: 32,
+            max_total_gib: 1_024,
+            max_ratio: 1_000,
+            ratio_floor_mib: 64,
+            ask_dictionary_mib: 256,
+            max_dictionary_mib: 1_536,
+            max_header_mib: 256,
+            max_index_mib: 256,
+            max_entries: 1_000_000,
+            max_name_bytes: 4_096,
+            max_component_bytes: 255,
+            max_link_target_bytes: 4_096,
+            max_memory_mib: 1_024,
+            spool_memory_mib: 64,
+            spool_disk_gib: 4,
+            max_nesting: 4,
+        }
+    }
+}
+
+impl ArchiveSettings {
+    /// A count of MiB in bytes, saturating.
+    pub const fn mib(units: u64) -> u64 {
+        units.saturating_mul(MIB)
+    }
+
+    /// A count of GiB in bytes, saturating.
+    pub const fn gib(units: u64) -> u64 {
+        units.saturating_mul(GIB)
+    }
+}
+
 /// The plugins section of `config.toml`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -241,6 +433,15 @@ pub struct Settings {
     pub auto_hide_menu: bool,
     /// Fade the window's bars while the mouse rests (alpha.6).
     pub focus_mode: bool,
+    /// The viewer (alpha.2).
+    pub viewer: ViewerSettings,
+    /// The quick view (alpha.2).
+    pub quick_view: QuickViewSettings,
+    /// The archive limits (alpha.2).
+    pub archives: ArchiveSettings,
+    /// The split presets: the built-in ones with the user's merged in
+    /// ([`merge_split_presets`]) (alpha.2).
+    pub split_presets: Vec<SplitPreset>,
     /// Whether case matters in filters (alpha.3).
     pub filter_case: FilterCase,
     /// The filter's pause before it says the count (alpha.3).
@@ -293,6 +494,10 @@ impl Default for Settings {
             thumbnails: false,
             auto_hide_menu: true,
             focus_mode: false,
+            viewer: ViewerSettings::default(),
+            quick_view: QuickViewSettings::default(),
+            archives: ArchiveSettings::default(),
+            split_presets: builtin_split_presets(),
             filter_case: FilterCase::Smart,
             filter_pause_ms: 400,
             week_starts_on: WeekStart::Sunday,
@@ -404,6 +609,15 @@ fn check_value(info: &SettingInfo, value: &Value) -> Result<(), String> {
             Some(table) if table.values().all(Value::is_str) => Ok(()),
             _ => Err(format!("{key} needs a table such as folder = \"#ffaa00\".")),
         },
+        SettingKind::SplitPresets => match value.as_array() {
+            Some(items) => items
+                .iter()
+                .enumerate()
+                .try_for_each(|(at, item)| check_preset(key, at + 1, item)),
+            None => Err(format!(
+                "{key} needs a list of presets, as [[{key}]] tables with a name and bytes."
+            )),
+        },
     }
 }
 
@@ -437,7 +651,14 @@ impl Settings {
         let file = Paths::SETTINGS;
         let mut table: Table = toml::from_str(text).map_err(|e| ConfigError::parse(file, e))?;
         let mut problems = Vec::new();
-        for parent in ["sort", "confirm", "plugins"] {
+        for parent in [
+            "sort",
+            "confirm",
+            "plugins",
+            "viewer",
+            "quick_view",
+            "archives",
+        ] {
             if table.get(parent).is_some_and(|v| !v.is_table()) {
                 problems.push(ConfigProblem::new(
                     file,
@@ -463,12 +684,25 @@ impl Settings {
                 format!("Unknown setting: {key}. Kept as it is."),
             ));
         }
+        if let Some(presets) = table.get("split_presets") {
+            for (name, key) in unknown_preset_keys(presets) {
+                problems.push(ConfigProblem::new(
+                    file,
+                    format!("Unknown key in split_presets, {name}: {key}. Kept as it is."),
+                ));
+            }
+        }
         let direction_given = get_dotted(&table, "sort.direction").is_some();
+        let presets_given = table.contains_key("split_presets");
         let mut settings: Settings = Value::Table(table)
             .try_into()
             .map_err(|e: toml::de::Error| ConfigError::parse(file, e))?;
         if !direction_given {
             settings.sort.direction = settings.sort.key.first_direction();
+        }
+        if presets_given {
+            settings.split_presets =
+                merge_split_presets(std::mem::take(&mut settings.split_presets));
         }
         Ok(Loaded {
             value: settings,
@@ -517,6 +751,14 @@ impl Settings {
             return String::new();
         };
         match (info.kind, value) {
+            (SettingKind::SplitPresets, _) => crate::schema::list_words(
+                &self
+                    .split_presets
+                    .iter()
+                    .map(|p| p.name.as_str())
+                    .collect::<Vec<_>>(),
+                "and",
+            ),
             (SettingKind::Flag, Value::Boolean(true)) => "on".to_owned(),
             (SettingKind::Flag, Value::Boolean(false)) => "off".to_owned(),
             (SettingKind::Choice(choices), Value::String(text)) => choices
@@ -659,6 +901,128 @@ mod tests {
             Settings::from_toml("[sort]\nkey = \"size\"\ndirection = \"ascending\"\n").unwrap();
         assert_eq!(settings.sort.direction, SortDirection::Ascending);
         assert!(settings.sorts_by_panel_key());
+    }
+
+    #[test]
+    fn the_split_presets_default_is_the_built_in_table_with_its_sources() {
+        let info = crate::schema::setting("split_presets").unwrap();
+        let default = info.default_value().unwrap();
+        let expected = Value::try_from(builtin_split_presets()).unwrap();
+        assert_eq!(default, expected);
+        for builtin in &crate::presets::BUILTIN_SPLIT_PRESETS {
+            let figure = crate::presets::grouped(builtin.bytes);
+            assert!(
+                info.help
+                    .contains(&format!("{}: {figure} bytes", builtin.name)),
+                "{}: {figure}",
+                builtin.name
+            );
+        }
+        assert_eq!(
+            Settings::default().value_words("split_presets"),
+            "Email attachment, GitHub file limit, CD, FAT32's largest file, DVD, Blu-ray and Floppy"
+        );
+    }
+
+    #[test]
+    fn a_users_preset_round_trips_and_its_unknown_key_is_said() {
+        let text = "[[split_presets]]\nname = \"Zip disk\"\nbytes = 100663296\nlabel = \"blue\"\n\n[[split_presets]]\nname = \"dvd\"\nbytes = 4700372992\nheadroom_percent = 2\n";
+        let loaded = Settings::read(text).unwrap();
+        let said: Vec<&str> = loaded.problems.iter().map(|p| p.text.as_str()).collect();
+        assert_eq!(
+            said,
+            ["Unknown key in split_presets, Zip disk: label. Kept as it is."]
+        );
+        let presets = &loaded.value.split_presets;
+        assert_eq!(presets.len(), 8, "seven built-in ones and the user's");
+        assert_eq!(presets[4].name, "dvd", "the built-in DVD replaced in place");
+        assert_eq!(presets[4].headroom_percent, 2);
+        assert_eq!(presets[7].name, "Zip disk");
+        assert_eq!(presets[7].part_bytes(), 100_663_296);
+        assert_eq!(
+            presets[7].unknown.get("label"),
+            Some(&Value::String("blue".into()))
+        );
+        let again = Settings::read(&loaded.value.to_toml().unwrap()).unwrap();
+        assert_eq!(again.value, loaded.value);
+    }
+
+    #[test]
+    fn a_bad_preset_keeps_the_built_in_ones_and_is_said_in_words() {
+        let cases = [
+            (
+                "[[split_presets]]\nname = \"Zip disk\"\nbytes = 0\n",
+                "split_presets preset Zip disk needs bytes, a whole number above 0.",
+            ),
+            (
+                "[[split_presets]]\nbytes = 10\n",
+                "split_presets preset 1 needs a name in quotes.",
+            ),
+            (
+                "[[split_presets]]\nname = \"Tape\"\nbytes = 10\nheadroom_percent = 80\n",
+                "split_presets preset Tape cannot keep 80 percent free: use 0 to 50.",
+            ),
+            (
+                "split_presets = \"big\"\n",
+                "split_presets needs a list of presets, as [[split_presets]] tables with a name and bytes.",
+            ),
+        ];
+        for (text, sentence) in cases {
+            let loaded = Settings::read(text).unwrap();
+            assert_eq!(
+                loaded.value.split_presets,
+                builtin_split_presets(),
+                "{text}"
+            );
+            let said: Vec<&str> = loaded.problems.iter().map(|p| p.text.as_str()).collect();
+            assert_eq!(said, [sentence]);
+            assert!(within_cells(sentence, "split_presets"));
+        }
+    }
+
+    #[test]
+    fn the_archive_limits_start_at_r7s_numbers_and_say_unknown_keys() {
+        let archives = ArchiveSettings::default();
+        assert_eq!(ArchiveSettings::gib(archives.max_member_gib), 8 << 30);
+        assert_eq!(ArchiveSettings::gib(archives.ask_total_gib), 32 << 30);
+        assert_eq!(
+            ArchiveSettings::gib(archives.max_total_gib),
+            1 << 40,
+            "1 TiB"
+        );
+        assert_eq!(ArchiveSettings::mib(archives.ask_dictionary_mib), 256 << 20);
+        assert_eq!(
+            ArchiveSettings::mib(archives.max_dictionary_mib),
+            1_536 << 20
+        );
+        assert_eq!(ArchiveSettings::mib(archives.max_index_mib), 256 << 20);
+        assert_eq!(archives.max_entries, 1_000_000);
+        assert_eq!(archives.max_nesting, 4);
+        assert_eq!(ArchiveSettings::gib(u64::MAX), u64::MAX, "saturates");
+        let loaded = Settings::read(
+            "[archives]\nmax_entries = 500000\nmax_size = 3\n[viewer]\nwrap = false\n",
+        )
+        .unwrap();
+        assert_eq!(loaded.value.archives.max_entries, 500_000);
+        assert!(!loaded.value.viewer.wrap);
+        let said: Vec<&str> = loaded.problems.iter().map(|p| p.text.as_str()).collect();
+        assert_eq!(said, ["Unknown setting: archives.max_size. Kept as it is."]);
+        let refused = Settings::read("[archives]\nmax_nesting = 9\n").unwrap();
+        assert_eq!(refused.value.archives.max_nesting, 4);
+        assert_eq!(
+            refused.problems[0].text,
+            "archives.max_nesting cannot be 9: use 1 to 8."
+        );
+        let not_a_table = Settings::read("viewer = 3\n").unwrap();
+        assert_eq!(
+            not_a_table.problems[0].text,
+            "viewer needs a table, as [viewer]. The defaults are in use."
+        );
+        assert_eq!(HexRow::Auto.bytes_per_row(true), 8);
+        assert_eq!(HexRow::Auto.bytes_per_row(false), 16);
+        assert_eq!(HexRow::Wide.bytes_per_row(true), 16);
+        assert_eq!(QuickViewSettings::default().wait_ms, 500);
+        assert_eq!(ViewerSettings::default().highlight_max_kib, 512);
     }
 
     #[test]

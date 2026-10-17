@@ -12,7 +12,7 @@ pub use diroxide_config::schema::{
     Choice, SCHEMA, SettingGroup, SettingInfo, SettingKind, list_words, setting,
 };
 pub use diroxide_config::theme::builtin_names as theme_names;
-pub use diroxide_config::{ColumnKind, DRIVE_KINDS};
+pub use diroxide_config::{BUILTIN_SPLIT_PRESETS, ColumnKind, DRIVE_KINDS, SplitPreset};
 pub use diroxide_theme::PanelRole;
 
 use diroxide_config::theme::{self, ColorOverride};
@@ -77,6 +77,10 @@ pub fn setting_help(key: &str) -> Option<String> {
         }
         SettingKind::Flag if info.default == "true" => "on".to_owned(),
         SettingKind::Flag => "off".to_owned(),
+        SettingKind::SplitPresets => format!(
+            "the built-in presets, {}",
+            Settings::default().value_words(info.key)
+        ),
         _ if info.default == "\"\"" || info.default == "[]" || info.default == "{}" => {
             "none".to_owned()
         }
@@ -135,6 +139,15 @@ mod tests {
                 .ends_with("it comes with alpha.3.")
         );
         assert!(setting_help("nothing").is_none());
+        let presets = setting_help("split_presets").unwrap();
+        assert!(
+            presets.contains("Default: the built-in presets, Email attachment, GitHub"),
+            "{presets}"
+        );
+        assert!(
+            !presets.contains("bytes = "),
+            "no TOML in the help: {presets}"
+        );
         for info in &SCHEMA {
             let help = setting_help(info.key).unwrap();
             assert!(within_cells(&help, info.name), "{help}");

@@ -50,6 +50,10 @@ pub enum SettingKind {
     Colors,
     /// A list of names.
     Names,
+    /// A list of split presets, `[[split_presets]]` tables each with a
+    /// name, a size in bytes and an optional headroom in percent
+    /// ([`crate::presets`]).
+    SplitPresets,
 }
 
 impl SettingKind {
@@ -75,6 +79,10 @@ impl SettingKind {
                 "a table of screen roles, each with a color as #rrggbb".to_owned()
             }
             SettingKind::Names => "a list of names".to_owned(),
+            SettingKind::SplitPresets => {
+                "a list of presets, each with a name, its size in bytes and the percent kept free"
+                    .to_owned()
+            }
         }
     }
 }
@@ -101,6 +109,11 @@ pub enum SettingGroup {
     Safety,
     /// Themes and colors.
     Look,
+    /// The viewer and the quick view (alpha.2).
+    Viewer,
+    /// Archives: the limits against hostile ones, and split presets
+    /// (alpha.2).
+    Archives,
     /// Search and the filter.
     Search,
     /// Plugins and components.
@@ -109,12 +122,14 @@ pub enum SettingGroup {
 
 impl SettingGroup {
     /// Every group, in order.
-    pub const ALL: [SettingGroup; 7] = [
+    pub const ALL: [SettingGroup; 9] = [
         SettingGroup::Panels,
         SettingGroup::Keys,
         SettingGroup::Speech,
         SettingGroup::Safety,
         SettingGroup::Look,
+        SettingGroup::Viewer,
+        SettingGroup::Archives,
         SettingGroup::Search,
         SettingGroup::Plugins,
     ];
@@ -127,6 +142,8 @@ impl SettingGroup {
             SettingGroup::Speech => "Speech and Braille",
             SettingGroup::Safety => "Safety",
             SettingGroup::Look => "Look",
+            SettingGroup::Viewer => "Viewer and quick view",
+            SettingGroup::Archives => "Archives and split",
             SettingGroup::Search => "Search and filter",
             SettingGroup::Plugins => "Plugins",
         }
@@ -240,6 +257,19 @@ const FILTER_CASES: &[Choice] = &[
     choice("match", "case always matters"),
 ];
 
+const HEX_ROWS: &[Choice] = &[
+    choice(
+        "auto",
+        "eight bytes in screen reader mode, sixteen otherwise",
+    ),
+    choice("narrow", "eight bytes, a row within a Braille line"),
+    choice("wide", "sixteen bytes"),
+];
+
+/// The default of `split_presets`, as TOML: the built-in table of
+/// [`crate::presets::BUILTIN_SPLIT_PRESETS`], which a test keeps equal.
+pub const SPLIT_PRESETS_DEFAULT: &str = r#"[{ name = "Email attachment", bytes = 18000000 }, { name = "GitHub file limit", bytes = 104857600 }, { name = "CD", bytes = 737280000, headroom_percent = 1 }, { name = "FAT32's largest file", bytes = 4294967295 }, { name = "DVD", bytes = 4700372992, headroom_percent = 1 }, { name = "Blu-ray", bytes = 25025314816, headroom_percent = 1 }, { name = "Floppy", bytes = 1474560, headroom_percent = 1 }]"#;
+
 const WEEK_STARTS: &[Choice] = &[
     choice("sunday", "Sunday"),
     choice("monday", "Monday"),
@@ -250,7 +280,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 44] = [
+pub const SCHEMA: [SettingInfo; 77] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -584,6 +614,414 @@ pub const SCHEMA: [SettingInfo; 44] = [
         default: "false",
         help: "In the window, fades the bars when the mouse rests, so the panels have the room. Visual only; nothing is announced.",
         arrives: Some("alpha.6"),
+    },
+    // The viewer (alpha.2, W2d; research/alpha2-plan.md part three and
+    // R17's caps).
+    SettingInfo {
+        key: "viewer.wrap",
+        name: "Wrap long lines",
+        group: G::Viewer,
+        kind: K::Flag,
+        default: "true",
+        help: "Continues a line longer than the screen on the next rows, each marked as continued, instead of cutting it off.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.wrap_width",
+        name: "Wrap width",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 0,
+            max: 1000,
+            unit: "characters",
+        },
+        default: "0",
+        help: "Where long lines wrap: 0 wraps at the width of the screen, and a number such as 40 wraps at that many characters, one Braille line.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.line_numbers",
+        name: "Line numbers",
+        group: G::Viewer,
+        kind: K::Flag,
+        default: "false",
+        help: "Starts each line in the viewer with its number. The line's number is always said on request.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.follow",
+        name: "Follow a growing file",
+        group: G::Viewer,
+        kind: K::Flag,
+        default: "false",
+        help: "Reads more of a file as it grows, as a log does, and stays at its end.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.hex_row",
+        name: "Hex row width",
+        group: G::Viewer,
+        kind: SettingKind::Choice(HEX_ROWS),
+        default: "\"auto\"",
+        help: "How many bytes a row of hex shows. Eight fit a 40-cell Braille line with their offset and their letters.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.member_cache_mib",
+        name: "Archive file memory",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 4096,
+            unit: "MiB",
+        },
+        default: "64",
+        help: "How much of a file inside an archive the viewer keeps decoded, to move back and forth in it. Past that, the viewer says how much it shows.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.highlight_max_kib",
+        name: "Code colors up to",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 65_536,
+            unit: "KiB",
+        },
+        default: "512",
+        help: "Code colors stay off for a larger file, and the status line says so. A big file then opens at once.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.highlight_max_lines",
+        name: "Code colors up to lines",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 100,
+            max: 1_000_000,
+            unit: "lines",
+        },
+        default: "10000",
+        help: "Code colors stay off for a file with more lines than this.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.highlight_max_line_chars",
+        name: "Code colors line limit",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 100,
+            max: 100_000,
+            unit: "characters",
+        },
+        default: "2000",
+        help: "A line longer than this keeps no colors, so one huge line cannot stall the viewer.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "viewer.highlight_deadline_ms",
+        name: "Code colors time limit",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 100,
+            max: 60_000,
+            unit: "milliseconds",
+        },
+        default: "2000",
+        help: "How long finding the code colors may take. Past it they stop for the session, and the reason is said.",
+        arrives: Some("alpha.2"),
+    },
+    // The quick view (alpha.2, W2e; plan section 5.9 and answer 15).
+    SettingInfo {
+        key: "quick_view.wait_ms",
+        name: "Quick view wait",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 0,
+            max: 5000,
+            unit: "milliseconds",
+        },
+        default: "500",
+        help: "How long the quick view waits after the cursor stops before it shows the file, so moving fast does not read every file on the way.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "quick_view.max_kib",
+        name: "Quick view reads up to",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 16,
+            max: 65_536,
+            unit: "KiB",
+        },
+        default: "1024",
+        help: "The most of a file the quick view reads. Past it, the quick view shows the start and says the file's size.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "quick_view.deadline_ms",
+        name: "Quick view time limit",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 100,
+            max: 60_000,
+            unit: "milliseconds",
+        },
+        default: "2000",
+        help: "How long reading a document may take. Past it, the quick view stops and shows the file's text instead.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "quick_view.follow_changes",
+        name: "Quick view follows changes",
+        group: G::Viewer,
+        kind: K::Flag,
+        default: "true",
+        help: "Shows the file again when it changes on disk, such as a note being written in another program, and says it was updated.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "quick_view.line_numbers",
+        name: "Quick view line numbers",
+        group: G::Viewer,
+        kind: K::Flag,
+        default: "false",
+        help: "Starts each line of plain text and code in the quick view with its number.",
+        arrives: Some("alpha.2"),
+    },
+    // The archive limits (alpha.2, W2a; research/archives.md section 6,
+    // R7's starting numbers, plan question 11 of R20).
+    SettingInfo {
+        key: "archives.max_member_gib",
+        name: "Largest member",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1_048_576,
+            unit: "GiB",
+        },
+        default: "8",
+        help: "Asks before reading one member larger than this, or one behind this much packed data in a tar.gz or tar.xz, which must be read from the start.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.ask_total_gib",
+        name: "Ask above this total",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1_048_576,
+            unit: "GiB",
+        },
+        default: "32",
+        help: "Asks before an unpack or a test that would write out more than this in all, since a small archive can expand to fill a drive.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_total_gib",
+        name: "Refuse above this total",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1_048_576,
+            unit: "GiB",
+        },
+        default: "1024",
+        help: "Refuses an operation that would expand to more than this in all. Past it, an archive is a bomb, not a backup.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_ratio",
+        name: "Largest expansion",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 10,
+            max: 1_000_000,
+            unit: "times its packed size",
+        },
+        default: "1000",
+        help: "Asks when one member grows more than this many times its packed size. Deflate cannot pass about 1,032 times, so more is a bomb or a run of zeros.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.ratio_floor_mib",
+        name: "Expansion judged after",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 65_536,
+            unit: "MiB",
+        },
+        default: "64",
+        help: "How much one member writes before its expansion is judged, so a small file that packs well is never asked about.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.ask_dictionary_mib",
+        name: "Ask above this dictionary",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 65_536,
+            unit: "MiB",
+        },
+        default: "256",
+        help: "Asks before opening a 7z or xz archive whose decoder needs a larger dictionary. 7-Zip's normal level uses 16 MiB, and xz's largest preset 64 MiB.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_dictionary_mib",
+        name: "Largest dictionary",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 65_536,
+            unit: "MiB",
+        },
+        default: "1536",
+        help: "Refuses a larger dictionary, 7-Zip's own most, before any memory is taken for it.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_header_mib",
+        name: "Largest header",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 65_536,
+            unit: "MiB",
+        },
+        default: "256",
+        help: "Refuses an archive whose header or list of contents is larger than this, which no real archive needs.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_index_mib",
+        name: "Largest member list",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 65_536,
+            unit: "MiB",
+        },
+        default: "256",
+        help: "Refuses to list an archive whose members would take more memory than this to keep in a list.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_entries",
+        name: "Most members",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1000,
+            max: 100_000_000,
+            unit: "members",
+        },
+        default: "1000000",
+        help: "Refuses an archive with more members than this. A million covers the largest real archives.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_name_bytes",
+        name: "Longest member name",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 255,
+            max: 65_536,
+            unit: "bytes",
+        },
+        default: "4096",
+        help: "Skips a member whose full name is longer than this and says so, since no drive could store it.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_component_bytes",
+        name: "Longest name part",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 64,
+            max: 4096,
+            unit: "bytes",
+        },
+        default: "255",
+        help: "Skips a member with a folder or file name longer than this and says so: the limit of most drives.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_link_target_bytes",
+        name: "Longest link target",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 255,
+            max: 65_536,
+            unit: "bytes",
+        },
+        default: "4096",
+        help: "Skips a link inside an archive whose target is longer than this and says so.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_memory_mib",
+        name: "Most decoder memory",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 16,
+            max: 65_536,
+            unit: "MiB",
+        },
+        default: "1024",
+        help: "Refuses an operation whose decoder would need more memory than this.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.spool_memory_mib",
+        name: "Inner archive in memory",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 4096,
+            unit: "MiB",
+        },
+        default: "64",
+        help: "Keeps an archive inside an archive in memory up to this size. A larger one goes to the spool folder in the state folder, never the system's temporary folder.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.spool_disk_gib",
+        name: "Inner archive spool",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1024,
+            unit: "GiB",
+        },
+        default: "4",
+        help: "The most one operation may write to the spool folder for archives inside archives, across every level, after a free-space check.",
+        arrives: Some("alpha.2"),
+    },
+    SettingInfo {
+        key: "archives.max_nesting",
+        name: "Archives inside archives",
+        group: G::Archives,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 8,
+            unit: "levels",
+        },
+        default: "4",
+        help: "How many archives deep a place may go, such as a zip inside a zip. A level past this is refused in words.",
+        arrives: Some("alpha.2"),
+    },
+    // Split and join (alpha.2, W2c; plan section 5.4, research/alpha2-plan.md
+    // part 5.3 with its sources).
+    SettingInfo {
+        key: "split_presets",
+        name: "Split presets",
+        group: G::Archives,
+        kind: K::SplitPresets,
+        default: SPLIT_PRESETS_DEFAULT,
+        help: "The sizes Split offers, each a use and its size in bytes. Presets you add as [[split_presets]] tables follow these, and one with a built-in name replaces it. Email attachment: 18,000,000 bytes, a 25 MB mail limit after base64 adds about 37 percent (RFC 2045). GitHub file limit: 104,857,600 bytes, its 100 MiB limit. CD: 737,280,000 bytes, an 80-minute CD-R. FAT32's largest file: 4,294,967,295 bytes, 4 GiB less one byte. DVD: 4,700,372,992 bytes, a single-layer DVD+R. Blu-ray: 25,025,314,816 bytes, a single layer. Floppy: 1,474,560 bytes, a formatted 1.44 MB disk. The disc and floppy sizes keep 1 percent free for the file system.",
+        arrives: Some("alpha.2"),
     },
     SettingInfo {
         key: "filter_case",

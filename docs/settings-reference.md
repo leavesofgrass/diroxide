@@ -309,6 +309,292 @@ Focus mode. In the window, fades the bars when the mouse rests, so the panels ha
 - Default: `false`.
 - Comes with alpha.6.
 
+## Viewer and quick view
+
+### viewer.wrap
+
+Wrap long lines. Continues a line longer than the screen on the next rows, each marked as continued, instead of cutting it off.
+
+- Holds: true or false.
+- Default: `true`.
+- Comes with alpha.2.
+
+### viewer.wrap_width
+
+Wrap width. Where long lines wrap: 0 wraps at the width of the screen, and a number such as 40 wraps at that many characters, one Braille line.
+
+- Holds: a number of characters, 0 to 1000.
+- Default: `0`.
+- Comes with alpha.2.
+
+### viewer.line_numbers
+
+Line numbers. Starts each line in the viewer with its number. The line's number is always said on request.
+
+- Holds: true or false.
+- Default: `false`.
+- Comes with alpha.2.
+
+### viewer.follow
+
+Follow a growing file. Reads more of a file as it grows, as a log does, and stays at its end.
+
+- Holds: true or false.
+- Default: `false`.
+- Comes with alpha.2.
+
+### viewer.hex_row
+
+Hex row width. How many bytes a row of hex shows. Eight fit a 40-cell Braille line with their offset and their letters.
+
+- Holds: one of auto, narrow or wide.
+- Default: `"auto"`.
+- `auto`: eight bytes in screen reader mode, sixteen otherwise.
+- `narrow`: eight bytes, a row within a Braille line.
+- `wide`: sixteen bytes.
+- Comes with alpha.2.
+
+### viewer.member_cache_mib
+
+Archive file memory. How much of a file inside an archive the viewer keeps decoded, to move back and forth in it. Past that, the viewer says how much it shows.
+
+- Holds: a number of MiB, 1 to 4096.
+- Default: `64`.
+- Comes with alpha.2.
+
+### viewer.highlight_max_kib
+
+Code colors up to. Code colors stay off for a larger file, and the status line says so. A big file then opens at once.
+
+- Holds: a number of KiB, 1 to 65536.
+- Default: `512`.
+- Comes with alpha.2.
+
+### viewer.highlight_max_lines
+
+Code colors up to lines. Code colors stay off for a file with more lines than this.
+
+- Holds: a number of lines, 100 to 1000000.
+- Default: `10000`.
+- Comes with alpha.2.
+
+### viewer.highlight_max_line_chars
+
+Code colors line limit. A line longer than this keeps no colors, so one huge line cannot stall the viewer.
+
+- Holds: a number of characters, 100 to 100000.
+- Default: `2000`.
+- Comes with alpha.2.
+
+### viewer.highlight_deadline_ms
+
+Code colors time limit. How long finding the code colors may take. Past it they stop for the session, and the reason is said.
+
+- Holds: a number of milliseconds, 100 to 60000.
+- Default: `2000`.
+- Comes with alpha.2.
+
+### quick_view.wait_ms
+
+Quick view wait. How long the quick view waits after the cursor stops before it shows the file, so moving fast does not read every file on the way.
+
+- Holds: a number of milliseconds, 0 to 5000.
+- Default: `500`.
+- Comes with alpha.2.
+
+### quick_view.max_kib
+
+Quick view reads up to. The most of a file the quick view reads. Past it, the quick view shows the start and says the file's size.
+
+- Holds: a number of KiB, 16 to 65536.
+- Default: `1024`.
+- Comes with alpha.2.
+
+### quick_view.deadline_ms
+
+Quick view time limit. How long reading a document may take. Past it, the quick view stops and shows the file's text instead.
+
+- Holds: a number of milliseconds, 100 to 60000.
+- Default: `2000`.
+- Comes with alpha.2.
+
+### quick_view.follow_changes
+
+Quick view follows changes. Shows the file again when it changes on disk, such as a note being written in another program, and says it was updated.
+
+- Holds: true or false.
+- Default: `true`.
+- Comes with alpha.2.
+
+### quick_view.line_numbers
+
+Quick view line numbers. Starts each line of plain text and code in the quick view with its number.
+
+- Holds: true or false.
+- Default: `false`.
+- Comes with alpha.2.
+
+## Archives and split
+
+### archives.max_member_gib
+
+Largest member. Asks before reading one member larger than this, or one behind this much packed data in a tar.gz or tar.xz, which must be read from the start.
+
+- Holds: a number of GiB, 1 to 1048576.
+- Default: `8`.
+- Comes with alpha.2.
+
+### archives.ask_total_gib
+
+Ask above this total. Asks before an unpack or a test that would write out more than this in all, since a small archive can expand to fill a drive.
+
+- Holds: a number of GiB, 1 to 1048576.
+- Default: `32`.
+- Comes with alpha.2.
+
+### archives.max_total_gib
+
+Refuse above this total. Refuses an operation that would expand to more than this in all. Past it, an archive is a bomb, not a backup.
+
+- Holds: a number of GiB, 1 to 1048576.
+- Default: `1024`.
+- Comes with alpha.2.
+
+### archives.max_ratio
+
+Largest expansion. Asks when one member grows more than this many times its packed size. Deflate cannot pass about 1,032 times, so more is a bomb or a run of zeros.
+
+- Holds: a number of times its packed size, 10 to 1000000.
+- Default: `1000`.
+- Comes with alpha.2.
+
+### archives.ratio_floor_mib
+
+Expansion judged after. How much one member writes before its expansion is judged, so a small file that packs well is never asked about.
+
+- Holds: a number of MiB, 1 to 65536.
+- Default: `64`.
+- Comes with alpha.2.
+
+### archives.ask_dictionary_mib
+
+Ask above this dictionary. Asks before opening a 7z or xz archive whose decoder needs a larger dictionary. 7-Zip's normal level uses 16 MiB, and xz's largest preset 64 MiB.
+
+- Holds: a number of MiB, 1 to 65536.
+- Default: `256`.
+- Comes with alpha.2.
+
+### archives.max_dictionary_mib
+
+Largest dictionary. Refuses a larger dictionary, 7-Zip's own most, before any memory is taken for it.
+
+- Holds: a number of MiB, 1 to 65536.
+- Default: `1536`.
+- Comes with alpha.2.
+
+### archives.max_header_mib
+
+Largest header. Refuses an archive whose header or list of contents is larger than this, which no real archive needs.
+
+- Holds: a number of MiB, 1 to 65536.
+- Default: `256`.
+- Comes with alpha.2.
+
+### archives.max_index_mib
+
+Largest member list. Refuses to list an archive whose members would take more memory than this to keep in a list.
+
+- Holds: a number of MiB, 1 to 65536.
+- Default: `256`.
+- Comes with alpha.2.
+
+### archives.max_entries
+
+Most members. Refuses an archive with more members than this. A million covers the largest real archives.
+
+- Holds: a number of members, 1000 to 100000000.
+- Default: `1000000`.
+- Comes with alpha.2.
+
+### archives.max_name_bytes
+
+Longest member name. Skips a member whose full name is longer than this and says so, since no drive could store it.
+
+- Holds: a number of bytes, 255 to 65536.
+- Default: `4096`.
+- Comes with alpha.2.
+
+### archives.max_component_bytes
+
+Longest name part. Skips a member with a folder or file name longer than this and says so: the limit of most drives.
+
+- Holds: a number of bytes, 64 to 4096.
+- Default: `255`.
+- Comes with alpha.2.
+
+### archives.max_link_target_bytes
+
+Longest link target. Skips a link inside an archive whose target is longer than this and says so.
+
+- Holds: a number of bytes, 255 to 65536.
+- Default: `4096`.
+- Comes with alpha.2.
+
+### archives.max_memory_mib
+
+Most decoder memory. Refuses an operation whose decoder would need more memory than this.
+
+- Holds: a number of MiB, 16 to 65536.
+- Default: `1024`.
+- Comes with alpha.2.
+
+### archives.spool_memory_mib
+
+Inner archive in memory. Keeps an archive inside an archive in memory up to this size. A larger one goes to the spool folder in the state folder, never the system's temporary folder.
+
+- Holds: a number of MiB, 1 to 4096.
+- Default: `64`.
+- Comes with alpha.2.
+
+### archives.spool_disk_gib
+
+Inner archive spool. The most one operation may write to the spool folder for archives inside archives, across every level, after a free-space check.
+
+- Holds: a number of GiB, 1 to 1024.
+- Default: `4`.
+- Comes with alpha.2.
+
+### archives.max_nesting
+
+Archives inside archives. How many archives deep a place may go, such as a zip inside a zip. A level past this is refused in words.
+
+- Holds: a number of levels, 1 to 8.
+- Default: `4`.
+- Comes with alpha.2.
+
+### split_presets
+
+Split presets. The sizes Split offers, each a use and its size in bytes. Presets you add as [[split_presets]] tables follow these, and one with a built-in name replaces it. Email attachment: 18,000,000 bytes, a 25 MB mail limit after base64 adds about 37 percent (RFC 2045). GitHub file limit: 104,857,600 bytes, its 100 MiB limit. CD: 737,280,000 bytes, an 80-minute CD-R. FAT32's largest file: 4,294,967,295 bytes, 4 GiB less one byte. DVD: 4,700,372,992 bytes, a single-layer DVD+R. Blu-ray: 25,025,314,816 bytes, a single layer. Floppy: 1,474,560 bytes, a formatted 1.44 MB disk. The disc and floppy sizes keep 1 percent free for the file system.
+
+- Holds: a list of presets, each with a name, its size in bytes and the percent kept free.
+- Default: the built-in presets, each with its source:
+  - Email attachment, 18 MB. Parts of 18,000,000 bytes. 18,000,000 bytes: a 25 MB mail limit after base64, which turns three bytes into four characters in lines of at most 76 (RFC 2045, section 6.8), about 37 percent more.
+  - GitHub file limit, 100 MiB. Parts of 104,857,600 bytes. 104,857,600 bytes: GitHub blocks a file over 100 MiB (its large-files page).
+  - CD, 700 MB. Capacity 737,280,000 bytes, parts of 729,907,200, 1 percent kept free. 737,280,000 bytes: an 80-minute CD-R, 360,000 sectors of 2,048 bytes.
+  - FAT32's largest file, 4 GiB less one byte. Parts of 4,294,967,295 bytes. 4,294,967,295 bytes: 4 GiB less one byte, the most FAT32's 32-bit size field holds.
+  - DVD, 4.7 GB. Capacity 4,700,372,992 bytes, parts of 4,653,369,262, 1 percent kept free. 4,700,372,992 bytes: a single-layer DVD+R, 2,295,104 sectors of 2,048 bytes, the smaller of the two DVD figures.
+  - Blu-ray, 25 GB. Capacity 25,025,314,816 bytes, parts of 24,775,061,667, 1 percent kept free. 25,025,314,816 bytes: a single-layer Blu-ray disc, 12,219,392 sectors of 2,048 bytes.
+  - Floppy, 1.44 MB. Capacity 1,474,560 bytes, parts of 1,459,814, 1 percent kept free. 1,474,560 bytes: a formatted 1.44 MB floppy, 80 tracks on 2 sides of 18 sectors of 512 bytes.
+- Add your own, after the built-in ones:
+
+```toml
+[[split_presets]]
+name = "Zip disk"
+bytes = 100663296
+```
+
+- Comes with alpha.2.
+
 ## Search and filter
 
 ### filter_case
