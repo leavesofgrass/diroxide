@@ -1,8 +1,8 @@
 # Known limits
 
-This page says what diroxide does not do yet as of alpha.2, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet as of alpha.3, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha. Where a limit has a workaround, the workaround comes first.
 
-## What is not in alpha.2
+## What is not in alpha.3
 
 Each item says which alpha brings it.
 
@@ -12,13 +12,67 @@ Each item says which alpha brings it.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come with alpha.7; until then the quick view says "No preview" and names the kind and size.
 - A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes with alpha.7.
 - Changing the owner and group of a file, and a dialog for typing a file time, come with alpha.7. There is no Change times command in alpha.2, although copies keep dates.
-- Full search by name and content, the full filter language, saved searches, labels and bookmarks, and the Keys list inside the program: alpha.3. `diro search ROOT PATTERN` already prints names that match a list of globs. You can already change keys by editing `keymap.toml`.
 - Plugins, script commands and the downloader for optional components: alpha.4. The Plugins menu only says "Plugins come with alpha.4."
 - SSH and other remote places, and the trash browser: alpha.5.
 - Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands: alpha.7.
-- Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP: alpha.8.
+- Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP: alpha.8. Compare files works on two files since alpha.3; two folders come with alpha.8.
 - Download files for each platform: alpha.6 for Windows x86_64 and Linux x86_64, the other platforms with alpha.9. `cargo install diro`: beta.1.
 - Passwords are asked only for archives. The masked password prompt is built, and the other features that need it, such as SSH, arrive in later alphas.
+
+## Search and the filter language
+
+- Content search on Windows is bound by the cost of opening each file: reading every file of a 1 GB tree whole takes about 1.5 seconds on the test machine, and a search needs about 2. Memory maps are off.
+- Search over a network has been tested against a fake place that answers in 5 milliseconds, not against a real share. The thread counts and the rates in [the search guide](search.md) come from that fake place.
+- A search that follows links or looks inside archives always uses the slower walk, one folder at a time through the provider.
+- In a search, `selected` and `bookmarked` are left undecided, because a search has no panel. `empty` on a folder reads that folder when asked.
+- A search does not count the online-only files before it starts. It asks file by file, and the summary counts the ones skipped.
+- A depth test works in a search and not in a panel, which shows one folder.
+- `type` matches only entries whose type is already known, and `group` goes by extension, with seven groups. The full type model comes with alpha.7.
+- Dates use the computer's current offset from UTC, with no daylight-saving rules. A file changed in the hour a clock changed may land on the wrong side of midnight.
+- `modified within 1000 days` is refused as "duration needed", while 999 days reads. Write the length in weeks or years instead.
+- A range written with a unit before the dots and a space after them, such as `size 1 KiB..1 MiB`, is read as three words. Write `size between 1 KiB and 1 MiB`, or glue the units: `size 1KiB..1MiB`.
+- Say filter reads a name with a slash, such as `build/`, as "name contains build/". The slash does limit the filter to folders.
+- Patterns are Rust regular expressions: no look-around and no backreferences. A pattern is at most 1,000 characters.
+- Owner and user group are read where the listing has them. Windows owners are not read in a listing.
+- Names are compared as stored. Accents are not folded.
+- Search has no index. It walks the folders, so it is not instant over a whole drive.
+- The Space list shows at most 30 rows. Hard links are counted once on Unix only; on Windows they may be counted more than once, and the list says so.
+
+<!-- to confirm: the Space list line assumes the wiring lane (W3a, commit 38) ships the list. P3b item 3 may remove the 1000-day line. -->
+
+## Labels, bookmarks and saved views
+
+- A label step can be undone only in the same session. A job's undo survives a restart.
+- There is no command to rename, recolor, reorder or delete a label. Edit `labels.toml` by hand. The favorite keys follow the order in the file.
+- A file that is renamed or moved loses its label, even when diroxide did it, because a label belongs to the file's path. The Labels list shows a label's item as missing until you take the label off.
+- A label's color is said as a word. Rows do not yet draw it in color.
+- Ctrl+1 to Ctrl+7, the favorite labels, do not arrive in many Unix terminals. The Edit menu's Labels submenu is the sure way.
+- No command sets a panel's columns yet, so a saved view keeps the columns in use when you saved it.
+- Typing in the Bookmarks list does not narrow it. An alias letter jumps, and any other letter moves by name.
+- A saved view's filter is read with the older name patterns until the filter language is wired into saved views.
+
+<!-- to confirm: the last line and the colors line, after the wiring lane (W3a) and the pre-wiring step (P3b, item 4, which adds label colors to themes). -->
+
+## Compare files
+
+- Two files only. Two folders come with alpha.8, and so does `--names -0`.
+- A file inside an archive is not compared. Copy it out first.
+- Unicode forms are recognized for Latin, Greek, Cyrillic and Hangul. "Sounds alike" covers space characters, dashes, quotes, full-width letters and a short list of Cyrillic and Greek letters that look like Latin ones. Other lookalikes are listed as ordinary changes.
+- Text is compared in full up to 16 MiB for each file. Past that, you choose the first 16 MiB as text or a byte-by-byte compare.
+- "Stopped early" is worked out from the clock after the run, not reported by the comparing code.
+- When names cannot keep four cells in the 40-cell verdict line, the line leaves them out, and the next line names the files.
+- The deadline, the text limit and how the three line algorithms compare have starting values that have not been tuned on a quiet machine.
+
+## Keys and presets
+
+- The presets are modeled on written sources, not on the programs. Total Commander's own Help was not read, and its keys come from published lists and forum pages that disagree in places. Midnight Commander's come from its manual, Worker's from the project's own notes, and the vim-style keys from the manuals of ranger, lf, yazi and vifm. A key may differ from the version you know.
+- A preset holds no key sequences. Midnight Commander's Ctrl+X family, Worker's Ctrl-x family and the doubled letters of vim-style managers (gg, dd, yy, pp) are left out or turned into single letters.
+- The keypad keys that some presets use need Num Lock on under NVDA and JAWS, whose review keys use the bare keypad.
+- The terminal column of every preset keeps off the keys a terminal never sends. A key a source manager uses that fails this check is in the window column only.
+- A key press in a terminal can change only the terminal column. The window column is changed by typing the key's name.
+- The table of which keys each terminal delivers is built from a key probe run by hand on each terminal. Some terminals are not in it yet.
+
+<!-- to confirm: whether the Explorer and Finder preset and the Worker preset shipped in alpha.3. If they slipped, say so here and take them out of the customizing keys guide. -->
 
 ## The trash
 
@@ -45,6 +99,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Removable drives are not watched. diroxide looks again when you return to the panel and every two seconds. Ejecting a USB drive while a panel shows it has not been tested yet; leave the folder first.
 - Network drives are never watched. The panel says: "Folder not watched. Reload with Ctrl+R." A folder that cannot be watched for any other reason says the same.
 - A burst of thousands of changes is shown as one refresh instead of one line each.
+- Watch this folder, which says when a new file has finished arriving, has its own limits: [watching a folder](watching.md) lists them. On Linux and macOS it cannot tell that a program still holds a file open, so a producer that pauses for more than 2 seconds is said early and then said again as "Arrived again".
 
 ## Dates and times
 
@@ -136,6 +191,7 @@ The table of keys each terminal can send waits for a key probe run by hand on ea
 - The by-kind code commands, the quick view's one-line announcement and the spoken sentences of the archive, split and join dialogs have been checked against 40 characters in tests, not heard. Braille cells in contracted braille take more room than characters.
 - Whether NVDA or JAWS speak the terminal's window title on each folder change has not been verified.
 - The side by side layout puts the cursor near column 41 when the right panel is active, so a screen reader may read the left panel's row first. The stacked layout avoids this. Which layout suits you best is still being decided by listening; see [Using diroxide with a screen reader](screen-readers.md).
+- The lines of search, the filter, labels, bookmarks, compare, the Keys list and watching were written to carry their meaning in the first 40 cells and are checked in tests, not heard. Whether the count after the filter pause helps or interrupts, whether a result row's first 26 cells are enough, and whether the status line's "Waiting for ... to settle" is read aloud as dynamic content are for the listening check to decide.
 - The 40-cell lines were written for computer braille, one cell per character, on a HumanWare Mantis Q40. Contracted braille and other displays are untested.
 
 ## Names and wide characters
@@ -160,6 +216,11 @@ The table of keys each terminal can send waits for a key probe run by hand on ea
 - [The quick view](quick-view.md)
 - [Split and join](split-join.md)
 - [Links, permissions and times](links-permissions.md)
+- [Search and the filter language](search.md)
+- [Labels and bookmarks](labels-bookmarks.md)
+- [Compare files](compare.md)
+- [Customizing keys](customizing-keys.md)
+- [Watching a folder](watching.md)
 - [Terminals](terminals.md)
 - [Operations and undo](operations.md)
 - [Troubleshooting](troubleshooting.md)
