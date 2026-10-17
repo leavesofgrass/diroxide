@@ -36,6 +36,20 @@ pub fn human_size(bytes: u64) -> String {
     }
 }
 
+/// A whole number with commas between groups of three digits, for exact
+/// byte counts on a details line: "4,700,372,992 bytes".
+pub fn grouped(n: u64) -> String {
+    let digits = n.to_string();
+    let mut text = String::with_capacity(digits.len() + digits.len() / 3);
+    for (at, digit) in digits.chars().enumerate() {
+        if at > 0 && (digits.len() - at).is_multiple_of(3) {
+            text.push(',');
+        }
+        text.push(digit);
+    }
+    text
+}
+
 /// The first `cells` characters of a line, as one line of a Braille display
 /// shows it.
 pub fn first_cells(text: &str, cells: usize) -> &str {
@@ -73,6 +87,16 @@ mod tests {
         assert_eq!(human_size(153_000_000), "153 MB");
         assert_eq!(human_size(999_960), "1.0 MB");
         assert_eq!(human_size(u64::MAX), "18.4 EB");
+    }
+
+    #[test]
+    fn exact_counts_are_grouped_by_three() {
+        assert_eq!(grouped(0), "0");
+        assert_eq!(grouped(999), "999");
+        assert_eq!(grouped(1_000), "1,000");
+        assert_eq!(grouped(49_152), "49,152");
+        assert_eq!(grouped(4_700_372_992), "4,700,372,992");
+        assert_eq!(grouped(u64::MAX), "18,446,744,073,709,551,615");
     }
 
     #[test]

@@ -910,7 +910,7 @@ mod tests {
         let expected = Value::try_from(builtin_split_presets()).unwrap();
         assert_eq!(default, expected);
         for builtin in &crate::presets::BUILTIN_SPLIT_PRESETS {
-            let figure = crate::presets::grouped(builtin.bytes);
+            let figure = diroxide_core::format::grouped(builtin.bytes);
             assert!(
                 info.help
                     .contains(&format!("{}: {figure} bytes", builtin.name)),

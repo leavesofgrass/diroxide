@@ -232,15 +232,7 @@ pub fn size_words(bytes: u64) -> String {
     if bytes < 1000 {
         return words;
     }
-    let digits = bytes.to_string();
-    let mut grouped = String::new();
-    for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at) % 3 == 0 {
-            grouped.push(',');
-        }
-        grouped.push(digit);
-    }
-    format!("{words} ({grouped} bytes)")
+    format!("{words} ({} bytes)", diroxide_core::format::grouped(bytes))
 }
 
 /// Hex lines: an offset, sixteen bytes, and the printable characters.

@@ -13,7 +13,7 @@
 
 use std::collections::BTreeMap;
 
-use diroxide_core::format::human_size;
+use diroxide_core::format::{grouped, human_size};
 use serde::{Deserialize, Serialize};
 use toml::Value;
 
@@ -82,19 +82,6 @@ impl SplitPreset {
             )
         }
     }
-}
-
-/// A number with commas between groups of three digits: "4,700,372,992".
-pub fn grouped(n: u64) -> String {
-    let digits = n.to_string();
-    let mut text = String::with_capacity(digits.len() + digits.len() / 3);
-    for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at) % 3 == 0 {
-            text.push(',');
-        }
-        text.push(digit);
-    }
-    text
 }
 
 /// A built-in preset with the published figure it comes from.
