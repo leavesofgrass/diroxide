@@ -296,6 +296,11 @@ access = "w"
 command = "view.forget-view"
 access = "g"
 
+# The arrival tracker (W3t).
+[[menu.item]]
+command = "view.watch-folder"
+access = "a"
+
 [[menu]]
 id = "preview"
 title = "Preview"

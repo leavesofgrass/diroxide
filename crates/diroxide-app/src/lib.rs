@@ -40,6 +40,8 @@ pub mod runtime;
 pub mod settings;
 pub mod startup;
 pub mod state;
+// Watch this folder (W3t).
+pub mod tracker;
 pub mod viewer;
 pub mod views;
 

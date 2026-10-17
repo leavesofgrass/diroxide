@@ -18,6 +18,8 @@
 //!   one line a change; exit 0 the same, 1 different, 2 trouble.
 //! - `diro split FILE` and `diro join PART`: split a file into numbered
 //!   parts with a `.crc` sidecar, and put them back together.
+//! - `diro watch [PATH]`: say each file that settles in a folder, one line
+//!   an arrival, until Ctrl+C; `--print0` for NUL-separated paths.
 //! - `diro plugin list|new|enable|disable|run|log`: plugin tooling.
 //! - `diro --version`, `diro --help`.
 //!
@@ -69,6 +71,8 @@ pub enum Invocation {
     Join(cmd::join::JoinArgs),
     /// Compare two files.
     Diff(cmd::diff::DiffArgs),
+    /// Say each file that settles in a folder (W3t).
+    Watch(cmd::watch::WatchArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -138,6 +142,7 @@ pub fn help_text() -> String {
         "diro split FILE --preset NAME  split into numbered parts; or --size N, --parts N",
         "diro join PART            join a split file's parts back into one file",
         "diro diff BEFORE AFTER    compare two files: the verdict first, then each change",
+        "diro watch [PATH]         say each file that settles in a folder; Ctrl+C stops",
         "diro plugin list          list the plugins",
         "diro --version            print the version",
         "diro --help               print this help",
@@ -245,6 +250,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "split" => cmd::split::parse(&args[1..]).map(Invocation::Split),
         "join" => cmd::join::parse(&args[1..]).map(Invocation::Join),
         "diff" => cmd::diff::parse(&args[1..]).map(Invocation::Diff),
+        "watch" => cmd::watch::parse(&args[1..]).map(Invocation::Watch),
         _ => parse_open(&args).map(Invocation::Open),
     }
 }
@@ -278,6 +284,7 @@ pub fn run(
         Invocation::Split(args) => cmd::split::run(&args, out),
         Invocation::Join(args) => cmd::join::run(&args, out),
         Invocation::Diff(args) => cmd::diff::run(&args, out),
+        Invocation::Watch(args) => cmd::watch::run(&args, out),
     }
 }
 

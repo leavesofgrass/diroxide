@@ -493,6 +493,13 @@ pub mod ids {
         /// The focused answer, in a dialog.
         ACCEPT = "dialog.accept";
     }
+
+    // The arrival tracker's command (W3t, plan commit 34).
+    ids! {
+        /// Watch the active panel's folder and say each file that settles
+        /// in it; again, or Cancel, stops.
+        WATCH_FOLDER = "view.watch-folder";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -517,7 +524,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 176] = [
+pub static CATALOG: [CommandInfo; 177] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1450,6 +1457,15 @@ pub static CATALOG: [CommandInfo; 176] = [
         ids::FORGET_VIEW,
         "Forget this folder's view",
         "Stops applying this folder's saved view; the usual view returns on leaving it.",
+        Panel,
+        &[],
+        &[],
+    ),
+    // The arrival tracker (W3t): no key; the palette and the View menu.
+    command(
+        ids::WATCH_FOLDER,
+        "Watch this folder",
+        "Says each new file in this folder once it stops changing; again stops watching.",
         Panel,
         &[],
         &[],

@@ -31,6 +31,8 @@ mod preview;
 mod select;
 mod split_join;
 mod viewing;
+// Watch this folder (W3t).
+mod watching;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -223,6 +225,14 @@ pub enum AppEvent {
         request: RequestId,
         /// The facts.
         facts: Box<crate::archives::ArchiveFacts>,
+    },
+    /// What the arrival watch of Watch this folder saw (W3t), tagged with
+    /// its watch, so a note from a watch already stopped is dropped.
+    Arrivals {
+        /// The watch, as [`Request::WatchArrivals`] numbered it.
+        watch: u64,
+        /// What it saw.
+        note: diroxide_ops::tracker::WatchNote,
     },
     /// The places a [`Request::CheckPlaces`] asked about were looked for
     /// (W3l): the ones gone, and how many could not be read.
@@ -537,6 +547,8 @@ pub struct App {
     /// The labels, bookmarks and folder views, and what their lists wait
     /// for (W3l).
     organize: organize::Organize,
+    /// The folder watched for arrivals (W3t).
+    watching: watching::WatchState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -846,6 +858,7 @@ impl App {
             highlighter: None,
             preview: preview::Preview::default(),
             organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
+            watching: watching::WatchState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1276,6 +1289,7 @@ impl App {
                 missing,
                 unreadable,
             } => self.places_checked(request, missing, unreadable),
+            AppEvent::Arrivals { watch, note } => self.arrivals(watch, note),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
         }
@@ -1309,6 +1323,10 @@ impl App {
         }
         // The labels, bookmarks, folder views and History list (W3l).
         if let Some(effects) = self.organize_dispatch(command) {
+            return effects;
+        }
+        // Watch this folder, and Cancel while it watches (W3t).
+        if let Some(effects) = self.watch_dispatch(command, action) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {
