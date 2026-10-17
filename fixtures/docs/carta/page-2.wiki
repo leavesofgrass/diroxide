@@ -1,0 +1,21 @@
+== Crows ==
+Crows gather at dusk.
+
+=== Where ===
+# The park
+# The river
+## The east bank
+## The west bank
+
+=== When ===
+{| class="wikitable"
+! Month !! Count
+|-
+| October || 400
+|-
+| November || 650
+|-
+| December || 900
+|}
+
+Sources: [https://example.org/crows the crow count] and [https://example.org/birds the bird list].

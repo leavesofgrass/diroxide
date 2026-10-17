@@ -1,0 +1,15 @@
+h2. Plan
+
+* Read the code
+** The viewer
+** The panel
+* Write the tests
+
+h3. Owners
+
+||Part||Owner||
+|Viewer|Ada Example|
+|Panel|Grace Example|
+|Region|Alan Example|
+
+Background: [the plan|https://example.org/plan] and [the notes|https://example.org/notes].

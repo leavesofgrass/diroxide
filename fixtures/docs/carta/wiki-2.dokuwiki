@@ -1,0 +1,16 @@
+====== Build steps ======
+
+===== Before =====
+
+  - Install Rust
+  - Clone the code
+    - Use the main branch
+
+===== Checks =====
+
+^ Check  ^ Command          ^
+| Format | cargo fmt        |
+| Lint   | cargo clippy     |
+| Test   | cargo nextest    |
+
+See [[https://example.org/build|the build guide]] and [[https://example.org/docker|the container guide]].

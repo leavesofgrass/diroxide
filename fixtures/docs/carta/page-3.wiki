@@ -1,0 +1,21 @@
+== Radios ==
+* Handhelds
+* Mobiles
+
+== Bands ==
+{| class="wikitable"
+! Band !! Range
+|-
+| 2 m || 144 to 148 MHz
+|}
+
+{| class="wikitable"
+! Band !! Range
+|-
+| 70 cm || 420 to 450 MHz
+|}
+
+== Links ==
+* [https://example.org/repeaters Repeaters]
+* [https://example.org/nets Nets]
+* [https://example.org/clubs Clubs]

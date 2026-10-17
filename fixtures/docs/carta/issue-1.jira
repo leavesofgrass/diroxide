@@ -1,0 +1,17 @@
+h1. The preview is silent
+
+The quick view says nothing after a move. See [the report|https://example.org/report].
+
+h2. Steps
+
+# Open a folder
+# Press Shift+F3
+# Move down
+
+h2. Seen on
+
+||Terminal||Result||
+|Windows Terminal|silent|
+|Console host|silent|
+
+Logs are on [the share|https://example.org/logs].

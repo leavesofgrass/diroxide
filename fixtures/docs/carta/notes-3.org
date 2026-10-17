@@ -1,0 +1,26 @@
+* Setup
+Install the tool, then run it once.
+
+#+BEGIN_SRC sh
+diro --version
+#+END_SRC
+
+#+BEGIN_QUOTE
+Read the guide first.
+#+END_QUOTE
+
+* Keys
+| Key | Does   |
+|-----+--------|
+| F3  | View   |
+| F5  | Copy   |
+
+| Key | Does   |
+|-----+--------|
+| F6  | Move   |
+| F8  | Trash  |
+
+* Links
+1. [[https://example.org/guide][The guide]]
+2. [[https://example.org/faq][Questions]]
+3. [[https://example.org/help][Help]]
