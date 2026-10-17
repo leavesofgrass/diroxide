@@ -387,6 +387,7 @@ impl Provider for LocalProvider {
                 volume: facts.kind,
                 longest_path_units,
                 network_path,
+                copies_across_drives: trashing::copies_across_drives(facts.root.as_deref()),
             },
             TrashRules::native(),
         );

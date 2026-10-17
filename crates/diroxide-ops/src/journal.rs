@@ -95,6 +95,11 @@ impl Interrupted {
             JobKind::Duplicate => "a duplicate",
             JobKind::MakeFolder => "making folders",
             JobKind::Link => "making links",
+            JobKind::Pack => "a pack",
+            JobKind::Unpack => "an unpack",
+            JobKind::TestArchive => "an archive test",
+            JobKind::Split => "a split",
+            JobKind::Join => "a join",
             JobKind::Undo => "an undo",
             _ => "a job",
         };
@@ -263,11 +268,16 @@ impl Journal {
     }
 
     /// The undo records of the finished jobs, oldest first, to fill the
-    /// undo log after a restart.
+    /// undo log after a restart: every finished job, those that left
+    /// nothing to undo included, so an undo after a restart can be matched
+    /// with the record it reversed even when the undo itself left nothing
+    /// to undo (an undo of a trash restores and records nothing). The app
+    /// pairs them (each undo takes away the record before it) and drops the
+    /// empty ones, as [`crate::UndoLog::record`] does.
     pub fn records(&self) -> Vec<UndoRecord> {
         self.read_all()
             .into_iter()
-            .filter(|(_, job, ended)| *ended && !job.record.is_empty())
+            .filter(|(_, _, ended)| *ended)
             .map(|(_, job, _)| job.record)
             .collect()
     }

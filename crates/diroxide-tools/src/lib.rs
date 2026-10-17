@@ -399,6 +399,44 @@ mod tests {
         );
     }
 
+    /// "Open in textweaver" (the quick view, W2e) finds `tw` through the
+    /// one PATH rule, or says how to get it (R20 commit 8).
+    #[test]
+    fn textweaver_is_found_on_a_fake_path_or_said_how_to_install() {
+        let spec = ToolRegistry::builtin().spec("tw").copied().unwrap();
+        assert_eq!(spec.name, "textweaver");
+        assert_eq!(spec.programs, ["tw"]);
+        assert_eq!(spec.version_args, ["--version"]);
+        let folder = tempfile::tempdir().unwrap();
+        let program = if cfg!(windows) { "tw.exe" } else { "tw" };
+        std::fs::write(folder.path().join(program), b"").unwrap();
+        let tools = ToolRegistry::builtin().with_path(Some(folder.path().as_os_str().to_owned()));
+        match tools.find("tw") {
+            Ok(ToolStatus::Found(path)) => assert!(path.starts_with(folder.path()), "{path:?}"),
+            other => panic!("tw on the fake path: {other:?}"),
+        }
+        assert!(
+            tools.describe("tw").starts_with("textweaver, found at "),
+            "{}",
+            tools.describe("tw")
+        );
+        let elsewhere = tempfile::tempdir().unwrap();
+        let missing =
+            ToolRegistry::builtin().with_path(Some(elsewhere.path().as_os_str().to_owned()));
+        assert_eq!(missing.find("tw"), Ok(ToolStatus::NotFound));
+        assert_eq!(
+            missing.describe("tw"),
+            "textweaver, not found. Install textweaver from its releases page or with cargo."
+        );
+        assert_eq!(
+            missing
+                .run("tw", &[], &OpContext::new())
+                .unwrap_err()
+                .to_string(),
+            "textweaver is not installed"
+        );
+    }
+
     #[test]
     fn overrides_turn_tools_off() {
         let mut overrides = ToolsConfig::default();

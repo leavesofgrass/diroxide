@@ -137,7 +137,9 @@ fn a_failed_listing_keeps_the_panel_where_it_was() {
 fn quit_asks_the_frontend_to_leave() {
     let (mut app, _) = app();
     let effects = app.handle(AppEvent::Key(key("ctrl+q")));
-    assert_eq!(effects, vec![Effect::Quit]);
+    // The session is saved through the app's own request, which the core
+    // effect at the end hands to the runtime.
+    assert_eq!(effects, vec![Effect::Quit, Effect::AppRequests]);
     assert!(app.wants_quit());
     assert_eq!(app.quit_folder(), Some(&here()));
     assert!(!app.keeps_shell_folder());
@@ -148,12 +150,32 @@ fn quit_asks_the_frontend_to_leave() {
     );
 }
 
+/// The app's own requests travel as one core effect, which the runtime
+/// takes where it stands and never hands to the frontend (W1d-1's
+/// contract request 4).
+#[test]
+fn queued_requests_travel_as_one_core_effect_the_runtime_takes() {
+    let (mut app, mut runtime) = app();
+    let quiet = app.dispatch(&Command::new(ids::SAY_STATUS));
+    assert!(!quiet.contains(&Effect::AppRequests), "{quiet:?}");
+    let effects = app.handle(AppEvent::Key(key("ctrl+q")));
+    let marks = effects
+        .iter()
+        .filter(|e| **e == Effect::AppRequests)
+        .count();
+    assert_eq!(marks, 1, "{effects:?}");
+    let screen = runtime.carry_out(&mut app, effects);
+    assert_eq!(screen, vec![Effect::Quit]);
+    assert!(app.take_requests().is_empty(), "taken at the effect");
+    assert!(runtime.execute(&Effect::AppRequests));
+}
+
 #[test]
 fn quit_and_keep_the_shell_where_it_was() {
     let (mut app, _) = app();
     let command = Command::new(ids::QUIT_KEEP_FOLDER);
     let effects = app.handle(AppEvent::Command(command));
-    assert_eq!(effects, vec![Effect::Quit]);
+    assert_eq!(effects, vec![Effect::Quit, Effect::AppRequests]);
     assert!(app.wants_quit());
     assert!(app.keeps_shell_folder());
     assert_eq!(app.quit_folder(), None);

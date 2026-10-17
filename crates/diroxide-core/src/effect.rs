@@ -73,6 +73,14 @@ pub enum Effect {
     SetClipboard(Vec<Place>),
     /// Leave the program.
     Quit,
+    /// The app has queued requests of its own for its runtime: work whose
+    /// types live in the app's crates (plan a job and wait for its
+    /// confirmation, run a confirmed plan, answer a job's question, watch a
+    /// folder, write the session, a setting or a prompt's history), so the
+    /// core names only that they are waiting. The runtime takes them here,
+    /// in the order they were queued (`App::take_requests` through
+    /// `Runtime::carry_out`); a frontend never sees it.
+    AppRequests,
 }
 
 impl Effect {
@@ -99,5 +107,12 @@ mod tests {
         assert!(Effect::Redraw(Redraw::All).is_for_frontend());
         assert!(Effect::Announce(Message::info("Copied.")).is_for_frontend());
         assert!(!Effect::CancelJob(JobId::new(1)).is_for_frontend());
+        assert!(!Effect::AppRequests.is_for_frontend());
+        let json = serde_json::to_string(&Effect::AppRequests).unwrap();
+        assert_eq!(json, "\"app-requests\"");
+        assert_eq!(
+            serde_json::from_str::<Effect>(&json).unwrap(),
+            Effect::AppRequests
+        );
     }
 }

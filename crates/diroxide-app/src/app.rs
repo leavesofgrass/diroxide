@@ -918,8 +918,25 @@ impl App {
         session
     }
 
-    /// Handles an event and returns what to do about it.
+    /// Handles an event and returns what to do about it. When the app
+    /// queued requests for its runtime, the effects end with
+    /// [`Effect::AppRequests`], where [`Runtime::carry_out`](crate::Runtime::carry_out)
+    /// takes them.
     pub fn handle(&mut self, event: AppEvent) -> Vec<Effect> {
+        let effects = self.handle_event(event);
+        self.mark_requests(effects)
+    }
+
+    /// Adds [`Effect::AppRequests`] at the end when requests wait and the
+    /// effects do not say so yet.
+    fn mark_requests(&self, mut effects: Vec<Effect>) -> Vec<Effect> {
+        if !self.requests.is_empty() && !effects.contains(&Effect::AppRequests) {
+            effects.push(Effect::AppRequests);
+        }
+        effects
+    }
+
+    fn handle_event(&mut self, event: AppEvent) -> Vec<Effect> {
         match event {
             AppEvent::Key(key) => self.press(key),
             AppEvent::Command(command) => self.dispatch(&command),
@@ -957,8 +974,14 @@ impl App {
         }
     }
 
-    /// Runs a command and returns what to do about it.
+    /// Runs a command and returns what to do about it, with
+    /// [`Effect::AppRequests`] at the end when it queued requests.
     pub fn dispatch(&mut self, command: &Command) -> Vec<Effect> {
+        let effects = self.dispatch_command(command);
+        self.mark_requests(effects)
+    }
+
+    fn dispatch_command(&mut self, command: &Command) -> Vec<Effect> {
         if command.id != ids::SAY_STATUS
             && command.id != ids::LIST_UP
             && command.id != ids::LIST_DOWN

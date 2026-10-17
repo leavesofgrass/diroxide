@@ -8,10 +8,23 @@ homepage.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The quick view's readers (W2e): carta for Org, reStructuredText,
+# MediaWiki, DokuWiki and Jira, pulldown-cmark for Markdown.
+carta.workspace = true
 diroxide-core.workspace = true
 diroxide-filetype.workspace = true
 diroxide-vfs.workspace = true
+# The viewer's decoder (W2d), textweaver's encoding module.
+encoding_rs.workspace = true
+pulldown-cmark.workspace = true
+serde.workspace = true
+# The highlight module (W2d): syntect as a tokenizer, bat's grammars.
+syntect.workspace = true
 thiserror.workspace = true
+two-face.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

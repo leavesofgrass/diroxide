@@ -191,6 +191,16 @@ pub trait FileWriter: Write + Send {
             what: "attributes on an unfinished file".to_owned(),
         })
     }
+
+    /// Where the bytes go until the commit: the unfinished `.diro-part-`
+    /// place beside the target, so the journal can record which unfinished
+    /// name belongs to which target and the next start can say what an
+    /// interrupted write left (R8 C1; W1b's contract request 1). The
+    /// default is `None`: this writer does not say, and nothing that needs
+    /// it may assume a name.
+    fn unfinished_place(&self) -> Option<Place> {
+        None
+    }
 }
 
 /// A listing delivered in batches, for providers whose folders are slow or
@@ -298,6 +308,8 @@ pub trait Provider: Send + Sync + fmt::Debug {
             volume: volume.kind,
             longest_path_units: crate::limits::utf16_units(&place.to_string()),
             network_path: place.remote().is_some(),
+            // A provider that copies across drives says so in its own gate.
+            copies_across_drives: false,
         };
         Ok(trash_gate(&facts, TrashRules::native()))
     }

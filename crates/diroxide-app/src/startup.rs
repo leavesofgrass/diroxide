@@ -104,13 +104,16 @@ pub fn terminal_keymap(config: &Config, platform: Platform) -> Keymap {
 
 /// The undo records to start with: the journal's finished records, oldest
 /// first, where each undo job takes away the record it reversed (the
-/// newest one before it), and undo jobs are not themselves undone.
+/// newest one before it), and undo jobs are not themselves undone. The
+/// journal returns jobs that left nothing to undo too: an undo among them
+/// still takes its record away, and a job with nothing to undo is dropped,
+/// as the undo log drops it in the session.
 pub fn pair_undo_records(records: Vec<UndoRecord>) -> Vec<UndoRecord> {
     let mut log: Vec<UndoRecord> = Vec::new();
     for record in records {
         if record.origin == diroxide_core::JobOrigin::Undo {
             log.pop();
-        } else {
+        } else if !record.is_empty() {
             log.push(record);
         }
     }
@@ -183,8 +186,36 @@ mod tests {
 
     fn record(job: u64, origin: JobOrigin) -> UndoRecord {
         let mut record = UndoRecord::for_job(JobId::new(job), JobKind::Rename);
+        if origin != JobOrigin::Undo {
+            let place = Place::parse(if cfg!(windows) { r"D:\a" } else { "/a" }).unwrap();
+            record.moves.push((place.clone(), place));
+        }
         record.origin = origin;
         record
+    }
+
+    #[test]
+    fn an_empty_undo_still_takes_its_record_and_an_empty_job_is_dropped() {
+        let empty_job = UndoRecord::for_job(JobId::new(2), JobKind::DeletePermanently);
+        let paired = pair_undo_records(vec![
+            record(1, JobOrigin::User),
+            empty_job,
+            record(3, JobOrigin::User),
+            UndoRecord {
+                origin: JobOrigin::Undo,
+                ..UndoRecord::for_job(JobId::new(4), JobKind::Undo)
+            },
+        ]);
+        let jobs: Vec<u64> = paired
+            .iter()
+            .filter_map(|r| r.job)
+            .map(JobId::get)
+            .collect();
+        assert_eq!(
+            jobs,
+            [1],
+            "the undo reversed job 3; job 2 had nothing to undo"
+        );
     }
 
     #[test]

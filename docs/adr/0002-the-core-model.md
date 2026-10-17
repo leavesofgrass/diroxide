@@ -12,6 +12,14 @@ Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from R8 to R1
 - **Jobs.** `JobKind` gains `Split`, `Join`, `Download` and `PluginCommand`; an unknown kind reads as `Unknown`, never planned. `ConflictPolicy` gains `Newer`; `ConflictKind`, `ConflictAction`, `ConflictAnswer`, `JobState`, `ErrorAction` and `JobOrigin` arrive; `JobRequest` gains `renames` and `origin`, both defaulted so older requests still read.
 - Core now depends on `regex` and `zeroize`, both pure Rust.
 
+Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2, from `research/alpha2-plan.md` part five, commits 2 to 9, and the items held from Wave 1). Core gains these, and closes again:
+
+- **Jobs.** `JobKind` gains `TestArchive` ("test", "Testing"), and `JobKind::ALL` lists every kind; a word test walks it with a match that has no fallback arm, so a kind cannot arrive without its verb and progress word. `JobRequest` gains `parts: Option<PartSize>` (`Bytes` per part or `EqualParts`), defaulted and left out of the JSON when absent, with `split_into`, `part_bytes` and `parts_for`.
+- **Places.** The `.001` rules P0b wrote are held by a property test (every archive extension, any case, three to five digits, both path styles) and by look-alikes that stay plain (`photo.jpg.001`, `a.7z.01`).
+- **The command text form** moves from the app into core (W1c's request): `Display` for `Command`, `Command::parse_text`, `Command::PLACE_ARGUMENTS` and `CommandTextError`, whose sentences are the ones the app said; `diroxide_app::commands::{command_text, parse_command_text}` delegate.
+- **Effects.** `Effect::AppRequests` (W1d-1's request): a runtime effect saying the app queued requests whose types the core cannot name; the app ends its effects with it, `Runtime::carry_out` takes the requests there, and a frontend never sees it. `is_for_frontend` is false for it.
+- **The catalog** gains `trash_copies_across` ("Trashing copies 3.2 GB to another drive. Go on? y or n"), and `format` gains `grouped` for exact byte counts ("4,700,372,992").
+
 ## Context
 
 Every crate speaks about places, entries, lists, commands, effects, messages, keys and time. If each defined its own, the frontends would read differently and the owner's screen readers would hear different words for the same thing. `diroxide-core` holds these types once, does no I/O, and is finished in Phase 0, so later waves build on it without changing it.

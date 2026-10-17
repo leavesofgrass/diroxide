@@ -26,6 +26,7 @@ pub mod columns;
 pub mod error;
 pub mod files;
 pub mod paths;
+pub mod presets;
 pub mod schema;
 pub mod session;
 pub mod settings;
@@ -40,11 +41,15 @@ pub use files::{
     RecipeConfig, ToolOverride, ToolsConfig, key_text_for_file,
 };
 pub use paths::Paths;
+pub use presets::{
+    BUILTIN_SPLIT_PRESETS, BuiltinPreset, SplitPreset, builtin_split_presets, merge_split_presets,
+};
 pub use schema::{Choice, SCHEMA, SettingGroup, SettingInfo, SettingKind};
 pub use session::{Layout, PanelState, SessionState, load_session, save_session};
 pub use settings::{
-    CompletionList, ConfirmSettings, DRIVE_KINDS, FilterCase, Highlighting, PluginSettings,
-    ScreenReaderMode, SecretEcho, Settings, SingleLetters, WeekStart,
+    ArchiveSettings, CompletionList, ConfirmSettings, DRIVE_KINDS, FilterCase, HexRow,
+    Highlighting, PluginSettings, QuickViewSettings, ScreenReaderMode, SecretEcho, Settings,
+    SingleLetters, ViewerSettings, WeekStart,
 };
 pub use store::{ConfigProblem, Loaded, problems_line, write_atomic, write_reference};
 

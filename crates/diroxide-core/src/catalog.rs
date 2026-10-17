@@ -77,6 +77,17 @@ pub fn too_long_for_trash(items: u64) -> Message {
     ))
 }
 
+/// The question where the trash would copy an item to another drive (a
+/// Linux drive whose own trash cannot be made): "Trashing copies 3.2 GB to
+/// another drive. Go on? y or n". The answer starts on No; No leaves the
+/// item where it is.
+pub fn trash_copies_across(bytes: u64) -> Message {
+    Message::question(&format!(
+        "Trashing copies {} to another drive. Go on",
+        crate::format::human_size(bytes)
+    ))
+}
+
 /// After a trash job: "Moved 3 items to the trash. They can be restored."
 pub fn moved_to_trash(items: u64) -> Message {
     let they = if items == 1 { "It" } else { "They" };
@@ -165,6 +176,13 @@ mod tests {
             moved_to_trash(1).text,
             "Moved 1 item to the trash. It can be restored."
         );
+        let copies = trash_copies_across(64_000_001);
+        assert_eq!(
+            copies.text,
+            "Trashing copies 64.0 MB to another drive. Go on? y or n"
+        );
+        assert_eq!(copies.kind, MessageKind::Question);
+        assert!(within_cells(&copies.text, "to another drive"));
     }
 
     #[test]

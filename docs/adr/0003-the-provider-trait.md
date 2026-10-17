@@ -11,6 +11,12 @@ Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from R7, R8 C
 - **Context and errors.** `OpContext` carries a `SecretSource` (ADR-0009). `VfsError` gains R8's classes, R7's and R9's data and password errors, and `TrashRefused`, with next steps that name no key; `class()` gives the retry rules and a scope (file, rule, environment). `WatchEvent::Gone` says the shown folder went away.
 - **Names.** The superscript device names, dot names, the length check by a place's `NameRules`, refused or only flagged, `numbered_name` with compound extensions, `unused_name`, and the shared unfinished-name functions.
 
+Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2, with W1b's two held requests):
+
+- **The writer's unfinished place.** `FileWriter` gains a defaulted `unfinished_place`, `None` unless the writer says; the local writer answers with its `.diro-part-` file beside the target, so the journal can tie the name to its target.
+- **Links in words.** `Capabilities` gains `can_link` (links held and the place writable) and `links_in_words` ("Links can be made here", on Windows with "symbolic links may need Developer Mode", or "Cannot link here: this place holds no links"). The local provider no longer claims links on FAT and exFAT under Windows. The engine refuses a link job where the destination cannot link, before anything is touched.
+- **The trash that copies.** `TrashFacts` gains `copies_across_drives`: on Linux a drive whose own trash cannot be made sends its items to the home trash by copying them. The gate answers the new `TrashGate::Copies`, which `allows()`, with `asks_first(bytes)` above `TRASH_COPY_ASK_BYTES` (64 MB) and `copy_question`. The rule is the pure `copies_across_drives`; the local provider fills the fact on the freedesktop systems and says false elsewhere. ADR-0008's gate is otherwise unchanged; the question is wired into the trash plan by the engine's next brief.
+
 ## Context
 
 diroxide shows local folders, archives, SFTP hosts and whatever plugins serve, through the same panels and the same job engine. Each kind of place needs one interface that the engine and the app can use without knowing which kind it is.

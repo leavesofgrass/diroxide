@@ -7,7 +7,7 @@ diroxide is one Cargo workspace. One app core holds all state and returns effect
 1. A frontend turns its own key event into a `diroxide_core::Key` and hands it to `App::handle` as `AppEvent::Key`.
 2. The app looks the key up in the keymap's layers (panel, list, global; a dialog first when one is open), in the frontend's column (terminal or window). A bound key gives a command; there are no key sequences (ADR-0005); an unbound printable key jumps to the next row starting with that letter.
 3. `App::dispatch` changes the app's state and returns `Effect`s.
-4. The frontend handles the screen and speech effects (`Redraw`, `Announce`, `OpenDialog`, `CloseDialog`, `Quit`). The `Runtime` handles the I/O effects (`List`, `StartJob`, `CancelJob`, `RunPlugin`, `OpenExternally`, `SetClipboard`) and turns their results into `AppEvent`s, which go back to `App::handle`.
+4. The frontend handles the screen and speech effects (`Redraw`, `Announce`, `OpenDialog`, `CloseDialog`, `Quit`). The `Runtime` handles the I/O effects (`List`, `StartJob`, `CancelJob`, `RunPlugin`, `OpenExternally`, `SetClipboard`) and `AppRequests`, where `Runtime::carry_out` takes the app's own queued requests (plan a job, run a confirmed plan, answer a question, watch a folder, save the session), and turns their results into `AppEvent`s, which go back to `App::handle`.
 5. A listing or job answer carries the request id it answers, so a late answer to an old request is dropped.
 
 The app core never does I/O and never blocks; tests drive it without a terminal or a window.
@@ -31,14 +31,14 @@ Each entry gives the crate's job, its owner after Phase 0, and the workspace cra
 - `diroxide-tui`: the terminal frontend. Owner: W1d. May depend on core, app and theme.
 - `diroxide-gui`: the window frontend. Owners: W4a, then W4b. May depend on core, app and theme.
 - `diroxide-cli`: the command line behind `diro`: open, serve, search, convert, plugin tooling. Owners: W1d, with W1e for `src/cmd/` and W3b for `src/cmd/plugin.rs`. May depend on every `diroxide-*` crate.
-- `diro`: the thin binary that `cargo install diro` installs. May depend on cli only, and on `ureq` behind its default `fetch` feature, the owner's one exception to the pure-Rust rule (ADR-0001).
+- `diro`: the thin binary that `cargo install diro` installs. May depend on cli only, and on `ureq` behind its default `fetch` feature, an entry of the native gate's inventory (ADR-0001).
 - `xtask`: the workspace's own tasks. Owner: the orchestrator, with W1c, W1e and W4c adding their tasks. May depend on core, vfs, ops, config, app and theme (ops for the bench, which copies through the engine). Nothing depends on it.
 
 Plan section 5.1 counts sixteen crates with `diroxide-cli` as "the diro binary". Phase 0 splits that into the library `diroxide-cli`, which holds the command line and is tested as a library, and the binary crate `diro`, so that `cargo install diro` is the install line (plan section 1). The Wave 1 contract adds the seventeenth crate of the plan's count, `diroxide-theme`, and moves the SFTP provider out of the main workspace (below). The main workspace has seventeen packages: fifteen `diroxide-*` crates, `diro` and `xtask`. The compare crate of plan section 6, `diroxide-diff`, will be the eighteenth when alpha.3 adds it.
 
 ## Plugins, outside the main workspace
 
-The plugin boundary is the language boundary (plan section 5.8, item 3; ADR-0001). Anything that needs C, assembly, another language or a license the main binary cannot carry is a plugin: a separate program in a workspace of its own under `plugins/`, which the root manifest's `exclude` keeps out, so `cargo build --workspace` and `cargo install diro` never see it. `cargo xtask native --check` fails the main workspace on any `cc`, `cmake` or `cxx` build dependency but its one allow entry (`ring`, for the `fetch` feature).
+The plugin boundary is the language boundary (plan section 5.8, item 3; ADR-0001). Anything that needs C, assembly, another language or a license the main binary cannot carry is a plugin: a separate program in a workspace of its own under `plugins/`, which the root manifest's `exclude` keeps out, so `cargo build --workspace` and `cargo install diro` never see it. Pure Rust is a goal, not a rule (answer 46): a crate that carries C may enter the main workspace only through the inventory in `xtask/src/native.rs`, with its reason, and `cargo xtask native --check` fails on any other `cc`, `cmake` or `cxx` build dependency. The inventory today: `ring`, for the `fetch` feature, and `psm` and `stacker`, carta's stack growth for the quick view's readers (ADR-0001).
 
 - `plugins/diro-sftp`: the SFTP provider plugin (Owner: W3c). Depends on core and vfs by path; russh and russh-sftp join its own manifest in alpha.5. Built with `cargo build --manifest-path plugins/diro-sftp/Cargo.toml`.
 

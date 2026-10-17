@@ -5,7 +5,11 @@
 # archivers for the archive cross-checks (xz-utils, bzip2, zip, unzip and
 # libarchive-tools for bsdtar), curl and wget for the components
 # downloader's fallback tests (approved by the owner on Sunday, October
-# 11, 2026), and an OpenSSH server for the SFTP tests.
+# 11, 2026), and an OpenSSH server for the SFTP tests. The archivers, curl
+# and wget were named here but missing from the package list until the
+# alpha.2 contract step (P2, Friday, October 16, 2026), which adds them for
+# W2b's cross-check suite and the demo set. The C compiler of the base
+# image builds the inventory's psm and stacker (through carta) and ring.
 #
 # Built once per toolchain change by the orchestrator:
 #   MSYS_NO_PATHCONV=1 docker compose build dev
@@ -24,6 +28,13 @@ RUN apt-get update \
       ffmpeg \
       pandoc \
       7zip \
+      xz-utils \
+      bzip2 \
+      zip \
+      unzip \
+      libarchive-tools \
+      curl \
+      wget \
       poppler-utils \
       openssh-server \
  && rm -rf /var/lib/apt/lists/*

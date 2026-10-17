@@ -615,6 +615,38 @@ mod tests {
     }
 
     #[test]
+    fn a_numbered_part_is_the_format_of_its_set_and_look_alikes_are_none() {
+        let parts: [(&str, Option<ArchiveFormat>); 14] = [
+            ("backup.7z.001", Some(ArchiveFormat::SevenZ)),
+            ("backup.7z.000", Some(ArchiveFormat::SevenZ)),
+            ("BACKUP.ZIP.1000", Some(ArchiveFormat::Zip)),
+            ("logs.tar.gz.002", Some(ArchiveFormat::TarGz)),
+            ("logs.tgz.0001", Some(ArchiveFormat::TarGz)),
+            ("logs.tar.xz.999", Some(ArchiveFormat::TarXz)),
+            ("disk.tar.12345", Some(ArchiveFormat::Tar)),
+            ("one.xz.003", Some(ArchiveFormat::Xz)),
+            ("photo.jpg.001", None),
+            ("report.pdf.001", None),
+            ("backup.7z.01", None),
+            ("backup.7z.001.txt", None),
+            ("x.001", None),
+            ("backup.zipx.001", None),
+        ];
+        for (name, format) in parts {
+            assert_eq!(ArchiveFormat::from_name(name), format, "{name}");
+            assert_eq!(
+                diroxide_core::place::opens_as_archive(name),
+                format.is_some(),
+                "{name}: the place parser agrees"
+            );
+        }
+        for format in ArchiveFormat::ALL {
+            let name = format!("set{}.042", format.extension());
+            assert_eq!(ArchiveFormat::from_name(&name), Some(*format), "{name}");
+        }
+    }
+
+    #[test]
     fn levels_are_words_with_numbers() {
         assert_eq!(
             CompressionLevel::Normal.number_for(ArchiveFormat::Zip),

@@ -18,7 +18,7 @@
 
 use std::fmt;
 
-use diroxide_core::{ArgValue, Command, CommandId, ListModel, ListRow, Place, SortKey, SortSpec};
+use diroxide_core::{Command, CommandId, ListModel, ListRow, SortKey, SortSpec};
 
 use diroxide_core::Layer;
 
@@ -1160,136 +1160,26 @@ pub fn sort_list(current: &SortSpec) -> ListModel {
     list
 }
 
-/// Argument names whose values are places in the command text form.
-const PLACE_ARGUMENTS: [&str; 6] = ["place", "dest", "to", "from", "source", "target"];
-
 /// Writes a command in the text form the banks and `diro run` share: the
-/// id, then each argument as `name=value`. Text that holds a space, a
-/// quotation mark or nothing, or reads as a number or a flag, is put in
-/// quotation marks, with a quotation mark inside written twice; backslashes
-/// stay as they are, so Windows paths read naturally.
+/// id, then each argument as `name=value`. Core's `Display` for
+/// [`Command`] is the one definition (the alpha.2 contract step); this
+/// stays for the Wave 1 callers.
 pub fn command_text(command: &Command) -> String {
-    let mut text = command.id.to_string();
-    for (name, value) in &command.args {
-        let values: Vec<String> = match value {
-            ArgValue::Text(t) => vec![quoted(t)],
-            ArgValue::Number(n) => vec![n.to_string()],
-            ArgValue::Flag(f) => vec![f.to_string()],
-            ArgValue::Place(p) => vec![quoted(&p.to_string())],
-            ArgValue::Places(places) => places.iter().map(|p| quoted(&p.to_string())).collect(),
-        };
-        for value in values {
-            text.push(' ');
-            text.push_str(name);
-            text.push('=');
-            text.push_str(&value);
-        }
-    }
-    text
+    command.to_string()
 }
 
-fn quoted(text: &str) -> String {
-    let plain = !text.is_empty()
-        && !text.chars().any(|c| c.is_whitespace() || c == '"')
-        && text.parse::<i64>().is_err()
-        && text != "true"
-        && text != "false";
-    if plain {
-        text.to_owned()
-    } else {
-        format!("\"{}\"", text.replace('"', "\"\""))
-    }
-}
-
-/// Splits command text into words, keeping quoted parts whole.
-fn words(text: &str) -> Result<Vec<(String, bool)>, String> {
-    let mut words = Vec::new();
-    let mut chars = text.chars().peekable();
-    let mut word = String::new();
-    let mut quoted_word = false;
-    let mut in_word = false;
-    while let Some(c) = chars.next() {
-        match c {
-            '"' => {
-                in_word = true;
-                quoted_word = true;
-                loop {
-                    match chars.next() {
-                        Some('"') if chars.peek() == Some(&'"') => {
-                            chars.next();
-                            word.push('"');
-                        }
-                        Some('"') => break,
-                        Some(other) => word.push(other),
-                        None => return Err("a quotation mark is not closed".to_owned()),
-                    }
-                }
-            }
-            c if c.is_whitespace() => {
-                if in_word {
-                    words.push((std::mem::take(&mut word), quoted_word));
-                    quoted_word = false;
-                    in_word = false;
-                }
-            }
-            c => {
-                in_word = true;
-                word.push(c);
-            }
-        }
-    }
-    if in_word {
-        words.push((word, quoted_word));
-    }
-    Ok(words)
-}
-
-/// Reads a command from its text form (see [`command_text`]). The error
-/// says what is wrong in words, meaning first: "Not a command id:
-/// File.Copy".
+/// Reads a command from its text form (see [`command_text`]), through
+/// [`Command::parse_text`]. The error says what is wrong in words, meaning
+/// first: "Not a command id: File.Copy".
 pub fn parse_command_text(text: &str) -> Result<Command, String> {
-    let mut parts = words(text)?.into_iter();
-    let Some((id, _)) = parts.next() else {
-        return Err("No command: the text is empty".to_owned());
-    };
-    let id = CommandId::new(id.clone()).map_err(|_| format!("Not a command id: {id}"))?;
-    let mut command = Command::new(id);
-    for (part, was_quoted) in parts {
-        let Some((name, raw)) = part.split_once('=') else {
-            return Err(format!("No value for {part}: write {part}=value"));
-        };
-        if name.is_empty() {
-            return Err(format!("No name before ={raw}"));
-        }
-        let value = if PLACE_ARGUMENTS.contains(&name) {
-            let place = Place::parse(raw).map_err(|e| format!("Not a place for {name}: {e}"))?;
-            match command.args.remove(name) {
-                Some(ArgValue::Place(first)) => ArgValue::Places(vec![first, place]),
-                Some(ArgValue::Places(mut all)) => {
-                    all.push(place);
-                    ArgValue::Places(all)
-                }
-                _ => ArgValue::Place(place),
-            }
-        } else if was_quoted {
-            ArgValue::Text(raw.to_owned())
-        } else if let Ok(n) = raw.parse::<i64>() {
-            ArgValue::Number(n)
-        } else if raw == "true" || raw == "false" {
-            ArgValue::Flag(raw == "true")
-        } else {
-            ArgValue::Text(raw.to_owned())
-        };
-        command.args.insert(name.to_owned(), value);
-    }
-    Ok(command)
+    Command::parse_text(text).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use diroxide_core::format::within_cells;
-    use diroxide_core::{Key, KeyCode, SortDirection};
+    use diroxide_core::{ArgValue, Key, KeyCode, Place, SortDirection};
     use std::collections::HashSet;
 
     #[test]

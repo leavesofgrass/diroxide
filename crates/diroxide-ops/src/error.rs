@@ -46,6 +46,11 @@ pub enum OpsError {
     /// from a request.
     #[error("there is nothing to undo")]
     NothingToUndo,
+    /// Links were asked for where the place cannot make them (a FAT or
+    /// exFAT drive, an archive, a read-only place); the text is the
+    /// capability's words: "Cannot link here: this place holds no links".
+    #[error("{0}")]
+    CannotLink(String),
 }
 
 impl Explain for OpsError {
@@ -62,6 +67,9 @@ impl Explain for OpsError {
             OpsError::Refused(_) => "Choose the entries inside it instead.".to_owned(),
             OpsError::IntoItself(_) => "Choose a destination outside it.".to_owned(),
             OpsError::NameRefused(_) => "Type another name.".to_owned(),
+            OpsError::CannotLink(_) => {
+                "Make the link in a folder on a drive that holds links.".to_owned()
+            }
         }
     }
 }

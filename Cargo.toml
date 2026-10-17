@@ -17,12 +17,16 @@ publish = false
 # with `name.workspace = true`; `cargo xtask deps --check` enforces both that
 # and the direction of the internal dependencies (docs/dev/architecture.md).
 #
-# The pure-Rust rule (plan section 4, principle 5): nothing here may bring a
-# C, C++ or assembly build into the main workspace. `cargo xtask native
-# --check` fails on any `cc`, `cmake` or `cxx` build dependency in the build
-# tree, with one allow entry: `ring` (through `rustls` through `ureq`), the
-# downloader's TLS provider behind the `fetch` feature of `diro`, the
-# owner's one exception (Sunday, October 11, 2026).
+# The pure-Rust goal (plan section 4, principle 5; answer 46: a goal, not
+# a rule): a crate that brings a C, C++ or assembly build into the main
+# workspace enters only through the inventory in `xtask/src/native.rs`,
+# with its reason, in the same commit. `cargo xtask native --check` fails
+# on any other `cc`, `cmake` or `cxx` build dependency in the build tree.
+# The inventory: `ring` (through `rustls` through `ureq`), the
+# downloader's TLS provider behind the `fetch` feature of `diro` (the
+# owner's exception, Sunday, October 11, 2026); `psm` and `stacker`
+# (through `carta`), the converter's stack growth (alpha.2's contract
+# step, Friday, October 16, 2026).
 [workspace.dependencies]
 # The workspace's own crates.
 diroxide-core = { path = "crates/diroxide-core", version = "0.1.0-alpha.1" }
@@ -64,11 +68,14 @@ globset = "0.4.18"
 grep-regex = "0.1.14"
 grep-searcher = "0.1.17"
 # Archives (research/archives.md section 15 F; plan question 6 closed by
-# answer 26). zip 9.0.1 exactly, as decided (9.0.4 exists; a bump is the
-# orchestrator's). lzma-rust2 on the 0.21 line that zip and sevenz-rust2
-# share, so one copy is compiled; `optimization` on (owner question 5's
-# default, hand-written `unsafe` inside the crate). liblzma has left the
-# main workspace under the plugin boundary; there is no `xz-c` feature.
+# answer 26). zip 9.0.1 exactly, as decided (9.0.4 exists, but it moved
+# to lzma-rust2 0.22; a bump is the orchestrator's, with sevenz-rust2).
+# lzma-rust2 on the 0.21 line that zip 9.0.1 and sevenz-rust2 0.23 share,
+# so one copy is compiled (`cargo tree -d` shows one); `optimization` on
+# (owner question 5's default, hand-written `unsafe` inside the crate).
+# liblzma has left the main workspace under the plugin boundary; there is
+# no `xz-c` feature. Since the alpha.2 contract step (P2) the archive
+# crate depends on these, so the license and native gates read them.
 zip = { version = "=9.0.1", default-features = false, features = ["deflate-flate2-zlib-rs", "bzip2", "aes-crypto", "lzma", "xz", "ppmd", "deflate64"] }
 lzma-rust2 = { version = "0.21.0", default-features = false, features = ["std", "encoder", "xz", "optimization"] }
 sevenz-rust2 = { version = "=0.23.0", default-features = false, features = ["compress", "aes256", "bzip2", "ppmd", "util"] }
@@ -76,6 +83,9 @@ tar = { version = "0.4.46", default-features = false }
 flate2 = { version = "1.1.5", default-features = false, features = ["zlib-rs"] }
 # bzip2 0.6 reads and writes through libbz2-rs-sys, a Rust port (no C).
 bzip2 = "0.6.1"
+# CRC-32 for the split sidecar (`.crc`, plan section 5.4) and the archive
+# checks; already in the graph through zip, declared for the ops crate.
+crc32fast = "1.5.2"
 # The local provider's `sys` module (research/file-operations.md C6):
 # safe Unix wrappers, the Windows calls, and copy-on-write clones.
 rustix = { version = "1.1.5", features = ["fs"] }
@@ -111,11 +121,28 @@ process-wrap = { version = "10.0.1", default-features = false, features = ["std"
 ureq = { version = "3.4", default-features = false, features = ["rustls"] }
 # Compare (alpha.3, research/diffing.md): std, text and inline only.
 similar = { version = "3.2.0", default-features = false, features = ["std", "text", "inline"] }
-# Highlighting and documents (alpha.2, research/syntax-highlighting.md):
-# the fancy-regex engine, never Oniguruma (C). When syntect enters the
-# build, add `[profile.dev.package.syntect]` with `opt-level = 3` below.
+# Highlighting and documents (alpha.2, research/syntax-highlighting.md and
+# research/alpha2-plan.md 4.5 and 4.6), depended on by the preview crate
+# since the alpha.2 contract step (P2). syntect as a tokenizer: parsing
+# with the fancy-regex engine, never Oniguruma (C), and none of its
+# themes, plist, YAML or HTML features; two-face brings bat's grammars.
+# Both run at full speed in debug builds (the profile entries below).
+syntect = { version = "5.3.0", default-features = false, features = ["parsing", "regex-fancy"] }
 two-face = { version = "0.5.2", default-features = false, features = ["syntect-fancy"] }
 pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
+# Text decoding: textweaver's encoding module carries over whole (answer
+# 41); (Apache-2.0 OR MIT) AND BSD-3-Clause, both allowed.
+encoding_rs = "0.8.42"
+# carta, the pure-Rust converter (answer 27): pinned exactly, textweaver's
+# pin, default features off (no CLI, no `fetch`, no highlight grammars),
+# with the five readers the quick view uses. Its include directives are
+# never followed and its Typst reader is never used. The writer feature
+# (`write-commonmark` for path B, `write-html` for path A) is added by
+# W2e after spike C1 (plan question 66); a bump waits for the twelve
+# samples. MIT OR Apache-2.0.
+carta = { version = "=0.0.11", default-features = false, features = ["read-org", "read-rst", "read-mediawiki", "read-dokuwiki", "read-jira"] }
+# scraper 0.27.0 (ISC, allowed) is declared only if spike C1 chooses path
+# A (an HTML-fragment reader carried from textweaver's html.rs); not now.
 # Detection and images.
 infer = "0.19" # unverified
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
@@ -174,6 +201,14 @@ debug = false
 opt-level = 3
 
 [profile.dev.package.regex-syntax]
+opt-level = 3
+
+# Highlighting at full speed in debug builds and tests (R17): syntect's
+# parser and its fancy-regex engine are the hot loop of the viewer.
+[profile.dev.package.syntect]
+opt-level = 3
+
+[profile.dev.package.fancy-regex]
 opt-level = 3
 
 [profile.test]

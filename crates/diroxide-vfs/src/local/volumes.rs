@@ -168,8 +168,8 @@ pub(crate) fn capabilities_for(facts: &VolumeFacts, rule: NameRule) -> Capabilit
         capabilities.restore = capabilities.trash;
         capabilities.reserved_names = true;
         // Junctions need no privilege; symbolic links may need Developer
-        // Mode, which the error says in words.
-        capabilities.links = true;
+        // Mode, which the error says in words. FAT and exFAT hold neither.
+        capabilities.links = !named(fs, &FAT_FILE_SYSTEMS) && !named(fs, &["exfat"]);
         capabilities.access.os_attributes = yes;
         capabilities.access.times = yes;
         capabilities.access.created_time = yes;
@@ -411,6 +411,27 @@ mod tests {
             max_name: Some(255),
             ..VolumeFacts::default()
         }
+    }
+
+    #[test]
+    fn links_follow_the_file_system_and_are_said_in_words() {
+        for fs in ["exFAT", "FAT32", "vfat"] {
+            let stick = capabilities_for(&facts(VolumeKind::Removable, fs), STRICT);
+            assert!(!stick.links, "{fs}");
+            assert_eq!(
+                stick.links_in_words(),
+                "Cannot link here: this place holds no links"
+            );
+        }
+        let ntfs = capabilities_for(&facts(VolumeKind::Fixed, "NTFS"), STRICT);
+        assert_eq!(
+            ntfs.links,
+            cfg!(windows),
+            "NTFS as Windows or Linux mounts it"
+        );
+        let home = capabilities_for(&facts(VolumeKind::Fixed, "ext4"), STRICT);
+        assert!(home.can_link());
+        assert!(home.links_in_words().starts_with("Links can be made here"));
     }
 
     #[test]

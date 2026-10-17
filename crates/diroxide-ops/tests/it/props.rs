@@ -321,6 +321,45 @@ proptest! {
         prop_assert_eq!(after, before);
     }
 
+    /// Undo after a copy sends the copy's new files to the trash, never
+    /// deletes them for good: the tree is as it was, and the trash holds
+    /// one copy of each file the job made (R20; plan section 5.4).
+    #[test]
+    fn undo_of_a_copy_sends_its_new_files_to_the_trash(source in tree("s")) {
+        let fake = setup(&source, &Tree { files: Vec::new() });
+        let before = fake.snapshot();
+        let engine = quick_engine(&fake);
+        let plan = engine.plan(&request(Op::Copy, &source)).unwrap();
+        let report = engine.run(&plan, &JobControl::new(), &Answers::default());
+        prop_assert!(report.failed.is_empty(), "{report:?}");
+        let made: Vec<Place> = report
+            .undo
+            .created
+            .iter()
+            .filter(|place| fake.entry(place).is_some_and(|e| e.kind == EntryKind::File))
+            .cloned()
+            .collect();
+        prop_assert_eq!(made.len(), source.files.len());
+        for place in &made {
+            prop_assert!(!fake.in_trash(place), "{place} is not in the trash yet");
+        }
+        let mut log = UndoLog::default();
+        log.record(report.undo);
+        let undo = engine
+            .undo_last(&mut log, JobId::new(2), &JobControl::new(), &Answers::default())
+            .unwrap();
+        prop_assert!(undo.failed.is_empty() && undo.skipped.is_empty(), "{undo:?}");
+        prop_assert_eq!(fake.snapshot(), before);
+        let mut trashed = fake.trash_contents();
+        trashed.sort();
+        let mut copied: Vec<Vec<u8>> = source.files.iter().map(|(_, data)| data.clone()).collect();
+        copied.sort();
+        prop_assert_eq!(trashed, copied, "each new file is in the trash, once");
+        for place in &made {
+            prop_assert!(fake.in_trash(place), "{place} went to the trash");
+        }
+    }
+
     /// With nothing in the way, the operations that ran are the plan's
     /// steps, in order.
     #[test]

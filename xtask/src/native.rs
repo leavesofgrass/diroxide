@@ -3,11 +3,17 @@
 //! in its build tree may depend on a native build tool: `cc`, `cmake`,
 //! `cxx` or `cxx-build`.
 //!
-//! There is exactly one allow entry, the owner's exception of Sunday,
-//! October 11, 2026 (answer 40): `cc` as the build dependency of `ring`,
-//! the TLS provider of `rustls`, reached only through `ureq`, the
-//! optional-components downloader's client behind the `fetch` feature of
-//! `diro`. Anything else fails, with the chain that brought it in.
+//! The allow list is the inventory of plan section 4, principle 5: pure
+//! Rust is a goal, not a rule (the owner, answer 46), so a crate that
+//! carries C enters only with an entry here, its reason in words, in the
+//! same commit as the dependency. The entries: `cc` as the build
+//! dependency of `ring`, the TLS provider of `rustls`, reached only
+//! through `ureq`, the optional-components downloader's client behind the
+//! `fetch` feature of `diro` (the owner's exception of Sunday, October 11,
+//! 2026, answer 40); and `cc` as the build dependency of `psm` and of
+//! `stacker`, reached only through `carta`, the converter of answer 27
+//! (alpha.2's contract step, Friday, October 16, 2026). Anything else
+//! fails, with the chain that brought it in.
 //!
 //! The check reads `cargo tree` inverted on each tool, over every feature,
 //! every target and the normal, build and dev edges, so a test dependency
@@ -35,13 +41,31 @@ pub struct Allow {
     pub reason: &'static str,
 }
 
-/// The allow list: one entry, and nothing else.
-pub const ALLOWED: [Allow; 1] = [Allow {
-    tool: "cc",
-    user: "ring",
-    through: &["rustls", "ureq"],
-    reason: "the fetch feature's TLS provider, the owner's one exception (answer 40)",
-}];
+/// The allow list, the inventory: each entry with its reason, and nothing
+/// else.
+pub const ALLOWED: [Allow; 3] = [
+    Allow {
+        tool: "cc",
+        user: "ring",
+        through: &["rustls", "ureq"],
+        reason: "the fetch feature's TLS provider, the owner's exception (answer 40)",
+    },
+    Allow {
+        tool: "cc",
+        user: "psm",
+        through: &["stacker", "carta"],
+        reason: "carta grows its stack through stacker on deeply nested documents, and psm \
+                 assembles the small stack switch; no pure-Rust reader covers Org, \
+                 reStructuredText, MediaWiki, DokuWiki and Jira (answers 27 and 46)",
+    },
+    Allow {
+        tool: "cc",
+        user: "stacker",
+        through: &["carta"],
+        reason: "stacker compiles one small C file for the same stack switch, for carta \
+                 (answers 27 and 46)",
+    },
+];
 
 /// One line of an inverted `cargo tree --prefix depth --format "{p}"`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -147,7 +171,7 @@ pub fn check(root: &Path) -> Result<bool> {
     }
     if problems.is_empty() {
         println!(
-            "native: Pass. No C build in the main workspace but the one allowed: ring, for the fetch feature."
+            "native: Pass. No C build in the main workspace but the inventory's: ring, for the fetch feature; psm and stacker, for carta."
         );
         Ok(true)
     } else {
@@ -212,8 +236,31 @@ mod tests {
     }
 
     #[test]
-    fn there_is_exactly_one_allow_entry() {
-        assert_eq!(ALLOWED.len(), 1);
+    fn the_inventory_lists_each_entry_with_its_reason() {
+        assert_eq!(ALLOWED.len(), 3);
+        for allow in &ALLOWED {
+            assert!(NATIVE_TOOLS.contains(&allow.tool), "{allow:?}");
+            assert!(
+                !allow.reason.is_empty() && !allow.through.is_empty(),
+                "{allow:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn psm_and_stacker_through_carta_are_allowed_and_nowhere_else() {
+        let tree = "0cc v1.8.0\n\
+            1psm v0.1.24\n\
+            2stacker v0.1.25\n\
+            3carta v0.0.11\n\
+            4diroxide-preview v0.1.0-alpha.1 (D:\\w\\crates\\diroxide-preview)\n\
+            1stacker v0.1.25 (*)\n";
+        assert_eq!(problems_in_tree("cc", tree), Vec::<String>::new());
+        let elsewhere = "0cc v1.8.0\n\
+            1stacker v0.1.25\n\
+            2rustc-demangle v0.1.0\n\
+            3diroxide-app v0.1.0-alpha.1 (D:\\w\\crates\\diroxide-app)\n";
+        assert_eq!(problems_in_tree("cc", elsewhere).len(), 1);
     }
 
     #[test]

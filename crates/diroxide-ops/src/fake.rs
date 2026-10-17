@@ -150,6 +150,9 @@ pub struct FakeSwitches {
     pub reserved_names: bool,
     /// The place has no trash.
     pub no_trash: bool,
+    /// The place holds no links, as a FAT or exFAT drive: the capabilities
+    /// say so and `create_link` is unsupported.
+    pub no_links: bool,
     /// Places within this one are on a second volume.
     pub second_volume: Option<Place>,
     /// The volume's kind, for the trash gate (fixed by default).
@@ -738,6 +741,10 @@ impl Drop for FakeWriter {
 }
 
 impl FileWriter for FakeWriter {
+    fn unfinished_place(&self) -> Option<Place> {
+        self.unfinished.clone()
+    }
+
     fn commit(mut self: Box<Self>, _durable: bool) -> Result<(), VfsError> {
         if let Some(unfinished) = self.unfinished.take() {
             self.fake.vanish(&unfinished);
@@ -800,7 +807,7 @@ impl Provider for FakeProvider {
         capabilities.writable = true;
         capabilities.trash = !switches.no_trash;
         capabilities.restore = !switches.no_trash;
-        capabilities.links = true;
+        capabilities.links = !switches.no_links;
         capabilities.attributes = true;
         capabilities.access.mode = Can::Yes;
         capabilities.access.os_attributes = Can::Yes;
@@ -945,7 +952,10 @@ impl Provider for FakeProvider {
         request: &LinkRequest,
         ctx: &OpContext,
     ) -> Result<(), VfsError> {
-        self.enter(FakeCall::CreateLink, place, ctx)?;
+        let switches = self.enter(FakeCall::CreateLink, place, ctx)?;
+        if switches.no_links {
+            return Err(VfsError::unsupported(self.scheme(), "make links"));
+        }
         if self.exists(place) {
             return Err(VfsError::AlreadyExists);
         }
@@ -1235,6 +1245,9 @@ mod tests {
             .unwrap();
         writer.write_all(b"made").unwrap();
         assert_eq!(fake.unfinished().len(), 1, "the unfinished name shows");
+        let unfinished = writer.unfinished_place().unwrap();
+        assert_eq!(unfinished.parent(), Some(p("/a")));
+        assert!(fake.exists(&unfinished), "the writer names it");
         writer.commit(false).unwrap();
         assert!(fake.unfinished().is_empty());
         assert_eq!(fake.contents(&p("/a/new.txt")).unwrap(), b"made");

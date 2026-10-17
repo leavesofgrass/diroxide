@@ -7,6 +7,8 @@
 //! The gate is pure, so its table is tested with fake drive kinds and the
 //! lengths 259 and 260; no test ever touches the real trash.
 
+use std::path::Path;
+
 use diroxide_core::Message;
 use diroxide_core::catalog;
 
@@ -15,6 +17,11 @@ use crate::volume::VolumeKind;
 /// The longest path, in UTF-16 units, that the Windows Recycle Bin takes
 /// (spike six: 259 reached the bin, 260 was removed for good).
 pub const TRASH_MAX_PATH_UNITS: usize = 259;
+
+/// Above this size an item the trash would copy to another drive asks
+/// first (research/file-operations.md, R8: 64 MB): the copy takes as long
+/// as copying the file, and fills the home drive.
+pub const TRASH_COPY_ASK_BYTES: u64 = 64_000_000;
 
 /// The rules of the platform's trash.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -63,6 +70,25 @@ pub struct TrashFacts {
     pub longest_path_units: usize,
     /// Whether the path is a network path (a share, a mapped drive).
     pub network_path: bool,
+    /// Whether the trash would take the item by copying it to a trash on
+    /// another drive and deleting the original (Linux and the other
+    /// freedesktop systems: a drive whose own trash cannot be made sends
+    /// its items to the home trash; [`copies_across_drives`]). Never on
+    /// Windows or macOS.
+    pub copies_across_drives: bool,
+}
+
+/// The freedesktop rule (R8; the `trash` crate as it is pinned): an item
+/// on a volume other than the home folder's, whose volume has no trash of
+/// its own that can be used or made, is copied into the home trash. When
+/// the home folder's volume is not known, the trash is taken not to copy,
+/// so nothing asks without cause.
+pub fn copies_across_drives(
+    item_root: &Path,
+    home_root: Option<&Path>,
+    own_trash_usable: bool,
+) -> bool {
+    home_root.is_some_and(|home| home != item_root) && !own_trash_usable
 }
 
 /// The gate's decision for one item.
@@ -70,6 +96,11 @@ pub struct TrashFacts {
 pub enum TrashGate {
     /// The trash may take it.
     Allowed,
+    /// The trash may take it, but only by copying it to another drive's
+    /// trash and deleting the original ([`TrashFacts::copies_across_drives`]):
+    /// slow and filling for a big item, so one over
+    /// [`TRASH_COPY_ASK_BYTES`] asks first ([`TrashGate::copy_question`]).
+    Copies,
     /// This drive has no trash (a removable drive on Windows, or a kind
     /// that is not known).
     NoTrashHere(VolumeKind),
@@ -85,14 +116,28 @@ pub enum TrashGate {
 impl TrashGate {
     /// Whether the trash may be called.
     pub const fn allows(self) -> bool {
-        matches!(self, TrashGate::Allowed)
+        matches!(self, TrashGate::Allowed | TrashGate::Copies)
+    }
+
+    /// Whether an item of `bytes` asks before the trash takes it: the trash
+    /// would copy it to another drive and it is over
+    /// [`TRASH_COPY_ASK_BYTES`].
+    pub const fn asks_first(self, bytes: u64) -> bool {
+        matches!(self, TrashGate::Copies) && bytes > TRASH_COPY_ASK_BYTES
+    }
+
+    /// The question before such a copy, starting on No: "Trashing copies
+    /// 3.2 GB to another drive. Go on? y or n". `None` when it need not ask.
+    pub fn copy_question(self, bytes: u64) -> Option<Message> {
+        self.asks_first(bytes)
+            .then(|| catalog::trash_copies_across(bytes))
     }
 
     /// Why the trash cannot take it, in lowercase words, for
     /// [`crate::VfsError::TrashRefused`]; empty when it can.
     pub fn why(self) -> String {
         match self {
-            TrashGate::Allowed => String::new(),
+            TrashGate::Allowed | TrashGate::Copies => String::new(),
             TrashGate::NoTrashHere(kind) => format!("this {} has no trash", kind.word()),
             TrashGate::Network => "a network drive has no trash".to_owned(),
             TrashGate::TooLong { units } => {
@@ -106,7 +151,7 @@ impl TrashGate {
     /// or n". `None` when the trash may take it.
     pub fn question(self, items: u64) -> Option<Message> {
         match self {
-            TrashGate::Allowed => None,
+            TrashGate::Allowed | TrashGate::Copies => None,
             TrashGate::NoTrashHere(_) | TrashGate::Network => Some(catalog::no_trash_here(items)),
             TrashGate::TooLong { .. } => Some(catalog::too_long_for_trash(items)),
         }
@@ -127,6 +172,9 @@ pub fn trash_gate(facts: &TrashFacts, rules: TrashRules) -> TrashGate {
         return TrashGate::TooLong {
             units: facts.longest_path_units,
         };
+    }
+    if facts.copies_across_drives {
+        return TrashGate::Copies;
     }
     TrashGate::Allowed
 }
@@ -177,7 +225,58 @@ mod tests {
             volume,
             longest_path_units: units,
             network_path: false,
+            copies_across_drives: false,
         }
+    }
+
+    #[test]
+    fn a_trash_that_copies_across_drives_asks_first_above_64_mb() {
+        let copying = TrashFacts {
+            copies_across_drives: true,
+            ..facts(VolumeKind::Removable, 40)
+        };
+        let gate = trash_gate(&copying, TrashRules::OTHER);
+        assert_eq!(gate, TrashGate::Copies);
+        assert!(gate.allows() && gate.why().is_empty() && gate.question(1).is_none());
+        assert!(!gate.asks_first(TRASH_COPY_ASK_BYTES));
+        assert!(gate.asks_first(TRASH_COPY_ASK_BYTES + 1));
+        assert!(gate.copy_question(1_000).is_none());
+        let q = gate.copy_question(3_200_000_000).unwrap();
+        assert_eq!(
+            q.text,
+            "Trashing copies 3.2 GB to another drive. Go on? y or n"
+        );
+        assert!(within_cells(
+            &q.text,
+            "Trashing copies 3.2 GB to another drive"
+        ));
+        assert!(!TrashGate::Allowed.asks_first(u64::MAX));
+        let network = TrashFacts {
+            network_path: true,
+            ..copying
+        };
+        assert_eq!(trash_gate(&network, TrashRules::OTHER), TrashGate::Network);
+        let windows_stick = trash_gate(&copying, TrashRules::WINDOWS);
+        assert_eq!(windows_stick, TrashGate::NoTrashHere(VolumeKind::Removable));
+    }
+
+    #[test]
+    fn the_freedesktop_rule_copies_only_off_the_home_volume_without_its_own_trash() {
+        let home = Path::new("/");
+        let usb = Path::new("/media/ada/USB");
+        assert!(copies_across_drives(usb, Some(home), false));
+        assert!(
+            !copies_across_drives(usb, Some(home), true),
+            "its own trash"
+        );
+        assert!(
+            !copies_across_drives(home, Some(home), false),
+            "the home volume"
+        );
+        assert!(
+            !copies_across_drives(usb, None, false),
+            "home unknown: no question"
+        );
     }
 
     #[test]
