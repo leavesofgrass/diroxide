@@ -19,6 +19,15 @@ list_windows = 800
 list_other = 300
 stat_windows = 800
 stat_other = 300
+# The search scenarios (alpha.3, W3s): the plan's starting budgets for a
+# warm search of the 1 GB tree (research/alpha3-plan.md, "Search speed on
+# a 1 GB tree"): names in 0.6 seconds and contents in 1.5 seconds on
+# Linux, two and a half times those on Windows. Each run includes
+# starting diro. Report-only until a baseline is saved.
+search_name_windows = 1500
+search_name_other = 600
+search_content_windows = 3750
+search_content_other = 1500
 
 # The full run.
 [full]

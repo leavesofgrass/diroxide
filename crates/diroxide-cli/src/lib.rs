@@ -3,7 +3,8 @@
 //! - `diro [PATH] [OTHER]`: open the panels at PATH and OTHER.
 //! - `diro serve --stdio`: the app core over JSON-RPC, the protocol the
 //!   plugins speak, for tests, scripts and other programs.
-//! - `diro search ROOT PATTERN`: search names, printing one place a line.
+//! - `diro search PLACE [EXPRESSION]`: search by name, kind, size, date and
+//!   contents in the filter language, one row a hit, the name first.
 //! - `diro ls [PLACE]` and `diro ls -`: list a place, or the paths on
 //!   standard input, one entry a line, the name first.
 //! - `diro completions SHELL`: the completion script for bash, zsh, fish
@@ -45,13 +46,8 @@ pub enum Invocation {
     Open(OpenOptions),
     /// Serve the app core over JSON-RPC.
     Serve,
-    /// Search names.
-    Search {
-        /// Where to start.
-        root: String,
-        /// The name pattern.
-        pattern: String,
-    },
+    /// Search by name, kind, size, date and contents.
+    Search(Box<cmd::search::SearchArgs>),
     /// Plugin tooling.
     Plugin(cmd::plugin::PluginCommand),
     /// List a place, or the paths on standard input.
@@ -122,7 +118,7 @@ pub fn help_text() -> String {
         "Usage:",
         "diro [PATH] [OTHER]       open the panels at PATH and OTHER",
         "diro serve --stdio        serve the app over JSON-RPC on standard input and output",
-        "diro search ROOT PATTERN  print the places under ROOT whose names match PATTERN",
+        "diro search PLACE [EXPRESSION]  find by name, kind, size, date and contents",
         "diro ls [PLACE]           list a folder, one entry a line, the name first",
         "diro ls -                 list the NUL-separated paths on standard input",
         "diro completions SHELL    print the completion script for bash, zsh, fish or powershell",
@@ -155,7 +151,7 @@ pub fn help_text() -> String {
         "2  wrong use, such as an unknown option",
         "3  partly done: some items failed; the output says which",
         "",
-        "diro ls --help gives the options of diro ls; diro archive --help those of diro archive.",
+        "diro ls --help gives the options of diro ls; diro search --help and diro archive --help theirs.",
     ]
     .join("\n")
 }
@@ -231,14 +227,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
             Some(other) => Err(CliError::UnknownOption(other.to_owned())),
             None => Err(CliError::Missing("serve".to_owned())),
         },
-        "search" => match &args[1..] {
-            [root, pattern] => Ok(Invocation::Search {
-                root: root.clone(),
-                pattern: pattern.clone(),
-            }),
-            [_, _, ..] => Err(CliError::TooMany("search".to_owned())),
-            _ => Err(CliError::Missing("search".to_owned())),
-        },
+        "search" => cmd::search::parse(&args[1..]).map(|a| Invocation::Search(Box::new(a))),
         "plugin" => cmd::plugin::parse(&args[1..]).map(Invocation::Plugin),
         "ls" => cmd::ls::parse(&args[1..]).map(Invocation::Ls),
         "completions" => cmd::completions::parse(&args[1..]).map(Invocation::Completions),
@@ -270,7 +259,7 @@ pub fn run(
         }
         Invocation::Open(options) => open::run(&options, out),
         Invocation::Serve => serve::run(input, out),
-        Invocation::Search { root, pattern } => cmd::search::run(&root, &pattern, out),
+        Invocation::Search(args) => cmd::search::run(&args, out),
         Invocation::Plugin(command) => cmd::plugin::run(&command, out),
         Invocation::Ls(args) => cmd::ls::run(&args, input, out),
         Invocation::Completions(args) => cmd::completions::run(args, out),
@@ -355,7 +344,7 @@ mod tests {
             Err(CliError::TooMany("b".into()))
         );
         assert_eq!(
-            parse(args(&["search", "x"])),
+            parse(args(&["search"])),
             Err(CliError::Missing("search".into()))
         );
     }

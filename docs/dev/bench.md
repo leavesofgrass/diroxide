@@ -37,6 +37,10 @@ Each line of the output starts with the scenario and its median, then the budget
 - `archive-zip`, `archive-tar` and `archive-7z`: list a zip, a tar and a 7z of 100,000 empty members through the archive provider, timed from the open to the last entry: opening the archive, building its index and listing every member. Each run opens a new provider, so no run reads another's cached index. The archives are packed first by diroxide's own pack runner, outside the timing.
 - `unpack`: unpack a zip holding one 200 MB file through the unpack runner, planned and run, into a new folder each run. The second line gives the rate.
 - `viewer`: open a 256 MB text log in the viewer and draw its first screen of 24 rows, in screen-reader mode, through the app's viewer itself.
+- `search-name`: search the 1 GB search tree (100,000 files in 5,000 folders, written once per run from `bench/search-tree.toml`, the small one with `--quick`) for the 1,000 files whose names hold its hit word, through `diro search --null`. Each run starts `diro`, so the starting time is in the figure. The plan's starting budget is 0.6 seconds warm on Linux and 1.5 seconds on Windows.
+- `search-content`: search the same tree's contents for the hit word, the same way: 1,000 files, the binaries skipped. The starting budget is 1.5 seconds on Linux and 3.75 seconds on Windows.
+
+The search scenarios run `diro search` because xtask may not depend on the search crate yet; each checks that it found exactly the tree's hits.
 
 The archive scenarios call the archive provider and its runners directly, since xtask may depend on the archive crate (P2b, W2g's request 1); before that they ran the `diro` binary, so the first figures below include starting `diro` and writing every path, and the next baseline is the one to compare with.
 

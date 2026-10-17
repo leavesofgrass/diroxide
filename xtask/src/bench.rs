@@ -21,6 +21,10 @@
 //!   planned and run, the rate said.
 //! - `viewer`: open a 256 MB text log in the viewer and draw its first
 //!   screen, in screen-reader mode.
+//! - `search-name` and `search-content`: search the 1 GB tree of
+//!   `bench/search-tree.toml` (its small form with `--quick`) by name and
+//!   by contents through `diro search`, from the start of the process to
+//!   its end (alpha.3, W3s).
 //!
 //! The archive scenarios call the archive provider and its runners
 //! directly (P2b, W2g's request 1): the archives are packed by diroxide's
@@ -102,6 +106,14 @@ pub struct Budgets {
     pub stat_windows: u64,
     /// Reading every entry's details, elsewhere.
     pub stat_other: u64,
+    /// A name search of the search tree, on Windows.
+    pub search_name_windows: u64,
+    /// A name search of the search tree, elsewhere.
+    pub search_name_other: u64,
+    /// A content search of the search tree, on Windows.
+    pub search_content_windows: u64,
+    /// A content search of the search tree, elsewhere.
+    pub search_content_other: u64,
 }
 
 /// `bench/params.toml`.
@@ -192,7 +204,7 @@ pub struct Options {
 }
 
 /// The scenario ids, in the order they run.
-pub const SCENARIOS: [&str; 11] = [
+pub const SCENARIOS: [&str; 13] = [
     "list",
     "stat",
     "list-stat",
@@ -204,6 +216,8 @@ pub const SCENARIOS: [&str; 11] = [
     "archive-7z",
     "unpack",
     "viewer",
+    "search-name",
+    "search-content",
 ];
 
 /// The archive listings: their id, the archive's name and its kind in
@@ -627,6 +641,106 @@ pub fn run_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
             times,
             None,
             "24 rows, screen-reader mode".to_owned(),
+        ));
+    }
+
+    if wanted(setting, &["search-name", "search-content"]) {
+        outcomes.extend(search_scenarios(setting)?);
+    }
+    Ok(outcomes)
+}
+
+/// The search scenarios (alpha.3, W3s): the search tree written once
+/// (the small one with `--quick`), then searched by name and by contents
+/// through `diro search --null`, each run timed from the start of the
+/// process to its end and checked against the tree's known count of
+/// hits. The bench calls `diro` because xtask may not depend on the
+/// search crate yet (W3s's contract change request).
+fn search_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
+    let mut outcomes = Vec::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .context("the workspace root could not be found")?;
+    let quick = setting.sizes == &setting.params.quick;
+    let tree_params = sample::tree_params(root, quick)?;
+    let tree = setting.work.join("search-tree");
+    println!(
+        "bench: writing the search tree, {} files in {} folders.",
+        grouped(tree_params.files),
+        grouped(tree_params.folders)
+    );
+    let started = Instant::now();
+    let facts = sample::write_search_tree(&tree, &tree_params)?;
+    println!(
+        "bench: wrote {} in {}.",
+        human_size(facts.bytes),
+        time_words(millis(started.elapsed()))
+    );
+    let diro = diro_binary(root)?;
+    let tree_text = tree.to_string_lossy().into_owned();
+    let budgets = &setting.params.budgets_ms;
+    let windows = cfg!(windows);
+    let name_expression = format!("name {}*", tree_params.hit_word);
+    let scenarios = [
+        (
+            "search-name",
+            vec![
+                "search",
+                tree_text.as_str(),
+                name_expression.as_str(),
+                "--null",
+            ],
+            format!("Search {} files by name", grouped(facts.files)),
+            if windows {
+                budgets.search_name_windows
+            } else {
+                budgets.search_name_other
+            },
+        ),
+        (
+            "search-content",
+            vec![
+                "search",
+                tree_text.as_str(),
+                "--content",
+                tree_params.hit_word.as_str(),
+                "--null",
+            ],
+            format!("Search {} of files by contents", human_size(facts.bytes)),
+            if windows {
+                budgets.search_content_windows
+            } else {
+                budgets.search_content_other
+            },
+        ),
+    ];
+    for (id, args, label, budget) in scenarios {
+        if !wanted(setting, &[id]) {
+            continue;
+        }
+        let mut found = 0;
+        let times = measure(setting.params.runs, |_| {
+            let started = Instant::now();
+            let output = run_diro(&diro, &tree, &args, b"")?;
+            let elapsed = started.elapsed();
+            found = output.split(|b| *b == 0).filter(|p| !p.is_empty()).count() as u64;
+            if found != facts.hit_files {
+                bail!(
+                    "diro search found {found}, and the tree holds {} hits",
+                    facts.hit_files
+                );
+            }
+            Ok(elapsed)
+        })?;
+        outcomes.push(outcome(
+            id,
+            label,
+            times,
+            Some(budget),
+            format!(
+                "{} found, through diro search, the process included",
+                grouped(found)
+            ),
         ));
     }
     Ok(outcomes)
