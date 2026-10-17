@@ -71,6 +71,11 @@ pub enum Effect {
     OpenExternally(Place),
     /// Put places on the clipboard, for other file managers.
     SetClipboard(Vec<Place>),
+    /// Put text on the system clipboard: a path or a name from the
+    /// viewer's Copy Path and Copy Name (W2d's request 3, P2b). A frontend
+    /// effect, since each frontend owns its clipboard: the terminal can set
+    /// it with its own escape sequence, the window through the platform.
+    SetClipboardText(String),
     /// Leave the program.
     Quit,
     /// The app has queued requests of its own for its runtime: work whose
@@ -93,6 +98,7 @@ impl Effect {
                 | Effect::Announce(_)
                 | Effect::OpenDialog(_)
                 | Effect::CloseDialog(_)
+                | Effect::SetClipboardText(_)
                 | Effect::Quit
         )
     }
@@ -108,6 +114,12 @@ mod tests {
         assert!(Effect::Announce(Message::info("Copied.")).is_for_frontend());
         assert!(!Effect::CancelJob(JobId::new(1)).is_for_frontend());
         assert!(!Effect::AppRequests.is_for_frontend());
+        let text = Effect::SetClipboardText("report.txt".into());
+        assert!(text.is_for_frontend(), "each frontend owns its clipboard");
+        assert!(!Effect::SetClipboard(Vec::new()).is_for_frontend());
+        let json = serde_json::to_string(&text).unwrap();
+        assert_eq!(json, r#"{"set-clipboard-text":"report.txt"}"#);
+        assert_eq!(serde_json::from_str::<Effect>(&json).unwrap(), text);
         let json = serde_json::to_string(&Effect::AppRequests).unwrap();
         assert_eq!(json, "\"app-requests\"");
         assert_eq!(

@@ -5,7 +5,7 @@
 
 use diroxide_core::format::grouped;
 use diroxide_core::names::display_name;
-use diroxide_core::{Message, Place};
+use diroxide_core::{Effect, Message, Place};
 use diroxide_vfs::Registry;
 
 use super::{RowPos, Viewer, ViewerSource};
@@ -131,20 +131,22 @@ impl Viewer {
         (self.place.clone(), Message::info(said))
     }
 
-    /// The viewed file's full path as text, for the clipboard, and what to
-    /// say: "Path copied: D:\docs\report.txt".
-    pub fn copy_path(&self) -> (String, Message) {
+    /// The viewed file's full path on the clipboard
+    /// ([`Effect::SetClipboardText`], P2b), and what to say: "Path copied:
+    /// D:\docs\report.txt".
+    pub fn copy_path(&self) -> (Effect, Message) {
         let path = self.place.to_string();
         let said = format!("Path copied: {}", display_name(&path));
-        (path, Message::info(said))
+        (Effect::SetClipboardText(path), Message::info(said))
     }
 
-    /// The viewed file's name, for the clipboard: "Name copied:
+    /// The viewed file's name on the clipboard
+    /// ([`Effect::SetClipboardText`], P2b), and what to say: "Name copied:
     /// report.txt".
-    pub fn copy_name(&self) -> (String, Message) {
+    pub fn copy_name(&self) -> (Effect, Message) {
         let name = self.place.name().unwrap_or_default().to_owned();
         let said = format!("Name copied: {}", self.name);
-        (name, Message::info(said))
+        (Effect::SetClipboardText(name), Message::info(said))
     }
 }
 
@@ -207,14 +209,16 @@ mod tests {
         let (place, said) = viewer.show_in_folder();
         assert_eq!(said.text, "folder, report-3.txt");
         assert_eq!(place.name(), Some("report-3.txt"));
-        let (name, said) = viewer.copy_name();
-        assert_eq!(
-            (name.as_str(), said.text.as_str()),
-            ("report-3.txt", "Name copied: report-3.txt")
-        );
-        let (path, said) = viewer.copy_path();
+        let (effect, said) = viewer.copy_name();
+        assert_eq!(effect, Effect::SetClipboardText("report-3.txt".into()));
+        assert_eq!(said.text, "Name copied: report-3.txt");
+        let (effect, said) = viewer.copy_path();
+        let Effect::SetClipboardText(path) = effect else {
+            panic!("the path goes on the clipboard as text: {effect:?}");
+        };
         assert!(path.ends_with("report-3.txt"), "{path}");
         assert!(said.text.starts_with("Path copied: "));
+        assert!(Effect::SetClipboardText(path).is_for_frontend());
         let mut alone = super::super::tests::memory(b"x");
         assert_eq!(
             texts(&alone.next_file(&registry)),
