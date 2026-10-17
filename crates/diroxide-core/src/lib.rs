@@ -28,7 +28,7 @@ pub mod secret;
 pub mod sort;
 
 pub use clock::{CivilTime, Clock, FixedClock, SystemClock, Timestamp, UtcOffset, Weekday};
-pub use command::{ArgValue, Command, CommandId};
+pub use command::{ArgValue, Command, CommandId, CommandTextError};
 pub use details::{DetailGroup, DetailRow};
 pub use effect::{Effect, PluginCall, Redraw};
 pub use entry::{Attributes, Entry, EntryKind, Link};
