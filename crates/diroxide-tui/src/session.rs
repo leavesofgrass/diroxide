@@ -16,6 +16,9 @@
 //!   drawn once.
 //! - After a program had the terminal (the editor, a shell, a command),
 //!   the whole screen is drawn again.
+//! - Text the app puts on the clipboard (the viewer's Copy Path and Copy
+//!   Name) goes to the clipboard sink, which the real terminal points at
+//!   the terminal's clipboard sequence (OSC 52).
 //! - After a frame, a changed row that holds a character two cells wide
 //!   is sent again from that character to the row's end, each cell placed
 //!   on its own (ratatui issue 2651: no release after 0.30.2 carries the
@@ -58,6 +61,40 @@ pub(crate) fn backend_error(error: impl std::fmt::Display) -> TuiError {
 /// Sets the terminal's title; the real terminal's loop gives one.
 pub type TitleSink = Box<dyn FnMut(&str)>;
 
+/// Puts text on the system clipboard ([`Effect::SetClipboardText`]: the
+/// viewer's Copy Path and Copy Name); the real terminal's loop gives one,
+/// which writes the terminal's clipboard sequence ([`osc52`]).
+pub type ClipboardSink = Box<dyn FnMut(&str)>;
+
+/// The terminal's clipboard sequence for a text (OSC 52): the text in
+/// base64 between `ESC ] 52 ; c ;` and the bell, so no character of it
+/// can reach the terminal as a control. Terminals that do not know the
+/// sequence ignore it.
+pub fn osc52(text: &str) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4 + 8);
+    out.push_str("\u{1b}]52;c;");
+    for chunk in bytes.chunks(3) {
+        let n = chunk.len();
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let v = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= n {
+                out.push(char::from(ALPHABET[((v >> (18 - 6 * i)) & 63) as usize]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out.push('\u{7}');
+    out
+}
+
 /// One running screen: the app, its runtime and a terminal.
 pub struct Session<'a, B: Backend> {
     app: &'a mut App,
@@ -84,6 +121,8 @@ pub struct Session<'a, B: Backend> {
     resent: Vec<u16>,
     title: String,
     title_sink: Option<TitleSink>,
+    clipboard_sink: Option<ClipboardSink>,
+    clipboard: Vec<String>,
     said: Vec<Message>,
     quit: bool,
 }
@@ -131,6 +170,8 @@ impl<'a, B: Backend> Session<'a, B> {
             resent: Vec::new(),
             title: String::new(),
             title_sink: None,
+            clipboard_sink: None,
+            clipboard: Vec::new(),
             said: Vec::new(),
             quit: false,
         }
@@ -154,6 +195,17 @@ impl<'a, B: Backend> Session<'a, B> {
     pub fn with_title_sink(mut self, sink: TitleSink) -> Self {
         self.title_sink = Some(sink);
         self
+    }
+
+    /// The same session putting copied text on the system clipboard.
+    pub fn with_clipboard_sink(mut self, sink: ClipboardSink) -> Self {
+        self.clipboard_sink = Some(sink);
+        self
+    }
+
+    /// Every text put on the clipboard so far, in order.
+    pub fn clipboard_texts(&self) -> &[String] {
+        &self.clipboard
     }
 
     /// The flag a terminal hook sets when it takes the terminal back from
@@ -258,6 +310,12 @@ impl<'a, B: Backend> Session<'a, B> {
                     self.redraw = true;
                 }
                 Effect::Quit => self.quit = true,
+                Effect::SetClipboardText(text) => {
+                    if let Some(sink) = self.clipboard_sink.as_mut() {
+                        sink(&text);
+                    }
+                    self.clipboard.push(text);
+                }
                 _ => self.redraw = true,
             }
         }
@@ -545,5 +603,48 @@ impl<'a, B: Backend> Session<'a, B> {
             self.title = title;
         }
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use diroxide_app::AppOptions;
+    use diroxide_core::Place;
+    use ratatui::backend::TestBackend;
+
+    use super::*;
+
+    #[test]
+    fn the_clipboard_sequence_is_base64_between_its_markers() {
+        let esc = char::from(0x1b);
+        let bell = char::from(7);
+        assert_eq!(osc52("Man"), format!("{esc}]52;c;TWFu{bell}"));
+        assert_eq!(osc52("Ma"), format!("{esc}]52;c;TWE={bell}"));
+        assert_eq!(osc52("M"), format!("{esc}]52;c;TQ=={bell}"));
+        assert_eq!(osc52(""), format!("{esc}]52;c;{bell}"));
+        let hostile = format!("a{esc}[2J");
+        let sent = osc52(&hostile);
+        assert_eq!(sent.matches(esc).count(), 1, "only the opening marker");
+        assert!(!sent.contains("[2J"));
+    }
+
+    #[test]
+    fn a_text_for_the_clipboard_goes_to_the_sink() {
+        let here = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let mut app = App::new(AppOptions::new(here.clone(), here));
+        let mut runtime = Runtime::with_local();
+        let terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        let got = Arc::new(Mutex::new(Vec::new()));
+        let sink_got = Arc::clone(&got);
+        let mut s = Session::new(&mut app, &mut runtime, terminal, TuiOptions::default())
+            .with_clipboard_sink(Box::new(move |text| {
+                sink_got.lock().unwrap().push(text.to_owned());
+            }));
+        let now = Instant::now();
+        s.carry(vec![Effect::SetClipboardText("notes.txt".to_owned())], now);
+        assert_eq!(s.clipboard_texts(), ["notes.txt"]);
+        assert_eq!(*got.lock().unwrap(), ["notes.txt"]);
     }
 }
