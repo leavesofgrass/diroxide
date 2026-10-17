@@ -14,27 +14,20 @@
 //! Dirsize walks with filters off. Duplicates go by size, then a fast
 //! hash, then a full comparison (alpha.8).
 
+mod engine;
 mod hit;
-#[allow(
-    dead_code,
-    reason = "the search runs through the walkers from the next commit"
-)]
 mod local_entry;
 mod query;
 mod sink;
 mod summary;
-#[allow(
-    dead_code,
-    reason = "the search runs through the walkers from the next commit"
-)]
 mod walk;
 
-use diroxide_core::filter::{Evaluator, Lookup, Truth};
 use diroxide_core::format::{count, human_size};
-use diroxide_core::{Clock, Entry, EntryKind, Explain, ListModel, Place, SystemClock};
+use diroxide_core::{EntryKind, Explain, ListModel, Place, SystemClock};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
+pub use engine::run_search;
 pub use hit::{ContentMatch, SearchHit};
 pub use query::{
     ContentPattern, DEFAULT_ROW_CAP, NamePattern, OnlineOnly, RowShape, SNAPSHOT_FOLDERS, Scope,
@@ -123,113 +116,6 @@ fn wildcard(glob: &[char], name: &[char]) -> bool {
         }
     }
     glob[g..].iter().all(|&c| c == '*')
-}
-
-/// The facts a search knows about an entry beyond the entry itself: its
-/// path and its depth.
-struct Facts<'a> {
-    path: &'a str,
-    depth: u32,
-}
-
-impl Lookup for Facts<'_> {
-    fn path(&self, _: &Entry) -> Option<String> {
-        Some(self.path.to_owned())
-    }
-
-    fn depth(&self, _: &Entry) -> Option<u32> {
-        Some(self.depth)
-    }
-}
-
-/// Searches, handing each hit to `sink` as it is found, and returns the
-/// summary. Date words in the expression are read against `clock` once,
-/// when the search starts.
-pub fn run_search(
-    query: &SearchQuery,
-    registry: &Registry,
-    clock: &dyn Clock,
-    control: &SearchControl,
-    sink: &mut dyn SearchSink,
-) -> Result<SearchSummary, SearchError> {
-    if query.scope.places.is_empty() {
-        return Err(SearchError::NoPlaces);
-    }
-    let evaluator = query.filter.as_ref().map(|f| f.evaluator(clock));
-    let hidden = query.searches_hidden();
-    let depth_limit = query.depth_limit();
-    let ctx = control.op_context();
-    let mut summary = SearchSummary {
-        row_cap: query.scope.row_cap,
-        ..SearchSummary::default()
-    };
-    let only = query.scope.places.len() == 1;
-    for root in &query.scope.places {
-        let provider = registry.resolve(root)?;
-        let mut pending = vec![(root.clone(), 0u32)];
-        let mut first = true;
-        while let Some((folder, depth)) = pending.pop() {
-            if control.checkpoint() {
-                summary.cancelled = true;
-                return Ok(summary);
-            }
-            let entries = match provider.list(&folder, &ctx) {
-                Ok(entries) => entries,
-                Err(VfsError::Cancelled) => {
-                    summary.cancelled = true;
-                    return Ok(summary);
-                }
-                Err(error) if first && only => return Err(error.into()),
-                Err(_) => {
-                    summary.unreadable += 1;
-                    continue;
-                }
-            };
-            first = false;
-            summary.folders += 1;
-            for entry in entries {
-                let depth = depth + 1;
-                if entry.hidden && !hidden {
-                    summary.skipped.hidden += 1;
-                    continue;
-                }
-                let Ok(place) = folder.join(&entry.name) else {
-                    summary.skipped.odd_names += 1;
-                    continue;
-                };
-                summary.entries += 1;
-                if entry.kind == EntryKind::Folder && depth_limit.is_none_or(|max| depth < max) {
-                    pending.push((place.clone(), depth));
-                }
-                let truth = decide(evaluator.as_ref(), &entry, &place, depth);
-                match truth {
-                    Truth::Yes => {
-                        summary.hits += 1;
-                        if query.scope.row_cap.is_none_or(|cap| summary.shown < cap) {
-                            summary.shown += 1;
-                            let hit = SearchHit::new(place, entry).with_depth(depth);
-                            if sink.found(hit).is_break() {
-                                control.cancel();
-                            }
-                        }
-                    }
-                    Truth::Unknown(why) => summary.add_unknown(why, 1),
-                    Truth::No => {}
-                }
-            }
-        }
-    }
-    Ok(summary)
-}
-
-fn decide(evaluator: Option<&Evaluator>, entry: &Entry, place: &Place, depth: u32) -> Truth {
-    match evaluator {
-        Some(evaluator) => {
-            let path = place.to_string();
-            evaluator.test(entry, &Facts { path: &path, depth })
-        }
-        None => Truth::Yes,
-    }
 }
 
 /// Searches, sending each hit to `found` as it is found (Phase 0's form):

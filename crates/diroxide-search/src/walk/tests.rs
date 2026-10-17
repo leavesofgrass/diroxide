@@ -160,6 +160,7 @@ fn walk_with(fixture: &Fixture, options: &Options) -> (BTreeSet<String>, WalkSta
         skip_places: &[],
         metadata: true,
         control: &control,
+        live: &Live::default(),
     };
     let seen = Arc::new(Mutex::new(BTreeSet::new()));
     let visitor = Collect {
@@ -349,6 +350,7 @@ fn a_visitor_can_stop_the_walk() {
             skip_places: &[],
             metadata: false,
             control: &control,
+            live: &Live::default(),
         };
         let count = Arc::new(Mutex::new(0));
         let stats = run(&plan, &Registry::with_local(), &|| {

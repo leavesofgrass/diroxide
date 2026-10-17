@@ -1,4 +1,11 @@
-//! Integration tests of search's contract.
+//! Integration tests of search's contract. Tests that write use a folder
+//! under the target directory (`CARGO_TARGET_TMPDIR`); the fake place
+//! never touches a disk.
+
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod engine;
+mod fake;
 
 use diroxide_core::Place;
 use diroxide_search::dirsize;

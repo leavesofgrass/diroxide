@@ -26,8 +26,9 @@ mod tests;
 
 use std::borrow::Cow;
 use std::ops::ControlFlow;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 
 use diroxide_core::{Entry, Place};
 use diroxide_vfs::{Provider, Registry, VfsError, VolumeKind};
@@ -87,14 +88,6 @@ impl Candidate {
             }
         }
     }
-
-    /// The local path, when the candidate has one.
-    pub(crate) fn local_path(&self) -> Option<&Path> {
-        match &self.location {
-            Location::Local(path) => Some(path),
-            Location::Place(..) => None,
-        }
-    }
 }
 
 /// A start of the walk: its place and, for a local place, its path.
@@ -147,6 +140,19 @@ pub(crate) struct WalkPlan<'a> {
     pub(crate) metadata: bool,
     /// Cancel and pause.
     pub(crate) control: &'a SearchControl,
+    /// The counts the progress line reads while the walk runs.
+    pub(crate) live: &'a Live,
+}
+
+/// What a walk has done so far, read by the progress line from another
+/// thread.
+#[derive(Debug, Default)]
+pub(crate) struct Live {
+    /// Folders read so far.
+    pub(crate) folders: AtomicU64,
+    /// Folders being listed right now through a provider: what a stop
+    /// leaves behind when a read is blocked.
+    pub(crate) listing: AtomicU64,
 }
 
 impl WalkPlan<'_> {

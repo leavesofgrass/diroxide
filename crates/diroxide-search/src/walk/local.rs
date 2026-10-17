@@ -178,6 +178,7 @@ impl<V: Visitor> ParallelVisitor for Thread<'_, V> {
         let is_dir = dent.file_type().is_some_and(|t| t.is_dir());
         if depth == 0 && is_dir {
             self.stats.folders += 1;
+            self.plan.live.folders.fetch_add(1, Ordering::Relaxed);
             return WalkState::Continue;
         }
         let is_link = dent.path_is_symlink();
@@ -204,6 +205,7 @@ impl<V: Visitor> ParallelVisitor for Thread<'_, V> {
                 }
             } else {
                 self.stats.folders += 1;
+                self.plan.live.folders.fetch_add(1, Ordering::Relaxed);
             }
         } else if is_link
             && entry

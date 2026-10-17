@@ -247,7 +247,10 @@ fn work<V: Visitor>(shared: &Shared<'_>, mut visitor: V) {
             shared.done(Vec::new());
             break;
         }
-        let entries = match job.provider.list(&job.place, &ctx) {
+        plan.live.listing.fetch_add(1, Ordering::Relaxed);
+        let listed = job.provider.list(&job.place, &ctx);
+        plan.live.listing.fetch_sub(1, Ordering::Relaxed);
+        let entries = match listed {
             Ok(entries) => entries,
             Err(VfsError::Cancelled) => {
                 shared.done(Vec::new());
@@ -260,6 +263,7 @@ fn work<V: Visitor>(shared: &Shared<'_>, mut visitor: V) {
             }
         };
         stats.folders += 1;
+        plan.live.folders.fetch_add(1, Ordering::Relaxed);
         let ignores = if plan.ignore_files && job.provider.scheme() != "archive" {
             IgnoreLevel::read(
                 job.ignores.clone(),

@@ -56,10 +56,6 @@ pub struct Skips {
 
 impl Skips {
     /// Adds another thread's counts.
-    #[allow(
-        dead_code,
-        reason = "the search runs through the walkers from the next commit"
-    )]
     pub(crate) fn add(&mut self, other: &Skips) {
         self.hidden += other.hidden;
         self.ignore_files |= other.ignore_files;
