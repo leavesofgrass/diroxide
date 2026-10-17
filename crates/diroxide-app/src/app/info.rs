@@ -242,6 +242,7 @@ impl App {
             (Layer::Panel, "In a panel"),
             (Layer::List, "In any list"),
             (Layer::Viewer, "In the viewer"),
+            (Layer::Preview, "In the preview"),
             (Layer::Dialog, "In a question"),
         ];
         let mut keyless: Vec<&commands::CommandInfo> = Vec::new();
