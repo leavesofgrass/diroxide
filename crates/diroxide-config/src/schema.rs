@@ -268,7 +268,7 @@ const HEX_ROWS: &[Choice] = &[
 
 /// The default of `split_presets`, as TOML: the built-in table of
 /// [`crate::presets::BUILTIN_SPLIT_PRESETS`], which a test keeps equal.
-pub const SPLIT_PRESETS_DEFAULT: &str = r#"[{ name = "Email attachment", bytes = 18000000 }, { name = "GitHub file limit", bytes = 104857600 }, { name = "CD", bytes = 737280000, headroom_percent = 1 }, { name = "FAT32's largest file", bytes = 4294967295 }, { name = "DVD", bytes = 4700372992, headroom_percent = 1 }, { name = "Blu-ray", bytes = 25025314816, headroom_percent = 1 }, { name = "Floppy", bytes = 1474560, headroom_percent = 1 }]"#;
+pub const SPLIT_PRESETS_DEFAULT: &str = r#"[{ name = "Email attachment", bytes = 18000000 }, { name = "GitHub file limit", bytes = 104857600 }, { name = "CD", bytes = 737280000, headroom_percent = 1 }, { name = "FAT32's largest file", bytes = 4294967295 }, { name = "DVD", bytes = 4700372992, headroom_percent = 1 }, { name = "Blu-ray", bytes = 25025314816, headroom_percent = 1 }, { name = "Floppy", bytes = 1457664 }]"#;
 
 const WEEK_STARTS: &[Choice] = &[
     choice("sunday", "Sunday"),
@@ -1020,7 +1020,7 @@ pub const SCHEMA: [SettingInfo; 77] = [
         group: G::Archives,
         kind: K::SplitPresets,
         default: SPLIT_PRESETS_DEFAULT,
-        help: "The sizes Split offers, each a use and its size in bytes. Presets you add as [[split_presets]] tables follow these, and one with a built-in name replaces it. Email attachment: 18,000,000 bytes, a 25 MB mail limit after base64 adds about 37 percent (RFC 2045). GitHub file limit: 104,857,600 bytes, its 100 MiB limit. CD: 737,280,000 bytes, an 80-minute CD-R. FAT32's largest file: 4,294,967,295 bytes, 4 GiB less one byte. DVD: 4,700,372,992 bytes, a single-layer DVD+R. Blu-ray: 25,025,314,816 bytes, a single layer. Floppy: 1,474,560 bytes, a formatted 1.44 MB disk. The disc and floppy sizes keep 1 percent free for the file system.",
+        help: "The sizes Split offers, each a use and its size in bytes. Presets you add as [[split_presets]] tables follow these, and one with a built-in name replaces it. Email attachment: 18,000,000 bytes, a 25 MB mail limit after base64 adds about 37 percent (RFC 2045). GitHub file limit: 104,857,600 bytes, its 100 MiB limit. CD: 737,280,000 bytes, an 80-minute CD-R. FAT32's largest file: 4,294,967,295 bytes, 4 GiB less one byte. DVD: 4,700,372,992 bytes, a single-layer DVD+R. Blu-ray: 25,025,314,816 bytes, a single layer. Floppy: 1,457,664 bytes, the data area of a formatted 1.44 MB disk. The disc sizes keep 1 percent free for the file system.",
         arrives: Some("alpha.2"),
     },
     SettingInfo {

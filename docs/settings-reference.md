@@ -574,7 +574,7 @@ Archives inside archives. How many archives deep a place may go, such as a zip i
 
 ### split_presets
 
-Split presets. The sizes Split offers, each a use and its size in bytes. Presets you add as [[split_presets]] tables follow these, and one with a built-in name replaces it. Email attachment: 18,000,000 bytes, a 25 MB mail limit after base64 adds about 37 percent (RFC 2045). GitHub file limit: 104,857,600 bytes, its 100 MiB limit. CD: 737,280,000 bytes, an 80-minute CD-R. FAT32's largest file: 4,294,967,295 bytes, 4 GiB less one byte. DVD: 4,700,372,992 bytes, a single-layer DVD+R. Blu-ray: 25,025,314,816 bytes, a single layer. Floppy: 1,474,560 bytes, a formatted 1.44 MB disk. The disc and floppy sizes keep 1 percent free for the file system.
+Split presets. The sizes Split offers, each a use and its size in bytes. Presets you add as [[split_presets]] tables follow these, and one with a built-in name replaces it. Email attachment: 18,000,000 bytes, a 25 MB mail limit after base64 adds about 37 percent (RFC 2045). GitHub file limit: 104,857,600 bytes, its 100 MiB limit. CD: 737,280,000 bytes, an 80-minute CD-R. FAT32's largest file: 4,294,967,295 bytes, 4 GiB less one byte. DVD: 4,700,372,992 bytes, a single-layer DVD+R. Blu-ray: 25,025,314,816 bytes, a single layer. Floppy: 1,457,664 bytes, the data area of a formatted 1.44 MB disk. The disc sizes keep 1 percent free for the file system.
 
 - Holds: a list of presets, each with a name, its size in bytes and the percent kept free.
 - Default: the built-in presets, each with its source:
@@ -584,7 +584,7 @@ Split presets. The sizes Split offers, each a use and its size in bytes. Presets
   - FAT32's largest file, 4 GiB less one byte. Parts of 4,294,967,295 bytes. 4,294,967,295 bytes: 4 GiB less one byte, the most FAT32's 32-bit size field holds.
   - DVD, 4.7 GB. Capacity 4,700,372,992 bytes, parts of 4,653,369,262, 1 percent kept free. 4,700,372,992 bytes: a single-layer DVD+R, 2,295,104 sectors of 2,048 bytes, the smaller of the two DVD figures.
   - Blu-ray, 25 GB. Capacity 25,025,314,816 bytes, parts of 24,775,061,667, 1 percent kept free. 25,025,314,816 bytes: a single-layer Blu-ray disc, 12,219,392 sectors of 2,048 bytes.
-  - Floppy, 1.44 MB. Capacity 1,474,560 bytes, parts of 1,459,814, 1 percent kept free. 1,474,560 bytes: a formatted 1.44 MB floppy, 80 tracks on 2 sides of 18 sectors of 512 bytes.
+  - Floppy, 1.44 MB. Parts of 1,457,664 bytes. 1,457,664 bytes: the data area of a formatted 1.44 MB floppy, 2,847 clusters of 512 bytes, the raw 1,474,560 less the boot sector, two FATs and the root folder.
 - Add your own, after the built-in ones:
 
 ```toml

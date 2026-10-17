@@ -2,7 +2,8 @@
 //! the sizes Split offers, each a use and its size in bytes, said use
 //! first ("Email attachment, 18.0 MB"). The built-in table holds published
 //! figures, each with its source, tied to the figure by a test; the
-//! optical and floppy sizes keep one percent free for the file system.
+//! optical sizes keep one percent free for the file system; the floppy
+//! preset is the formatted disk's data area, with nothing more kept free.
 //!
 //! `config.toml` may add presets as `[[split_presets]]` tables, each with
 //! a `name`, `bytes` and an optional `headroom_percent`. They are listed
@@ -156,10 +157,10 @@ pub const BUILTIN_SPLIT_PRESETS: [BuiltinPreset; 7] = [
     },
     BuiltinPreset {
         name: "Floppy",
-        bytes: 1_474_560,
-        headroom_percent: 1,
+        bytes: 1_457_664,
+        headroom_percent: 0,
         said: "1.44 MB",
-        source: "1,474,560 bytes: a formatted 1.44 MB floppy, 80 tracks on 2 sides of 18 sectors of 512 bytes",
+        source: "1,457,664 bytes: the data area of a formatted 1.44 MB floppy, 2,847 clusters of 512 bytes, the raw 1,474,560 less the boot sector, two FATs and the root folder",
     },
 ];
 
@@ -271,7 +272,7 @@ mod tests {
             ("FAT32's largest file", u64::from(u32::MAX)),
             ("DVD", 2_295_104 * SECTOR),
             ("Blu-ray", 12_219_392 * SECTOR),
-            ("Floppy", 80 * 2 * 18 * 512),
+            ("Floppy", 2_847 * 512),
         ];
         assert_eq!(BUILTIN_SPLIT_PRESETS.len(), figures.len());
         for (builtin, (name, figure)) in BUILTIN_SPLIT_PRESETS.iter().zip(figures) {
@@ -287,10 +288,15 @@ mod tests {
         }
         assert_eq!(4 * KIB * MIB - 1, 4_294_967_295, "4 GiB less one byte");
         assert_eq!(1_474_560 / 1_024, 1_440, "the 1.44 MB of a floppy");
+        assert_eq!(
+            (80 * 2 * 18 - 1 - 9 * 2 - 14) * 512,
+            1_457_664,
+            "the data area: the raw sectors less the boot sector, two FATs and the root folder"
+        );
     }
 
     #[test]
-    fn the_optical_and_floppy_presets_keep_one_percent_free() {
+    fn the_optical_presets_keep_one_percent_free() {
         let dvd = BUILTIN_SPLIT_PRESETS[4].preset();
         assert_eq!(dvd.part_bytes(), 4_653_369_262);
         assert_eq!(
@@ -298,7 +304,7 @@ mod tests {
             "Capacity 4,700,372,992 bytes, parts of 4,653,369,262, 1 percent kept free"
         );
         for builtin in &BUILTIN_SPLIT_PRESETS {
-            let optical = matches!(builtin.name, "CD" | "DVD" | "Blu-ray" | "Floppy");
+            let optical = matches!(builtin.name, "CD" | "DVD" | "Blu-ray");
             assert_eq!(
                 builtin.headroom_percent,
                 u8::from(optical),
