@@ -23,6 +23,12 @@
 //!   headings"; "Preview: main.rs, Rust, 412 lines"; "Preview: big.log,
 //!   first 1 MiB of 2.0 GB"; "No preview: photo.png, PNG image, 2.0 MB";
 //!   "Quick view on" and "Quick view off".
+//! - **Tab enters it as a region** (`region`): the document as a list in
+//!   the list model, moved through by line, heading, paragraph, table
+//!   and cell, links and find, with the safe opener rule for links.
+//! - **"Open in textweaver"** hands the file to `tw` through the tools
+//!   registry ([`QuickView::open_in_textweaver`]), or says how to install
+//!   it.
 //!
 //! How a frontend drives it, as W2d's viewer is driven: every command is
 //! a plain method that returns the [`Message`]s to say, in order, and
@@ -33,6 +39,7 @@
 //! panel's watch.
 
 mod region;
+mod textweaver;
 mod worker;
 
 #[cfg(test)]
@@ -56,6 +63,7 @@ use diroxide_vfs::{CancelToken, Registry, WatchEvent};
 
 use region::Region;
 pub use region::{LinkTarget, Outcome, QuickViewRequest};
+pub use textweaver::TEXTWEAVER;
 use worker::{Answer, Rendered, Request, Shared, Worker};
 
 /// What the quick view reads from the settings.
