@@ -9,6 +9,9 @@ publish.workspace = true
 
 [dependencies]
 diroxide-core.workspace = true
+# The viewer's decoder (byte-order mark, encoding) and its safe form of a
+# line, so the compare reads and shows text exactly as the viewer does.
+diroxide-preview.workspace = true
 # The cancel token every run honors, and (with the driver) the provider
 # reads of two files.
 diroxide-vfs.workspace = true

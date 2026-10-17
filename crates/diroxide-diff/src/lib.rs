@@ -22,14 +22,23 @@
 //! (after), and Swap turns the direction around ([`TextComparison::swapped`]).
 
 pub mod change;
+pub mod content;
 mod engine;
 pub mod error;
+pub mod explain;
+pub mod facts;
+mod forms;
 mod lines;
 pub mod options;
 pub mod text;
+pub mod words;
 
 pub use change::{Change, ChangeKind, Counts};
+pub use content::{ContentComparison, compare_contents};
 pub use error::DiffError;
+pub use explain::{Delta, Reason, explain};
+pub use facts::{Endings, FactDifference, FileFacts, Sides};
 pub use lines::LineEnding;
 pub use options::{CompareOptions, Ignore, LineAlgorithm};
 pub use text::{TextComparison, compare_text};
+pub use words::{ChangeWindow, WordDiff, WordSegment, change_window, word_diff};

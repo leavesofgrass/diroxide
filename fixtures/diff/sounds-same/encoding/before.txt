@@ -1,0 +1,4 @@
+Invoice for Ada Example, Café Oxide
+items:
+	total due: 40
+paid: 0

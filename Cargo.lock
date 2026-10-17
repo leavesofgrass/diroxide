@@ -947,6 +947,7 @@ name = "diroxide-diff"
 version = "0.1.0-alpha.1"
 dependencies = [
  "diroxide-core",
+ "diroxide-preview",
  "diroxide-vfs",
  "proptest",
  "similar 3.2.0",

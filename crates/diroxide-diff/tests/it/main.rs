@@ -4,3 +4,4 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod properties;
+mod sounds_same;
