@@ -33,7 +33,7 @@ A word that is not a field name is a name test.
 
 - A bare word matches names that contain it: `report`. Several bare words must all be in the name, so `report 2026` finds names that hold both.
 - A word with `*`, `?` or `[` is a glob and must match the whole name: `*.pdf`, `IMG_????.jpg`, `[abc].txt`. The star and the question mark never cross a folder separator. In a `path` test, two stars cross folders: `path **/src/*.rs`.
-- A comma joins values of one test and means either: `*.txt, *.md`, or `ext pdf, docx`. A space after the comma is fine. A comma binds tighter than a space, so `report 2026, *.pdf` means the name holds report, and also holds 2026 or matches `*.pdf`.
+- A comma joins values of one test and means either: `*.txt, *.md`, or `ext pdf, docx`. A space after the comma is fine, and a semicolon works as a comma. A comma binds tighter than a space, so `report 2026, *.pdf` means the name holds report, and also holds 2026 or matches `*.pdf`.
 - A slash at either end of a name limits it to folders, as a gitignore file does: `build/`.
 - `re:` before a word reads the rest as a regular expression, searched anywhere in the name: `re:^IMG_\d{4}`. Use quotes if the pattern holds a space. diroxide uses Rust's regular expressions, so look-around and backreferences are refused with a sentence that says how to write it another way: "Filter problem: look-around not allowed", then "Match the text around it too: for a v before a digit, write v\d." A pattern is at most 1,000 characters.
 - `like` is a flexible match, for when you remember a name loosely: `name like "rprt"`.
@@ -220,9 +220,9 @@ A content search looks inside files. Type text in the "contains text" field, or 
 - A file that holds a NUL byte looks binary. It is skipped and counted: "6 binary files skipped." A UTF-16 file with a byte-order mark is searched. One without a mark holds NUL bytes and counts as binary.
 - One row per file by default, with the first matching line and a count of the others. One row per matching line is a switch, and `--lines` on the command line.
 - `first 64 KB` after a content test reads only the start of each file.
-- Online-only files are counted first, and diroxide asks: "12 files are online only, 1.4 GB to download. Skip them, download them, or cancel?" The answer starts on Skip.
+- Online-only files are never read without asking, because reading one downloads it. The ones left out are counted in the summary: "3 online-only files skipped, 1.4 GB."
 
-<!-- to confirm: the online-only question is quoted from the research plan; the wiring lane owns its wording. -->
+<!-- to confirm: the research plan has the app count online-only files first and ask "12 files are online only, 1.4 GB to download. Skip them, download them, or cancel?", with Skip as the default. W3s built the guard that asks file by file and counts afterward. Use whichever the wiring lane (W3a, commit 37) ships. -->
 
 ### Over a network
 
