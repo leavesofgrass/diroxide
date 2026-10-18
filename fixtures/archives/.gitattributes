@@ -1,2 +1,7 @@
 # Fixtures and fuzz seeds are bytes: never convert line endings.
 * -text
+# The xz project's test files (xz/SOURCES.md): bytes kept exactly as
+# fetched, their SHA-256 recorded, so binary as well (no text diffs).
+xz/*.xz binary
+xz/*.lzma binary
+xz/*.lz binary
