@@ -7,11 +7,11 @@
 
 diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, in the orthodox style of Worker and Directory Opus. Its command is `diro`. It is designed first for people who use a screen reader or a Braille display, and for anyone who works from the keyboard. Every row says what it is in its first 40 characters, status is always words, color never carries meaning alone, and every delete lists what it will remove and starts on No. It is written for Windows, Linux and macOS, with no X11 code.
 
-Status: alpha. The first alpha, 0.1.0-alpha.1, is in progress: a terminal file manager for local folders and archives, with copy, move, rename, trash and undo, a viewer and a quick view, search with a filter language, labels and bookmarks, file compare, and a list of keys you can change, with key presets; the window comes later. [Known limits](docs/known-limits.md) lists what it does not do yet.
+Status: alpha. This is alpha 1, version 0.1.0-alpha.1: a terminal file manager for local folders and archives. It has copy, move, rename, trash and undo; archives opened like folders; a viewer and a quick view; split and join; links and permissions; search with a filter language; labels and bookmarks; file compare; a list of keys you can change, with key presets; watching a folder; and command-line subcommands. The window comes in a later alpha. [Known limits](docs/known-limits.md) lists what it does not do yet, and the [accessibility statement](docs/accessibility.md) says what has been checked by ear and what has not.
 
 ## Get diro
 
-There will be two ways in: one download for each platform, and `cargo install diro`. alpha.1 offers neither yet, so you build it from source.
+There will be two ways in: one download for each platform, and `cargo install diro`. Alpha 1 offers neither yet, so you build it from source.
 
 - Build from source. You need a Rust toolchain from rustup (the repository pins the version and rustup fetches it) and the linker Rust needs on your system. In the source folder, run:
 
@@ -20,8 +20,8 @@ cargo build --release -p diro
 ```
 
 - The program is `target/release/diro`, or `diro.exe` on Windows. Put it on your PATH.
-- One file for each platform comes with alpha.6: `diro.exe` on Windows, one `diro` for macOS, and an AppImage on Linux. The builds will not be code-signed, so each platform needs one first-run step. On Windows, SmartScreen warns first: choose More info, then Run anyway. On macOS, remove the quarantine mark once with `xattr -d com.apple.quarantine`, and make the file executable with `chmod +x`. On Linux, make the AppImage executable with `chmod +x`.
-- `cargo install diro` comes at beta.1.
+- One file for each platform comes in a later alpha: `diro.exe` on Windows, one `diro` for macOS, and an AppImage on Linux. The builds will not be code-signed, so each platform needs one first-run step. On Windows, SmartScreen warns first: choose More info, then Run anyway. On macOS, remove the quarantine mark once with `xattr -d com.apple.quarantine`, and make the file executable with `chmod +x`. On Linux, make the AppImage executable with `chmod +x`.
+- `cargo install diro` comes with the first beta.
 
 [Installing diroxide](docs/install.md) has every step.
 
@@ -34,14 +34,14 @@ Run `diro` in a terminal. These keys are the same on every platform.
 3. Space marks the row and moves down. A marked row says "selected".
 4. F5 copies the marked rows, or the focused row, to the other panel. It asks first, and the answer starts on No.
 5. F2 renames the focused entry.
-6. Ctrl+P opens the command palette, a list of every command: type part of a name and press Enter. In the window, which comes with alpha.6, Ctrl+Shift+P does the same.
+6. Ctrl+P opens the command palette, a list of every command: type part of a name and press Enter. In the window, which comes in a later alpha, Ctrl+Shift+P does the same.
 7. Ctrl+Q quits.
 
 Ctrl+Z undoes the last job. Every delete, move and overwrite lists what it will touch before it asks.
 
 ## The terminal
 
-In this alpha diroxide runs in the terminal; the window comes with alpha.6. Windows Terminal is the main target, and the classic console, Linux terminals and macOS Terminal are best effort. Terminals keep some keys for themselves, so the palette and the menus reach every command: see [Terminals](docs/terminals.md).
+In alpha 1 diroxide runs in the terminal; the window comes in a later alpha. Windows Terminal is the main target, and the classic console, Linux terminals and macOS Terminal are best effort. Terminals keep some keys for themselves, so the palette and the menus reach every command: see [Terminals](docs/terminals.md).
 
 ## Screen readers
 
@@ -49,14 +49,15 @@ diroxide has no voice of its own. It writes short lines that put their meaning f
 
 ## Plugins
 
-Plugins, in any language, come with alpha.4.
+Plugins, in any language, come in a later alpha.
 
 ## Learn more
 
 - [Quick start](docs/quickstart.md) and [installing diroxide](docs/install.md).
 - [The panels](docs/panels.md), [operations and undo](docs/operations.md), [settings](docs/settings.md) and the [settings reference](docs/settings-reference.md).
 - [Archives](docs/archives.md), [the viewer](docs/viewer.md), [the quick view](docs/quick-view.md), [split and join](docs/split-join.md) and [links, permissions and times](docs/links-permissions.md).
-- [Every key](docs/keyboard.md), generated from the keymap.
+- [Search and the filter language](docs/search.md), [labels and bookmarks](docs/labels-bookmarks.md), [compare files](docs/compare.md) and [watching a folder](docs/watching.md).
+- [Every key](docs/keyboard.md), generated from the keymap, and [customizing keys](docs/customizing-keys.md).
 - [Terminals](docs/terminals.md) and [troubleshooting](docs/troubleshooting.md).
 - [Known limits](docs/known-limits.md), [privacy](docs/privacy.md) and the [accessibility statement](docs/accessibility.md).
 - [The documentation index](docs/README.md) and the [changelog](CHANGELOG.md).
