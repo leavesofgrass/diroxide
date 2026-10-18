@@ -1,0 +1,133 @@
+# Builds diro for Windows, macOS and Linux and publishes them on GitHub
+# Releases, as a pre-release while the alphas run. Started by hand with a
+# tag name, or by a pushed version tag. Plain logs, no color, so they read
+# well in a screen reader.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The tag to build and release, such as 0.1.0-alpha.1"
+        required: true
+        type: string
+  push:
+    tags:
+      - "[0-9]*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: never
+  RUST_BACKTRACE: "1"
+
+jobs:
+  build:
+    name: Build for ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+            binary: diro.exe
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+            binary: diro
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            platform: macos-aarch64
+            binary: diro
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            platform: macos-x86_64
+            binary: diro
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Install the pinned toolchain and the target
+        run: |
+          rustup toolchain install
+          rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Build diro with the dist profile
+        run: cargo build --profile dist -p diro --target ${{ matrix.target }}
+      - name: Say the version the binary reports
+        run: target/${{ matrix.target }}/dist/${{ matrix.binary }} --version
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "diro-${{ inputs.tag || github.ref_name }}-${{ matrix.platform }}"
+          New-Item -ItemType Directory -Path $name | Out-Null
+          Copy-Item -LiteralPath "target/${{ matrix.target }}/dist/${{ matrix.binary }}" -Destination $name
+          Copy-Item -LiteralPath README.md, CHANGELOG.md, LICENSE-APACHE, LICENSE-MIT, NOTICE -Destination $name
+          Copy-Item -LiteralPath docs -Destination "$name/docs" -Recurse
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+          New-Item -ItemType Directory -Path out | Out-Null
+          Move-Item -LiteralPath "$name.zip" -Destination out
+          Get-ChildItem out
+      - name: Package (macOS and Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="diro-${{ inputs.tag || github.ref_name }}-${{ matrix.platform }}"
+          mkdir -p "$name" out
+          cp "target/${{ matrix.target }}/dist/${{ matrix.binary }}" "$name/"
+          cp README.md CHANGELOG.md LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
+          cp -R docs "$name/docs"
+          tar -czf "out/$name.tar.gz" "$name"
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums and release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          cd assets
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+          cd ..
+          # The changelog's section for this tag, without its heading.
+          awk -v tag="$tag" '
+            /^## /{ if (on) exit; on = ($2 == tag) ; next }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "No changelog section for $tag" >&2; exit 1; fi
+          printf '\nThe archives hold the diro program, the guides and the licenses. Checksums are in SHA256SUMS. The macOS and Linux programs are not signed: on macOS, allow it once under Privacy and Security after the first start is blocked.\n' >> notes.md
+          cat notes.md
+      - name: Create the pre-release and upload the assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          gh release create "$tag" --prerelease --title "diroxide $tag" --notes-file notes.md --verify-tag assets/*
+          gh release view "$tag" --json assets --jq '.assets[].name'
