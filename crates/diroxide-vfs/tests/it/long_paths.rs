@@ -24,6 +24,30 @@ fn a_tree_of_1300_characters_works_end_to_end() {
     let provider = LocalProvider::new();
     let ctx = OpContext::new();
     let top = place_of(&folder);
+    // macOS caps a path at 1,024 bytes, and the provider refuses past it in
+    // words rather than letting the system fail; the end-to-end tree of
+    // 1,300 characters is for Windows (with the extended prefix) and Linux.
+    if cfg!(target_os = "macos") {
+        let mut place = top.clone();
+        let mut refused = None;
+        for level in 0..40 {
+            let next = place.join(&level_name(level)).unwrap();
+            match provider.create_dir(&next, &ctx) {
+                Ok(_) => place = next,
+                Err(error) => {
+                    refused = Some((level, error));
+                    break;
+                }
+            }
+        }
+        let (level, error) = refused.expect("macOS refuses a path past 1,024 bytes");
+        assert!(level >= 30, "refused already at level {level}");
+        assert!(
+            matches!(error, diroxide_vfs::VfsError::NameInvalid),
+            "{error:?}"
+        );
+        return;
+    }
     let mut levels = vec![top.clone()];
     for level in 0..40 {
         let next = levels[level].join(&level_name(level)).unwrap();
