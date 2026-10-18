@@ -4,7 +4,7 @@ Status: Accepted, Friday, October 16, 2026 (the Wave 1 contract, P0b, from resea
 
 ## Context
 
-From alpha.2 on, diroxide asks for passwords and passphrases: an encrypted zip or 7z, an SSH key or host (the SFTP plugin), an encrypted file. The owner reads with a screen reader and a Braille display, so a masked field must say what it is for and still let the owner check what was typed. A password that reaches a log, a debug print, a saved job or a crash report is a leak. Phase 0 kept a `Secret` and a `PasswordPrompt` inside the SFTP crate, where the archive provider and the encryption jobs could not use them; the provider trait had no way to ask; `VfsError` had no word for "a password is needed"; and `Dialog::Prompt` kept its text in a plain `String` that derives `Debug`.
+From the plan's alpha.2 on (which ships as part of alpha 1), diroxide asks for passwords and passphrases: an encrypted zip or 7z, an SSH key or host (the SFTP plugin), an encrypted file. The owner reads with a screen reader and a Braille display, so a masked field must say what it is for and still let the owner check what was typed. A password that reaches a log, a debug print, a saved job or a crash report is a leak. Phase 0 kept a `Secret` and a `PasswordPrompt` inside the SFTP crate, where the archive provider and the encryption jobs could not use them; the provider trait had no way to ask; `VfsError` had no word for "a password is needed"; and `Dialog::Prompt` kept its text in a plain `String` that derives `Debug`.
 
 ## Decision
 

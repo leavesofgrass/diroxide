@@ -96,9 +96,9 @@ cargo xtask sample-folder D:\dirocheck
 cargo xtask search-tree D:\searchtree
 ```
 
-The search tree is the 1 GB, 100,000-file tree of alpha.3's search spike, with a known number of hits; its parameters are in `bench/search-tree.toml`, and `--small` writes a 300-file one.
+The search tree is the 1 GB, 100,000-file tree of the plan's alpha.3 search spike, with a known number of hits; its parameters are in `bench/search-tree.toml`, and `--small` writes a 300-file one.
 
-The demo set of the alpha.2 check goes in a new or empty folder on drive D: with a plain name, and nowhere else:
+The demo set of the plan's alpha.2 check goes in a new or empty folder on drive D: with a plain name, and nowhere else:
 
 ```bash
 cargo xtask demo D:/demo
@@ -108,7 +108,7 @@ It writes `course.zip`, `backup.7z` (solid), `logs.tar.xz`, `locked.zip` (AES-25
 
 ## The search spike
 
-The search lane's spike (alpha.3) times the walkers and the search on the 1 GB search tree, compares them with `rg` when `rg` is on PATH, and lists a slow place, a stand-in for a network share, at 1, 2, 4 and 8 threads. Write the tree once, then run the spike on it in an optimized build:
+The search lane's spike (the plan's alpha.3) times the walkers and the search on the 1 GB search tree, compares them with `rg` when `rg` is on PATH, and lists a slow place, a stand-in for a network share, at 1, 2, 4 and 8 threads. Write the tree once, then run the spike on it in an optimized build:
 
 ```bash
 cargo xtask search-tree D:\searchtree

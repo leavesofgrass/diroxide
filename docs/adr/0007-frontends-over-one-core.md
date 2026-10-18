@@ -38,7 +38,7 @@ R4 found that a side-by-side screen mixes both panels in every line a screen rea
 
 ## Consequences
 
-- `diro PATH` opened one screen and returned in Phase 0; since W1d-2 (Friday, October 16, 2026) it opens the full terminal screen on the alternate screen, `--inline` is the fallback viewport, and `--gui` says the window comes with alpha.6 and opens the terminal.
+- `diro PATH` opened one screen and returned in Phase 0; since W1d-2 (Friday, October 16, 2026) it opens the full terminal screen on the alternate screen, `--inline` is the fallback viewport, and `--gui` says the window comes later and opens the terminal (the plan's alpha.6 is the window).
 - The scripted terminal test in Wave 1 drives `App` and `Runtime` and reads the rendered lines.
 
 ## See also
