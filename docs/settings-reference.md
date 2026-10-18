@@ -289,7 +289,6 @@ Code colors. Colors code in the viewer. Auto colors it except in screen reader m
 - `auto`: colors, except in screen reader mode.
 - `on`: colors.
 - `off`: no colors.
-- Comes with alpha.2.
 
 ### thumbnails
 
@@ -323,7 +322,6 @@ Wrap long lines. Continues a line longer than the screen on the next rows, each 
 
 - Holds: true or false.
 - Default: `true`.
-- Comes with alpha.2.
 
 ### viewer.wrap_width
 
@@ -331,7 +329,6 @@ Wrap width. Where long lines wrap: 0 wraps at the width of the screen, and a num
 
 - Holds: a number of characters, 0 to 1000.
 - Default: `0`.
-- Comes with alpha.2.
 
 ### viewer.line_numbers
 
@@ -339,7 +336,6 @@ Line numbers. Starts each line in the viewer with its number. The line's number 
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with alpha.2.
 
 ### viewer.follow
 
@@ -347,7 +343,6 @@ Follow a growing file. Reads more of a file as it grows, as a log does, and stay
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with alpha.2.
 
 ### viewer.hex_row
 
@@ -358,7 +353,6 @@ Hex row width. How many bytes a row of hex shows. Eight fit a 40-cell Braille li
 - `auto`: eight bytes in screen reader mode, sixteen otherwise.
 - `narrow`: eight bytes, a row within a Braille line.
 - `wide`: sixteen bytes.
-- Comes with alpha.2.
 
 ### viewer.member_cache_mib
 
@@ -366,7 +360,6 @@ Archive file memory. How much of a file inside an archive the viewer keeps decod
 
 - Holds: a number of MiB, 1 to 4096.
 - Default: `64`.
-- Comes with alpha.2.
 
 ### viewer.highlight_max_kib
 
@@ -374,7 +367,6 @@ Code colors up to. Code colors stay off for a larger file, and the status line s
 
 - Holds: a number of KiB, 1 to 65536.
 - Default: `512`.
-- Comes with alpha.2.
 
 ### viewer.highlight_max_lines
 
@@ -382,7 +374,6 @@ Code colors up to lines. Code colors stay off for a file with more lines than th
 
 - Holds: a number of lines, 100 to 1000000.
 - Default: `10000`.
-- Comes with alpha.2.
 
 ### viewer.highlight_max_line_chars
 
@@ -390,7 +381,6 @@ Code colors line limit. A line longer than this keeps no colors, so one huge lin
 
 - Holds: a number of characters, 100 to 100000.
 - Default: `2000`.
-- Comes with alpha.2.
 
 ### viewer.highlight_deadline_ms
 
@@ -398,7 +388,6 @@ Code colors time limit. How long finding the code colors may take. Past it they 
 
 - Holds: a number of milliseconds, 100 to 60000.
 - Default: `2000`.
-- Comes with alpha.2.
 
 ### quick_view.wait_ms
 
@@ -406,7 +395,6 @@ Quick view wait. How long the quick view waits after the cursor stops before it 
 
 - Holds: a number of milliseconds, 0 to 5000.
 - Default: `500`.
-- Comes with alpha.2.
 
 ### quick_view.max_kib
 
@@ -414,7 +402,6 @@ Quick view reads up to. The most of a file the quick view reads. Past it, the qu
 
 - Holds: a number of KiB, 16 to 65536.
 - Default: `1024`.
-- Comes with alpha.2.
 
 ### quick_view.deadline_ms
 
@@ -422,7 +409,6 @@ Quick view time limit. How long reading a document may take. Past it, the quick 
 
 - Holds: a number of milliseconds, 100 to 60000.
 - Default: `2000`.
-- Comes with alpha.2.
 
 ### quick_view.follow_changes
 
@@ -430,7 +416,6 @@ Quick view follows changes. Shows the file again when it changes on disk, such a
 
 - Holds: true or false.
 - Default: `true`.
-- Comes with alpha.2.
 
 ### quick_view.line_numbers
 
@@ -438,7 +423,6 @@ Quick view line numbers. Starts each line of plain text and code in the quick vi
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with alpha.2.
 
 ## Archives and split
 
@@ -448,7 +432,6 @@ Largest member. Asks before reading one member larger than this, or one behind t
 
 - Holds: a number of GiB, 1 to 1048576.
 - Default: `8`.
-- Comes with alpha.2.
 
 ### archives.ask_total_gib
 
@@ -456,7 +439,6 @@ Ask above this total. Asks before an unpack or a test that would write out more 
 
 - Holds: a number of GiB, 1 to 1048576.
 - Default: `32`.
-- Comes with alpha.2.
 
 ### archives.max_total_gib
 
@@ -464,7 +446,6 @@ Refuse above this total. Refuses an operation that would expand to more than thi
 
 - Holds: a number of GiB, 1 to 1048576.
 - Default: `1024`.
-- Comes with alpha.2.
 
 ### archives.max_ratio
 
@@ -472,7 +453,6 @@ Largest expansion. Asks when one member grows more than this many times its pack
 
 - Holds: a number of times its packed size, 10 to 1000000.
 - Default: `1000`.
-- Comes with alpha.2.
 
 ### archives.ratio_floor_mib
 
@@ -480,7 +460,6 @@ Expansion judged after. How much one member writes before its expansion is judge
 
 - Holds: a number of MiB, 1 to 65536.
 - Default: `64`.
-- Comes with alpha.2.
 
 ### archives.ask_dictionary_mib
 
@@ -488,7 +467,6 @@ Ask above this dictionary. Asks before opening a 7z or xz archive whose decoder 
 
 - Holds: a number of MiB, 1 to 65536.
 - Default: `256`.
-- Comes with alpha.2.
 
 ### archives.max_dictionary_mib
 
@@ -496,7 +474,6 @@ Largest dictionary. Refuses a larger dictionary, 7-Zip's own most, before any me
 
 - Holds: a number of MiB, 1 to 65536.
 - Default: `1536`.
-- Comes with alpha.2.
 
 ### archives.max_header_mib
 
@@ -504,7 +481,6 @@ Largest header. Refuses an archive whose header or list of contents is larger th
 
 - Holds: a number of MiB, 1 to 65536.
 - Default: `256`.
-- Comes with alpha.2.
 
 ### archives.max_index_mib
 
@@ -512,7 +488,6 @@ Largest member list. Refuses to list an archive whose members would take more me
 
 - Holds: a number of MiB, 1 to 65536.
 - Default: `256`.
-- Comes with alpha.2.
 
 ### archives.max_entries
 
@@ -520,7 +495,6 @@ Most members. Refuses an archive with more members than this. A million covers t
 
 - Holds: a number of members, 1000 to 100000000.
 - Default: `1000000`.
-- Comes with alpha.2.
 
 ### archives.max_name_bytes
 
@@ -528,7 +502,6 @@ Longest member name. Skips a member whose full name is longer than this and says
 
 - Holds: a number of bytes, 255 to 65536.
 - Default: `4096`.
-- Comes with alpha.2.
 
 ### archives.max_component_bytes
 
@@ -536,7 +509,6 @@ Longest name part. Skips a member with a folder or file name longer than this an
 
 - Holds: a number of bytes, 64 to 4096.
 - Default: `255`.
-- Comes with alpha.2.
 
 ### archives.max_link_target_bytes
 
@@ -544,7 +516,6 @@ Longest link target. Skips a link inside an archive whose target is longer than 
 
 - Holds: a number of bytes, 255 to 65536.
 - Default: `4096`.
-- Comes with alpha.2.
 
 ### archives.max_memory_mib
 
@@ -552,7 +523,6 @@ Most decoder memory. Refuses an operation whose decoder would need more memory t
 
 - Holds: a number of MiB, 16 to 65536.
 - Default: `1024`.
-- Comes with alpha.2.
 
 ### archives.spool_memory_mib
 
@@ -560,7 +530,6 @@ Inner archive in memory. Keeps an archive inside an archive in memory up to this
 
 - Holds: a number of MiB, 1 to 4096.
 - Default: `64`.
-- Comes with alpha.2.
 
 ### archives.spool_disk_gib
 
@@ -568,7 +537,6 @@ Inner archive spool. The most one operation may write to the spool folder for ar
 
 - Holds: a number of GiB, 1 to 1024.
 - Default: `4`.
-- Comes with alpha.2.
 
 ### archives.max_nesting
 
@@ -576,7 +544,6 @@ Archives inside archives. How many archives deep a place may go, such as a zip i
 
 - Holds: a number of levels, 1 to 8.
 - Default: `4`.
-- Comes with alpha.2.
 
 ### archives.ask_read_ahead_mib
 
@@ -584,7 +551,6 @@ Ask before reading ahead. Asks before one member of a tar.gz, a tar.xz or a soli
 
 - Holds: a number of MiB, 1 to 1048576.
 - Default: `256`.
-- Comes with alpha.2.
 
 ### archives.spool_folder
 
@@ -592,7 +558,6 @@ Spool folder. Where an archive inside an archive is kept while it is open, when 
 
 - Holds: text.
 - Default: `""`.
-- Comes with alpha.2.
 
 ### split_presets
 
@@ -615,7 +580,6 @@ name = "Zip disk"
 bytes = 100663296
 ```
 
-- Comes with alpha.2.
 
 ## Search and filter
 
