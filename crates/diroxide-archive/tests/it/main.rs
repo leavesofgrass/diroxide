@@ -30,6 +30,7 @@ mod test_run;
 mod unpack_plan;
 mod unpack_run;
 mod world;
+mod xz_project;
 mod xz_read;
 mod zip_read;
 

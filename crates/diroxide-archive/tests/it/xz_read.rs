@@ -1,19 +1,19 @@
 //! xz and tar.xz through the provider (commit 17), with research
-//! archives.md section 3's four gates, the fixtures built by the encoder
-//! at test time in place of the xz project's test files (whose download
-//! waits for the owner's approval):
+//! archives.md section 3's four gates. Gate one runs on the xz project's
+//! own test files in `xz_project.rs`; the cases here are built with the
+//! encoder at test time for what those small files do not cover:
 //!
-//! 1. Good streams decode (every check type, several blocks, a BCJ
-//!    filter, concatenated streams, stream padding, an empty stream); bad
-//!    ones fail without a large allocation (cut at every 4 KiB, a flipped
-//!    byte, padding that is not a multiple of four, trailing garbage);
-//!    unsupported ones fail as unsupported (a reserved check type, an
-//!    unknown filter).
+//! 1. Good streams of real data decode at three presets, in many blocks of
+//!    many LZMA2 chunks, and through a BCJ filter; a plain xz is sized by
+//!    the indexes of several streams; a tar inside lists as the tar it is.
 //! 2. Interoperability with the `xz` program, when `DIRO_CROSS_CHECK=1`
 //!    is set and `xz` is on PATH.
 //! 3. A decode-speed figure for the report.
-//! 4. Hostile input: the cuts and the flip above, and a block whose
-//!    dictionary is over the cap refused before the allocation.
+//! 4. Hostile input: a cut at every 4 KiB is never a short success;
+//!    padding of three bytes after a stream of data is refused by the
+//!    provider though the crate takes it; a block whose dictionary is over
+//!    the cap is refused before the allocation, and one over the soft
+//!    limit asks first.
 
 use std::io::{Read, Write};
 use std::time::Instant;
@@ -22,7 +22,7 @@ use diroxide_archive::{Allowances, ArchiveError, Limits};
 use diroxide_vfs::{OpContext, Provider};
 use lzma_rust2::{CheckType, FilterType, XzOptions, XzReader, XzWriter};
 
-use crate::build::{crc, noise, tar_of, xz};
+use crate::build::{noise, tar_of, xz};
 use crate::hostile::patch_xz_dictionary;
 use crate::memory::{Peak, mib};
 use crate::world::World;
@@ -81,46 +81,32 @@ fn read_single(world: &World, name: &str, bytes: &[u8]) -> Result<Vec<u8>, Strin
 }
 
 #[test]
-fn gate_one_good_streams_decode() {
+fn gate_one_good_streams_of_real_data_decode() {
     let world = World::plain();
     let data = sample(300_000);
     let cases: Vec<(&str, Vec<u8>)> = vec![
         ("preset 0", xz_with(&data, 0, CheckType::Crc64, None, false)),
         ("preset 1", xz_with(&data, 1, CheckType::Crc64, None, false)),
         ("preset 6", xz_with(&data, 6, CheckType::Crc64, None, false)),
-        ("no check", xz_with(&data, 1, CheckType::None, None, false)),
-        ("CRC-32", xz_with(&data, 1, CheckType::Crc32, None, false)),
-        ("SHA-256", xz_with(&data, 1, CheckType::Sha256, None, false)),
         (
             "many blocks",
             xz_with(&data, 1, CheckType::Crc64, Some(32 << 10), false),
         ),
         ("BCJ x86", xz_with(&data, 1, CheckType::Crc64, None, true)),
-        ("empty", xz_with(b"", 1, CheckType::Crc64, None, false)),
     ];
     for (name, bytes) in cases {
-        let want: &[u8] = if name == "empty" { b"" } else { &data };
         assert_eq!(
             decode(&bytes, &Limits::default()).as_deref(),
-            Ok(want),
+            Ok(&data[..]),
             "{name}"
         );
         let read = read_single(&world, "sample.xz", &bytes);
-        assert_eq!(read.as_deref(), Ok(want), "{name} through the provider");
+        assert_eq!(
+            read.as_deref(),
+            Ok(&data[..]),
+            "{name} through the provider"
+        );
     }
-    // Two streams one after another, with padding between and after.
-    let mut joined = xz(b"first ", 1);
-    joined.extend_from_slice(&[0; 4]);
-    joined.extend_from_slice(&xz(b"second", 1));
-    joined.extend_from_slice(&[0; 8]);
-    assert_eq!(
-        decode(&joined, &Limits::default()).as_deref(),
-        Ok(&b"first second"[..])
-    );
-    assert_eq!(
-        read_single(&world, "joined.xz", &joined).as_deref(),
-        Ok(&b"first second"[..])
-    );
 }
 
 #[test]
@@ -172,12 +158,14 @@ fn a_tar_xz_lists_and_reads() {
 }
 
 #[test]
-fn gate_one_and_four_bad_streams_fail_without_a_large_allocation() {
+fn gate_four_cuts_and_padding_fail_without_a_large_allocation() {
     let data = noise(64 << 10, 9);
     let whole = xz(&data, 0);
     let limits = Limits::strict();
+    let world = World::new(limits);
     let peak = Peak::start();
-    // Cut at every 4 KiB: never a short success.
+    // Cut at every 4 KiB: never a short success, alone or through the
+    // provider.
     let mut at = 4096;
     while at < whole.len() {
         let result = decode(&whole[..at], &limits);
@@ -186,18 +174,15 @@ fn gate_one_and_four_bad_streams_fail_without_a_large_allocation() {
             "cut at {at} decoded {:?} bytes",
             result.map(|d| d.len())
         );
+        let error = read_single(&world, "cut.xz", &whole[..at]).unwrap_err();
+        assert!(error.starts_with("it is damaged"), "cut at {at}: {error}");
         at += 4096;
     }
-    // A flipped byte in the data fails the check or the decoder.
-    let mut flipped = whole.clone();
-    let middle = flipped.len() / 2;
-    flipped[middle] ^= 0x55;
-    assert!(decode(&flipped, &limits).is_err());
-    // Padding that is not a multiple of four, and garbage after the end:
-    // the provider refuses both. lzma-rust2 0.21 alone accepts the three
-    // bytes of padding (a gate finding: the provider holds the rule).
-    let world = World::new(limits);
-    let mut padded = whole.clone();
+    // Padding that is not a multiple of four: the provider refuses it.
+    // lzma-rust2 0.21 alone accepts the three bytes after a stream of
+    // data (a gate finding: the provider holds the rule). A flipped byte
+    // and data after the end are the xz project's bad files now.
+    let mut padded = whole;
     padded.extend_from_slice(&[0; 3]);
     assert!(
         decode(&padded, &limits).is_ok(),
@@ -208,52 +193,8 @@ fn gate_one_and_four_bad_streams_fail_without_a_large_allocation() {
         error.contains("padding is not a multiple of four"),
         "{error}"
     );
-    let mut garbage = whole.clone();
-    garbage.extend_from_slice(b"GARBAGE!");
-    assert!(decode(&garbage, &limits).is_err());
-    let error = read_single(&world, "garbage.xz", &garbage).unwrap_err();
-    assert!(error.starts_with("it is damaged"), "{error}");
     let peak = peak.stop();
     assert!(peak < 512 << 20, "{:.0} MiB", mib(peak));
-}
-
-/// Patches the stream flags' check type, in the header and the footer,
-/// and fixes both CRCs.
-fn with_check_type(mut bytes: Vec<u8>, check: u8) -> Vec<u8> {
-    bytes[7] = check;
-    let header_crc = crc(&bytes[6..8]);
-    bytes[8..12].copy_from_slice(&header_crc.to_le_bytes());
-    let footer = bytes.len() - 12;
-    bytes[footer + 9] = check;
-    let footer_crc = crc(&bytes[footer + 4..footer + 10]);
-    bytes[footer..footer + 4].copy_from_slice(&footer_crc.to_le_bytes());
-    bytes
-}
-
-#[test]
-fn gate_one_unsupported_streams_fail_as_unsupported() {
-    let world = World::plain();
-    let reserved = with_check_type(xz(b"checked by nothing known", 1), 0x02);
-    let error = decode(&reserved, &Limits::default()).unwrap_err();
-    assert!(error.contains("which is not supported"), "{error}");
-    let through = read_single(&world, "reserved.xz", &reserved).unwrap_err();
-    assert!(through.contains("not supported"), "{through}");
-    // An unknown filter id in the block header.
-    let mut filtered = xz(b"filtered by nothing known", 1);
-    let block = 12;
-    let header_size = (usize::from(filtered[block]) + 1) * 4;
-    let at = filtered[block..block + header_size]
-        .windows(2)
-        .position(|w| w == [0x21, 0x01])
-        .unwrap();
-    filtered[block + at] = 0x3F;
-    let sum = crc(&filtered[block..block + header_size - 4]);
-    filtered[block + header_size - 4..block + header_size].copy_from_slice(&sum.to_le_bytes());
-    let error = decode(&filtered, &Limits::default()).unwrap_err();
-    assert!(
-        error.contains("not supported") || error.starts_with("it is damaged"),
-        "{error}"
-    );
 }
 
 #[test]

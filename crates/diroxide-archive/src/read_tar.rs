@@ -139,11 +139,9 @@ pub(crate) fn decoder(
     match wrapper {
         Wrapper::Plain => Box::new(counted),
         Wrapper::Gzip => Box::new(GzStream::new(counted, trailing)),
-        Wrapper::Xz { mem_limit_kb } => Box::new(lzma_rust2::XzReader::new_mem_limit(
-            counted,
-            true,
-            mem_limit_kb,
-        )),
+        Wrapper::Xz { mem_limit_kb } => {
+            Box::new(crate::read_xz::Decoder::new(counted, mem_limit_kb))
+        }
     }
 }
 
