@@ -25,7 +25,7 @@ What you need:
 
 Everything else diroxide uses is pure Rust. A C compiler is needed only for those crates, and `cargo xtask native --check` checks that nothing else in the build asks for one.
 
-In the source folder, build the program:
+Get the source with git (`git clone https://github.com/leavesofgrass/diroxide`) or as the tagged archive from the repository's releases page, then, in its folder, build the program:
 
 ```bash
 cargo build --release -p diro

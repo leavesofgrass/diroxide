@@ -13,7 +13,7 @@ Status: alpha. This is alpha 1, version 0.1.0-alpha.1: a terminal file manager f
 
 There will be two ways in: one download for each platform, and `cargo install diro`. Alpha 1 offers neither yet, so you build it from source.
 
-- Build from source. You need a Rust toolchain from rustup (the repository pins the version and rustup fetches it) and the linker Rust needs on your system. In the source folder, run:
+- Build from source. You need a Rust toolchain from rustup (the repository pins the version and rustup fetches it) and the linker Rust needs on your system. Clone the repository, `https://github.com/leavesofgrass/diroxide`, and in its folder run:
 
 ```bash
 cargo build --release -p diro
