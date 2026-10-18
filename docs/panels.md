@@ -22,7 +22,7 @@ In screen-reader mode the other panel is redrawn only when you ask, whatever the
 - The rows of the panel follow. There is no ".." row; Left, Backspace and Alt+Up go to the parent. At the top of a drive, diroxide says "At the top already".
 - The status line gives the latest message with its key fact first. A move of the cursor does not change it. Between messages, Ctrl+D tells you where you are.
 - The jobs line says what jobs are doing, or "No jobs".
-- The key bar is the last line. It names the function keys in words: "F2 Rename  F3 View  F4 Edit  F5 Copy". Since alpha.2 it is drawn in every mode, screen-reader mode included. The `key_bar` setting turns it off, and the compact setting hides it. The Say key bar command in the Help menu (Alt+H, then K) reads it to you.
+- The key bar is the last line. It names the function keys in words: "F2 Rename  F3 View  F4 Edit  F5 Copy". It is drawn in every mode, screen-reader mode included. The `key_bar` setting turns it off, and the compact setting hides it. The Say key bar command in the Help menu (Alt+H, then K) reads it to you.
 - Prompts and their candidate lists appear at the bottom of the screen, in the minibuffer. In screen-reader mode a candidate list is drawn only when you move into it, and while you type one line says the count.
 
 The hardware cursor always sits on the focused row's first cell, so a screen reader and a Braille display follow it. In a prompt it sits where the next character will go. In an empty folder it sits on the line that says "Empty folder".
@@ -112,7 +112,7 @@ The filter speaks the filter language, the same one that select by pattern, Find
 - A filter that cannot be read is explained in two parts, each once, after the pause: "Filter problem: size needs a number", then "Word 3. Try size over 10 MB."
 - Enter keeps the filter: "Filter on, 4 of 9 shown". The title line names it: "filter: size over 1 KB and name matches *.log". Escape in the panel takes it off: "Filter off, 9 shown". So does Clear filter in the View menu or the palette.
 - Say filter (View menu, Alt+V, then Y) reads the filter back in a sentence, with the real days of words such as last week. Stash filter and Restore filter keep a filter aside and bring it back. Folders only and Files only show one kind with a single command.
-- Filters you used in alpha.1 keep their meaning. A comma now binds tighter than a space, so `report 2026, *.pdf` means report, and also 2026 or a PDF. A name that starts with a bracket or an exclamation mark has to be quoted.
+- A comma binds tighter than a space, so `report 2026, *.pdf` means report, and also 2026 or a PDF. A name that starts with a bracket or an exclamation mark has to be quoted.
 
 Hidden files have their own switch: Show hidden files, on Alt+Period, in the View menu and the palette. diroxide says "Hidden files shown" or "Hidden files not shown". It is not Ctrl+H, because terminals confuse that key with Backspace. Hidden means a name that starts with a dot on Linux and macOS, the hidden flag on macOS, and the hidden attribute on Windows. A name such as `.gitignore` is not hidden on Windows.
 
@@ -123,7 +123,7 @@ Marking picks the rows a command will act on. With no marks, a command acts on t
 - Space marks the focused row and moves down: "Selected report.pdf. 1 selected." Space on a marked row unmarks it: "Not selected report.pdf. 0 selected."
 - Ctrl+A marks every row, and diroxide says "40 items selected". Select none, invert, select by pattern and unselect by pattern are in the Select menu (Alt+S) and the palette. In the terminal, star inverts the marks, plus asks for a pattern to select and minus asks for a pattern to unselect, when single-letter keys are on. The prompt starts with `*`, so plus and then Enter marks everything. The prompt takes the filter language, so `size over 1 MB` and `modified last week` work as well as `*.pdf`. Before it marks anything it counts and asks, starting on No: "4 entries will be selected. No is the default. y or n", and then says "4 selected". ([Search and the filter language](search.md) describes the language.)
 - Ctrl+Down and Ctrl+Up go to the next and previous marked row, saying "No selected row below" or "No selected row above" at the ends.
-- Ctrl+D says the marks with their size: "3 selected, 4.2 MB. Documents, 40 items, on report.pdf, 3 of 40". Folders are not sized until a later alpha.
+- Ctrl+D says the marks with their size: "3 selected, 4.2 MB. Documents, 40 items, on report.pdf, 3 of 40". A folder has no size until it is counted. Folder sizes, in the Search menu (F9, then R, then Z), counts the marked folders or the focused one; [search](search.md) has it.
 - Restore selection (in the Select menu and the palette) brings back the marks that a select all, none, invert, pattern, finished job or change of folder replaced: "Selection restored: 31 selected."
 
 The Select menu has more ways to mark: by kind, by size, by date, the same extension, a range, and the next few rows. [Search and the filter language](search.md) describes them.

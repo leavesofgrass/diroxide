@@ -1,6 +1,6 @@
 # Quick start
 
-This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, because alpha.1 has no window yet. If you have not built diroxide yet, start with [installing diroxide](install.md).
+This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, because alpha 1 has no window yet. If you have not built diroxide yet, start with [installing diroxide](install.md).
 
 ## How keys are written
 
@@ -102,7 +102,7 @@ Press F3 on a file to read it in the viewer. Up and Down move a line, Ctrl+D say
 ## Find any command
 
 - Ctrl+P opens the command palette. Type part of a command's name and press Enter. Each entry says its name first and its key after it.
-- F9 opens the menu bar. Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. The Search menu has no Alt letter, because Alt+S is Select; open it with F9, then R. Every menu item shows its live key. The Plugins menu only says that plugins come with alpha.4.
+- F9 opens the menu bar. Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. The Search menu has no Alt letter, because Alt+S is Select; open it with F9, then R. Every menu item shows its live key. The Plugins menu only says that plugins come in a later alpha.
 - Shift+F1 or the question mark opens help: a list of commands with their keys.
 
 ## Quit

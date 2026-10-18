@@ -1,8 +1,8 @@
 # Watching a folder
 
-This guide covers Watch this folder and `diro watch`. Both tell you, in one polite line, when a new file has finished arriving in a folder: a scan that a scanner is writing, a download, a file another program is saving. It comes with alpha.3.
+This guide covers Watch this folder and `diro watch`. Both tell you, in one polite line, when a new file has finished arriving in a folder: a scan that a scanner is writing, a download, a file another program is saving.
 
-What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha.3 had been heard on a screen reader when this guide was written, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
+What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
 
 ## Why it waits
 
@@ -33,7 +33,7 @@ Other lines:
 - "Gave up waiting for app.log". A file that kept changing for an hour, such as a log. The watch goes on with the others.
 - "Close this dialog first." The watch needs the panel, not a dialog.
 
-Watching lasts for the session. Nothing is saved, moved or run. A rule that does something with each arrival comes with alpha.7.
+Watching lasts for the session. Nothing is saved, moved or run. A rule that does something with each arrival comes in a later alpha.
 
 ### What is never an arrival
 
@@ -65,7 +65,7 @@ The exit codes are 0 when watched until stopped, 1 when the folder could not be 
 
 ## Limits
 
-- On Linux and macOS there is no check for a program that still holds a file open. A producer that pauses for longer than 2 seconds is said early, and then said again as "Arrived again" with the final size. `--settle SECONDS` in the shell command is the remedy. The app has no quiet-period setting in alpha.3.
+- On Linux and macOS there is no check for a program that still holds a file open. A producer that pauses for longer than 2 seconds is said early, and then said again as "Arrived again" with the final size. `--settle SECONDS` in the shell command is the remedy. The app has no quiet-period setting in alpha 1.
 - A file renamed into the folder waits only half a second, because a producer that writes a file elsewhere and renames it in has finished. On Windows only a rename inside the watched folder gets this; a file moved in from another folder is seen as new and waits the full 2 seconds.
 - Escape pressed to clear letters you typed to find a row also stops the watch, because the typed letters are cleared before the watch sees the key.
 - A network share is checked, not watched, and its wait is long.

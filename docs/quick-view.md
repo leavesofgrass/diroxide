@@ -1,8 +1,8 @@
 # The quick view
 
-This guide covers the quick view: a live preview of the focused file in the other panel. It tells what Shift+F3 does, what diroxide says when the preview changes, how to move through a preview by heading, paragraph, table and link, how to search it, which formats it reads, and how to open the file in textweaver. The quick view comes with alpha.2.
+This guide covers the quick view: a live preview of the focused file in the other panel. It tells what Shift+F3 does, what diroxide says when the preview changes, how to move through a preview by heading, paragraph, table and link, how to search it, which formats it reads, and how to open the file in textweaver.
 
-What this guide says about the quick view comes from its design and from the tests that check each sentence. Nothing in alpha.2 had been heard on a screen reader when this guide was written, so the lines below are what the quick view is built to say.
+What this guide says about the quick view comes from its design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so the lines below are what the quick view is built to say.
 
 ## What it is
 
@@ -79,10 +79,10 @@ Slash opens the prompt "Find in the preview" and searches the preview, ignoring 
 
 ## What it reads
 
-In alpha.2 the quick view reads Markdown, plain text, code and the formats of carta.
+The quick view reads Markdown, plain text, code and the formats of carta.
 
 - Markdown, by the extensions `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn`, `.mdtxt` and `.rmd`: front matter, lists, tables, code blocks, links, footnotes and callouts are read, and math is kept as written. A title in the front matter becomes the document's title, not a heading row. Embeds, the Obsidian way of pulling in another note, are never followed. Raw HTML keeps its text and drops its tags.
-- Plain text and code: lines, with an optional line-number column (`quick_view.line_numbers`). The preview shows code as plain lines. The viewer (F3) colors it; the preview does not draw code colors in this alpha.
+- Plain text and code: lines, with an optional line-number column (`quick_view.line_numbers`). The preview shows code as plain lines. The viewer (F3) colors it; the preview does not draw code colors.
 - carta's formats, by extension: Org (`.org`), reStructuredText (`.rst`, `.rest`), MediaWiki (`.mediawiki`, `.wiki`), DokuWiki (`.dokuwiki`) and Jira (`.jira`). carta is a converter written in Rust. diroxide pins it to one exact version and never requires it. An Org `#+TITLE` becomes the document's title, not a heading row. A document that carta cannot read shows its text instead, as above.
 - Anything else: text shows as text, and bytes that are not text show as hex.
 
@@ -90,7 +90,7 @@ In the panel an Org file's row reads "file", not "Org", because the file type ta
 
 The preview reads only the file in front of it. It never follows an include or an embed to another file, because that would read a named file from anywhere on your computer. A reStructuredText include is left out and the preview says so once: "An include directive was left out, so the file it names is not read." carta's Typst reader is not in the build, for the same reason.
 
-What comes with alpha.7: DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words. Until then the quick view says "No preview" and names the kind and size.
+DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha. Until then the quick view says "No preview" and names the kind and size.
 
 A preview never blocks. A reader that takes too long stops at the `quick_view.deadline_ms` limit, 2,000 milliseconds by default: "Could not read big.org: took too long.", then "Showing the text." A reader that ran past its deadline cannot be stopped, so it is left to finish. At most three readers run at once, and when they are all busy the next file says "Could not read notes.org: an earlier document is still being read."
 

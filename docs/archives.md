@@ -1,8 +1,8 @@
 # Archives
 
-This guide covers archives: opening one like a folder, copying files out of it, unpacking, packing a selection into a new archive, testing, passwords, split archives, the limits that protect you, and the `diro archive` command. Archives come with alpha.2.
+This guide covers archives: opening one like a folder, copying files out of it, unpacking, packing a selection into a new archive, testing, passwords, split archives, the limits that protect you, and the `diro archive` command.
 
-What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha.2 had been heard on a screen reader when this guide was written, so every "you should hear" line is what diroxide is built to say. If your experience differs, that is a finding.
+What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so every "you should hear" line is what diroxide is built to say. If your experience differs, that is a finding.
 
 ## What diroxide reads and writes
 
@@ -40,7 +40,7 @@ Junk that archive tools add, such as `__MACOSX` folders and `._` files, is marke
 
 ## Archives are read only here
 
-Nothing can be changed inside an archive in alpha.2. Copy into it, move into it, rename, delete and make folder all give the same answer: "Archives are read only here. Use Pack to make a new one."
+Nothing can be changed inside an archive in alpha 1. Copy into it, move into it, rename, delete and make folder all give the same answer: "Archives are read only here. Use Pack to make a new one."
 
 To get a changed archive, pack a new one. Adding to an archive, deleting from it and renaming inside it come in a later alpha.
 
@@ -177,11 +177,11 @@ The exit codes are the family's: 0 when done, 1 when nothing was done because th
 
 ## Settings
 
-The Archives and split group of [the settings reference](settings-reference.md) holds nineteen settings: the seventeen limits above plus `archives.ask_read_ahead_mib` and `archives.spool_folder`. The `split_presets` setting is in the same group and is described in [split and join](split-join.md). An unpack keeps each member's modified time, as every copy and move keeps dates; there is no setting to turn that off in this alpha.
+The Archives and split group of [the settings reference](settings-reference.md) holds nineteen settings: the seventeen limits above plus `archives.ask_read_ahead_mib` and `archives.spool_folder`. The `split_presets` setting is in the same group and is described in [split and join](split-join.md). An unpack keeps each member's modified time, as every copy and move keeps dates; there is no setting to turn that off.
 
 ## Known gaps
 
-[Known limits](known-limits.md) lists everything alpha.2 does not do with archives. The ones you are most likely to meet: no adding to or changing an existing archive, no RAR or ISO, no progress line while a big tar.xz is listed, zip times read as UTC, and the names of older zips in Shift-JIS and other legacy encodings are not chosen yet.
+[Known limits](known-limits.md) lists everything alpha 1 does not do with archives. The ones you are most likely to meet: no adding to or changing an existing archive, no RAR or ISO, no progress line while a big tar.xz is listed, zip times read as UTC, and the names of older zips in Shift-JIS and other legacy encodings are not chosen yet.
 
 ## See also
 
