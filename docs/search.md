@@ -1,8 +1,8 @@
 # Search and the filter language
 
-This guide covers finding things in diroxide. It describes the filter language that every place that narrows a list speaks, the panel filter, select by pattern, Search and its results list, saved searches, the Space list, the newest files, and `diro search` for the command line. It comes with alpha.3.
+This guide covers finding things in diroxide. It describes the filter language that every place that narrows a list speaks, the panel filter, select by pattern, Search and its results list, saved searches, the Space list, the newest files, and `diro search` for the command line.
 
-What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha.3 had been heard on a screen reader when this guide was written, so the lines below are what diroxide is built to say, not a report of what was heard. If your experience differs, that is a finding. [The accessibility statement](accessibility.md) says what has been checked.
+What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so the lines below are what diroxide is built to say, not a report of what was heard. If your experience differs, that is a finding. [The accessibility statement](accessibility.md) says what has been checked.
 
 ## One language in five places
 
@@ -58,7 +58,7 @@ A field name, an optional colon, then a value. `ext pdf`, `ext:pdf` and `ext is 
 - `ext` (or `extension`): the extension without its dot. A comma list means either.
 - `kind`: `folder`, `file`, `link`, `archive`, `special` or `item`. A file kind also matches archives, because an archive is a file. An item is a row that is not a file, such as one a plugin lists.
 - `type`: the detected type's short name, such as `PDF`. It matches only entries whose type is already known.
-- `group`: a group of file types by extension: `images`, `music`, `video`, `documents`, `archives`, `code` and `text`. The full type model comes with alpha.7.
+- `group`: a group of file types by extension: `images`, `music`, `video`, `documents`, `archives`, `code` and `text`. The full type model comes in a later alpha.
 - `label`: a label name, or several with commas. [Labels and bookmarks](labels-bookmarks.md) describes labels.
 - `owner`: the name of the file's owner. `usergroup`: the Unix group. (The word `group` always means the group of file types.) Owner and group are compared without regard to case. A Windows listing does not carry owners.
 - `size`: a number with a unit. `depth`: how many folders below the start; direct children are 1.
@@ -373,7 +373,7 @@ Reads as: modified last week, October 4 to 10. The next lines show the tree, the
 
 - Patterns are Rust regular expressions: no look-around and no backreferences.
 - Dates use the computer's current offset from UTC, with no daylight-saving rules.
-- Types that have not been checked do not match. Groups go by extension until alpha.7.
+- Types that have not been checked do not match. Groups go by extension until the full type model arrives.
 - Owner and user group are read where the listing has them. Windows owners are not read in a listing.
 - A folder has no size until it is counted.
 - Names are compared as stored. Accents are not folded.

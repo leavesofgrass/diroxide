@@ -11,7 +11,7 @@ Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from R7, R8 C
 - **Context and errors.** `OpContext` carries a `SecretSource` (ADR-0009). `VfsError` gains R8's classes, R7's and R9's data and password errors, and `TrashRefused`, with next steps that name no key; `class()` gives the retry rules and a scope (file, rule, environment). `WatchEvent::Gone` says the shown folder went away.
 - **Names.** The superscript device names, dot names, the length check by a place's `NameRules`, refused or only flagged, `numbered_name` with compound extensions, `unused_name`, and the shared unfinished-name functions.
 
-Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2, with W1b's two held requests):
+Status update, Friday, October 16, 2026 (the plan's alpha.2 contract step, P2, with W1b's two held requests):
 
 - **The writer's unfinished place.** `FileWriter` gains a defaulted `unfinished_place`, `None` unless the writer says; the local writer answers with its `.diro-part-` file beside the target, so the journal can tie the name to its target.
 - **Links in words.** `Capabilities` gains `can_link` (links held and the place writable) and `links_in_words` ("Links can be made here", on Windows with "symbolic links may need Developer Mode", or "Cannot link here: this place holds no links"). The local provider no longer claims links on FAT and exFAT under Windows. The engine refuses a link job where the destination cannot link, before anything is touched.

@@ -1,8 +1,8 @@
 # Links, permissions and times
 
-This guide covers making links and changing where a link points, changing permissions and Windows attributes, what happens to times, and reading the details of an entry. These commands come with alpha.2. Changing the owner and setting a time by hand come with alpha.7.
+This guide covers making links and changing where a link points, changing permissions and Windows attributes, what happens to times, and reading the details of an entry. Changing the owner and setting a time by hand come in a later alpha.
 
-What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha.2 had been heard on a screen reader when this guide was written.
+What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build.
 
 ## Links
 
@@ -72,7 +72,7 @@ On Windows the rows are "Read only: off", "Hidden: off" and "Marked for backup: 
 
 If nothing would change the dialog says "Nothing to change: permissions already match."
 
-Typing an octal number or a symbolic mode, a one-key Make runnable and a list of named presets are not in this alpha.
+Typing an octal number or a symbolic mode, a one-key Make runnable and a list of named presets are not built yet.
 
 ### Apply to: the recursive option
 
@@ -113,15 +113,15 @@ The result is "Changed permissions of 12 items." and Ctrl+Z says "Undid permissi
 
 ## Times
 
-There is no Change times command in alpha.2. The engine can set the modified, created and accessed times, but the date entry dialog comes with alpha.7, along with changing the owner.
+There is no Change times command in alpha 1. The engine can set the modified, created and accessed times, but the date entry dialog comes in a later alpha, along with changing the owner.
 
 ### Copying keeps dates
 
-Copies, moves and unpacks keep the modified time of files and folders. A folder's time is set after its contents, so the copy itself never replaces it. The created time is kept on Windows and macOS, where the system can set one. Linux cannot set a created time. The accessed time is never kept. A change time is set by the system alone and cannot be copied. There is no setting to turn this off in this alpha.
+Copies, moves and unpacks keep the modified time of files and folders. A folder's time is set after its contents, so the copy itself never replaces it. The created time is kept on Windows and macOS, where the system can set one. Linux cannot set a created time. The accessed time is never kept. A change time is set by the system alone and cannot be copied. There is no setting to turn this off.
 
 ## Details: the information list
 
-Alt+Enter lists the facts about the focused entry, one fact on each row, with its name first. Windows Terminal keeps Alt+Enter; the File menu has Details as the sure way ([terminals](terminals.md)). The list is titled "Details of course.zip", and alpha.2 puts the rows the viewer and the archives need at its start:
+Alt+Enter lists the facts about the focused entry, one fact on each row, with its name first. Windows Terminal keeps Alt+Enter; the File menu has Details as the sure way ([terminals](terminals.md)). The list is titled "Details of course.zip", and the rows the viewer and the archives need come at its start:
 
 - "Type: zip archive" or "Type: PDF document". The type comes first.
 - "Size: 48 KB (49,152 bytes)". The size in words, then the exact bytes.

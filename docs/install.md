@@ -1,15 +1,15 @@
 # Installing diroxide
 
-This guide says how to get diroxide running, what is available now, and what comes later. In alpha.1 there are no download files yet, so you build the program from its source.
+This guide says how to get diroxide running, what is available now, and what comes later. In alpha 1 there are no download files yet, so you build the program from its source.
 
 ## Two ways in, and where each stands
 
 diroxide will have two ways in, and only two.
 
-- One file for each platform, from the project's releases page: `diro.exe` on Windows, one `diro` for macOS, and an AppImage on Linux. There is no archive to open and no installer. Each file comes with a line in a SHA256SUMS list and a provenance attestation, so you can check it. The Windows x86_64 file and the Linux x86_64 AppImage start with alpha.6. The macOS file, the Windows ARM64 file and the Linux aarch64 AppImage come with alpha.9.
-- `cargo install diro`, for anyone who builds from the published crate, and the way to any other shape of install on Linux. It comes at beta.1.
+- One file for each platform, from the project's releases page: `diro.exe` on Windows, one `diro` for macOS, and an AppImage on Linux. There is no archive to open and no installer. Each file comes with a line in a SHA256SUMS list and a provenance attestation, so you can check it. The Windows x86_64 file and the Linux x86_64 AppImage start in a later alpha. The macOS file, the Windows ARM64 file and the Linux aarch64 AppImage come in a still later one.
+- `cargo install diro`, for anyone who builds from the published crate, and the way to any other shape of install on Linux. It comes with the first beta.
 
-Package manager entries, such as winget, Scoop, Homebrew and the AUR, come with alpha.9 and point at the same files.
+Package manager entries, such as winget, Scoop, Homebrew and the AUR, come in a later alpha and point at the same files.
 
 Until then, the way in is to build from source.
 
@@ -18,7 +18,7 @@ Until then, the way in is to build from source.
 What you need:
 
 - A Rust toolchain from rustup. The repository pins the exact version in `rust-toolchain.toml`, so rustup downloads the right one the first time you build.
-- A C compiler, and the linker Rust needs. Since alpha.2 a build of the workspace needs a C compiler. carta, the converter the quick view reads Org and other formats with, brings two small crates, psm and stacker, that compile a little C and assembly so that deeply nested documents cannot overflow the stack. The downloader's secure connection library, ring, compiles C too. `cargo install diro` needs the same when it comes at beta.1. The tools are the ones that also give Rust its linker, so one install covers both:
+- A C compiler, and the linker Rust needs. A build of the workspace needs a C compiler. carta, the converter the quick view reads Org and other formats with, brings two small crates, psm and stacker, that compile a little C and assembly so that deeply nested documents cannot overflow the stack. The downloader's secure connection library, ring, compiles C too. `cargo install diro` needs the same when it comes with the first beta. The tools are the ones that also give Rust its linker, so one install covers both:
   - Windows: the Microsoft C++ Build Tools, with the "Desktop development with C++" workload. They hold the C compiler, the assembler and the linker.
   - Linux: a C compiler and make. On Debian and Ubuntu that is the `build-essential` package, on Fedora the `gcc` and `make` packages, and on Arch the `base-devel` group. `clang` works in place of gcc.
   - macOS: the Xcode command line tools, installed with `xcode-select --install`. They hold clang.
@@ -65,7 +65,7 @@ A smaller build still needs a C compiler, for carta. [Building, for contributors
 
 ## The first run of a downloaded file
 
-This applies from alpha.6. The builds are not code-signed, so each platform needs one step the first time. A program you built yourself needs none of this.
+This applies once downloadable files exist, in a later alpha. The builds are not code-signed, so each platform needs one step the first time. A program you built yourself needs none of this.
 
 - Windows: SmartScreen warns when you first start `diro.exe`. Choose More info, then Run anyway. Put the file in a folder on your PATH.
 - macOS: the system quarantines a downloaded file. Remove the mark once, then make the file executable:

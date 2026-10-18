@@ -1,10 +1,10 @@
 # diroxide documentation
 
-diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, keyboard first and accessible first. Its command is `diro`. It is in its first alpha series: the guides here describe what alpha.1, alpha.2 and alpha.3 do, and each later alpha adds its own guides.
+diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, keyboard first and accessible first. Its command is `diro`. It is in its alpha series: the guides here describe what alpha 1 does, and each later alpha adds its own guides.
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, files and archives, finding things, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -14,7 +14,7 @@ If you are new, begin with the [quick start](quickstart.md).
 
 - [Quick start](quickstart.md): from a built program to copying, renaming and deleting a file, in ten minutes.
 - [Known limits](known-limits.md): what does not work yet, and what has not been tested.
-- [Privacy](privacy.md): what stays on your computer, and when diroxide uses the network. In alpha.1 it does not.
+- [Privacy](privacy.md): what stays on your computer, and when diroxide uses the network. In alpha 1 it does not.
 - [Accessibility statement](accessibility.md): what diroxide promises, how it is checked, and what has and has not been heard.
 - [What is new](../CHANGELOG.md): the changelog.
 
@@ -22,8 +22,8 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Getting started
 
-- [Quick start](quickstart.md): starting, moving, marking, copying, renaming, deleting, undoing and quitting.
-- [Installing diroxide](install.md): building from source today (a Rust toolchain and a C compiler), the one file per platform that comes with alpha.6, and `cargo install diro` at beta.1.
+- [Quick start](quickstart.md): starting, moving, marking, copying, renaming, deleting, undoing and quitting, and a first look at search, labels, compare, archives and the viewer.
+- [Installing diroxide](install.md): building from source today (a Rust toolchain and a C compiler), the one file per platform that comes in a later alpha, and `cargo install diro` with the first beta.
 - [Using diroxide with a screen reader](screen-readers.md): how diroxide talks to NVDA, JAWS, Orca and VoiceOver, what you should hear, the settings to check, and the Braille display.
 - [Terminals](terminals.md): which terminal to use, the keys terminals keep, Windows Terminal's own keys and how to give them back, the key test, and `diro --inline`, `diro ls` and `diro search` for when the full screen fails.
 - [Troubleshooting](troubleshooting.md): common problems, and how to report a bug.
@@ -32,9 +32,8 @@ If you are new, begin with the [quick start](quickstart.md).
 
 - [The panels](panels.md): the three layouts, what a row says, moving, going to a path or a place, path jump, sorting, filtering and marking rows.
 - [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo.
-- [Every key](keyboard.md): the default keys for the terminal and the window, the keys a terminal may keep and the keys screen readers keep, generated from the keymap. Each key preset has its own sheet, linked from [customizing keys](customizing-keys.md).
 
-### Archives, files and previews (alpha.2)
+### Archives, files and previews
 
 - [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, the limits that protect you, and `diro archive`.
 - [The viewer](viewer.md): F3, lines, wrap, jump, search, hex mode, following a log, large files, and code read by ear.
@@ -42,32 +41,33 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Split and join](split-join.md): cutting a big file into parts for mail, GitHub, a disc or FAT32, joining them back, the checksum file, `diro split` and `diro join`.
 - [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, times, and the details list.
 
-### Search, labels, compare and keys (alpha.3)
+### Finding, remembering and comparing
 
 - [Search and the filter language](search.md): the one filter language that the panel filter, select by pattern, Search and saved searches share, twenty examples, results, the Space list, newest files, and `diro search`.
 - [Labels and bookmarks](labels-bookmarks.md): labels on files, bookmarks on folders, the History list, a view saved for one folder, and saved searches.
 - [Compare files](compare.md): what two files differ in, said in words first, the change list, the cases that sound the same, binary and large files, and `diro diff`.
-- [Customizing keys](customizing-keys.md): the Keys list, changing a key, the key test, the key presets, `diro keys` and `keymap.toml`.
 - [Watching a folder](watching.md): hearing when a new file has finished arriving, in the program and with `diro watch`.
 
-### Settings
+### Keys and settings
 
+- [Every key](keyboard.md): the default keys for the terminal and the window, the keys a terminal may keep and the keys screen readers keep, generated from the keymap. Each key preset has its own sheet, linked from [customizing keys](customizing-keys.md).
+- [Customizing keys](customizing-keys.md): the Keys list, changing a key, the key test, the key presets, `diro keys` and `keymap.toml`.
 - [Settings and where the files live](settings.md): the config and state folders, the settings most people look for, themes, changing keys, menus and banks.
 - [Settings reference](settings-reference.md): every setting with its default, range and help, generated from the program's own list of settings.
 
-### Coming with later alphas
+### Coming in later alphas
 
-These guides are not written yet, because the features they describe are not in alpha.3. Each arrives with the alpha that ships its feature.
+These guides are not written yet, because the features they describe are not in alpha 1. Each arrives with the alpha that ships its feature.
 
-- Plugins, writing a plugin, script commands and optional components: comes with alpha.4.
-- SSH and remote places: comes with alpha.5.
-- The window: comes with alpha.6.
-- Tools and conversions, previews, and git: comes with alpha.7.
-- Tabs and the folder tree, synchronize and saved tasks, duplicates, batch rename, disk images and GitHub: comes with alpha.8.
+- Plugins, writing a plugin, script commands and optional components.
+- SSH and remote places.
+- The window.
+- Tools and conversions, previews of more kinds of document, and git.
+- Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, disk images and GitHub.
 
 ## For people who build diroxide
 
-- [The plan for the first alpha](plan.md): what diroxide is, its architecture, the alphas and the waves.
+- [The plan](plan.md): what diroxide is, its architecture, the alphas and the waves. Its alpha names are the plan's own stages; the first three ship together as alpha 1.
 - [Architecture](dev/architecture.md): the crates, what each does, and which way dependencies point.
 - [Building](dev/building.md): the toolchain, the checks, the profiles and the tasks.
 - [Docker](dev/docker.md): the Linux container for builds and tests.

@@ -11,7 +11,7 @@ Status update, Friday, October 16, 2026 (the Wave 1 contract, P0b, from R8 C4 an
 - **Undo.** `UndoRecord` gains the job's kind, its origin and the created entries, so a copy, a made folder, a split and a join undo too; it is serializable for the journal W1b writes before the first step.
 - **Tests.** The fake provider has the switches these tests need: place rules, latency and a stall, the lies (a commit that writes nothing, a clone that fails late, a trash that does nothing) and faults after N bytes.
 
-Status update, Friday, October 16, 2026 (the alpha.2 contract step, P2, from `research/alpha2-plan.md` commits 2 to 4 and W1d-1's held request 3):
+Status update, Friday, October 16, 2026 (the plan's alpha.2 contract step, P2, from `research/alpha2-plan.md` commits 2 to 4 and W1d-1's held request 3):
 
 - **Undo of what a job made.** The created entries W1b records are held by tests: a property test copies a random tree on the fake provider, undoes it, and finds the tree as it was with every new file in the fake trash exactly once; the undo of a split trashes the sidecar and the parts, newest first, and of a join the whole.
 - **Links.** `Step::Link` plans and runs links; the planner first asks the destination's capabilities and refuses with `OpsError::CannotLink`, in the capability's words. The fake provider gains a `no_links` switch.

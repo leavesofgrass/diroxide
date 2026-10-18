@@ -1,8 +1,8 @@
 # Customizing keys
 
-This guide covers how to see every key diroxide has, change one, test what your terminal sends, and switch to a set of keys modeled on another file manager. It describes the Keys list, Change key, the key test, the six presets, `diro keys`, and the `keymap.toml` file behind them. It comes with alpha.3. Before it, you changed keys by editing `keymap.toml`, which still works and is described below.
+This guide covers how to see every key diroxide has, change one, test what your terminal sends, and switch to a set of keys modeled on another file manager. It describes the Keys list, Change key, the key test, the six presets, `diro keys`, and the `keymap.toml` file behind them. You can still change keys by editing `keymap.toml` by hand, and that is described below too.
 
-What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha.3 had been heard on a screen reader when this guide was written, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
+What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
 
 ## How the keys are layered
 
@@ -18,7 +18,7 @@ A key in a higher layer wins. Choosing a preset sets its name in `config.toml` (
 
 Every key is one key with its modifiers. There are no key sequences and no leader keys, so a key never waits for a second one. Insert and Caps Lock are never bound, because they are the screen readers' keys.
 
-There are two columns of keys, because a terminal cannot send everything a window can. The terminal column holds the keys a terminal can send. The window column, used when the window comes with alpha.6, also holds keys such as Ctrl+Enter. Most keys are the same in both, and the lists say "in both".
+There are two columns of keys, because a terminal cannot send everything a window can. The terminal column holds the keys a terminal can send. The window column, used when the window comes in a later alpha, also holds keys such as Ctrl+Enter. Most keys are the same in both, and the lists say "in both".
 
 ## The Keys list
 
@@ -57,7 +57,7 @@ Choose a row, press Enter, and choose Change key.
    - A key the terminal cannot send, in the terminal column: "The terminal cannot send Ctrl+Enter. Use it for the window column only? No is the default. y or n".
    - A key a terminal program keeps, which is said and the change goes on: "Windows Terminal keeps Ctrl+V: it pastes text, so the key never arrives."
    - A key a screen reader owns: "Screen readers keep Ctrl+Alt+Up: NVDA, JAWS and Narrator. Use it anyway? No is the default. y or n".
-   - A key promised to a later alpha: "Ctrl+T is kept for New tab, coming in alpha.8. Use it anyway? No is the default. y or n".
+   - A key kept for a command that comes in a later alpha. diroxide names the command, as in "Ctrl+T is kept for New tab", and asks "Use it anyway? No is the default. y or n".
    - A key another command has, where this command's keys are looked up: "F5 already copies to the other panel. Take it, swap, or cancel?" A list opens with the focus on Cancel. Take it leaves the other command without the key. Swap gives it this command's old key. Cancel changes nothing: "Nothing changed." Two commands cannot share a key in one layer. A command you need to find your way, such as Say status, the palette, help, the menus and quit, is never left without a key, so only Swap is offered: "Ctrl+D already says the status. Swap, or cancel? Say status needs a key."
    - A letter: "A letter key works only while letters run commands. Go on? No is the default. y or n".
 6. It writes one line to `keymap.toml`, safely, and says "Ctrl+F9 saved for Sort by size." Your comments and the order of your lines stay. After a take or a swap it also says what happened to the other command: "Copy to other panel has no key now."
@@ -87,7 +87,7 @@ A preset is a set of keys modeled on another file manager. It is the middle laye
 - diroxide defaults: the keys most people know, the CUA keys, Explorer's and the Finder's, and the Norton row. This is [the keyboard page](keyboard.md).
 - Total Commander: the Norton row, Shift+F6 to rename, Alt with the function keys for archives, Alt+F7 and Ctrl+F to find files, Ctrl+L for the size of folders, Shift+F2 to select the differences, and the keypad's plus, minus, star and slash for the selection. In the window, Alt with plus selects the same extension. Ctrl+Q stays the quit key in a terminal. [The sheet](keyboard-total-commander.md).
 - Midnight Commander: the Norton row with its Alt keys for history and paths. Alt+Y and Alt+U are Back and Forward, Alt+C asks for a folder, Alt with a question mark finds a file, backslash unselects by pattern, and in the window F10 quits and Ctrl+Space sizes the folder. [The sheet](keyboard-midnight-commander.md).
-- Explorer and Finder: Backspace goes back, Ctrl+E finds files, Alt+P turns on the preview, and on a Mac the Command keys do what the Finder does. Command+D is not carried, because on a Mac it is Say status. [The sheet](keyboard-explorer-finder.md).
+- Explorer and Finder: Backspace goes back, Ctrl+E finds files, Alt+P turns on the preview, and on a Mac the Command keys do what the Finder does. Command+D is not carried, because on a Mac it is Say status. In this preset Control with 1 to 7 sets the favorite labels (see [the favorite labels](labels-bookmarks.md)). macOS may keep those keys for Mission Control. That will be checked when the window arrives on a Mac; until then the Labels submenu in the Edit menu (Alt+E, then B, then 1 to 7) is the sure way. [The sheet](keyboard-explorer-finder.md).
 - Worker: the plus and minus keys select all and none, and star inverts (on the keypad in the window), Backspace goes back, the backquote and the caret show hidden files, Alt+N and Alt+T sort by name and by modified time, Ctrl+E opens a shell here, Ctrl+O shows this folder in the other panel, and Alt+Q quits. Alt+T sorts in a panel, so the Tools menu is F9, then T. [The sheet](keyboard-worker.md).
 - vim-style, for ranger, lf, yazi and vifm: h, j, k and l move, g and a capital G go to the first and last row, a capital H and L go back and forward, y copies, x cuts, p pastes, d trashes, r renames, a makes a folder, e edits, i views, v inverts the selection, a capital V marks a range, s finds files, o opens the Sort list, slash filters, a colon opens the palette, t sets a label, m bookmarks this folder, and q quits. It runs letters as commands, so choosing it turns type-ahead off, and choosing another preset turns it back on. The Norton row and the other keys stay, so a mistake in the letters never takes your keys away. Ctrl+B pages up in the window only, because tmux keeps Ctrl+B for itself in a terminal. [The sheet](keyboard-vim-style.md).
 
@@ -172,6 +172,7 @@ The palette lists the command you used last first when the field is empty. After
 - [Terminals](terminals.md)
 - [Settings and where the files live](settings.md)
 - [The panels](panels.md)
+- [Labels and bookmarks](labels-bookmarks.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Troubleshooting](troubleshooting.md)
 - [Known limits](known-limits.md)

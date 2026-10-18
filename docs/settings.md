@@ -11,7 +11,7 @@ diroxide keeps two folders. The config folder holds the files you edit. The stat
 - macOS: both are in `~/Library/Application Support/diroxide`.
 - With `diro --portable`, the folders are `config` and `state` beside the program, so you can carry everything on a drive.
 
-In the config folder, alpha.1 uses these files:
+The config folder holds these files:
 
 - `config.toml` holds the settings.
 - `keymap.toml` holds your changes to the keys. diroxide writes the built-in keys beside it as `keymap-defaults.toml`, a read-only reference that it rewrites at each start; changes to that copy are not read.
@@ -22,7 +22,7 @@ In the config folder, alpha.1 uses these files:
 
 Later alphas add more files, such as the tools list and the plugins folder. They are described when they arrive.
 
-The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and, since alpha.2, a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. Since alpha.3 it also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now.
+The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. It also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now.
 
 ## How diroxide treats these files
 
@@ -33,7 +33,7 @@ The state folder holds each panel's folder, focused row, sort and history, and t
 
 ## Changing a setting
 
-In the program, open Settings from the Tools menu (Alt+T, then S) or the palette. It is a list with one row for each setting, in the order of the reference. Each row says the setting's name, then its value in words, and says "comes with alpha.N" for a setting that does nothing yet. Enter flips a switch, or opens the choices with "Back to default" last, or opens a field for a number or text. The help key (Shift+F1 or the question mark) on a row gives that setting's help. The change is saved at once, and diroxide says it: "Layout: stacked", or "Layout back to side by side".
+In the program, open Settings from the Tools menu (Alt+T, then S) or the palette. It is a list with one row for each setting, in the order of the reference. Each row says the setting's name, then its value in words, and, for a setting that does nothing yet, that it comes with a later alpha. Enter flips a switch, or opens the choices with "Back to default" last, or opens a field for a number or text. The help key (Shift+F1 or the question mark) on a row gives that setting's help. The change is saved at once, and diroxide says it: "Layout: stacked", or "Layout back to side by side".
 
 By file, open `config.toml` in any text editor. diroxide reads it the next time it starts. A setting is one line. A name with a dot belongs to a table: `sort.key` is `key` under `[sort]`.
 
@@ -76,7 +76,7 @@ How long a copy retries a lost network, how long it waits before it says "stalle
 
 ### Search, filters, compare and keys
 
-Alpha.3 adds settings for the filter language, search, compare and the key presets. [The settings reference](settings-reference.md) lists every one with its default and range, under Search and filter and under Keys.
+These settings are for the filter language, search, compare and the key presets. [The settings reference](settings-reference.md) lists every one with its default and range, under Search and filter and under Keys.
 
 - Filter case (`filter_case`): how case decides a match in filters and searches. `smart` (default) ignores case unless the text has a capital letter, `ignore` never cares and `match` always does.
 - Filter pause (`filter_pause_ms`, 400; 0 to 5000): how long the panel filter waits after your last key before it says the count. A longer pause is quieter.
@@ -89,7 +89,7 @@ Alpha.3 adds settings for the filter language, search, compare and the key prese
 
 ### The viewer, the quick view, archives and split sizes
 
-Alpha.2 adds four groups of settings. [The settings reference](settings-reference.md) lists every one with its default and range, under Viewer and quick view and under Archives and split.
+Four groups of settings cover the viewer, the quick view, archives and split sizes. [The settings reference](settings-reference.md) lists every one with its default and range, under Viewer and quick view and under Archives and split.
 
 - The viewer (`viewer.*`): wrap (`viewer.wrap`, on) and the width it wraps at (`viewer.wrap_width`, 0 for the screen's width, or a number such as 40 for a Braille line), line numbers (`viewer.line_numbers`, off), follow a growing file (`viewer.follow`, off), the hex row (`viewer.hex_row`: `auto` is eight bytes in screen-reader mode and sixteen otherwise), how much of an archive member it keeps decoded (`viewer.member_cache_mib`, 64), and the four caps on code colors (`viewer.highlight_max_kib`, `viewer.highlight_max_lines`, `viewer.highlight_max_line_chars` and `viewer.highlight_deadline_ms`). [The viewer](viewer.md) says what each does.
 - The quick view (`quick_view.*`): how long it waits after the cursor stops (`quick_view.wait_ms`, 500), how much of a file it reads (`quick_view.max_kib`, 1024), how long reading may take (`quick_view.deadline_ms`, 2000), whether it follows changes on disk (`quick_view.follow_changes`, on) and line numbers (`quick_view.line_numbers`, off). [The quick view](quick-view.md) says what each does.
@@ -112,7 +112,7 @@ hex_row = "narrow"
 wait_ms = 800
 ```
 
-Some settings are kept now and do nothing yet. The reference marks each with the alpha that brings it: plugins (alpha.4), the components list (alpha.4), thumbnails (alpha.7), and hiding the menu bar and focus mode in the window (alpha.6).
+Some settings are kept now and do nothing yet: plugins, the components list, thumbnails, and hiding the menu bar and focus mode in the window. The reference marks each as coming with a later alpha.
 
 ## Themes and colors
 

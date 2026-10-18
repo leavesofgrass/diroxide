@@ -1,13 +1,13 @@
 # Privacy
 
-This page says what diroxide keeps on your computer, when it uses the network, and what the log file holds. The short answer: everything stays on your computer, and alpha.1 does not use the network at all.
+This page says what diroxide keeps on your computer, when it uses the network, and what the log file holds. The short answer: everything stays on your computer, and alpha 1 does not use the network at all.
 
 ## What stays on your computer
 
 diroxide keeps its files in two folders. [The settings guide](settings.md) says where they are on each system.
 
 - The config folder holds the files you can edit: `config.toml`, `keymap.toml`, `menus.toml`, the banks of command buttons and your own themes, and two read-only copies of the built-in keys and menus.
-- The state folder holds what diroxide remembers for you: where each panel was and which row was focused when you quit (`session.toml`), the history of the prompts you used (the `history` folder), the folders you visited so path jump can rank them, the undo journal of your last jobs, and `terminal.log`.
+- The state folder holds what diroxide remembers for you: where each panel was and which row was focused when you quit (`session.toml`), the history of the prompts you used (the `history` folder), the folders you visited so path jump can rank them, the undo journal of your last jobs, the labels, bookmarks, saved views and saved searches you made, and `terminal.log`.
 - With `--portable`, both folders sit beside the program instead, so you can carry diroxide on a drive.
 
 All of these are plain files. You can read them, copy them and delete them. Deleting the state folder only makes diroxide forget.
@@ -16,7 +16,7 @@ diroxide never sends any of this anywhere. It has no account, no sign-in, no usa
 
 ## When the network is used
 
-The network is used only by what you ask for. alpha.1 does not use it for anything: no feature in it opens a connection.
+The network is used only by what you ask for. Alpha 1 does not use it for anything: no feature in it opens a connection.
 
 Later alphas add features that do, and each one asks first:
 
@@ -32,6 +32,7 @@ When a request does leave your computer, it carries only what that feature needs
 - Cut, copy and paste of files use diroxide's own clipboard. They do not touch the system clipboard.
 - When you press Enter on a file, diroxide hands it to your system's own program for that kind of file. What that program does with the file is up to it.
 - F4 hands the file to the editor you have chosen.
+- In the quick view, Enter on a web or mail link asks first, and the question starts on No. If you say yes, diroxide hands the address to your system's browser or mail program. The connection, if there is one, is that program's.
 
 ## The log file
 
@@ -47,7 +48,7 @@ The undo journal lists the paths of the last jobs so that Undo can reverse them,
 
 ## Plugins
 
-Plugins arrive with alpha.4. A plugin runs with your own rights and can read what you can read, so enable only plugins you trust. Each plugin has its own log in the state folder.
+Plugins arrive in a later alpha. A plugin runs with your own rights and can read what you can read, so enable only plugins you trust. Each plugin has its own log in the state folder.
 
 ## Reporting a problem
 

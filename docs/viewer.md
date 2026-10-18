@@ -1,8 +1,8 @@
 # The viewer
 
-This guide covers the file viewer: opening a file with F3, reading it a line at a time, wrapping and line numbers, jumping and searching, hex mode, stepping through the files of a folder, following a growing log, how a large file is handled, and how code is read by ear. The viewer comes with alpha.2.
+This guide covers the file viewer: opening a file with F3, reading it a line at a time, wrapping and line numbers, jumping and searching, hex mode, stepping through the files of a folder, following a growing log, how a large file is handled, and how code is read by ear.
 
-What this guide says about the spoken lines comes from the design and from the tests that check each sentence. Nothing in alpha.2 had been heard on a screen reader when this guide was written.
+What this guide says about the spoken lines comes from the design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build.
 
 ## Open and close
 
@@ -74,7 +74,7 @@ A file that looks binary opens in hex mode and says why: "big.bin looks binary; 
 
 ## Which characters: encodings
 
-The viewer decides how to read a file from its first bytes. UTF-8 is tried first; a byte-order mark means UTF-16, and the viewer says so in words: "Encoding: UTF-16 (byte-order mark)". Older Windows text in Windows-1252 is recognized too. A file that fits none of these opens in hex mode. A chooser for other encodings comes with alpha.7.
+The viewer decides how to read a file from its first bytes. UTF-8 is tried first; a byte-order mark means UTF-16, and the viewer says so in words: "Encoding: UTF-16 (byte-order mark)". Older Windows text in Windows-1252 is recognized too. A file that fits none of these opens in hex mode. A chooser for other encodings comes in a later alpha.
 
 ## The next file, and back to the folder
 

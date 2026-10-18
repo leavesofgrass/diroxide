@@ -108,7 +108,7 @@ Make symbolic link makes a link to each marked entry in the other panel's folder
 
 ## Permissions and times
 
-Change permissions (File menu, Alt+F then W; no key of its own) says the result in words first and the octal number second: "Owner can read and write, group can read, others can read (644)". Its dialog steps owner, group and others through read and write, read only, read, write and run, read and run, and no access. On Windows it changes the attributes. A change can go inside folders, with "Apply to:" as the plan's first row. The plan lists what will change and asks first, and Ctrl+Z reverses it. There is no Change times command in alpha.2. A copy keeps the modified time of files and folders; see [links, permissions and times](links-permissions.md).
+Change permissions (File menu, Alt+F then W; no key of its own) says the result in words first and the octal number second: "Owner can read and write, group can read, others can read (644)". Its dialog steps owner, group and others through read and write, read only, read, write and run, read and run, and no access. On Windows it changes the attributes. A change can go inside folders, with "Apply to:" as the plan's first row. The plan lists what will change and asks first, and Ctrl+Z reverses it. There is no Change times command in alpha 1. A copy keeps the modified time of files and folders; see [links, permissions and times](links-permissions.md).
 
 ## Delete to the trash: F8 and Delete
 

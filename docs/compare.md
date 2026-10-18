@@ -1,8 +1,8 @@
 # Compare files
 
-This guide covers Compare files: what two files differ in, said in words before any change is shown. It describes which two files diroxide compares, what you hear and in what order, how to walk the changes, the options that leave differences out, binary and large files, and `diro diff` for the command line. It comes with alpha.3. Comparing two folders comes with alpha.8.
+This guide covers Compare files: what two files differ in, said in words before any change is shown. It describes which two files diroxide compares, what you hear and in what order, how to walk the changes, the options that leave differences out, binary and large files, and `diro diff` for the command line. Comparing two folders comes in a later alpha.
 
-What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha.3 had been heard on a screen reader when this guide was written, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
+What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
 
 ## Why it reads the way it does
 
@@ -20,7 +20,7 @@ Before it starts, the status line says which two. For two marked files: "Compari
 
 The direction is from the first file to the second. For one file in each panel, that is from the other panel's file to this panel's, and the report says so: "From the other panel to this panel." For two marked files it names them: "From old.txt to report.txt." Swap turns it around and says so: "Swapped. From this panel to the other panel." Nothing is compared again when you swap.
 
-Two folders, a folder and a file, or a file inside an archive are not compared in alpha.3. The message says what to do: "Could not compare D:/diro-demo: it is not a file. Choose two files to compare." or "Mark two files, or focus a file in each panel, to compare." or "No file to compare report.txt with in the other panel. Focus one there, or mark two here."
+Two folders, a folder and a file, or a file inside an archive are not compared in alpha 1. The message says what to do: "Could not compare D:/diro-demo: it is not a file. Choose two files to compare." or "Mark two files, or focus a file in each panel, to compare." or "No file to compare report.txt with in the other panel. Focus one there, or mark two here."
 
 ## What you hear, in order
 
@@ -166,7 +166,7 @@ The exit codes are 0 for the same, 1 for different, and 2 for wrong use or troub
 
 ## Limits
 
-- Only two files at a time. Folders compare with alpha.8.
+- Only two files at a time. Folders compare in a later alpha.
 - The unified view is a list, not a mode of the viewer. Enter on a row opens the viewer at its line.
 - Text is compared in full up to 16 MiB for each file.
 - Unicode forms are recognized for Latin, Greek, Cyrillic and Hangul. "Sounds alike" covers space characters, dashes, quotes, full-width letters and a short list of Cyrillic and Greek letters that look Latin.

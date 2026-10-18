@@ -1,8 +1,8 @@
 # Labels and bookmarks
 
-This guide covers the ways diroxide remembers things for you: labels on files, bookmarks on folders, the History list of places you visit, and a view saved for one folder. It also says where saved searches fit. It comes with alpha.3.
+This guide covers the ways diroxide remembers things for you: labels on files, bookmarks on folders, the History list of places you visit, and a view saved for one folder. It also says where saved searches fit.
 
-What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha.3 had been heard on a screen reader when this guide was written, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
+What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
 
 ## Labels
 
@@ -98,7 +98,7 @@ A saved view's filter is read in the filter language. A filter that reads file c
 
 ## Saved searches
 
-A saved search is a different kind of memory: a filter and a scope, run again when you open it. Save this search and Saved searches are in the Search menu (F9, then R, then S and V). [Search and the filter language](search.md) describes them. A saved search is a file in the `saved` folder of the state folder, in the plain shape that collections will use with alpha.8. It can be run and deleted, not renamed or edited.
+A saved search is a different kind of memory: a filter and a scope, run again when you open it. Save this search and Saved searches are in the Search menu (F9, then R, then S and V). [Search and the filter language](search.md) describes them. A saved search is a file in the `saved` folder of the state folder, in the plain shape that collections will use in a later alpha. It can be run and deleted, not renamed or edited.
 
 ## Settings and files
 

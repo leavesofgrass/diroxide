@@ -1,8 +1,8 @@
 # Split and join
 
-This guide covers splitting a big file into numbered parts and putting the parts back together: the sizes diroxide offers and where each comes from, what the plan says before anything is written, the checksum file that travels with the parts, how a join finds its parts and names a gap, the verdict, undo, the `diro split` and `diro join` commands, and how other programs read the same parts. Split and join come with alpha.2.
+This guide covers splitting a big file into numbered parts and putting the parts back together: the sizes diroxide offers and where each comes from, what the plan says before anything is written, the checksum file that travels with the parts, how a join finds its parts and names a gap, the verdict, undo, the `diro split` and `diro join` commands, and how other programs read the same parts.
 
-What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha.2 had been heard on a screen reader when this guide was written.
+What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build.
 
 ## What split does
 
@@ -91,7 +91,7 @@ crc32=21EB719A
 
 The file name has no folder. The size is the byte count in decimal. The checksum is a CRC-32 of the whole file in eight uppercase hexadecimal digits. The format is the one Total Commander and Krusader write.
 
-diroxide reads checksum files from other programs tolerantly: the key names in any letter case, one line or several, either kind of line ending, either letter case in the checksum, and UTF-8 first, then Windows-1252. A key it does not know is ignored and said. It looks for `report.pdf.crc` and then `report.crc`, and accepts the file only if the `filename` in it matches the set. A SHA-256 line comes with alpha.7.
+diroxide reads checksum files from other programs tolerantly: the key names in any letter case, one line or several, either kind of line ending, either letter case in the checksum, and UTF-8 first, then Windows-1252. A key it does not know is ignored and said. It looks for `report.pdf.crc` and then `report.crc`, and accepts the file only if the `filename` in it matches the set. A SHA-256 line comes in a later alpha.
 
 Whether Total Commander finds `report.pdf.crc` from `report.pdf.001` has not been tried. [Known limits](known-limits.md) says so.
 
