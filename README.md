@@ -11,16 +11,16 @@ Status: alpha. This is alpha 1, version 0.1.0-alpha.1: a terminal file manager f
 
 ## Get diro
 
-There will be two ways in: one download for each platform, and `cargo install diro`. Alpha 1 offers neither yet, so you build it from source.
+There are two ways in: one file for each platform, and `cargo install diro`. Alpha 1 has the files; the crate comes with the first beta.
 
-- Build from source. You need a Rust toolchain from rustup (the repository pins the version and rustup fetches it) and the linker Rust needs on your system. Clone the repository, `https://github.com/leavesofgrass/diroxide`, and in its folder run:
+- Download the one file for your platform from the [releases page](https://github.com/leavesofgrass/diroxide/releases): `diro.exe` for Windows, one `diro` for macOS (Apple silicon and Intel in one file), and an AppImage for Linux. There is no archive to open and no installer. The builds are not code-signed, so each platform needs one first-run step. On Windows, SmartScreen warns first: choose More info, then Run anyway. On macOS, remove the quarantine mark once with `xattr -d com.apple.quarantine`, and make the file executable with `chmod +x`. On Linux, make the AppImage executable with `chmod +x`.
+- Or build from source. You need a Rust toolchain from rustup (the repository pins the version and rustup fetches it) and the linker Rust needs on your system. Clone the repository, `https://github.com/leavesofgrass/diroxide`, and in its folder run:
 
 ```bash
 cargo build --release -p diro
 ```
 
 - The program is `target/release/diro`, or `diro.exe` on Windows. Put it on your PATH.
-- One file for each platform comes in a later alpha: `diro.exe` on Windows, one `diro` for macOS, and an AppImage on Linux. The builds will not be code-signed, so each platform needs one first-run step. On Windows, SmartScreen warns first: choose More info, then Run anyway. On macOS, remove the quarantine mark once with `xattr -d com.apple.quarantine`, and make the file executable with `chmod +x`. On Linux, make the AppImage executable with `chmod +x`.
 - `cargo install diro` comes with the first beta.
 
 [Installing diroxide](docs/install.md) has every step.

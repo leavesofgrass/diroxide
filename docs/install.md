@@ -1,17 +1,21 @@
 # Installing diroxide
 
-This guide says how to get diroxide running, what is available now, and what comes later. In alpha 1 there are no download files yet, so you build the program from its source.
+This guide says how to get diroxide running, what is available now, and what comes later. Alpha 1 has one download for each platform. `cargo install diro` comes with the first beta, and you can always build the program from its source.
 
 ## Two ways in, and where each stands
 
 diroxide will have two ways in, and only two.
 
-- One file for each platform, from the project's releases page: `diro.exe` on Windows, one `diro` for macOS, and an AppImage on Linux. There is no archive to open and no installer. Each file comes with a line in a SHA256SUMS list and a provenance attestation, so you can check it. The Windows x86_64 file and the Linux x86_64 AppImage start in a later alpha. The macOS file, the Windows ARM64 file and the Linux aarch64 AppImage come in a still later one.
+- One file for each platform, from the project's [releases page](https://github.com/leavesofgrass/diroxide/releases): `diro.exe` on Windows, one `diro` for macOS (Apple silicon and Intel in one universal file), and an AppImage on Linux. There is no archive to open and no installer. Each file comes with a line in a SHA256SUMS list and a provenance attestation, so you can check it. Alpha 1 has the Windows x86_64 file, the macOS universal file and the Linux x86_64 AppImage. The Windows ARM64 file and the Linux aarch64 AppImage come in a later alpha.
 - `cargo install diro`, for anyone who builds from the published crate, and the way to any other shape of install on Linux. It comes with the first beta.
 
 Package manager entries, such as winget, Scoop, Homebrew and the AUR, come in a later alpha and point at the same files.
 
-Until then, the way in is to build from source.
+## Download the one file
+
+On the [releases page](https://github.com/leavesofgrass/diroxide/releases), each release lists its files. The file's name carries the version and the platform, such as `diro-0.1.0-alpha.1-windows-x86_64.exe`, `diro-0.1.0-alpha.1-macos-universal` and `diro-0.1.0-alpha.1-linux-x86_64.AppImage`. Download the one for your system, rename it to `diro` (or `diro.exe`) if you like, and put it in a folder on your PATH. Then read [the first run of a downloaded file](#the-first-run-of-a-downloaded-file) below: each platform asks for one step the first time.
+
+Build from source when you want the newest commit, or a smaller diro.
 
 ## Build from source
 
@@ -65,7 +69,7 @@ A smaller build still needs a C compiler, for carta. [Building, for contributors
 
 ## The first run of a downloaded file
 
-This applies once downloadable files exist, in a later alpha. The builds are not code-signed, so each platform needs one step the first time. A program you built yourself needs none of this.
+The builds are not code-signed, so each platform needs one step the first time. A program you built yourself needs none of this.
 
 - Windows: SmartScreen warns when you first start `diro.exe`. Choose More info, then Run anyway. Put the file in a folder on your PATH.
 - macOS: the system quarantines a downloaded file. Remove the mark once, then make the file executable:
@@ -86,7 +90,7 @@ If you prefer, choose Open Anyway under Privacy and Security in System Settings 
 chmod +x diro.AppImage
 ```
 
-If your system cannot run AppImages, install with `cargo install diro` once it is available.
+If your system cannot run AppImages, build from source, or install with `cargo install diro` once it is available.
 
 ## Checking a download
 
@@ -109,6 +113,12 @@ shasum -a 256 diro
 ```
 
 The two values must match exactly. If they do not, do not run the file.
+
+Each file also has a provenance attestation, GitHub's signed record that this workflow built it from this repository. With the GitHub command-line tool signed in, check it with the file's name:
+
+```bash
+gh attestation verify diro.exe --owner leavesofgrass
+```
 
 ## Set up your shell
 
