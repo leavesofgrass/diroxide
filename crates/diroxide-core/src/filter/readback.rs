@@ -13,7 +13,7 @@ use crate::sort::NameCase;
 use super::FilterOptions;
 use super::dates::{DateContext, DateValue, Duration, Precision};
 use super::parse::default_op;
-use super::token::split_head;
+use super::token::{split_head, stays_whole};
 use super::tree::{
     Amount, ContentOp, DateOp, Expr, Field, Flag, NumberOp, SizeUnit, Test, TextOp, kind_word,
 };
@@ -120,6 +120,7 @@ pub(crate) fn needs_quotes(value: &str) -> bool {
         })
         || value.starts_with(['(', ')', '!'])
         || value.ends_with(')')
+        || !stays_whole(value, false)
         || KEYWORDS.iter().any(|k| k.eq_ignore_ascii_case(value))
         || Field::from_word(value).is_some()
         || Flag::from_word(value).is_some()
@@ -258,12 +259,14 @@ impl Writer<'_> {
     }
 
     /// A regular expression after `regex`, which reads to the next space
-    /// and leaves a final comma out.
+    /// and leaves a final comma out; quoted when a group's closing bracket
+    /// after it would join it or its own would close the group.
     fn pattern(&mut self, value: &str) {
         if value.is_empty()
             || value.chars().any(char::is_whitespace)
             || value.starts_with('"')
             || value.ends_with(',')
+            || !stays_whole(value, true)
         {
             self.out.push_str(&quoted(value));
         } else {

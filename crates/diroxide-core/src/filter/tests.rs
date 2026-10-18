@@ -1017,6 +1017,32 @@ proptest! {
         }
     }
 
+    // A1f: the characters and words the lexer treats specially, so a
+    // value's brackets often meet a group's, where the any-text property
+    // met them once in many runs.
+    #[test]
+    fn language_characters_in_any_order_read_or_say_why(
+        pieces in prop::collection::vec(
+            prop::sample::select(vec![
+                "(", ")", "\"", ",", ";", "!", "=", "<", ">", " ", " ", " ", "a", "A", "0",
+                "\\", "[", "]", "*", "/", ":", "re:", " regex ", " and ", " or ", " not ",
+                "name", "content", "size", "1", " MB", " case ", "hidden", "\u{11BF0}",
+            ]),
+            0..16,
+        )
+    ) {
+        let text = pieces.concat();
+        for case in CaseRule::ALL {
+            let options = FilterOptions { case, ..FilterOptions::default() };
+            if let Ok(filter) = Filter::parse_with(&text, &options) {
+                let sentence = filter.sentence();
+                let again = Filter::parse_with(&sentence, &options)
+                    .map_err(|e| TestCaseError::fail(format!("{text:?} read back as {sentence}: {}", e.sentences())))?;
+                prop_assert_eq!(again.expr(), filter.expr(), "{:?} read back as {}", text, sentence);
+            }
+        }
+    }
+
     #[test]
     fn filter_words_in_any_order_read_or_say_why(
         words in prop::collection::vec(
@@ -1215,4 +1241,50 @@ fn a_name_with_a_slash_reads_back_as_folders_only() {
     assert!(!evaluator.matches(&file, &NoLookup));
     let line = said("build/");
     assert!(line.chars().count() <= 40, "{line}");
+}
+
+/// A1f (the container check's finding): a value with more opening
+/// brackets than closing ones read back bare, so the bracket that closes
+/// its group joined the word (`0(` and `)` read as `0()`), the group never
+/// closed, and the sentence mixed and with or. Such a value is quoted, so
+/// the property's minimal input reads back to the same tree under every
+/// case rule.
+#[test]
+fn a_value_with_an_open_bracket_reads_back_quoted() {
+    let text = "A;0(\"\u{11BF0}\"";
+    for case in CaseRule::ALL {
+        let options = FilterOptions {
+            case,
+            ..FilterOptions::default()
+        };
+        let filter = Filter::parse_with(text, &options)
+            .unwrap_or_else(|e| panic!("{case:?}: {}", e.sentences()));
+        let sentence = filter.sentence();
+        let again = Filter::parse_with(&sentence, &options)
+            .unwrap_or_else(|e| panic!("{case:?}: {sentence}: {}", e.sentences()));
+        assert_eq!(again.expr(), filter.expr(), "{case:?}: {sentence}");
+        assert_eq!(again.sentence(), sentence, "{case:?}");
+    }
+    assert_eq!(
+        parse(text).sentence(),
+        "(name contains A, match case or \"0(\") and name contains \u{11BF0}"
+    );
+    assert_eq!(parse("\"0(\"").sentence(), "name contains \"0(\"");
+    assert_eq!(parse("*(1)*").sentence(), "name matches *(1)*", "balanced");
+    assert_eq!(parse("name regex []((]").sentence(), "name regex \"[]((]\"");
+    assert_eq!(parse("name regex []a)]").sentence(), "name regex []a)]");
+    for text in [
+        "\"0(\"",
+        "(a or \"0(\") and b",
+        "not (\"((x)\" or b)",
+        "(\"a(b\" or \"c((d)\") and \"e(\"",
+        "(a or \"x)(y\") and b",
+        "(name regex \"([]a)])\" or b) and c",
+        "(name regex \"[]a)]\" or b) and c",
+        "(content regex \"[]((]\" or b) and c",
+        "(name regex []((] or b) and c",
+        "not (not hidden or \"q(\")",
+    ] {
+        round_trips(text);
+    }
 }

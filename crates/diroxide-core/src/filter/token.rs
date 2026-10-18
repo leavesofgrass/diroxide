@@ -118,11 +118,9 @@ pub(crate) fn split_head(word: &str) -> Option<(&str, &str)> {
     letters.then(|| (head, &word[colon + 1..]))
 }
 
-/// How many closing brackets at the end of a word close groups: those
-/// with no opening bracket in the word, up to the groups open and the
-/// brackets there. A regular expression's escaped characters and classes
-/// do not count.
-fn closing(word: &str, open_groups: usize, regex: bool) -> usize {
+/// The opening and closing brackets in a word, as groups count them: a
+/// regular expression's escaped characters and classes do not count.
+fn brackets(word: &str, regex: bool) -> (usize, usize) {
     let mut opens = 0usize;
     let mut closes = 0usize;
     let mut chars = word.chars();
@@ -139,8 +137,27 @@ fn closing(word: &str, open_groups: usize, regex: bool) -> usize {
             _ => {}
         }
     }
+    (opens, closes)
+}
+
+/// How many closing brackets at the end of a word close groups: those
+/// with no opening bracket in the word, up to the groups open and the
+/// brackets there. A regular expression's escaped characters and classes
+/// do not count.
+fn closing(word: &str, open_groups: usize, regex: bool) -> usize {
+    let (opens, closes) = brackets(word, regex);
     let trailing = word.chars().rev().take_while(|&c| c == ')').count();
     closes.saturating_sub(opens).min(open_groups).min(trailing)
+}
+
+/// Whether a bare word reads as itself both alone and before the bracket
+/// that closes its group: its brackets balance, or it has more closing
+/// ones but none at its end. Otherwise a group's closing bracket joins
+/// the word (`0(` and `)` read as `0()`) or the word's own closes the
+/// group, so the read-back quotes it (A1f).
+pub(crate) fn stays_whole(word: &str, regex: bool) -> bool {
+    let (opens, closes) = brackets(word, regex);
+    opens == closes || (closes > opens && !word.ends_with(')'))
 }
 
 struct Lexer<'a> {
