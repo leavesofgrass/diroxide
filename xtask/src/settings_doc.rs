@@ -90,7 +90,7 @@ mod tests {
         assert!(page.contains("- `focused_row`: focused row.\n"));
         assert!(page.contains("- `octal`: Octal mode.\n"));
         // Every alpha.3 setting is live (W3a); the plugins come next.
-        assert!(page.contains("- Comes with alpha.4.\n"));
+        assert!(page.contains("- Comes with a later alpha.\n"));
         assert!(page.contains("\n### archives.max_entries\n"));
         assert!(page.contains("  - GitHub file limit, 100 MiB. Parts of 104,857,600 bytes. 104,857,600 bytes: GitHub blocks"));
         assert!(
