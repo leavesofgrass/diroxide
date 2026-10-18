@@ -805,6 +805,11 @@ Given on Saturday, October 10, 2026, after the Wave 0 research:
 55. **A taken name on a copy follows the desktop convention, "course (2).zip",** for user files; the plain-name rule is for what agents and scripts create in the repository (the same message).
 56. **The Explorer and Finder preset keeps Control with a digit for the favorite labels on macOS,** with a note on the keys page that macOS may keep them for Mission Control, checked when the window arrives on a Mac (the same message).
 
+57. **The repository is public on GitHub** (Saturday, October 17, 2026, 10:10 PM, after "we should prep the repo for publication"): `https://github.com/leavesofgrass/diroxide`, created with the GitHub CLI, public from the first push, which carried `main` and the tag `0.1.0-alpha.1`; the lane branches stay local as each lane's record.
+58. **The history's author email is the GitHub noreply address,** rewritten on every branch before the first push, and the repository's own git identity uses it from now on; the owner's name stays on every commit.
+59. **The Claude tooling is not in the repository:** the guard hook, its tests and the safe-remove script stay on disk under `.claude`, ignored, with their master copies in the owner's wiki.
+60. **The owner's other site is named without its domain** in this plan (a callsign under the privacy rule); the website sections say "the owner's personal site".
+
 Questions 4 to 14 are open and take their defaults until the owner says otherwise.
 
 ## Bookkeeping left from the planning session
