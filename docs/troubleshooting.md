@@ -108,11 +108,11 @@ The archive holds a member whose name would write outside the folder you chose, 
 
 ## "Archives are read only here."
 
-You tried to change something inside an archive: copy into it, move, rename, delete, or make a folder. alpha.2 cannot do that, on purpose. Use Pack to make a new archive, or unpack the archive, change the files, and pack again.
+You tried to change something inside an archive: copy into it, move, rename, delete, or make a folder. Alpha 1 cannot do that, on purpose. Use Pack to make a new archive, or unpack the archive, change the files, and pack again.
 
 ## An archive will not open
 
-The message says why, in the cause after the name: "Could not open a.rar: it uses the RAR format, which is not supported." The formats alpha.2 reads are zip, 7z, tar, tar.gz, tar.xz and xz. [Known limits](known-limits.md) lists the rest. If you think the file is an archive with the wrong name, try Open as archive in the palette, which goes by the file's bytes.
+The message says why, in the cause after the name: "Could not open a.rar: it uses the RAR format, which is not supported." The formats diroxide reads are zip, 7z, tar, tar.gz, tar.xz and xz. [Known limits](known-limits.md) lists the rest. If you think the file is an archive with the wrong name, try Open as archive in the palette, which goes by the file's bytes.
 
 ## "Part 004 is missing. Nothing was joined."
 
@@ -150,7 +150,7 @@ diroxide never throws a file away. It reports the problem at start in words, use
 
 ## `diro --gui` opens the terminal
 
-That is true until alpha.6. `diro --gui` says "The window comes with alpha.6; the terminal opens instead." Use the terminal for now.
+That is true until the window arrives, in a later alpha. `diro --gui` says that the window comes later and opens the terminal instead. Use the terminal for now.
 
 ## A filter says "Filter problem"
 

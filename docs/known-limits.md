@@ -1,22 +1,22 @@
 # Known limits
 
-This page says what diroxide does not do yet as of alpha.3, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet as of alpha 1, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha. Where a limit has a workaround, the workaround comes first.
 
-## What is not in alpha.3
+## What is not in alpha 1
 
-Each item says which alpha brings it.
+Each item below is still to come. None of them is dated: a feature that is not in alpha 1 arrives in a later alpha.
 
-- The window. diroxide runs in the terminal only. `diro --gui` is accepted and says "The window comes with alpha.6; the terminal opens instead." The window comes with alpha.6.
-- Changing an archive. alpha.2 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes with alpha.7.
-- More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for alpha.7, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
-- The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come with alpha.7; until then the quick view says "No preview" and names the kind and size.
-- A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes with alpha.7.
-- Changing the owner and group of a file, and a dialog for typing a file time, come with alpha.7. There is no Change times command in alpha.2, although copies keep dates.
-- Plugins, script commands and the downloader for optional components: alpha.4. The Plugins menu only says "Plugins come with alpha.4."
-- SSH and other remote places, and the trash browser: alpha.5.
-- Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands: alpha.7.
-- Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP: alpha.8. Compare files works on two files since alpha.3; two folders come with alpha.8.
-- Download files for each platform: alpha.6 for Windows x86_64 and Linux x86_64, the other platforms with alpha.9. `cargo install diro`: beta.1.
+- The window. diroxide runs in the terminal only. `diro --gui` is accepted, says that the window comes later, and opens the terminal.
+- Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
+- More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
+- The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
+- A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes in a later alpha.
+- Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 1, although copies keep dates.
+- Plugins, script commands and the downloader for optional components come in a later alpha. The Plugins menu only says that plugins are not here yet.
+- SSH and other remote places, and the trash browser, come in a later alpha.
+- Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands come in a later alpha.
+- Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
+- Download files for each platform come in a later alpha, first for Windows x86_64 and Linux x86_64 and then for the other platforms. `cargo install diro` comes with the first beta.
 - Passwords are asked only for archives. The masked password prompt is built, and the other features that need it, such as SSH, arrive in later alphas.
 
 ## Search and the filter language
@@ -30,13 +30,13 @@ Each item says which alpha brings it.
 - Pause search is F2 in a list. In another list F2 says "No search is running."
 - Tab in the Go to a place list completes bookmarks only, by name or place. The list under the field still narrows over every place.
 - On Windows a leading dot does not make a file hidden, so "Hidden files skipped." is said there only for files with the hidden attribute.
-- Go to a path on Windows keeps the forward slashes of a place with a scheme, such as `sftp://`. Remote places come with alpha.5.
+- Go to a path on Windows keeps the forward slashes of a place with a scheme, such as `sftp://`. Remote places come in a later alpha.
 - Content search on Windows is bound by the cost of opening each file: reading every file of a 1 GB tree whole takes about 1.5 seconds on the test machine, and a search needs about 2. Memory maps are off.
 - Search over a network has been tested against a fake place that answers in 5 milliseconds, not against a real share. The thread counts and the rates in [the search guide](search.md) come from that fake place.
 - A search that follows links or looks inside archives always uses the slower walk, one folder at a time through the provider.
 - In a search, `selected` and `bookmarked` are left undecided, because a search has no panel. `empty` on a folder reads that folder when asked.
 - A depth test works in a search and not in a panel, which shows one folder.
-- `type` matches only entries whose type is already known, and `group` goes by extension, with seven groups. The full type model comes with alpha.7.
+- `type` matches only entries whose type is already known, and `group` goes by extension, with seven groups. The full type model comes in a later alpha.
 - Dates use the computer's current offset from UTC, with no daylight-saving rules. A file changed in the hour a clock changed may land on the wrong side of midnight.
 - Patterns are Rust regular expressions: no look-around and no backreferences. A pattern is at most 1,000 characters.
 - Owner and user group are read where the listing has them. Windows owners are not read in a listing.
@@ -56,7 +56,7 @@ Each item says which alpha brings it.
 
 ## Compare files
 
-- Two files only. Two folders come with alpha.8, and so does `--names -0`.
+- Two files only. Two folders come in a later alpha, and so does `--names -0`.
 - A file inside an archive is not compared. Copy it out first.
 - The unified view is a list, not a mode of the viewer. Enter on a row opens the viewer at its line.
 - Next and previous change are F7 and Shift+F7 in the compare list. Some terminals send Shift+F7 as another key. P, or Shift+F10 and its actions list, is the sure way. The Compare submenu in the Search menu cannot open while a compare is open.
@@ -77,7 +77,8 @@ Each item says which alpha brings it.
 - A command that Change key has no sentence for is described as "runs" and its name.
 - On Windows a text paste arrives as typed keys, so during Change key its first character is taken as the key. The questions that follow start on No. The capture says nothing about the terminal on Windows, because whether Windows reports keys exactly is not probed.
 - The Explorer and Finder preset has no Command+D, because on a Mac Command+D is Say status. In the Worker preset Alt+T sorts in a panel, so the Tools menu is F9, then T.
-- Keys that plugins propose come with alpha.4.
+- In the Explorer and Finder preset, Control with 1 to 7 sets the favorite labels, and macOS may keep those keys for Mission Control. That is checked when the window arrives on a Mac. The Labels submenu of the Edit menu is the sure way.
+- Keys that plugins propose come in a later alpha, with plugins.
 
 ## The trash
 
@@ -112,7 +113,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The created time is kept on Windows and macOS. Linux cannot set a created time, so it is not kept there.
 - The accessed time is never kept.
 - An unpack keeps each member's modified time. A zip stores a time in the old DOS form, which has no time zone and only two-second steps, and diroxide reads and writes it as UTC. Programs that read it as local time, such as Info-ZIP's `unzip`, show the times of a zip diroxide wrote shifted by your offset from UTC, and a zip written by such a program shows shifted in diroxide. The extended time field that zip also allows is not read or written yet.
-- Copies and moves keep dates, and there is no setting to turn that off in this alpha.
+- Copies and moves keep dates, and there is no setting to turn that off.
 
 ## Archives
 
@@ -155,7 +156,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 - A read error partway through a join fails the whole join. Run it again.
 - With very small parts, the split progress line can run past 40 characters. The part count stays inside the first 40.
-- The checksum file has no SHA-256 line yet. It comes with alpha.7.
+- The checksum file has no SHA-256 line yet. It comes in a later alpha.
 - Spanned zip sets (`.z01`) and RAR volumes are not byte splits and are not joined by putting the parts end to end.
 - Whether Total Commander and Double Commander find the checksum file diroxide writes, `report.pdf.crc`, from `report.pdf.001` has not been tried. `cat`, `copy /b` and diroxide's own join are tested against each other.
 - Parts keep the file's extension in their names, as 7-Zip's do. Total Commander's own parts may drop it. diroxide reads both.
@@ -165,8 +166,8 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Windows needs Developer Mode or an administrator to make a symbolic link, and a FAT or exFAT drive holds no links at all. The words for the missing right are tested on the error itself; the test machine had the right, so the real refusal has not been seen yet.
 - A folder link on Windows cannot be changed in one step, so changing its target uses the trash. On a drive with no trash, changing a folder link's target fails in words.
 - Not built yet from the permissions plan: typing an octal number or a symbolic mode such as `u=rw,g=r`, Make runnable, the list of permission presets, a list of protected places that refuse changes in administrator mode, extra checks for private-key names, changing a file with several hard links once, and a "why can't I?" explanation. The permissions dialog steps each of owner, group and others through six choices instead.
-- Access lists, flags such as immutable and locked, and extended attributes are neither shown nor edited. They come with alpha.7, shown first. Changing the owner comes with alpha.7.
-- The rows alpha.2 adds to the details list (type, size with its exact bytes, a link's target) have no dates of their own, because the preview code has no time zone. The times are in the details list as before.
+- Access lists, flags such as immutable and locked, and extended attributes are neither shown nor edited. They come in a later alpha, shown first. Changing the owner comes in a later alpha too.
+- The first rows of the details list (type, size with its exact bytes, a link's target) have no dates of their own, because the preview code has no time zone. The times are in the details list as before.
 - The Unix half of the atomic link swap is covered by the project's Linux container check. It has not been run natively on a Unix machine outside it.
 
 ## Terminals and keys
@@ -189,10 +190,10 @@ The table of keys each terminal can send is built from a key probe run by hand o
 
 ## Screen readers and Braille
 
-- NVDA in Windows Terminal is the main target. Nothing in alpha.2 had been heard on a screen reader when this page was written; the first listening check comes after the build is complete. [The accessibility statement](accessibility.md) records what has been checked.
+- NVDA in Windows Terminal is the main target. Nothing in alpha 1 had been heard on a screen reader when this page was written; the listening checks come after the build is complete. [The accessibility statement](accessibility.md) records what has been checked.
 - JAWS in Windows Terminal is untested.
 - Orca and VoiceOver are best effort. Terminals that draw with the graphics card, such as Alacritty and kitty, give Orca nothing to read.
-- The key bar is drawn on the last line in every mode, screen-reader mode included, since alpha.2, and the `key_bar` setting turns it off. Say key bar, in the Help menu (Alt+H, then K) and the palette, reads it. At 80 columns the bar uses one space between pairs so that all nine fit. diroxide does not detect a screen reader in alpha.2, so the default `auto` setting counts as on.
+- The key bar is drawn on the last line in every mode, screen-reader mode included, and the `key_bar` setting turns it off. Say key bar, in the Help menu (Alt+H, then K) and the palette, reads it. At 80 columns the bar uses one space between pairs so that all nine fit. diroxide does not detect a screen reader in alpha 1, so the default `auto` setting counts as on.
 - Whether eight bytes a row is the right width for hex on a screen reader and a 40-cell display is decided by listening. The `viewer.hex_row` setting changes it.
 - The by-kind code commands, the quick view's one-line announcement and the spoken sentences of the archive, split and join dialogs have been checked against 40 characters in tests, not heard. Braille cells in contracted braille take more room than characters.
 - Whether NVDA or JAWS speak the terminal's window title on each folder change has not been verified.
@@ -204,6 +205,7 @@ The table of keys each terminal can send is built from a key probe run by hand o
 
 - A file name that is not valid Unicode is flagged and refused. diroxide does not show it with changed characters.
 - Windows would change some names: a trailing space or dot, a device name such as `NUL`, a reserved character. diroxide refuses to create them.
+- When a name is taken on a copy, Keep both and Duplicate follow the desktop convention: `course (2).zip`, with a space and parentheses. That is the owner's choice, so the names look like the ones Explorer and the Finder make. Rename the file afterward if you prefer a plain name.
 - Hidden, control and invisible characters in a name are shown as a question mark. The real name is kept for operations, and a listing before a delete spells them out as `U+XXXX`.
 - A known drawing bug in the library that paints the terminal can shift the rest of a row after an emoji or a Chinese, Japanese or Korean name in some terminals. No newer release of the library fixes it, so diroxide sends a changed row that holds a wide character again from that character to the end of the row. If a row still looks shifted, note the terminal's name and version when you report it.
 

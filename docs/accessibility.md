@@ -1,6 +1,6 @@
 # Accessibility statement
 
-This page says what diroxide promises about accessibility, how each promise is checked, what has been checked so far, and what has not. It was written on Friday, October 16, 2026, before alpha.1 had been heard on a screen reader, and it is updated after each listening check.
+This page says what diroxide promises about accessibility, how each promise is checked, what has been checked so far, and what has not. It was written on Friday, October 16, 2026, and revised on Saturday, October 17, 2026, to cover everything in alpha 1. Nothing in alpha 1 had been heard on a screen reader at either date, because the listening tests come after the build. The page is updated after each listening check.
 
 ## Who diroxide is built for
 
@@ -31,11 +31,11 @@ Automated tests run with every change.
 - A check compares the keymap with the keys NVDA, JAWS and Orca use, and with the keys terminals cannot send.
 - A documentation check looks for broken links, tables and guides without a "See also".
 
-Listening checks are done by hand, because no test hears what a screen reader says. After the build is complete, the first check takes ten minutes with NVDA, then JAWS, then a 40-cell Braille display. Its findings are filed as the first inputs of the next alpha, or fixed at once if they stop daily use.
+Listening checks are done by hand, because no test hears what a screen reader says. After the build is complete, the first check takes ten minutes with NVDA, then JAWS, then a 40-cell Braille display. Longer checks for archives, the viewer and the quick view, and for search, labels, compare, keys and watching, follow in [Using diroxide with a screen reader](screen-readers.md). Their findings are filed as the first inputs of the next alpha, or fixed at once if they stop daily use.
 
 ## What has been checked
 
-When this page was written, nothing in alpha.1 had been heard on a screen reader. What exists is the design and the automated tests above. The "you should hear" lines in [Using diroxide with a screen reader](screen-readers.md) are what the build is meant to say. They become checked statements only when a listening check has confirmed them, and this page will say so, with the date, the screen reader and its version, and the terminal.
+When this page was written, nothing in alpha 1 had been heard on a screen reader. What exists is the design and the automated tests above. The "you should hear" lines in [Using diroxide with a screen reader](screen-readers.md) are what the build is meant to say. They become checked statements only when a listening check has confirmed them, and this page will say so, with the date, the screen reader and its version, and the terminal.
 
 ## What has not been checked
 
@@ -59,7 +59,7 @@ When this page was written, nothing in alpha.1 had been heard on a screen reader
 
 ## The window
 
-The window comes with alpha.6. It will be built on the platform accessibility interfaces (UI Automation on Windows, AT-SPI on Linux and NSAccessibility on macOS), with each panel as a list box whose options are the rows. It will be checked with a UI Automation report and a listening check of its own, and this page will gain a section for it.
+The window comes in a later alpha. It will be built on the platform accessibility interfaces (UI Automation on Windows, AT-SPI on Linux and NSAccessibility on macOS), with each panel as a list box whose options are the rows. It will be checked with a UI Automation report and a listening check of its own, and this page will gain a section for it.
 
 ## Tell us
 
