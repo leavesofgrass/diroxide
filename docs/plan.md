@@ -438,6 +438,8 @@ Each alpha has a goal, contents, what the owner checks, and exit criteria. "Read
 
 **Nine alphas, then the website, then beta.1** (the owner's decision, Saturday, October 10, 2026). Each alpha carries a large number of commits. The seven headings below are the first plan's; the nine-alpha split, provisional until the feature catalog (R6, `research/feature-catalog.md`) lands and is folded in, is:
 
+**The first three alphas ship as one** (the owner, Saturday, October 17, 2026, answer 50): the contents of the planned alpha.1, alpha.2 and alpha.3, built in Waves 1 to 3, are the tag `0.1.0-alpha.1`. The headings below keep their planned names, and each later planned alpha takes the next tag when its wave lands: the planned alpha.4 ships as `0.1.0-alpha.2`, alpha.5 as alpha.3, alpha.6 as alpha.4, alpha.7 as alpha.5, alpha.8 as alpha.6, alpha.9 as alpha.7. The guides never number a future feature: they say "a later alpha".
+
 - alpha.1: two panels (as below, unchanged).
 - alpha.2: archives, the viewer, and the document quick view for Markdown, plain text and code.
 - alpha.3: search, filters, labels, bookmarks and saved searches.
@@ -794,6 +796,14 @@ Given on Saturday, October 10, 2026, after the Wave 0 research:
 16. **The logo** (the same evening, 10:20 PM): from D1's three concepts the owner approved concept B, the crab waving from the open drawer of the cabinet in three-quarter view, and in particular its icon variant as the mark, together with the wordmark. The files are in `assets/logo/` with their alt text; the window alpha rasterizes the mark into the platform icon files.
 15. **The document quick view** (the same evening, 10:17 PM, answered interactively): live preview of documents in the other panel, as orthodox quick view; it follows the cursor after a short pause and re-renders when the previewed file changes on disk; Tab enters it as a region with its own cursor (by line, heading and paragraph; Escape returns); tables by row and cell, links listed and followed through the safe opener, find within it, and "open in textweaver"; rendering pure Rust first through textweaver's relicensed loaders with pandoc and pdftotext as the fallback; Markdown, plain text and code in alpha.2 with the viewer, then DOCX, PDF, HTML, EPUB, spreadsheets and CSV as rows, and images described in words, in alpha.7. The design is in section 5.9.
 13. **Extended research before Wave 1** (the same evening): two more research agents, on the history and the paradigm of the orthodox file managers (Norton Commander, Midnight Commander, FAR and their kin) and on the other paradigms and the per-alpha feature catalog (ranger and its kin, Emacs dired, Directory Opus's Amiga roots), so each alpha's feature list is fleshed out before building. The owner expects each alpha to carry a large number of commits; the alphas are big, as textweaver's were, and the waves are sized to them.
+
+50. **The first three alphas ship as one** (Saturday, October 17, 2026, 7:50 PM): Waves 1 to 3 are `0.1.0-alpha.1`; the later planned alphas take the next tags in turn (section 8); the guides say "a later alpha" and never number a future feature.
+51. **Wave 4 starts after the owner's listening test of alpha 1** (the same message), not before, so fixes his ears find come first and the week's quota stays his.
+52. **The finished worktrees are removed through git's own worktree removal and the merged branches stay** as each lane's record (the same message).
+53. **Docker: the dangling images and the build cache may be pruned, never a volume** (the same message).
+54. **The xz project's test files (0BSD, about 97 small files under 1 MB) may be downloaded as archive fixtures,** pinned to a commit and checked against their published sizes (the same message; question 60's download).
+55. **A taken name on a copy follows the desktop convention, "course (2).zip",** for user files; the plain-name rule is for what agents and scripts create in the repository (the same message).
+56. **The Explorer and Finder preset keeps Control with a digit for the favorite labels on macOS,** with a note on the keys page that macOS may keep them for Mission Control, checked when the window arrives on a Mac (the same message).
 
 Questions 4 to 14 are open and take their defaults until the owner says otherwise.
 
