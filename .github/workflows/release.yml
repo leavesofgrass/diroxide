@@ -116,14 +116,14 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
       - uses: actions/download-artifact@v4
         with:
-          path: assets
+          path: release-assets
           merge-multiple: true
       - name: Checksums and release notes
         shell: bash
         run: |
           set -euo pipefail
           tag="${{ inputs.tag || github.ref_name }}"
-          cd assets
+          cd release-assets
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
           cd ..
@@ -143,9 +143,9 @@ jobs:
           set -euo pipefail
           tag="${{ inputs.tag || github.ref_name }}"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" --clobber assets/*
+            gh release upload "$tag" --clobber release-assets/*
             gh release edit "$tag" --notes-file notes.md --prerelease
           else
-            gh release create "$tag" --prerelease --title "diroxide $tag" --notes-file notes.md --verify-tag assets/*
+            gh release create "$tag" --prerelease --title "diroxide $tag" --notes-file notes.md --verify-tag release-assets/*
           fi
           gh release view "$tag" --json assets --jq '.assets[].name'
