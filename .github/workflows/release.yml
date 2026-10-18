@@ -89,13 +89,24 @@ jobs:
           cp -R docs "$name/docs"
           tar -czf "out/$name.tar.gz" "$name"
           ls -l out
+      # The program is the tag's; the packaging is the workflow's own commit,
+      # so a tag made before the packaging existed still gets its AppImage.
+      - name: Take the packaging from the workflow's own commit
+        if: runner.os == 'Linux'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: packaging-src
+          sparse-checkout: packaging
       - name: Package (Linux, an AppImage)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
-          sh packaging/appimage/fetch-tools.sh "$RUNNER_TEMP/appimage"
-          sh packaging/appimage/build.sh "target/${{ matrix.target }}/dist/${{ matrix.binary }}" "${{ inputs.tag || github.ref_name }}" out "$RUNNER_TEMP/appimage"
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends desktop-file-utils file
+          sh packaging-src/packaging/appimage/fetch-tools.sh "$RUNNER_TEMP/appimage"
+          sh packaging-src/packaging/appimage/build.sh "target/${{ matrix.target }}/dist/${{ matrix.binary }}" "${{ inputs.tag || github.ref_name }}" out "$RUNNER_TEMP/appimage" "$GITHUB_WORKSPACE"
           ls -l out
       - uses: actions/upload-artifact@v4
         with:
