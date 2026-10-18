@@ -809,6 +809,7 @@ Given on Saturday, October 10, 2026, after the Wave 0 research:
 58. **The history's author email is the GitHub noreply address,** rewritten on every branch before the first push, and the repository's own git identity uses it from now on; the owner's name stays on every commit.
 59. **The Claude tooling is not in the repository:** the guard hook, its tests and the safe-remove script stay on disk under `.claude`, ignored, with their master copies in the owner's wiki.
 60. **The owner's other site is named without its domain** in this plan (a callsign under the privacy rule); the website sections say "the owner's personal site".
+61. **Pushes land as the commits land** (Saturday, October 17, 2026, 10:32 PM): `main` on GitHub stays current with `main` here, every checked commit going up when it lands; tags only on the owner's go; never a force push.
 
 Questions 4 to 14 are open and take their defaults until the owner says otherwise.
 
