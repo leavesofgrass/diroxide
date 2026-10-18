@@ -646,7 +646,7 @@ impl Runtime {
                 self.queue.push_back(AppEvent::Problem(Message::could_not(
                     "run",
                     &call.plugin,
-                    "plugins come with alpha.4",
+                    "plugins come with a later alpha",
                     "",
                 )));
                 true
@@ -663,7 +663,7 @@ impl Runtime {
                 self.queue.push_back(AppEvent::Problem(Message::could_not(
                     "copy",
                     "to the system clipboard",
-                    "alpha.1 keeps its own file clipboard",
+                    "alpha 1 keeps its own file clipboard",
                     "",
                 )));
                 true

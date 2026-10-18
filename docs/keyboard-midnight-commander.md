@@ -56,7 +56,7 @@ These keys of the source are two keys in a row, which diroxide does not use: a k
 - Ctrl+X Ctrl+D: Compare files.
 - Ctrl+X H: Add a bookmark.
 - Ctrl+X J: Job history.
-- Ctrl+X !: External panelize, with alpha.4.
+- Ctrl+X !: External panelize, with a later alpha.
 - Ctrl+X T: Paste the marked names into the run prompt.
 - Ctrl+X P: Paste the other panel's names into the run prompt.
 

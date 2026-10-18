@@ -104,7 +104,7 @@ id = "file.permissions"
 
 [[held_back]]
 keys = "ctrl+x o"
-command = "Change the owner, with alpha.7"
+command = "Change the owner, with a later alpha"
 
 [[held_back]]
 keys = "ctrl+x l"

@@ -146,4 +146,4 @@ id = "view.hidden"
 
 [[held_back]]
 keys = "g t"
-command = "Next tab, with alpha.8"
+command = "Next tab, with a later alpha"

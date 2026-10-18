@@ -114,7 +114,7 @@ These keys of the source are two keys in a row, which diroxide does not use: a k
 - P P: Paste, as p here.
 - C W: Rename, as r here.
 - Z H: Show hidden files, as the period here.
-- G T: Next tab, with alpha.8.
+- G T: Next tab, with a later alpha.
 
 ## See also
 

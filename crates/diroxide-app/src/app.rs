@@ -1662,7 +1662,7 @@ impl App {
             Action::FilterClear => self.filter_clear(),
             Action::Sort => self.sort_by(&command.id),
             Action::SortList => self.sort_list(),
-            Action::Plugins => vec![self.say(Message::info("Plugins come with alpha.4."))],
+            Action::Plugins => vec![self.say(Message::info("Plugins come with a later alpha."))],
             Action::Quit | Action::QuitToFolder => self.ask_quit(false),
             Action::QuitKeepFolder => self.ask_quit(true),
             Action::Help => self.help(),

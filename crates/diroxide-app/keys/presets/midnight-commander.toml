@@ -108,7 +108,7 @@ id = "jobs.history"
 
 [[held_back]]
 keys = "ctrl+x !"
-command = "External panelize, with alpha.4"
+command = "External panelize, with a later alpha"
 
 [[held_back]]
 keys = "ctrl+x t"

@@ -157,7 +157,7 @@ fn notices(options: &OpenOptions, out: &mut dyn Write) -> Result<(), CliError> {
     if options.gui {
         writeln!(
             out,
-            "The window comes with alpha.6; the terminal opens instead."
+            "The window comes with a later alpha; the terminal opens instead."
         )
         .map_err(write_failed)?;
     }
@@ -361,7 +361,7 @@ mod tests {
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(
             lines[0],
-            "The window comes with alpha.6; the terminal opens instead."
+            "The window comes with a later alpha; the terminal opens instead."
         );
         assert_eq!(lines[1], "Unknown theme: no-such. Galaxy is in use.");
     }

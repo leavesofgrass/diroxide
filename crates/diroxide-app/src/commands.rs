@@ -2297,7 +2297,7 @@ pub static CATALOG: [CommandInfo; 213] = [
     command(
         ids::PLUGINS,
         "Plugins",
-        "Lists the plugins and what they may do. Plugins come with alpha.4.",
+        "Lists the plugins and what they may do. Plugins come with a later alpha.",
         Global,
         &[],
         &[],
@@ -2330,7 +2330,7 @@ pub static CATALOG: [CommandInfo; 213] = [
 
 /// Names kept for the commands of later alphas, so no command of this one
 /// takes them in the palette: the name, and the alpha that brings it.
-pub const RESERVED_NAMES: [(&str, &str); 1] = [("hot folder", "alpha.7")];
+pub const RESERVED_NAMES: [(&str, &str); 1] = [("hot folder", "a later alpha")];
 
 /// A built-in command by id.
 pub fn info(id: &CommandId) -> Option<&'static CommandInfo> {

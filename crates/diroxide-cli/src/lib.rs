@@ -153,7 +153,7 @@ pub fn help_text() -> String {
         "--portable                keep the settings beside the program",
         "--no-plugins              start without plugins",
         "--tui                     open in the terminal, even with a display",
-        "--gui                     open the window (it comes with alpha.6)",
+        "--gui                     open the window (it comes with a later alpha)",
         "--inline                  draw below the prompt, not on the whole screen",
         "--cwd-file FILE           at quit, write the active folder to FILE for the shell",
         "--theme NAME              use this theme for this session",

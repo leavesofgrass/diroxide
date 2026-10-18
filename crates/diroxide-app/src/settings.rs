@@ -40,8 +40,8 @@ fn value_details(settings: &Settings, info: &SettingInfo, theme_verdict: &str) -
     if info.key == "theme" && !theme_verdict.is_empty() {
         details.push(theme_verdict.to_owned());
     }
-    if let Some(alpha) = info.arrives {
-        details.push(format!("comes with {alpha}"));
+    if info.arrives.is_some() {
+        details.push("comes with a later alpha".to_owned());
     }
     details
 }
@@ -123,8 +123,8 @@ pub fn setting_help(key: &str) -> Option<String> {
         info.group.title(),
         info.kind.words()
     );
-    if let Some(alpha) = info.arrives {
-        text.push_str(&format!(" Kept now; it comes with {alpha}."));
+    if info.arrives.is_some() {
+        text.push_str(" Kept now; it comes with a later alpha.");
     }
     Some(text)
 }
@@ -172,7 +172,7 @@ mod tests {
         assert!(
             setting_help("plugins.enabled")
                 .unwrap()
-                .ends_with("it comes with alpha.4.")
+                .ends_with("it comes with a later alpha.")
         );
         assert!(setting_help("nothing").is_none());
         let presets = setting_help("split_presets").unwrap();

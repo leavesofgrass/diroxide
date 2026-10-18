@@ -68,7 +68,7 @@ These keys of the source are two keys in a row, which diroxide does not use: a k
 - Ctrl+X S: Make a symbolic link.
 - Ctrl+X Ctrl+S: Change a link's target.
 - Ctrl+X C: Change permissions.
-- Ctrl+X O: Change the owner, with alpha.7.
+- Ctrl+X O: Change the owner, with a later alpha.
 - Ctrl+X L: The command log, the job history here.
 - Ctrl+X N: Newest files.
 - Ctrl+L 1: The first layout.

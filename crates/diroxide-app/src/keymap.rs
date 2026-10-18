@@ -127,8 +127,8 @@ impl KeyConcern {
             KeyConcern::NeedsNumLock { readers } => {
                 format!("Num Lock on needed for {k}: {readers} review with it off.")
             }
-            KeyConcern::Reserved { name, alpha } => {
-                format!("{k} is kept for {name}, coming in {alpha}.")
+            KeyConcern::Reserved { name, .. } => {
+                format!("{k} is kept for {name}, coming in a later alpha.")
             }
             KeyConcern::AlreadyUsed { command } => {
                 format!("{k} already runs {}.", commands::name_of(command))
@@ -1197,7 +1197,7 @@ mod tests {
         );
         assert_eq!(
             said("ctrl+t", ids::COPY),
-            ["Ctrl+T is kept for New tab, coming in alpha.8."]
+            ["Ctrl+T is kept for New tab, coming in a later alpha."]
         );
         assert!(said("ctrl+t", CommandId::from_static("tab.new")).is_empty());
         assert_eq!(

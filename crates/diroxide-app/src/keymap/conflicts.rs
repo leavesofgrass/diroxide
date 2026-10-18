@@ -491,7 +491,7 @@ mod tests {
             ),
             (
                 "ctrl+t",
-                &["Ctrl+T is kept for New tab, coming in alpha.8. Use it anyway? y or n"],
+                &["Ctrl+T is kept for New tab, coming in a later alpha. Use it anyway? y or n"],
             ),
             (
                 "ctrl+f",
