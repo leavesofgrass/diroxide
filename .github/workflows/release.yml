@@ -1,9 +1,11 @@
 # Builds diro for Windows, macOS and Linux and publishes them on GitHub
-# Releases, as a pre-release while the alphas run: a zip for Windows, a
-# tarball for each macOS architecture, an AppImage for Linux. Started by
-# hand with a tag name, or by a pushed version tag. Running it again for
-# the same tag replaces the assets. Plain logs, no color, so they read
-# well in a screen reader.
+# Releases, as a pre-release while the alphas run. One file per platform,
+# as the plan decides (section 5, "Two ways in"): the diro program itself
+# for Windows, one universal binary for macOS, an AppImage for Linux; no
+# archive to open and no installer. Each file has its line in SHA256SUMS
+# and a provenance attestation. Started by hand with a tag name, or by a
+# pushed version tag; running it again for the same tag replaces the
+# files. Plain logs, no color, so they read well in a screen reader.
 name: Release
 
 on:
@@ -19,107 +21,123 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 env:
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: never
   RUST_BACKTRACE: "1"
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  build:
-    name: Build for ${{ matrix.platform }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            platform: windows-x86_64
-            binary: diro.exe
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            platform: linux-x86_64
-            binary: diro
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            platform: macos-aarch64
-            binary: diro
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            platform: macos-x86_64
-            binary: diro
-    runs-on: ${{ matrix.os }}
+  windows:
+    name: Windows x86_64
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
-      - name: Install the pinned toolchain and the target
-        run: |
-          rustup toolchain install
-          rustup target add ${{ matrix.target }}
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
-          key: release-${{ matrix.target }}
+          key: release-windows-x86_64
       - name: Build diro with the dist profile
-        run: cargo build --profile dist -p diro --target ${{ matrix.target }}
-      - name: Say the version the binary reports
-        run: target/${{ matrix.target }}/dist/${{ matrix.binary }} --version
-      - name: Package (Windows, a zip)
-        if: runner.os == 'Windows'
+        run: cargo build --profile dist -p diro
+      - name: The one file
         shell: pwsh
         run: |
-          $name = "diro-${{ inputs.tag || github.ref_name }}-${{ matrix.platform }}"
-          New-Item -ItemType Directory -Path $name | Out-Null
-          Copy-Item -LiteralPath "target/${{ matrix.target }}/dist/${{ matrix.binary }}" -Destination $name
-          Copy-Item -LiteralPath README.md, CHANGELOG.md, LICENSE-APACHE, LICENSE-MIT, NOTICE -Destination $name
-          Copy-Item -LiteralPath docs -Destination "$name/docs" -Recurse
-          Compress-Archive -Path $name -DestinationPath "$name.zip"
           New-Item -ItemType Directory -Path out | Out-Null
-          Move-Item -LiteralPath "$name.zip" -Destination out
+          $file = "out/diro-$env:TAG-windows-x86_64.exe"
+          Copy-Item -LiteralPath target/dist/diro.exe -Destination $file
+          & $file --version
           Get-ChildItem out
-      - name: Package (macOS, a tarball)
-        if: runner.os == 'macOS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: out/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS universal
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Install the pinned toolchain and both targets
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-macos-universal
+      - name: Build diro with the dist profile for both architectures
+        run: |
+          cargo build --profile dist -p diro --target aarch64-apple-darwin
+          cargo build --profile dist -p diro --target x86_64-apple-darwin
+      - name: The one file, a universal binary signed ad hoc
         shell: bash
         run: |
           set -euo pipefail
-          name="diro-${{ inputs.tag || github.ref_name }}-${{ matrix.platform }}"
-          mkdir -p "$name" out
-          cp "target/${{ matrix.target }}/dist/${{ matrix.binary }}" "$name/"
-          cp README.md CHANGELOG.md LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
-          cp -R docs "$name/docs"
-          tar -czf "out/$name.tar.gz" "$name"
+          mkdir -p out
+          file="out/diro-$TAG-macos-universal"
+          lipo -create -output "$file" target/aarch64-apple-darwin/dist/diro target/x86_64-apple-darwin/dist/diro
+          chmod 0755 "$file"
+          codesign --force --sign - "$file"
+          codesign --verify --verbose=2 "$file"
+          lipo -info "$file"
+          "$file" --version
           ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: out/*
+          if-no-files-found: error
+
+  linux:
+    name: Linux x86_64 AppImage
+    # Ubuntu 22.04, so the program links an older glibc and runs on more systems.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       # The program is the tag's; the packaging is the workflow's own commit,
       # so a tag made before the packaging existed still gets its AppImage.
       - name: Take the packaging from the workflow's own commit
-        if: runner.os == 'Linux'
         uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           path: packaging-src
           sparse-checkout: packaging
-      - name: Package (Linux, an AppImage)
-        if: runner.os == 'Linux'
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-linux-x86_64
+      - name: Build diro with the dist profile
+        run: cargo build --profile dist -p diro
+      - name: The one file, an AppImage
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends desktop-file-utils file
           sh packaging-src/packaging/appimage/fetch-tools.sh "$RUNNER_TEMP/appimage"
-          sh packaging-src/packaging/appimage/build.sh "target/${{ matrix.target }}/dist/${{ matrix.binary }}" "${{ inputs.tag || github.ref_name }}" out "$RUNNER_TEMP/appimage" "$GITHUB_WORKSPACE"
+          sh packaging-src/packaging/appimage/build.sh target/dist/diro "$TAG" out "$RUNNER_TEMP/appimage" "$GITHUB_WORKSPACE"
+          rm -r out/diro.AppDir
           ls -l out
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform }}
-          path: |
-            out/*.zip
-            out/*.tar.gz
-            out/*.AppImage
+          name: linux-x86_64
+          path: out/*
           if-no-files-found: error
 
   release:
     name: Publish the release
-    needs: build
+    needs: [windows, macos, linux]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
@@ -133,30 +151,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ inputs.tag || github.ref_name }}"
           cd release-assets
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
           cd ..
           # The changelog's section for this tag, without its heading.
-          awk -v tag="$tag" '
+          awk -v tag="$TAG" '
             /^## /{ if (on) exit; on = ($2 == tag) ; next }
             on { print }
           ' CHANGELOG.md > notes.md
-          if [ ! -s notes.md ]; then echo "No changelog section for $tag" >&2; exit 1; fi
-          printf '\nThe Windows zip and the macOS tarballs hold the diro program, the guides and the licenses; the Linux AppImage holds the program and the licenses, and runs as it is once made executable. Checksums are in SHA256SUMS. The macOS and Linux programs are not signed: on macOS, allow it once under Privacy and Security after the first start is blocked.\n' >> notes.md
+          if [ ! -s notes.md ]; then echo "No changelog section for $TAG" >&2; exit 1; fi
+          cat >> notes.md <<'NOTES'
+
+          ## The files
+
+          Each file is the diro program itself, with no archive to open and no installer: the Windows program, the macOS universal binary (Apple silicon and Intel in one file), and the Linux AppImage. Rename it to `diro` if you like and put it in a folder on your PATH. The builds are not code-signed, so each platform asks for one step the first time: on Windows, SmartScreen warns, so choose More info, then Run anyway; on macOS, remove the quarantine mark once with `xattr -d com.apple.quarantine` and make the file executable with `chmod +x`; on Linux, make the AppImage executable with `chmod +x`. Each file has a line in SHA256SUMS and a provenance attestation (`gh attestation verify FILE --owner leavesofgrass`). The guides are in the repository under `docs/`, starting with [Installing diroxide](https://github.com/leavesofgrass/diroxide/blob/main/docs/install.md).
+          NOTES
           cat notes.md
-      - name: Create the pre-release, or replace its assets
+      - name: Create the pre-release, or replace its files
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="${{ inputs.tag || github.ref_name }}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" --clobber release-assets/*
-            gh release edit "$tag" --notes-file notes.md --prerelease
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" --clobber release-assets/*
+            gh release edit "$TAG" --notes-file notes.md --prerelease
           else
-            gh release create "$tag" --prerelease --title "diroxide $tag" --notes-file notes.md --verify-tag release-assets/*
+            gh release create "$TAG" --prerelease --title "diroxide $TAG" --notes-file notes.md --verify-tag release-assets/*
           fi
-          gh release view "$tag" --json assets --jq '.assets[].name'
+          gh release view "$TAG" --json assets --jq '.assets[] | .name + " " + (.size|tostring)'
+      - name: Attest the provenance of the files
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-assets/*
