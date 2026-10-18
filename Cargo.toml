@@ -10,6 +10,7 @@ version = "0.1.0-alpha.1"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 homepage = "https://diroxide.app"
+repository = "https://github.com/leavesofgrass/diroxide"
 # Nothing is published until the owner says so.
 publish = false
 

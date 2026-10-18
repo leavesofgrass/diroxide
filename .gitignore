@@ -3,8 +3,7 @@
 /target-*
 
 # Claude Code session folders (worktrees, temp)
-/.claude/worktrees/
-/.claude/tmp/
+/.claude/
 
 # Editor and OS noise
 *.swp
