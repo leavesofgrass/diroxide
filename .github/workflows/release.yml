@@ -1,6 +1,8 @@
 # Builds diro for Windows, macOS and Linux and publishes them on GitHub
-# Releases, as a pre-release while the alphas run. Started by hand with a
-# tag name, or by a pushed version tag. Plain logs, no color, so they read
+# Releases, as a pre-release while the alphas run: a zip for Windows, a
+# tarball for each macOS architecture, an AppImage for Linux. Started by
+# hand with a tag name, or by a pushed version tag. Running it again for
+# the same tag replaces the assets. Plain logs, no color, so they read
 # well in a screen reader.
 name: Release
 
@@ -62,7 +64,7 @@ jobs:
         run: cargo build --profile dist -p diro --target ${{ matrix.target }}
       - name: Say the version the binary reports
         run: target/${{ matrix.target }}/dist/${{ matrix.binary }} --version
-      - name: Package (Windows)
+      - name: Package (Windows, a zip)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -75,8 +77,8 @@ jobs:
           New-Item -ItemType Directory -Path out | Out-Null
           Move-Item -LiteralPath "$name.zip" -Destination out
           Get-ChildItem out
-      - name: Package (macOS and Linux)
-        if: runner.os != 'Windows'
+      - name: Package (macOS, a tarball)
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -87,10 +89,21 @@ jobs:
           cp -R docs "$name/docs"
           tar -czf "out/$name.tar.gz" "$name"
           ls -l out
+      - name: Package (Linux, an AppImage)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh packaging/appimage/fetch-tools.sh "$RUNNER_TEMP/appimage"
+          sh packaging/appimage/build.sh "target/${{ matrix.target }}/dist/${{ matrix.binary }}" "${{ inputs.tag || github.ref_name }}" out "$RUNNER_TEMP/appimage"
+          ls -l out
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}
-          path: out/*
+          path: |
+            out/*.zip
+            out/*.tar.gz
+            out/*.AppImage
           if-no-files-found: error
 
   release:
@@ -120,14 +133,19 @@ jobs:
             on { print }
           ' CHANGELOG.md > notes.md
           if [ ! -s notes.md ]; then echo "No changelog section for $tag" >&2; exit 1; fi
-          printf '\nThe archives hold the diro program, the guides and the licenses. Checksums are in SHA256SUMS. The macOS and Linux programs are not signed: on macOS, allow it once under Privacy and Security after the first start is blocked.\n' >> notes.md
+          printf '\nThe Windows zip and the macOS tarballs hold the diro program, the guides and the licenses; the Linux AppImage holds the program and the licenses, and runs as it is once made executable. Checksums are in SHA256SUMS. The macOS and Linux programs are not signed: on macOS, allow it once under Privacy and Security after the first start is blocked.\n' >> notes.md
           cat notes.md
-      - name: Create the pre-release and upload the assets
+      - name: Create the pre-release, or replace its assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="${{ inputs.tag || github.ref_name }}"
-          gh release create "$tag" --prerelease --title "diroxide $tag" --notes-file notes.md --verify-tag assets/*
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" --clobber assets/*
+            gh release edit "$tag" --notes-file notes.md --prerelease
+          else
+            gh release create "$tag" --prerelease --title "diroxide $tag" --notes-file notes.md --verify-tag assets/*
+          fi
           gh release view "$tag" --json assets --jq '.assets[].name'

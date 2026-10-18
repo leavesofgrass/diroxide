@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=diroxide
+GenericName=Two-panel file manager
+Comment=A two-panel file manager in the terminal, keyboard first and accessible first
+Exec=diro
+TryExec=diro
+Terminal=true
+Icon=diroxide
+Categories=System;FileTools;FileManager;ConsoleOnly;
+Keywords=file manager;two panels;orthodox;archives;search;screen reader;braille;terminal;
+StartupNotify=false
