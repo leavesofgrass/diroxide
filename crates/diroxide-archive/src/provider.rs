@@ -371,7 +371,7 @@ fn open_source(
             (index, Backend::SevenZ(sevenz))
         }
         ArchiveFormat::TarXz | ArchiveFormat::Xz => {
-            read_xz::check(&source, &name, limits, allow)?;
+            let size = read_xz::check(&source, &name, limits, allow)?;
             let wrapper = Wrapper::Xz {
                 mem_limit_kb: read_xz::mem_limit_kb(limits),
             };
@@ -379,7 +379,6 @@ fn open_source(
                 let index = read_tar::list(&source, wrapper, &name, limits, ctx, allow)?;
                 (index, Backend::Tar(TarBackend::new(source, wrapper)))
             } else {
-                let size = read_xz::uncompressed_size(&source, limits);
                 let index = read_tar::single_index(&name, size, limits)?;
                 (index, Backend::Single(SingleBackend::new(source, wrapper)))
             }

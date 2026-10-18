@@ -251,11 +251,21 @@ pub fn from_io(error: io::Error) -> VfsError {
     }
 }
 
-/// The text with its first letter in lowercase, for a cause in a sentence.
+/// Whether an I/O error carries a provider error or a limit: one the
+/// chain or a source made, not a codec's own.
+pub(crate) fn carries(error: &io::Error) -> bool {
+    error
+        .get_ref()
+        .is_some_and(|e| e.is::<Carried>() || e.is::<VfsError>())
+}
+
+/// The text with its first letter in lowercase, for a cause in a sentence;
+/// a first word in capitals is a name and stays ("XZ block header").
 pub(crate) fn lowercase_first(text: &str) -> String {
     let text = text.trim().trim_end_matches('.');
     let mut chars = text.chars();
     match chars.next() {
+        Some(_) if chars.clone().next().is_some_and(char::is_uppercase) => text.to_owned(),
         Some(first) => first.to_lowercase().chain(chars).collect(),
         None => "the data could not be read".to_owned(),
     }
@@ -752,6 +762,17 @@ mod tests {
             "it is damaged: its data ends early"
         );
         let carried = to_io(VfsError::WrongPassword);
+        assert!(carries(&carried));
         assert_eq!(from_io(carried), VfsError::WrongPassword);
+        assert!(!carries(&io::Error::other("dist overflow")));
+        // A codec's words keep a name in capitals at their start.
+        let header = io::Error::new(io::ErrorKind::InvalidData, "XZ block header CRC32 mismatch");
+        assert_eq!(
+            from_io(header).to_string(),
+            "it is damaged: XZ block header CRC32 mismatch"
+        );
+        assert_eq!(lowercase_first("Invalid data."), "invalid data");
+        assert_eq!(lowercase_first("LZMA2 must be last"), "LZMA2 must be last");
+        assert_eq!(lowercase_first("A"), "a");
     }
 }
