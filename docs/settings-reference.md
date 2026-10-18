@@ -296,7 +296,7 @@ Thumbnails. Shows pictures as small images in the window's thumbnail mode. The w
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with alpha.7.
+- Comes with a later alpha.
 
 ### auto_hide_menu
 
@@ -304,7 +304,7 @@ Hide the menu bar. In the window on Windows, keeps the menu bar hidden until the
 
 - Holds: true or false.
 - Default: `true`.
-- Comes with alpha.6.
+- Comes with a later alpha.
 
 ### focus_mode
 
@@ -312,7 +312,7 @@ Focus mode. In the window, fades the bars when the mouse rests, so the panels ha
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with alpha.6.
+- Comes with a later alpha.
 
 ## Viewer and quick view
 
@@ -717,7 +717,7 @@ Plugins in use. The plugins you turned on, by name. None is on until you turn it
 
 - Holds: a list of names.
 - Default: `[]`.
-- Comes with alpha.4.
+- Comes with a later alpha.
 
 ### plugins.timeout_ms
 
@@ -725,7 +725,7 @@ Plugin time limit. How long a plugin may take to answer before it is reported an
 
 - Holds: a number of milliseconds, 1000 to 600000.
 - Default: `10000`.
-- Comes with alpha.4.
+- Comes with a later alpha.
 
 ### components_source
 
@@ -733,7 +733,7 @@ Components list. Where the list of optional components is read from. Empty means
 
 - Holds: text.
 - Default: `""`.
-- Comes with alpha.4.
+- Comes with a later alpha.
 
 ## Themes
 

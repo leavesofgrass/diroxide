@@ -133,7 +133,7 @@ pub fn generate() -> String {
     page.push_str("\n## In a terminal\n");
     column_section(&mut page, KeyColumn::Terminal);
     page.push_str("\n## In the window\n\n");
-    page.push_str("The window arrives with alpha.6; these are its keys. On macOS the window uses Command where this list says Ctrl, and leaves Ctrl+F3 to Ctrl+F7 and Ctrl+Space to the system; the Sort list, the View menu and the palette sort there.\n");
+    page.push_str("The window arrives in a later alpha; these are its keys. On macOS the window uses Command where this list says Ctrl, and leaves Ctrl+F3 to Ctrl+F7 and Ctrl+Space to the system; the Sort list, the View menu and the palette sort there.\n");
     column_section(&mut page, KeyColumn::Window);
 
     let menus = Menus::builtin();
@@ -200,10 +200,9 @@ pub fn generate() -> String {
             Some(KeyColumn::Window) => ", in the window".to_owned(),
         };
         page.push_str(&format!(
-            "- {}: {}, coming in {}{column}.\n",
+            "- {}: {}, coming later{column}.\n",
             names.join(" or "),
-            row.name,
-            row.alpha
+            row.name
         ));
     }
     page.push_str("\n## See also\n\n");
@@ -385,7 +384,7 @@ mod tests {
         assert!(page.contains("Sure way: View menu, Sort submenu, Sort by modified."));
         // Ctrl+F is bound to Find files since alpha.3 (W3a); Ctrl+T stays
         // kept for tabs.
-        assert!(page.contains("- Ctrl+T: New tab, coming in alpha.8.\n"));
+        assert!(page.contains("- Ctrl+T: New tab, coming later.\n"));
         assert!(page.contains("- Ctrl+F: Find files. "));
         for info in CATALOG.iter() {
             assert!(page.contains(&format!("({})", info.id)), "{}", info.id);

@@ -49,8 +49,8 @@ pub fn generate() -> String {
             if info.kind == SettingKind::DriveKinds {
                 page.push_str(&format!("- Drive kinds: {}.\n", DRIVE_KINDS.join(", ")));
             }
-            if let Some(alpha) = info.arrives {
-                page.push_str(&format!("- Comes with {alpha}.\n"));
+            if info.arrives.is_some() {
+                page.push_str("- Comes with a later alpha.\n");
             }
         }
     }

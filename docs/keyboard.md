@@ -244,7 +244,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 
 ## In the window
 
-The window arrives with alpha.6; these are its keys. On macOS the window uses Command where this list says Ctrl, and leaves Ctrl+F3 to Ctrl+F7 and Ctrl+Space to the system; the Sort list, the View menu and the palette sort there.
+The window arrives in a later alpha; these are its keys. On macOS the window uses Command where this list says Ctrl, and leaves Ctrl+F3 to Ctrl+F7 and Ctrl+Space to the system; the Sort list, the View menu and the palette sort there.
 
 ### Everywhere
 
@@ -559,12 +559,12 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 
 ## Kept for later alphas
 
-- Ctrl+T: New tab, coming in alpha.8.
-- Ctrl+W: Close tab, coming in alpha.8.
-- Ctrl+Tab: Next tab, coming in alpha.8, in the window.
-- Ctrl+Shift+Tab: Previous tab, coming in alpha.8, in the window.
-- Ctrl+Shift+E: Folder tree, coming in alpha.8, in the window.
-- F11: Full screen, coming in alpha.6, in the window.
+- Ctrl+T: New tab, coming later.
+- Ctrl+W: Close tab, coming later.
+- Ctrl+Tab: Next tab, coming later, in the window.
+- Ctrl+Shift+Tab: Previous tab, coming later, in the window.
+- Ctrl+Shift+E: Folder tree, coming later, in the window.
+- F11: Full screen, coming later, in the window.
 
 ## See also
 
