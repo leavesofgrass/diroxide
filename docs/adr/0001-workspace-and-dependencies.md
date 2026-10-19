@@ -48,7 +48,7 @@ diroxide is built by waves of agents, one or two at a time, each owning crates. 
 
 ## Fallback
 
-If a crate boundary proves wrong, two crates merge, or a module moves, by a contract change request resolved at integration. If a heavy crate fails, plan section 6 names its fallback (liblzma or lzma-rust2, russh or openssh-sftp-client, the vendored window stack or a fresh vendor).
+If a crate boundary proves wrong, two crates merge, or a module moves, by a contract change request resolved at integration. If a heavy crate fails, plan section 6 names its fallback (liblzma or lzma-rust2, russh or openssh-sftp-client, the vendored GUI stack or a fresh vendor).
 
 ## Consequences
 
