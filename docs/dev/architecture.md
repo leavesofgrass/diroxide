@@ -1,16 +1,16 @@
 # Architecture
 
-diroxide is one Cargo workspace. One app core holds all state and returns effects; three frontends show it (the terminal, the window, and a headless JSON-RPC server). Every crate has one job. This page is the crate map: what each crate does, who owns it after Phase 0, and which workspace crates it may depend on. `cargo xtask deps --check` enforces the dependency lists below; the table it checks is in `xtask/src/deps.rs`, and the two must change together.
+diroxide is one Cargo workspace. One app core holds all state and returns effects; three frontends show it (the terminal, the graphical interface (GUI), and a headless JSON-RPC server). Every crate has one job. This page is the crate map: what each crate does, who owns it after Phase 0, and which workspace crates it may depend on. `cargo xtask deps --check` enforces the dependency lists below; the table it checks is in `xtask/src/deps.rs`, and the two must change together.
 
 ## How a key press travels
 
 1. A frontend turns its own key event into a `diroxide_core::Key` and hands it to `App::handle` as `AppEvent::Key`.
-2. The app looks the key up in the keymap's layers (panel, list, global; a dialog first when one is open), in the frontend's column (terminal or window). A bound key gives a command; there are no key sequences (ADR-0005); an unbound printable key jumps to the next row starting with that letter.
+2. The app looks the key up in the keymap's layers (panel, list, global; a dialog first when one is open), in the frontend's column (terminal or GUI). A bound key gives a command; there are no key sequences (ADR-0005); an unbound printable key jumps to the next row starting with that letter.
 3. `App::dispatch` changes the app's state and returns `Effect`s.
 4. The frontend handles the screen and speech effects (`Redraw`, `Announce`, `OpenDialog`, `CloseDialog`, `Quit`) and text for the clipboard (`SetClipboardText`), since each frontend owns its clipboard. The `Runtime` handles the I/O effects (`List`, `StartJob`, `CancelJob`, `RunPlugin`, `OpenExternally`, `SetClipboard`) and `AppRequests`, where `Runtime::carry_out` takes the app's own queued requests (plan a job, run a confirmed plan, answer a question, watch a folder, save the session), and turns their results into `AppEvent`s, which go back to `App::handle`.
 5. A listing or job answer carries the request id it answers, so a late answer to an old request is dropped.
 
-The app core never does I/O and never blocks; tests drive it without a terminal or a window.
+The app core never does I/O and never blocks; tests drive it without a terminal or the GUI.
 
 ## The crates
 
@@ -30,7 +30,7 @@ Each entry gives the crate's job, its owner after Phase 0, and the workspace cra
 - `diroxide-plugins`: the JSON-RPC protocol, manifests, the host, the transport and script commands; no in-process tier (Lua scripts run through a Lua runner plugin). Owners: W3a, with W3b for `script.rs`. May depend on core, vfs, config, tools and ops.
 - `diroxide-app`: the app core: panels, commands, keymap dispatch, menus, the palette, banks, dialogs, jobs, announcements and the runtime. Owners: W1c for `commands.rs`, `keymap.rs`, `menu.rs`, `palette.rs` and `settings.rs`; W1d for the rest; later waves add their own files. May depend on core, vfs, archive, ops, search, filetype, config, plugins, tools, preview, theme and diff.
 - `diroxide-tui`: the terminal frontend. Owner: W1d. May depend on core, app and theme.
-- `diroxide-gui`: the window frontend. Owners: W4a, then W4b. May depend on core, app and theme.
+- `diroxide-gui`: the GUI frontend. Owners: W4a, then W4b. May depend on core, app and theme.
 - `diroxide-cli`: the command line behind `diro`: open, serve, search, convert, plugin tooling. Owners: W1d, with W1e for `src/cmd/` and W3b for `src/cmd/plugin.rs`. May depend on every `diroxide-*` crate.
 - `diro`: the thin binary that `cargo install diro` installs. May depend on cli only, and on `ureq` behind its default `fetch` feature, an entry of the native gate's inventory (ADR-0001).
 - `xtask`: the workspace's own tasks. Owner: the orchestrator, with W1c, W1e and W4c adding their tasks. May depend on core, vfs, ops, archive, search, config, app and theme (ops for the bench, which copies through the engine; archive for the bench's archive scenarios and the demo set, which pack, list and unpack through the provider and its runners, P2b; search for the bench's search scenarios, which run the search engine itself, W3s). Nothing depends on it.

@@ -65,7 +65,7 @@ Names are in code type. Defaults are in parentheses.
 - Trash (`trash`, system) and the drives that use it (`trash_drives`, fixed): on Windows only fixed drives keep trashed files safely. Elsewhere the delete is listed and asks before it deletes for good. Replaced files go to the trash first (`replace_to_trash`, on), so Undo can bring them back.
 - Portable names (`portable_names`, on): refuses names that other systems cannot store, such as a colon or a trailing space, when diroxide makes or renames an entry.
 - Dialog settle time (`dialog_settle_ms`, 250; 0 to 2000): keys that arrive this soon after a dialog opens are ignored.
-- Completion list (`completion_list`): `auto` (default) lists candidates as you type in the window and on request in a terminal, `as_you_type`, or `on_tab`.
+- Completion list (`completion_list`): `auto` (default) lists candidates as you type in the graphical interface (GUI) and on request in a terminal, `as_you_type`, or `on_tab`.
 - Cursor fallback (`cursor_fallback`, off): parks the cursor on the status line instead of the row, for a screen reader that follows it better there.
 - Compact (`compact`, off): hides the key bar and the title line in a terminal, and keeps the status and jobs lines.
 - Editor (`editor`, empty): the program F4 starts, a name on the path or a full path with no arguments. If it is empty, diroxide tries VISUAL, then EDITOR, then the system's text editor.
@@ -112,7 +112,7 @@ hex_row = "narrow"
 wait_ms = 800
 ```
 
-Some settings are kept now and do nothing yet: plugins, the components list, thumbnails, and hiding the menu bar and focus mode in the window. The reference marks each as coming with a later alpha.
+Some settings are kept now and do nothing yet: plugins, the components list, thumbnails, and hiding the menu bar and focus mode in the GUI. The reference marks each as coming with a later alpha.
 
 ## Themes and colors
 
@@ -131,7 +131,7 @@ diroxide comes with 24 themes. Their names, for the `theme` setting, are in the 
 Every key is yours to change, with no sequences and no leader keys: each binding is one key with its modifiers. You change them in `keymap.toml`, or in the program, in the Keys list (Settings, then Keys), which writes the same file for you. [Customizing keys](customizing-keys.md) is the guide to the Keys list, the key test and the presets.
 
 - A key is written in plain words joined by plus signs, in lowercase: `ctrl+f5`, `shift+f3`, `alt+home`, `alt+period`, `kp-plus` for the keypad's plus. The word `none` unbinds a command.
-- The file has one line for each command and each place it works, in tables named for the column and the layer: `terminal.panel`, `terminal.global`, `terminal.list` and `terminal.dialog`, and the same for `window`. A value is one key, or a list of keys. The built-in defaults are written beside it in `keymap-defaults.toml`, so you can copy a line and change it.
+- The file has one line for each command and each place it works, in tables named for the column and the layer: `terminal.panel`, `terminal.global`, `terminal.list` and `terminal.dialog`, and the same for `gui`. A value is one key, or a list of keys. The built-in defaults are written beside it in `keymap-defaults.toml`, so you can copy a line and change it.
 - A line looks like this:
 
 ```toml

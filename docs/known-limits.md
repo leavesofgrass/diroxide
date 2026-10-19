@@ -6,7 +6,7 @@ This page says what diroxide does not do yet as of alpha 1, where it is limited 
 
 Each item below is still to come. None of them is dated: a feature that is not in alpha 1 arrives in a later alpha.
 
-- The window. diroxide runs in the terminal only. `diro --gui` is accepted, says that the window comes later, and opens the terminal.
+- The graphical interface (GUI). diroxide runs in the terminal only. `diro --gui` is accepted, says that the GUI comes later, and opens the terminal.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
@@ -71,13 +71,13 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The presets are modeled on written sources, not on the programs. Total Commander's own Help was not read, and its keys come from published lists and forum pages that disagree in places. Midnight Commander's come from its manual, Worker's from the project's own notes, and the vim-style keys from the manuals of ranger, lf, yazi and vifm. A key may differ from the version you know.
 - A preset holds no key sequences. Midnight Commander's Ctrl+X family, Worker's Ctrl-x family and the doubled letters of vim-style managers (gg, dd, yy, pp) are left out or turned into single letters.
 - The keypad keys that some presets use need Num Lock on under NVDA and JAWS, whose review keys use the bare keypad.
-- The terminal column of every preset keeps off the keys a terminal never sends. A key a source manager uses that fails this check is in the window column only.
-- A key press in a terminal can change only the terminal column. The window column is changed by typing the key's name.
+- The terminal column of every preset keeps off the keys a terminal never sends. A key a source manager uses that fails this check is in the GUI column only.
+- A key press in a terminal can change only the terminal column. The GUI column is changed by typing the key's name.
 - The delivery table, which says what each terminal does with each key, has most of its rows marked "to probe". `diro keys probe` fills in a terminal's column, but only when someone runs it there and sends the answer back.
 - A command that Change key has no sentence for is described as "runs" and its name.
 - On Windows a text paste arrives as typed keys, so during Change key its first character is taken as the key. The questions that follow start on No. The capture says nothing about the terminal on Windows, because whether Windows reports keys exactly is not probed.
 - The Explorer and Finder preset has no Command+D, because on a Mac Command+D is Say status. In the Worker preset Alt+T sorts in a panel, so the Tools menu is F9, then T.
-- In the Explorer and Finder preset, Control with 1 to 7 sets the favorite labels, and macOS may keep those keys for Mission Control. That is checked when the window arrives on a Mac. The Labels submenu of the Edit menu is the sure way.
+- In the Explorer and Finder preset, Control with 1 to 7 sets the favorite labels, and macOS may keep those keys for Mission Control. That is checked when the GUI arrives on a Mac. The Labels submenu of the Edit menu is the sure way.
 - Keys that plugins propose come in a later alpha, with plugins.
 
 ## The trash
@@ -118,7 +118,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 ## Archives
 
 - Limits: [the archives guide](archives.md) lists them with the questions they ask. A listing shows at most 500,000 entries of one folder and says so. An archive with more than a million members is refused unless you raise `archives.max_entries`.
-- The command-line `diro archive` commands use the built-in limits, not the `[archives]` table in your settings. Only the program in the terminal or the window reads the table.
+- The command-line `diro archive` commands use the built-in limits, not the `[archives]` table in your settings. Only the program in the terminal or the GUI reads the table.
 - 7z passwords: diroxide wipes its own copy of a typed password when the job ends, and leaving a locked 7z makes it forget the password. The library that reads and writes 7z keeps a copy in memory in a form diroxide cannot wipe, for as long as it needs it: one read, or the whole time a 7z is being packed. A zip password is only borrowed by its library and does not have this limit.
 - A tar.gz, tar.xz or solid 7z is listed with no progress line. A "Reading logs.tar.xz: 3.2 of 14.0 GB" line is planned and not wired, so a big one shows nothing until the list is ready.
 - Junk entries such as `__MACOSX` are marked hidden by the archive reader. Whether Show hidden files lists them in the panel has not been checked.

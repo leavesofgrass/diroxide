@@ -54,7 +54,7 @@ To view a member without copying it, press F3 on it. The title names both: "note
 
 ## Unpack
 
-Unpack writes the members of the focused archive to the other panel's folder. It is Alt+F9 in the desktop window. In a terminal it is File, Archive, Unpack (F9 or Alt+F, then A, then U), or the palette. On an archive that is not open it unpacks all of it. Inside an open archive, mark members first and it unpacks those.
+Unpack writes the members of the focused archive to the other panel's folder. It is Alt+F9 in the graphical interface (GUI). In a terminal it is File, Archive, Unpack (F9 or Alt+F, then A, then U), or the palette. On an archive that is not open it unpacks all of it. Inside an open archive, mark members first and it unpacks those.
 
 The dialog is a list. Its first row says what will happen and runs it on Enter: "Unpack hostile.zip into out". Every other row is "label: value", and Enter changes the row:
 
@@ -81,7 +81,7 @@ Not an archive: on a file that is not one, Unpack says "Not an archive. Unpack n
 
 ## Pack
 
-Pack makes a new archive from the marked rows, or the focused row, in the other panel's folder. It is Alt+F5 in the desktop window. In a terminal it is File, Archive, Pack (F9 or Alt+F, then A, then P), or the palette. It never changes an existing archive: it writes under a temporary name, tests the result, and only then gives it its name. A cancel, or a failed test, leaves any older file of that name untouched.
+Pack makes a new archive from the marked rows, or the focused row, in the other panel's folder. It is Alt+F5 in the GUI. In a terminal it is File, Archive, Pack (F9 or Alt+F, then A, then P), or the palette. It never changes an existing archive: it writes under a temporary name, tests the result, and only then gives it its name. A cancel, or a failed test, leaves any older file of that name untouched.
 
 The dialog is a list. The first row says what will happen and runs it on Enter: "Pack 2 items into demo.zip". The other rows, in order:
 
@@ -106,7 +106,7 @@ Packing to an existing name asks the usual question about a taken name. The old 
 
 ## Test an archive
 
-Test archive reads every member and checks every checksum, and writes nothing. It is Alt+Shift+F9 in the desktop window; in a terminal File, Archive, Test archive (Alt+F, then A, then T), or the palette. It has no dialog. On a file that is not an archive it says "Not an archive. Test archive needs an archive file."
+Test archive reads every member and checks every checksum, and writes nothing. It is Alt+Shift+F9 in the GUI; in a terminal File, Archive, Test archive (Alt+F, then A, then T), or the palette. It has no dialog. On a file that is not an archive it says "Not an archive. Test archive needs an archive file."
 
 - "Test started: demo.zip", then "Archive is sound: 2 members."
 - "2 members damaged: first is week1/a.txt". The result list names every damaged member.
@@ -147,7 +147,7 @@ An archive that is damaged says where: "it is damaged: its data ends early". A m
 
 ## From a shell
 
-These subcommands do the same jobs without the panels, and each prints one plain line a member, the path first. They read passwords only in a terminal, never from the command line. They use the built-in default limits. Only the program in the terminal or the window reads the `[archives]` table of your settings.
+These subcommands do the same jobs without the panels, and each prints one plain line a member, the path first. They read passwords only in a terminal, never from the command line. They use the built-in default limits. Only the program in the terminal or the GUI reads the `[archives]` table of your settings.
 
 ```bash
 diro archive list course.zip

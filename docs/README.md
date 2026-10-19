@@ -50,7 +50,7 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Keys and settings
 
-- [Every key](keyboard.md): the default keys for the terminal and the window, the keys a terminal may keep and the keys screen readers keep, generated from the keymap. Each key preset has its own sheet, linked from [customizing keys](customizing-keys.md).
+- [Every key](keyboard.md): the default keys for the terminal and the graphical interface (GUI), the keys a terminal may keep and the keys screen readers keep, generated from the keymap. Each key preset has its own sheet, linked from [customizing keys](customizing-keys.md).
 - [Customizing keys](customizing-keys.md): the Keys list, changing a key, the key test, the key presets, `diro keys` and `keymap.toml`.
 - [Settings and where the files live](settings.md): the config and state folders, the settings most people look for, themes, changing keys, menus and banks.
 - [Settings reference](settings-reference.md): every setting with its default, range and help, generated from the program's own list of settings.
@@ -61,7 +61,7 @@ These guides are not written yet, because the features they describe are not in 
 
 - Plugins, writing a plugin, script commands and optional components.
 - SSH and remote places.
-- The window.
+- The GUI.
 - Tools and conversions, previews of more kinds of document, and git.
 - Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, disk images and GitHub.
 
@@ -85,7 +85,7 @@ Each architecture decision record keeps one decision: the context, the choice, t
 - [ADR-0004: The job engine](adr/0004-the-job-engine.md): plans, progress, conflicts and undo.
 - [ADR-0005: Commands, keys and menus from one model](adr/0005-commands-keys-and-menus.md): one model for menus, the palette, banks and keys.
 - [ADR-0006: The plugin protocol](adr/0006-the-plugin-protocol.md): plugins over JSON-RPC in any language.
-- [ADR-0007: Frontends over one core](adr/0007-frontends-over-one-core.md): the terminal, the window and the headless server over one app core.
+- [ADR-0007: Frontends over one core](adr/0007-frontends-over-one-core.md): the terminal, the GUI and the headless server over one app core.
 - [ADR-0008: Safety rules](adr/0008-safety-rules.md): lists before deletes, literal paths, the trash by default and confirmations that start on No.
 - [ADR-0009: Secrets and the masked prompt](adr/0009-secrets-and-the-masked-prompt.md): one secret type that is wiped and never logged, and a password prompt that says what it is for.
 

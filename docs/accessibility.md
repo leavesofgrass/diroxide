@@ -57,9 +57,9 @@ When this page was written, nothing in alpha 1 had been heard on a screen reader
 
 [Known limits](known-limits.md) lists what does not work yet, including the keys some terminals will not send.
 
-## The window
+## The graphical interface (GUI)
 
-The window comes in a later alpha. It will be built on the platform accessibility interfaces (UI Automation on Windows, AT-SPI on Linux and NSAccessibility on macOS), with each panel as a list box whose options are the rows. It will be checked with a UI Automation report and a listening check of its own, and this page will gain a section for it.
+The GUI comes in a later alpha. It will be built on the platform accessibility interfaces (UI Automation on Windows, AT-SPI on Linux and NSAccessibility on macOS), with each panel as a list box whose options are the rows. It will be checked with a UI Automation report and a listening check of its own, and this page will gain a section for it.
 
 ## Tell us
 

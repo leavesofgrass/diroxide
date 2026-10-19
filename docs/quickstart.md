@@ -1,6 +1,6 @@
 # Quick start
 
-This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, because alpha 1 has no window yet. If you have not built diroxide yet, start with [installing diroxide](install.md).
+This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, because alpha 1 has no GUI yet. If you have not built diroxide yet, start with [installing diroxide](install.md).
 
 ## How keys are written
 

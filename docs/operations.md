@@ -96,7 +96,7 @@ Shift+F5 makes a copy of the focused or marked entries in the same folder. It as
 
 ## Archives: pack, unpack and test
 
-Pack makes a new archive from the marked rows, Unpack writes an archive's members to a folder, and Test archive reads every member and checks it. They are jobs, with a plan, a question that starts on No, progress, a result list and Undo. In a terminal they are in the File menu under Archive (Alt+F, then A) and in the palette; in the desktop window they are Alt+F5, Alt+F9 and Alt+Shift+F9. F5 from inside an open archive unpacks the marked members, reading the archive once, with the default settings. Copying, moving, renaming or deleting inside an archive is not possible, and says "Archives are read only here. Use Pack to make a new one." [Archives](archives.md) has the dialogs, the passwords and the limits.
+Pack makes a new archive from the marked rows, Unpack writes an archive's members to a folder, and Test archive reads every member and checks it. They are jobs, with a plan, a question that starts on No, progress, a result list and Undo. In a terminal they are in the File menu under Archive (Alt+F, then A) and in the palette; in the graphical interface (GUI) they are Alt+F5, Alt+F9 and Alt+Shift+F9. F5 from inside an open archive unpacks the marked members, reading the archive once, with the default settings. Copying, moving, renaming or deleting inside an archive is not possible, and says "Archives are read only here. Use Pack to make a new one." [Archives](archives.md) has the dialogs, the passwords and the limits.
 
 ## Split and join
 
