@@ -261,8 +261,8 @@ pub fn run(args: &KeysArgs, paths: Option<&Paths>, out: &mut dyn Write) -> Resul
         KeysArgs::Print => {
             let config = paths.map(diroxide_config::load).unwrap_or_default();
             let preset = presets::chosen(&config.settings.preset);
-            let (terminal, window) = presets::keymaps(&config.keymap, preset, platform);
-            write!(out, "{}", keymap::print_keys(&terminal, &window)).map_err(failed)?;
+            let (terminal, gui) = presets::keymaps(&config.keymap, preset, platform);
+            write!(out, "{}", keymap::print_keys(&terminal, &gui)).map_err(failed)?;
             Ok(0)
         }
         KeysArgs::Preset(name) => run_preset(name.as_deref(), paths, out),

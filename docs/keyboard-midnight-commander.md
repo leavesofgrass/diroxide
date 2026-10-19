@@ -22,7 +22,7 @@ Its keys come from Midnight Commander's manual, version 4.8.33, and its keymap f
 - Ctrl+Left or Alt+I: This folder to other panel. Was Ctrl+Left. (panel.this-in-other)
 - Ctrl+F or Alt+?: Find files. Was Ctrl+F. (search.find)
 
-## In the window
+## In the GUI
 
 ### Everywhere
 

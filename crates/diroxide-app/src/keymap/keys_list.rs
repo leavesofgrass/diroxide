@@ -12,8 +12,8 @@
 //! - Typing narrows it: words match names; a key's name ("ctrl+f5")
 //!   matches by key; "unbound", "changed", "preset" and "conflicts" show
 //!   those rows.
-//! - Enter on a row opens its actions: Change key, Change the window key
-//!   (typed, since a terminal cannot send the keys only the window has),
+//! - Enter on a row opens its actions: Change key, Change the GUI key
+//!   (typed, since a terminal cannot send the keys only the GUI has),
 //!   Add a second key, Remove a key, Reset this key, Test keys.
 //!
 //! A dialog's own commands (Yes, No, Accept) are not listed: their keys
@@ -33,8 +33,8 @@ use crate::commands::{CATALOG, CommandInfo};
 pub struct KeysView<'a> {
     /// The terminal column.
     pub terminal: &'a Keymap,
-    /// The window column.
-    pub window: &'a Keymap,
+    /// The GUI column.
+    pub gui: &'a Keymap,
     /// The column this frontend can capture: the terminal's in a
     /// terminal.
     pub here: KeyColumn,
@@ -67,7 +67,7 @@ impl KeysView<'_> {
     pub fn column(&self, column: KeyColumn) -> &Keymap {
         match column {
             KeyColumn::Terminal => self.terminal,
-            KeyColumn::Window => self.window,
+            KeyColumn::Gui => self.gui,
         }
     }
 
@@ -86,11 +86,11 @@ impl KeysView<'_> {
     }
 
     /// A command's keys in words, the terminal's first: "F5 in both",
-    /// "Shift+F1 or ? in a terminal, F1 in the window", "no key".
+    /// "Shift+F1 or ? in a terminal, F1 in the GUI", "no key".
     pub fn keys_words(&self, info: &CommandInfo) -> String {
         let terminal = self.keys_written(KeyColumn::Terminal, info);
-        let window = self.keys_written(KeyColumn::Window, info);
-        if terminal == window {
+        let gui = self.keys_written(KeyColumn::Gui, info);
+        if terminal == gui {
             return if terminal.is_empty() {
                 "no key".to_owned()
             } else {
@@ -107,7 +107,7 @@ impl KeysView<'_> {
         format!(
             "{}, {}",
             side(&terminal, "in a terminal"),
-            side(&window, "in the window")
+            side(&gui, "in the GUI")
         )
     }
 
@@ -228,8 +228,8 @@ impl KeysView<'_> {
     /// A row's actions, Change key first.
     pub fn actions(&self, info: &CommandInfo) -> ListModel {
         let other = match self.here {
-            KeyColumn::Terminal => ("Change the window key", "type its name"),
-            KeyColumn::Window => ("Change the terminal key", "type its name"),
+            KeyColumn::Terminal => ("Change the GUI key", "type its name"),
+            KeyColumn::Gui => ("Change the terminal key", "type its name"),
         };
         let mut rows = vec![
             ListRow::new(actions::CHANGE, "Change key").with_details(["press the new key"]),
@@ -272,13 +272,13 @@ mod tests {
 
     fn view<'a>(
         terminal: &'a Keymap,
-        window: &'a Keymap,
+        gui: &'a Keymap,
         owner: &'a KeymapConfig,
         preset: &'a KeymapConfig,
     ) -> KeysView<'a> {
         KeysView {
             terminal,
-            window,
+            gui,
             here: KeyColumn::Terminal,
             owner,
             preset,
@@ -289,12 +289,12 @@ mod tests {
     #[test]
     fn each_row_says_the_name_the_keys_and_the_state() {
         let terminal = Keymap::defaults().for_platform(Platform::Windows);
-        let window = Keymap::defaults_for(KeyColumn::Window).for_platform(Platform::Windows);
-        let owner = KeymapConfig::from_toml("[terminal.panel]\n\"file.rename\" = \"shift+f6\"\n[window.panel]\n\"file.rename\" = \"shift+f6\"\n").unwrap();
+        let gui = Keymap::defaults_for(KeyColumn::Gui).for_platform(Platform::Windows);
+        let owner = KeymapConfig::from_toml("[terminal.panel]\n\"file.rename\" = \"shift+f6\"\n[gui.panel]\n\"file.rename\" = \"shift+f6\"\n").unwrap();
         let none = KeymapConfig::default();
         let terminal_changed = terminal.clone().with_overrides(&owner);
-        let window_changed = window.clone().with_overrides(&owner);
-        let v = view(&terminal_changed, &window_changed, &owner, &none);
+        let gui_changed = gui.clone().with_overrides(&owner);
+        let v = view(&terminal_changed, &gui_changed, &owner, &none);
         assert_eq!(v.title(), "Keys, preset diroxide defaults, 1 changed");
         let said = |id: diroxide_core::CommandId| v.row(info(&id)).spoken();
         assert_eq!(said(ids::COPY), "Copy to other panel, F5 in both");
@@ -310,11 +310,11 @@ mod tests {
         assert_eq!(said(ids::SORT_KIND), "Sort by kind, no key");
         assert_eq!(
             said(ids::HELP),
-            "Help, Shift+F1 or ? in a terminal, F1 in the window, check terminal"
+            "Help, Shift+F1 or ? in a terminal, F1 in the GUI, check terminal"
         );
         assert_eq!(
             said(ids::SETTINGS),
-            "Settings, no key in a terminal, Ctrl+Comma in the window"
+            "Settings, no key in a terminal, Ctrl+Comma in the GUI"
         );
         // Ctrl+F5 is a macOS key only on macOS.
         assert_eq!(
@@ -324,7 +324,7 @@ mod tests {
         for row in v.list("").rows() {
             assert!(within_cells(&row.spoken(), &row.label), "{}", row.spoken());
         }
-        let v = view(&terminal, &window, &none, &owner);
+        let v = view(&terminal, &gui, &none, &owner);
         assert_eq!(
             v.row(info(&ids::RENAME)).spoken(),
             "Rename, F2 in both, preset"
@@ -334,12 +334,12 @@ mod tests {
     #[test]
     fn typing_narrows_by_name_by_key_and_by_state() {
         let terminal = Keymap::defaults();
-        let window = Keymap::defaults_for(KeyColumn::Window);
+        let gui = Keymap::defaults_for(KeyColumn::Gui);
         let owner = KeymapConfig::from_toml("[terminal.panel]\n\"view.sort-size\" = \"ctrl+f9\"\n")
             .unwrap();
         let none = KeymapConfig::default();
         let terminal = terminal.with_overrides(&owner);
-        let v = view(&terminal, &window, &owner, &none);
+        let v = view(&terminal, &gui, &owner, &none);
         let ids_of = |query: &str| -> Vec<String> {
             v.list(query).rows().iter().map(|r| r.id.clone()).collect()
         };
@@ -369,23 +369,23 @@ mod tests {
     #[test]
     fn a_rows_actions_start_with_change_key() {
         let terminal = Keymap::defaults();
-        let window = Keymap::defaults_for(KeyColumn::Window);
+        let gui = Keymap::defaults_for(KeyColumn::Gui);
         let owner = KeymapConfig::from_toml("[terminal.panel]\n\"view.sort-size\" = \"ctrl+f9\"\n")
             .unwrap();
         let none = KeymapConfig::default();
         let terminal = terminal.with_overrides(&owner);
-        let v = view(&terminal, &window, &owner, &none);
+        let v = view(&terminal, &gui, &owner, &none);
         let list = v.actions(info(&ids::SORT_SIZE));
         assert_eq!(
             list.title(),
-            "Sort by size, Ctrl+F9 in a terminal, Ctrl+F6 in the window"
+            "Sort by size, Ctrl+F9 in a terminal, Ctrl+F6 in the GUI"
         );
         let rows: Vec<String> = list.rows().iter().map(|r| r.spoken()).collect();
         assert_eq!(
             rows,
             [
                 "Change key, press the new key",
-                "Change the window key, type its name",
+                "Change the GUI key, type its name",
                 "Add a second key, press it",
                 "Remove a key",
                 "Reset this key, back to the preset",

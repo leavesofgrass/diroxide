@@ -289,7 +289,7 @@ fn watch_this_folder_is_in_the_view_menu_and_the_palette_with_no_key() {
     let info = diroxide_app::commands::info(&ids::WATCH_FOLDER).unwrap();
     assert_eq!(info.name, "Watch this folder");
     assert!(info.palette_only);
-    assert!(info.window.is_empty());
+    assert!(info.gui.is_empty());
     let dir = temp();
     let work = fixture(dir.path());
     let mut s = Session::start(

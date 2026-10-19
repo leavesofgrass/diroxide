@@ -1504,7 +1504,7 @@ impl App {
         }
     }
 
-    /// An answer a frontend sends for the dialog on top (the window and
+    /// An answer a frontend sends for the dialog on top (the GUI and
     /// the server answer this way; the terminal sends keys).
     pub(super) fn answer(
         &mut self,

@@ -16,7 +16,7 @@ use crate::store::{ConfigProblem, line_of};
 /// ("none") unbinds it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeyOverride {
-    /// The column: the terminal's keys or the window's.
+    /// The column: the terminal's keys or the GUI's.
     pub column: KeyColumn,
     /// The layer the binding applies in.
     pub layer: Layer,
@@ -39,7 +39,7 @@ pub struct KeyOverride {
 /// "file.trash" = ["delete", "f8"]
 /// "view.sort-list" = "none"
 ///
-/// [window.panel]
+/// [gui.panel]
 /// "view.sort-list" = "ctrl+shift+s"
 /// ```
 ///
@@ -89,7 +89,7 @@ impl KeymapConfig {
             let Some(column) = KeyColumn::ALL.into_iter().find(|c| c.word() == column_name) else {
                 config.problems.push(problem(
                     column_line,
-                    format!("Unknown column: [{column_name}]; use terminal or window"),
+                    format!("Unknown column: [{column_name}]; use terminal or gui"),
                 ));
                 continue;
             };
@@ -511,7 +511,7 @@ mod tests {
 \"file.copy\" = \"f5\"
 \"file.trash\" = [\"delete\", \"f8\"]
 \"app.help\" = \"none\"
-[window.panel]
+[gui.panel]
 \"app.help\" = \"f1\"
 ",
         )
@@ -537,7 +537,7 @@ mod tests {
         );
         assert!(
             help.iter()
-                .any(|o| o.column == KeyColumn::Window && o.keys.len() == 1)
+                .any(|o| o.column == KeyColumn::Gui && o.keys.len() == 1)
         );
     }
 
@@ -554,7 +554,7 @@ mod tests {
 \"file.view\" = 3
 \"file.move\" = [\"f6\", 7]
 \"file.copy\" = \"f5\"
-[window]
+[gui]
 x = 1
 ";
         let config = KeymapConfig::from_toml(text).unwrap();
@@ -568,8 +568,8 @@ x = 1
                 "Not a command id: File.Copy, line 8.",
                 "No key for file.view: write \"f5\" or \"none\", line 9.",
                 "No key for file.move: write \"f5\" or \"none\", line 10.",
-                "Unknown column: [tv]; use terminal or window, line 3.",
-                "Unknown layer: [window.x], line 13."
+                "Unknown column: [tv]; use terminal or gui, line 3.",
+                "Unknown layer: [gui.x], line 13."
             ]
         );
         for problem in &config.problems {
@@ -588,7 +588,7 @@ x = 1
     #[test]
     fn rendered_lines_read_back_the_same() {
         let config = KeymapConfig::from_toml(
-            "[terminal.panel]\n\"file.copy\" = \"f5\"\n\"file.trash\" = [\"delete\", \"f8\"]\n\"view.hidden\" = \"alt+.\"\n\"select.pattern\" = \"+\"\n[window.global]\n\"app.palette\" = [\"ctrl+shift+p\", \"ctrl+p\"]\n\"app.help\" = \"none\"\n",
+            "[terminal.panel]\n\"file.copy\" = \"f5\"\n\"file.trash\" = [\"delete\", \"f8\"]\n\"view.hidden\" = \"alt+.\"\n\"select.pattern\" = \"+\"\n[gui.global]\n\"app.palette\" = [\"ctrl+shift+p\", \"ctrl+p\"]\n\"app.help\" = \"none\"\n",
         )
         .unwrap();
         let text = KeymapConfig::render(&config.overrides, "Keys.\nSecond line.");

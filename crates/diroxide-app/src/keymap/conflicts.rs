@@ -5,7 +5,7 @@
 //! 1. **Refused.** Insert is the screen readers' key and is never bound.
 //!    A key that is already the command's own changes nothing.
 //! 2. **The terminal.** In the terminal column a key the terminal cannot
-//!    send asks "Use it for the window column only?"; a key a terminal
+//!    send asks "Use it for the GUI column only?"; a key a terminal
 //!    program keeps, or that some terminals send as another, is said and
 //!    the change goes on. A program's row counts only on its own system:
 //!    macOS's keys on macOS, the Windows console's on Windows.
@@ -56,8 +56,8 @@ pub fn is_critical(command: &CommandId) -> bool {
 /// What a yes-or-no question of the analysis asks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AskKind {
-    /// The terminal cannot send the key: use it in the window column only.
-    WindowOnly,
+    /// The terminal cannot send the key: use it in the GUI column only.
+    GuiOnly,
     /// A screen reader owns the key, or a later alpha is promised it.
     Anyway,
     /// A single printable key.
@@ -65,11 +65,11 @@ pub enum AskKind {
 }
 
 impl AskKind {
-    /// The question, without its "? y or n": "Use it for the window column
+    /// The question, without its "? y or n": "Use it for the GUI column
     /// only".
     pub const fn words(self) -> &'static str {
         match self {
-            AskKind::WindowOnly => "Use it for the window column only",
+            AskKind::GuiOnly => "Use it for the GUI column only",
             AskKind::Anyway => "Use it anyway",
             AskKind::Letter => "Go on",
         }
@@ -355,7 +355,7 @@ pub fn analyze(
         match &concern {
             KeyConcern::TerminalCannot { .. } => findings.push(Finding::Ask {
                 line: first_clause(&concern.sentence(key, platform)),
-                kind: AskKind::WindowOnly,
+                kind: AskKind::GuiOnly,
             }),
             KeyConcern::TerminalProgram { program, .. } => {
                 if program_holds(program, platform) {
@@ -474,7 +474,7 @@ mod tests {
             ("insert", &["Insert is the screen reader key."]),
             (
                 "ctrl+enter",
-                &["The terminal cannot send Ctrl+Enter. Use it for the window column only? y or n"],
+                &["The terminal cannot send Ctrl+Enter. Use it for the GUI column only? y or n"],
             ),
             (
                 "ctrl+v",
@@ -636,7 +636,7 @@ mod tests {
     fn every_command_with_a_key_has_words_and_each_sentence_fits() {
         let platform = Platform::Windows;
         for info in commands::CATALOG.iter() {
-            for text in info.terminal.iter().chain(info.window) {
+            for text in info.terminal.iter().chain(info.gui) {
                 let k = key(text);
                 let sentence = already(&k, &info.id, platform);
                 assert!(sentence.ends_with('.'), "{sentence}");

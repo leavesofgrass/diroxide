@@ -73,7 +73,7 @@ impl SingleLetters {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompletionList {
-    /// As you type in the window, on Tab in a terminal.
+    /// As you type in the GUI, on Tab in a terminal.
     #[default]
     Auto,
     /// As you type.
@@ -543,11 +543,11 @@ pub struct Settings {
     pub key_bar: bool,
     /// Code colors in the viewer (alpha.2).
     pub highlighting: Highlighting,
-    /// Thumbnails in the window (alpha.7).
+    /// Thumbnails in the GUI (alpha.7).
     pub thumbnails: bool,
-    /// Hide the window's menu bar until Alt or F10 (alpha.6).
+    /// Hide the GUI's menu bar until Alt or F10 (alpha.6).
     pub auto_hide_menu: bool,
-    /// Fade the window's bars while the mouse rests (alpha.6).
+    /// Fade the GUI's bars while the mouse rests (alpha.6).
     pub focus_mode: bool,
     /// The viewer (alpha.2).
     pub viewer: ViewerSettings,

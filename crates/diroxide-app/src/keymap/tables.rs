@@ -520,7 +520,7 @@ fn read_tables() -> Tables {
                 let column = match row.column.as_str() {
                     "both" => None,
                     "terminal" => Some(KeyColumn::Terminal),
-                    "window" => Some(KeyColumn::Window),
+                    "gui" => Some(KeyColumn::Gui),
                     other => {
                         problems.push(format!("{file}: unknown column {other}"));
                         continue;
@@ -773,7 +773,7 @@ mod tests {
                 "{text}"
             );
         }
-        assert!(reserved_entry(&key("ctrl+tab"), KeyColumn::Window).is_some());
+        assert!(reserved_entry(&key("ctrl+tab"), KeyColumn::Gui).is_some());
         assert!(reserved_entry(&key("ctrl+tab"), KeyColumn::Terminal).is_none());
     }
 }

@@ -231,7 +231,7 @@ console_host = "to probe"
 source = "as Ctrl+F3"
 
 # Alt with the function keys: the archive keys of the Total Commander
-# preset and the window column.
+# preset and the GUI column.
 
 [[key]]
 key = "alt+f1"

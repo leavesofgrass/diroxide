@@ -356,7 +356,7 @@ mod tests {
     }
 
     /// The owner's file, with comments in every place a comment can be.
-    const GOLDEN: &str = "# My keys, kept in my dotfiles.\n\n[terminal.panel]\n# Sorting first.\n\"view.sort-size\" = \"ctrl+f9\" # since the laptop has no F6\n\"plugin.thing\" = \"ctrl+k\" # a command this version does not know\n\n# The window, later.\n[window.global]\n\"app.quit\" = [\"ctrl+q\", \"alt+f4\"]\n";
+    const GOLDEN: &str = "# My keys, kept in my dotfiles.\n\n[terminal.panel]\n# Sorting first.\n\"view.sort-size\" = \"ctrl+f9\" # since the laptop has no F6\n\"plugin.thing\" = \"ctrl+k\" # a command this version does not know\n\n# The GUI, later.\n[gui.global]\n\"app.quit\" = [\"ctrl+q\", \"alt+f4\"]\n";
 
     #[test]
     fn a_change_keeps_every_comment_the_order_and_unknown_lines() {
@@ -379,7 +379,7 @@ mod tests {
         assert_eq!(count, 3);
         assert_eq!(
             text,
-            "# My keys, kept in my dotfiles.\n\n[terminal.panel]\n# Sorting first.\n\"view.sort-size\" = \"ctrl+f8\" # since the laptop has no F6\n\"plugin.thing\" = \"ctrl+k\" # a command this version does not know\n\"view.sort-name\" = \"none\"\n\n[terminal.global]\n\"app.quit\" = [\"ctrl+q\", \"f10\"]\n\n# The window, later.\n[window.global]\n\"app.quit\" = [\"ctrl+q\", \"alt+f4\"]\n"
+            "# My keys, kept in my dotfiles.\n\n[terminal.panel]\n# Sorting first.\n\"view.sort-size\" = \"ctrl+f8\" # since the laptop has no F6\n\"plugin.thing\" = \"ctrl+k\" # a command this version does not know\n\"view.sort-name\" = \"none\"\n\n[terminal.global]\n\"app.quit\" = [\"ctrl+q\", \"f10\"]\n\n# The GUI, later.\n[gui.global]\n\"app.quit\" = [\"ctrl+q\", \"alt+f4\"]\n"
         );
         let read = KeymapConfig::from_toml(&text).unwrap();
         assert!(read.problems.is_empty(), "{:?}", read.problems);
@@ -406,7 +406,7 @@ mod tests {
         assert_eq!(count, 2);
         assert_eq!(
             text,
-            "# My keys, kept in my dotfiles.\n\n[terminal.panel]\n# Sorting first.\n\"plugin.thing\" = \"ctrl+k\" # a command this version does not know\n\n# The window, later.\n[window.global]\n"
+            "# My keys, kept in my dotfiles.\n\n[terminal.panel]\n# Sorting first.\n\"plugin.thing\" = \"ctrl+k\" # a command this version does not know\n\n# The GUI, later.\n[gui.global]\n"
         );
         // The last line of a table: its comment stays below the line
         // before, or below the table's header.
@@ -426,7 +426,7 @@ mod tests {
         let (text, _) = edit_text(alone, &size).unwrap();
         assert_eq!(text, "[terminal.panel]\n# Size, my way.\n");
         let missing = KeymapEdit::Lines(vec![KeyLine {
-            column: KeyColumn::Window,
+            column: KeyColumn::Gui,
             layer: Layer::Viewer,
             command: ids::SORT_SIZE,
             keys: None,

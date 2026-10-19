@@ -9,13 +9,13 @@
 # Keys list lets anyone swap. Adapted from their two-letter keys: gg is
 # g, dd is d, yy is y, pp is p; ranger's zh and vifm's za are the period;
 # cw is r; the sort prefixes are the Sort list on o. Ctrl+F pages down;
-# Ctrl+B pages up in the window only, since tmux keeps Ctrl+B for its
+# Ctrl+B pages up in the GUI only, since tmux keeps Ctrl+B for its
 # prefix in a terminal. Ctrl+D stays Say status and Ctrl+U swaps the
 # panels, so the half-page keys are not carried.
 #
 # The quote and the backquote open the bookmarks, as ranger's and lf's
 # marks do, and m bookmarks this folder; Ctrl+B and Alt+B then leave the
-# bookmarks, so Ctrl+B pages up in the window. t sets a label (ranger's
+# bookmarks, so Ctrl+B pages up in the GUI. t sets a label (ranger's
 # tag) and T clears the labels.
 #
 # Joined with their commands in alpha.3 (W3a): V marks a range, as
@@ -71,14 +71,14 @@ letters = "commands"
 "select.range" = "shift+v"
 "search.find" = "s"
 
-[window.global]
+[gui.global]
 "app.palette" = ["ctrl+shift+p", "ctrl+p", ":"]
 "app.help" = ["f1", "?"]
 "app.quit" = ["ctrl+q", "q"]
 "app.quit-to-folder" = "shift+q"
 "jobs.history" = "w"
 
-[window.list]
+[gui.list]
 "list.down" = ["down", "j"]
 "list.up" = ["up", "k"]
 "list.home" = ["home", "g"]
@@ -86,7 +86,7 @@ letters = "commands"
 "list.page-down" = ["pagedown", "ctrl+f"]
 "list.page-up" = ["pageup", "ctrl+b"]
 
-[window.panel]
+[gui.panel]
 "go.bookmarks" = ["'", "`"]
 "bookmark.add" = "m"
 "label.set" = ["alt+l", "t"]

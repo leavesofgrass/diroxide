@@ -6,7 +6,7 @@
 //! - `regen [--check]`: writes every generated page (`docs/keyboard.md`,
 //!   `docs/settings-reference.md`), or checks that each is current.
 //! - `keyboard [--check]`: writes `docs/keyboard.md` from the keymap's
-//!   defaults, as two lists (terminal, window), or checks that it is
+//!   defaults, as two lists (terminal, GUI), or checks that it is
 //!   current.
 //! - `native --check`: the pure-Rust gate: no `cc`, `cmake` or `cxx` build
 //!   dependency in the main workspace but the one allow entry (ring, for

@@ -10,7 +10,7 @@
 //!   `[preset]` table gives its name, a description with the meaning
 //!   first, the source manager and the single-letter mode
 //!   (`type-ahead`, or `commands` for the vim-style set); the key lines
-//!   are `keymap.toml`'s own tables (`[terminal.panel]`, `[window.global]`
+//!   are `keymap.toml`'s own tables (`[terminal.panel]`, `[gui.global]`
 //!   and the rest), and list only what the preset changes. Key sequences a
 //!   source manager uses are listed under `[[held_back]]`, with the
 //!   command each would run, since a key is one key here (question 56).
@@ -355,7 +355,7 @@ pub fn keymaps(owner: &KeymapConfig, preset: &Preset, platform: Platform) -> (Ke
             .keymap(KeyColumn::Terminal, platform)
             .with_overrides(owner),
         preset
-            .keymap(KeyColumn::Window, platform)
+            .keymap(KeyColumn::Gui, platform)
             .with_overrides(owner),
     )
 }
@@ -369,7 +369,7 @@ pub fn check(preset: &Preset) -> Vec<String> {
     let name = &preset.name;
     for platform in [Platform::Windows, Platform::MacOs, Platform::Other] {
         let terminal = preset.keymap(KeyColumn::Terminal, platform);
-        let window = preset.keymap(KeyColumn::Window, platform);
+        let gui = preset.keymap(KeyColumn::Gui, platform);
         let mut say = |line: String| {
             if !found.contains(&line) {
                 found.push(line);
@@ -410,16 +410,16 @@ pub fn check(preset: &Preset) -> Vec<String> {
                 _ => {}
             }
         }
-        for keymap in [&terminal, &window] {
+        for keymap in [&terminal, &gui] {
             let column = keymap.column();
             for conflict in keymap.conflicts() {
-                say(format!("{name}, {column} column: {conflict}"));
+                say(format!("{name}, {} column: {conflict}", column.in_words()));
             }
             for conflict in keymap.screen_reader_conflicts() {
-                say(format!("{name}, {column} column: {conflict}"));
+                say(format!("{name}, {} column: {conflict}", column.in_words()));
             }
             for only in keymap.only_num_lock_keys() {
-                say(format!("{name}, {column} column: {only}"));
+                say(format!("{name}, {} column: {only}", column.in_words()));
             }
         }
         // The critical set keeps a terminal key.
@@ -432,16 +432,16 @@ pub fn check(preset: &Preset) -> Vec<String> {
             }
         }
         // A command's only terminal key may not run another command in the
-        // window, unless it has a window key of its own.
+        // gui, unless it has a GUI key of its own.
         for info in CATALOG.iter() {
             let keys = terminal.keys_in(info.layer, &info.id);
             if let [only] = keys.as_slice()
-                && window.keys_in(info.layer, &info.id).is_empty()
-                && let Some(other) = window.binding(info.layer, only)
+                && gui.keys_in(info.layer, &info.id).is_empty()
+                && let Some(other) = gui.binding(info.layer, only)
                 && other.command != info.id
             {
                 say(format!(
-                    "{name}: {}, the only terminal key of {}, runs {} in the window.",
+                    "{name}: {}, the only terminal key of {}, runs {} in the GUI.",
                     written(only, platform),
                     info.name,
                     commands::name_of(&other.command)
@@ -523,7 +523,7 @@ mod tests {
         };
         let (t, w, win, mac) = (
             KeyColumn::Terminal,
-            KeyColumn::Window,
+            KeyColumn::Gui,
             Platform::Windows,
             Platform::MacOs,
         );
@@ -537,7 +537,7 @@ mod tests {
         ];
         let listed: Vec<&str> = presets().iter().map(|p| p.id.as_str()).collect();
         assert_eq!(listed, ids);
-        // Total Commander: Shift+F6 renames, F2 reloads; the window quits
+        // Total Commander: Shift+F6 renames, F2 reloads; the GUI quits
         // on Alt+F4 and Ctrl+Q is its quick view.
         assert_eq!(keys("total-commander", t, win, ids::RENAME), "Shift+F6");
         assert_eq!(keys("total-commander", t, win, ids::RELOAD), "F2 or Ctrl+R");
@@ -548,7 +548,7 @@ mod tests {
             "Ctrl+Q or Shift+F3"
         );
         assert_eq!(keys("total-commander", t, win, ids::PACK), "Alt+F5");
-        // Midnight Commander: F10 quits in the window, its Alt keys.
+        // Midnight Commander: F10 quits in the GUI, its Alt keys.
         assert_eq!(
             keys("midnight-commander", w, win, ids::QUIT),
             "F10 or Ctrl+Q"
@@ -575,7 +575,7 @@ mod tests {
         );
         assert_eq!(keys("explorer-finder", t, win, ids::MENU_PLUGINS), "Alt+U");
         // Worker: plus selects all in a terminal; F1 is the palette in
-        // the window, help moves to Shift+F1.
+        // the GUI, help moves to Shift+F1.
         assert_eq!(keys("worker", t, win, ids::SELECT_ALL), "Ctrl+A or Plus");
         assert_eq!(keys("worker", t, win, ids::SELECT_PATTERN), "");
         assert_eq!(keys("worker", w, win, ids::HELP), "Shift+F1");
@@ -615,7 +615,7 @@ mod tests {
         assert_eq!(tc.problems, Vec::<String>::new());
         let owner =
             KeymapConfig::from_toml("[terminal.panel]\n\"file.rename\" = \"ctrl+f9\"\n").unwrap();
-        let (terminal, window) = keymaps(&owner, &tc, Platform::Windows);
+        let (terminal, gui) = keymaps(&owner, &tc, Platform::Windows);
         assert_eq!(
             terminal.key_text(&ids::RENAME),
             "Ctrl+F9",
@@ -623,9 +623,9 @@ mod tests {
         );
         assert_eq!(terminal.keys_text(&ids::RELOAD), "F2 or Ctrl+R");
         assert_eq!(
-            window.key_text(&ids::RENAME),
+            gui.key_text(&ids::RENAME),
             "F2",
-            "the window column is untouched"
+            "the GUI column is untouched"
         );
         let (terminal, _) = keymaps(&KeymapConfig::default(), &tc, Platform::Windows);
         assert_eq!(terminal.key_text(&ids::RENAME), "Shift+F6");
@@ -635,7 +635,7 @@ mod tests {
     #[test]
     fn the_checks_say_each_problem_in_words() {
         let bad = read(&format!(
-            "{HEADER}[terminal.global]\n\"app.say-status\" = \"none\"\n\"app.quit\" = \"ctrl+enter\"\n[terminal.panel]\n\"view.sort-size\" = \"w\"\n\"view.sort-name\" = \"ctrl+alt+n\"\n\"file.copi\" = \"f5\"\n\"file.view\" = \"ctrl+x ctrl+v\"\n[window.panel]\n\"select.all\" = \"kp-plus\"\n[[held_back]]\nkeys = \"ctrl+x c\"\ncommand = \"Change permissions\"\nid = \"file.permissions\"\n"
+            "{HEADER}[terminal.global]\n\"app.say-status\" = \"none\"\n\"app.quit\" = \"ctrl+enter\"\n[terminal.panel]\n\"view.sort-size\" = \"w\"\n\"view.sort-name\" = \"ctrl+alt+n\"\n\"file.copi\" = \"f5\"\n\"file.view\" = \"ctrl+x ctrl+v\"\n[gui.panel]\n\"select.all\" = \"kp-plus\"\n[[held_back]]\nkeys = \"ctrl+x c\"\ncommand = \"Change permissions\"\nid = \"file.permissions\"\n"
         ));
         assert_eq!(bad.held_back.len(), 1);
         let said = check(&bad);
@@ -645,7 +645,7 @@ mod tests {
             "Test: Say status needs a terminal key.",
             "Test: the terminal cannot send Ctrl+Enter, the key of Quit.",
             "Test, terminal column: Screen readers keep Ctrl+Alt+N: NVDA. (Sort by name)",
-            "Test, window column: Select all has only keypad keys.",
+            "Test, GUI column: Select all has only keypad keys.",
             "Test: W is a letter, and letters jump to names in this preset.",
         ] {
             assert!(said.iter().any(|s| s == expected), "{expected}\n{said:#?}");

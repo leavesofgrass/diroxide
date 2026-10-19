@@ -7,7 +7,7 @@
 use diroxide_core::{Key, KeyCode};
 
 /// The system the keys are pressed on, which names the Meta key and
-/// decides the macOS window column (Command for Control).
+/// decides the macOS GUI column (Command for Control).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Platform {
     /// Windows.

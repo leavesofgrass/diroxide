@@ -29,7 +29,7 @@ Its keys come from a third-party list of Total Commander's shortcuts and forum p
 - Ctrl+L: Folder sizes. No key before. (dir.sizes)
 - Shift+F2: Select the differences. No key before. (select.differences)
 
-## In the window
+## In the GUI
 
 ### Everywhere
 

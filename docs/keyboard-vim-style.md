@@ -56,7 +56,7 @@ Its keys come from the manual pages of ranger and vifm, lf's documentation and y
 - End or Shift+G: Last row. Was End. (list.end)
 - Page Down or Ctrl+F: Next page. Was Page Down. (list.page-down)
 
-## In the window
+## In the GUI
 
 ### Everywhere
 

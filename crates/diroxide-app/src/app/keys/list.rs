@@ -33,11 +33,11 @@ impl App {
     /// list's own rows first while nothing is typed.
     fn keys_list_model(&self, query: &str) -> (String, ListModel) {
         let terminal = self.layered(KeyColumn::Terminal);
-        let window = self.layered(KeyColumn::Window);
+        let gui = self.layered(KeyColumn::Gui);
         let preset = self.preset();
         let view = KeysView {
             terminal: &terminal,
-            window: &window,
+            gui: &gui,
             here: self.keymap.column(),
             owner: &self.keys.owner,
             preset: &preset.lines,
@@ -56,11 +56,11 @@ impl App {
     /// A row's actions, built from the layers.
     fn actions_model(&self, info: &CommandInfo) -> ListModel {
         let terminal = self.layered(KeyColumn::Terminal);
-        let window = self.layered(KeyColumn::Window);
+        let gui = self.layered(KeyColumn::Gui);
         let preset = self.preset();
         KeysView {
             terminal: &terminal,
-            window: &window,
+            gui: &gui,
             here: self.keymap.column(),
             owner: &self.keys.owner,
             preset: &preset.lines,
@@ -171,8 +171,8 @@ impl App {
         };
         let here = self.keymap.column();
         let other = match here {
-            KeyColumn::Terminal => KeyColumn::Window,
-            KeyColumn::Window => KeyColumn::Terminal,
+            KeyColumn::Terminal => KeyColumn::Gui,
+            KeyColumn::Gui => KeyColumn::Terminal,
         };
         let change = |column, add| Change {
             command: command.clone(),

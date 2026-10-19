@@ -1224,13 +1224,13 @@ impl App {
     }
 
     /// Lists a place into a panel, as Go to a path does. App-side hook for
-    /// the server's `panel/set` and the window's address bar.
+    /// the server's `panel/set` and the GUI's address bar.
     pub fn open_place(&mut self, side: Side, place: Place) -> Vec<Effect> {
         self.open(side, place, None)
     }
 
     /// Puts a panel's focus on the row with this name (its real name);
-    /// whether it was found. App-side hook for the server and the window.
+    /// whether it was found. App-side hook for the server and the GUI.
     /// The quick view follows, as it does a key's move.
     pub fn focus_name(&mut self, side: Side, name: &str) -> bool {
         let found = self.panel_mut(side).list_mut().focus_id(name);
@@ -1239,7 +1239,7 @@ impl App {
     }
 
     /// Marks or unmarks the rows with these names; returns how many
-    /// changed. App-side hook for the server and the window.
+    /// changed. App-side hook for the server and the GUI.
     pub fn mark_names(&mut self, side: Side, names: &[String], mark: bool) -> usize {
         let list = self.panel_mut(side).list_mut();
         let before = list.selected_count();
@@ -1272,7 +1272,7 @@ impl App {
     /// The title line cut to `cells` characters: a long parent is cut from
     /// its left with three dots ("in ...\finance\2026"), so the leaf and
     /// the panel always fit; the whole path is Go to a path's default
-    /// text. The terminal draws this; the window uses the whole line.
+    /// text. The terminal draws this; the GUI uses the whole line.
     pub fn title_line_within(&self, cells: usize) -> String {
         if let Some(title) = self.viewer_title(cells) {
             return title;

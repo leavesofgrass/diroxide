@@ -2,7 +2,7 @@
 //! both frontends, as the list model is one list. A field has a label said
 //! first, its text, a cursor, a completion source and a history key; the
 //! frontend draws it (the minibuffer in a terminal, an editable combo box
-//! in the window) and the app feeds it candidates from its source.
+//! in the GUI) and the app feeds it candidates from its source.
 //!
 //! Completion reads the same everywhere: candidates that start with what
 //! was typed come first, then those that contain it, without regard to

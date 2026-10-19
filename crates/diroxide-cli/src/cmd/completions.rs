@@ -146,7 +146,7 @@ pub fn command() -> Command {
         .arg(flag("portable", "Keep the settings beside the program"))
         .arg(flag("no-plugins", "Start without plugins"))
         .arg(flag("tui", "Open in the terminal, even with a display"))
-        .arg(flag("gui", "Open the window (it comes with a later alpha)"))
+        .arg(flag("gui", "Open the GUI (it comes with a later alpha)"))
         .arg(flag(
             "inline",
             "Draw below the prompt, not on the whole screen",

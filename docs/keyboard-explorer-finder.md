@@ -23,7 +23,7 @@ Its keys come from Microsoft's keyboard shortcuts page for File Explorer and App
 - Left or Alt+Up: Up one folder. Was Left or Backspace or Alt+Up. (panel.up)
 - Ctrl+F or Ctrl+E: Find files. Was Ctrl+F. (search.find)
 
-## In the window
+## In the GUI
 
 ### Everywhere
 
@@ -40,9 +40,9 @@ Its keys come from Microsoft's keyboard shortcuts page for File Explorer and App
 - Plus: Select by pattern. Was Plus or Keypad Slash. (select.pattern)
 - Ctrl+F or Ctrl+E: Find files. Was Ctrl+F. (search.find)
 
-## On macOS, in the window
+## On macOS, in the GUI
 
-On macOS the window has these keys as well, the Finder's.
+On macOS the GUI has these keys as well, the Finder's.
 
 ### Everywhere
 

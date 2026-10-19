@@ -19,7 +19,7 @@
 //! "file.trash" = ["delete", "f8"]
 //! "view.sort-list" = "none"
 //!
-//! [window.panel]
+//! [gui.panel]
 //! "view.sort-list" = "ctrl+shift+s"
 //! ```
 
@@ -325,27 +325,35 @@ impl From<Key> for String {
 }
 
 /// The two columns of the keymap: the keys a terminal can deliver, and the
-/// keys of the window. Each command has a binding in each column (plan
-/// section 5.7); the window column uses Command for Control on macOS.
+/// keys of the GUI. Each command has a binding in each column (plan
+/// section 5.7); the GUI column uses Command for Control on macOS.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum KeyColumn {
     /// The terminal frontend, which never uses keys a terminal cannot
     /// deliver (the unsafe-key table).
     Terminal,
-    /// The window frontend.
-    Window,
+    /// The GUI frontend.
+    Gui,
 }
 
 impl KeyColumn {
     /// Both columns, the terminal first.
-    pub const ALL: [KeyColumn; 2] = [KeyColumn::Terminal, KeyColumn::Window];
+    pub const ALL: [KeyColumn; 2] = [KeyColumn::Terminal, KeyColumn::Gui];
 
     /// The column's name, as written in `keymap.toml`.
     pub const fn word(self) -> &'static str {
         match self {
             KeyColumn::Terminal => "terminal",
-            KeyColumn::Window => "window",
+            KeyColumn::Gui => "gui",
+        }
+    }
+
+    /// The column's name in a sentence: "terminal" or "GUI".
+    pub const fn in_words(self) -> &'static str {
+        match self {
+            KeyColumn::Terminal => "terminal",
+            KeyColumn::Gui => "GUI",
         }
     }
 }
@@ -482,6 +490,6 @@ mod tests {
     #[test]
     fn columns_are_named() {
         assert_eq!(KeyColumn::Terminal.word(), "terminal");
-        assert_eq!(KeyColumn::ALL[1].to_string(), "window");
+        assert_eq!(KeyColumn::ALL[1].to_string(), "gui");
     }
 }

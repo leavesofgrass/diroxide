@@ -52,7 +52,7 @@ pub use code::IndentMove;
 /// Whether code is colored, for a frontend that draws the runs.
 pub use diroxide_config::Highlighting as HighlightSetting;
 /// The token classes and their runs, for a frontend that may not depend
-/// on the preview crate (the terminal, the window).
+/// on the preview crate (the terminal, the GUI).
 pub use diroxide_preview::classes::{ClassRun, TokenClass};
 /// The highlighter: the session a frontend keeps and hands to each
 /// viewer, the languages, the caps.

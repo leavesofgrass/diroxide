@@ -239,7 +239,7 @@ const READER_MODES: &[Choice] = &[
 ];
 
 const COMPLETION_LISTS: &[Choice] = &[
-    choice("auto", "as you type in the window, on Tab in a terminal"),
+    choice("auto", "as you type in the GUI, on Tab in a terminal"),
     choice("as_you_type", "as you type"),
     choice("on_tab", "on Tab"),
 ];
@@ -457,7 +457,7 @@ pub const SCHEMA: [SettingInfo; 91] = [
         group: G::Speech,
         kind: SettingKind::Choice(COMPLETION_LISTS),
         default: "\"auto\"",
-        help: "When the candidates appear under a text field: as you type, or only when you ask for them. Auto lists them as you type in the window and on request in a terminal.",
+        help: "When the candidates appear under a text field: as you type, or only when you ask for them. Auto lists them as you type in the graphical interface (GUI) and on request in a terminal.",
         arrives: None,
     },
     SettingInfo {
@@ -619,7 +619,7 @@ pub const SCHEMA: [SettingInfo; 91] = [
         group: G::Look,
         kind: K::Flag,
         default: "false",
-        help: "Shows pictures as small images in the window's thumbnail mode. The words stay.",
+        help: "Shows pictures as small images in the GUI's thumbnail mode. The words stay.",
         arrives: Some("alpha.7"),
     },
     SettingInfo {
@@ -628,7 +628,7 @@ pub const SCHEMA: [SettingInfo; 91] = [
         group: G::Look,
         kind: K::Flag,
         default: "true",
-        help: "In the window on Windows, keeps the menu bar hidden until the Menus command or Alt alone shows it.",
+        help: "In the GUI on Windows, keeps the menu bar hidden until the Menus command or Alt alone shows it.",
         arrives: Some("alpha.6"),
     },
     SettingInfo {
@@ -637,7 +637,7 @@ pub const SCHEMA: [SettingInfo; 91] = [
         group: G::Look,
         kind: K::Flag,
         default: "false",
-        help: "In the window, fades the bars when the mouse rests, so the panels have the room. Visual only; nothing is announced.",
+        help: "In the GUI, fades the bars when the mouse rests, so the panels have the room. Visual only; nothing is announced.",
         arrives: Some("alpha.6"),
     },
     // The viewer (alpha.2, W2d; research/alpha2-plan.md part three and

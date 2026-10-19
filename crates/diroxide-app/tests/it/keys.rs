@@ -173,7 +173,7 @@ fn ctrl_f5_says_it_sorts_by_modified_time() {
 }
 
 #[test]
-fn a_key_the_terminal_cannot_send_offers_the_window_column() {
+fn a_key_the_terminal_cannot_send_offers_the_gui_column() {
     let (_dir, mut s) = session_with_settle(0);
     s.run_command(change("view.sort-kind"));
     let effects = s.app.end_key_test(10);
@@ -183,10 +183,10 @@ fn a_key_the_terminal_cannot_send_offers_the_window_column() {
         s.key("enter"),
         [
             "Got Control plus Enter",
-            "The terminal cannot send Ctrl+Enter. Use it for the window column only? No is the default. y or n"
+            "The terminal cannot send Ctrl+Enter. Use it for the GUI column only? No is the default. y or n"
         ]
     );
-    // In the window column Ctrl+Enter goes to a path; Sort by kind has no
+    // In the GUI column Ctrl+Enter goes to a path; Sort by kind has no
     // key there to swap.
     assert_eq!(
         s.key("y"),
@@ -284,12 +284,9 @@ fn the_keys_list_from_settings_narrows_and_a_change_keeps_the_files_comments() {
     assert_eq!(rows[1], "Reset all keys, 1 changed");
     assert!(rows[2].starts_with("Single letters, "), "{}", rows[2]);
     assert!(rows.contains(&"Copy to other panel, F5 in both".to_owned()));
-    assert!(
-        rows.contains(
-            &"Sort by name, F12 in a terminal, Ctrl+F3 in the window, changed, check terminal"
-                .to_owned()
-        )
-    );
+    assert!(rows.contains(
+        &"Sort by name, F12 in a terminal, Ctrl+F3 in the GUI, changed, check terminal".to_owned()
+    ));
     let said = s.type_text("copy");
     let last = said.last().unwrap();
     assert!(last.starts_with("Copy path, no key. "), "{last}");

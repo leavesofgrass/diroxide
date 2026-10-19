@@ -4,7 +4,7 @@
 //!
 //! - `config.toml`: [`Settings`], checked against the [`schema`].
 //! - `keymap.toml`: [`KeymapConfig`], the owner's keys: command to key, in
-//!   a table per column (terminal, window) and layer.
+//!   a table per column (terminal, GUI) and layer.
 //! - `menus.toml`: [`MenusConfig`], the menus; the built-in ones when the
 //!   file is missing.
 //! - `filetypes.toml`: [`FileTypesConfig`].

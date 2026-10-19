@@ -9,7 +9,7 @@
 //! the current folder in the left panel and restores the right one (the
 //! owner's answer 74); `diro PATH` and `diro LEFT RIGHT` open those.
 //!
-//! `--tui` and `--gui` are accepted (the window comes with alpha.6, so
+//! `--tui` and `--gui` are accepted (the GUI comes with alpha.6, so
 //! `--gui` says so and opens the terminal); `--inline` draws below the
 //! prompt instead of on the alternate screen; `--cwd-file FILE` writes the
 //! active panel's last local folder at quit for the shell wrapper of
@@ -46,7 +46,7 @@ pub struct OpenOptions {
     pub no_plugins: bool,
     /// The terminal, even where a display is there.
     pub tui: bool,
-    /// The window (it comes with alpha.6).
+    /// The GUI (it comes with alpha.6).
     pub gui: bool,
     /// The inline viewport instead of the alternate screen (W1d-2).
     pub inline: bool,
@@ -77,10 +77,10 @@ pub fn paths(portable: bool) -> Option<Paths> {
     }
 }
 
-/// Whether a display is there for the window (plan section 5.10):
+/// Whether a display is there for the GUI (plan section 5.10):
 /// always on Windows and macOS; on Linux and the other Unix systems when a
-/// Wayland or X11 display is set. The window alpha calls this to choose
-/// between the window and the terminal.
+/// Wayland or X11 display is set. The GUI alpha calls this to choose
+/// between the GUI and the terminal.
 pub fn display_present() -> bool {
     if cfg!(any(windows, target_os = "macos")) {
         return true;
@@ -150,14 +150,14 @@ pub fn run(options: &OpenOptions, out: &mut dyn Write) -> Result<i32, CliError> 
     }
 }
 
-/// Says what the options cannot do before the screen opens: the window
+/// Says what the options cannot do before the screen opens: the GUI
 /// comes with alpha.6; an unknown theme gives the default.
 fn notices(options: &OpenOptions, out: &mut dyn Write) -> Result<(), CliError> {
     let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
     if options.gui {
         writeln!(
             out,
-            "The window comes with a later alpha; the terminal opens instead."
+            "The GUI comes with a later alpha; the terminal opens instead."
         )
         .map_err(write_failed)?;
     }
@@ -361,7 +361,7 @@ mod tests {
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(
             lines[0],
-            "The window comes with a later alpha; the terminal opens instead."
+            "The GUI comes with a later alpha; the terminal opens instead."
         );
         assert_eq!(lines[1], "Unknown theme: no-such. Galaxy is in use.");
     }

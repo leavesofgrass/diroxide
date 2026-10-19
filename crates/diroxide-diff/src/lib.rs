@@ -1,7 +1,7 @@
 //! Compare two files and say the result in words (research/diffing.md,
 //! R18; plan section 5.15).
 //!
-//! A compare is read in one fixed order, in the terminal, the window and
+//! A compare is read in one fixed order, in the terminal, the GUI and
 //! `diro diff` alike: the verdict and the counts, the direction, what was
 //! ignored, the facts about the files as wholes, then one row per change,
 //! each with its meaning in its first 40 cells. Words come before signs;

@@ -272,7 +272,7 @@ impl<'a, B: Backend> Session<'a, B> {
         self.app
     }
 
-    /// The app, for a test's hooks (the server's and the window's ways in,
+    /// The app, for a test's hooks (the server's and the GUI's ways in,
     /// such as [`App::focus_name`]).
     pub fn app_mut(&mut self) -> &mut App {
         self.redraw = true;

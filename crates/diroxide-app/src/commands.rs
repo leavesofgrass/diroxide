@@ -1,5 +1,5 @@
 //! The command catalog: every built-in command's id, name, help, layer and
-//! default keys in both columns (terminal and window), in one table, so
+//! default keys in both columns (terminal and gui), in one table, so
 //! menus, the palette, banks, F1 help and `docs/keyboard.md` all read the
 //! same names and keys (ADR-0005).
 //!
@@ -119,9 +119,9 @@ pub struct CommandInfo {
     pub layer: Layer,
     /// Default keys in the terminal column, as written in `keymap.toml`.
     pub terminal: &'static [&'static str],
-    /// Default keys in the window column, as written in `keymap.toml`; on
+    /// Default keys in the GUI column, as written in `keymap.toml`; on
     /// macOS Control becomes Command (see the keymap).
-    pub window: &'static [&'static str],
+    pub gui: &'static [&'static str],
     /// No terminal key by design: the palette and the command's menu reach
     /// it.
     pub palette_only: bool,
@@ -605,7 +605,7 @@ const fn command(
     help: &'static str,
     layer: Layer,
     terminal: &'static [&'static str],
-    window: &'static [&'static str],
+    gui: &'static [&'static str],
 ) -> CommandInfo {
     CommandInfo {
         id,
@@ -613,7 +613,7 @@ const fn command(
         help,
         layer,
         terminal,
-        window,
+        gui,
         palette_only: terminal.is_empty(),
     }
 }
@@ -2483,7 +2483,7 @@ mod tests {
     #[test]
     fn default_keys_parse_and_never_use_insert() {
         for info in &CATALOG {
-            for keys in [info.terminal, info.window] {
+            for keys in [info.terminal, info.gui] {
                 for text in keys {
                     let key = Key::parse(text).unwrap_or_else(|e| panic!("{}: {e}", info.id));
                     assert!(key.code != KeyCode::Insert, "{}", info.id);
@@ -2507,7 +2507,7 @@ mod tests {
     #[test]
     fn the_phase_0_keys_that_were_decided_away_are_gone() {
         for info in &CATALOG {
-            for text in info.terminal.iter().chain(info.window) {
+            for text in info.terminal.iter().chain(info.gui) {
                 let key = Key::parse(text).unwrap();
                 for gone in ["f10", "ctrl+i", "ctrl+h", "ctrl+shift+s"] {
                     if key == Key::parse(gone).unwrap() {
@@ -2521,7 +2521,7 @@ mod tests {
         let quit = info(&ids::QUIT).unwrap();
         assert_eq!(quit.terminal, &["ctrl+q"]);
         assert_eq!(info(&ids::SAY_STATUS).unwrap().terminal, &["ctrl+d"]);
-        assert_eq!(info(&ids::DETAILS).unwrap().window, &["alt+enter"]);
+        assert_eq!(info(&ids::DETAILS).unwrap().gui, &["alt+enter"]);
     }
 
     #[test]

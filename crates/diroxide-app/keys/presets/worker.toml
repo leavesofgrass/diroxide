@@ -3,7 +3,7 @@
 # never Worker's own files). In a terminal Worker's keypad keys arrive as
 # the main row's characters, so the terminal column gives the characters
 # Worker's meanings (plus selects all, minus selects none, star inverts)
-# and the window column gives them to the keypad; the keypad keys work
+# and the GUI column gives them to the keypad; the keypad keys work
 # under NVDA only with Num Lock on. Select by pattern and unselect by
 # pattern have no terminal key: the Select menu and the palette reach
 # them, and the pattern prompt's default star makes Enter select all.
@@ -18,20 +18,20 @@
 # options); F9 opens the menus (Worker's F9 is help mode, which is the
 # question mark and then a key here); Ctrl+D is Say status, so Worker's
 # bookmark filter key is not carried, and Details gives Alt+Enter to the
-# folder history in the window and takes Ctrl+I there, Worker's info
+# folder history in the GUI and takes Ctrl+I there, Worker's info
 # mode (a terminal sends Ctrl+I as Tab, so the terminal keeps Alt+Enter
-# for Details). In the window F1 opens the palette, as
+# for Details). In the GUI F1 opens the palette, as
 # Worker's command menu, and help moves to Shift+F1.
 #
 # Not carried: the Ctrl+B and Ctrl+V panel modes (they are other
 # commands here), Ctrl+H search
 # history (a terminal sends it as Backspace), Ctrl+Return and
-# Ctrl+Shift+Return (the window has Ctrl+Enter for the path), Ctrl+Space,
+# Ctrl+Shift+Return (the GUI has Ctrl+Enter for the path), Ctrl+Space,
 # Insert (the screen readers' key) and Shift+Return.
 #
 # Waiting for their commands (alpha.3, then these lines join the preset):
 #   go.jump = "/"
-# Bookmarks keeps Ctrl+B and Alt+B and gains Ctrl+Backslash in the window;
+# Bookmarks keeps Ctrl+B and Alt+B and gains Ctrl+Backslash in the GUI;
 # Set label is Alt+L, as in Worker, in the defaults already.
 
 [preset]
@@ -56,12 +56,12 @@ letters = "type-ahead"
 "file.shell-here" = "ctrl+e"
 "panel.this-in-other" = ["ctrl+left", "ctrl+o"]
 
-[window.global]
+[gui.global]
 "app.quit" = ["ctrl+q", "alt+q"]
 "app.palette" = ["ctrl+shift+p", "ctrl+p", "f1"]
 "app.help" = "shift+f1"
 
-[window.panel]
+[gui.panel]
 "go.bookmarks" = ["ctrl+b", "alt+b", "ctrl+\\"]
 "select.all" = ["ctrl+a", "kp-plus"]
 "select.none" = ["ctrl+shift+a", "kp-minus"]

@@ -1,4 +1,4 @@
-//! The window frontend: Masonry, `masonry_winit`, Vello, Parley and
+//! The GUI frontend: Masonry, `masonry_winit`, Vello, Parley and
 //! AccessKit, vendored from textweaver at the same revision and patches.
 //! Each panel is one focusable AccessKit list box whose options are the
 //! rows: an option's name is the row as the list model speaks it (name
@@ -11,17 +11,17 @@
 //! modal, named, close on Escape and return the focus.
 //!
 //! Phase 0: [`panel_grid`] computes the row and column data both shapes are
-//! built from, without AccessKit; [`run`] says the window is not built yet.
+//! built from, without AccessKit; [`run`] says the GUI is not built yet.
 //! Wave 4 (W4a and W4b) owns this crate.
 
 use diroxide_app::{App, Panel, Runtime};
 use diroxide_core::Explain;
 use thiserror::Error;
 
-/// Options of the window.
+/// Options of the GUI.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GuiOptions {
-    /// The window's title.
+    /// The GUI's title.
     pub title: String,
 }
 
@@ -33,12 +33,12 @@ impl Default for GuiOptions {
     }
 }
 
-/// Why the window could not run.
+/// Why the GUI could not run.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 #[non_exhaustive]
 pub enum GuiError {
-    /// The window frontend is not built yet.
-    #[error("the window is not built yet")]
+    /// The GUI frontend is not built yet.
+    #[error("the GUI is not built yet")]
     NotBuilt,
 }
 
@@ -90,7 +90,7 @@ pub fn panel_grid(panel: &Panel) -> GridModel {
     }
 }
 
-/// Runs the window. Phase 0: not built.
+/// Runs the GUI. Phase 0: not built.
 pub fn run(app: &mut App, runtime: &mut Runtime, options: &GuiOptions) -> Result<(), GuiError> {
     let _ = (app, runtime, options);
     Err(GuiError::NotBuilt)
@@ -114,6 +114,6 @@ mod tests {
         assert_eq!(grid.rows[0].cells[0], "src");
         assert_eq!(grid.focus, Some(0));
         let err = run(&mut app, &mut runtime, &GuiOptions::default()).unwrap_err();
-        assert_eq!(err.to_string(), "the window is not built yet");
+        assert_eq!(err.to_string(), "the GUI is not built yet");
     }
 }

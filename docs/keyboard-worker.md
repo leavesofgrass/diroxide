@@ -30,7 +30,7 @@ Its keys come from the project's survey of Worker's features, its key bindings, 
 - Ctrl+E: Shell here. No key before. (file.shell-here)
 - Ctrl+Left or Ctrl+O: This folder to other panel. Was Ctrl+Left. (panel.this-in-other)
 
-## In the window
+## In the GUI
 
 ### Everywhere
 

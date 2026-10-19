@@ -3,7 +3,7 @@
 # has already promised. The keymap's tests read it: a default binding
 # uses a reserved key only for the command it is reserved for.
 #
-# column = "both", "terminal" or "window".
+# column = "both", "terminal" or "gui".
 
 
 [[key]]
@@ -25,25 +25,25 @@ keys = ["ctrl+tab"]
 command = "tab.next"
 name = "Next tab"
 alpha = "alpha.8"
-column = "window"
+column = "gui"
 
 [[key]]
 keys = ["ctrl+shift+tab"]
 command = "tab.previous"
 name = "Previous tab"
 alpha = "alpha.8"
-column = "window"
+column = "gui"
 
 [[key]]
 keys = ["ctrl+shift+e"]
 command = "view.tree"
 name = "Folder tree"
 alpha = "alpha.8"
-column = "window"
+column = "gui"
 
 [[key]]
 keys = ["f11"]
 command = "view.full-screen"
 name = "Full screen"
 alpha = "alpha.6"
-column = "window"
+column = "gui"

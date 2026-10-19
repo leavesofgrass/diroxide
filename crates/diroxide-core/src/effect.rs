@@ -80,7 +80,7 @@ pub enum Effect {
     /// Put text on the system clipboard: a path or a name from the
     /// viewer's Copy Path and Copy Name (W2d's request 3, P2b). A frontend
     /// effect, since each frontend owns its clipboard: the terminal can set
-    /// it with its own escape sequence, the window through the platform.
+    /// it with its own escape sequence, the GUI through the platform.
     SetClipboardText(String),
     /// Leave the program.
     Quit,

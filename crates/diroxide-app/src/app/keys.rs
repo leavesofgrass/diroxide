@@ -213,7 +213,7 @@ impl App {
     /// Change key for a command, as the Keys list's Change key does: the
     /// capture prompt opens in this keymap's column and waits for one key
     /// ("Press the new key now. Escape cancels."). App-side hook for the
-    /// window and the tests; the Keys list calls it too.
+    /// gui and the tests; the Keys list calls it too.
     pub fn change_key(&mut self, command: &CommandId) -> Vec<Effect> {
         let change = Change {
             command: command.clone(),
@@ -469,7 +469,7 @@ impl App {
     }
 
     /// Yes to a check's question: the next findings follow. "Use it for
-    /// the window column only?" moves the change to the window column and
+    /// the GUI column only?" moves the change to the GUI column and
     /// checks it there again.
     pub(super) fn keys_yes(&mut self, purpose: KeysPurpose) -> Vec<Effect> {
         if purpose == KeysPurpose::ResetAll {
@@ -488,8 +488,8 @@ impl App {
         else {
             return Vec::new();
         };
-        if kind == AskKind::WindowOnly {
-            change.column = KeyColumn::Window;
+        if kind == AskKind::GuiOnly {
+            change.column = KeyColumn::Gui;
             let again = self.findings(&change, &key);
             return self.run_checks(change, key, again, Choice::default());
         }

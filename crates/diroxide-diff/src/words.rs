@@ -92,7 +92,7 @@ pub struct WordSegment {
 }
 
 /// The words of two versions of a line, lined up: what the change window
-/// says, and what a window frontend can emphasize for sighted readers.
+/// says, and what a GUI frontend can emphasize for sighted readers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WordDiff {
     segments: Vec<WordSegment>,

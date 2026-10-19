@@ -153,11 +153,11 @@ Dialog settle time. How long a new dialog waits before it takes keys, so a key p
 
 ### completion_list
 
-Completion list. When the candidates appear under a text field: as you type, or only when you ask for them. Auto lists them as you type in the window and on request in a terminal.
+Completion list. When the candidates appear under a text field: as you type, or only when you ask for them. Auto lists them as you type in the graphical interface (GUI) and on request in a terminal.
 
 - Holds: one of auto, as_you_type or on_tab.
 - Default: `"auto"`.
-- `auto`: as you type in the window, on Tab in a terminal.
+- `auto`: as you type in the GUI, on Tab in a terminal.
 - `as_you_type`: as you type.
 - `on_tab`: on Tab.
 
@@ -292,7 +292,7 @@ Code colors. Colors code in the viewer. Auto colors it except in screen reader m
 
 ### thumbnails
 
-Thumbnails. Shows pictures as small images in the window's thumbnail mode. The words stay.
+Thumbnails. Shows pictures as small images in the GUI's thumbnail mode. The words stay.
 
 - Holds: true or false.
 - Default: `false`.
@@ -300,7 +300,7 @@ Thumbnails. Shows pictures as small images in the window's thumbnail mode. The w
 
 ### auto_hide_menu
 
-Hide the menu bar. In the window on Windows, keeps the menu bar hidden until the Menus command or Alt alone shows it.
+Hide the menu bar. In the GUI on Windows, keeps the menu bar hidden until the Menus command or Alt alone shows it.
 
 - Holds: true or false.
 - Default: `true`.
@@ -308,7 +308,7 @@ Hide the menu bar. In the window on Windows, keeps the menu bar hidden until the
 
 ### focus_mode
 
-Focus mode. In the window, fades the bars when the mouse rests, so the panels have the room. Visual only; nothing is announced.
+Focus mode. In the GUI, fades the bars when the mouse rests, so the panels have the room. Visual only; nothing is announced.
 
 - Holds: true or false.
 - Default: `false`.

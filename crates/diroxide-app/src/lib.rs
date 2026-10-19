@@ -2,7 +2,7 @@
 //! keys into commands, dispatches commands, and returns [`Effect`]s for a
 //! frontend and the [`Runtime`] to carry out. Frontends draw and announce;
 //! a feature exists when the core has it. Tests drive the core without a
-//! terminal or a window.
+//! terminal or the GUI.
 //!
 //! A frontend's loop is three steps: hand each key to [`App::handle`],
 //! give the effects to [`Runtime::carry_out`] (which does the I/O and

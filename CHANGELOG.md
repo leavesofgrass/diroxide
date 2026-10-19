@@ -2,6 +2,10 @@
 
 Notable changes to diroxide, newest first. Agents write under a scratch heading with their id; the orchestrator regroups the entries by area before each alpha. Versions follow the alpha series in the plan; nothing is released until the owner says so.
 
+## Unreleased
+
+- The planned graphical interface is the GUI in every guide, message and keymap table, no longer the window. The keymap file's `[window.*]` tables are `[gui.*]`; the Keys list says "in the GUI".
+
 ## 0.1.0-alpha.1
 
 Alpha 1 is a terminal file manager for local folders and archives. This entry was written on Saturday, October 17, 2026. [The accessibility statement](docs/accessibility.md) says what has been checked by ear, and [known limits](docs/known-limits.md) lists what alpha 1 does not do.

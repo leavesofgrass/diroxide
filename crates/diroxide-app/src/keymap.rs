@@ -1,10 +1,10 @@
 //! The keymap: keys bound to commands in layers, from the catalog's
 //! defaults and `keymap.toml`'s lines, one column at a time (the terminal's
-//! or the window's). A key is looked up in the most specific layer first.
+//! or the GUI's). A key is looked up in the most specific layer first.
 //! A binding is one key with its modifiers; there are no sequences (plan
 //! question 56).
 //!
-//! On macOS the window column uses Command where the others use Control,
+//! On macOS the GUI column uses Command where the others use Control,
 //! leaves Ctrl+F3 to Ctrl+F7 to the system (the Sort list, the View menu
 //! and the palette sort there), and leaves Ctrl+Space to the system too.
 //!
@@ -193,7 +193,7 @@ impl Keymap {
         Self::defaults_for(KeyColumn::Terminal)
     }
 
-    /// One column's default keys from the command catalog. The window
+    /// One column's default keys from the command catalog. The GUI
     /// column is the Windows and Linux one; [`Keymap::for_platform`] makes
     /// the macOS one.
     pub fn defaults_for(column: KeyColumn) -> Self {
@@ -201,7 +201,7 @@ impl Keymap {
         for info in &CATALOG {
             let keys = match column {
                 KeyColumn::Terminal => info.terminal,
-                KeyColumn::Window => info.window,
+                KeyColumn::Gui => info.gui,
             };
             parse_defaults(keys, info.layer, &info.id, &mut bindings);
         }
@@ -212,14 +212,14 @@ impl Keymap {
         }
     }
 
-    /// The same keymap for a system. In the window column on macOS,
+    /// The same keymap for a system. In the GUI column on macOS,
     /// Command replaces Control, and the keys the system keeps are left
     /// out: Ctrl+F3 to Ctrl+F8 (the Sort list, the View menu and the
     /// palette sort instead) and Ctrl+Space. The terminal column keeps
     /// Control everywhere, because the terminal program owns Command.
     pub fn for_platform(mut self, platform: Platform) -> Self {
         self.platform = platform;
-        if self.column == KeyColumn::Window && platform == Platform::MacOs {
+        if self.column == KeyColumn::Gui && platform == Platform::MacOs {
             self.bindings.retain(|b| {
                 let system_f_key = b.key.mods.ctrl
                     && !b.key.mods.alt
@@ -672,10 +672,10 @@ pub fn keymaps(config: &KeymapConfig, platform: Platform) -> (Keymap, Keymap) {
     let terminal = Keymap::defaults_for(KeyColumn::Terminal)
         .for_platform(platform)
         .with_overrides(config);
-    let window = Keymap::defaults_for(KeyColumn::Window)
+    let gui = Keymap::defaults_for(KeyColumn::Gui)
         .for_platform(platform)
         .with_overrides(config);
-    (terminal, window)
+    (terminal, gui)
 }
 
 /// What the key test says for a key the terminal sent: "Got Control plus
@@ -808,8 +808,8 @@ pub fn app_keymap_problems(config: &KeymapConfig, platform: Platform) -> Vec<Con
             }
         }
     }
-    let (terminal, window) = keymaps(config, platform);
-    for keymap in [&terminal, &window] {
+    let (terminal, gui) = keymaps(config, platform);
+    for keymap in [&terminal, &gui] {
         for conflict in keymap.conflicts() {
             problems.push(ConfigProblem::new(
                 file,
@@ -831,9 +831,9 @@ fn capitalized(word: &str) -> String {
 /// The current keys of both columns as `keymap.toml` text, every command
 /// with its keys or "none": what `diro keys print` writes, so a keymap can
 /// live in the owner's dotfiles. Read back, it gives the same keys.
-pub fn print_keys(terminal: &Keymap, window: &Keymap) -> String {
+pub fn print_keys(terminal: &Keymap, gui: &Keymap) -> String {
     let mut lines = terminal.lines();
-    lines.extend(window.lines());
+    lines.extend(gui.lines());
     KeymapConfig::render(
         &lines,
         "The keys of diroxide, both columns, as diro keys print wrote them.\nKeep this file as keymap.toml to use these keys; change a line to change a key.",
@@ -857,10 +857,10 @@ pub fn write_references(paths: &Paths) -> Result<(), diroxide_config::ConfigErro
 /// file as `keymap-defaults.toml`, a read-only reference.
 pub fn defaults_reference() -> String {
     let mut lines = Keymap::defaults_for(KeyColumn::Terminal).lines();
-    lines.extend(Keymap::defaults_for(KeyColumn::Window).lines());
+    lines.extend(Keymap::defaults_for(KeyColumn::Gui).lines());
     KeymapConfig::render(
         &lines,
-        "The built-in keys of diroxide, written by diroxide at each start.\nThis copy is not read: copy a line to keymap.toml and change it there.\nOne key per command and layer, or a list, or \"none\" to unbind.\nOn macOS the window column uses Command where this says ctrl.",
+        "The built-in keys of diroxide, written by diroxide at each start.\nThis copy is not read: copy a line to keymap.toml and change it there.\nOne key per command and layer, or a list, or \"none\" to unbind.\nOn macOS the GUI column uses Command where this says ctrl.",
     )
 }
 
@@ -1076,8 +1076,8 @@ mod tests {
     }
 
     #[test]
-    fn the_macos_window_column_uses_command_and_leaves_the_system_keys() {
-        let mac = Keymap::defaults_for(KeyColumn::Window).for_platform(Platform::MacOs);
+    fn the_macos_gui_column_uses_command_and_leaves_the_system_keys() {
+        let mac = Keymap::defaults_for(KeyColumn::Gui).for_platform(Platform::MacOs);
         assert_eq!(mac.key_text(&ids::QUIT), "Cmd+Q");
         assert_eq!(mac.spoken_key(&ids::QUIT), "Command plus Q");
         assert!(mac.keys_for(&ids::SORT_MODIFIED).is_empty());
@@ -1100,11 +1100,11 @@ mod tests {
             Lookup::Command(ids::RELOAD)
         );
         assert_eq!(keymap.keys_for(&ids::RELOAD), vec![&key("f12")]);
-        let window_only = config(vec![KeyOverride {
-            column: KeyColumn::Window,
+        let gui_only = config(vec![KeyOverride {
+            column: KeyColumn::Gui,
             ..line(Layer::Panel, ids::COPY, &[])
         }]);
-        let keymap = Keymap::defaults().with_overrides(&window_only);
+        let keymap = Keymap::defaults().with_overrides(&gui_only);
         assert_eq!(
             keymap.lookup(&PANEL, &key("f5")),
             Lookup::Command(ids::COPY)
@@ -1206,15 +1206,13 @@ mod tests {
         );
         assert!(said("f12", ids::COPY)[0].starts_with("The terminal cannot send F12:"));
         assert!(said("ctrl+k", ids::COPY).is_empty());
-        let window = Keymap::defaults_for(KeyColumn::Window);
+        let gui = Keymap::defaults_for(KeyColumn::Gui);
         assert!(
-            window
-                .concerns(Layer::Panel, &key("ctrl+enter"), &ids::GO_PATH)
+            gui.concerns(Layer::Panel, &key("ctrl+enter"), &ids::GO_PATH)
                 .is_empty()
         );
         assert_eq!(
-            window
-                .concerns(Layer::Panel, &key("kp-plus"), &ids::SELECT_ALL)
+            gui.concerns(Layer::Panel, &key("kp-plus"), &ids::SELECT_ALL)
                 .iter()
                 .map(|c| c.sentence(&key("kp-plus"), p))
                 .collect::<Vec<_>>(),
@@ -1367,8 +1365,8 @@ mod tests {
 
     #[test]
     fn print_read_back_is_clean_and_the_same() {
-        let (terminal, window) = keymaps(&KeymapConfig::default(), Platform::Windows);
-        let printed = print_keys(&terminal, &window);
+        let (terminal, gui) = keymaps(&KeymapConfig::default(), Platform::Windows);
+        let printed = print_keys(&terminal, &gui);
         let config = KeymapConfig::from_toml(&printed).unwrap();
         assert_eq!(check_keymap(&config, Platform::Windows), Vec::new());
         let (t2, w2) = keymaps(&config, Platform::Windows);
@@ -1388,7 +1386,7 @@ mod tests {
             b
         };
         assert_eq!(sorted(&t2), sorted(&terminal));
-        assert_eq!(sorted(&w2), sorted(&window));
+        assert_eq!(sorted(&w2), sorted(&gui));
         assert!(printed.contains("\n[terminal.panel]\n"));
         assert!(printed.contains("\"app.key-test\" = \"none\"\n"));
         assert!(defaults_reference().starts_with("# The built-in keys of diroxide"));
