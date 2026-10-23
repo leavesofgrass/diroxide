@@ -17,16 +17,21 @@
 //!   system: Git's bash and never WSL's on Windows, `py -3` before any
 //!   Python on PATH and never the Store stub, PowerShell with the
 //!   per-process policy override the consent text names.
+//! - [`command`] makes one runnable shape of a script file and a
+//!   manifest-only command; [`context`] checks the selection and writes
+//!   the run folder (both selection files, the context JSON, the
+//!   directives file, the cancel file, `DIRO_TEMP`) and the `DIRO_*`
+//!   environment that names them.
 //!
 //! W4b owns this module and its submodules (alpha 2, commits 18 to 28 of
 //! R22's order).
 
+pub mod command;
+pub mod context;
 pub mod header;
 pub mod interpreter;
 mod read;
 pub mod recipe;
-
-use std::path::Path;
 
 use diroxide_core::Place;
 
@@ -90,23 +95,6 @@ pub struct ScriptContext {
     pub cursor: Option<Place>,
     /// The selected entries; the cursor's entry when nothing is selected.
     pub selection: Vec<Place>,
-}
-
-/// The environment variables a script gets. `selection_file` names a file
-/// with one selected path per line, which the host writes.
-pub fn environment(context: &ScriptContext, selection_file: &Path) -> Vec<(String, String)> {
-    let mut vars = vec![
-        ("DIRO_ACTIVE".to_owned(), context.active.to_string()),
-        ("DIRO_OTHER".to_owned(), context.other.to_string()),
-        (
-            "DIRO_SELECTION_FILE".to_owned(),
-            selection_file.display().to_string(),
-        ),
-    ];
-    if let Some(cursor) = &context.cursor {
-        vars.push(("DIRO_CURSOR".to_owned(), cursor.to_string()));
-    }
-    vars
 }
 
 /// Expands placeholders in a one-line command's arguments into an argument
@@ -206,12 +194,5 @@ mod tests {
             err.to_string(),
             "the placeholder {file} has nothing to fill it"
         );
-    }
-
-    #[test]
-    fn the_environment_names_the_panels() {
-        let vars = environment(&context(), Path::new("sel.txt"));
-        assert!(vars.contains(&("DIRO_ACTIVE".to_owned(), "/home/ada".to_owned())));
-        assert!(vars.contains(&("DIRO_CURSOR".to_owned(), "/home/ada/a.png".to_owned())));
     }
 }
