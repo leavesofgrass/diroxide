@@ -96,7 +96,7 @@ pub enum Question {
         /// The job that asks for every job on the host.
         job: JobId,
         /// The host and its waiting jobs.
-        question: diroxide_ops::ConnectionQuestion,
+        question: ConnectionQuestion,
     },
     /// An archive limit's question ("Expands to 40 GB from 40 KB. Unpack?
     /// y or n"), asked once per kind in a job, starting on No; the answer
@@ -141,7 +141,7 @@ pub enum Reply {
     /// Yes or no, to a limit's question.
     Confirm(bool),
     /// The answer to the connection question.
-    Connection(diroxide_ops::ConnectionAnswer),
+    Connection(ConnectionAnswer),
 }
 
 /// An archive job planned and waiting to run: what the pack, unpack and
