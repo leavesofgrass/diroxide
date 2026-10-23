@@ -45,6 +45,11 @@ pub fn replace_lines(name: &str) -> Vec<String> {
     ]
 }
 
+/// A provider's lost connection when the plugin gave no reason.
+pub fn connection_lost() -> String {
+    "Connection lost".to_owned()
+}
+
 /// What a text prompt says when the text does not fit the plugin's
 /// pattern and the plugin gave no words of its own.
 pub fn text_does_not_fit() -> String {

@@ -60,6 +60,7 @@ pub mod manifest;
 pub mod panels;
 pub mod places;
 pub mod protocol;
+pub mod provider;
 pub mod router;
 pub mod script;
 pub mod services;

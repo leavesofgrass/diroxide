@@ -22,10 +22,10 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use diroxide_config::PluginSettings;
-use diroxide_core::{CommandId, JobRequest, Message};
+use diroxide_core::{CommandId, JobRequest, Message, Place};
 use diroxide_ops::JobReport;
 use diroxide_tools::process::ProcessSpec;
-use diroxide_vfs::Registry;
+use diroxide_vfs::{Registry, WatchEvent, WatchSink};
 use serde_json::{Map, Value};
 
 use crate::ask::{Answer, PromptHistory, Question, TextDocument};
@@ -33,13 +33,16 @@ use crate::calls::Calls;
 use crate::error::PluginError;
 use crate::files::Files;
 use crate::lines;
-use crate::live::{LivePlugin, Notice, RequestKind};
+use crate::live::{CallOptions, LivePlugin, Notice, RequestKind};
 use crate::log::{PluginLog, Source};
 use crate::manifest::Manifest;
 use crate::panels::{Denials, PanelChange, PanelChoice, PanelSnapshot};
 use crate::protocol::{ErrorKind, Notification, PROTOCOL, Params, Request, RpcError, methods};
 use crate::router::{CancelFlag, Connection, Event, Inbound, Outcome};
-use crate::services::{AnnounceLimiter, ProgressBoard, Waiting, announcement, settings_for};
+use crate::services::{
+    AnnounceLimiter, MAX_ANNOUNCE_CHARS, ProgressBoard, Waiting, announcement, clean_text,
+    settings_for,
+};
 use crate::session::{InitializeParams, SessionError, handshake, unconfirmed};
 use crate::spool::Spool;
 use crate::supervisor::{
@@ -201,6 +204,16 @@ pub enum HostEvent {
         /// The plugin's id.
         plugin: String,
     },
+    /// A plugin's provider lost a device or a session
+    /// (`provider/lost`): panels at the authority show it in words.
+    ProviderLost {
+        /// The plugin's id.
+        plugin: String,
+        /// The authority lost, such as `mtp://phone`.
+        authority: String,
+        /// "Phone disconnected (MTP)", the plugin's name last.
+        message: Message,
+    },
 }
 
 /// Starts a plugin's program and returns its transport.
@@ -295,6 +308,13 @@ impl Voice {
         }
     }
 
+    pub(crate) fn events_push(&self, event: HostEvent) {
+        self.events
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(event);
+    }
+
     fn push(&self, message: Message) {
         self.events
             .lock()
@@ -321,9 +341,62 @@ struct PluginInbound {
     limiter: Mutex<AnnounceLimiter>,
     board: Mutex<ProgressBoard>,
     stray_said: AtomicBool,
+    watches: Mutex<HashMap<String, (Place, WatchSink)>>,
 }
 
 impl PluginInbound {
+    /// `provider/changed`: each change to the watch's sink, as the
+    /// provider trait's events; an unknown watch or change is dropped.
+    fn changed(&self, params: &Params) {
+        let Some(id) = params.get("watch_id").and_then(Value::as_str) else {
+            return;
+        };
+        let watches = self.watches.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some((folder, sink)) = watches.get(id) else {
+            return;
+        };
+        let changes = params
+            .get("changes")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for change in changes {
+            let place = change
+                .get("place")
+                .and_then(Value::as_str)
+                .and_then(|p| Place::parse(p).ok())
+                .filter(|p| p.parent().as_ref() == Some(folder));
+            let event = match (change.get("kind").and_then(Value::as_str), place) {
+                (Some("created"), Some(place)) => WatchEvent::Created(place),
+                (Some("modified"), Some(place)) => WatchEvent::Changed(place),
+                (Some("removed"), Some(place)) => WatchEvent::Removed(place),
+                (Some("renamed"), Some(place)) => WatchEvent::RenamedIn(place),
+                _ => WatchEvent::Rescan,
+            };
+            sink(event);
+        }
+    }
+
+    /// `provider/lost`: said once, with the plugin's name last.
+    fn lost(&self, params: &Params) {
+        let authority = params
+            .get("authority")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let reason = params
+            .get("reason")
+            .and_then(Value::as_str)
+            .map(|r| clean_text(r, MAX_ANNOUNCE_CHARS))
+            .filter(|r| !r.is_empty())
+            .unwrap_or_else(lines::connection_lost);
+        self.voice.events_push(HostEvent::ProviderLost {
+            plugin: self.voice.plugin.clone(),
+            authority,
+            message: Message::warning(lines::with_source(&reason, &self.name)),
+        });
+    }
+
     fn live(&self) -> Option<Arc<LivePlugin>> {
         self.live.get().and_then(Weak::upgrade)
     }
@@ -365,6 +438,18 @@ impl PluginInbound {
             return;
         };
         let value = params.get("value").cloned().unwrap_or(Value::Null);
+        if value.get("kind").and_then(Value::as_str) == Some("partial") {
+            if let Some(live) = self.live() {
+                let entries = value
+                    .get("entries")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                live.partial(token, entries);
+                live.progress(token, None);
+            }
+            return;
+        }
         let (said, waiting) = self
             .board
             .lock()
@@ -422,6 +507,8 @@ impl Inbound for PluginInbound {
     fn notification(&self, notification: &Notification) {
         match notification.method.as_str() {
             methods::UI_ANNOUNCE => self.announce(&notification.params),
+            methods::PROVIDER_CHANGED => self.changed(&notification.params),
+            methods::PROVIDER_LOST => self.lost(&notification.params),
             methods::PROGRESS => self.progress(&notification.params),
             methods::LOG => {
                 let level = match notification.params.get("level").and_then(Value::as_str) {
@@ -832,6 +919,7 @@ impl Host {
             limiter: Mutex::new(AnnounceLimiter::new(self.ticker.now())),
             board: Mutex::new(ProgressBoard::default()),
             stray_said: AtomicBool::new(false),
+            watches: Mutex::new(HashMap::new()),
         });
         let connection = Connection::open(
             name,
@@ -857,6 +945,18 @@ impl Host {
     /// Calls a method on a plugin, starting it if needed, on the caller's
     /// thread. The method's kind decides its inactivity limit.
     pub fn call(&self, plugin: &str, method: &str, params: Value) -> Result<Value, PluginError> {
+        self.call_with(plugin, method, params, CallOptions::default())
+    }
+
+    /// The same, with a cancel token and a taker of partial batches (a
+    /// provider's streamed listing).
+    pub fn call_with(
+        &self,
+        plugin: &str,
+        method: &str,
+        params: Value,
+        options: CallOptions<'_>,
+    ) -> Result<Value, PluginError> {
         let info = self
             .plugin(plugin)
             .ok_or_else(|| PluginError::Unknown(plugin.to_owned()))?;
@@ -886,7 +986,7 @@ impl Host {
             .map_or_else(|| info.manifest.name.clone(), |c| c.name.clone());
         let live = self.live(info)?;
         let name = info.manifest.name.clone();
-        live.call_labeled(method, params, kind, &label)
+        live.call_with(method, params, kind, &label, options)
             .map_err(|error| match ErrorKind::from_code(error.code) {
                 Some(ErrorKind::TimedOut) => PluginError::Timeout(name),
                 Some(ErrorKind::PluginUnavailable) => PluginError::Stopped(name),
@@ -930,6 +1030,60 @@ impl Host {
             slot.off = None;
             slot.crashes.reset();
             slot.starts.reset();
+        }
+    }
+
+    /// Kills a running plugin at once, its whole tree, without the polite
+    /// ending: what it was serving fails, and nothing it had not committed
+    /// is committed. It starts again at its next use.
+    pub fn kill(&self, plugin: &str) {
+        let slot = self
+            .slots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+            .cloned();
+        if let Some(slot) = slot
+            && let Some(live) = slot
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .live
+                .take()
+        {
+            live.kill();
+        }
+    }
+
+    /// Sends a running plugin's `provider/changed` for a watch to `sink`,
+    /// until [`Host::remove_watch`].
+    pub fn add_watch(&self, plugin: &str, watch_id: &str, folder: Place, sink: WatchSink) {
+        if let Some(inbound) = self
+            .inbounds
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+        {
+            inbound
+                .watches
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(watch_id.to_owned(), (folder, sink));
+        }
+    }
+
+    /// Forgets a watch.
+    pub fn remove_watch(&self, plugin: &str, watch_id: &str) {
+        if let Some(inbound) = self
+            .inbounds
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+        {
+            inbound
+                .watches
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(watch_id);
         }
     }
 
@@ -1212,6 +1366,27 @@ mod tests {
         host.tick();
         assert_eq!(said(&host), ["80 more messages from Line counter"]);
         assert!(host.is_running("line-counter"));
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    #[test]
+    fn a_lost_connection_is_an_event_with_the_plugin_last() {
+        let ticker = Arc::new(ManualTicker::new());
+        let host = host(FakeLauncher::new(Mode::Lost), &ticker, "");
+        run_echo(&host);
+        let lost: Vec<HostEvent> = host
+            .take_events()
+            .into_iter()
+            .filter(|e| matches!(e, HostEvent::ProviderLost { .. }))
+            .collect();
+        assert_eq!(
+            lost,
+            [HostEvent::ProviderLost {
+                plugin: "line-counter".into(),
+                authority: "memfs://box".into(),
+                message: Message::warning("Box unplugged (Line counter)"),
+            }]
+        );
         host.shutdown_all(QUIT_BUDGET);
     }
 

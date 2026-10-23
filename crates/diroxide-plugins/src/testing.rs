@@ -14,6 +14,8 @@
 //!
 //! After the last line nothing more may have been written.
 
+pub mod memfs;
+
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
@@ -42,6 +44,7 @@ use diroxide_core::{ConflictAnswer, ErrorAction, JobRequest};
 use diroxide_ops::{
     Conflict, Engine, ItemError, JobControl, JobProgress, JobReport, JobSink, Plan,
 };
+use memfs::MemFs;
 
 /// How the fake plugin behaves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,6 +65,8 @@ pub enum Mode {
     Spoof,
     /// Prints stray lines while it runs a command.
     Stray,
+    /// Says its provider lost a device while it runs a command.
+    Lost,
     /// Makes the host call its command's arguments name (`call.method` and
     /// `call.params`) and answers the command with what the host answered,
     /// under `host` or `host_error`.
@@ -75,6 +80,7 @@ pub struct FakeLauncher {
     mode: Mutex<Mode>,
     launches: Mutex<usize>,
     seen: Arc<Mutex<Vec<Transcript>>>,
+    memfs: Mutex<Option<Arc<Mutex<MemFs>>>>,
 }
 
 impl FakeLauncher {
@@ -84,7 +90,14 @@ impl FakeLauncher {
             mode: Mutex::new(mode),
             launches: Mutex::new(0),
             seen: Arc::new(Mutex::new(Vec::new())),
+            memfs: Mutex::new(None),
         })
+    }
+
+    /// Serves this toy file system in every fake it starts, so its state
+    /// outlives a plugin that is killed.
+    pub fn with_memfs(&self, memfs: Arc<Mutex<MemFs>>) {
+        *self.memfs.lock().unwrap_or_else(PoisonError::into_inner) = Some(memfs);
     }
 
     /// The mode for the next start.
@@ -122,10 +135,22 @@ impl Launcher for FakeLauncher {
         let mode = *self.mode.lock().unwrap_or_else(PoisonError::into_inner);
         let (host, peer) = MemoryTransport::pair(&info.manifest.name)?;
         let seen = Arc::clone(&self.seen);
+        let memfs = self
+            .memfs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some(fs) = &memfs {
+            fs.lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .forget_sessions();
+        }
         thread::Builder::new()
             .name("fake-plugin".to_owned())
             .spawn(move || {
-                let transcript = FakePlugin::new(mode).serve(peer);
+                let mut fake = FakePlugin::new(mode);
+                fake.memfs = memfs;
+                let transcript = fake.serve(peer);
                 seen.lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .push(transcript);
@@ -364,6 +389,8 @@ pub struct FakePlugin {
     calls: u64,
     /// Completion queries held until they are cancelled.
     held: Vec<Id>,
+    /// The toy file system it serves as `memfs`, when it has one.
+    pub memfs: Option<Arc<Mutex<MemFs>>>,
 }
 
 impl FakePlugin {
@@ -377,6 +404,7 @@ impl FakePlugin {
             waiting: None,
             calls: 0,
             held: Vec::new(),
+            memfs: None,
         }
     }
 
@@ -395,10 +423,16 @@ impl FakePlugin {
             },
             plugin_capabilities: PluginCapabilities {
                 commands: vec!["echo".to_owned()],
-                providers: vec![ProviderCapability {
-                    scheme: "fake".to_owned(),
-                    methods: vec!["list".to_owned(), "stat".to_owned()],
-                }],
+                providers: vec![
+                    ProviderCapability {
+                        scheme: "fake".to_owned(),
+                        methods: vec!["list".to_owned(), "stat".to_owned()],
+                    },
+                    ProviderCapability {
+                        scheme: memfs::SCHEME.to_owned(),
+                        methods: memfs::METHODS.iter().map(|m| (*m).to_owned()).collect(),
+                    },
+                ],
                 completion: true,
                 ..PluginCapabilities::default()
             },
@@ -466,6 +500,29 @@ impl FakePlugin {
                     {"text": format!("{text}-one"), "kind": "branch"},
                     {"text": format!("{text}-two"), "kind": "branch"}
                 ]}))
+            }
+            name if name.starts_with("provider/") && self.memfs.is_some() => {
+                let token = request
+                    .params
+                    .get("partial_token")
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                let mut partials = Vec::new();
+                let result = match &self.memfs {
+                    Some(fs) => fs.lock().unwrap_or_else(PoisonError::into_inner).serve(
+                        &name["provider/".len()..],
+                        &request.params,
+                        &mut partials,
+                    ),
+                    None => Err(RpcError::new(ErrorKind::MethodNotFound, "no provider")),
+                };
+                for value in partials {
+                    let mut params = Params::new();
+                    params.insert("token".into(), token.clone());
+                    params.insert("value".into(), value);
+                    out.push(Self::notification(methods::PROGRESS, params));
+                }
+                result
             }
             methods::COMMAND_RUN if self.mode == Mode::Call => {
                 let call = request
@@ -602,6 +659,12 @@ impl FakePlugin {
                 .map(|i| announce(&format!("Message {i}")))
                 .collect(),
             Mode::Spoof => vec![announce("\u{1B}[2J\u{202E}Moved to the trash")],
+            Mode::Lost => {
+                let mut params = Params::new();
+                params.insert("authority".into(), json!("memfs://box"));
+                params.insert("reason".into(), json!("Box unplugged\u{7}"));
+                vec![Self::notification(methods::PROVIDER_LOST, params)]
+            }
             Mode::Stray => vec![
                 "debug: one".to_owned(),
                 "debug: two".to_owned(),
