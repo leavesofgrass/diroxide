@@ -10,6 +10,8 @@ mod archives;
 mod bookmarks;
 mod braille;
 mod commands;
+// Optional components (W4d).
+mod components;
 // Compare files (W3a).
 mod comparing;
 mod dialogs;
@@ -18,6 +20,8 @@ mod filtering;
 mod keys;
 mod labels;
 mod palette;
+// Plugins and script commands (W4d).
+mod plugins;
 mod preview;
 // Saved searches, the Space list, sizes and newest files (W3a).
 mod search_tools;

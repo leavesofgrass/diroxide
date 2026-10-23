@@ -25,6 +25,8 @@ pub mod app;
 pub mod archives;
 pub mod bookmarks;
 pub mod commands;
+// Optional components in the app (W4d).
+pub mod components;
 pub mod dialog;
 pub mod entry;
 pub mod jobs;
@@ -34,6 +36,8 @@ pub mod menu;
 pub mod messages;
 pub mod palette;
 pub mod panel;
+// Plugins and script commands in the app (W4d).
+pub mod plugins;
 pub mod quickview;
 pub mod request;
 pub mod runtime;

@@ -243,6 +243,12 @@ pub enum Request {
     /// [`AppEvent::Planned`](crate::AppEvent::Planned). Counting progress
     /// arrives as job progress meanwhile.
     Plan(Box<JobRequest>),
+    /// Plugins and script commands: scan, enable, run, answer a plugin's
+    /// call (W4d).
+    Plugins(Box<crate::plugins::PluginRequest>),
+    /// Optional components: list, download, verify, remove, install
+    /// (W4d).
+    Components(Box<crate::components::ComponentRequest>),
     /// Plan the undo of a job's record; answered like [`Request::Plan`].
     PlanUndo {
         /// The undo job's id.

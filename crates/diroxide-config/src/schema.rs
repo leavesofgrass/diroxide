@@ -296,7 +296,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 91] = [
+pub const SCHEMA: [SettingInfo; 92] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -1243,7 +1243,7 @@ pub const SCHEMA: [SettingInfo; 91] = [
         group: G::Plugins,
         kind: K::Names,
         default: "[]",
-        help: "The plugins you turned on, by name. None is on until you turn it on.",
+        help: "Reserved. Manage plugins in the Plugins menu turns a plugin on, after its question.",
         arrives: Some("alpha.4"),
     },
     SettingInfo {
@@ -1257,7 +1257,7 @@ pub const SCHEMA: [SettingInfo; 91] = [
         },
         default: "10000",
         help: "How long a plugin may take to answer before it is reported and left.",
-        arrives: Some("alpha.4"),
+        arrives: None,
     },
     SettingInfo {
         key: "components_source",
@@ -1266,7 +1266,16 @@ pub const SCHEMA: [SettingInfo; 91] = [
         kind: K::Text,
         default: "\"\"",
         help: "Where the list of optional components is read from. Empty means the public list.",
-        arrives: Some("alpha.4"),
+        arrives: None,
+    },
+    SettingInfo {
+        key: "components_first_run_shown",
+        name: "First-run list shown",
+        group: G::Plugins,
+        kind: K::Flag,
+        default: "false",
+        help: "Whether the first-run list of optional components was shown. Ask first-run choices again turns it off.",
+        arrives: None,
     },
 ];
 

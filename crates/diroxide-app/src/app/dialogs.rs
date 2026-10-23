@@ -160,6 +160,10 @@ impl App {
 
     /// A key with a dialog open.
     pub(super) fn dialog_key(&mut self, key: Key) -> Vec<Effect> {
+        // A plugin's lister and choose question (W4d).
+        if let Some(effects) = self.plugin_key(&key) {
+            return effects;
+        }
         // The results lister's and the search dialog's own keys (W3a).
         if let Some(effects) = self.results_key(&key) {
             return effects;
@@ -330,8 +334,11 @@ impl App {
         }
         let mut effects = self.close_top();
         match purpose {
+            Purpose::Plugin(wants) => effects.extend(self.plugin_escape(*wants)),
+            Purpose::Component(wants) => effects.extend(self.component_escape(*wants)),
             Purpose::RunPlan(plan) | Purpose::TypedPlan(plan, _) => {
-                self.flows.remove(&plan.job);
+                let flow = self.flows.remove(&plan.job);
+                self.plugin_job_ended(flow.as_ref(), Err("the owner said no".to_owned()));
                 self.jobs.finish(plan.job);
                 effects.push(Effect::Redraw(Redraw::JobsLine));
                 effects.push(self.say(Message::info("Nothing changed.")));
@@ -473,6 +480,8 @@ impl App {
                 effects.push(Effect::OpenExternally(place));
             }
             Purpose::Keys(purpose) => effects.extend(self.keys_yes(*purpose)),
+            Purpose::Plugin(wants) => effects.extend(self.plugin_yes(*wants)),
+            Purpose::Component(wants) => effects.extend(self.component_yes(*wants)),
             Purpose::Organize(wants) => effects.extend(self.organize_yes(*wants)),
             Purpose::FilterContents {
                 side,
@@ -695,6 +704,8 @@ impl App {
                 self.close_top()
             }
             Purpose::Secret { ask } => self.secret_enter(ask),
+            Purpose::Plugin(wants) => self.plugin_accept(*wants, row, text),
+            Purpose::Component(wants) => self.component_accept(*wants, row, text),
             Purpose::NewPassword { form, first } => {
                 let typed = match self.dialogs.last() {
                     Some((_, Dialog::Secret { typed, .. })) => typed.clone(),
@@ -919,7 +930,7 @@ impl App {
 
     /// A candidate chosen from a field's list: its text goes into the
     /// field and the list closes.
-    fn take_candidate(&mut self, text: &str) -> Vec<Effect> {
+    pub(super) fn take_candidate(&mut self, text: &str) -> Vec<Effect> {
         let candidate = Candidate::new(text, "");
         if let Some((
             _,
@@ -944,7 +955,8 @@ impl App {
         if !matches!(
             purpose,
             Some(Purpose::Secret { .. } | Purpose::NewPassword { .. })
-        ) {
+        ) && !self.plugin_secret()
+        {
             return Vec::new();
         }
         let show_toggle = key.mods.alt && !key.mods.ctrl && matches!(key.code, KeyCode::Char('s'));
@@ -1222,6 +1234,22 @@ impl App {
                 self.refresh_candidates()
             }
             Some(Purpose::Keys(purpose)) if purpose.is_list() => self.keys_list_typed(),
+            // A plugin's prompt with a plugin completer (W4d).
+            Some(Purpose::Plugin(_)) => {
+                if let Some((
+                    _,
+                    Dialog::Edit {
+                        candidates,
+                        in_list,
+                        ..
+                    },
+                )) = self.dialogs.last_mut()
+                {
+                    *candidates = None;
+                    *in_list = false;
+                }
+                self.plugin_field_changed(&text)
+            }
             Some(Purpose::Organize(wants)) if wants.list_always() => self.refresh_candidates(),
             _ => {
                 if let Some((
@@ -1254,10 +1282,12 @@ impl App {
             _ => return Vec::new(),
         };
         let list = match self.top_purpose().cloned() {
-            Some(Purpose::Palette) => {
-                self.palette
-                    .list_with(&text, &self.keymap, Some(&self.menus))
-            }
+            Some(Purpose::Palette) => self.palette.list_with_extra(
+                &text,
+                &self.keymap,
+                Some(&self.menus),
+                &crate::plugins::registry::palette_entries(&self.plugins.catalog),
+            ),
             Some(Purpose::Places(side)) => {
                 let all = self.place_candidates(side, false);
                 let found: Vec<Candidate> = all
@@ -1539,7 +1569,7 @@ impl App {
                 }
                 match self.top_purpose().cloned() {
                     Some(Purpose::Secret { ask }) => self.secret_enter(ask),
-                    Some(Purpose::NewPassword { .. }) => self.accept(),
+                    Some(Purpose::NewPassword { .. } | Purpose::Plugin(_)) => self.accept(),
                     _ => Vec::new(),
                 }
             }

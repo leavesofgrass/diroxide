@@ -193,6 +193,12 @@ impl Menus {
                 let action = match (&item.command, &item.menu) {
                     (Some(command), None) => match CommandId::new(command.clone()) {
                         Ok(id) if commands::info(&id).is_some() => ItemAction::Command(id),
+                        // A plugin's or a script's command (W4d): kept, and
+                        // shown only while its plugin is enabled, with
+                        // nothing reported.
+                        Ok(id) if crate::plugins::registry::is_plugin_command(&id) => {
+                            ItemAction::Command(id)
+                        }
                         _ => {
                             problems.push(format!("Unknown command in {place}: {command}."));
                             continue;
@@ -372,14 +378,38 @@ impl Menus {
     /// key from the live keymap ("Copy to other panel, F5"); a submenu says
     /// "submenu". Items the place does not allow are left out.
     pub fn list(&self, id: &str, keymap: &Keymap, place: &Capabilities) -> Option<ListModel> {
+        self.list_with(id, keymap, place, &|_| None)
+    }
+
+    /// The same list with plugin commands (W4d): an item naming a
+    /// plugin's or a script's command shows the row `plugin` gives it
+    /// (its name and key, or "disabled" with the reason), and is left out
+    /// when `plugin` gives none (its plugin is not enabled).
+    pub fn list_with(
+        &self,
+        id: &str,
+        keymap: &Keymap,
+        place: &Capabilities,
+        plugin: &dyn Fn(&CommandId) -> Option<ListRow>,
+    ) -> Option<ListModel> {
         let menu = self.menu(id)?;
         let rows = menu
             .items
             .iter()
             .filter(|item| item.when.is_none_or(|w| w.holds(place)))
-            .map(|item| {
+            .filter_map(|item| {
+                if let ItemAction::Command(command) = &item.action
+                    && commands::info(command).is_none()
+                {
+                    return plugin(command).map(|mut row| {
+                        if item.label != command.as_str() {
+                            row.label.clone_from(&item.label);
+                        }
+                        row
+                    });
+                }
                 let row = ListRow::new(item.row_id(), item.label.clone());
-                match &item.action {
+                Some(match &item.action {
                     ItemAction::Command(command) => {
                         let key = keymap.key_text(command);
                         if key.is_empty() {
@@ -389,7 +419,7 @@ impl Menus {
                         }
                     }
                     ItemAction::Submenu(_) => row.with_details(["submenu"]),
-                }
+                })
             })
             .collect();
         let mut list = ListModel::new(format!("{} menu", menu.title)).with_rows(rows);
@@ -658,7 +688,12 @@ pub fn banks(config: &BanksConfig) -> (Vec<Bank>, Vec<ConfigProblem>) {
                         .commands
                         .iter()
                         .filter_map(|text| match parse_command_text(text) {
-                            Ok(command) if commands::info(&command.id).is_some() => Some(command),
+                            Ok(command)
+                                if commands::info(&command.id).is_some()
+                                    || crate::plugins::registry::is_plugin_command(&command.id) =>
+                            {
+                                Some(command)
+                            }
                             Ok(command) => {
                                 problems.push(ConfigProblem::new(
                                     Paths::BANKS,

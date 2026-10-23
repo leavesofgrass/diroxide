@@ -713,7 +713,7 @@ Larger files. What a compare does with a file over the text compare limit.
 
 ### plugins.enabled
 
-Plugins in use. The plugins you turned on, by name. None is on until you turn it on.
+Plugins in use. Reserved. Manage plugins in the Plugins menu turns a plugin on, after its question.
 
 - Holds: a list of names.
 - Default: `[]`.
@@ -725,7 +725,6 @@ Plugin time limit. How long a plugin may take to answer before it is reported an
 
 - Holds: a number of milliseconds, 1000 to 600000.
 - Default: `10000`.
-- Comes with a later alpha.
 
 ### components_source
 
@@ -733,7 +732,13 @@ Components list. Where the list of optional components is read from. Empty means
 
 - Holds: text.
 - Default: `""`.
-- Comes with a later alpha.
+
+### components_first_run_shown
+
+First-run list shown. Whether the first-run list of optional components was shown. Ask first-run choices again turns it off.
+
+- Holds: true or false.
+- Default: `false`.
 
 ## Themes
 

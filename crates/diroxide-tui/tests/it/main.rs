@@ -13,6 +13,8 @@ mod alpha3;
 mod owners_check;
 // The owner's check of alpha.3 (W3a, plan commit 42).
 mod owners_check_alpha3;
+// A plugin's dialogs (W4d).
+mod plugins;
 mod support;
 
 use std::ffi::OsString;
