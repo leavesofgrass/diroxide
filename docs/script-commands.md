@@ -22,12 +22,12 @@ diro plugin new total-size --language bash
 ```
 
 ```text
-Wrote total-size.sh in the scripts folder.
+Wrote total-size.sh in /home/ada/.config/diroxide/plugins/scripts.
 Check it: diro plugin check total-size
 Try it once: diro plugin run total-size -- FILE
 ```
 
-(The first line names the full folder.) It writes a working script, copied from the shipped example, with the header explained in comments. The command is named "Total size" until you change the `name` line.
+(The first line names your own scripts folder.) It writes a working script, copied from the shipped example, with the header explained in comments. The command is named "Total size" until you change the `name` line.
 
 ```bash
 diro plugin check total-size
@@ -295,7 +295,7 @@ The `mode` key says where a script's output lines go.
 
 Output is cleaned of escape sequences and control characters, a line is cut at 2,000 characters, and the whole output at 1 MB. "Output cut at 1 MB." says it happened.
 
-From a shell, `diro plugin run` prints the lines of any mode. A script in `lister` mode prints its places and then a title line:
+From a shell, `diro plugin run` prints a script's output lines. A script in `lister` mode prints its places and then a title line:
 
 ```text
 D:/notes/a.txt
@@ -444,7 +444,7 @@ mode = "launch"
 argv = ["{setting.tool}", "{files}"]
 ```
 
-The command takes every key of a header, with the same meaning. The program is `argv[0]`, and diroxide finds it on the PATH or in your tool settings. There is no shell, so a name with spaces, quotes or `$(...)` is inert.
+The command takes every key of a header, with the same meaning. The program is `argv[0]`, and diroxide finds it on the PATH. There is no shell, so a name with spaces, quotes or `$(...)` is inert.
 
 diroxide fills placeholders one argument at a time, after the list is split:
 

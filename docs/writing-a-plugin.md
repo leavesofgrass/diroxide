@@ -12,7 +12,7 @@ Every command in this guide was run. Every example plugin in it passes `diro plu
 - Write a plugin with no code when the work is "run this program on the files". You give the program and its arguments in `plugin.toml`, and diroxide fills in the file names itself. A diff tool, pandoc and pdftotext are all this kind.
 - Write a process plugin when you need more than a command: a list of rows that are not files, a place that serves a file system, a dialog that asks questions, settings that change while it runs, or progress and cancel. It is a program in any language that talks JSON lines with diroxide.
 
-You can start with a script and move to a plugin later. A script becomes a plugin by getting a `plugin.toml`.
+You can start with a script and move to a plugin later.
 
 ## Start from a skeleton
 
@@ -388,13 +388,13 @@ The exit code is 0 when every group that ran passed. A failure names the check, 
 - Services: only the services the manifest allows are called.
 - Output hygiene: stray lines on standard output are counted and reported, but never fatal.
 
-A plugin with no code of its own runs the manifest and accessibility groups and skips the rest, which need a process. The conformance checks found three real gaps in the first drafts of the Python examples (no -32002 before `initialize`, no -32700 for a line that is not JSON, and no -32600 for a batch), and the examples now do all three.
+A plugin with no code of its own runs the manifest and accessibility groups and skips the rest, which need a process.
 
 ## The nine examples
 
-They are in the `examples/plugins` folder of the source, and in the optional component "Example plugins". The skeletons are copied from them. Run `diro plugin check` on a folder to see it pass; run `diro plugin conformance` on any of them.
+They are in the `examples/plugins` folder of the source, and in the optional component "Example plugins". The skeletons are copied from them. Run `diro plugin check` on any of them to see it pass, and `diro plugin conformance` on any of the folders.
 
-1. Total size of selection (`scripts/total-size.sh`). Five lines of bash that read the selection list and say how many items there are and how big they are. It shows the header, the NUL list, the directives file and the exit codes. [Script commands](script-commands.md) takes it apart.
+1. Total size of selection (`scripts/total-size.sh`). A short bash script that reads the selection list and says how many items there are and how big they are. It shows the header, the NUL list, the directives file and the exit codes. [Script commands](script-commands.md) takes it apart.
 2. Select empty folders (`scripts/select-empty-folders.sh`). Marks the empty folders of the active panel with `select` directives, which wait until the script ends so the panel does not move while you listen.
 3. Line counter (`line-counter`). The protocol example above: settings, cancel, progress, error kinds and a per-file result list, standard library only.
 4. Search the whole computer (`system-index`). Three commands and no code. Everything's `es` on Windows, `plocate` on Linux and `mdfind` on macOS take a typed query, and the output lines become a list of real files in a panel. It shows `prompt`, `mode = "lister"`, `list`, `max_rows`, `os`, `needs` and `exit_words`. You hear "214 results for report, from Everything", or "No results for report.", or "First 5,000 shown, narrow the search.".
@@ -414,7 +414,7 @@ Then `diro plugin run select-empty-folders` asks "Run it once? y or n" and runs 
 
 ## Write plugins that read well by ear
 
-These are the rules every plugin shipped with diroxide keeps, and the conformance checks look for the first four.
+These are the rules every plugin shipped with diroxide keeps. The conformance checks look at the first one.
 
 - Put the meaning in the first 40 characters of every name, description and message. A Braille line is 40 cells, and a screen reader says the start first.
 - Use words before symbols, and never let a color or a symbol carry the meaning alone. Write "Modified, src/lib.rs", not an icon. Emoji and box drawing come out as noise on a Braille display.
