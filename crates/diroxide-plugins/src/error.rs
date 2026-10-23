@@ -44,6 +44,10 @@ pub enum PluginError {
         code: i64,
         /// The plugin's message.
         message: String,
+        /// The next step in words, from `data.hint`, when the plugin gave
+        /// one; an `untrusted` error always carries one (the line that
+        /// forgets a changed host key, said and never run).
+        hint: Option<String>,
     },
     /// No plugin has this name.
     #[error("no plugin is called {0}")]
@@ -77,6 +81,9 @@ impl Explain for PluginError {
             }
             PluginError::Manifest { .. } => "Fix plugin.toml, or disable the plugin.".to_owned(),
             PluginError::Placeholder(_) => "Select something, or move to an entry.".to_owned(),
+            PluginError::Remote {
+                hint: Some(hint), ..
+            } => hint.clone(),
             _ => String::new(),
         }
     }

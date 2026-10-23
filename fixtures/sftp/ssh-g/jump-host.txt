@@ -1,0 +1,15 @@
+host lab
+user ada
+hostname 10.0.0.7
+port 22
+batchmode no
+controlmaster auto
+controlpath ~/.ssh/cm-%C
+controlpersist 600
+stricthostkeychecking false
+serveralivecountmax 3
+serveraliveinterval 30
+connecttimeout 5
+proxyjump bastion.example
+identityfile ~/.ssh/id_ed25519_lab
+userknownhostsfile ~/.ssh/known_hosts

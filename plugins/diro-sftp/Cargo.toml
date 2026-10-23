@@ -1,17 +1,20 @@
-# The SFTP provider plugin. A workspace of its own, outside the main one,
-# because its cryptography (russh's ring or aws-lc-rs) carries C and
-# assembly, which the main binary never links (plan section 5.8, item 3;
-# ADR-0001). Built and installed on its own:
+# The SFTP provider plugin: SFTP places through the OpenSSH client already
+# on the machine (answer 78). A workspace of its own, outside the main one
+# (plan section 5.8, item 3): a plugin is a feature family the owner opts
+# into, installed with `cargo install` of this crate or as a component.
+# Pure Rust and no C build: ssh does the cryptography, this crate speaks
+# the SFTP protocol over ssh's pipes with its own codec (answer 88).
 #
 #   cargo build --manifest-path plugins/diro-sftp/Cargo.toml
 #
-# Phase 0's types only, moved here by the Wave 1 contract step (P0b); W3c
-# adds russh and russh-sftp to this manifest, never to the main one.
+# One program in two modes (answer 82): the JSON-RPC plugin the host
+# starts, and, when DIRO_ASKPASS_ENDPOINT is set, the askpass helper ssh
+# starts to ask a password or a host key question.
 [workspace]
 
 [package]
 name = "diro-sftp"
-description = "The SFTP provider plugin of diroxide, with key and agent authentication and known hosts."
+description = "The SFTP places plugin of diroxide: SFTP over the OpenSSH client, with its own askpass helper."
 version = "0.1.0-alpha.1"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
@@ -20,7 +23,40 @@ publish = false
 
 [dependencies]
 diroxide-core = { path = "../../crates/diroxide-core", version = "0.1.0-alpha.1" }
-diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.1" }
+# The wire types, the session's lifecycle and the error kinds, shared with
+# the host so the two never drift (pure Rust).
+diroxide-plugins = { path = "../../crates/diroxide-plugins", version = "0.1.0-alpha.1" }
+# The process helper: a program by its path, no shell, no console window,
+# a tree killed as a whole (R22 section 5.3).
+diroxide-tools = { path = "../../crates/diroxide-tools", version = "0.1.0-alpha.1" }
+# The askpass proof (answer 82): random tokens and nonces from the system,
+# HMAC-SHA-256 checked in constant time. Pure Rust.
+getrandom = "0.3.4"
+hmac = "0.13.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.146"
+sha2 = "0.11.1"
+thiserror = "2.0.18"
+
+[dev-dependencies]
+proptest = "1.11.0"
+tempfile = "3.27.0"
+
+[features]
+# Tests only: builds the fake ssh of the test plan (R25 commit 55), which
+# also records what an askpass helper is given (spike SF1).
+fake-ssh = []
+
+[[bin]]
+name = "diro-sftp"
+path = "src/main.rs"
+
+[[bin]]
+name = "diro-fake-ssh"
+path = "src/bin/fake_ssh.rs"
+required-features = ["fake-ssh"]
+test = false
+doc = false
 
 [lints.rust]
 missing_docs = "deny"
@@ -34,3 +70,12 @@ todo = "deny"
 unimplemented = "deny"
 unwrap_used = "warn"
 expect_used = "warn"
+
+# Lean debug builds that share a cache, as the main workspace's.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false

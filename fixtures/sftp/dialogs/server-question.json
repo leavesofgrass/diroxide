@@ -1,0 +1,5 @@
+{
+  "kind": "secret",
+  "title": "Question from build.example:",
+  "message": ["Verification code: \u001b[31m(sent to your phone)‮"]
+}

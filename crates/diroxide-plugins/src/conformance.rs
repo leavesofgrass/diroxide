@@ -833,6 +833,39 @@ fn drive(info: &PluginInfo, state: &Path) -> Vec<(Group, Verdict)> {
                     provider.scheme
                 )),
             }
+            // The stage 2 additions, when declared: volumes and places are
+            // lists, or a typed error (a provider that must sign in first).
+            for (method, wanted, list) in [
+                (
+                    methods::PROVIDER_VOLUMES,
+                    "volumes",
+                    json!({"authority": format!("{}://conformance", provider.scheme)}),
+                ),
+                (methods::PROVIDER_PLACES, "places", json!({})),
+            ] {
+                if !provider.methods.contains(wanted) {
+                    continue;
+                }
+                let id = d.request(method, params(list));
+                match d.wait(Some(&id), ANSWER_WAIT) {
+                    Waited::Answer(r) if code_of(&r) == Some(ErrorKind::MethodNotFound.code()) => {
+                        problems.push(format!(
+                            "{}: {wanted} is declared but answered -32601",
+                            provider.scheme
+                        ));
+                    }
+                    Waited::Answer(r)
+                        if r.error.is_some()
+                            || r.result
+                                .as_ref()
+                                .is_some_and(|v| v.get(wanted).is_some_and(Value::is_array)) => {}
+                    Waited::Answer(_) => problems.push(format!(
+                        "{}: {wanted} is not a list of {wanted}",
+                        provider.scheme
+                    )),
+                    _ => problems.push(format!("{}: {wanted} was not answered", provider.scheme)),
+                }
+            }
         }
         out.push((Group::Providers, verdict(problems)));
     }

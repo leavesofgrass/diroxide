@@ -345,6 +345,44 @@ impl WireText {
     }
 }
 
+/// One storage a provider offers, as `provider/volumes` answers it: the
+/// volumes list's row, or, when the request named a place, the one volume
+/// that holds it (the free-space check). Absent numbers are not known,
+/// and are never read as zero.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireVolume {
+    /// Its name, meaning first: "Home on build.example".
+    pub name: String,
+    /// Its root, in the provider's own form.
+    pub place: String,
+    /// The bytes the user may still write, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub free: Option<u64>,
+    /// Its size in bytes, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<u64>,
+    /// Whether it can be unplugged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub removable: bool,
+}
+
+/// One place a plugin offers, as `provider/places` answers it: a saved
+/// site or a host from a configuration file, for the go-to-place list.
+/// The state is a word ("saved", "connected", "lost", "from ssh config"),
+/// never a color or a symbol.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WirePlaceRow {
+    /// Its spoken name: "build".
+    pub name: String,
+    /// Where Enter goes, in the provider's own form.
+    pub place: String,
+    /// Its state in words: "saved", "connected", "lost".
+    pub state: String,
+    /// More words, read last: "alice@build.example".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
 /// How a plugin's message is said: `status`, `info`, `warning` or `error`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

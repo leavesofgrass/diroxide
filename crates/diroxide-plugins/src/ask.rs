@@ -959,6 +959,58 @@ mod tests {
         assert_eq!(q.lines, ["Host key changed: example.org", "Old: ab12 cd34"]);
     }
 
+    /// R25's commit 46: the SFTP plugin's questions as the dialog shows
+    /// them, golden row for row: the title with the plugin's name last,
+    /// then each line of the message cleaned, the fingerprint in hex
+    /// groups of four one part a line (answer 84), the server's own words
+    /// last and cleaned.
+    #[test]
+    fn the_sftp_dialogs_keep_their_golden_rows() {
+        for (json, rows) in [
+            (
+                include_str!("../../../fixtures/sftp/dialogs/new-host-key.json"),
+                include_str!("../../../fixtures/sftp/dialogs/new-host-key.rows"),
+            ),
+            (
+                include_str!("../../../fixtures/sftp/dialogs/password.json"),
+                include_str!("../../../fixtures/sftp/dialogs/password.rows"),
+            ),
+            (
+                include_str!("../../../fixtures/sftp/dialogs/server-question.json"),
+                include_str!("../../../fixtures/sftp/dialogs/server-question.rows"),
+            ),
+        ] {
+            let (q, _) = ask(serde_json::from_str(json).unwrap()).unwrap();
+            let shown: Vec<&str> = std::iter::once(q.title.as_str())
+                .chain(q.lines.iter().map(String::as_str))
+                .collect();
+            let golden: Vec<&str> = rows.lines().collect();
+            assert_eq!(shown, golden);
+            // Each row's meaning is whole within one Braille line; the one
+            // longer row is ssh's own text, after the line that says so.
+            for row in &shown {
+                assert!(
+                    row.chars().count() <= 40
+                        || row.starts_with("SHA256:")
+                        || row.ends_with("(SFTP places)"),
+                    "{row}"
+                );
+            }
+        }
+        let (q, _) = ask(serde_json::from_str(include_str!(
+            "../../../fixtures/sftp/dialogs/new-host-key.json"
+        ))
+        .unwrap())
+        .unwrap();
+        assert!(matches!(
+            q.kind,
+            QuestionKind::Confirm {
+                destructive: true,
+                ..
+            }
+        ));
+    }
+
     #[test]
     fn completion_sources_are_read_and_never_for_a_secret() {
         let (_, wanted) = ask(json!({"kind": "text", "prompt_id": "branch",
