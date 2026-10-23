@@ -1,6 +1,6 @@
 # Known limits
 
-This page says what diroxide does not do yet as of alpha 1, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands and optional components arrived with alpha 2. Where a limit has a workaround, the workaround comes first.
 
 ## What is not in alpha 1
 
@@ -12,12 +12,46 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
 - A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes in a later alpha.
 - Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 1, although copies keep dates.
-- Plugins, script commands and the downloader for optional components come in a later alpha. The Plugins menu only says that plugins are not here yet.
 - SSH and other remote places, and the trash browser, come in a later alpha.
 - Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands come in a later alpha.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
 - Download files for each platform come in a later alpha, first for Windows x86_64 and Linux x86_64 and then for the other platforms. `cargo install diro` comes with the first beta.
 - Passwords are asked only for archives. The masked password prompt is built, and the other features that need it, such as SSH, arrive in later alphas.
+
+## Plugins and script commands
+
+[Plugins](plugins.md), [writing a plugin](writing-a-plugin.md) and [script commands](script-commands.md) describe what they do. These are the limits.
+
+- A plugin is a program that runs with your rights. diroxide limits what a plugin may ask of it, and checks that. It cannot limit what the program does on its own. [Security](security.md) says plainly what a plugin could still do. Turn on only what you have read or trust.
+- No limits are set on a plugin's processor use, memory, disk use or number of processes. A plugin can use all it is given.
+- Ending a plugin whole. On Windows, a job object ends a plugin and everything it started, even when diroxide is ended by force. On Linux and macOS, a normal quit ends the plugin's whole group. When diroxide is killed outright, a plugin that watches its parent, as the examples do, exits on its own, and one that does not can keep running. The code that ends a plugin's group on Linux and macOS has been run in the project's Linux container only.
+- A cancel gives a script three seconds to look at its cancel file, and then ends it and everything it started. There is no gentler signal first on Linux and macOS.
+- Scripts and folder trust. On Linux and macOS a script whose file or folder others can change is refused. On Windows the access lists are not read yet, so nothing is refused there. Keep the scripts folder writable by you alone.
+- A script can start slowly: about a tenth of a second for bash and Python, and a third of a second to over a second and a half for PowerShell 5.1, on the test machine. Plugins stay running between uses for five minutes, so the cost is paid once.
+- PowerShell 7 has not been tried. Windows PowerShell 5.1 has, with the policy override. A `.cmd` or `.bat` script runs on Windows only.
+- On Windows, bash is Git for Windows' bash. The `bash.exe` in the system folder is WSL's launcher, and diroxide refuses it. Without Git for Windows, bash scripts do not run, and diroxide says so.
+- Hooks. A manifest may declare them and `diro plugin check` reads them, but diroxide does not run them yet. Also shape only for now: `column/format`, `column/changed`, `place/describe`, `completion/query`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit`. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare them and will be called when the feature that needs them arrives.
+- File transfers through a plugin's place are inline only. Resuming a stopped transfer, and watching a folder through a plugin's place, are shapes without a working end-to-end test.
+- The preview region and the conversions dialog come in a later alpha. Until then `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
+- Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
+- `diro run` runs diroxide's own commands. It cannot run a plugin's command yet. Use `diro plugin run NAME`.
+- The conformance checks do not yet try a line over the length limit, or check that a plugin exits when diroxide is gone.
+- The lines a plugin causes were written to carry their meaning in the first 40 cells and are checked in tests. They have not been heard on a screen reader or read on a Braille display yet.
+
+## Optional components
+
+[Optional components](components.md) describes the feature. These are the limits.
+
+- The list in this build has one component, the example plugins. The pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
+- Downloads use a built-in client, then `curl`, then `wget` from your PATH. A build of diroxide made without the built-in client needs `curl` or `wget`, and says "Not downloaded: curl was not found." when it has neither.
+- A private repository as your own source, reached through the GitHub CLI's sign-in, is not built yet. A folder works, and a repository written `owner/name` is read from its public release downloads.
+- Where a helper has no build for your computer, the message says "No build for this computer." and names a generic next step, not your system's own install command.
+- The list's `min_diro`, `needs_tools` and `protocol` fields are read and not enforced yet.
+- After Escape, a stalled transfer in the built-in client can take a moment to stop, until the client's own time limits end it. `curl` and `wget` are ended at once.
+- A component that would run an installer is refused: "installers are not supported yet".
+- The downloaded programs are not code-signed, and neither are the builds of diroxide. Windows' SmartScreen and virus scanners may react.
+- The first-run list of components is built and is not shown yet, because the list holds only the examples.
+- Installing from a zip file or a folder says "Not downloaded" when it finds none of the files, which is the wrong word for an install.
 
 ## Search and the filter language
 
@@ -78,7 +112,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - On Windows a text paste arrives as typed keys, so during Change key its first character is taken as the key. The questions that follow start on No. The capture says nothing about the terminal on Windows, because whether Windows reports keys exactly is not probed.
 - The Explorer and Finder preset has no Command+D, because on a Mac Command+D is Say status. In the Worker preset Alt+T sorts in a panel, so the Tools menu is F9, then T.
 - In the Explorer and Finder preset, Control with 1 to 7 sets the favorite labels, and macOS may keep those keys for Mission Control. That is checked when the GUI arrives on a Mac. The Labels submenu of the Edit menu is the sure way.
-- Keys that plugins propose come in a later alpha, with plugins.
+- A key that a plugin or a script proposes binds only when it is free, and the Keys list says it is proposed.
 
 ## The trash
 
@@ -200,6 +234,7 @@ The table of keys each terminal can send is built from a key probe run by hand o
 - The side by side layout puts the cursor near column 41 when the right panel is active, so a screen reader may read the left panel's row first. The stacked layout avoids this. Which layout suits you best is still being decided by listening; see [Using diroxide with a screen reader](screen-readers.md).
 - The lines of search, the filter, labels, bookmarks, compare, the Keys list and watching were written to carry their meaning in the first 40 cells and are checked in tests, not heard. Whether the count after the filter pause helps or interrupts, whether a result row's first 26 cells are enough, and whether the status line's "Waiting for ... to settle" is read aloud as dynamic content are for the listening check to decide.
 - The 40-cell lines were written for computer braille, one cell per character, on a HumanWare Mantis Q40. Contracted braille and other displays are untested.
+- The lines of plugins, script commands and optional components (the turn-on question, the jobs line, the failure lines, the ask-first question) were written to carry their meaning in the first 40 cells and are checked in tests, not heard. A plugin's own text is cleaned and given its name last, but its wording is the plugin's, so a plugin's lines may not fit 40 cells.
 
 ## Names and wide characters
 
@@ -219,6 +254,11 @@ The table of keys each terminal can send is built from a key probe run by hand o
 ## See also
 
 - [The accessibility statement](accessibility.md)
+- [Plugins](plugins.md)
+- [Writing a plugin](writing-a-plugin.md)
+- [Script commands](script-commands.md)
+- [Optional components](components.md)
+- [Security](security.md)
 - [Archives](archives.md)
 - [The viewer](viewer.md)
 - [The quick view](quick-view.md)
