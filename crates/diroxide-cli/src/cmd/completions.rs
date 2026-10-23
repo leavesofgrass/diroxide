@@ -355,6 +355,7 @@ pub fn command() -> Command {
                         .help("The folder to watch; the current folder by default"),
                 ),
         )
+        .subcommand(components_command())
         .subcommand(no_help(
             Command::new("serve")
                 .about("Serve the app over JSON-RPC on standard input and output")
@@ -397,6 +398,58 @@ pub fn command() -> Command {
                         .arg(named("name", "The plugin")),
                 )),
         ))
+}
+
+/// `diro components` as `cmd/components.rs` reads it (W4c), for
+/// completion only.
+fn components_command() -> Command {
+    let source = || {
+        Arg::new("source")
+            .long("source")
+            .value_name("FOLDER")
+            .value_hint(ValueHint::DirPath)
+            .global(true)
+            .help("Use this folder as the components source for this run")
+    };
+    Command::new("components")
+        .about("Optional components: list, download, verify, remove, install")
+        .disable_help_subcommand(true)
+        .arg(source())
+        .arg(
+            flag(
+                "portable",
+                "Use the settings and components beside the program",
+            )
+            .global(true),
+        )
+        .subcommand(
+            Command::new("list")
+                .about("Each component: title, state, size, license, id")
+                .arg(flag("json", "Write one JSON object a line")),
+        )
+        .subcommand(
+            Command::new("download")
+                .about("Say its size and license, ask, then download it")
+                .arg(flag("yes", "Answer yes to the question").short('y'))
+                .arg(named("id", "The component")),
+        )
+        .subcommand(
+            Command::new("verify")
+                .about("Check each installed file by size and SHA-256")
+                .arg(Arg::new("id").help("The component")),
+        )
+        .subcommand(
+            Command::new("remove")
+                .about("List its files, ask, then remove them")
+                .arg(flag("yes", "Answer yes to the question").short('y'))
+                .arg(named("id", "The component")),
+        )
+        .subcommand(
+            Command::new("install")
+                .about("Install from a zip file or a folder")
+                .arg(named("id", "The component"))
+                .arg(named("path", "The zip file or folder").value_hint(ValueHint::AnyPath)),
+        )
 }
 
 /// `diro archive` as clap describes it, for completion only; keep in step

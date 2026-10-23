@@ -38,6 +38,9 @@
 //!   ([`unpack_in`]); [`install_from`] installs from a zip file or a folder
 //!   with the same pins, for a computer without a network.
 //!
+//! - [`messages`] holds every line the feature says, meaning first within
+//!   40 cells, and the models the app and `diro components` share.
+//!
 //! Nothing here asks the owner: the app and `diro components` say the
 //! size and the license and wait for a yes before anything is fetched.
 
@@ -54,6 +57,7 @@ pub mod http;
 #[cfg(test)]
 mod loopback;
 pub mod manifest;
+pub mod messages;
 pub mod pin;
 pub mod receipt;
 #[cfg(test)]

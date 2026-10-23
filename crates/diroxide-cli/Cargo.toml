@@ -18,6 +18,8 @@ diroxide-app.workspace = true
 # diro archive, split and join (W2g): the archive provider, its runners,
 # and the engine's split and join.
 diroxide-archive.workspace = true
+# diro components (W4c): the list, the downloader, install from a file.
+diroxide-components.workspace = true
 diroxide-config.workspace = true
 diroxide-core.workspace = true
 # diro diff (W3d): compare two files in words.
@@ -26,6 +28,8 @@ diroxide-filetype.workspace = true
 diroxide-ops.workspace = true
 diroxide-plugins.workspace = true
 diroxide-search.workspace = true
+# curl and wget for diro components, through the tools registry.
+diroxide-tools.workspace = true
 diroxide-tui.workspace = true
 diroxide-vfs.workspace = true
 serde.workspace = true
@@ -43,6 +47,9 @@ tempfile.workspace = true
 # The viewer's syntax set, forwarded to the app (W2d's request 2, P2b);
 # `diro` turns it on by default.
 syntax-set = ["diroxide-app/syntax-set"]
+# The components downloader's built-in HTTPS client (answer 40), forwarded
+# to the components crate; `diro` turns it on by default.
+fetch = ["diroxide-components/fetch"]
 
 [lints]
 workspace = true

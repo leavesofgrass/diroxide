@@ -52,6 +52,11 @@ pub const MAX_MEMBERS: usize = 50_000;
 /// The least slack over `unpacked_size` an unpack allows.
 pub const MIN_SLACK: u64 = 64 << 10;
 
+/// The reason given for a file in a zip or a folder to install from that
+/// is none of the component's files: it is not used, and its being there
+/// does not make the install partial.
+pub const NOT_ITS_FILE: &str = "not one of the component's files";
+
 /// What unpacking left out: each member, with the reason in words.
 pub type LeftOut = Vec<(String, String)>;
 
@@ -442,17 +447,15 @@ pub fn install_from(
         }
         missing = left;
     } else if !meta.is_dir() && used.is_empty() {
-        outcome.left_out.push((
-            display_name(from),
-            "not one of the component's files".to_owned(),
-        ));
+        outcome
+            .left_out
+            .push((display_name(from), NOT_ITS_FILE.to_owned()));
     }
     if meta.is_dir() {
         for path in candidates.iter().filter(|p| !used.contains(*p)).take(50) {
-            outcome.left_out.push((
-                display_name(path),
-                "not one of the component's files".to_owned(),
-            ));
+            outcome
+                .left_out
+                .push((display_name(path), NOT_ITS_FILE.to_owned()));
         }
     }
     if let Some(pin) = missing.first() {
@@ -536,7 +539,7 @@ fn extract_pins<'a>(
             .filter(|p| !found.contains(&p.name) && (p.name == name || p.size == record.size))
             .collect();
         if candidates.is_empty() {
-            left_out.push((path, "not one of the component's files".to_owned()));
+            left_out.push((path, NOT_ITS_FILE.to_owned()));
             return Ok(true);
         }
         let part = staging.join(format!("extract{PART_SUFFIX}"));

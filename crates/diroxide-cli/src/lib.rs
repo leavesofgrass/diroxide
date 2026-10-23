@@ -21,6 +21,8 @@
 //! - `diro watch [PATH]`: say each file that settles in a folder, one line
 //!   an arrival, until Ctrl+C; `--print0` for NUL-separated paths.
 //! - `diro plugin list|new|enable|disable|run|log`: plugin tooling.
+//! - `diro components list|download|verify|remove|install`: optional
+//!   components, asked for before anything is fetched (W4c).
 //! - `diro --version`, `diro --help`.
 //!
 //! Every argument must be valid Unicode: a name that is not is refused
@@ -73,6 +75,8 @@ pub enum Invocation {
     Diff(cmd::diff::DiffArgs),
     /// Say each file that settles in a folder (W3t).
     Watch(cmd::watch::WatchArgs),
+    /// List, download, verify, remove or install optional components (W4c).
+    Components(cmd::components::ComponentsArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -146,6 +150,8 @@ pub fn help_text() -> String {
         "diro diff BEFORE AFTER    compare two files: the verdict first, then each change",
         "diro watch [PATH]         say each file that settles in a folder; Ctrl+C stops",
         "diro plugin list          list the plugins",
+        "diro components list      list the optional components: title, state, size, license",
+        "diro components download ID  say its size and license, ask, then download it",
         "diro --version            print the version",
         "diro --help               print this help",
         "",
@@ -166,6 +172,7 @@ pub fn help_text() -> String {
         "",
         "diro ls --help gives the options of diro ls; diro archive --help those of diro archive.",
         "diro diff --help gives the options of diro diff.",
+        "diro components --help gives the options of diro components.",
         "diro ls --help gives the options of diro ls; diro search --help and diro archive --help theirs.",
     ]
     .join("\n")
@@ -253,6 +260,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "join" => cmd::join::parse(&args[1..]).map(Invocation::Join),
         "diff" => cmd::diff::parse(&args[1..]).map(Invocation::Diff),
         "watch" => cmd::watch::parse(&args[1..]).map(Invocation::Watch),
+        "components" => cmd::components::parse(&args[1..]).map(Invocation::Components),
         _ => parse_open(&args).map(Invocation::Open),
     }
 }
@@ -287,6 +295,7 @@ pub fn run(
         Invocation::Join(args) => cmd::join::run(&args, out),
         Invocation::Diff(args) => cmd::diff::run(&args, out),
         Invocation::Watch(args) => cmd::watch::run(&args, out),
+        Invocation::Components(args) => cmd::components::run(&args, out),
     }
 }
 
