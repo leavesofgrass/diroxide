@@ -658,9 +658,10 @@ sha256 = "{}"
         let setting = folder.display().to_string();
         let nobody = Script::new(&[]);
         let listed = run_with(tmp.path(), &["list"], &setting, &nobody);
+        // The embedded list's components come first, then the source's.
         assert_eq!(
-            listed.out,
-            "Word list: not installed, 10 bytes, license CC0-1.0, a data pack, id words\n"
+            listed.out.lines().last(),
+            Some("Word list: not installed, 10 bytes, license CC0-1.0, a data pack, id words")
         );
         let got = run_with(
             tmp.path(),
@@ -750,10 +751,14 @@ sha256 = "{}"
         assert!(!without.out.contains("Word list"));
         let flag = format!("--source={}", folder.display());
         let with = run_with(tmp.path(), &["list", &flag], "", &nobody);
-        assert!(with.out.starts_with("Word list: not installed"));
+        assert!(
+            with.out
+                .lines()
+                .any(|l| l.starts_with("Word list: not installed"))
+        );
         let json = run_with(tmp.path(), &["list", "--json", &flag], "", &nobody);
         let object: serde_json::Value =
-            serde_json::from_str(json.out.lines().next().unwrap()).unwrap();
+            serde_json::from_str(json.out.lines().last().unwrap()).unwrap();
         assert_eq!(object["id"], "words");
         assert_eq!(object["state"], "not installed");
         assert_eq!(object["size"], 10);

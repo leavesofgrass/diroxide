@@ -382,6 +382,61 @@ mod tests {
         assert!(error.to_string().contains("a b.txt is not plain names"));
     }
 
+    /// The end-to-end test of the whole path with no network (R22 section
+    /// 6.4): the examples pack, built as the release builds it, served
+    /// from a folder source named the way the owner's `components_source`
+    /// names one, downloaded against the embedded list, verified, removed.
+    #[test]
+    fn the_examples_pack_downloads_verifies_and_removes_from_a_folder_source() {
+        use std::sync::Arc;
+
+        use diroxide_components::{
+            Consent, Downloader, FileState, Sources, StandardFetcher, Status, host_target,
+        };
+        use diroxide_vfs::OpContext;
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let built = build(root).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source");
+        for file in &built.files {
+            fs::create_dir_all(source.join(&file.release)).unwrap();
+            fs::write(source.join(&file.release).join(&file.name), &file.bytes).unwrap();
+        }
+        let list = Manifest::embedded();
+        let pack = list
+            .get("diro-examples")
+            .expect("the examples pack is listed");
+        let sources = Sources::offline().with_source(&source.display().to_string());
+        let components = tmp.path().join("state").join("components");
+        let downloader = Downloader::new(
+            components.clone(),
+            sources,
+            Arc::new(StandardFetcher::local_only()),
+        );
+        let mut events = Vec::new();
+        let outcome = downloader
+            .download(pack, &Consent::yes(pack), &OpContext::new(), &mut |e| {
+                events.push(e.clone());
+            })
+            .unwrap();
+        assert_eq!(outcome.fetched, ["diro-examples-0.1.0.zip"]);
+        assert!(outcome.left_out.is_empty(), "{:?}", outcome.left_out);
+        let target = host_target();
+        assert_eq!(pack.status_in(&components, target), Status::Installed);
+        let checked = pack.verify_in(&components, target);
+        assert!(checked.iter().any(|c| c.path == "README.md"));
+        assert!(
+            checked.iter().all(|c| c.state == FileState::Good),
+            "{checked:?}"
+        );
+        let removal = pack.removal_in(&components);
+        assert!(removal.kept.is_empty());
+        removal.run().unwrap();
+        assert!(!pack.dir_in(&components).exists());
+        assert_eq!(pack.status_in(&components, target), Status::NotInstalled);
+    }
+
     #[test]
     fn the_embedded_list_is_current() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();

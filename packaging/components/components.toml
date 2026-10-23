@@ -22,3 +22,24 @@
 # file's name, so no account name is written here.
 
 format = 1
+
+# The example plugins and script commands (R22 section 6.4): the first
+# component, and the end-to-end test of the whole path with no network.
+[[component]]
+id = "diro-examples"
+title = "Example plugins"
+kind = "data"
+version = "0.1.0"
+license = "Apache-2.0 OR MIT"
+credit = "The diroxide project"
+features = ["examples"]
+min_diro = "0.1.0-alpha.2"
+action = "unpack"
+
+[[component.file]]
+name = "diro-examples-0.1.0.zip"
+target = "any"
+pack = [
+  { from = "packaging/components/diro-examples", as = "" },
+  { from = "examples/plugins", as = "plugins", optional = true },
+]
