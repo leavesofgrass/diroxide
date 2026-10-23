@@ -25,6 +25,7 @@
 pub mod askpass;
 pub mod lines;
 pub mod plugin;
+pub mod provider;
 pub mod rpc;
 pub mod settings;
 pub mod sftp;

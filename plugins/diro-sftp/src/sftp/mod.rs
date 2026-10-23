@@ -4,9 +4,11 @@
 //! server's in tests).
 
 pub mod codec;
+pub mod errors;
 pub mod fake;
 pub mod fuzzing;
 pub mod mux;
+pub mod ops;
 pub mod session;
 
 pub use codec::{Attrs, CodecError, NameEntry, Request, Response};

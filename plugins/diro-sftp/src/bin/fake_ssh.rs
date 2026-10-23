@@ -16,13 +16,15 @@
 //!   runs `SSH_ASKPASS` with the prompt as ssh does and logs whether it
 //!   answered and its exit code (`"accept"` names the one answer that
 //!   counts as right, and `"tries"` how many times a prompt is asked
-//!   before ssh gives up); `{"stderr": TEXT}`, `{"exit": CODE}` and
+//!   before ssh gives up); `{"stderr": TEXT}`, `{"stdout": TEXT}`,
+//!   `{"exit": CODE}` and
 //!   `{"sleep_ms": N}` do what they say; `{"child_sleep_ms": N}` starts a
 //!   copy of the program that sleeps, as ssh's own children would, and
 //!   logs its process id; `{"serve": {"files": {PATH: TEXT}, "dirs":
-//!   [PATH], "faults": {...}}}` serves the fake SFTP server
+//!   [PATH], "faults": {...}, "for_ms": N}}` serves the fake SFTP server
 //!   (`diro_sftp::sftp::fake`) on standard input and output until the
-//!   input ends, as `ssh -s sftp` does once it is signed in.
+//!   input ends, as `ssh -s sftp` does once it is signed in, or for `N`
+//!   milliseconds and then ends, as an ssh that dies does.
 //!
 //! **As an askpass recorder** (spike SF1): when `FAKE_ASKPASS_RECORD`
 //! names a file, the program is an `SSH_ASKPASS` stand-in that appends one
@@ -162,8 +164,24 @@ fn serve_sftp(config: &Value) {
         reuse_ids: flag("reuse_ids"),
         drop_after_bytes: n("drop_after_bytes"),
         no_statvfs: flag("no_statvfs"),
+        no_posix_rename: flag("no_posix_rename"),
+        copy_data: flag("copy_data"),
+        hostile_names: flag("hostile_names"),
+        short_writes: n("short_writes"),
+        fail_write_at: n("fail_write_at"),
+        fail_close: flag("fail_close"),
     };
-    let _ = serve(io::stdin(), io::stdout(), Arc::new(Mutex::new(fs)), faults);
+    let fs = Arc::new(Mutex::new(fs));
+    match config.get("for_ms").and_then(Value::as_u64) {
+        // Serves for a while, then ends as a dying ssh does.
+        Some(ms) => {
+            thread::spawn(move || serve(io::stdin(), io::stdout(), fs, faults));
+            thread::sleep(Duration::from_millis(ms));
+        }
+        None => {
+            let _ = serve(io::stdin(), io::stdout(), fs, faults);
+        }
+    }
 }
 
 fn run_script(script: &[Value], log: Option<&str>) -> ExitCode {
@@ -208,6 +226,12 @@ fn run_script(script: &[Value], log: Option<&str>) -> ExitCode {
             }
         } else if let Some(text) = step.get("stderr").and_then(Value::as_str) {
             let _ = writeln!(stderr, "{text}");
+        } else if let Some(text) = step.get("stdout").and_then(Value::as_str) {
+            // Text on standard output before any SFTP, as a shell startup
+            // file that prints does.
+            let mut stdout = io::stdout();
+            let _ = stdout.write_all(text.as_bytes());
+            let _ = stdout.flush();
         } else if let Some(ms) = step.get("sleep_ms").and_then(Value::as_u64) {
             thread::sleep(Duration::from_millis(ms));
         } else if let Some(ms) = step.get("child_sleep_ms").and_then(Value::as_u64) {

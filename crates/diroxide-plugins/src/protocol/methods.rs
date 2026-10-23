@@ -68,6 +68,9 @@ pub const PROVIDER_WRITE_END: &str = "provider/write_end";
 pub const PROVIDER_CREATE_DIR: &str = "provider/create_dir";
 /// Host to plugin, request: rename or move within the provider.
 pub const PROVIDER_RENAME: &str = "provider/rename";
+/// Host to plugin, request: makes a link at a place, symbolic or hard,
+/// to a target (S-B's request; the SFTP plugin serves it).
+pub const PROVIDER_CREATE_LINK: &str = "provider/create_link";
 /// Host to plugin, request: remove one entry.
 pub const PROVIDER_REMOVE: &str = "provider/remove";
 /// Host to plugin, request: move one entry to the provider's trash.
@@ -340,7 +343,7 @@ use Call::{Notification as N, Request as R};
 use Sender::{Either as E, Host as H, Plugin as P};
 
 /// Every method, in the reference's order.
-pub const ALL: [Method; 65] = [
+pub const ALL: [Method; 66] = [
     method(
         INITIALIZE,
         H,
@@ -510,6 +513,15 @@ pub const ALL: [Method; 65] = [
         A::Providers,
         "the provider's methods list",
         "Renames or moves within the provider.",
+        NOW,
+    ),
+    method(
+        PROVIDER_CREATE_LINK,
+        H,
+        R,
+        A::Providers,
+        "the provider's methods list",
+        "Makes a link at a place, symbolic or hard, to a target.",
         NOW,
     ),
     method(
@@ -995,8 +1007,9 @@ mod tests {
         // provider/volumes and completion/query (12 requests), and
         // lister/closed, column/changed, tools/output and provider/lost
         // (4 notifications). R25 adds provider/places (1 request). W4d adds
-        // panel/changed, the serve event (1 notification).
-        assert_eq!(counts(), (37 + 12 + 1, 10 + 4 + 1));
+        // panel/changed, the serve event (1 notification). S-B adds
+        // provider/create_link (1 request).
+        assert_eq!(counts(), (37 + 12 + 1 + 1, 10 + 4 + 1));
     }
 
     #[test]
