@@ -1049,9 +1049,8 @@ impl App {
         if let Some(message) = message {
             effects.push(Effect::Announce(message));
         }
-        if changed {
-            effects.extend(self.refresh_jobs_list());
-        }
+        // An open Jobs list follows, at the line's own pace.
+        effects.extend(self.refresh_jobs_list());
         effects
     }
 
