@@ -7,7 +7,8 @@
 //! - One message per line. The host ends lines with `\n` and accepts `\n`
 //!   or `\r\n`. Batches (JSON arrays) are refused with
 //!   [`ErrorKind::InvalidRequest`].
-//! - A standard-output line that does not start with `{` (after spaces) is
+//! - A standard-output line that does not start with `{` or `[` (after
+//!   spaces) is
 //!   stray output, logged and not answered ([`is_message_line`]); a line
 //!   that starts with `{` and does not parse is answered with a parse error
 //!   and a null id.
@@ -448,10 +449,11 @@ struct Raw {
     error: Option<RpcError>,
 }
 
-/// Whether a line is meant as a message: it starts with `{` after optional
-/// spaces. Any other output line is stray, logged and not answered.
+/// Whether a line is meant as a message: it starts with `{` (or `[`, a
+/// batch, which is refused) after optional spaces. Any other output line
+/// is stray, logged and not answered.
 pub fn is_message_line(line: &str) -> bool {
-    line.trim_start().starts_with('{')
+    line.trim_start().starts_with(['{', '['])
 }
 
 /// Reads one line as a message. The error is the answer to send back, with

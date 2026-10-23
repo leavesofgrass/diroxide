@@ -1,0 +1,9 @@
+# Before initialize is answered: a request gets -32002, a notification
+# is dropped, and initialize still works afterward.
+> {"jsonrpc":"2.0","id":1,"method":"command/run","params":{"command":"echo"}}
+< {"jsonrpc":"2.0","id":1,"error":{"code":-32002,"message":"initialize has not been answered yet","data":{"kind":"not_initialized"}}}
+> {"jsonrpc":"2.0","method":"settings/changed","params":{"settings":{}}}
+> {"jsonrpc":"2.0","id":"start","method":"initialize","params":{"protocol":1}}
+< {"jsonrpc":"2.0","id":"start","result":"*"}
+> {"jsonrpc":"2.0","id":2,"method":"command/run","params":{"command":"echo"}}
+< {"jsonrpc":"2.0","id":2,"result":"*"}

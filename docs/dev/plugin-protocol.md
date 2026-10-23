@@ -8,7 +8,7 @@ Protocol 1 has 49 requests and 14 notifications. Within protocol 1 only addition
 
 - One JSON-RPC 2.0 message per line, UTF-8 without a byte order mark, in both directions. The host ends lines with `\n` and accepts `\r\n`.
 - The longest line is 8 MiB by default; a plugin may ask for up to 64 MiB in its manifest. The reader enforces the limit while reading; a longer line is refused, and the next line is still read.
-- A line that does not start with `{` after spaces is stray output: logged, counted and never answered. A line that starts with `{` and does not parse, or is not valid UTF-8, is answered with -32700 and a null id.
+- A line that does not start with `{` or `[` after spaces is stray output: logged, counted and never answered. A line that starts with `{` and does not parse, or is not valid UTF-8, is answered with -32700 and a null id.
 - Batches (JSON arrays) are refused with -32600.
 - Standard error is free text for the plugin's log, never the screen.
 - A plugin flushes after every message.

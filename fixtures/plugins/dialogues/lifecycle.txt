@@ -1,0 +1,9 @@
+# The whole session, from the initiating side: initialize, initialized,
+# shutdown, exit. The answering side is a plugin, or diro serve.
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":1,"host":{"name":"diroxide","version":"0.1.0-alpha.2"},"plugin_id":"line-counter","locale":"en-US"}}
+< {"jsonrpc":"2.0","id":1,"result":"*"}
+> {"jsonrpc":"2.0","method":"initialized"}
+> {"jsonrpc":"2.0","id":2,"method":"shutdown"}
+< {"jsonrpc":"2.0","id":2,"result":null}
+> {"jsonrpc":"2.0","method":"exit"}
+< exit

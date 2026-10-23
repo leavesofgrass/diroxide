@@ -41,8 +41,9 @@ pub fn page() -> String {
         MAX_LINE_BYTES_LIMIT / (1024 * 1024)
     ));
     out.push_str(
-        "- A line that does not start with `{` after spaces is stray output: logged, \
-         counted and never answered. A line that starts with `{` and does not parse, or is \
+        "- A line that does not start with `{` or `[` after spaces is stray output: \
+         logged, counted and never answered. A line that starts with `{` and does not \
+         parse, or is \
          not valid UTF-8, is answered with -32700 and a null id.\n",
     );
     out.push_str("- Batches (JSON arrays) are refused with -32600.\n");

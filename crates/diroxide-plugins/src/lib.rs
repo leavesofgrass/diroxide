@@ -26,11 +26,14 @@ pub mod error;
 pub mod framing;
 pub mod fuzzing;
 pub mod host;
+pub mod lines;
 pub mod log;
 pub mod manifest;
 pub mod protocol;
 pub mod script;
+pub mod session;
 pub mod shapes;
+pub mod testing;
 pub mod transport;
 
 pub use error::PluginError;

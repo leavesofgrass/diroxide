@@ -1,0 +1,10 @@
+# Another protocol's major version is refused in words, and the session
+# stays waiting for an initialize it can accept.
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":2}}
+< {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"the other side speaks protocol 2; this side speaks 1","data":{"kind":"invalid_params"}}}
+> {"jsonrpc":"2.0","id":2,"method":"command/run"}
+< {"jsonrpc":"2.0","id":2,"error":{"code":-32002,"message":"*","data":{"kind":"not_initialized"}}}
+> {"jsonrpc":"2.0","id":3,"method":"initialize","params":{"protocol":1}}
+< {"jsonrpc":"2.0","id":3,"result":"*"}
+> {"jsonrpc":"2.0","id":4,"method":"initialize","params":{"protocol":1}}
+< {"jsonrpc":"2.0","id":4,"error":{"code":-32600,"message":"initialize was already answered","data":{"kind":"invalid_request"}}}

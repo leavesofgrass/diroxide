@@ -53,13 +53,14 @@ impl RawLine {
 /// What a line turned out to be.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Frame {
-    /// A line meant as a message: it starts with `{` after spaces and is
+    /// A line meant as a message: it starts with `{` (or `[`, a batch,
+    /// which is refused) after spaces and is
     /// valid UTF-8. The `\r` of a `\r\n` ending is removed.
     Message(String),
     /// A line that is not meant as a message: logged, counted, never
     /// answered. Lossy, cut to [`STRAY_PREVIEW_CHARS`].
     Stray(String),
-    /// A line that starts with `{` but is not valid UTF-8: answered as a
+    /// A message line that is not valid UTF-8: answered as a
     /// parse error. The text is a lossy preview for the log.
     NotUtf8(String),
     /// A line longer than the limit: refused, and the next line is still
@@ -160,7 +161,7 @@ pub fn classify(line: &RawLine) -> Frame {
         bytes = rest;
     }
     let first = bytes.iter().position(|b| !matches!(b, b' ' | b'\t'));
-    let message = first.is_some_and(|i| bytes[i] == b'{');
+    let message = first.is_some_and(|i| matches!(bytes[i], b'{' | b'['));
     if line.over_limit() {
         return Frame::TooLong {
             length: line.length,
