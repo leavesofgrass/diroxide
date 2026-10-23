@@ -44,6 +44,42 @@ pub fn other_protocol(plugin: &str, theirs: u32) -> String {
     }
 }
 
+/// "Plugins are off for this session." (`--no-plugins`)
+pub fn plugins_off() -> String {
+    "Plugins are off for this session.".to_owned()
+}
+
+/// "Line counter is off: it did not start twice."
+pub fn off_after_failed_starts(plugin: &str) -> String {
+    format!("{plugin} is off: it did not start twice.")
+}
+
+/// "Line counter is off: it stopped 3 times."
+pub fn off_after_crashes(plugin: &str, times: usize) -> String {
+    format!("{plugin} is off: it stopped {times} times.")
+}
+
+/// "Line counter stopped unexpectedly."
+pub fn stopped_unexpectedly(plugin: &str) -> String {
+    format!("{plugin} stopped unexpectedly.")
+}
+
+/// "It starts again when you use it."
+pub fn starts_again() -> String {
+    "It starts again when you use it.".to_owned()
+}
+
+/// "Line counter was stopped for flooding."
+pub fn flooded(plugin: &str) -> String {
+    format!("{plugin} was stopped for flooding.")
+}
+
+/// "Count lines timed out after 30 seconds.", with a command's name or
+/// the plugin's.
+pub fn timed_out(what: &str, after: Duration) -> String {
+    format!("{what} timed out after {}.", duration_words(after))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

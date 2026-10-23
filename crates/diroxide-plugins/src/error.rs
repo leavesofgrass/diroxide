@@ -51,6 +51,10 @@ pub enum PluginError {
     /// The plugin is not enabled.
     #[error("{0} is not enabled")]
     NotEnabled(String),
+    /// The plugin, or every plugin, is off for this session; the text is
+    /// the sentence ("Line counter is off: it stopped 3 times.").
+    #[error("{0}")]
+    Off(String),
     /// A script command's placeholders could not be filled.
     #[error("the placeholder {0} has nothing to fill it")]
     Placeholder(String),
@@ -68,7 +72,9 @@ impl Explain for PluginError {
             PluginError::Timeout(_) | PluginError::Stopped(_) => {
                 "Read the plugin's log with diro plugin log.".to_owned()
             }
-            PluginError::NotEnabled(_) => "Enable it in the Plugins menu.".to_owned(),
+            PluginError::NotEnabled(_) | PluginError::Off(_) => {
+                "Enable it in the Plugins menu.".to_owned()
+            }
             PluginError::Manifest { .. } => "Fix plugin.toml, or disable the plugin.".to_owned(),
             PluginError::Placeholder(_) => "Select something, or move to an entry.".to_owned(),
             _ => String::new(),

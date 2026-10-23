@@ -408,7 +408,7 @@ impl Call {
 /// thread.
 pub struct Connection {
     shared: Arc<Shared>,
-    reader: Option<JoinHandle<()>>,
+    reader: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl std::fmt::Debug for Connection {
@@ -450,7 +450,7 @@ impl Connection {
         };
         Ok(Self {
             shared,
-            reader: Some(reader),
+            reader: Mutex::new(Some(reader)),
         })
     }
 
@@ -481,10 +481,23 @@ impl Connection {
 
     /// Sends a request; the answer comes on the returned [`Call`].
     pub fn request(&self, method: &str, params: Params) -> Result<Call, PluginError> {
+        self.request_then(method, params, |_| {})
+    }
+
+    /// Sends a request, after `registered` has seen its id, so whatever
+    /// keeps track of the request (its timer, its token) is in place before
+    /// the plugin can answer.
+    pub fn request_then(
+        &self,
+        method: &str,
+        params: Params,
+        registered: impl FnOnce(&Id),
+    ) -> Result<Call, PluginError> {
         if self.is_ended() {
             return Err(PluginError::Stopped(self.shared.name.clone()));
         }
         let (id, answer) = self.shared.router.register(method);
+        registered(&id);
         let request = Request::new(id.clone(), method, params);
         if let Err(e) = self.shared.send(&request) {
             self.shared.router.give_up(
@@ -546,7 +559,14 @@ impl Connection {
     /// The polite ending through the router: `shutdown` with up to `grace`
     /// for its answer, `exit`, the input closed, two seconds for the
     /// output to end, then a kill.
-    pub fn stop(mut self, grace: Duration) -> Ending {
+    pub fn stop(&self, grace: Duration) -> Ending {
+        self.stop_within(grace, Duration::from_secs(2))
+    }
+
+    /// The polite ending with both waits chosen: up to `grace` for the
+    /// answer to `shutdown` and up to `end_wait` for the output to end
+    /// after `exit`; then a kill. Never waits longer than the two.
+    pub fn stop_within(&self, grace: Duration, end_wait: Duration) -> Ending {
         self.shared.stopping.store(true, Ordering::SeqCst);
         let answered = matches!(
             self.request(methods::SHUTDOWN, Params::new())
@@ -556,7 +576,7 @@ impl Connection {
         );
         let _ = self.notify(methods::EXIT, Params::new());
         self.shared.transport.close_input();
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + end_wait;
         while !self.is_ended() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
@@ -564,7 +584,12 @@ impl Connection {
         if !ended {
             let _ = self.shared.transport.kill();
         }
-        if let Some(reader) = self.reader.take() {
+        let reader = self
+            .reader
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(reader) = reader {
             let _ = reader.join();
         }
         if answered && ended {
@@ -572,6 +597,19 @@ impl Connection {
         } else {
             Ending::Killed
         }
+    }
+
+    /// Whether the host ended the plugin (a stop or a kill), so an end of
+    /// its output is not a crash.
+    pub fn stopped_by_host(&self) -> bool {
+        self.shared.stopping.load(Ordering::SeqCst)
+    }
+
+    /// Kills the plugin as a crash would, without telling the router: for
+    /// tests of the crash policy.
+    #[cfg(test)]
+    pub(crate) fn kill_unexpectedly(&self) {
+        let _ = self.shared.transport.kill();
     }
 
     /// Kills the plugin at once, without the polite ending.
