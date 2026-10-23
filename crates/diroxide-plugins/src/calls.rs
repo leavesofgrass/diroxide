@@ -33,6 +33,7 @@ use crate::protocol::methods::{self, Availability, Call, Sender};
 use crate::protocol::{ErrorKind, Params, Request, RpcError};
 use crate::router::{CancelFlag, Outcome};
 use crate::session::PluginCapabilities;
+use crate::tools::ToolBox;
 
 /// What the host knows about one running plugin while it serves its
 /// requests.
@@ -59,6 +60,8 @@ pub(crate) struct Calls {
     pub(crate) denials: Denials,
     /// What its `fs/*` calls reach.
     pub(crate) files: Files,
+    /// Where its `tools/*` calls find programs.
+    pub(crate) tools: ToolBox,
 }
 
 fn not_served(method: &str) -> RpcError {
@@ -85,6 +88,18 @@ impl Calls {
         let params = &request.params;
         let ctx = || diroxide_vfs::OpContext::new().with_cancel(cancel.token());
         match method {
+            methods::TOOLS_RUN => crate::tools::run(
+                params,
+                &self.manifest.permissions,
+                &self.tools,
+                self.files.spool.as_deref(),
+                cancel,
+                Some(self.output_stream(&request.id, params)),
+            ),
+            methods::TOOLS_FIND => crate::tools::find(params, &self.tools),
+            methods::TOOLS_LAUNCH => {
+                crate::tools::launch(params, &self.manifest.permissions, &self.tools)
+            }
             methods::FS_LIST => self.files.list(params, &ctx()),
             methods::FS_STAT => self.files.stat(params, &ctx()),
             methods::FS_READ => self.files.read(params, &ctx()),
@@ -226,6 +241,30 @@ impl Calls {
             "cancelled": cancelled,
             "summary": summaries.join(" "),
         }))
+    }
+
+    /// Where a streamed tool's records go: `tools/output` notifications
+    /// naming the request, the stream and the record, in the run's
+    /// encoding.
+    fn output_stream(&self, id: &crate::protocol::Id, params: &Params) -> crate::tools::Emit {
+        let live = self.live_weak();
+        let id = id.clone();
+        let raw = params.get("encoding").and_then(Value::as_str) == Some("base64");
+        Arc::new(move |stream: &str, chunk: &[u8]| {
+            let Some(live) = live.upgrade() else {
+                return;
+            };
+            let chunk = if raw {
+                crate::base64::encode(chunk)
+            } else {
+                String::from_utf8_lossy(chunk).into_owned()
+            };
+            let mut notice = Params::new();
+            notice.insert("id".into(), json!(id));
+            notice.insert("stream".into(), json!(stream));
+            notice.insert("chunk".into(), json!(chunk));
+            let _ = live.connection().notify(methods::TOOLS_OUTPUT, notice);
+        })
     }
 
     /// `panel/get`: a panel's place, cursor, selection, sort and filter.
@@ -893,6 +932,52 @@ pub(crate) mod tests {
         );
         assert_eq!(looped["error"]["code"], -32032);
         own.shutdown_all(QUIT_BUDGET);
+    }
+
+    /// A streamed run reaches the plugin as `tools/output` notifications,
+    /// one per line, naming the request.
+    #[test]
+    fn a_streamed_tool_reaches_the_plugin_line_by_line() {
+        use crate::tools::tests::{FAKE, fake_args, fake_tool_folder};
+        let (_folder, tools) = fake_tool_folder();
+        let services = RecordingServices::new();
+        let launcher = FakeLauncher::new(Mode::Call);
+        let mut host = Host::new(&PluginSettings::default())
+            .with_launcher(Arc::clone(&launcher) as Arc<dyn crate::host::Launcher>)
+            .with_tools(tools)
+            .with_services(Arc::clone(&services) as Arc<dyn HostServices>);
+        host.add(plugin_info(&format!(
+            "\n[permissions]\ntools = [\"{FAKE}\"]\n"
+        )));
+        let answer = call(
+            &host,
+            methods::TOOLS_RUN,
+            json!({"tool": FAKE, "args": fake_args("echo", &["arg=one", "arg=two"]),
+                "stream": ["stdout"]}),
+        );
+        assert_eq!(answer["exit_code"], 0, "{answer}");
+        assert_eq!(answer["stdout"], "");
+        let refused = call(
+            &host,
+            methods::TOOLS_RUN,
+            json!({"tool": "git", "args": []}),
+        );
+        assert_eq!(refused["error"]["code"], -32030);
+        host.shutdown_all(QUIT_BUDGET);
+        let seen = launcher.transcripts_after(1);
+        let chunks: Vec<String> = seen[0]
+            .received
+            .iter()
+            .filter_map(|m| match m {
+                crate::protocol::Incoming::Notification(n) if n.method == methods::TOOLS_OUTPUT => {
+                    assert_eq!(n.params["id"], "host-1");
+                    n.params["chunk"].as_str().map(|c| c.trim_end().to_owned())
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(chunks.iter().any(|c| c.ends_with("arg=one")), "{chunks:?}");
+        assert!(chunks.iter().any(|c| c.ends_with("arg=two")), "{chunks:?}");
     }
 
     #[test]

@@ -45,6 +45,7 @@ use crate::spool::Spool;
 use crate::supervisor::{
     Action, CrashPolicy, CrashVerdict, Flood, FloodGuard, SystemTicker, Ticker,
 };
+use crate::tools::ToolBox;
 use crate::transport::{PluginTransport, StdioTransport, resolve_program};
 
 /// How long quitting waits for every plugin in all.
@@ -473,6 +474,7 @@ pub struct Host {
     settings: Mutex<HashMap<String, Map<String, Value>>>,
     history: Arc<Mutex<PromptHistory>>,
     registry: Option<Arc<Registry>>,
+    tools: ToolBox,
     off: bool,
 }
 
@@ -502,6 +504,7 @@ impl Host {
             settings: Mutex::new(HashMap::new()),
             history: Arc::new(Mutex::new(PromptHistory::default())),
             registry: None,
+            tools: ToolBox::default(),
             off: false,
         }
     }
@@ -533,6 +536,13 @@ impl Host {
     /// plugins' `fs/*` calls.
     pub fn with_registry(mut self, registry: Arc<Registry>) -> Self {
         self.registry = Some(registry);
+        self
+    }
+
+    /// The same host finding the plugins' tools here (tests put fakes
+    /// on a test PATH).
+    pub fn with_tools(mut self, tools: ToolBox) -> Self {
+        self.tools = tools;
         self
     }
 
@@ -808,6 +818,7 @@ impl Host {
                         .collect(),
                     plugin: name.clone(),
                 },
+                tools: self.tools.clone(),
             },
             log: log.clone(),
             flood: Mutex::new(FloodGuard::default()),

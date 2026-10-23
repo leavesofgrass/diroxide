@@ -68,6 +68,7 @@ pub mod shapes;
 pub mod spool;
 pub mod supervisor;
 pub mod testing;
+pub mod tools;
 pub mod transport;
 
 pub use ask::{Answer, Question, QuestionKind, TextDocument};
