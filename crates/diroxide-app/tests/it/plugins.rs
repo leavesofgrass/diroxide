@@ -1225,3 +1225,90 @@ fn the_settings_list_reaches_each_plugins_settings() {
     s.key("enter");
     assert_eq!(rows(&s), ["Skip blank, off"]);
 }
+
+/// The shipped line counter, a real process through the real launcher:
+/// it needs Python 3 on the PATH (`py -3` on Windows), so it runs only on
+/// request: `cargo nextest run --run-ignored only real_line_counter`.
+#[test]
+#[ignore = "starts Python: run on request"]
+fn real_line_counter_counts_through_the_app() {
+    let dir = temp();
+    let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+    let folder = paths.plugins_dir().join("line-counter");
+    fs::create_dir_all(&folder).unwrap();
+    let example = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/plugins/line-counter");
+    for name in ["plugin.toml", "main.py"] {
+        fs::copy(example.join(name), folder.join(name)).unwrap();
+    }
+    enable(&paths);
+    let work = fixture(dir.path());
+    fs::write(work.join("three.txt"), "one\ntwo\nthree\n").unwrap();
+    let here = place(&work);
+    let mut s = Session::open(
+        here.clone(),
+        here,
+        diroxide_vfs::Registry::with_local(),
+        Setup {
+            settings: settings(),
+            paths: Some(paths),
+            ..Setup::default()
+        },
+    );
+    s.focus("three.txt");
+    s.key("space");
+    let said = s.run_command(Command::new(id("line-counter.count_lines")));
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Lines: 3") && l.ends_with("By Line counter.")),
+        "{said:?}"
+    );
+    s.runtime.stop_plugins();
+}
+
+/// The shipped total-size script, run through the real script runner: it
+/// needs bash (Git's bash on Windows), so it runs only on request.
+#[test]
+#[ignore = "starts bash: run on request"]
+fn real_total_size_script_says_its_words_through_the_app() {
+    use diroxide_plugins::script::consent::script_fingerprint;
+    let dir = temp();
+    let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+    let scripts = paths.plugins_dir().join("scripts");
+    fs::create_dir_all(&scripts).unwrap();
+    let script = scripts.join("total-size.sh");
+    fs::copy(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/plugins/scripts/total-size.sh"),
+        &script,
+    )
+    .unwrap();
+    let fingerprint = script_fingerprint(&script, diroxide_components::sha256_hex).unwrap();
+    ConsentStore::open(&paths.state_dir.join("plugins"))
+        .enable("total-size", Kind::Script, fingerprint)
+        .unwrap();
+    let work = fixture(dir.path());
+    let here = place(&work);
+    let mut s = Session::open(
+        here.clone(),
+        here,
+        diroxide_vfs::Registry::with_local(),
+        Setup {
+            settings: settings(),
+            paths: Some(paths),
+            ..Setup::default()
+        },
+    );
+    s.focus("notes.txt");
+    s.key("space");
+    s.focus("report.pdf");
+    s.key("space");
+    let said = s.run_command(Command::new(id("script.total-size")));
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Selected: 2, size:")
+                && l.ends_with("By Total size of selection.")),
+        "{said:?}"
+    );
+    assert_eq!(s.app.jobs().line(), "No jobs");
+}
