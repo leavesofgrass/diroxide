@@ -32,6 +32,9 @@ pub mod gate;
 mod gate_tests;
 pub mod join;
 pub mod journal;
+#[cfg(test)]
+mod limit_tests;
+pub mod limiter;
 pub mod links;
 pub mod options;
 pub mod pace;
@@ -68,6 +71,7 @@ pub use fake::{
 pub use gate::{ConnectionAnswer, ConnectionQuestion, GateEvent, Gates, Waiter};
 pub use join::{JoinFacts, JoinOutcome, Verdict};
 pub use journal::{Interrupted, Journal};
+pub use limiter::{LimitScope, Limiter, SpeedLimit};
 pub use links::LinkForm;
 pub use options::EngineOptions;
 pub use pace::{FakePacer, Pacer, SystemPacer};

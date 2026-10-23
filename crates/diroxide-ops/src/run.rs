@@ -51,7 +51,7 @@ use crate::gate;
 use crate::journal::JournalWriter;
 use crate::plan::{Plan, Step, is_read_only};
 use crate::progress::{Estimator, JobProgress};
-use crate::queue::HostKey;
+use crate::queue::{HostKey, JobClass};
 use crate::resume::{self, JobNotice, NotResumed, Partial};
 use crate::undo::{LeftAs, UndoRecord};
 
@@ -248,6 +248,9 @@ pub(crate) struct Run<'a> {
     /// The ledger of partial files could not be written, and that was
     /// said.
     ledger_warned: bool,
+    /// The job touches a remote place: the global speed limit applies to
+    /// it by default.
+    remote: bool,
     split: Option<split::SplitState>,
     join: Option<join::JoinState>,
 }
@@ -319,6 +322,7 @@ impl<'a> Run<'a> {
             host_gone: false,
             here: Vec::new(),
             ledger_warned: false,
+            remote: matches!(JobClass::of_plan(plan), JobClass::Remote(_)),
             split: None,
             join: None,
         }
@@ -569,6 +573,43 @@ impl<'a> Run<'a> {
             }
         }
         if waited { Gated::Back } else { Gated::Answers }
+    }
+
+    /// Waits as the speed limits say after `bytes` passed (R25, 2.6): the
+    /// job's own, and the global one where it applies (a remote job, or
+    /// every job when the owner chose so). Quiet for the stall detector;
+    /// a pause is honored inside a long wait, Cancel at once. `false` when
+    /// cancelled.
+    fn pace(&mut self, bytes: u64) -> bool {
+        const SLICE: Duration = Duration::from_millis(200);
+        let engine = self.engine;
+        let now = engine.pacer().now();
+        let mut wait = self.control.limiter().take(bytes, now);
+        let global = engine.speed_limit();
+        if global.applies(self.remote) {
+            wait = wait.max(global.take(bytes, now));
+        }
+        if wait.is_zero() {
+            return !self.control.cancel.is_cancelled();
+        }
+        let mut left = wait;
+        let done = loop {
+            self.shared.quiet.store(true, Ordering::Relaxed);
+            let slice = left.min(SLICE);
+            if !crate::pace::wait(engine.pacer(), slice, &self.control.cancel) {
+                break false;
+            }
+            left = left.saturating_sub(slice);
+            if left.is_zero() {
+                break true;
+            }
+            if self.control.is_paused() && !self.hold() {
+                break false;
+            }
+        };
+        self.shared.quiet.store(false, Ordering::Relaxed);
+        self.shared.touch();
+        done
     }
 
     /// Says once that the job waits for a host, quietly for the stall
@@ -1392,6 +1433,9 @@ impl<'a> Run<'a> {
                 }
                 bytes += read as u64;
                 self.advance(read as u64);
+                if !self.pace(read as u64) {
+                    return Err(VfsError::Cancelled);
+                }
             }
         })();
         if let Err(error) = result {

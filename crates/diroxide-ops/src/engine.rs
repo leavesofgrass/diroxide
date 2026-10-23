@@ -24,6 +24,7 @@ use diroxide_vfs::{CancelToken, Registry, VfsError};
 use crate::error::OpsError;
 use crate::gate::{ConnectionAnswer, ConnectionQuestion, Gates};
 use crate::journal::Journal;
+use crate::limiter::{Limiter, SpeedLimit};
 use crate::options::EngineOptions;
 use crate::pace::{Pacer, SystemPacer};
 use crate::plan::Plan;
@@ -277,13 +278,15 @@ pub trait JobSink: Send + Sync {
     }
 }
 
-/// Cancels or pauses a running job. Cloning shares the control.
+/// Cancels or pauses a running job, and sets its own speed limit. Cloning
+/// shares the control.
 #[derive(Clone, Debug, Default)]
 pub struct JobControl {
     /// Cancels the job between steps, and inside providers through the
     /// token.
     pub cancel: CancelToken,
     paused: Arc<AtomicBool>,
+    speed: Arc<Limiter>,
 }
 
 impl JobControl {
@@ -305,6 +308,23 @@ impl JobControl {
     /// Whether the job is paused.
     pub fn is_paused(&self) -> bool {
         self.paused.load(Ordering::Relaxed)
+    }
+
+    /// Sets this job's own speed limit, or takes it off with `None`, while
+    /// it runs: the next chunk follows it (R25 N8). The global limit
+    /// ([`Engine::speed_limit`]) applies as well.
+    pub fn set_speed_limit(&self, limit: Option<SpeedLimit>) {
+        self.speed.set(limit);
+    }
+
+    /// This job's own speed limit, when one is set.
+    pub fn speed_limit(&self) -> Option<SpeedLimit> {
+        self.speed.limit()
+    }
+
+    /// This job's own limiter.
+    pub(crate) fn limiter(&self) -> &Limiter {
+        &self.speed
     }
 }
 
@@ -491,6 +511,7 @@ pub struct Engine {
     journal: Option<Journal>,
     gates: Gates,
     ledger: Arc<Ledger>,
+    limiter: Arc<Limiter>,
 }
 
 impl Engine {
@@ -505,7 +526,28 @@ impl Engine {
             journal: None,
             gates: Gates::new(),
             ledger: Arc::new(Ledger::in_memory()),
+            limiter: Arc::new(Limiter::new()),
         }
+    }
+
+    /// The same engine sharing this global speed limit: an engine made
+    /// again keeps the limit its running jobs follow.
+    pub fn with_speed_limit(mut self, limiter: Arc<Limiter>) -> Self {
+        self.limiter = limiter;
+        self
+    }
+
+    /// The global speed limit, shared by every clone of this engine: off
+    /// by default, remote jobs only unless the scope says all jobs
+    /// ([`crate::limiter::LimitScope`]). Changing it changes the next
+    /// chunk of every job it limits.
+    pub fn speed_limit(&self) -> &Limiter {
+        &self.limiter
+    }
+
+    /// The global limiter itself, to share with an engine made again.
+    pub fn speed_limiter(&self) -> Arc<Limiter> {
+        Arc::clone(&self.limiter)
     }
 
     /// The same engine keeping its ledger of partial files here: in the
