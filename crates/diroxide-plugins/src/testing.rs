@@ -1,8 +1,11 @@
 //! In-process fakes for tests: a plugin that answers through a
-//! [`MemoryPeer`], and a driver for the
-//! fixture dialogues in `fixtures/plugins/dialogues/`. Not for use outside
-//! tests; the misbehaving process plugin of the test plan (R22, section
-//! 8.1) is a separate program.
+//! [`MemoryPeer`], the toy file system it can serve ([`memfs`]), a
+//! launcher of fakes, host services that record everything, and a driver
+//! for the fixture dialogues in `fixtures/plugins/dialogues/`. Not for use
+//! outside tests. The misbehaving process plugin of the test plan (R22,
+//! section 8.1) is the program `diroxide-fake-plugin`
+//! (`src/bin/fake_plugin.rs`, built with the `fake-plugin` feature), which
+//! speaks through the same [`FakePlugin`].
 //!
 //! A dialogue is a text file of lines:
 //!
@@ -67,6 +70,11 @@ pub enum Mode {
     Stray,
     /// Says its provider lost a device while it runs a command.
     Lost,
+    /// Never answers a command, and ignores `$/cancel_request`.
+    CancelDeaf,
+    /// Breaks the session's rules: answers requests before `initialize`
+    /// and unknown methods with a result instead of -32601.
+    Bad,
     /// Makes the host call its command's arguments name (`call.method` and
     /// `call.params`) and answers the command with what the host answered,
     /// under `host` or `host_error`.
@@ -476,7 +484,11 @@ impl FakePlugin {
             Err(error) => return vec![answer(Response::failure(None, error))],
         };
         self.transcript.received.push(incoming.clone());
-        match self.life.gate(&incoming) {
+        let gate = match (self.mode, &incoming) {
+            (Mode::Bad, Incoming::Request(_)) => Gate::Proceed,
+            _ => self.life.gate(&incoming),
+        };
+        match gate {
             Gate::Proceed => {}
             Gate::Refuse(error) => {
                 let Incoming::Request(request) = incoming else {
@@ -577,6 +589,7 @@ impl FakePlugin {
                 }
                 result
             }
+            methods::COMMAND_RUN if self.mode == Mode::CancelDeaf => return Vec::new(),
             methods::COMMAND_RUN if self.mode == Mode::Call => {
                 let call = request
                     .params
@@ -627,6 +640,7 @@ impl FakePlugin {
                 out.extend(self.chatter(&token));
                 Ok(json!({"done": 1, "skipped": 0, "failed": []}))
             }
+            _ if self.mode == Mode::Bad => Ok(Value::Null),
             _ => Err(RpcError::new(
                 ErrorKind::MethodNotFound,
                 format!("no method {}", request.method),

@@ -7,9 +7,9 @@ license.workspace = true
 homepage.workspace = true
 publish.workspace = true
 
-# No features: the in-process Lua tier is retired (plan section 5.8, item
-# 3). Lua scripts run through the Lua runner plugin, a process like any
-# other, in its own workspace under plugins/.
+# The in-process Lua tier is retired (plan section 5.8, item 3): Lua
+# scripts run through the Lua runner plugin, a process like any other, in
+# its own workspace under plugins/.
 
 [dependencies]
 diroxide-config.workspace = true
@@ -30,6 +30,18 @@ toml.workspace = true
 [dev-dependencies]
 proptest.workspace = true
 tempfile.workspace = true
+
+[features]
+# Tests only: builds the misbehaving plugin of the test plan (R22, section
+# 8.1), which the host's tests and the conformance suite start.
+fake-plugin = []
+
+[[bin]]
+name = "diroxide-fake-plugin"
+path = "src/bin/fake_plugin.rs"
+required-features = ["fake-plugin"]
+test = false
+doc = false
 
 [lints]
 workspace = true
