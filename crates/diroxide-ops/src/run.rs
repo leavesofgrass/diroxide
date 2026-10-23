@@ -24,7 +24,7 @@
 //!   fresh read.
 
 use std::collections::{HashMap, HashSet};
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::thread;
@@ -39,9 +39,10 @@ use diroxide_core::{
     Place,
 };
 use diroxide_vfs::names::{NameRules, check_name_with, is_unfinished, unused_name};
+use diroxide_vfs::provider::ResumableWrite;
 use diroxide_vfs::{
-    AttributeChange, CopyHint, ErrorClass, LinkKind, LinkRequest, OpContext, Provider, TrashCheck,
-    VfsError, WriteMode,
+    AttributeChange, CopyHint, ErrorClass, FileWriter, LinkKind, LinkRequest, OpContext, Provider,
+    ReadSeek, TrashCheck, VfsError, WriteMode,
 };
 use sha2::{Digest, Sha256};
 
@@ -51,6 +52,7 @@ use crate::journal::JournalWriter;
 use crate::plan::{Plan, Step, is_read_only};
 use crate::progress::{Estimator, JobProgress};
 use crate::queue::HostKey;
+use crate::resume::{self, JobNotice, NotResumed, Partial};
 use crate::undo::{LeftAs, UndoRecord};
 
 mod access;
@@ -185,15 +187,29 @@ pub(crate) fn watch_for_stalls(
 }
 
 /// How one file is streamed: its write mode, whether it replaces a file,
-/// whether the bytes are hashed for the read-back, and whether the commit
+/// whether the bytes are hashed for the read-back, whether the commit
 /// flushes to storage first (a move, whose source is removed after, and a
-/// replace).
+/// replace), and the size the plan saw (a large file is written so a lost
+/// connection can resume it).
 #[derive(Clone, Copy, Debug)]
 struct Stream {
     mode: WriteMode,
     replace: bool,
     hash: bool,
     durable: bool,
+    size: Option<u64>,
+}
+
+/// A resumable write in progress: the provider's side, and its part file.
+type Kept<'p> = Option<(&'p dyn ResumableWrite, Place)>;
+
+/// A seekable source read in order, from where it was put.
+struct Seeked(Box<dyn ReadSeek>);
+
+impl Read for Seeked {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
 }
 
 /// What a step made, to check against a fresh read at the end.
@@ -229,6 +245,9 @@ pub(crate) struct Run<'a> {
     /// The places of the step at work, for the hosts a lost network
     /// waits for.
     here: Vec<Place>,
+    /// The ledger of partial files could not be written, and that was
+    /// said.
+    ledger_warned: bool,
     split: Option<split::SplitState>,
     join: Option<join::JoinState>,
 }
@@ -299,6 +318,7 @@ impl<'a> Run<'a> {
             halted: false,
             host_gone: false,
             here: Vec::new(),
+            ledger_warned: false,
             split: None,
             join: None,
         }
@@ -631,6 +651,8 @@ impl<'a> Run<'a> {
     pub(crate) fn execute(&mut self) {
         let plan = self.plan;
         let steps = &plan.steps;
+        // The part files this job keeps are its own while it runs.
+        self.engine.ledger().claim(plan.job);
         self.report
             .skipped
             .extend(self.plan.facts.left_out.iter().cloned());
@@ -799,6 +821,7 @@ impl<'a> Run<'a> {
             };
             let _ = journal.end(how, &self.report.undo.left);
         }
+        self.engine.ledger().release(self.plan.job);
         self.emit(JobState::Finished);
     }
 
@@ -1206,8 +1229,12 @@ impl<'a> Run<'a> {
         let source = self.provider(from)?;
         let destination = self.provider(target)?;
         self.check_target_name(&*destination, target)?;
+        // A move to or from a remote place reads the destination back and
+        // hashes it before the source goes, whatever the setting (answer
+        // 96): create, verify, then destroy.
+        let remote = HostKey::of(from).is_some() || HostKey::of(target).is_some();
         let verify = if moving {
-            self.engine.options().verify_moves
+            self.engine.options().verify_moves || remote
         } else {
             self.engine.options().verify_copies
         };
@@ -1246,10 +1273,21 @@ impl<'a> Run<'a> {
                     replace,
                     hash: verify,
                     durable: moving || replace,
+                    size: entry.size,
                 };
-                self.attempt(from, |run| {
+                let streamed = self.attempt(from, |run| {
                     run.stream_once(&*source, from, &*destination, target, how)
-                })?
+                });
+                match streamed {
+                    Ok(done) => done,
+                    // Cancel removes the part file; a lost connection
+                    // that ended the item keeps it for a later resume.
+                    Err(Stop::Cancelled) => {
+                        self.drop_part(&*destination, from, target);
+                        return Err(Outcome::Cancelled);
+                    }
+                    Err(stop) => return Err(stop.into()),
+                }
             }
         };
         // The commit's word is not proof: read the target again. When it
@@ -1294,7 +1332,10 @@ impl<'a> Run<'a> {
 
     /// One try at streaming a file into a committing writer, in chunks.
     /// A replace sends the old file to the trash only after every byte is
-    /// written, and brings it back if the commit fails.
+    /// written, and brings it back if the commit fails. A large file goes
+    /// through a kept write where both places can (R25, 2.5): a lost
+    /// connection keeps its part file, the next try goes on where it
+    /// stopped when everything agrees, and anything else removes it.
     fn stream_once(
         &mut self,
         source: &dyn Provider,
@@ -1308,11 +1349,28 @@ impl<'a> Run<'a> {
             replace,
             hash,
             durable,
+            size,
         } = how;
         let ctx = self.ctx.clone();
-        let mut reader = source.read(from, &ctx)?;
-        let mut writer = destination.write(target, mode, &ctx)?;
         let mut hasher = hash.then(Sha256::new);
+        let (mut reader, mut writer, kept, start): (Box<dyn Read + Send>, _, Kept<'_>, u64) =
+            match self.resumable(source, from, destination, target, size) {
+                None => {
+                    let reader = source.read(from, &ctx)?;
+                    (reader, destination.write(target, mode, &ctx)?, None, 0)
+                }
+                Some(resumable) => {
+                    let (writer, part, start) =
+                        self.open_kept(source, from, resumable, target, mode)?;
+                    self.advance(start);
+                    self.shared.estimator().reset();
+                    let kept = Some((resumable, part));
+                    match self.open_source(source, from, start, hasher.as_mut()) {
+                        Ok(reader) => (reader, writer, kept, start),
+                        Err(error) => return Err(self.give_up(&kept, Some(writer), error, start)),
+                    }
+                }
+            };
         let mut buffer = vec![0u8; self.engine.options().chunk_bytes.max(1)];
         let mut bytes: u64 = 0;
         let result = (|| -> Result<(), VfsError> {
@@ -1337,24 +1395,16 @@ impl<'a> Run<'a> {
             }
         })();
         if let Err(error) = result {
-            drop(writer);
-            self.rewind(bytes);
-            return Err(error);
+            return Err(self.give_up(&kept, Some(writer), error, start + bytes));
         }
         if let Err(error) = writer.flush() {
-            drop(writer);
-            self.rewind(bytes);
-            return Err(vfs_of(error));
+            return Err(self.give_up(&kept, Some(writer), vfs_of(error), start + bytes));
         }
         let mut old_in_trash = false;
         if replace && self.keeps_old(destination, target) {
             let check = match destination.trash(target, &ctx) {
                 Ok(check) => check,
-                Err(error) => {
-                    drop(writer);
-                    self.rewind(bytes);
-                    return Err(error);
-                }
+                Err(error) => return Err(self.give_up(&kept, Some(writer), error, start + bytes)),
             };
             match self.post_check(destination, target, check) {
                 TrashCheck::InTrash => old_in_trash = true,
@@ -1366,11 +1416,10 @@ impl<'a> Run<'a> {
                     self.warn(target, catalog::TRASH_NOT_CONFIRMED);
                 }
                 TrashCheck::StillThere => {
-                    drop(writer);
-                    self.rewind(bytes);
-                    return Err(VfsError::Unsafe {
+                    let error = VfsError::Unsafe {
                         why: "the old copy is still there after the trash".to_owned(),
-                    });
+                    };
+                    return Err(self.give_up(&kept, Some(writer), error, start + bytes));
                 }
             }
         }
@@ -1378,13 +1427,205 @@ impl<'a> Run<'a> {
             if old_in_trash && destination.restore(target, &OpContext::new()).is_err() {
                 self.warn(target, "the old copy is in the trash");
             }
-            self.rewind(bytes);
-            return Err(error);
+            return Err(self.give_up(&kept, None, error, start + bytes));
         }
         if old_in_trash {
             self.report.undo.trashed.push(target.clone());
         }
-        Ok((bytes, hasher.map(|h| h.finalize().to_vec())))
+        if let Some((_, part)) = &kept {
+            let forgotten = self.engine.ledger().forget(part);
+            self.ledger_note(target, forgotten);
+        }
+        Ok((start + bytes, hasher.map(|h| h.finalize().to_vec())))
+    }
+
+    /// The resumable write for a copy, when the file is large enough and
+    /// both places can: the destination keeps and reopens part files, and
+    /// the source reads at an offset.
+    fn resumable<'p>(
+        &self,
+        source: &dyn Provider,
+        from: &Place,
+        destination: &'p dyn Provider,
+        target: &Place,
+        size: Option<u64>,
+    ) -> Option<&'p dyn ResumableWrite> {
+        let large = size.is_some_and(|size| size >= self.engine.options().resume_over);
+        if large && destination.capabilities(target).resume && source.capabilities(from).random_read
+        {
+            destination.as_resumable()
+        } else {
+            None
+        }
+    }
+
+    /// Opens the kept write of a copy: the ledger's part file when the
+    /// fingerprint and the window check agree, said ("Resuming report.iso
+    /// at 410 MB of 800 MB"); otherwise a fresh one, after removing a part
+    /// file that did not agree and saying why. Returns the writer, its
+    /// part file, and where the next byte goes.
+    fn open_kept(
+        &mut self,
+        source: &dyn Provider,
+        from: &Place,
+        resumable: &dyn ResumableWrite,
+        target: &Place,
+        mode: WriteMode,
+    ) -> Result<(Box<dyn FileWriter>, Place, u64), VfsError> {
+        let ctx = self.ctx.clone();
+        let fresh = source.stat(from, &ctx)?;
+        let size = fresh.size.unwrap_or(0);
+        let engine = self.engine;
+        let ledger = engine.ledger();
+        let job = self.plan.job;
+        if let Some(line) = ledger.find(job, target, from) {
+            let refused = match resume::check(&line, &fresh, source, resumable, &ctx)? {
+                Ok(0) => None,
+                Ok(_) => match resumable.reopen(&line.unfinished, target, mode, &ctx) {
+                    Ok((writer, at)) => {
+                        self.sink.notice(&JobNotice::Resuming {
+                            name: name_of(from),
+                            at,
+                            of: size,
+                        });
+                        let updated = ledger.update(&line.unfinished, job, at);
+                        self.ledger_note(target, updated);
+                        return Ok((writer, line.unfinished, at));
+                    }
+                    Err(error) if error.class() == ErrorClass::Network => return Err(error),
+                    Err(VfsError::Cancelled) => return Err(VfsError::Cancelled),
+                    Err(_) => Some(NotResumed::Gone),
+                },
+                Err(why) => Some(why),
+            };
+            if let Some(why) = refused {
+                self.sink.notice(&JobNotice::NotResumed {
+                    name: name_of(from),
+                    why,
+                });
+            }
+            let _ = resumable.discard(&line.unfinished, &OpContext::new());
+            let forgotten = ledger.forget(&line.unfinished);
+            self.ledger_note(target, forgotten);
+        }
+        let writer = resumable.write_kept(target, mode, &ctx)?;
+        let Some(part) = writer.unfinished_place() else {
+            return Err(VfsError::Unsafe {
+                why: "the place did not name the copy's unfinished file".to_owned(),
+            });
+        };
+        let recorded = ledger.record(Partial {
+            job,
+            target: target.clone(),
+            unfinished: part.clone(),
+            source: from.clone(),
+            source_size: size,
+            source_modified: fresh.modified,
+            bytes: 0,
+        });
+        self.ledger_note(target, recorded);
+        Ok((writer, part, 0))
+    }
+
+    /// The source, read from `start`. A move never trusts a resumed
+    /// prefix: with a hash to keep, the prefix is read again into it first
+    /// (resume saves the writing of the prefix, not its reading).
+    fn open_source(
+        &mut self,
+        source: &dyn Provider,
+        from: &Place,
+        start: u64,
+        hasher: Option<&mut Sha256>,
+    ) -> Result<Box<dyn Read + Send>, VfsError> {
+        let ctx = self.ctx.clone();
+        if start == 0 {
+            return source.read(from, &ctx);
+        }
+        let mut reader = source.open_seekable(from, &ctx)?;
+        match hasher {
+            None => {
+                reader.seek(SeekFrom::Start(start)).map_err(vfs_of)?;
+            }
+            Some(hasher) => {
+                let mut buffer = vec![0u8; self.engine.options().chunk_bytes.max(1)];
+                let mut left = start;
+                while left > 0 {
+                    if !self.hold() {
+                        return Err(VfsError::Cancelled);
+                    }
+                    let want = usize::try_from(left)
+                        .unwrap_or(usize::MAX)
+                        .min(buffer.len());
+                    let read = match reader.read(&mut buffer[..want]) {
+                        Ok(0) => return Err(VfsError::Changed),
+                        Ok(read) => read,
+                        Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(error) => return Err(vfs_of(error)),
+                    };
+                    hasher.update(&buffer[..read]);
+                    left -= read as u64;
+                    self.shared.touch();
+                }
+            }
+        }
+        Ok(Box::new(Seeked(reader)))
+    }
+
+    /// A stream that stopped: the writer goes, the progress steps back,
+    /// and a part file stays for a resume when the connection was lost
+    /// (its bytes noted in the ledger), or is removed otherwise. Returns
+    /// the error.
+    fn give_up(
+        &mut self,
+        kept: &Kept<'_>,
+        writer: Option<Box<dyn FileWriter>>,
+        error: VfsError,
+        written: u64,
+    ) -> VfsError {
+        drop(writer);
+        self.rewind(written);
+        if let Some((resumable, part)) = kept {
+            let ledger = self.engine.ledger();
+            let noted = if resume::keeps_part(&error) {
+                ledger.update(part, self.plan.job, written)
+            } else {
+                let _ = resumable.discard(part, &OpContext::new());
+                ledger.forget(part)
+            };
+            self.ledger_note(part, noted);
+        }
+        error
+    }
+
+    /// Cancel removes the part file this job kept for a copy, and its
+    /// ledger line.
+    fn drop_part(&mut self, destination: &dyn Provider, from: &Place, target: &Place) {
+        let ledger = self.engine.ledger();
+        let Some(line) = ledger.find(self.plan.job, target, from) else {
+            return;
+        };
+        if line.job != self.plan.job {
+            return;
+        }
+        if let Some(resumable) = destination.as_resumable() {
+            let _ = resumable.discard(&line.unfinished, &OpContext::new());
+        }
+        let forgotten = ledger.forget(&line.unfinished);
+        self.ledger_note(target, forgotten);
+    }
+
+    /// A ledger that could not be written is said once, as a warning: the
+    /// resume still works in this session, not after a restart.
+    fn ledger_note(&mut self, place: &Place, result: io::Result<()>) {
+        if let Err(error) = result
+            && !self.ledger_warned
+        {
+            self.ledger_warned = true;
+            self.warn(
+                place,
+                format!("the list of partial files could not be written: {error}"),
+            );
+        }
     }
 
     /// Reads a target back and compares its hash, saying "Verifying".

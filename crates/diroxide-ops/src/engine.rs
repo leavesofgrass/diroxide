@@ -28,6 +28,7 @@ use crate::options::EngineOptions;
 use crate::pace::{Pacer, SystemPacer};
 use crate::plan::Plan;
 use crate::progress::JobProgress;
+use crate::resume::{JobNotice, Ledger};
 use crate::run::{Run, Shared, watch_for_stalls};
 use crate::undo::{UndoLog, UndoRecord};
 
@@ -267,6 +268,13 @@ pub trait JobSink: Send + Sync {
         let _ = question;
         ConnectionAnswer::AskEachJob
     }
+
+    /// Takes a line the job says once, beside its progress: a file resumed
+    /// where it stopped, or a part file that could not be. The default
+    /// says nothing.
+    fn notice(&self, notice: &JobNotice) {
+        let _ = notice;
+    }
 }
 
 /// Cancels or pauses a running job. Cloning shares the control.
@@ -482,6 +490,7 @@ pub struct Engine {
     pacer: Arc<dyn Pacer>,
     journal: Option<Journal>,
     gates: Gates,
+    ledger: Arc<Ledger>,
 }
 
 impl Engine {
@@ -495,7 +504,23 @@ impl Engine {
             pacer: Arc::new(SystemPacer::new()),
             journal: None,
             gates: Gates::new(),
+            ledger: Arc::new(Ledger::in_memory()),
         }
+    }
+
+    /// The same engine keeping its ledger of partial files here: in the
+    /// state folder ([`Ledger::open`]) so the next start finds what a crash
+    /// left, shared by every clone.
+    pub fn with_ledger(mut self, ledger: Arc<Ledger>) -> Self {
+        self.ledger = ledger;
+        self
+    }
+
+    /// The ledger of partial files (R25, 2.5): what a lost connection or a
+    /// crash left for a resume. Its leftovers are listed, never removed
+    /// unasked.
+    pub fn ledger(&self) -> &Ledger {
+        &self.ledger
     }
 
     /// The same engine sharing these connection gates: an engine made

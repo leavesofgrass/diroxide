@@ -42,6 +42,7 @@ use std::time::Duration;
 
 use diroxide_core::{Attributes, Entry, EntryKind, Place, Timestamp};
 use diroxide_vfs::names::unfinished_name;
+use diroxide_vfs::provider::ResumableWrite;
 use diroxide_vfs::{
     AttributeChange, Can, Capabilities, CopyHint, FileWriter, LinkKind, LinkRequest, OpContext,
     Provider, ReadSeek, SpaceInfo, TrashCheck, TrashGate, VfsError, VolumeInfo, VolumeKind,
@@ -68,6 +69,9 @@ pub struct Lies {
     pub clone_fails_late: bool,
     /// The trash reports the item in the trash and leaves it where it was.
     pub trash_does_nothing: bool,
+    /// A kept part file loses its last N bytes to zeros, its length kept,
+    /// as a server that crashed before it flushed (spike Q1's case).
+    pub kept_tail_zeroed: u64,
 }
 
 /// A failure at a place.
@@ -212,6 +216,10 @@ pub struct FakeSwitches {
     /// Connections that drop in the middle of a transfer (R25's drop
     /// mode), each once.
     pub drops: Vec<LinkDrop>,
+    /// Writes can be resumed: a kept write leaves its part file and a
+    /// later one reopens it (the capability `resume`); off by default, so
+    /// a cut write leaves nothing, as before.
+    pub resume: bool,
 }
 
 /// A connection that drops after a number of bytes (R25's drop mode): a
@@ -698,6 +706,61 @@ impl FakeProvider {
         true
     }
 
+    /// A committing writer at a place, its unfinished name showing in the
+    /// folder: the body of `write` and of the kept write.
+    fn writer(
+        &self,
+        place: &Place,
+        mode: WriteMode,
+        ctx: &OpContext,
+    ) -> Result<FakeWriter, VfsError> {
+        let switches = self.enter(FakeCall::Write, place, ctx)?;
+        if switches.read_only.contains(place) {
+            return Err(VfsError::PermissionDenied);
+        }
+        if switches.locked.contains(place) {
+            return Err(VfsError::InUse);
+        }
+        let Some(folder) = place.parent() else {
+            return Err(VfsError::NotFound);
+        };
+        if !self.exists(&folder) {
+            return Err(VfsError::NotFound);
+        }
+        if mode == WriteMode::CreateNew && self.exists(place) {
+            return Err(VfsError::AlreadyExists);
+        }
+        let token = {
+            let mut state = self.state();
+            state.next_token += 1;
+            state.next_token
+        };
+        let unfinished = folder
+            .join(&unfinished_name(token))
+            .map_err(VfsError::from)?;
+        let entry = Entry::new(unfinished.name().unwrap_or_default(), EntryKind::File);
+        let (key, node) = self.new_node(&unfinished, entry, Vec::new());
+        self.state().nodes.insert(key, node);
+        Ok(FakeWriter::new(
+            self,
+            place,
+            Some(unfinished),
+            mode,
+            &switches,
+        ))
+    }
+
+    /// Refuses anything but an unfinished name.
+    fn unfinished_only(place: &Place) -> Result<(), VfsError> {
+        if diroxide_vfs::names::is_unfinished(place.name().unwrap_or_default()) {
+            Ok(())
+        } else {
+            Err(VfsError::Unsafe {
+                why: "only an unfinished file is reopened or removed here".to_owned(),
+            })
+        }
+    }
+
     fn volume_of(switches: &FakeSwitches, place: &Place) -> u64 {
         match &switches.second_volume {
             Some(root) if place.is_within(root) => 2,
@@ -902,6 +965,9 @@ struct FakeWriter {
     seekable: bool,
     fail_at: Option<(u64, VfsError)>,
     link: Link,
+    /// A kept write: dropped without its commit, its bytes stay in the
+    /// part file.
+    kept: bool,
 }
 
 impl Write for FakeWriter {
@@ -929,11 +995,50 @@ impl Write for FakeWriter {
     }
 }
 
+impl FakeWriter {
+    fn new(
+        fake: &FakeProvider,
+        place: &Place,
+        unfinished: Option<Place>,
+        mode: WriteMode,
+        switches: &FakeSwitches,
+    ) -> Self {
+        let fail_at = switches
+            .faults
+            .iter()
+            .find(|f| &f.place == place)
+            .and_then(|f| f.at_byte.map(|at| (at, f.error.clone())));
+        Self {
+            fake: fake.clone(),
+            place: place.clone(),
+            unfinished,
+            mode,
+            buffer: Vec::new(),
+            pos: 0,
+            seekable: switches.seekable_writes,
+            fail_at,
+            link: Link::new(fake, place, switches),
+            kept: false,
+        }
+    }
+}
+
 impl Drop for FakeWriter {
     fn drop(&mut self) {
-        if let Some(unfinished) = self.unfinished.take() {
+        let Some(unfinished) = self.unfinished.take() else {
+            return;
+        };
+        if !self.kept {
             self.fake.vanish(&unfinished);
+            return;
         }
+        let mut data = std::mem::take(&mut self.buffer);
+        let zeroed = usize::try_from(self.fake.switches().lies.kept_tail_zeroed)
+            .unwrap_or(usize::MAX)
+            .min(data.len());
+        let from = data.len() - zeroed;
+        data[from..].fill(0);
+        self.fake.add_file(&unfinished, &data);
     }
 }
 
@@ -1040,6 +1145,7 @@ impl Provider for FakeProvider {
         capabilities.random_read = true;
         capabilities.clone_copy = switches.clone_copy;
         capabilities.replace_rename = switches.replace_rename;
+        capabilities.resume = switches.resume;
         capabilities
     }
 
@@ -1109,49 +1215,11 @@ impl Provider for FakeProvider {
         mode: WriteMode,
         ctx: &OpContext,
     ) -> Result<Box<dyn FileWriter>, VfsError> {
-        let switches = self.enter(FakeCall::Write, place, ctx)?;
-        if switches.read_only.contains(place) {
-            return Err(VfsError::PermissionDenied);
-        }
-        if switches.locked.contains(place) {
-            return Err(VfsError::InUse);
-        }
-        let Some(folder) = place.parent() else {
-            return Err(VfsError::NotFound);
-        };
-        if !self.exists(&folder) {
-            return Err(VfsError::NotFound);
-        }
-        if mode == WriteMode::CreateNew && self.exists(place) {
-            return Err(VfsError::AlreadyExists);
-        }
-        let token = {
-            let mut state = self.state();
-            state.next_token += 1;
-            state.next_token
-        };
-        let unfinished = folder
-            .join(&unfinished_name(token))
-            .map_err(VfsError::from)?;
-        let entry = Entry::new(unfinished.name().unwrap_or_default(), EntryKind::File);
-        let (key, node) = self.new_node(&unfinished, entry, Vec::new());
-        self.state().nodes.insert(key, node);
-        let fail_at = switches
-            .faults
-            .iter()
-            .find(|f| &f.place == place)
-            .and_then(|f| f.at_byte.map(|at| (at, f.error.clone())));
-        Ok(Box::new(FakeWriter {
-            fake: self.clone(),
-            place: place.clone(),
-            unfinished: Some(unfinished),
-            mode,
-            buffer: Vec::new(),
-            pos: 0,
-            seekable: switches.seekable_writes,
-            fail_at,
-            link: Link::new(self, place, &switches),
-        }))
+        Ok(Box::new(self.writer(place, mode, ctx)?))
+    }
+
+    fn as_resumable(&self) -> Option<&dyn ResumableWrite> {
+        Some(self)
     }
 
     fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
@@ -1457,6 +1525,80 @@ impl Provider for FakeProvider {
             total: None,
             max_file_size: switches.max_file_size,
         })
+    }
+}
+
+/// The fake's resumable write (R25 commit 69): a kept write leaves its
+/// bytes in its part file, with the tail zeroed when
+/// [`Lies::kept_tail_zeroed`] says so; a reopened one goes on at its end.
+impl ResumableWrite for FakeProvider {
+    fn write_kept(
+        &self,
+        target: &Place,
+        mode: WriteMode,
+        ctx: &OpContext,
+    ) -> Result<Box<dyn FileWriter>, VfsError> {
+        let mut writer = self.writer(target, mode, ctx)?;
+        writer.kept = true;
+        Ok(Box::new(writer))
+    }
+
+    fn reopen(
+        &self,
+        unfinished: &Place,
+        target: &Place,
+        mode: WriteMode,
+        ctx: &OpContext,
+    ) -> Result<(Box<dyn FileWriter>, u64), VfsError> {
+        Self::unfinished_only(unfinished)?;
+        if unfinished.parent() != target.parent() {
+            return Err(VfsError::Unsafe {
+                why: "the unfinished file is not beside its target".to_owned(),
+            });
+        }
+        let switches = self.enter(FakeCall::Write, target, ctx)?;
+        let data = self.contents(unfinished).ok_or(VfsError::NotFound)?;
+        let length = data.len() as u64;
+        let mut writer = FakeWriter::new(self, target, Some(unfinished.clone()), mode, &switches);
+        writer.pos = data.len();
+        writer.buffer = data;
+        writer.kept = true;
+        Ok((Box::new(writer), length))
+    }
+
+    fn unfinished_len(&self, unfinished: &Place, ctx: &OpContext) -> Result<u64, VfsError> {
+        Self::unfinished_only(unfinished)?;
+        self.enter(FakeCall::Stat, unfinished, ctx)?;
+        self.contents(unfinished)
+            .map(|data| data.len() as u64)
+            .ok_or(VfsError::NotFound)
+    }
+
+    fn read_unfinished(
+        &self,
+        unfinished: &Place,
+        offset: u64,
+        length: usize,
+        ctx: &OpContext,
+    ) -> Result<Vec<u8>, VfsError> {
+        Self::unfinished_only(unfinished)?;
+        self.enter(FakeCall::Read, unfinished, ctx)?;
+        let data = self.contents(unfinished).ok_or(VfsError::NotFound)?;
+        let from = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(data.len());
+        let to = from.saturating_add(length).min(data.len());
+        Ok(data[from..to].to_vec())
+    }
+
+    fn discard(&self, unfinished: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+        Self::unfinished_only(unfinished)?;
+        self.enter(FakeCall::Remove, unfinished, ctx)?;
+        if !self.exists(unfinished) {
+            return Err(VfsError::NotFound);
+        }
+        self.vanish(unfinished);
+        Ok(())
     }
 }
 

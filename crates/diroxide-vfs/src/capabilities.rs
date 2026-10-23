@@ -128,9 +128,10 @@ pub struct Capabilities {
     /// 2). A folder is never replaced.
     pub replace_rename: bool,
     /// A write cut short by a lost connection can go on where it stopped:
-    /// its unfinished file is kept and reopened at its end (R25, 2.5). The
-    /// reading side needs [`Self::random_read`]; anything else starts the
-    /// file again.
+    /// its unfinished file is kept and reopened at its end (R25, 2.5),
+    /// through [`crate::provider::ResumableWrite`], found with
+    /// [`crate::Provider::as_resumable`]. The reading side needs
+    /// [`Self::random_read`]; anything else starts the file again.
     pub resume: bool,
 }
 

@@ -52,6 +52,11 @@ pub struct EngineOptions {
     /// The copy loop's chunk: pause, cancel and progress are honored
     /// between chunks.
     pub chunk_bytes: usize,
+    /// Files of at least this many bytes are written so a lost connection
+    /// can resume them where they stopped (R25, 2.5), where both places
+    /// can; smaller ones simply start again. 4 MiB: below it the window
+    /// check would read about as much as it saves.
+    pub resume_over: u64,
     /// A permanent delete of more entries than this asks for the count to
     /// be typed.
     pub typed_count_over: u64,
@@ -82,6 +87,7 @@ impl Default for EngineOptions {
             network_retry_growth: 3,
             stall_after: Duration::from_secs(20),
             chunk_bytes: 1024 * 1024,
+            resume_over: 4 * 1024 * 1024,
             typed_count_over: 1000,
             typed_count_ratio: 50,
             protected: Vec::new(),

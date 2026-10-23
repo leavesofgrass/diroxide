@@ -41,6 +41,9 @@ pub mod plan;
 mod planner;
 pub mod progress;
 pub mod queue;
+pub mod resume;
+#[cfg(test)]
+mod resume_tests;
 mod run;
 #[cfg(test)]
 mod run_tests;
@@ -73,6 +76,7 @@ pub use parts::{PartInfo, PartsError, PartsReader};
 pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
 pub use queue::{Cancelled, Grant, HostKey, JobClass, Queue, QueueLimits};
+pub use resume::{JobNotice, Ledger, NotResumed, Partial};
 pub use sidecar::{Sidecar, SidecarRead};
 pub use split::{SplitFacts, SplitFile};
 pub use undo::{LeftAs, Relinked, UndoLog, UndoRecord};
