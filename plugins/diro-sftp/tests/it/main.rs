@@ -6,6 +6,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod conformance;
+#[cfg(feature = "fake-ssh")]
+mod fakes;
+#[cfg(feature = "fake-ssh")]
+mod locate;
 mod modes;
 #[cfg(all(windows, feature = "fake-ssh"))]
 mod spikes;

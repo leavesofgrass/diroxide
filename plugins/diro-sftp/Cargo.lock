@@ -82,6 +82,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "diroxide-core",
  "diroxide-plugins",
+ "diroxide-tools",
  "serde",
  "serde_json",
  "tempfile",
