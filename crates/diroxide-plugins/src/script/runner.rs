@@ -44,6 +44,9 @@ use crate::script::context::{
 };
 use crate::script::directives::{Directive, DirectiveReader, parse_directive, stdout_directive};
 use crate::script::interpreter::{Lookup, Missing, is_app_alias};
+use crate::script::placeholders::{
+    self, Fill, PlaceholderError, default_budget, expand_in_batches,
+};
 use crate::script::recipe::{ListForm, Per, RunMode, StdinForm};
 use crate::script::words::{self, Ending, ending_lines};
 use crate::services::clean_text;
@@ -101,6 +104,10 @@ pub trait RunSink {
 
     /// A line for the command's log: an ignored directive, a refusal.
     fn log(&mut self, _line: &str) {}
+
+    /// A sentence of the host's about the run, said at once: "Running in
+    /// 3 batches."
+    fn note(&mut self, _message: &Message) {}
 }
 
 /// A sink that keeps everything, in order.
@@ -112,6 +119,8 @@ pub struct Recorder {
     pub output: Vec<String>,
     /// The log lines.
     pub log: Vec<String>,
+    /// The host's own sentences.
+    pub notes: Vec<String>,
 }
 
 impl RunSink for Recorder {
@@ -125,6 +134,10 @@ impl RunSink for Recorder {
 
     fn log(&mut self, line: &str) {
         self.log.push(line.to_owned());
+    }
+
+    fn note(&mut self, message: &Message) {
+        self.notes.push(message.text.clone());
     }
 }
 
@@ -141,6 +154,8 @@ pub struct RunEnv {
     pub grace: Duration,
     /// The owner's values of the plugin's settings, for `{setting.KEY}`.
     pub settings: Map<String, Value>,
+    /// The longest command line; a longer `{files}` list runs in batches.
+    pub budget: usize,
 }
 
 impl RunEnv {
@@ -152,6 +167,7 @@ impl RunEnv {
             registry: ToolRegistry::builtin(),
             grace: CANCEL_GRACE,
             settings: Map::new(),
+            budget: default_budget(),
         }
     }
 
@@ -186,7 +202,12 @@ pub enum RunError {
     /// The command is not made for this system.
     OtherSystem,
     /// A placeholder could not be filled.
-    Placeholder(String),
+    Placeholder(PlaceholderError),
+    /// An unattended run of a command that does not promise it never
+    /// asks.
+    NotUnattended,
+    /// A preview of a command that has none.
+    NoPreview,
     /// The run folder could not be written.
     Io(String),
 }
@@ -199,7 +220,20 @@ impl RunError {
             RunError::Interpreter(missing) => missing.sentence(),
             RunError::NeedsTool(tool) => words::needs_tool(tool),
             RunError::OtherSystem => words::other_system(title),
-            RunError::Placeholder(why) => lines::could_not_run(title, why),
+            RunError::Placeholder(PlaceholderError::Empty(name)) if name == "other_file" => {
+                "Both panels need a file under the cursor.".to_owned()
+            }
+            RunError::Placeholder(PlaceholderError::Empty(name)) if name == "file" => {
+                "Move to a file first.".to_owned()
+            }
+            RunError::Placeholder(error) => match error.is_setting() {
+                Some(key) => format!("Choose {key} in the plugin's settings first."),
+                None => lines::could_not_run(title, &error.cause()),
+            },
+            RunError::NotUnattended => {
+                format!("{title} cannot run unattended: it may ask questions.")
+            }
+            RunError::NoPreview => format!("{title} has no preview."),
             RunError::Io(cause) => lines::could_not_run(title, cause),
         }
     }
@@ -277,6 +311,22 @@ pub fn run(
     if !command.exists_on(env.lookup.os) {
         return Err(RunError::OtherSystem);
     }
+    let recipe = &command.recipe;
+    if context.unattended
+        && (!recipe.unattended || recipe.mode.is_terminal() || recipe.confirm.is_some())
+    {
+        return Err(RunError::NotUnattended);
+    }
+    if context.dry_run && !recipe.dry_run {
+        return Err(RunError::NoPreview);
+    }
+    if recipe.prompt.is_some() && context.input.as_deref().is_none_or(|i| i.trim().is_empty()) {
+        // An empty answer to the prompt cancels the run.
+        let mut report = RunReport::new();
+        report.ending = Ending::Cancelled;
+        report.said = vec![Message::status(lines::cancelled(&command.title))];
+        return Ok(report);
+    }
     let mut tools = BTreeMap::new();
     for tool in &command.needs {
         let found = env
@@ -311,6 +361,7 @@ pub fn run(
             break;
         }
         let prepared = prepare(command, one, &env.folders, forward, &tools)?;
+        let mut directives = DirectiveReader::new();
         let invocations = match &interpreter {
             Some(interpreter) => match &command.program {
                 Program::Script(path) => vec![interpreter.command_for(path)],
@@ -324,13 +375,20 @@ pub fn run(
                 }
             },
         };
+        if invocations.len() > 1 {
+            sink.note(&Message::status(words::in_batches(invocations.len())));
+        }
         for (program, args) in invocations {
             if cancel.is_cancelled() {
                 report.ending = Ending::Cancelled;
                 break;
             }
             let spec = process_spec(&program, &args, &prepared, command);
-            let outcome = run_process(&spec, &prepared, command, env, sink, cancel, &mut report);
+            let follow = Follow {
+                prepared: &prepared,
+                directives: &mut directives,
+            };
+            let outcome = run_process(&spec, follow, command, env, sink, cancel, &mut report);
             report.runs += 1;
             if command.recipe.mode == RunMode::OutputColumn
                 && let Some(entry) = one.cursor.as_ref()
@@ -384,24 +442,104 @@ fn one_entry(context: &RunContext, entry: Picked) -> RunContext {
     one
 }
 
-/// The starts of a manifest-only command: its `argv` with the program
-/// found by the tools rule. Placeholders arrive with the next commit.
+/// The values of a run's placeholders.
+pub fn fill_for(
+    command: &ScriptCommand,
+    context: &RunContext,
+    prepared: &Prepared,
+    env: &RunEnv,
+) -> Fill {
+    let text = |p: &Place| OsString::from(p.to_string());
+    let mut fill = Fill::new();
+    if let Some(cursor) = &context.cursor {
+        fill.set("file", text(&cursor.place));
+        fill.set_name(cursor.place.name().unwrap_or_default());
+    }
+    if let Some(other) = &context.other_cursor {
+        fill.set("other_file", text(&other.place));
+    }
+    fill.set_list(
+        "files",
+        prepared
+            .selection
+            .entries
+            .iter()
+            .map(|e| text(&e.place))
+            .collect(),
+    );
+    fill.set("dir", text(&context.active))
+        .set("other", text(&context.other))
+        .set("dest", text(&context.other))
+        .set("max_rows", command.recipe.max_rows.to_string())
+        .set("selection_file0", prepared.folder.selection_file0());
+    if prepared.folder.selection_file().is_file() {
+        fill.set("selection_file", prepared.folder.selection_file());
+    }
+    if let Some(input) = &context.input {
+        fill.set("input", input.clone());
+    }
+    fill.set_settings(&env.settings);
+    fill
+}
+
+/// The starts of a manifest-only command: its `argv` filled per argument,
+/// in batches when `{files}` is too long for one command line, each
+/// program found by the tools rule.
 fn argv_invocations(
     command: &ScriptCommand,
-    _context: &RunContext,
-    _prepared: &Prepared,
+    context: &RunContext,
+    prepared: &Prepared,
     env: &RunEnv,
 ) -> Result<Vec<Invocation>, RunError> {
     let Program::Argv(argv) = &command.program else {
         return Ok(Vec::new());
     };
-    let Some((program, args)) = argv.split_first() else {
-        return Err(RunError::Placeholder("its argv is empty".to_owned()));
+    let fill = fill_for(command, context, prepared, env);
+    let runs = expand_in_batches(argv, &fill, env.budget).map_err(RunError::Placeholder)?;
+    let mut invocations = Vec::new();
+    for run in runs {
+        let Some((program, args)) = run.split_first() else {
+            return Err(RunError::Placeholder(PlaceholderError::Empty(
+                "argv".to_owned(),
+            )));
+        };
+        let name = program.to_string_lossy();
+        let path = env
+            .find_tool(&name)
+            .ok_or_else(|| RunError::NeedsTool(name.into_owned()))?;
+        invocations.push((path, args.to_vec()));
+    }
+    Ok(invocations)
+}
+
+/// What a command would run, in words, for `--explain`; nothing runs.
+pub fn explain(
+    command: &ScriptCommand,
+    context: &RunContext,
+    env: &RunEnv,
+) -> Result<Vec<String>, RunError> {
+    let interpreter = match &command.program {
+        Program::Script(path) => Some(
+            env.lookup
+                .choose(path, &command.recipe.interpreter)
+                .map_err(RunError::Interpreter)?,
+        ),
+        Program::Argv(_) => None,
     };
-    let path = env
-        .find_tool(program)
-        .ok_or_else(|| RunError::NeedsTool(program.clone()))?;
-    Ok(vec![(path, args.iter().map(OsString::from).collect())])
+    let forward = interpreter.as_ref().is_some_and(|i| i.forward_slashes);
+    let prepared = prepare(command, context, &env.folders, forward, &BTreeMap::new())?;
+    let invocations = match (&interpreter, &command.program) {
+        (Some(interpreter), Program::Script(path)) => Ok(vec![interpreter.command_for(path)]),
+        _ => argv_invocations(command, context, &prepared, env),
+    };
+    let _ = prepared.folder.remove();
+    let invocations = invocations?;
+    let program = invocations
+        .first()
+        .map(|(p, _)| p.display().to_string())
+        .unwrap_or_default();
+    let runs: Vec<Vec<OsString>> = invocations.into_iter().map(|(_, args)| args).collect();
+    Ok(placeholders::explain(&program, &runs))
 }
 
 /// What one start of the program left.
@@ -494,16 +632,27 @@ fn read_tail<R: Read + Send + 'static>(stream: R) -> Receiver<Vec<u8>> {
     receiver
 }
 
+/// A run folder, and the reader that follows its directives file across
+/// the starts of one run (batches share it).
+struct Follow<'a> {
+    prepared: &'a Prepared,
+    directives: &'a mut DirectiveReader,
+}
+
 /// Follows one start of the program to its end.
 fn run_process(
     spec: &ProcessSpec,
-    prepared: &Prepared,
+    follow: Follow<'_>,
     command: &ScriptCommand,
     env: &RunEnv,
     sink: &mut dyn RunSink,
     cancel: &Cancel,
     report: &mut RunReport,
 ) -> Outcome {
+    let Follow {
+        prepared,
+        directives,
+    } = follow;
     let recipe = &command.recipe;
     let mode = recipe.mode;
     let mut outcome = Outcome {
@@ -557,7 +706,6 @@ fn run_process(
         .take_stdout()
         .map(|out| read_records(out, separator, MAX_OUTPUT_BYTES));
     let stderr = child.take_stderr().map(read_tail);
-    let mut directives = DirectiveReader::new();
     let directives_file = prepared.folder.directives_file();
     let started = Instant::now();
     let mut ending_at: Option<Instant> = None;
@@ -988,7 +1136,9 @@ pub(crate) mod tests {
             flag.cancel();
         });
         let mut sink = Recorder::default();
-        let report = run(&polite, &bench.context(), &bench.env, &mut sink, &cancel).unwrap();
+        let mut patient = bench.env.clone();
+        patient.grace = CANCEL_GRACE;
+        let report = run(&polite, &bench.context(), &patient, &mut sink, &cancel).unwrap();
         waker.join().unwrap();
         assert_eq!(report.ending, Ending::Cancelled);
         assert_eq!(said(&report), ["Probe: cancelled."]);
@@ -1076,5 +1226,219 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert_eq!(error.sentence("Probe"), "Probe is not for this system.");
+    }
+
+    /// A manifest-only command whose program is the system's bash running
+    /// a script of the bench: the argv path, with placeholders.
+    fn argv_command(bench: &Bench, name: &str, body: &str, args: &[&str]) -> ScriptCommand {
+        let script = bench.root.path().join("scripts").join(name);
+        fs::write(&script, body).unwrap();
+        let bash = bench.env.lookup.bash().unwrap();
+        let mut argv = vec![bash.program.to_string_lossy().into_owned()];
+        argv.extend(bash.args.iter().map(|a| a.to_string_lossy().into_owned()));
+        argv.push(script.to_string_lossy().into_owned());
+        argv.extend(args.iter().map(|a| (*a).to_owned()));
+        let mut command = ScriptCommand::from_script(&script, &parse_header("").header);
+        command.id = "fake.argv".to_owned();
+        command.title = "Fake tool".to_owned();
+        command.source = "Fake plugin".to_owned();
+        command.program = Program::Argv(argv);
+        command
+    }
+
+    fn marked(bench: &Bench, count: usize) -> RunContext {
+        let mut context = bench.context();
+        let work = bench.root.path().join("work");
+        context.marked = (0..count)
+            .map(|n| {
+                let path = work.join(format!("file-{n:03}.txt"));
+                Picked::new(
+                    Place::parse(&path.to_string_lossy()).unwrap(),
+                    EntryKind::File,
+                )
+            })
+            .collect();
+        context
+    }
+
+    #[test]
+    fn a_long_list_runs_in_batches_and_says_so() {
+        let Some(mut bench) = Bench::new() else {
+            return;
+        };
+        let command = argv_command(
+            &bench,
+            "count.sh",
+            "printf 'announce %s\\n' \"$#\" >> \"${DIRO_DIRECTIVES:?}\"\n",
+            &["{files}"],
+        );
+        let context = marked(&bench, 40);
+        let one_name = context.marked[0].place.to_string().len() + 3;
+        let fixed: usize = match &command.program {
+            Program::Argv(argv) => argv[..argv.len() - 1].iter().map(|a| a.len() + 3).sum(),
+            Program::Script(_) => 0,
+        };
+        bench.env.budget = fixed + one_name * 12;
+        let (report, sink) = bench.run(&command, &context);
+        assert_eq!(report.ending, Ending::Exited(0));
+        assert!(report.runs >= 4, "{} runs", report.runs);
+        assert_eq!(sink.notes, [words::in_batches(report.runs)]);
+        let counted: usize = sink
+            .acted
+            .iter()
+            .map(|(_, d)| match d {
+                Directive::Announce(n) => n.parse::<usize>().unwrap(),
+                _ => 0,
+            })
+            .sum();
+        assert_eq!(counted, 40);
+    }
+
+    #[test]
+    fn placeholders_reach_the_program_as_separate_arguments() {
+        let Some(bench) = Bench::new() else { return };
+        let command = argv_command(
+            &bench,
+            "args.sh",
+            "for a in \"$@\"; do printf '[%s]\\n' \"$a\"; done\n",
+            &["--", "{name}", "{input}", "x{max_rows}"],
+        );
+        let mut context = bench.context();
+        let dash = bench.root.path().join("work").join("-dash name.txt");
+        context.cursor = Some(Picked::new(
+            Place::parse(&dash.to_string_lossy()).unwrap(),
+            EntryKind::File,
+        ));
+        context.input = Some("two words \"quoted\"".to_owned());
+        let (report, _) = bench.run(&command, &context);
+        assert_eq!(
+            report.output,
+            [
+                "[--]",
+                "[./-dash name.txt]",
+                "[two words \"quoted\"]",
+                "[x5000]"
+            ]
+        );
+    }
+
+    #[test]
+    fn explain_runs_nothing() {
+        let Some(bench) = Bench::new() else { return };
+        let marker = bench.root.path().join("work").join("ran");
+        let command = argv_command(
+            &bench,
+            "touch.sh",
+            &format!(
+                "printf x > '{}'\n",
+                marker.to_string_lossy().replace('\\', "/")
+            ),
+            &["{files}"],
+        );
+        let lines = explain(&command, &marked(&bench, 2), &bench.env).unwrap();
+        assert!(lines[0].starts_with("Would run "), "{lines:?}");
+        assert!(lines[0].ends_with("with 5 arguments."), "{lines:?}");
+        assert_eq!(lines.last().unwrap(), "Nothing was run.");
+        assert!(!marker.exists());
+        let runs = bench.root.path().join("state").join("runs");
+        assert_eq!(fs::read_dir(runs).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn unattended_runs_refuse_commands_that_may_ask() {
+        let Some(bench) = Bench::new() else { return };
+        let asks = bench.script("asks.sh", &format!("{HEAD}exit 0\n"));
+        let mut context = bench.context();
+        context.unattended = true;
+        let mut sink = Recorder::default();
+        let error = run(&asks, &context, &bench.env, &mut sink, &Cancel::new()).unwrap_err();
+        assert_eq!(
+            error.sentence("Probe"),
+            "Probe cannot run unattended: it may ask questions."
+        );
+        let quiet = bench.script(
+            "quiet.sh",
+            &format!("{HEAD}# diro: unattended = \"ok\"\n# diro: timeout = \"1m\"\n[ \"$DIRO_UNATTENDED\" = 1 ] && exit 0\nexit 1\n"),
+        );
+        let report = run(&quiet, &context, &bench.env, &mut sink, &Cancel::new()).unwrap();
+        assert_eq!(report.ending, Ending::Exited(0));
+        let mut terminal = quiet.clone();
+        terminal.recipe.mode = RunMode::Terminal;
+        assert!(matches!(
+            run(&terminal, &context, &bench.env, &mut sink, &Cancel::new()),
+            Err(RunError::NotUnattended)
+        ));
+    }
+
+    #[test]
+    fn an_empty_prompt_answer_cancels_and_a_preview_needs_dry_run() {
+        let Some(bench) = Bench::new() else { return };
+        let asks = bench.script(
+            "prompt.sh",
+            &format!("{HEAD}# diro: prompt = \"New width:\"\nexit 0\n"),
+        );
+        let mut context = bench.context();
+        context.input = Some("  ".to_owned());
+        let (report, _) = bench.run(&asks, &context);
+        assert_eq!(report.ending, Ending::Cancelled);
+        assert_eq!(report.runs, 0);
+        context.input = None;
+        context.dry_run = true;
+        let plain = bench.script("plain.sh", &format!("{HEAD}exit 0\n"));
+        let mut sink = Recorder::default();
+        let error = run(&plain, &context, &bench.env, &mut sink, &Cancel::new()).unwrap_err();
+        assert_eq!(error.sentence("Probe"), "Probe has no preview.");
+        let preview = bench.script(
+            "preview.sh",
+            &format!("{HEAD}# diro: dry_run = \"supported\"\n[ \"$DIRO_DRY_RUN\" = 1 ] && echo 'Would remove 3 files'\n"),
+        );
+        let report = run(&preview, &context, &bench.env, &mut sink, &Cancel::new()).unwrap();
+        assert_eq!(report.output, ["Would remove 3 files"]);
+    }
+
+    #[test]
+    fn an_empty_setting_or_cursor_is_said_plainly() {
+        let Some(mut bench) = Bench::new() else {
+            return;
+        };
+        let command = argv_command(
+            &bench,
+            "diff.sh",
+            "exit 0\n",
+            &["{setting.tool}", "{file}", "{other_file}"],
+        );
+        bench.env.settings = serde_json::json!({ "tool": [] })
+            .as_object()
+            .unwrap()
+            .clone();
+        let mut sink = Recorder::default();
+        let error = run(
+            &command,
+            &bench.context(),
+            &bench.env,
+            &mut sink,
+            &Cancel::new(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.sentence("Compare"),
+            "Choose tool in the plugin's settings first."
+        );
+        bench.env.settings = serde_json::json!({ "tool": ["x"] })
+            .as_object()
+            .unwrap()
+            .clone();
+        let error = run(
+            &command,
+            &bench.context(),
+            &bench.env,
+            &mut sink,
+            &Cancel::new(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.sentence("Compare"),
+            "Both panels need a file under the cursor."
+        );
     }
 }
