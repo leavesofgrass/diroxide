@@ -207,7 +207,7 @@ components_source = "D:/components"
 - A folder: files are read from `FOLDER/ID-VERSION/FILENAME`, for example `D:/components/diro-examples-0.1.0/diro-examples-0.1.0.zip`. A `components.toml` at the top of the folder may add components.
 - A repository written `owner/name`: its release downloads are used the same way.
 - The question says "From your own components source." and never says the address.
-- A token for a private source goes only to that source: in a header for the built-in client, or on standard input for curl, never as a command-line argument, and never for wget. Reaching a private repository through the GitHub CLI's own sign-in is not built yet.
+- No token is sent today. A private source that needs a sign-in, such as a private repository reached through the GitHub CLI, is not built yet. When it is, the token will go only to that source, never as a command-line argument.
 
 Whatever the source, a file is accepted only when it matches the pin. A source is trusted by the pins, not by its address.
 
