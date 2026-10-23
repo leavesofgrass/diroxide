@@ -92,6 +92,18 @@ pub enum SiteError {
     SecretMode,
 }
 
+/// What a site changes in how ssh is started for it: its key file, the
+/// agent, and the far end's SFTP server program.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SiteOptions {
+    /// A key file, given to ssh as `-i` with `IdentitiesOnly=yes`.
+    pub key_file: Option<std::path::PathBuf>,
+    /// Whether an unlocked key is handed to the agent.
+    pub add_key_to_agent: bool,
+    /// The far end's SFTP server program, checked.
+    pub sftp_server_program: Option<String>,
+}
+
 /// One saved site.
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct Site {
@@ -279,6 +291,15 @@ impl Site {
         own.host() == target.host()
             && (own.user().is_none() || own.user() == target.user())
             && (own.port().is_none() || own.port() == target.port())
+    }
+
+    /// What it changes in how ssh is started.
+    pub fn options(&self) -> SiteOptions {
+        SiteOptions {
+            key_file: self.key_file.as_deref().map(std::path::PathBuf::from),
+            add_key_to_agent: self.add_key_to_agent,
+            sftp_server_program: self.sftp_server_program.clone(),
+        }
     }
 
     /// The keyring account of its password: `site:ID:user@host`.

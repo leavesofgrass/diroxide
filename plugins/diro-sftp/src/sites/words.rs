@@ -143,10 +143,6 @@ pub fn nothing_to_forget(name: &str) -> String {
 /// A stored password the server refused: it is not used again.
 pub const STORED_REFUSED: &str = "Saved password refused; asking you.";
 
-/// A site that goes through a jump host never has its password filled
-/// in: the jump host could ask for it in ssh's own words.
-pub const JUMP_HOST_ASKS: &str = "Through a jump host: you type it.";
-
 /// The secret modes, each as the owner reads it.
 pub fn mode_words(mode: &str) -> &'static str {
     match mode {
@@ -196,7 +192,6 @@ mod tests {
             forgotten("build"),
             nothing_to_forget("build"),
             STORED_REFUSED.to_owned(),
-            JUMP_HOST_ASKS.to_owned(),
             mode_words("never").to_owned(),
             mode_words("session").to_owned(),
             mode_words("keyring").to_owned(),

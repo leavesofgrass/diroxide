@@ -23,7 +23,7 @@ pub mod volumes;
 pub mod write;
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use diroxide_core::Place;
 use diroxide_plugins::protocol::{ErrorKind, Params, RpcError, methods};
@@ -137,6 +137,7 @@ pub struct Provider {
     opener: Arc<dyn Opener>,
     connections: Mutex<HashMap<Target, Arc<Connection>>>,
     opening: Mutex<HashMap<Target, Arc<Mutex<()>>>>,
+    sites: OnceLock<Arc<crate::sites::Sites>>,
 }
 
 impl std::fmt::Debug for Provider {
@@ -155,6 +156,7 @@ impl Provider {
             opener,
             connections: Mutex::new(HashMap::new()),
             opening: Mutex::new(HashMap::new()),
+            sites: OnceLock::new(),
         }
     }
 
@@ -219,11 +221,42 @@ impl Provider {
             return Ok(connection.answer());
         }
         let interactive = call.params.get("interactive").and_then(Value::as_bool) != Some(false);
-        let connection = Connection::open(Arc::clone(&self.opener), &at.target, interactive, call)?;
+        // The saved site this place belongs to, when one does: its ssh
+        // options, and its saved password offered once (S-C).
+        let sites = self.sites.get();
+        let site = sites.and_then(|s| s.for_target(&at.target));
+        let mut state = call.state.clone();
+        state.site = site.as_ref().map(crate::sites::Site::options);
+        let call = Call {
+            state: &state,
+            ..*call
+        };
+        let memory = Memory::new();
+        if let (Some(sites), Some(site)) = (sites, &site)
+            && let Some(secret) = sites.saved_secret(site)
+        {
+            memory.offer(secret);
+        }
+        let connection = Connection::open_with(
+            Arc::clone(&self.opener),
+            &at.target,
+            interactive,
+            &call,
+            memory,
+        )?;
         let answer = connection.answer();
         self.lock()
             .insert(at.target.clone(), Arc::clone(&connection));
+        if let (Some(sites), Some(site)) = (sites, &site) {
+            sites.after_login(site, connection.memory(), call.peer, call.cancel);
+        }
         Ok(answer)
+    }
+
+    /// Gives the provider the plugin's sites, so a connection to a saved
+    /// site uses its options and its saved password.
+    pub fn set_sites(&self, sites: Arc<crate::sites::Sites>) {
+        let _ = self.sites.set(sites);
     }
 
     /// Closes a connection quietly (`provider/disconnect`, or the owner's

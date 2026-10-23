@@ -44,6 +44,26 @@ thiserror = "2.0.18"
 # The sites file: comment-keeping edits of `sites.toml` (R24 section
 # 3.2). Already in this lock through diroxide-config; pure Rust.
 toml_edit = "0.25.15"
+# Wiping bytes read from the keyring as soon as they are wrapped; the
+# core's own Secret uses it already.
+zeroize = "1.8.1"
+# The system keyring, opt-in per site (answer 83; ADR-0011): the
+# keyring ecosystem's core, pure Rust, which only calls the operating
+# system's store; one store crate per system below. No C build in any.
+keyring-core = "1.0.0"
+
+[target.'cfg(windows)'.dependencies]
+# Windows Credential Manager, through windows-sys.
+windows-native-keyring-store = "1.1.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# The macOS keychain, through security-framework.
+apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+# The Secret Service on Linux and the BSDs, over zbus with its pure-Rust
+# session encryption.
+zbus-secret-service-keyring-store = { version = "1.0.1", features = ["crypto-rust"] }
 
 [dev-dependencies]
 # The host's own settings, for the provider contract list run through the

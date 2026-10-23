@@ -39,6 +39,8 @@ mod ops;
 mod read;
 #[cfg(feature = "fake-ssh")]
 mod reconnect;
+#[cfg(feature = "fake-ssh")]
+mod secrets;
 mod session;
 #[cfg(feature = "fake-ssh")]
 mod sites;

@@ -1,6 +1,6 @@
 //! The plugin's commands (R24, "The plugin's shape"; R25 commit 73): the
 //! Sites list, Connect, Disconnect, Cancel connection, New site, Edit
-//! site and Delete site.
+//! site, Delete site and Forget password.
 //!
 //! - **A row or the panel says which site.** A command run from the
 //!   Sites list acts on its row (`site:ID` or `config:NAME`); run from a
@@ -41,6 +41,7 @@ pub const COMMANDS: &[&str] = &[
     "new_site",
     "edit_site",
     "delete_site",
+    "forget_password",
 ];
 
 /// How long a host call other than a question may take.
@@ -265,6 +266,7 @@ pub fn run(run: &Run<'_>) -> Result<Value, RpcError> {
         "new_site" => new_site(run),
         "edit_site" => edit_site(run),
         "delete_site" => delete_site(run),
+        "forget_password" => forget_password(run),
         other => Err(RpcError::new(
             ErrorKind::MethodNotFound,
             format!("no command {other}"),
@@ -368,6 +370,11 @@ fn disconnect(run: &Run<'_>, cancel: bool) -> Result<Value, RpcError> {
     }
     if !cancel {
         run.announce(&words::disconnected(&name), "status");
+    }
+    // The owner closed the last connection: this session's passwords go
+    // (R24 section 3.4).
+    if run.provider.connected().is_empty() {
+        run.sites.clear_session();
     }
     Ok(done(closed))
 }
@@ -555,7 +562,31 @@ fn delete_site(run: &Run<'_>) -> Result<Value, RpcError> {
         return nothing_changed(run);
     }
     save(run, |file| file.remove(&site.id).map(|_| ()))?;
+    // Its saved password goes with it; a store that cannot be reached
+    // leaves nothing the plugin can find again.
+    let _ = run.sites.forget_secret(&site);
     run.announce(&words::site_deleted(&site.name), "info");
+    Ok(done(1))
+}
+
+/// Forget password: asked first, starting on No; removes the site's
+/// password from this session and the keyring.
+fn forget_password(run: &Run<'_>) -> Result<Value, RpcError> {
+    let Chosen::Site(site) = run.chosen()? else {
+        return Err(no_site());
+    };
+    if !run.sites.has_secret(&site) {
+        run.announce(&words::nothing_to_forget(&site.name), "info");
+        return Ok(done(0));
+    }
+    let question = words::forget_question(&site.name);
+    if !run.confirm(&question, &[], "Forget", "Keep") {
+        return nothing_changed(run);
+    }
+    run.sites
+        .forget_secret(&site)
+        .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
+    run.announce(&words::forgotten(&site.name), "info");
     Ok(done(1))
 }
 

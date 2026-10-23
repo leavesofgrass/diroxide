@@ -147,6 +147,11 @@ id = "delete_site"
 name = "Delete the site"
 description = "Deletes the saved site after asking; starts on No."
 
+[[command]]
+id = "forget_password"
+name = "Forget the site's password"
+description = "Removes its saved password from memory and the keyring."
+
 # The Sites list: Enter connects; the actions by key.
 [[lister]]
 id = "sites"
@@ -194,4 +199,9 @@ selection = "one"
 [[lister.action]]
 key = "alt+c"
 command = "cancel_connection"
+selection = "one"
+
+[[lister.action]]
+key = "alt+f"
+command = "forget_password"
 selection = "one"

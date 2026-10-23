@@ -22,8 +22,8 @@ use serde_json::Value;
 use crate::provider::{Call, Opener, Provider, SshOpener};
 use crate::rpc::{Cancel, Handler, Peer, WORKERS};
 use crate::settings::Settings;
-use crate::sites::Sites;
 use crate::sites::commands::{self, Run};
+use crate::sites::{KeyStore, MemoryKeyring, Sites, SystemKeyring};
 
 /// The scheme this plugin serves.
 pub const SCHEME: &str = "sftp";
@@ -62,6 +62,9 @@ pub struct State {
     pub state_dir: Option<PathBuf>,
     /// The host's spool folder, where file transfers land.
     pub spool_dir: Option<PathBuf>,
+    /// For one connection: what its saved site changes in how ssh is
+    /// started (the sites lane, S-C); `None` for a place no site names.
+    pub site: Option<crate::sites::model::SiteOptions>,
 }
 
 /// The plugin.
@@ -74,18 +77,28 @@ pub struct Plugin {
 
 impl Plugin {
     /// A plugin that has not been initialized, whose connections start
-    /// the OpenSSH client.
+    /// the OpenSSH client and whose saved passwords go to the system's
+    /// keyring (opt-in per site; answer 83).
     pub fn new() -> Arc<Self> {
-        Self::with_opener(Arc::new(SshOpener::new()))
+        Self::with_parts(Arc::new(SshOpener::new()), SystemKeyring::new())
     }
 
     /// The same, with connections opened by `opener` (a test's fake
-    /// server, or ssh with another helper program).
+    /// server, or ssh with another helper program) and a keyring in
+    /// memory, so a test never touches the system's.
     pub fn with_opener(opener: Arc<dyn Opener>) -> Arc<Self> {
+        Self::with_parts(opener, MemoryKeyring::new())
+    }
+
+    /// The same, with both parts chosen.
+    pub fn with_parts(opener: Arc<dyn Opener>, keyring: Arc<dyn KeyStore>) -> Arc<Self> {
+        let provider = Arc::new(Provider::new(opener));
+        let sites = Arc::new(Sites::with_keyring(keyring));
+        provider.set_sites(Arc::clone(&sites));
         Arc::new(Self {
             state: Mutex::new(State::default()),
-            provider: Arc::new(Provider::new(opener)),
-            sites: Arc::new(Sites::new()),
+            provider,
+            sites,
         })
     }
 
@@ -201,6 +214,7 @@ impl Handler for Plugin {
 
     fn shutdown(&self) {
         self.provider.close_all();
+        self.sites.clear_session();
     }
 }
 
