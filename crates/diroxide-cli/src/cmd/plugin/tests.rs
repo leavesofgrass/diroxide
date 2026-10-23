@@ -336,3 +336,105 @@ fn log_restart_and_unknown_names_say_so() {
     let (_, out, _) = empty.run(&["list"], &[], "");
     assert!(out.starts_with("No plugins or scripts in "), "{out}");
 }
+
+#[test]
+fn new_writes_a_skeleton_that_checks_clean() {
+    let folders = Folders::new();
+    let (code, out, _) = folders.run(&["new", "total-size", "--language", "bash"], &[], "");
+    assert_eq!(code, 0, "{out}");
+    let lines: Vec<&str> = out.lines().collect();
+    assert!(lines[0].starts_with("Wrote total-size.sh in "), "{out}");
+    assert_eq!(lines[1], "Check it: diro plugin check total-size");
+    assert_eq!(lines[2], "Try it once: diro plugin run total-size -- FILE");
+    assert!(folders.scripts().join("total-size.sh").is_file());
+    if has_bash() {
+        let (code, out, _) = folders.run(&["check", "total-size"], &[], "");
+        assert_eq!(
+            (code, out.as_str()),
+            (0, "Checked 1 plugin: no problems.\n")
+        );
+    }
+    let (code, out, _) = folders.run(&["new", "line-counter", "--language=python"], &[], "");
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.starts_with(
+            "Wrote line-counter with 4 files: plugin.toml, main.py, test_main.py, README.txt.\n"
+        ),
+        "{out}"
+    );
+    let (code, out, _) = folders.run(&["check", "line-counter"], &[], "");
+    assert_eq!(
+        (code, out.as_str()),
+        (0, "Checked 1 plugin: no problems.\n")
+    );
+    let (code, out, _) = folders.run(&["list"], &[], "");
+    assert_eq!(code, 0);
+    assert_eq!(
+        out,
+        "Line counter: not enabled, plugin 0.1.0, id line-counter\nTotal size: not enabled, script, id total-size\n"
+    );
+}
+
+#[test]
+fn new_refuses_odd_names_existing_ones_and_wrong_kinds() {
+    let folders = Folders::new();
+    let (code, out, _) = folders.run(&["new", "My Tool", "--language", "bash"], &[], "");
+    assert_eq!(code, 2);
+    assert_eq!(
+        out,
+        "Could not make My Tool: U+004D is an uppercase letter; use lowercase. Use lowercase letters, digits, - and _.\n"
+    );
+    assert_eq!(
+        folders
+            .run(&["new", "tidy", "--language", "bash"], &[], "")
+            .0,
+        0
+    );
+    let (code, out, _) = folders.run(&["new", "tidy", "--language", "bash"], &[], "");
+    assert_eq!(
+        (code, out.as_str()),
+        (1, "Could not make tidy: it exists. Choose another name.\n")
+    );
+    assert_eq!(
+        folders.run(&["new", "x1", "--language", "lua"], &[], "").0,
+        2
+    );
+    assert_eq!(
+        folders
+            .run(
+                &["new", "lst", "--language", "bash", "--kind", "lister"],
+                &[],
+                ""
+            )
+            .0,
+        2
+    );
+    let elsewhere = folders.work().to_string_lossy().into_owned();
+    let (code, out, _) = folders.run(
+        &[
+            "new",
+            "my-store",
+            "--language",
+            "python",
+            "--kind",
+            "provider",
+            "--dir",
+            &elsewhere,
+        ],
+        &[],
+        "",
+    );
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.lines()
+            .nth(2)
+            .unwrap()
+            .starts_with("Install it: diro plugin install "),
+        "{out}"
+    );
+    assert!(folders.work().join("my-store").join("main.py").is_file());
+    assert!(matches!(
+        parse(&args(&["list", "--kind", "lister"])),
+        Err(CliError::Failed(_))
+    ));
+}

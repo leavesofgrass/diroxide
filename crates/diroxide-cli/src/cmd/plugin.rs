@@ -4,6 +4,10 @@
 //!
 //! - `diro plugin list`: one line a plugin or script, its name and state
 //!   first: "Total size of selection: not enabled, script, id total-size".
+//! - `diro plugin new NAME --language bash|python [--kind command|lister|
+//!   provider] [--dir FOLDER]`: a working skeleton copied from a shipped
+//!   example, never over anything, then three lines: what it wrote, how
+//!   to check it, how to try it once.
 //! - `diro plugin enable NAME [--yes]`: says what it runs, what diroxide
 //!   checks and what it only states, then asks; the answer starts on No.
 //!   `disable NAME` forgets the yes.
@@ -44,6 +48,7 @@ use diroxide_plugins::script::directives::Directive;
 use diroxide_plugins::script::installed::{self, Installed, scripts_dir};
 use diroxide_plugins::script::interpreter::Lookup;
 use diroxide_plugins::script::runner::{self, Cancel, RunEnv, RunSink};
+use diroxide_plugins::script::skeleton::{self, Kind as SkeletonKind, Language, SkeletonError};
 use diroxide_plugins::services::settings_for;
 use diroxide_plugins::shapes::{PanelRef, WireContext, WireEntry};
 use diroxide_plugins::{Host, HostEvent, PluginError, lines};
@@ -65,6 +70,8 @@ pub enum PluginAction {
     Help,
     /// List the plugins and scripts.
     List,
+    /// Write a skeleton.
+    New(String),
     /// Enable one.
     Enable(String),
     /// Disable one.
@@ -99,6 +106,12 @@ pub struct PluginArgs {
     pub portable: bool,
     /// `--explain`: say what would run, run nothing.
     pub explain: bool,
+    /// `--language`: bash or python, for `new`.
+    pub language: Option<String>,
+    /// `--kind`: command, lister or provider, for `new`.
+    pub kind: Option<String>,
+    /// `--dir`: where `new` writes.
+    pub dir: Option<String>,
 }
 
 /// The help for `diro plugin`, one usage a line, meaning first.
@@ -107,6 +120,9 @@ pub fn help_text() -> String {
         "diro plugin: plugins and script commands from a shell.",
         "",
         "diro plugin list                 each plugin and script: name, state, kind, id",
+        "diro plugin new NAME --language bash|python  write a working skeleton",
+        "  --kind command|lister|provider   for Python; command by default",
+        "  --dir FOLDER                     where to write; the plugins folder by default",
         "diro plugin enable NAME [--yes]  say what it may do, ask, then enable it",
         "diro plugin disable NAME         forget that it was enabled",
         "diro plugin run NAME [COMMAND] [-- PATH...]  run it once on PATH",
@@ -132,6 +148,9 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
         yes: false,
         portable: false,
         explain: false,
+        language: None,
+        kind: None,
+        dir: None,
     };
     let mut words = Vec::new();
     let mut paths = Vec::new();
@@ -146,6 +165,24 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
             "--yes" | "-y" => parsed.yes = true,
             "--portable" => parsed.portable = true,
             "--explain" => parsed.explain = true,
+            "--language" | "--kind" | "--dir" => {
+                let value = rest
+                    .next()
+                    .filter(|v| !v.is_empty())
+                    .ok_or_else(|| CliError::Missing(arg.clone()))?;
+                set_valued(&mut parsed, arg, value.clone());
+            }
+            option
+                if ["--language=", "--kind=", "--dir="]
+                    .iter()
+                    .any(|p| option.starts_with(p)) =>
+            {
+                let (flag, value) = option.split_once('=').unwrap_or((option, ""));
+                if value.is_empty() {
+                    return Err(CliError::Missing(flag.to_owned()));
+                }
+                set_valued(&mut parsed, flag, value.to_owned());
+            }
             option if option.starts_with('-') && option.len() > 1 => {
                 return Err(CliError::UnknownOption(option.to_owned()));
             }
@@ -162,6 +199,7 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
     parsed.action = match first.as_deref() {
         None => PluginAction::Help,
         Some("list") => PluginAction::List,
+        Some("new") => PluginAction::New(one("new")?),
         Some("enable") => PluginAction::Enable(one("enable")?),
         Some("disable") => PluginAction::Disable(one("disable")?),
         Some("restart") => PluginAction::Restart(one("restart")?),
@@ -179,7 +217,7 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
         }
         Some(other) => {
             return Err(CliError::Failed(format!(
-                "diro plugin has no {other}; use list, enable, disable, run, restart, log, check or install"
+                "diro plugin has no {other}; use list, new, enable, disable, run, restart, log, check or install"
             )));
         }
     };
@@ -191,12 +229,27 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
             "paths after -- go with diro plugin run".to_owned(),
         ));
     }
+    let valued = parsed.language.is_some() || parsed.kind.is_some() || parsed.dir.is_some();
+    if valued && !matches!(parsed.action, PluginAction::New(_)) {
+        return Err(CliError::Failed(
+            "--language, --kind and --dir go with diro plugin new".to_owned(),
+        ));
+    }
     if parsed.explain && !matches!(parsed.action, PluginAction::Run { .. }) {
         return Err(CliError::Failed(
             "--explain goes with diro plugin run".to_owned(),
         ));
     }
     Ok(parsed)
+}
+
+/// Sets `--language`, `--kind` or `--dir`.
+fn set_valued(parsed: &mut PluginArgs, flag: &str, value: String) {
+    match flag {
+        "--language" => parsed.language = Some(value),
+        "--kind" => parsed.kind = Some(value),
+        _ => parsed.dir = Some(value),
+    }
 }
 
 /// What a run of `diro plugin` works with: the real folders and terminal
@@ -275,6 +328,7 @@ pub fn run_in(args: &PluginArgs, mut env: Env<'_>, out: &mut dyn Write) -> Resul
             Ok(0)
         }
         PluginAction::List => list(&env, out),
+        PluginAction::New(name) => new(name, args, &env, out),
         PluginAction::Enable(name) => enable(name, args.yes, &env, out),
         PluginAction::Disable(name) => disable(name, &env, out),
         PluginAction::Run {
@@ -410,6 +464,63 @@ fn list(env: &Env<'_>, out: &mut dyn Write) -> Result<i32, CliError> {
         writeln!(out, "{name}: {state}, {}{id}", item.kind_words()).map_err(write_error)?;
     }
     Ok(0)
+}
+
+fn new(name: &str, args: &PluginArgs, env: &Env<'_>, out: &mut dyn Write) -> Result<i32, CliError> {
+    let language_word = args.language.as_deref().unwrap_or("python");
+    let Some(language) = Language::parse(language_word) else {
+        writeln!(
+            out,
+            "Could not make {name}: {language_word} is not a language. Use bash or python."
+        )
+        .map_err(write_error)?;
+        return Ok(2);
+    };
+    let kind_word = args.kind.as_deref().unwrap_or("command");
+    let Some(kind) = SkeletonKind::parse(kind_word) else {
+        writeln!(
+            out,
+            "Could not make {name}: {kind_word} is not a kind. Use command, lister or provider."
+        )
+        .map_err(write_error)?;
+        return Ok(2);
+    };
+    let skeleton = match skeleton::generate(name, language, kind) {
+        Ok(skeleton) => skeleton,
+        Err(error) => {
+            writeln!(out, "{}", error.sentence()).map_err(write_error)?;
+            return Ok(match error {
+                SkeletonError::Exists(_) | SkeletonError::Io(_) => 1,
+                _ => 2,
+            });
+        }
+    };
+    let (dir, in_plugins) = match &args.dir {
+        Some(text) => {
+            let place = Place::resolve(text, &env.here).map_err(|e| {
+                CliError::Failed(diroxide_core::Message::from_error("use", text, &e).text)
+            })?;
+            let Some(local) = place.local_path() else {
+                writeln!(out, "Could not make {name}: --dir must be a local folder.")
+                    .map_err(write_error)?;
+                return Ok(2);
+            };
+            (PathBuf::from(local), false)
+        }
+        None => (skeleton::default_dir(&env.plugins_dir(), language), true),
+    };
+    match skeleton::write(&skeleton, &dir) {
+        Ok(written) => {
+            for line in skeleton::written_lines(&skeleton, &written, &dir, in_plugins) {
+                writeln!(out, "{line}").map_err(write_error)?;
+            }
+            Ok(0)
+        }
+        Err(error) => {
+            writeln!(out, "{}", error.sentence()).map_err(write_error)?;
+            Ok(1)
+        }
+    }
 }
 
 fn enable(name: &str, yes: bool, env: &Env<'_>, out: &mut dyn Write) -> Result<i32, CliError> {

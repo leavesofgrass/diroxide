@@ -32,6 +32,8 @@
 //! - [`consent`] keeps the owner's yes with the hashes of the manifest and
 //!   the program (a change asks again) and words the question; [`installed`]
 //!   finds and checks the plugins and scripts in the plugins folder.
+//! - [`skeleton`] is `diro plugin new`: a copy of a shipped example with
+//!   its id and name replaced, so the two cannot drift apart.
 //!
 //! W4b owns this module and its submodules (alpha 2, commits 18 to 28 of
 //! R22's order).
@@ -47,6 +49,7 @@ pub mod placeholders;
 mod read;
 pub mod recipe;
 pub mod runner;
+pub mod skeleton;
 pub mod words;
 
 pub use directives::{Directive, parse_directive};

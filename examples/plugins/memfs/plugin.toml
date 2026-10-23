@@ -1,0 +1,69 @@
+# Memory files (toy): an example diroxide provider plugin in Python,
+# standard library only. A file system that lives in the plugin's
+# memory, so quitting diroxide loses it; the name says so. It is the
+# provider contract in one small file, and the template for plugins
+# that reach other places. `diro plugin new NAME --language python
+# --kind provider` writes a copy of this folder under a new name.
+
+[plugin]
+id = "memfs"
+name = "Memory files (toy)"
+version = "0.1.0"
+description = "Keeps files in memory until diroxide quits: a toy provider."
+license = "Apache-2.0 OR MIT"
+protocol = 1
+min_host = "0.1.0-alpha.1"
+
+# The data lives in the process, so it never stops while idle and takes
+# one request at a time.
+[run]
+command = ["python3", "main.py"]
+start = "on_demand"
+concurrency = 1
+idle_timeout = "never"
+
+[run.windows]
+command = ["py", "-3", "main.py"]
+
+[permissions]
+fs = "none"
+panel = "none"
+
+[permissions.declared]
+network = "no network"
+files = "none: its files live in its memory"
+programs = "no other programs"
+
+[[provider]]
+scheme = "memfs"
+name = "Memory files (toy)"
+separator = "/"
+case_sensitive = true
+max_name_length = 255
+reserved_names = []
+writable = true
+trash = false
+links = false
+attributes = false
+watch = false
+server_side_copy = false
+atomic_rename = true
+methods = [
+  "connect",
+  "list",
+  "stat",
+  "read",
+  "write_begin",
+  "write_chunk",
+  "write_end",
+  "create_dir",
+  "rename",
+  "remove",
+]
+lease = "listers"
+
+[[setting]]
+key = "batch_lists"
+type = "bool"
+default = true
+description = "Send a large folder's entries in batches of 1,000."
