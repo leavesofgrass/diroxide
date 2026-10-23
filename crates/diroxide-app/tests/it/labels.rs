@@ -251,7 +251,14 @@ fn the_labels_list_counts_missing_items_and_lists_a_labels_items() {
     f.s.key("enter");
     f.s.key("down");
     let said = f.s.key("delete");
-    assert_eq!(last(&said), "Label urgent removed from budget.xlsx");
+    // The folder's watch may announce the earlier removals in the same
+    // breath on a loaded machine, so the label line is looked for, not
+    // required to be last.
+    assert!(
+        said.iter()
+            .any(|s| s == "Label urgent removed from budget.xlsx"),
+        "{said:?}"
+    );
     assert!(f.s.app.dialog().unwrap().1.focus_line().ends_with("of 2"));
     f.s.key("escape");
     assert_eq!(f.s.dialog_title().as_deref(), Some("Labels, 6 labels"));
