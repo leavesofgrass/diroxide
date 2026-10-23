@@ -26,6 +26,8 @@ use diroxide_core::{Message, Place, Side};
 use diroxide_tools::process::ProcessSpec;
 use serde_json::{Map, Value};
 
+use crate::ask::{Answer, PromptHistory, Question, TextDocument};
+use crate::calls::Calls;
 use crate::error::PluginError;
 use crate::lines;
 use crate::live::{LivePlugin, Notice, RequestKind};
@@ -69,20 +71,12 @@ pub struct PanelSnapshot {
 
 /// What the host offers plugins, implemented by the app over its own state,
 /// dialogs and job engine, so a plugin's operations get the same safety,
-/// trash, progress and undo as built-in ones.
+/// trash, progress and undo as built-in ones. Every method runs on one of
+/// the router's worker threads, never the input thread, and may block
+/// while the owner answers; the time does not count against the plugin.
 pub trait HostServices: Send + Sync {
-    /// `ui/announce`: says a message.
+    /// `ui/announce`: says a message, already cleaned and attributed.
     fn announce(&self, message: Message);
-
-    /// `ui/ask`: asks a yes-or-no question through an accessible dialog.
-    /// `None` when the user cancels.
-    fn ask_yes_no(&self, question: &str) -> Option<bool>;
-
-    /// `ui/ask`: asks for text, with a label. `None` when cancelled.
-    fn ask_text(&self, label: &str, initial: &str) -> Option<String>;
-
-    /// `panel/get`: a panel's state; `None` for the active one.
-    fn panel(&self, side: Option<Side>) -> PanelSnapshot;
 
     /// `$/progress`, as the job's sentence: shown in the jobs line, said on
     /// Say Status, or at once when it says the plugin waits for the owner.
@@ -90,6 +84,27 @@ pub trait HostServices: Send + Sync {
     fn progress(&self, message: Message) {
         self.announce(message);
     }
+
+    /// `ui/ask`: one accessible dialog, the app's own: modal, titled with
+    /// [`Question::title`] (the plugin's name last), closed by Escape
+    /// ([`Answer::Cancelled`]), focus returned. A destructive confirm
+    /// starts on No. A typed kind offers [`Question::history`] and
+    /// [`Question::completion`]; a secret is never echoed.
+    fn ask(&self, question: &Question) -> Answer;
+
+    /// `ui/show_text`: the document in the viewer, titled with its
+    /// title. When [`TextDocument::wait`] is set, returns when the owner
+    /// closes it. The default says this host has no viewer.
+    fn show_text(&self, document: &TextDocument) -> Result<(), RpcError> {
+        let _ = document;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host has no viewer",
+        ))
+    }
+
+    /// `panel/get`: a panel's state; `None` for the active one.
+    fn panel(&self, side: Option<Side>) -> PanelSnapshot;
 }
 
 /// Something the app says or shows about a plugin. Each carries its
@@ -225,14 +240,14 @@ struct Slot {
 /// Where a plugin's words go: the app's services, or, without them (tests,
 /// `diro plugin run`), the host's events.
 #[derive(Clone)]
-struct Voice {
+pub(crate) struct Voice {
     services: Option<Arc<dyn HostServices>>,
     events: Arc<Mutex<Vec<HostEvent>>>,
     plugin: String,
 }
 
 impl Voice {
-    fn say(&self, message: Message) {
+    pub(crate) fn say(&self, message: Message) {
         match &self.services {
             Some(services) => services.announce(message),
             None => self.push(message),
@@ -262,7 +277,8 @@ impl Voice {
 /// also feed the supervisor; floods stop the plugin.
 struct PluginInbound {
     name: String,
-    live: OnceLock<Weak<LivePlugin>>,
+    live: Arc<OnceLock<Weak<LivePlugin>>>,
+    calls: Calls,
     log: PluginLog,
     flood: Mutex<FloodGuard>,
     flooded: Mutex<bool>,
@@ -365,11 +381,8 @@ impl PluginInbound {
 }
 
 impl Inbound for PluginInbound {
-    fn request(&self, request: &Request, _cancel: &CancelFlag) -> Outcome {
-        Err(RpcError::new(
-            ErrorKind::MethodNotFound,
-            format!("the host does not serve {} yet", request.method),
-        ))
+    fn request(&self, request: &Request, cancel: &CancelFlag) -> Outcome {
+        self.calls.serve(request, cancel)
     }
 
     fn notification(&self, notification: &Notification) {
@@ -425,6 +438,7 @@ pub struct Host {
     events: Arc<Mutex<Vec<HostEvent>>>,
     services: Option<Arc<dyn HostServices>>,
     settings: Mutex<HashMap<String, Map<String, Value>>>,
+    history: Arc<Mutex<PromptHistory>>,
     off: bool,
 }
 
@@ -452,6 +466,7 @@ impl Host {
             events: Arc::new(Mutex::new(Vec::new())),
             services: None,
             settings: Mutex::new(HashMap::new()),
+            history: Arc::new(Mutex::new(PromptHistory::default())),
             off: false,
         }
     }
@@ -713,9 +728,19 @@ impl Host {
         for warning in &started.result.warnings {
             log.write(Source::Plugin("warn"), warning);
         }
+        let live_cell = Arc::new(OnceLock::new());
         let inbound = Arc::new(PluginInbound {
             name: name.clone(),
-            live: OnceLock::new(),
+            live: Arc::clone(&live_cell),
+            calls: Calls {
+                plugin_id: manifest.id.clone(),
+                name: name.clone(),
+                confirmed: started.result.plugin_capabilities.clone(),
+                services: self.services.clone(),
+                history: Arc::clone(&self.history),
+                live: live_cell,
+                log: log.clone(),
+            },
             log: log.clone(),
             flood: Mutex::new(FloodGuard::default()),
             flooded: Mutex::new(false),
@@ -1021,43 +1046,7 @@ impl Drop for Host {
 mod tests {
     use super::*;
     use crate::supervisor::ManualTicker;
-    use crate::testing::{FakePlugin, Mode};
-    use crate::transport::MemoryTransport;
-
-    /// Starts in-process fake plugins in a mode.
-    struct FakeLauncher {
-        mode: Mutex<Mode>,
-        launches: Mutex<usize>,
-        seen: Arc<Mutex<Vec<crate::testing::Transcript>>>,
-    }
-
-    impl FakeLauncher {
-        fn new(mode: Mode) -> Arc<Self> {
-            Arc::new(Self {
-                mode: Mutex::new(mode),
-                launches: Mutex::new(0),
-                seen: Arc::new(Mutex::new(Vec::new())),
-            })
-        }
-    }
-
-    impl Launcher for FakeLauncher {
-        fn launch(
-            &self,
-            info: &PluginInfo,
-            _log: &PluginLog,
-        ) -> Result<Arc<dyn PluginTransport>, PluginError> {
-            *self.launches.lock().unwrap() += 1;
-            let mode = *self.mode.lock().unwrap();
-            let (host, peer) = MemoryTransport::pair(&info.manifest.name)?;
-            let seen = Arc::clone(&self.seen);
-            thread::spawn(move || {
-                let transcript = FakePlugin::new(mode).serve(peer);
-                seen.lock().unwrap().push(transcript);
-            });
-            Ok(Arc::new(host))
-        }
-    }
+    use crate::testing::{FakeLauncher, Mode};
 
     fn info(extra: &str) -> PluginInfo {
         let text = format!(
@@ -1157,11 +1146,8 @@ mod tests {
         fn announce(&self, message: Message) {
             self.said.lock().unwrap().push(message);
         }
-        fn ask_yes_no(&self, _: &str) -> Option<bool> {
-            None
-        }
-        fn ask_text(&self, _: &str, _: &str) -> Option<String> {
-            None
+        fn ask(&self, _: &Question) -> Answer {
+            Answer::Cancelled
         }
         fn panel(&self, _: Option<Side>) -> PanelSnapshot {
             PanelSnapshot {
@@ -1211,13 +1197,7 @@ mod tests {
         values.insert("depth".into(), serde_json::json!(7));
         host.set_settings("line-counter", values);
         host.shutdown_all(QUIT_BUDGET);
-        for _ in 0..200 {
-            if !launcher.seen.lock().unwrap().is_empty() {
-                break;
-            }
-            thread::sleep(Duration::from_millis(5));
-        }
-        let seen = launcher.seen.lock().unwrap();
+        let seen = launcher.transcripts_after(1);
         let received = &seen[0].received;
         let initialize = received
             .iter()
@@ -1267,7 +1247,7 @@ mod tests {
         assert!(host.is_running("line-counter"));
         host.call("line-counter", methods::COMMAND_RUN, Value::Null)
             .unwrap();
-        assert_eq!(*launcher.launches.lock().unwrap(), 1);
+        assert_eq!(launcher.launches(), 1);
         let started = Instant::now();
         host.shutdown_all(QUIT_BUDGET);
         assert!(started.elapsed() < QUIT_BUDGET + Duration::from_secs(1));
@@ -1371,7 +1351,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(*launcher.launches.lock().unwrap(), 3);
+        assert_eq!(launcher.launches(), 3);
         assert!(
             host.call("line-counter", "command/run", Value::Null)
                 .is_err()

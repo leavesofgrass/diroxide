@@ -80,6 +80,38 @@ pub fn clean_text(text: &str, max: usize) -> String {
     out
 }
 
+/// Cleans one line of a document from a plugin: control, format and
+/// direction characters and terminal escape sequences removed, a tab made
+/// four spaces, other spaces kept as they are (indentation and diff
+/// columns matter), cut to `max` characters.
+pub fn clean_keeping_spaces(text: &str, max: usize) -> String {
+    let mut out = String::with_capacity(text.len().min(max * 4));
+    let mut count = 0;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if count >= max {
+            break;
+        }
+        if c == '\u{1B}' || c == '\u{9B}' {
+            skip_escape(c, &mut chars);
+            continue;
+        }
+        if c == '\t' {
+            let spaces = 4.min(max - count);
+            out.extend(std::iter::repeat_n(' ', spaces));
+            count += spaces;
+            continue;
+        }
+        let c = if c.is_whitespace() { ' ' } else { c };
+        if classify(c) != CharClass::Normal {
+            continue;
+        }
+        out.push(c);
+        count += 1;
+    }
+    out
+}
+
 /// Skips one terminal escape sequence after its introducer: CSI (`ESC [`
 /// or U+009B) up to its final byte, OSC (`ESC ]`) up to BEL or `ESC \`,
 /// and any other `ESC x` pair.

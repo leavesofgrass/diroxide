@@ -101,7 +101,9 @@ impl Ticker for ManualTicker {
 #[derive(Clone, Debug)]
 struct Timer {
     limit: Option<Duration>,
-    started: Duration,
+    /// The plugin's own time on the request: neither the host's (a host
+    /// call it made) nor the owner's (a wait for the owner).
+    busy: Duration,
     idle: Duration,
     last: Duration,
     waiting_since: Option<Duration>,
@@ -113,7 +115,7 @@ impl Timer {
     fn new(limit: Option<Duration>, now: Duration) -> Self {
         Self {
             limit,
-            started: now,
+            busy: Duration::ZERO,
             idle: Duration::ZERO,
             last: now,
             waiting_since: None,
@@ -136,6 +138,9 @@ impl Timer {
             None => from,
         };
         self.idle += now.saturating_sub(start);
+        if self.waiting_since.is_none() {
+            self.busy += now.saturating_sub(from);
+        }
     }
 }
 
@@ -143,7 +148,9 @@ impl Timer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
     /// Say that a request waits for the plugin ("Count lines: waiting for
-    /// the plugin"), once, two seconds after it was sent.
+    /// the plugin"), once, after two seconds of the plugin's own time: the
+    /// time the host spends on the plugin's calls, a dialog waiting for the
+    /// owner among them, does not count.
     Slow(Id),
     /// A request's timer ran out: send `$/cancel_request`.
     Cancel(Id),
@@ -199,6 +206,9 @@ impl Supervisor {
     /// restarts.
     pub fn activity(&mut self, id: &Id, now: Duration) {
         if let Some(timer) = self.timers.get_mut(id) {
+            if timer.waiting_since.is_none() {
+                timer.busy += now.saturating_sub(timer.last);
+            }
             timer.idle = Duration::ZERO;
             timer.last = now;
         }
@@ -262,7 +272,7 @@ impl Supervisor {
                 continue;
             };
             timer.advance(now, host_calls);
-            if !timer.noticed && now.saturating_sub(timer.started) >= SLOW_NOTICE {
+            if !timer.noticed && timer.busy >= SLOW_NOTICE {
                 timer.noticed = true;
                 actions.push(Action::Slow(id.clone()));
             }
@@ -428,6 +438,19 @@ mod tests {
         assert_eq!(sup.tick(at(31), false), []);
         assert_eq!(sup.tick(at(32), false), [Action::TimedOut(id.clone())]);
         assert!(sup.is_unresponsive());
+    }
+
+    /// The jobs line says "waiting for the plugin" after two seconds of the
+    /// plugin's own time, never while the owner answers its question.
+    #[test]
+    fn the_waiting_notice_counts_only_the_plugins_time() {
+        let mut sup = Supervisor::new(None, at(0));
+        let id = Id::Number(1);
+        sup.track(id.clone(), Some(at(30)), at(0));
+        assert_eq!(sup.tick(at(1), false), []);
+        assert_eq!(sup.tick(at(60), true), []);
+        assert_eq!(sup.tick(at(61), true), []);
+        assert_eq!(sup.tick(at(62), false), [Action::Slow(id)]);
     }
 
     #[test]

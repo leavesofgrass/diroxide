@@ -15,17 +15,27 @@
 //! After the last line nothing more may have been written.
 
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+use crate::ask::{Answer, Question, TextDocument};
+use crate::error::PluginError;
 use crate::framing::{Frame, RawLine, classify};
+use crate::host::{HostServices, Launcher, PanelSnapshot, PluginInfo};
+use crate::log::PluginLog;
+use crate::manifest::Manifest;
 use crate::protocol::{
-    ErrorKind, Incoming, Notification, Params, Response, RpcError, methods, parse_line, to_line,
+    ErrorKind, Id, Incoming, Notification, Params, Request, Response, RpcError, methods,
+    parse_line, to_line,
 };
 use crate::session::{
     Gate, InitializeResult, Lifecycle, Peer, PluginCapabilities, ProviderCapability,
 };
-use crate::transport::MemoryPeer;
+use crate::transport::{MemoryPeer, MemoryTransport, PluginTransport};
+use diroxide_core::Message;
 
 /// How the fake plugin behaves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,6 +56,198 @@ pub enum Mode {
     Spoof,
     /// Prints stray lines while it runs a command.
     Stray,
+    /// Makes the host call its command's arguments name (`call.method` and
+    /// `call.params`) and answers the command with what the host answered,
+    /// under `host` or `host_error`.
+    Call,
+}
+
+/// Starts in-process fake plugins in a mode, over memory transports, and
+/// keeps what each one saw.
+#[derive(Debug)]
+pub struct FakeLauncher {
+    mode: Mutex<Mode>,
+    launches: Mutex<usize>,
+    seen: Arc<Mutex<Vec<Transcript>>>,
+}
+
+impl FakeLauncher {
+    /// A launcher of fakes in a mode.
+    pub fn new(mode: Mode) -> Arc<Self> {
+        Arc::new(Self {
+            mode: Mutex::new(mode),
+            launches: Mutex::new(0),
+            seen: Arc::new(Mutex::new(Vec::new())),
+        })
+    }
+
+    /// The mode for the next start.
+    pub fn set_mode(&self, mode: Mode) {
+        *self.mode.lock().unwrap_or_else(PoisonError::into_inner) = mode;
+    }
+
+    /// How many fakes it started.
+    pub fn launches(&self) -> usize {
+        *self.launches.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// What the fakes saw, once at least `count` have ended (waiting up to
+    /// five seconds).
+    pub fn transcripts_after(&self, count: usize) -> Vec<Transcript> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let seen = self.seen.lock().unwrap_or_else(PoisonError::into_inner);
+            if seen.len() >= count || Instant::now() >= deadline {
+                return seen.clone();
+            }
+            drop(seen);
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+}
+
+impl Launcher for FakeLauncher {
+    fn launch(
+        &self,
+        info: &PluginInfo,
+        _log: &PluginLog,
+    ) -> Result<Arc<dyn PluginTransport>, PluginError> {
+        *self.launches.lock().unwrap_or_else(PoisonError::into_inner) += 1;
+        let mode = *self.mode.lock().unwrap_or_else(PoisonError::into_inner);
+        let (host, peer) = MemoryTransport::pair(&info.manifest.name)?;
+        let seen = Arc::clone(&self.seen);
+        thread::Builder::new()
+            .name("fake-plugin".to_owned())
+            .spawn(move || {
+                let transcript = FakePlugin::new(mode).serve(peer);
+                seen.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push(transcript);
+            })
+            .map_err(|e| PluginError::Io(e.to_string()))?;
+        Ok(Arc::new(host))
+    }
+}
+
+/// The manifest of the fake plugin, `line-counter` ("Line counter"), with
+/// one command `echo` ("Echo") and `extra` lines in its `[run]` table and
+/// after it.
+pub fn plugin_info(extra: &str) -> PluginInfo {
+    let text = format!(
+        "[plugin]
+id = \"line-counter\"
+name = \"Line counter\"
+version = \"0.1.0\"
+protocol = 1
+
+[run]
+command = [\"x\"]
+startup_timeout = \"1s\"
+{extra}
+[[command]]
+id = \"echo\"
+name = \"Echo\"
+"
+    );
+    let report = Manifest::check(&text);
+    let problems = report.text();
+    let manifest = report
+        .manifest
+        .unwrap_or_else(|| panic!("the fake manifest does not read: {problems}"));
+    PluginInfo {
+        manifest,
+        folder: std::path::PathBuf::from("."),
+        enabled: true,
+    }
+}
+
+type Responder = Box<dyn FnMut(&Question) -> Answer + Send>;
+
+/// Host services that record everything a plugin causes and answer from a
+/// script: the stand-ins of the fake host (R22, section 8.1). Questions are
+/// answered by the responder when one is set, else from the queue of
+/// answers, else with Escape.
+#[derive(Default)]
+pub struct RecordingServices {
+    said: Mutex<Vec<Message>>,
+    questions: Mutex<Vec<Question>>,
+    documents: Mutex<Vec<TextDocument>>,
+    answers: Mutex<VecDeque<Answer>>,
+    responder: Mutex<Option<Responder>>,
+}
+
+impl std::fmt::Debug for RecordingServices {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RecordingServices").finish_non_exhaustive()
+    }
+}
+
+fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+impl RecordingServices {
+    /// Services with nothing recorded and no answers.
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Queues an answer for the next question.
+    pub fn answer(&self, answer: Answer) {
+        locked(&self.answers).push_back(answer);
+    }
+
+    /// Answers every question through `responder` (it may block, as the
+    /// owner does).
+    pub fn respond(&self, responder: impl FnMut(&Question) -> Answer + Send + 'static) {
+        *locked(&self.responder) = Some(Box::new(responder));
+    }
+
+    /// What was said, in order.
+    pub fn said(&self) -> Vec<String> {
+        locked(&self.said).iter().map(|m| m.text.clone()).collect()
+    }
+
+    /// The questions asked, in order.
+    pub fn questions(&self) -> Vec<Question> {
+        locked(&self.questions).clone()
+    }
+
+    /// The documents shown, in order.
+    pub fn documents(&self) -> Vec<TextDocument> {
+        locked(&self.documents).clone()
+    }
+}
+
+impl HostServices for RecordingServices {
+    fn announce(&self, message: Message) {
+        locked(&self.said).push(message);
+    }
+
+    fn ask(&self, question: &Question) -> Answer {
+        locked(&self.questions).push(question.clone());
+        if let Some(responder) = locked(&self.responder).as_mut() {
+            return responder(question);
+        }
+        locked(&self.answers)
+            .pop_front()
+            .unwrap_or(Answer::Cancelled)
+    }
+
+    fn show_text(&self, document: &TextDocument) -> Result<(), RpcError> {
+        locked(&self.documents).push(document.clone());
+        Ok(())
+    }
+
+    fn panel(&self, _side: Option<diroxide_core::Side>) -> PanelSnapshot {
+        PanelSnapshot {
+            side: diroxide_core::Side::Left,
+            place: diroxide_core::Place::parse(if cfg!(windows) { "C:\\" } else { "/" })
+                .unwrap_or_else(|_| panic!("the root place reads")),
+            cursor: None,
+            selection: Vec::new(),
+        }
+    }
 }
 
 /// What the fake plugin saw.
@@ -76,6 +278,12 @@ pub struct FakePlugin {
     life: Lifecycle,
     transcript: Transcript,
     exited: bool,
+    /// The command waiting for the host's answer, and the id of the call
+    /// it made.
+    waiting: Option<(Id, Id)>,
+    calls: u64,
+    /// Completion queries held until they are cancelled.
+    held: Vec<Id>,
 }
 
 impl FakePlugin {
@@ -86,6 +294,9 @@ impl FakePlugin {
             life: Lifecycle::new(),
             transcript: Transcript::default(),
             exited: false,
+            waiting: None,
+            calls: 0,
+            held: Vec::new(),
         }
     }
 
@@ -108,6 +319,7 @@ impl FakePlugin {
                     scheme: "fake".to_owned(),
                     methods: vec!["list".to_owned(), "stat".to_owned()],
                 }],
+                completion: true,
                 ..PluginCapabilities::default()
             },
             warnings: Vec::new(),
@@ -153,11 +365,51 @@ impl FakePlugin {
                 return Vec::new();
             }
         }
-        let Incoming::Request(request) = incoming else {
-            return Vec::new();
+        let request = match incoming {
+            Incoming::Request(request) => request,
+            Incoming::Response(response) => return self.host_answered(response),
+            Incoming::Notification(notification) => return self.notified(&notification),
         };
         let mut out = Vec::new();
         let result = match request.method.as_str() {
+            methods::COMPLETION_QUERY => {
+                let text = request
+                    .params
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                if text.ends_with("slow") {
+                    self.held.push(request.id);
+                    return Vec::new();
+                }
+                Ok(json!({"candidates": [
+                    {"text": format!("{text}-one"), "kind": "branch"},
+                    {"text": format!("{text}-two"), "kind": "branch"}
+                ]}))
+            }
+            methods::COMMAND_RUN if self.mode == Mode::Call => {
+                let call = request
+                    .params
+                    .get("args")
+                    .and_then(|a| a.get("call"))
+                    .or_else(|| request.params.get("call"))
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                let method = call
+                    .get("method")
+                    .and_then(Value::as_str)
+                    .unwrap_or(methods::UI_ASK)
+                    .to_owned();
+                let params = call
+                    .get("params")
+                    .and_then(Value::as_object)
+                    .cloned()
+                    .unwrap_or_default();
+                self.calls += 1;
+                let id = Id::Text(format!("host-{}", self.calls));
+                self.waiting = Some((request.id, id.clone()));
+                return vec![answer(Request::new(id, &method, params))];
+            }
             methods::INITIALIZE => match self.life.initialize(&request.params) {
                 Ok(_) => {
                     if self.mode == Mode::Chatty {
@@ -195,6 +447,53 @@ impl FakePlugin {
             Err(error) => Response::failure(Some(request.id), error),
         }));
         out
+    }
+
+    /// The host answered a call the plugin made: the command that waited
+    /// for it is answered now.
+    fn host_answered(&mut self, response: Response) -> Vec<String> {
+        let Some((command, call)) = self.waiting.take() else {
+            return Vec::new();
+        };
+        if response.id.as_ref() != Some(&call) {
+            self.waiting = Some((command, call));
+            return Vec::new();
+        }
+        let mut value = json!({"done": 1, "skipped": 0, "failed": []});
+        if let Some(fields) = value.as_object_mut() {
+            match (response.result, response.error) {
+                (_, Some(error)) => {
+                    fields.insert("host_error".into(), json!(error));
+                }
+                (result, None) => {
+                    fields.insert("host".into(), result.unwrap_or(Value::Null));
+                }
+            }
+        }
+        vec![answer(Response::success(command, value))]
+    }
+
+    /// A notification from the host: a cancel answers a held query.
+    fn notified(&mut self, notification: &Notification) -> Vec<String> {
+        if notification.method != methods::CANCEL_REQUEST {
+            return Vec::new();
+        }
+        let Some(id) = notification
+            .params
+            .get("id")
+            .and_then(|v| serde_json::from_value::<Id>(v.clone()).ok())
+        else {
+            return Vec::new();
+        };
+        let before = self.held.len();
+        self.held.retain(|held| held != &id);
+        if self.held.len() == before {
+            return Vec::new();
+        }
+        vec![answer(Response::failure(
+            Some(id),
+            RpcError::new(ErrorKind::RequestCancelled, "cancelled"),
+        ))]
     }
 
     /// What the talking modes write while a command runs.

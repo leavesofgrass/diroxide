@@ -45,6 +45,8 @@
 //! listers, hooks, the fake plugin process and the conformance runner;
 //! W4b owns [`script`].
 
+pub mod ask;
+mod calls;
 pub mod error;
 pub mod framing;
 pub mod fuzzing;
@@ -63,6 +65,7 @@ pub mod supervisor;
 pub mod testing;
 pub mod transport;
 
+pub use ask::{Answer, Question, QuestionKind, TextDocument};
 pub use error::PluginError;
 pub use host::{Host, HostEvent, HostServices, Launcher, PanelSnapshot, PluginInfo};
 pub use manifest::{CommandSpec, Manifest, ManifestReport, Problem, Severity};
