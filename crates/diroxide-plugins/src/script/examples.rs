@@ -59,10 +59,49 @@ fn is_size_words(text: &str) -> bool {
         && number.chars().all(|c| c.is_ascii_digit() || c == '.')
 }
 
+/// Copies a folder's tree into `to`, made here, skipping Python's
+/// bytecode folders and never following a link; on Linux and macOS the
+/// copy is the owner's alone (0700 for folders, 0600 for files), as an
+/// installed plugins folder is.
+fn copy_private(from: &Path, to: &Path) {
+    fs::create_dir(to).unwrap();
+    for item in fs::read_dir(from).unwrap().flatten() {
+        let kind = item.file_type().unwrap();
+        let name = item.file_name();
+        if kind.is_symlink() || name == "__pycache__" {
+            continue;
+        }
+        let target = to.join(&name);
+        if kind.is_dir() {
+            copy_private(&item.path(), &target);
+        } else if kind.is_file() {
+            fs::copy(item.path(), &target).unwrap();
+            owner_only(&target, 0o600);
+        }
+    }
+    owner_only(to, 0o700);
+}
+
+#[cfg(unix)]
+fn owner_only(path: &Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+#[cfg(not(unix))]
+fn owner_only(_path: &Path, _mode: u32) {}
+
+/// `diro plugin check` over a private copy of the examples, never over
+/// the repository's tree in place: there the files may be anyone's to
+/// change (a bind mount from Windows shows every file as mode 777), and
+/// the script-folder trust check rightly refuses such a script.
 #[test]
 fn every_example_passes_check() {
     let lookup = Lookup::system();
-    let all = installed::scan(&examples(), Os::current());
+    let scratch = tempfile::tempdir().unwrap();
+    let copy = scratch.path().join("plugins");
+    copy_private(&examples(), &copy);
+    let all = installed::scan(&copy, Os::current());
     let ids: Vec<&str> = all.iter().map(Installed::id).collect();
     for wanted in [
         "changed-files",
