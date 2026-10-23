@@ -2,8 +2,14 @@
 //! version, the hosts of the owner's configuration, the arguments it is
 //! started with, and the process itself.
 
+pub mod gcmd;
+pub mod hosts;
 pub mod locate;
+pub mod target;
 pub mod version;
 
+pub use gcmd::{HostKeyChecking, ResolveError, Resolved, resolve};
+pub use hosts::{ConfigHost, ConfigPlaces, HostList, config_hosts};
 pub use locate::{Found, LocateError, Origin, SearchPlaces, locate};
+pub use target::{Target, TargetError};
 pub use version::{Flavor, SshVersion};

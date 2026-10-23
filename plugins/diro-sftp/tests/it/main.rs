@@ -9,6 +9,8 @@ mod conformance;
 #[cfg(feature = "fake-ssh")]
 mod fakes;
 #[cfg(feature = "fake-ssh")]
+mod hosts;
+#[cfg(feature = "fake-ssh")]
 mod locate;
 mod modes;
 #[cfg(all(windows, feature = "fake-ssh"))]

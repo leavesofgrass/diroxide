@@ -3,8 +3,24 @@
 //! nothing by color. The host adds the plugin's name last to every line
 //! the plugin causes (answer 90), so these lines never carry it.
 
+use diroxide_plugins::services::clean_text;
+
 /// One line of the owner's Braille display, in cells.
 pub const MAX_LINE_CELLS: usize = 40;
+
+/// Text from outside (ssh's standard error, a server's words) made safe
+/// to show: control, format and direction characters and terminal escapes
+/// removed, spaces folded, cut to `max` characters. It is never the
+/// sentence itself, only words placed after the plugin's own.
+pub fn cleaned(text: &str, max: usize) -> String {
+    clean_text(text, max)
+}
+
+/// A host from the owner's ssh configuration, as a row with nothing saved:
+/// "nas, from ssh config".
+pub fn config_host_row(name: &str) -> String {
+    format!("{name}, from ssh config")
+}
 
 /// The next step after "Not connected": "Open the place again to
 /// connect."
@@ -122,6 +138,11 @@ mod tests {
                 "ssh: OpenSSH 10.3 from PATH",
             ),
             (setting_not_absolute(), "Its path must be a full path."),
+            (config_host_row("nas"), "nas, from ssh config"),
+            (
+                cleaned("Bad \u{1B}[31mowner\u{202E} on file", 40),
+                "Bad owner on file",
+            ),
             (setting_not_openssh(), "It did not answer as OpenSSH."),
         ] {
             assert_eq!(made, expected);
