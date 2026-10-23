@@ -154,7 +154,9 @@ impl Peer {
         self.send(&response);
     }
 
-    fn deliver(&self, response: Response) {
+    /// Hands an answer from the host to the request that waits for it (the
+    /// reader thread does this; a test's fake host too).
+    pub fn deliver(&self, response: Response) {
         let Some(Id::Number(id)) = response.id else {
             return;
         };

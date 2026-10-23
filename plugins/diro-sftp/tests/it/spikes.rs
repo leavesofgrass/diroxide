@@ -820,3 +820,106 @@ fn spike_sf1b_ssh_inside_the_hosts_jobs() {
         assert!(saw.kex_init);
     }
 }
+
+/// Spike SF6, the changed key: ssh's words when a host's key differs from
+/// the one known hosts records. The known-hosts file is the test's own,
+/// with a made-up key for the fake server's address. The captured text,
+/// the port and the file's path made plain, becomes the fixture
+/// `fixtures/sftp/stderr/changed-host-key-*.txt`; the helper must never
+/// be asked.
+///
+/// **Results, Friday, October 23, 2026:** both Windows builds refuse at
+/// once with the warning block and "Host key verification failed.",
+/// exit 255, and never start the helper.
+#[test]
+#[ignore = "spike SF6: starts the real ssh.exe of this computer; run by hand"]
+fn spike_sf6_changed_host_key_capture() {
+    let dir = std::env::temp_dir().join("sf6");
+    std::fs::create_dir_all(&dir).unwrap();
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/sftp/stderr");
+    std::fs::create_dir_all(&fixtures).unwrap();
+    for program in programs() {
+        let tcp = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = tcp.local_addr().unwrap().port();
+        let server = thread::spawn(move || serve_one(tcp));
+        let config = dir.join("empty_config");
+        let known = dir.join("known_hosts");
+        let record = dir.join("record.jsonl");
+        let _ = std::fs::write(&record, b"");
+        let mut blob = Vec::new();
+        string(&mut blob, b"ssh-ed25519");
+        string(&mut blob, &[42u8; 32]);
+        let line = format!(
+            "[127.0.0.1]:{port} ssh-ed25519 {}\n",
+            diroxide_plugins::base64::encode(&blob)
+        );
+        std::fs::write(&config, b"").unwrap();
+        std::fs::write(&known, line.as_bytes()).unwrap();
+        let output = Command::new(&program)
+            .arg("-F")
+            .arg(&config)
+            .arg("-o")
+            .arg(format!("UserKnownHostsFile={}", known.display()))
+            .arg("-o")
+            .arg(format!("GlobalKnownHostsFile={}", known.display()))
+            .args([
+                "-o",
+                "IdentityAgent=none",
+                "-o",
+                "BatchMode=no",
+                "-o",
+                "UpdateHostKeys=no",
+                "-o",
+                "CheckHostIP=no",
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "ControlPath=none",
+                "-s",
+                "-T",
+                "-p",
+            ])
+            .arg(port.to_string())
+            .args(["--", "127.0.0.1", "sftp"])
+            .env("SSH_ASKPASS", FAKE_SSH)
+            .env("SSH_ASKPASS_REQUIRE", "force")
+            .env("FAKE_ASKPASS_RECORD", &record)
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdin(Stdio::piped())
+            .output()
+            .unwrap();
+        let _ = server.join();
+        let stderr = String::from_utf8_lossy(&output.stderr).replace("\r\n", "\n");
+        let plain = stderr
+            .replace(&format!("[127.0.0.1]:{port}"), "build.example")
+            .replace(
+                &known.display().to_string(),
+                "C:/Users/ada/.ssh/known_hosts",
+            )
+            .replace(
+                &known.display().to_string().replace('\\', "\\\\"),
+                "C:/Users/ada/.ssh/known_hosts",
+            );
+        assert_eq!(output.status.code(), Some(255), "{plain}");
+        assert!(
+            plain.contains("REMOTE HOST IDENTIFICATION HAS CHANGED"),
+            "{plain}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&record).unwrap_or_default(),
+            "",
+            "the helper was asked about a changed key"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&known).unwrap(),
+            line,
+            "known hosts changed"
+        );
+        let name = if version(&program).starts_with("OpenSSH_for_Windows_9.5") {
+            "changed-host-key-windows-9.5p2.txt"
+        } else {
+            "changed-host-key-msys-10.3p1.txt"
+        };
+        std::fs::write(fixtures.join(name), plain).unwrap();
+    }
+}
