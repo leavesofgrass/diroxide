@@ -1082,6 +1082,27 @@ impl PluginProvider {
     }
 }
 
+/// The authority of a remote place, `scheme://user@host:port` with the user
+/// and the port only when the place has them, so two accounts or two ports
+/// on one host are two sign-ins (S-B's request).
+fn authority_of(place: &Place) -> String {
+    place
+        .remote()
+        .map(|r| {
+            let mut s = format!("{}://", r.scheme());
+            if let Some(user) = r.user() {
+                s.push_str(user);
+                s.push('@');
+            }
+            s.push_str(r.host());
+            if let Some(port) = r.port() {
+                s.push_str(&format!(":{port}"));
+            }
+            s
+        })
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
@@ -1598,25 +1619,4 @@ mod tests {
         assert_eq!(read_all(&toy.provider, &p("/r/other.bin")), b"fresh");
         toy.host.shutdown_all(crate::host::QUIT_BUDGET);
     }
-}
-
-/// The authority of a remote place, `scheme://user@host:port` with the user
-/// and the port only when the place has them, so two accounts or two ports
-/// on one host are two sign-ins (S-B's request).
-fn authority_of(place: &Place) -> String {
-    place
-        .remote()
-        .map(|r| {
-            let mut s = format!("{}://", r.scheme());
-            if let Some(user) = r.user() {
-                s.push_str(user);
-                s.push('@');
-            }
-            s.push_str(r.host());
-            if let Some(port) = r.port() {
-                s.push_str(&format!(":{port}"));
-            }
-            s
-        })
-        .unwrap_or_default()
 }
