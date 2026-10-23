@@ -21,13 +21,23 @@
 //!   `commit` true; a writer dropped without its commit (a cancel, a
 //!   failure) ends the session with `commit` false, and a plugin that
 //!   stops mid-write is never told to commit, so nothing is left behind.
-//!   A `resume` request and its `offset` answer are a fixed shape
-//!   ([`WriteBegin`], [`WriteBegun`]); nothing resumes yet.
+//!   A `resume` request carries the offset the host believes is there
+//!   ([`PluginProvider::write_resuming`]); the plugin answers the offset
+//!   it goes on from, 0 when it starts over, and the session's chunks
+//!   start there.
 //! - **Sign-in:** `provider/connect` once per authority before its first
 //!   call; an `auth_required` answer to any call sends the host back to
 //!   connect once, then the call is tried again.
 //! - **Cancellation** is the operation's token: the request is cancelled
 //!   with `$/cancel_request` and still answered.
+//! - **Volumes and places:** `provider/volumes` lists an authority's
+//!   storages, or with a place the one that holds it, and fills
+//!   [`Provider::space`] and [`Provider::volume`]; a number the plugin
+//!   does not give is not known, never zero. `provider/places` lists the
+//!   places the plugin offers (its sites) as rows with a state word,
+//!   without signing in. Both are cleaned and checked like listings.
+//! - **An untrusted other side** (a changed host key) is refused with the
+//!   plugin's hint kept: the next step in words, said and never run.
 
 use std::collections::HashSet;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -36,8 +46,8 @@ use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use diroxide_core::{Attributes, Entry, Place};
 use diroxide_vfs::{
-    AttributeChange, Capabilities, CopyHint, FileWriter, OpContext, Provider, ReadSeek,
-    StreamingList, TrashCheck, VfsError, WatchHandle, WatchSink, WriteMode,
+    AttributeChange, Capabilities, CopyHint, FileWriter, OpContext, Provider, ReadSeek, SpaceInfo,
+    StreamingList, TrashCheck, VfsError, VolumeInfo, VolumeKind, WatchHandle, WatchSink, WriteMode,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -45,10 +55,13 @@ use serde_json::{Value, json};
 use crate::base64;
 use crate::error::PluginError;
 use crate::host::Host;
+use crate::lines;
 use crate::live::CallOptions;
 use crate::manifest::ProviderSpec;
+use crate::places::plugin_place;
 use crate::protocol::ErrorKind;
-use crate::shapes::{WireEntry, format_time};
+use crate::services::clean_text;
+use crate::shapes::{WireEntry, WirePlaceRow, WireVolume, format_time};
 
 /// The size of one read or write chunk: 1 MiB, base64 on the wire.
 pub const CHUNK: usize = 1024 * 1024;
@@ -65,8 +78,7 @@ pub struct WriteBegin {
     /// The size, when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_hint: Option<u64>,
-    /// A request to go on from where an earlier write stopped (shape only:
-    /// nothing resumes in this alpha).
+    /// A request to go on from where an earlier write stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume: Option<ResumeRequest>,
 }
@@ -91,6 +103,71 @@ pub struct WriteBegun {
     pub offset: Option<u64>,
 }
 
+/// One storage of a plugin's provider, read from `provider/volumes` and
+/// checked: the name cleaned, the root parsed like any place a plugin
+/// names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VolumeRow {
+    /// Its name, cleaned, meaning first.
+    pub name: String,
+    /// Its root.
+    pub place: Place,
+    /// The bytes the user may still write; `None` is not known.
+    pub free: Option<u64>,
+    /// Its size; `None` is not known.
+    pub total: Option<u64>,
+    /// Whether it can be unplugged.
+    pub removable: bool,
+}
+
+impl VolumeRow {
+    /// The row in words, meaning first: "Home on build.example, 12.0 GB
+    /// free of 50.0 GB", or "..., free space not known".
+    pub fn words(&self) -> String {
+        lines::volume_row(&self.name, self.free, self.total)
+    }
+
+    /// The free space and size, for the copy plan's room check.
+    pub fn space(&self) -> SpaceInfo {
+        SpaceInfo {
+            free_to_user: self.free,
+            total: self.total,
+            max_file_size: None,
+        }
+    }
+}
+
+/// One place a plugin offers, read from `provider/places` and checked.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlaceRow {
+    /// Its spoken name, cleaned.
+    pub name: String,
+    /// Where Enter goes.
+    pub place: Place,
+    /// Its state in words, cleaned: "saved", "connected", "lost".
+    pub state: String,
+    /// More words, read last.
+    pub detail: Option<String>,
+}
+
+impl PlaceRow {
+    /// The row in words, the state right after the name: "build, saved,
+    /// alice@build.example".
+    pub fn words(&self) -> String {
+        lines::place_row(&self.name, &self.state, self.detail.as_deref())
+    }
+}
+
+/// The places a plugin offers, with how many rows were left out because
+/// their place or name could not be used.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlaceRows {
+    /// The rows, in the plugin's order.
+    pub rows: Vec<PlaceRow>,
+    /// How many were left out.
+    pub skipped: usize,
+}
+
 /// A plugin's provider for one scheme.
 pub struct PluginProvider {
     host: Weak<Host>,
@@ -110,8 +187,13 @@ impl std::fmt::Debug for PluginProvider {
 
 /// The provider error for a plugin's error.
 pub fn plugin_to_vfs(error: &PluginError, scheme: &str, operation: &str) -> VfsError {
-    let (code, message) = match error {
-        PluginError::Remote { code, message, .. } => (*code, message.clone()),
+    let (code, message, hint) = match error {
+        PluginError::Remote {
+            code,
+            message,
+            hint,
+            ..
+        } => (*code, message.clone(), hint.clone()),
         PluginError::Timeout(_) => {
             return VfsError::Io {
                 kind: io::ErrorKind::TimedOut,
@@ -144,7 +226,9 @@ pub fn plugin_to_vfs(error: &PluginError, scheme: &str, operation: &str) -> VfsE
         Some(ErrorKind::NoSpace) => VfsError::StorageFull,
         Some(ErrorKind::TooLarge) => VfsError::FileTooLarge,
         Some(ErrorKind::Conflict) => VfsError::Changed,
-        Some(ErrorKind::Untrusted) => VfsError::Unsafe { why: message },
+        Some(ErrorKind::Untrusted) => VfsError::Unsafe {
+            why: lines::untrusted_why(&message, hint.as_deref()),
+        },
         Some(ErrorKind::RequestCancelled) => VfsError::Cancelled,
         Some(ErrorKind::TimedOut) => VfsError::Io {
             kind: io::ErrorKind::TimedOut,
@@ -567,36 +651,29 @@ impl Provider for PluginProvider {
         mode: WriteMode,
         ctx: &OpContext,
     ) -> Result<Box<dyn FileWriter>, VfsError> {
-        let begin = WriteBegin {
-            place: place.to_string(),
-            conflict: match mode {
-                WriteMode::CreateNew => "fail".to_owned(),
-                WriteMode::Overwrite => "overwrite".to_owned(),
-            },
-            transfer: "inline".to_owned(),
-            size_hint: None,
-            resume: None,
+        self.begin_write(place, mode, None, ctx)
+            .map(|(writer, _)| writer)
+    }
+
+    fn volume(&self, place: &Place, ctx: &OpContext) -> Result<VolumeInfo, VfsError> {
+        let Some(row) = self.volume_of(place, ctx)? else {
+            return Ok(VolumeInfo::unknown(VolumeInfo::top_of(place)));
         };
-        let answer = self.call(
-            "write_begin",
-            "write files",
-            place,
-            serde_json::to_value(&begin).unwrap_or(Value::Null),
-            ctx,
-        )?;
-        let begun: WriteBegun = serde_json::from_value(answer).map_err(|_| VfsError::Io {
-            kind: io::ErrorKind::InvalidData,
-            message: "the plugin's write session could not be read".to_owned(),
-        })?;
-        Ok(Box::new(PluginWriter {
-            provider: Arc::new(self.clone_for_io()),
-            place: place.clone(),
-            ctx: ctx.clone(),
-            id: begun.write_id,
-            sent: 0,
-            buffer: Vec::new(),
-            ended: false,
-        }))
+        let kind = if row.removable {
+            VolumeKind::Removable
+        } else {
+            VolumeKind::Network
+        };
+        let mut info = VolumeInfo::unknown(row.place).with_kind(kind);
+        info.label = Some(row.name);
+        Ok(info)
+    }
+
+    fn space(&self, place: &Place, ctx: &OpContext) -> Result<SpaceInfo, VfsError> {
+        Ok(self
+            .volume_of(place, ctx)?
+            .map(|row| row.space())
+            .unwrap_or_default())
     }
 
     fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
@@ -768,6 +845,197 @@ impl Provider for PluginProvider {
 }
 
 impl PluginProvider {
+    /// Starts a write session that goes on from where an earlier,
+    /// interrupted one stopped: the host says how many bytes it believes
+    /// are there and the source's fingerprint; the answer is the writer and
+    /// the offset its first chunk goes to, which the plugin chose (0 when
+    /// it starts over: no partial file, a changed fingerprint, or a partial
+    /// shorter than asked). The caller sends the bytes from that offset.
+    pub fn write_resuming(
+        &self,
+        place: &Place,
+        mode: WriteMode,
+        resume: ResumeRequest,
+        ctx: &OpContext,
+    ) -> Result<(Box<dyn FileWriter>, u64), VfsError> {
+        self.begin_write(place, mode, Some(resume), ctx)
+    }
+
+    fn begin_write(
+        &self,
+        place: &Place,
+        mode: WriteMode,
+        resume: Option<ResumeRequest>,
+        ctx: &OpContext,
+    ) -> Result<(Box<dyn FileWriter>, u64), VfsError> {
+        let asked = resume.as_ref().map_or(0, |r| r.offset);
+        let begin = WriteBegin {
+            place: place.to_string(),
+            conflict: match mode {
+                WriteMode::CreateNew => "fail".to_owned(),
+                WriteMode::Overwrite => "overwrite".to_owned(),
+            },
+            transfer: "inline".to_owned(),
+            size_hint: None,
+            resume,
+        };
+        let answer = self.call(
+            "write_begin",
+            "write files",
+            place,
+            serde_json::to_value(&begin).unwrap_or(Value::Null),
+            ctx,
+        )?;
+        let begun: WriteBegun = serde_json::from_value(answer).map_err(|_| VfsError::Io {
+            kind: io::ErrorKind::InvalidData,
+            message: "the plugin's write session could not be read".to_owned(),
+        })?;
+        let mut writer = PluginWriter {
+            provider: Arc::new(self.clone_for_io()),
+            place: place.clone(),
+            ctx: ctx.clone(),
+            id: begun.write_id,
+            sent: 0,
+            buffer: Vec::new(),
+            ended: false,
+        };
+        // A plugin cannot go on from further than the host asked: the bytes
+        // between would never be sent.
+        let offset = begun.offset.unwrap_or(0);
+        if offset > asked {
+            let _ = writer.end(false);
+            return Err(VfsError::Io {
+                kind: io::ErrorKind::InvalidData,
+                message: format!(
+                    "the plugin would resume at byte {offset}, past the {asked} the host has"
+                ),
+            });
+        }
+        writer.sent = offset;
+        Ok((Box::new(writer), offset))
+    }
+
+    /// The storages of a place's authority (`provider/volumes` with the
+    /// authority), for the volumes list; empty when the provider declares
+    /// none. A row whose root is not a place of this provider is left
+    /// out.
+    pub fn volumes(&self, place: &Place, ctx: &OpContext) -> Result<Vec<VolumeRow>, VfsError> {
+        if !self.has("volumes") {
+            return Ok(Vec::new());
+        }
+        let authority = place
+            .remote()
+            .map(|r| format!("{}://{}", r.scheme(), r.host()))
+            .unwrap_or_default();
+        let answer = self.call(
+            "volumes",
+            "list volumes",
+            place,
+            json!({"authority": authority}),
+            ctx,
+        )?;
+        Ok(self.volume_rows(&answer))
+    }
+
+    /// The one volume that holds a place (`provider/volumes` with the
+    /// place); `None` when the provider declares no volumes or names none.
+    pub fn volume_of(&self, place: &Place, ctx: &OpContext) -> Result<Option<VolumeRow>, VfsError> {
+        if !self.has("volumes") {
+            return Ok(None);
+        }
+        let answer = self.call(
+            "volumes",
+            "check free space",
+            place,
+            json!({"place": place.to_string()}),
+            ctx,
+        )?;
+        Ok(self.volume_rows(&answer).into_iter().next())
+    }
+
+    fn is_ours(&self, place: &Place) -> bool {
+        place
+            .remote()
+            .is_some_and(|r| r.scheme() == self.spec.scheme)
+    }
+
+    fn volume_rows(&self, answer: &Value) -> Vec<VolumeRow> {
+        let values = match (answer.get("volumes"), answer.get("volume")) {
+            (Some(Value::Array(values)), _) => values.clone(),
+            (_, Some(one @ Value::Object(_))) => vec![one.clone()],
+            _ => Vec::new(),
+        };
+        values
+            .into_iter()
+            .filter_map(|value| serde_json::from_value::<WireVolume>(value).ok())
+            .filter_map(|wire| {
+                let place = plugin_place(&wire.place).ok()?;
+                let name = clean_text(&wire.name, lines::MAX_LINE_CELLS);
+                (self.is_ours(&place) && !name.is_empty()).then_some(VolumeRow {
+                    name,
+                    place,
+                    free: wire.free,
+                    total: wire.total,
+                    removable: wire.removable,
+                })
+            })
+            .collect()
+    }
+
+    /// The places the plugin offers (`provider/places`), such as its saved
+    /// sites and the hosts of a configuration file, for the go-to-place
+    /// list. Listing them never signs in. A row whose place is not one of
+    /// this provider's, or whose name or state is empty once cleaned, is
+    /// left out and counted.
+    pub fn places(&self, ctx: &OpContext) -> Result<PlaceRows, VfsError> {
+        if !self.has("places") {
+            return Ok(PlaceRows::default());
+        }
+        ctx.check()?;
+        let host = self.host()?;
+        let answer = host
+            .call_with(
+                &self.plugin,
+                "provider/places",
+                json!({}),
+                CallOptions {
+                    cancel: Some(&ctx.cancel),
+                    batches: None,
+                },
+            )
+            .map_err(|e| plugin_to_vfs(&e, &self.spec.scheme, "list places"))?;
+        let values = answer
+            .get("places")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut out = PlaceRows::default();
+        for value in values {
+            match self.place_row(value) {
+                Some(row) => out.rows.push(row),
+                None => out.skipped += 1,
+            }
+        }
+        Ok(out)
+    }
+
+    fn place_row(&self, value: Value) -> Option<PlaceRow> {
+        let wire = serde_json::from_value::<WirePlaceRow>(value).ok()?;
+        let place = plugin_place(&wire.place).ok()?;
+        let name = clean_text(&wire.name, lines::MAX_LINE_CELLS);
+        let state = clean_text(&wire.state, lines::MAX_LINE_CELLS);
+        let detail = wire
+            .detail
+            .map(|d| clean_text(&d, lines::MAX_LINE_CELLS * 2))
+            .filter(|d| !d.is_empty());
+        (self.is_ours(&place) && !name.is_empty() && !state.is_empty()).then_some(PlaceRow {
+            name,
+            place,
+            state,
+            detail,
+        })
+    }
+
     fn clone_for_io(&self) -> Self {
         Self {
             host: self.host.clone(),
@@ -1133,6 +1401,7 @@ mod tests {
             plugin: "X".into(),
             code: kind.code(),
             message: "words".into(),
+            hint: None,
         };
         for (kind, expected) in [
             (ErrorKind::NotFound, VfsError::NotFound),
@@ -1150,5 +1419,167 @@ mod tests {
             plugin_to_vfs(&remote(ErrorKind::Unsupported), "memfs", "read files"),
             VfsError::Unsupported { .. }
         ));
+        let untrusted = PluginError::Remote {
+            plugin: "SFTP places".into(),
+            code: ErrorKind::Untrusted.code(),
+            message: "Host key changed. Not connected.".into(),
+            hint: Some("To forget the old key, run:\nssh-keygen -R build.example".into()),
+        };
+        assert_eq!(
+            plugin_to_vfs(&untrusted, "sftp", "sign in"),
+            VfsError::Unsafe {
+                why: "Host key changed. Not connected. To forget the old key, run: ssh-keygen -R build.example".into()
+            }
+        );
+        assert_eq!(
+            diroxide_core::Explain::next_step(&untrusted),
+            "To forget the old key, run:\nssh-keygen -R build.example"
+        );
+    }
+
+    const MANIFEST_ALL: &str = "\n[[provider]]\nscheme = \"memfs\"\nname = \"Memory files\"\nwritable = true\nmethods = [\"connect\", \"list\", \"stat\", \"read\", \"write_begin\", \"write_chunk\", \"write_end\", \"create_dir\", \"rename\", \"remove\", \"volumes\", \"places\"]\n";
+
+    /// R25's commit 46: an untrusted authority is refused with its hint,
+    /// and the plugin is never asked anything past the refused sign-in.
+    #[test]
+    fn an_untrusted_authority_is_refused_with_its_hint() {
+        let toy = toy(MemFs::default(), MANIFEST_ALL);
+        let changed = Place::parse("memfs://changed/x.txt").unwrap();
+        let error = toy.provider.stat(&changed, &ctx()).unwrap_err();
+        assert_eq!(
+            error,
+            VfsError::Unsafe {
+                why: "Host key changed. Not connected. To forget the old key, run: ssh-keygen -R changed".into()
+            }
+        );
+        assert_eq!(toy.memfs.lock().unwrap().calls, ["connect"]);
+        toy.host.shutdown_all(crate::host::QUIT_BUDGET);
+    }
+
+    /// R25's commit 46: volumes with and without a place; a number the
+    /// plugin does not give is not known, never zero; a provider that
+    /// declares no volumes is never asked.
+    #[test]
+    fn volumes_with_and_without_a_place() {
+        let mut fs = MemFs::default();
+        fs.add_file("/v/data.bin", &[1u8; 1000]);
+        let toy = toy(fs, MANIFEST_ALL);
+        let rows = toy.provider.volumes(&p("/v"), &ctx()).unwrap();
+        let words: Vec<String> = rows.iter().map(VolumeRow::words).collect();
+        assert_eq!(
+            words,
+            [
+                "Memory box, 999 KB free of 1.0 MB",
+                "Spare shelf, 999 KB free of 1.0 MB"
+            ]
+        );
+        assert_eq!(rows[0].place.to_string(), "memfs://box/");
+        let space = toy.provider.space(&p("/v/data.bin"), &ctx()).unwrap();
+        assert_eq!(
+            (space.free_to_user, space.total),
+            (Some(999_000), Some(1_000_000))
+        );
+        let volume = toy.provider.volume(&p("/v/data.bin"), &ctx()).unwrap();
+        assert_eq!(volume.kind, VolumeKind::Network);
+        assert_eq!(volume.label.as_deref(), Some("Memory box"));
+        toy.host.shutdown_all(crate::host::QUIT_BUDGET);
+
+        let unknown = self::toy(MemFs::default().without_free_space(), MANIFEST_ALL);
+        let space = unknown.provider.space(&p("/"), &ctx()).unwrap();
+        assert_eq!(space, SpaceInfo::default());
+        assert_eq!(
+            unknown.provider.volumes(&p("/"), &ctx()).unwrap()[0].words(),
+            "Memory box, free space not known"
+        );
+        unknown.host.shutdown_all(crate::host::QUIT_BUDGET);
+
+        let undeclared = self::toy(MemFs::default(), MANIFEST);
+        assert!(
+            undeclared
+                .provider
+                .volumes(&p("/"), &ctx())
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            undeclared.provider.space(&p("/"), &ctx()).unwrap(),
+            SpaceInfo::default()
+        );
+        assert!(
+            !undeclared
+                .memfs
+                .lock()
+                .unwrap()
+                .calls
+                .contains(&"volumes".to_owned())
+        );
+        undeclared.host.shutdown_all(crate::host::QUIT_BUDGET);
+    }
+
+    /// R25's commit 46: the places a plugin offers, state first after the
+    /// name, without a sign-in; rows that are not this provider's places,
+    /// or have nothing to say, are left out and counted.
+    #[test]
+    fn places_are_rows_with_a_state_word() {
+        let toy = toy(MemFs::default(), MANIFEST_ALL);
+        let places = toy.provider.places(&ctx()).unwrap();
+        let words: Vec<String> = places.rows.iter().map(PlaceRow::words).collect();
+        assert_eq!(words, ["box, connected, Memory box", "spare, saved"]);
+        assert_eq!(places.rows[1].place.to_string(), "memfs://spare/");
+        assert_eq!(places.skipped, 3);
+        assert_eq!(toy.memfs.lock().unwrap().calls, ["places"]);
+        toy.host.shutdown_all(crate::host::QUIT_BUDGET);
+        let undeclared = self::toy(MemFs::default(), MANIFEST);
+        assert_eq!(
+            undeclared.provider.places(&ctx()).unwrap(),
+            PlaceRows::default()
+        );
+        undeclared.host.shutdown_all(crate::host::QUIT_BUDGET);
+    }
+
+    /// R25's commit 46: `write_begin` carries `resume` and the answer's
+    /// offset is where the chunks go on; a changed source starts over.
+    #[test]
+    fn a_write_resumes_from_the_offset_the_plugin_answers() {
+        let mut fs = MemFs::default();
+        fs.add_folder("/r");
+        fs.add_partial("/r/big.bin", b"0123456789", Some("src-1"));
+        fs.add_partial("/r/other.bin", b"abcdef", Some("src-1"));
+        let toy = toy(fs, MANIFEST_ALL);
+        let (mut writer, offset) = toy
+            .provider
+            .write_resuming(
+                &p("/r/big.bin"),
+                WriteMode::CreateNew,
+                ResumeRequest {
+                    offset: 6,
+                    fingerprint: Some("src-1".into()),
+                },
+                &ctx(),
+            )
+            .unwrap();
+        assert_eq!(offset, 6);
+        writer.write_all(b"6789AB").unwrap();
+        writer.commit(true).unwrap();
+        assert_eq!(read_all(&toy.provider, &p("/r/big.bin")), b"0123456789AB");
+        assert!(toy.memfs.lock().unwrap().partial("/r/big.bin").is_none());
+        // Another source: the plugin starts over at 0.
+        let (mut writer, offset) = toy
+            .provider
+            .write_resuming(
+                &p("/r/other.bin"),
+                WriteMode::CreateNew,
+                ResumeRequest {
+                    offset: 3,
+                    fingerprint: Some("src-2".into()),
+                },
+                &ctx(),
+            )
+            .unwrap();
+        assert_eq!(offset, 0);
+        writer.write_all(b"fresh").unwrap();
+        writer.commit(true).unwrap();
+        assert_eq!(read_all(&toy.provider, &p("/r/other.bin")), b"fresh");
+        toy.host.shutdown_all(crate::host::QUIT_BUDGET);
     }
 }

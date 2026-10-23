@@ -2,9 +2,13 @@
 //! fake plugin serves in its provider mode. It is the subject of the
 //! provider contract list (R22, section 8.3): listings in one answer or in
 //! partial batches, ranged reads, write sessions that commit or leave
-//! nothing, folders, renames, removes, and a sign-in that fails first.
-//! Its state can outlive a plugin process, so a test can kill the plugin
-//! in the middle of a write and see that nothing was left.
+//! nothing, folders, renames, removes, and a sign-in that fails first;
+//! and, for the provider plugins of stage 2 (R25's commit 46), its
+//! volumes with and without a place, the places it offers, an authority
+//! it refuses as untrusted with a hint (`memfs://changed`), and writes
+//! that resume from a partial file. Its state can outlive a plugin
+//! process, so a test can kill the plugin in the middle of a write and see
+//! that nothing was left.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -30,7 +34,15 @@ pub const METHODS: &[&str] = &[
     "create_dir",
     "rename",
     "remove",
+    "volumes",
+    "places",
 ];
+
+/// The authority the toy refuses as untrusted, as a changed host key is.
+pub const UNTRUSTED: &str = "changed";
+
+/// The toy's size in bytes; what its files hold is taken from it.
+pub const SIZE: u64 = 1_000_000;
 
 /// How many entries go in one partial batch.
 pub const BATCH: usize = 1000;
@@ -49,13 +61,23 @@ struct Session {
     overwrite: bool,
 }
 
+/// What an interrupted write left: its bytes and the fingerprint of the
+/// source it came from.
+#[derive(Clone, Debug)]
+struct Partial {
+    bytes: Vec<u8>,
+    fingerprint: Option<String>,
+}
+
 /// A file system in memory.
 #[derive(Debug)]
 pub struct MemFs {
     nodes: BTreeMap<String, Node>,
     writes: HashMap<String, Session>,
+    partials: HashMap<String, Partial>,
     next: u64,
     refuse_connects: usize,
+    space_known: bool,
     /// Every method called, in order, for the tests.
     pub calls: Vec<String>,
 }
@@ -67,8 +89,10 @@ impl Default for MemFs {
         Self {
             nodes,
             writes: HashMap::new(),
+            partials: HashMap::new(),
             next: 1,
             refuse_connects: 0,
+            space_known: true,
             calls: Vec::new(),
         }
     }
@@ -101,6 +125,31 @@ impl MemFs {
             refuse_connects: times,
             ..Self::default()
         }
+    }
+
+    /// The toy with volumes that do not know their free space.
+    pub fn without_free_space(self) -> Self {
+        Self {
+            space_known: false,
+            ..self
+        }
+    }
+
+    /// Leaves a partial file at a path, as an interrupted write does, with
+    /// the fingerprint of its source.
+    pub fn add_partial(&mut self, path: &str, bytes: &[u8], fingerprint: Option<&str>) {
+        self.partials.insert(
+            path.to_owned(),
+            Partial {
+                bytes: bytes.to_vec(),
+                fingerprint: fingerprint.map(str::to_owned),
+            },
+        );
+    }
+
+    /// The partial file at a path, if one is left.
+    pub fn partial(&self, path: &str) -> Option<&[u8]> {
+        self.partials.get(path).map(|p| p.bytes.as_slice())
     }
 
     /// Adds a folder and its parents.
@@ -156,6 +205,33 @@ impl MemFs {
         } else {
             path.to_owned()
         })
+    }
+
+    fn authority(params: &Params, key: &str) -> Option<String> {
+        let text = params.get(key).and_then(Value::as_str)?;
+        Place::parse(text)
+            .ok()?
+            .remote()
+            .map(|r| r.host().to_owned())
+    }
+
+    fn used(&self) -> u64 {
+        self.nodes
+            .values()
+            .map(|node| match node {
+                Node::File(bytes) => bytes.len() as u64,
+                Node::Folder => 0,
+            })
+            .sum()
+    }
+
+    fn volume(&self, name: &str, place: &str) -> Value {
+        if self.space_known {
+            json!({"name": name, "place": place, "free": SIZE.saturating_sub(self.used()),
+                "total": SIZE})
+        } else {
+            json!({"name": name, "place": place})
+        }
     }
 
     fn entry(&self, path: &str) -> Option<WireEntry> {
@@ -217,6 +293,13 @@ impl MemFs {
         self.calls.push(method.to_owned());
         match method {
             "connect" => {
+                if Self::authority(params, "place").as_deref() == Some(UNTRUSTED) {
+                    return Err(RpcError::with_hint(
+                        ErrorKind::Untrusted,
+                        "Host key changed. Not connected.",
+                        "To forget the old key, run:\nssh-keygen -R changed",
+                    ));
+                }
                 if self.refuse_connects > 0 {
                     self.refuse_connects -= 1;
                     return Err(RpcError::with_hint(
@@ -284,19 +367,34 @@ impl MemFs {
                     }
                     _ => {}
                 }
+                // A resume goes on from the partial file when it is from the
+                // same source and holds at least what the host asked for;
+                // otherwise it starts over at 0.
+                let resume = params.get("resume");
+                let (offset, bytes) = match (resume, self.partials.get(&path)) {
+                    (Some(asked), Some(partial)) => {
+                        let at = asked.get("offset").and_then(Value::as_u64).unwrap_or(0);
+                        let same = asked.get("fingerprint").and_then(Value::as_str)
+                            == partial.fingerprint.as_deref();
+                        if same && at <= partial.bytes.len() as u64 {
+                            (at, partial.bytes[..at as usize].to_vec())
+                        } else {
+                            (0, Vec::new())
+                        }
+                    }
+                    _ => (0, Vec::new()),
+                };
                 let id = format!("w{}", self.next);
                 self.next += 1;
                 self.writes.insert(
                     id.clone(),
                     Session {
                         path,
-                        bytes: Vec::new(),
+                        bytes,
                         overwrite,
                     },
                 );
-                // Nothing resumes yet: a resume request starts at 0.
-                let offset = params.get("resume").map(|_| 0);
-                Ok(json!({"write_id": id, "offset": offset}))
+                Ok(json!({"write_id": id, "offset": resume.map(|_| offset)}))
             }
             "write_chunk" => {
                 let id = params.get("write_id").and_then(Value::as_str).unwrap_or("");
@@ -329,6 +427,7 @@ impl MemFs {
                     return Err(error(ErrorKind::AlreadyExists, "the file exists"));
                 }
                 let path = session.path.clone();
+                self.partials.remove(&path);
                 self.nodes.insert(path.clone(), Node::File(session.bytes));
                 Ok(json!(self.entry(&path)))
             }
@@ -395,6 +494,29 @@ impl MemFs {
                 self.nodes.remove(&path);
                 Ok(Value::Null)
             }
+            "volumes" => {
+                if params.contains_key("place") {
+                    Self::path(params, "place")?;
+                    Ok(json!({"volumes": [self.volume("Memory box", "memfs://box/")]}))
+                } else {
+                    Ok(json!({"volumes": [
+                        self.volume("Memory box", "memfs://box/"),
+                        self.volume("Spare shelf", "memfs://spare/"),
+                        // Not a place of this provider: the host leaves it out.
+                        {"name": "Elsewhere", "place": "/elsewhere"},
+                    ]}))
+                }
+            }
+            "places" => Ok(json!({"places": [
+                {"name": "box", "place": "memfs://box/", "state": "connected",
+                    "detail": "Memory box"},
+                {"name": "spare", "place": "memfs://spare/", "state": "saved"},
+                // Left out by the host, and counted: a place that is not
+                // one of this provider's, a bare drive, an empty state.
+                {"name": "other", "place": "/home/other", "state": "saved"},
+                {"name": "drive", "place": "C:", "state": "saved"},
+                {"name": "blank", "place": "memfs://blank/", "state": "\u{200B}"},
+            ]})),
             other => Err(error(
                 ErrorKind::MethodNotFound,
                 &format!("no method provider/{other}"),

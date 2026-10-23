@@ -5,6 +5,8 @@
 
 use std::time::Duration;
 
+use diroxide_core::format::human_size;
+
 /// One line of the owner's Braille display, in cells: a line's meaning
 /// must be whole within it.
 pub const MAX_LINE_CELLS: usize = 40;
@@ -260,6 +262,64 @@ pub fn wrote_stray_text(plugin: &str) -> String {
     format!("{plugin} wrote stray text; see its log.")
 }
 
+/// Why a provider refused an other side it could not verify, for the
+/// provider error: the plugin's words, then its hint, the next step said
+/// and never run: "Host key changed. Not connected. To forget the old
+/// key, run: ssh-keygen -R build.example".
+pub fn untrusted_why(message: &str, hint: Option<&str>) -> String {
+    let message = message.trim().trim_end_matches('.');
+    let hint: Vec<&str> = hint
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    if hint.is_empty() {
+        format!("{message}.")
+    } else {
+        format!("{message}. {}", hint.join(" "))
+    }
+}
+
+/// The same refusal as lines for a dialog or the messages list, one fact
+/// a line: the plugin's words with its name last, then each line of its
+/// hint ("Host key changed. Not connected (SFTP places)", "To forget the
+/// old key, run:", "ssh-keygen -R build.example").
+pub fn untrusted_lines(message: &str, hint: Option<&str>, plugin: &str) -> Vec<String> {
+    let mut out = vec![with_source(message, plugin)];
+    out.extend(
+        hint.unwrap_or_default()
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned),
+    );
+    out
+}
+
+/// A volume's row, meaning first: "Home on build.example, 12.0 GB free of
+/// 50.0 GB"; a number the provider does not know is said so, never read as
+/// zero: "Home on build.example, free space not known".
+pub fn volume_row(name: &str, free: Option<u64>, total: Option<u64>) -> String {
+    match (free, total) {
+        (Some(free), Some(total)) => {
+            format!("{name}, {} free of {}", human_size(free), human_size(total))
+        }
+        (Some(free), None) => format!("{name}, {} free", human_size(free)),
+        (None, Some(total)) => format!("{name}, {} in all, free not known", human_size(total)),
+        (None, None) => format!("{name}, free space not known"),
+    }
+}
+
+/// A place a plugin offers, its state right after its name: "build,
+/// saved, alice@build.example"; "nas, from ssh config".
+pub fn place_row(name: &str, state: &str, detail: Option<&str>) -> String {
+    match detail {
+        Some(detail) => format!("{name}, {state}, {detail}"),
+        None => format!("{name}, {state}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,6 +404,67 @@ mod tests {
                 || made.starts_with("Line counter wrote stray text");
             assert!(cells <= 40 || long_ok, "{made} is {cells} cells");
         }
+    }
+
+    /// The provider additions of R25's commit 46: a refusal with its hint,
+    /// the volumes and the places, golden and whole within 40 cells where
+    /// their meaning is.
+    #[test]
+    fn the_provider_lines_of_commit_46() {
+        let hint = "To forget the old key, run:\nssh-keygen -R build.example";
+        assert_eq!(
+            untrusted_why("Host key changed. Not connected.", Some(hint)),
+            "Host key changed. Not connected. To forget the old key, run: ssh-keygen -R build.example"
+        );
+        assert_eq!(
+            untrusted_why("the host key changed", None),
+            "the host key changed."
+        );
+        let rows = untrusted_lines(
+            "Host key changed. Not connected.",
+            Some(hint),
+            "SFTP places",
+        );
+        assert_eq!(
+            rows,
+            [
+                "Host key changed. Not connected (SFTP places)",
+                "To forget the old key, run:",
+                "ssh-keygen -R build.example",
+            ]
+        );
+        assert!(
+            rows[0]
+                .chars()
+                .take(40)
+                .collect::<String>()
+                .contains("Not connected")
+        );
+        assert!(rows[1..].iter().all(|r| r.chars().count() <= 40));
+        assert_eq!(
+            volume_row(
+                "Home on build.example",
+                Some(12_000_000_000),
+                Some(50_000_000_000)
+            ),
+            "Home on build.example, 12.0 GB free of 50.0 GB"
+        );
+        assert_eq!(
+            volume_row("Home on build.example", None, None),
+            "Home on build.example, free space not known"
+        );
+        assert_eq!(volume_row("Box", Some(512), None), "Box, 512 bytes free");
+        assert_eq!(
+            volume_row("Box", None, Some(2_000)),
+            "Box, 2.0 KB in all, free not known"
+        );
+        let place = place_row("build", "saved", Some("alice@build.example"));
+        assert_eq!(place, "build, saved, alice@build.example");
+        assert!(place.chars().count() <= 40);
+        assert_eq!(
+            place_row("nas", "from ssh config", None),
+            "nas, from ssh config"
+        );
     }
 
     #[test]

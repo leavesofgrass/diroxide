@@ -97,6 +97,36 @@ fn hooks_and_providers_are_checked_when_declared() {
     assert!(report.passed(), "{}", report.text());
 }
 
+/// R25's commit 46: a provider that declares volumes and places is asked
+/// for both; one that declares them and answers -32601 fails, named.
+#[test]
+fn volumes_and_places_are_checked_when_declared() {
+    let root = tempfile::tempdir().unwrap();
+    let declared = "\n[[provider]]\nscheme = \"memfs\"\nname = \"Memory files\"\nmethods = [\"volumes\", \"places\"]\n";
+    let report = run(&fake(root.path(), "provider", declared));
+    assert_eq!(
+        report.verdict(Group::Providers),
+        Some(&Verdict::Pass(Vec::new())),
+        "{}",
+        report.text()
+    );
+    let other = root.path().join("echo-root");
+    let report = run(&fake(&other, "echo", declared));
+    match report.verdict(Group::Providers) {
+        Some(Verdict::Fail(problems)) => {
+            assert!(
+                problems.contains(&"memfs: volumes is declared but answered -32601".to_owned()),
+                "{problems:?}"
+            );
+            assert!(
+                problems.contains(&"memfs: places is declared but answered -32601".to_owned()),
+                "{problems:?}"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
 #[test]
 fn a_manifest_only_plugin_and_a_broken_manifest() {
     let root = tempfile::tempdir().unwrap();

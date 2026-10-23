@@ -1017,6 +1017,7 @@ impl Host {
                 _ => PluginError::Remote {
                     plugin: name,
                     code: error.code,
+                    hint: error.hint().map(str::to_owned),
                     message: error.message,
                 },
             })

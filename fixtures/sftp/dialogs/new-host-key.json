@@ -1,0 +1,20 @@
+{
+  "kind": "confirm",
+  "destructive": true,
+  "yes_label": "Trust and connect",
+  "no_label": "Do not connect",
+  "title": "New server key",
+  "message": [
+    "New server key for build.example.",
+    "Check it before you accept it.",
+    "Key type: ED25519.",
+    "Fingerprint, in groups of four:",
+    "Part 1 of 4: 2134 141b 8436 8a94",
+    "Part 2 of 4: a6d8 d5c1 2155 8759",
+    "Part 3 of 4: 8d34 a500 27c6 fb7d",
+    "Part 4 of 4: c4f9 8430 2e65 fb1d",
+    "As ssh printed it:",
+    "SHA256:ITQUG4Q2ipSm2NXBIVWHWY00pQAnxvt9xPmEMC5l+x0",
+    "Trust this key and connect?"
+  ]
+}
