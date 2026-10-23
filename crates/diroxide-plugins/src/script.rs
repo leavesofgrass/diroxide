@@ -22,67 +22,32 @@
 //!   the run folder (both selection files, the context JSON, the
 //!   directives file, the cancel file, `DIRO_TEMP`) and the `DIRO_*`
 //!   environment that names them.
+//! - [`directives`] reads what a script asks while it runs; [`runner`]
+//!   runs it through the process helper in its mode, follows its
+//!   directives, cancels it with the cancel file then the job kill, and
+//!   ends with the words of [`words`].
 //!
 //! W4b owns this module and its submodules (alpha 2, commits 18 to 28 of
 //! R22's order).
 
 pub mod command;
 pub mod context;
+pub mod directives;
 pub mod header;
 pub mod interpreter;
 mod read;
 pub mod recipe;
+pub mod runner;
+pub mod words;
 
 use diroxide_core::Place;
 
 use crate::error::PluginError;
 
+pub use directives::{Directive, parse_directive};
 pub use header::{HeaderReport, ScriptHeader, parse_header};
 pub use recipe::{CwdChoice, ListForm, Per, Recipe, RunMode, StdinForm};
-
-/// A directive a script prints.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Directive {
-    /// `diro:announce TEXT`: say something.
-    Announce(String),
-    /// `diro:refresh`: list the panels again.
-    Refresh,
-    /// `diro:cd PATH`: open a place in the active panel.
-    Cd(String),
-    /// `diro:select PATH`: select an entry.
-    Select(String),
-    /// `diro:progress N of M`: report progress.
-    Progress {
-        /// Done.
-        done: u64,
-        /// In all.
-        total: u64,
-    },
-}
-
-/// Reads one output line as a directive; `None` for ordinary output and
-/// for `diro:` lines that are not understood.
-pub fn parse_directive(line: &str) -> Option<Directive> {
-    let rest = line.trim_end_matches(['\r', '\n']).strip_prefix("diro:")?;
-    let (word, argument) = match rest.split_once(' ') {
-        Some((word, argument)) => (word, argument.trim()),
-        None => (rest.trim(), ""),
-    };
-    match word {
-        "announce" if !argument.is_empty() => Some(Directive::Announce(argument.to_owned())),
-        "refresh" => Some(Directive::Refresh),
-        "cd" if !argument.is_empty() => Some(Directive::Cd(argument.to_owned())),
-        "select" if !argument.is_empty() => Some(Directive::Select(argument.to_owned())),
-        "progress" => {
-            let (done, total) = argument.split_once(" of ")?;
-            Some(Directive::Progress {
-                done: done.trim().parse().ok()?,
-                total: total.trim().parse().ok()?,
-            })
-        }
-        _ => None,
-    }
-}
+pub use runner::{Cancel, RunEnv, RunReport, RunSink, run};
 
 /// The context a script command runs in.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -148,26 +113,6 @@ mod tests {
             cursor: Some(p("/home/ada/a.png")),
             selection: vec![p("/home/ada/a.png"), p("/home/ada/b.png")],
         }
-    }
-
-    #[test]
-    fn directives_are_recognized() {
-        assert_eq!(
-            parse_directive("diro:announce Done, 3 made"),
-            Some(Directive::Announce("Done, 3 made".into()))
-        );
-        assert_eq!(parse_directive("diro:refresh"), Some(Directive::Refresh));
-        assert_eq!(
-            parse_directive("diro:cd /tmp/x y"),
-            Some(Directive::Cd("/tmp/x y".into()))
-        );
-        assert_eq!(
-            parse_directive("diro:progress 3 of 10"),
-            Some(Directive::Progress { done: 3, total: 10 })
-        );
-        assert_eq!(parse_directive("diro:progress three"), None);
-        assert_eq!(parse_directive("plain output"), None);
-        assert_eq!(parse_directive("diro:dance"), None);
     }
 
     #[test]
