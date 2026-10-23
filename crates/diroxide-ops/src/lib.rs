@@ -10,6 +10,9 @@
 //! and an [`UndoLog`] of moves, trashings and created entries, kept on
 //! disk by the [`Journal`]. Nothing here runs a shell.
 //!
+//! The transfer queue is the jobs list (R25, part 1): the [`Queue`] decides
+//! when a confirmed job starts, by class and host.
+//!
 //! The order is create, verify, then destroy (plan section 5.4). The
 //! [`fake`] provider has the latency, stall and "lies" switches the tests
 //! of that order need.
@@ -33,6 +36,7 @@ pub mod parts;
 pub mod plan;
 mod planner;
 pub mod progress;
+pub mod queue;
 mod run;
 #[cfg(test)]
 mod run_tests;
@@ -61,6 +65,7 @@ pub use part_names::{Discovery, PartSet, SetProblem};
 pub use parts::{PartInfo, PartsError, PartsReader};
 pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
+pub use queue::{Cancelled, Grant, HostKey, JobClass, Queue, QueueLimits};
 pub use sidecar::{Sidecar, SidecarRead};
 pub use split::{SplitFacts, SplitFile};
 pub use undo::{LeftAs, Relinked, UndoLog, UndoRecord};
