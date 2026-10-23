@@ -9,7 +9,9 @@
 //! appeared meanwhile is a conflict and never a loss; with
 //! [`WriteMode::Overwrite`] replacing. A writer dropped without a commit,
 //! on an error, a cancel or a panic, removes its unfinished file, so no
-//! half-written file is ever left under the real name.
+//! half-written file is ever left under the real name. A kept write (the
+//! resumable write of R25 commit 69, `local::resume`) leaves its
+//! unfinished file instead, for the engine to reopen at its end or remove.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Seek, SeekFrom, Write};
@@ -79,6 +81,12 @@ impl Unfinished {
         Err(last)
     }
 
+    /// An unfinished file that stays when dropped: a resumable write's,
+    /// reopened at its end (R25 commit 69).
+    pub(crate) fn kept(path: PathBuf) -> Self {
+        Self { path, armed: false }
+    }
+
     /// The unfinished file's path.
     pub(crate) fn path(&self) -> &Path {
         &self.path
@@ -120,6 +128,35 @@ impl LocalWriter {
             target,
             mode,
         })
+    }
+
+    /// Starts a write whose unfinished file stays when the writer is
+    /// dropped without its commit: a lost connection or a crash leaves it
+    /// for a resume, and the engine removes it on Cancel.
+    pub(crate) fn start_kept(target: PathBuf, mode: WriteMode) -> Result<Self, VfsError> {
+        let mut writer = Self::start(target, mode)?;
+        writer.unfinished.keep();
+        Ok(writer)
+    }
+
+    /// Reopens a kept unfinished file at its end, for a resume, and
+    /// answers its length.
+    pub(crate) fn reopen(
+        unfinished: PathBuf,
+        target: PathBuf,
+        mode: WriteMode,
+    ) -> Result<(Self, u64), VfsError> {
+        let mut file = OpenOptions::new().write(true).open(&unfinished)?;
+        let length = file.seek(SeekFrom::End(0))?;
+        Ok((
+            Self {
+                file: Some(file),
+                unfinished: Unfinished::kept(unfinished),
+                target,
+                mode,
+            },
+            length,
+        ))
     }
 }
 

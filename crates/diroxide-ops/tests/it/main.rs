@@ -11,6 +11,7 @@ mod kill;
 mod links;
 mod parts;
 mod props;
+mod resume;
 mod support;
 
 use std::sync::Arc;

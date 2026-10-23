@@ -127,6 +127,12 @@ pub struct Capabilities {
     /// empty: what makes changing a link's target atomic (W2c's request
     /// 2). A folder is never replaced.
     pub replace_rename: bool,
+    /// A write cut short by a lost connection can go on where it stopped:
+    /// its unfinished file is kept and reopened at its end (R25, 2.5),
+    /// through [`crate::provider::ResumableWrite`], found with
+    /// [`crate::Provider::as_resumable`]. The reading side needs
+    /// [`Self::random_read`]; anything else starts the file again.
+    pub resume: bool,
 }
 
 impl Capabilities {
@@ -157,6 +163,7 @@ impl Capabilities {
             random_read: false,
             clone_copy: false,
             replace_rename: false,
+            resume: false,
         }
     }
 
@@ -233,6 +240,12 @@ mod tests {
                 "{words}"
             );
         }
+    }
+
+    #[test]
+    fn nothing_resumes_unless_said() {
+        assert!(!Capabilities::read_only().resume);
+        assert!(!Capabilities::default().resume);
     }
 
     #[test]

@@ -198,6 +198,9 @@ pub(crate) fn capabilities_for(facts: &VolumeFacts, rule: NameRule) -> Capabilit
     // A file or link renamed over another in one step: `rename(2)`, or
     // `MoveFileExW` replacing, wherever the place takes changes.
     capabilities.replace_rename = writable;
+    // An unfinished file is kept and reopened at its end wherever the place
+    // takes changes: a network share that drops comes back to it (R25 2.5).
+    capabilities.resume = writable;
     capabilities
 }
 

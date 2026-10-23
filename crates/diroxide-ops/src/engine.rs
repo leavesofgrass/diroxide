@@ -22,11 +22,15 @@ use diroxide_core::{
 use diroxide_vfs::{CancelToken, Registry, VfsError};
 
 use crate::error::OpsError;
+use crate::gate::{ConnectionAnswer, ConnectionQuestion, Gates};
+use crate::hooks::{self, HookCall, HookRunner};
 use crate::journal::Journal;
+use crate::limiter::{Limiter, SpeedLimit};
 use crate::options::EngineOptions;
 use crate::pace::{Pacer, SystemPacer};
 use crate::plan::Plan;
 use crate::progress::JobProgress;
+use crate::resume::{JobNotice, Ledger};
 use crate::run::{Run, Shared, watch_for_stalls};
 use crate::undo::{UndoLog, UndoRecord};
 
@@ -254,15 +258,36 @@ pub trait JobSink: Send + Sync {
     /// settle (the engine retries a lost network on its own first, and
     /// skips a class already answered "Skip all like this").
     fn error(&self, error: &ItemError) -> ErrorAction;
+
+    /// Answers the one question for a host whose connection did not come
+    /// back within its budget of tries (R25, 2.4): Keep waiting, Try again
+    /// now or Cancel these jobs. Asked once per host and round, through
+    /// the sink of the one job that probes for all of them. The default,
+    /// for a frontend that has no such question, is
+    /// [`ConnectionAnswer::AskEachJob`]: the jobs stop waiting and each
+    /// asks about its item, as before the gate.
+    fn connection(&self, question: &ConnectionQuestion) -> ConnectionAnswer {
+        let _ = question;
+        ConnectionAnswer::AskEachJob
+    }
+
+    /// Takes a line the job says once, beside its progress: a file resumed
+    /// where it stopped, or a part file that could not be. The default
+    /// says nothing.
+    fn notice(&self, notice: &JobNotice) {
+        let _ = notice;
+    }
 }
 
-/// Cancels or pauses a running job. Cloning shares the control.
+/// Cancels or pauses a running job, and sets its own speed limit. Cloning
+/// shares the control.
 #[derive(Clone, Debug, Default)]
 pub struct JobControl {
     /// Cancels the job between steps, and inside providers through the
     /// token.
     pub cancel: CancelToken,
     paused: Arc<AtomicBool>,
+    speed: Arc<Limiter>,
 }
 
 impl JobControl {
@@ -284,6 +309,23 @@ impl JobControl {
     /// Whether the job is paused.
     pub fn is_paused(&self) -> bool {
         self.paused.load(Ordering::Relaxed)
+    }
+
+    /// Sets this job's own speed limit, or takes it off with `None`, while
+    /// it runs: the next chunk follows it (R25 N8). The global limit
+    /// ([`Engine::speed_limit`]) applies as well.
+    pub fn set_speed_limit(&self, limit: Option<SpeedLimit>) {
+        self.speed.set(limit);
+    }
+
+    /// This job's own speed limit, when one is set.
+    pub fn speed_limit(&self) -> Option<SpeedLimit> {
+        self.speed.limit()
+    }
+
+    /// This job's own limiter.
+    pub(crate) fn limiter(&self) -> &Limiter {
+        &self.speed
     }
 }
 
@@ -351,6 +393,13 @@ pub struct JobReport {
     pub warnings: Vec<(Place, String)>,
     /// Whether the job was cancelled before its end.
     pub cancelled: bool,
+    /// Whether the job stopped at its first failure, as its error policy
+    /// said ([`diroxide_core::job::ErrorPolicy::StopAtFirst`]); the failure
+    /// is in `failed`.
+    pub stopped: bool,
+    /// How many times the engine tried an item again on its own, silently,
+    /// after a lost network: counted here and never said one by one.
+    pub retries: u32,
     /// The check of what the job made against a fresh read, when it ran.
     pub reconciliation: Option<Reconciliation>,
     /// What the Undo command can reverse.
@@ -373,6 +422,8 @@ impl JobReport {
             failed: Vec::new(),
             warnings: Vec::new(),
             cancelled: false,
+            stopped: false,
+            retries: 0,
             reconciliation: None,
             undo: UndoRecord::for_job(job, kind),
             joined: None,
@@ -381,8 +432,9 @@ impl JobReport {
 
     /// The report in one line, the problems first (R8): "Copy had 8
     /// failures: 290 done, 2 skipped."; "Copy cancelled: 2 done."; "Copy
-    /// finished with 1 warning: 3 done."; "Copy finished: 3 done, 1
-    /// skipped." A missing result counts as a failure.
+    /// stopped at the first error: 2 done."; "Copy finished with 1
+    /// warning: 3 done."; "Copy finished: 3 done, 1 skipped." A missing
+    /// result counts as a failure.
     pub fn summary(&self) -> String {
         let verb = summary_word(self.kind);
         let mut counts = vec![format!("{} done", self.done.len())];
@@ -393,6 +445,8 @@ impl JobReport {
         let failures = self.failed.len() + missing;
         let head = if self.cancelled {
             format!("{verb} cancelled")
+        } else if self.stopped {
+            format!("{verb} stopped at the first error")
         } else if failures > 0 {
             format!(
                 "{verb} had {}",
@@ -414,7 +468,7 @@ impl JobReport {
 /// ("Copy", "Move to the trash"), except where the verb needs its object
 /// and would read wrong before "finished": "Permissions finished: 1
 /// done.", not "Change the attributes of finished".
-fn summary_word(kind: JobKind) -> String {
+pub(crate) fn summary_word(kind: JobKind) -> String {
     match kind {
         JobKind::SetAttributes => "Permissions".to_owned(),
         JobKind::SetTimes => "Times".to_owned(),
@@ -456,18 +510,100 @@ pub struct Engine {
     options: EngineOptions,
     pacer: Arc<dyn Pacer>,
     journal: Option<Journal>,
+    gates: Gates,
+    ledger: Arc<Ledger>,
+    limiter: Arc<Limiter>,
+    hooks: Option<Arc<dyn HookRunner>>,
 }
 
 impl Engine {
     /// An engine that reaches places through this registry, with the
-    /// default options, the real clock and no journal.
+    /// default options, the real clock, no journal and its own connection
+    /// gates.
     pub fn new(registry: Arc<Registry>) -> Self {
         Self {
             registry,
             options: EngineOptions::default(),
             pacer: Arc::new(SystemPacer::new()),
             journal: None,
+            gates: Gates::new(),
+            ledger: Arc::new(Ledger::in_memory()),
+            limiter: Arc::new(Limiter::new()),
+            hooks: None,
         }
+    }
+
+    /// The same engine asking these plugins' hooks (R25 commit 71):
+    /// `before_*` at the end of [`Engine::plan_with`], `after_*` when a
+    /// run ends.
+    pub fn with_hooks(mut self, runner: Arc<dyn HookRunner>) -> Self {
+        self.hooks = Some(runner);
+        self
+    }
+
+    /// Asks the `before_*` hooks of a planned job, after the plan and
+    /// before the confirmation: each on a thread of its own, at most its
+    /// time limit. Returns the lines to say while the job goes on, or
+    /// [`OpsError::HookStopped`] with the line that stopped it. Nothing
+    /// when the engine has no runner or the job's kind has no event.
+    pub fn before_hooks(&self, plan: &Plan, control: &JobControl) -> Result<Vec<String>, OpsError> {
+        let (Some(runner), Some(call)) = (&self.hooks, HookCall::of(plan)) else {
+            return Ok(Vec::new());
+        };
+        match hooks::ask_before(runner, &call, &control.cancel) {
+            None => Err(OpsError::Vfs(VfsError::Cancelled)),
+            Some(Ok(warnings)) => Ok(warnings),
+            Some(Err(line)) => Err(OpsError::HookStopped(line)),
+        }
+    }
+
+    /// The same engine sharing this global speed limit: an engine made
+    /// again keeps the limit its running jobs follow.
+    pub fn with_speed_limit(mut self, limiter: Arc<Limiter>) -> Self {
+        self.limiter = limiter;
+        self
+    }
+
+    /// The global speed limit, shared by every clone of this engine: off
+    /// by default, remote jobs only unless the scope says all jobs
+    /// ([`crate::limiter::LimitScope`]). Changing it changes the next
+    /// chunk of every job it limits.
+    pub fn speed_limit(&self) -> &Limiter {
+        &self.limiter
+    }
+
+    /// The global limiter itself, to share with an engine made again.
+    pub fn speed_limiter(&self) -> Arc<Limiter> {
+        Arc::clone(&self.limiter)
+    }
+
+    /// The same engine keeping its ledger of partial files here: in the
+    /// state folder ([`Ledger::open`]) so the next start finds what a crash
+    /// left, shared by every clone.
+    pub fn with_ledger(mut self, ledger: Arc<Ledger>) -> Self {
+        self.ledger = ledger;
+        self
+    }
+
+    /// The ledger of partial files (R25, 2.5): what a lost connection or a
+    /// crash left for a resume. Its leftovers are listed, never removed
+    /// unasked.
+    pub fn ledger(&self) -> &Ledger {
+        &self.ledger
+    }
+
+    /// The same engine sharing these connection gates: an engine made
+    /// again over a new registry keeps the hosts it knows lost, and their
+    /// waiting jobs.
+    pub fn with_gates(mut self, gates: Gates) -> Self {
+        self.gates = gates;
+        self
+    }
+
+    /// The connection gates, one per host, shared by every clone of this
+    /// engine (R25, 2.4).
+    pub fn gates(&self) -> &Gates {
+        &self.gates
     }
 
     /// The same engine with these options.
@@ -541,7 +677,12 @@ impl Engine {
             let mut run = Run::new(self, plan, control, sink, &shared);
             run.execute();
             drop(stop);
-            run.into_report()
+            let report = run.into_report();
+            // The after hooks hear the report once, never waited for.
+            if let Some(runner) = &self.hooks {
+                hooks::send_after(runner, &report);
+            }
+            report
         })
     }
 

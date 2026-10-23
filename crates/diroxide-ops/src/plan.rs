@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use diroxide_core::catalog;
 use diroxide_core::format::{count, human_size};
+use diroxide_core::job::ErrorPolicy;
 use diroxide_core::names::spell_out;
 use diroxide_core::{
     Attributes, ConflictPolicy, Entry, EntryKind, JobId, JobKind, JobOrigin, Message, Place,
@@ -483,6 +484,13 @@ pub struct PlanFacts {
     pub join: Option<JoinFacts>,
     /// A permissions or times job's edit and rows, the recursion first.
     pub attributes: Option<AttributeFacts>,
+    /// What the run does when an item fails after its silent retries: the
+    /// request's error policy (R25 N9), asking by default.
+    pub error_policy: ErrorPolicy,
+    /// What the `before_*` hooks said while the job goes on anyway: a hook
+    /// that did not answer in time, each line ending with the plugin's
+    /// name (R25 commit 71). Said before the confirmation.
+    pub hook_warnings: Vec<String>,
 }
 
 impl PlanFacts {

@@ -256,6 +256,63 @@ pub trait StreamingList: Send + Sync {
     ) -> Result<(), VfsError>;
 }
 
+/// Writes that survive a lost connection (R25, 2.5): the unfinished file
+/// stays when its writer is dropped without its commit, and a later write
+/// reopens it at its end. Found through [`Provider::as_resumable`], the
+/// pattern of [`Provider::as_streaming`], where
+/// [`Capabilities::resume`](crate::Capabilities::resume) says the place can.
+///
+/// A provider only keeps and reopens bytes; the job engine decides whether
+/// to resume: its ledger of partial files, the fingerprint of the source
+/// (size and modified time) and the window check (the first 64 KiB and the
+/// last 1 MiB of the partial file against the source). So a plugin's
+/// provider, SFTP's first, answers the same calls over the wire. Only an
+/// unfinished name this program made is ever reopened or removed here.
+pub trait ResumableWrite: Send + Sync {
+    /// Starts a write of `target`, as [`Provider::write`] does, whose
+    /// unfinished file is kept when the writer is dropped without its
+    /// commit (a lost connection, a crash). The writer's
+    /// [`FileWriter::unfinished_place`] names that file; a commit makes it
+    /// `target`'s content as any writer's does.
+    fn write_kept(
+        &self,
+        target: &Place,
+        mode: WriteMode,
+        ctx: &OpContext,
+    ) -> Result<Box<dyn FileWriter>, VfsError>;
+
+    /// Reopens the unfinished file a kept write of `target` left, at its
+    /// end, and answers its length: the writer's next byte goes there. The
+    /// new writer is kept the same way; its commit makes the file
+    /// `target`'s content. `unfinished` must be an unfinished name beside
+    /// `target`, or the call is refused.
+    fn reopen(
+        &self,
+        unfinished: &Place,
+        target: &Place,
+        mode: WriteMode,
+        ctx: &OpContext,
+    ) -> Result<(Box<dyn FileWriter>, u64), VfsError>;
+
+    /// The length of an unfinished file, as the place holds it now: what a
+    /// resume goes on from.
+    fn unfinished_len(&self, unfinished: &Place, ctx: &OpContext) -> Result<u64, VfsError>;
+
+    /// Reads up to `length` bytes of an unfinished file from `offset`, for
+    /// the window check; fewer at its end.
+    fn read_unfinished(
+        &self,
+        unfinished: &Place,
+        offset: u64,
+        length: usize,
+        ctx: &OpContext,
+    ) -> Result<Vec<u8>, VfsError>;
+
+    /// Removes an unfinished file a kept write left: on Cancel, or when a
+    /// resume is refused. Anything but an unfinished name is refused.
+    fn discard(&self, unfinished: &Place, ctx: &OpContext) -> Result<(), VfsError>;
+}
+
 /// A kind of place: the local disk, archives, a plugin's protocol.
 ///
 /// Every method blocks, so callers run them on worker threads, never on the
@@ -442,6 +499,13 @@ pub trait Provider: Send + Sync + fmt::Debug {
     fn as_streaming(&self) -> Option<&dyn StreamingList> {
         None
     }
+
+    /// The resumable write, when this provider has one; a place says
+    /// whether it can use it with
+    /// [`Capabilities::resume`](crate::Capabilities::resume).
+    fn as_resumable(&self) -> Option<&dyn ResumableWrite> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -596,5 +660,6 @@ mod tests {
         assert_eq!(provider.space(&place, &ctx).unwrap(), SpaceInfo::default());
         assert!(provider.volume(&place, &ctx).unwrap().root.is_root());
         assert!(provider.as_streaming().is_none());
+        assert!(provider.as_resumable().is_none());
     }
 }

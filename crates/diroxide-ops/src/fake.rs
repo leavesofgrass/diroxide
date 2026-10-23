@@ -20,6 +20,11 @@
 //! - Faults ([`Fault`], [`CallFault`]): a chosen error at a place, on any
 //!   call or on one kind of call, always or a number of times, optionally
 //!   after N bytes of a read or a write.
+//! - A lost connection (R25): places taken offline
+//!   ([`FakeProvider::take_offline`]) fail every call with a lost network,
+//!   transfers already open included, until brought back; a drop
+//!   ([`LinkDrop`]) cuts one transfer after N bytes and leaves its place
+//!   offline.
 //!
 //! A write shows its unfinished name (`.diro-part-` and eight hex digits)
 //! in the folder while it runs, as the local provider's committing writer
@@ -37,6 +42,7 @@ use std::time::Duration;
 
 use diroxide_core::{Attributes, Entry, EntryKind, Place, Timestamp};
 use diroxide_vfs::names::unfinished_name;
+use diroxide_vfs::provider::ResumableWrite;
 use diroxide_vfs::{
     AttributeChange, Can, Capabilities, CopyHint, FileWriter, LinkKind, LinkRequest, OpContext,
     Provider, ReadSeek, SpaceInfo, TrashCheck, TrashGate, VfsError, VolumeInfo, VolumeKind,
@@ -63,6 +69,9 @@ pub struct Lies {
     pub clone_fails_late: bool,
     /// The trash reports the item in the trash and leaves it where it was.
     pub trash_does_nothing: bool,
+    /// A kept part file loses its last N bytes to zeros, its length kept,
+    /// as a server that crashed before it flushed (spike Q1's case).
+    pub kept_tail_zeroed: u64,
 }
 
 /// A failure at a place.
@@ -200,6 +209,45 @@ pub struct FakeSwitches {
     /// item: `GoneNotInTrash` is a trash that lost it, `NotChecked` a
     /// plugin's trash that cannot tell. `None` answers `InTrash`.
     pub trash_check: Option<TrashCheck>,
+    /// Places that cannot be reached: every call at or inside one fails
+    /// with a lost network, as a host that went away (R25's offline mode).
+    /// A test brings a place back by taking it off the list.
+    pub offline: Vec<Place>,
+    /// Connections that drop in the middle of a transfer (R25's drop
+    /// mode), each once.
+    pub drops: Vec<LinkDrop>,
+    /// Writes can be resumed: a kept write leaves its part file and a
+    /// later one reopens it (the capability `resume`); off by default, so
+    /// a cut write leaves nothing, as before.
+    pub resume: bool,
+}
+
+/// A connection that drops after a number of bytes (R25's drop mode): a
+/// read or a write of a file at or inside `within` fails with a lost
+/// network once its transfer reaches `after_bytes`, counted from the start
+/// of the file, and the place goes offline when `goes_offline` says so.
+/// Each drop fires once, then is gone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LinkDrop {
+    /// Where the connection drops.
+    pub within: Place,
+    /// How many bytes of the file get through first.
+    pub after_bytes: u64,
+    /// Whether the place stays unreachable afterwards (offline), until a
+    /// test brings it back.
+    pub goes_offline: bool,
+}
+
+impl LinkDrop {
+    /// A drop after `after_bytes` bytes at or inside `within`, the place
+    /// staying offline afterwards.
+    pub fn after(within: Place, after_bytes: u64) -> Self {
+        Self {
+            within,
+            after_bytes,
+            goes_offline: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -586,6 +634,9 @@ impl FakeProvider {
         if switches.latency.stall_after_calls == Some(calls) {
             thread::sleep(switches.latency.stall_for);
         }
+        if switches.offline.iter().any(|root| place.is_within(root)) {
+            return Err(VfsError::NetworkLost);
+        }
         if let Some(fault) = switches
             .faults
             .iter()
@@ -607,6 +658,107 @@ impl FakeProvider {
         }
         ctx.check()?;
         Ok(switches)
+    }
+
+    /// Takes a place offline: every call at or inside it fails with a lost
+    /// network until [`FakeProvider::bring_back`].
+    pub fn take_offline(&self, place: &Place) {
+        let mut switches = self.switches_mut();
+        if !switches.offline.contains(place) {
+            switches.offline.push(place.clone());
+        }
+    }
+
+    /// Brings an offline place back.
+    pub fn bring_back(&self, place: &Place) {
+        self.switches_mut().offline.retain(|root| root != place);
+    }
+
+    /// Whether a place is offline now.
+    pub fn is_offline(&self, place: &Place) -> bool {
+        self.switches()
+            .offline
+            .iter()
+            .any(|root| place.is_within(root))
+    }
+
+    /// The armed drop for a transfer at a place: where it fires.
+    fn drop_for(switches: &FakeSwitches, place: &Place) -> Option<LinkDrop> {
+        switches
+            .drops
+            .iter()
+            .find(|drop| place.is_within(&drop.within))
+            .cloned()
+    }
+
+    /// Fires a drop: `true` when it was still armed (it is gone now, and
+    /// its place offline when it says so), `false` when another transfer
+    /// fired it first.
+    fn fire(&self, drop: &LinkDrop) -> bool {
+        let mut switches = self.switches_mut();
+        let Some(at) = switches.drops.iter().position(|armed| armed == drop) else {
+            return false;
+        };
+        switches.drops.remove(at);
+        if drop.goes_offline && !switches.offline.contains(&drop.within) {
+            switches.offline.push(drop.within.clone());
+        }
+        true
+    }
+
+    /// A committing writer at a place, its unfinished name showing in the
+    /// folder: the body of `write` and of the kept write.
+    fn writer(
+        &self,
+        place: &Place,
+        mode: WriteMode,
+        ctx: &OpContext,
+    ) -> Result<FakeWriter, VfsError> {
+        let switches = self.enter(FakeCall::Write, place, ctx)?;
+        if switches.read_only.contains(place) {
+            return Err(VfsError::PermissionDenied);
+        }
+        if switches.locked.contains(place) {
+            return Err(VfsError::InUse);
+        }
+        let Some(folder) = place.parent() else {
+            return Err(VfsError::NotFound);
+        };
+        if !self.exists(&folder) {
+            return Err(VfsError::NotFound);
+        }
+        if mode == WriteMode::CreateNew && self.exists(place) {
+            return Err(VfsError::AlreadyExists);
+        }
+        let token = {
+            let mut state = self.state();
+            state.next_token += 1;
+            state.next_token
+        };
+        let unfinished = folder
+            .join(&unfinished_name(token))
+            .map_err(VfsError::from)?;
+        let entry = Entry::new(unfinished.name().unwrap_or_default(), EntryKind::File);
+        let (key, node) = self.new_node(&unfinished, entry, Vec::new());
+        self.state().nodes.insert(key, node);
+        Ok(FakeWriter::new(
+            self,
+            place,
+            Some(unfinished),
+            mode,
+            &switches,
+        ))
+    }
+
+    /// Refuses anything but an unfinished name.
+    fn unfinished_only(place: &Place) -> Result<(), VfsError> {
+        if diroxide_vfs::names::is_unfinished(place.name().unwrap_or_default()) {
+            Ok(())
+        } else {
+            Err(VfsError::Unsafe {
+                why: "only an unfinished file is reopened or removed here".to_owned(),
+            })
+        }
     }
 
     fn volume_of(switches: &FakeSwitches, place: &Place) -> u64 {
@@ -732,11 +884,52 @@ impl SlowPlace {
     }
 }
 
-/// A reader that fails after a number of bytes.
+/// The connection a transfer runs over: a place that can go offline
+/// while it runs, and a drop that may fire in it.
+struct Link {
+    fake: FakeProvider,
+    place: Place,
+    drop: Option<LinkDrop>,
+}
+
+impl Link {
+    fn new(fake: &FakeProvider, place: &Place, switches: &FakeSwitches) -> Self {
+        Self {
+            fake: fake.clone(),
+            place: place.clone(),
+            drop: FakeProvider::drop_for(switches, place),
+        }
+    }
+
+    /// How many bytes from `at` may pass before the drop; `None` when no
+    /// drop is armed. An error when the place is offline, or the drop
+    /// fires at `at`.
+    fn room(&mut self, at: u64) -> io::Result<Option<u64>> {
+        if self.fake.is_offline(&self.place) {
+            return Err(io_error(&VfsError::NetworkLost));
+        }
+        let Some(drop) = &self.drop else {
+            return Ok(None);
+        };
+        if at < drop.after_bytes {
+            return Ok(Some(drop.after_bytes - at));
+        }
+        let drop = drop.clone();
+        self.drop = None;
+        if self.fake.fire(&drop) {
+            return Err(io_error(&VfsError::NetworkLost));
+        }
+        Ok(None)
+    }
+}
+
+/// A reader that fails after a number of bytes, and over a connection
+/// that may drop.
 struct FaultyReader {
     inner: Cursor<Vec<u8>>,
     fail_at: Option<u64>,
     error: Option<VfsError>,
+    link: Link,
 }
 
 impl Read for FaultyReader {
@@ -746,12 +939,15 @@ impl Read for FaultyReader {
         {
             return Err(io_error(error));
         }
-        let limit = match self.fail_at {
+        let mut limit = match self.fail_at {
             Some(at) => usize::try_from(at.saturating_sub(self.inner.position()))
                 .unwrap_or(usize::MAX)
                 .min(buf.len()),
             None => buf.len(),
         };
+        if let Some(room) = self.link.room(self.inner.position())? {
+            limit = limit.min(usize::try_from(room).unwrap_or(usize::MAX));
+        }
         self.inner.read(&mut buf[..limit])
     }
 }
@@ -768,10 +964,18 @@ struct FakeWriter {
     pos: usize,
     seekable: bool,
     fail_at: Option<(u64, VfsError)>,
+    link: Link,
+    /// A kept write: dropped without its commit, its bytes stay in the
+    /// part file.
+    kept: bool,
 }
 
 impl Write for FakeWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let mut bytes = bytes;
+        if let Some(room) = self.link.room(self.pos as u64)? {
+            bytes = &bytes[..bytes.len().min(usize::try_from(room).unwrap_or(usize::MAX))];
+        }
         let end = self.pos + bytes.len();
         if let Some((at, error)) = &self.fail_at
             && end as u64 > *at
@@ -791,11 +995,50 @@ impl Write for FakeWriter {
     }
 }
 
+impl FakeWriter {
+    fn new(
+        fake: &FakeProvider,
+        place: &Place,
+        unfinished: Option<Place>,
+        mode: WriteMode,
+        switches: &FakeSwitches,
+    ) -> Self {
+        let fail_at = switches
+            .faults
+            .iter()
+            .find(|f| &f.place == place)
+            .and_then(|f| f.at_byte.map(|at| (at, f.error.clone())));
+        Self {
+            fake: fake.clone(),
+            place: place.clone(),
+            unfinished,
+            mode,
+            buffer: Vec::new(),
+            pos: 0,
+            seekable: switches.seekable_writes,
+            fail_at,
+            link: Link::new(fake, place, switches),
+            kept: false,
+        }
+    }
+}
+
 impl Drop for FakeWriter {
     fn drop(&mut self) {
-        if let Some(unfinished) = self.unfinished.take() {
+        let Some(unfinished) = self.unfinished.take() else {
+            return;
+        };
+        if !self.kept {
             self.fake.vanish(&unfinished);
+            return;
         }
+        let mut data = std::mem::take(&mut self.buffer);
+        let zeroed = usize::try_from(self.fake.switches().lies.kept_tail_zeroed)
+            .unwrap_or(usize::MAX)
+            .min(data.len());
+        let from = data.len() - zeroed;
+        data[from..].fill(0);
+        self.fake.add_file(&unfinished, &data);
     }
 }
 
@@ -902,6 +1145,7 @@ impl Provider for FakeProvider {
         capabilities.random_read = true;
         capabilities.clone_copy = switches.clone_copy;
         capabilities.replace_rename = switches.replace_rename;
+        capabilities.resume = switches.resume;
         capabilities
     }
 
@@ -955,6 +1199,7 @@ impl Provider for FakeProvider {
             inner: Cursor::new(node.data),
             fail_at: fault.and_then(|f| f.at_byte),
             error: fault.map(|f| f.error.clone()),
+            link: Link::new(self, place, &switches),
         }))
     }
 
@@ -970,48 +1215,11 @@ impl Provider for FakeProvider {
         mode: WriteMode,
         ctx: &OpContext,
     ) -> Result<Box<dyn FileWriter>, VfsError> {
-        let switches = self.enter(FakeCall::Write, place, ctx)?;
-        if switches.read_only.contains(place) {
-            return Err(VfsError::PermissionDenied);
-        }
-        if switches.locked.contains(place) {
-            return Err(VfsError::InUse);
-        }
-        let Some(folder) = place.parent() else {
-            return Err(VfsError::NotFound);
-        };
-        if !self.exists(&folder) {
-            return Err(VfsError::NotFound);
-        }
-        if mode == WriteMode::CreateNew && self.exists(place) {
-            return Err(VfsError::AlreadyExists);
-        }
-        let token = {
-            let mut state = self.state();
-            state.next_token += 1;
-            state.next_token
-        };
-        let unfinished = folder
-            .join(&unfinished_name(token))
-            .map_err(VfsError::from)?;
-        let entry = Entry::new(unfinished.name().unwrap_or_default(), EntryKind::File);
-        let (key, node) = self.new_node(&unfinished, entry, Vec::new());
-        self.state().nodes.insert(key, node);
-        let fail_at = switches
-            .faults
-            .iter()
-            .find(|f| &f.place == place)
-            .and_then(|f| f.at_byte.map(|at| (at, f.error.clone())));
-        Ok(Box::new(FakeWriter {
-            fake: self.clone(),
-            place: place.clone(),
-            unfinished: Some(unfinished),
-            mode,
-            buffer: Vec::new(),
-            pos: 0,
-            seekable: switches.seekable_writes,
-            fail_at,
-        }))
+        Ok(Box::new(self.writer(place, mode, ctx)?))
+    }
+
+    fn as_resumable(&self) -> Option<&dyn ResumableWrite> {
+        Some(self)
     }
 
     fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
@@ -1320,6 +1528,80 @@ impl Provider for FakeProvider {
     }
 }
 
+/// The fake's resumable write (R25 commit 69): a kept write leaves its
+/// bytes in its part file, with the tail zeroed when
+/// [`Lies::kept_tail_zeroed`] says so; a reopened one goes on at its end.
+impl ResumableWrite for FakeProvider {
+    fn write_kept(
+        &self,
+        target: &Place,
+        mode: WriteMode,
+        ctx: &OpContext,
+    ) -> Result<Box<dyn FileWriter>, VfsError> {
+        let mut writer = self.writer(target, mode, ctx)?;
+        writer.kept = true;
+        Ok(Box::new(writer))
+    }
+
+    fn reopen(
+        &self,
+        unfinished: &Place,
+        target: &Place,
+        mode: WriteMode,
+        ctx: &OpContext,
+    ) -> Result<(Box<dyn FileWriter>, u64), VfsError> {
+        Self::unfinished_only(unfinished)?;
+        if unfinished.parent() != target.parent() {
+            return Err(VfsError::Unsafe {
+                why: "the unfinished file is not beside its target".to_owned(),
+            });
+        }
+        let switches = self.enter(FakeCall::Write, target, ctx)?;
+        let data = self.contents(unfinished).ok_or(VfsError::NotFound)?;
+        let length = data.len() as u64;
+        let mut writer = FakeWriter::new(self, target, Some(unfinished.clone()), mode, &switches);
+        writer.pos = data.len();
+        writer.buffer = data;
+        writer.kept = true;
+        Ok((Box::new(writer), length))
+    }
+
+    fn unfinished_len(&self, unfinished: &Place, ctx: &OpContext) -> Result<u64, VfsError> {
+        Self::unfinished_only(unfinished)?;
+        self.enter(FakeCall::Stat, unfinished, ctx)?;
+        self.contents(unfinished)
+            .map(|data| data.len() as u64)
+            .ok_or(VfsError::NotFound)
+    }
+
+    fn read_unfinished(
+        &self,
+        unfinished: &Place,
+        offset: u64,
+        length: usize,
+        ctx: &OpContext,
+    ) -> Result<Vec<u8>, VfsError> {
+        Self::unfinished_only(unfinished)?;
+        self.enter(FakeCall::Read, unfinished, ctx)?;
+        let data = self.contents(unfinished).ok_or(VfsError::NotFound)?;
+        let from = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(data.len());
+        let to = from.saturating_add(length).min(data.len());
+        Ok(data[from..to].to_vec())
+    }
+
+    fn discard(&self, unfinished: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+        Self::unfinished_only(unfinished)?;
+        self.enter(FakeCall::Remove, unfinished, ctx)?;
+        if !self.exists(unfinished) {
+            return Err(VfsError::NotFound);
+        }
+        self.vanish(unfinished);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1560,6 +1842,47 @@ mod tests {
         drop(writer);
         assert!(!fake.exists(&p("/a/x")));
         assert!(fake.unfinished().is_empty());
+    }
+
+    #[test]
+    fn an_offline_place_and_a_drop_lose_the_connection() {
+        let fake = FakeProvider::new();
+        let host = Place::parse("sftp://build/").unwrap();
+        let file = Place::parse("sftp://build/srv/big.bin").unwrap();
+        let data: Vec<u8> = (0..100u8).collect();
+        fake.add_file(&file, &data);
+        let ctx = OpContext::new();
+        fake.switches_mut()
+            .drops
+            .push(LinkDrop::after(host.clone(), 40));
+        let mut reader = fake.read(&file, &ctx).unwrap();
+        let mut got = Vec::new();
+        let error = reader.read_to_end(&mut got).unwrap_err();
+        assert_eq!(got.len(), 40, "the bytes before the drop got through");
+        assert_eq!(error.kind(), io::ErrorKind::NetworkDown);
+        assert!(fake.is_offline(&file));
+        assert_eq!(fake.stat(&file, &ctx).unwrap_err(), VfsError::NetworkLost);
+        fake.bring_back(&host);
+        assert!(fake.stat(&host, &ctx).is_ok(), "the root answers again");
+        let mut again = Vec::new();
+        fake.read(&file, &ctx)
+            .unwrap()
+            .read_to_end(&mut again)
+            .unwrap();
+        assert_eq!(again, data, "a drop fires once");
+        // A write cut the same way leaves nothing at the target.
+        let target = Place::parse("sftp://build/srv/up.bin").unwrap();
+        fake.switches_mut()
+            .drops
+            .push(LinkDrop::after(host.clone(), 30));
+        let mut writer = fake.write(&target, WriteMode::CreateNew, &ctx).unwrap();
+        assert!(writer.write_all(&data).is_err());
+        drop(writer);
+        assert!(!fake.exists(&target));
+        assert!(fake.unfinished().is_empty());
+        fake.bring_back(&host);
+        fake.take_offline(&host);
+        assert!(fake.list(&host, &ctx).is_err());
     }
 
     #[test]

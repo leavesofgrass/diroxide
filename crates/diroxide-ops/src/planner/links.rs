@@ -147,6 +147,7 @@ impl Engine {
         plan.facts.items = 1;
         plan.facts.links = 1;
         plan.facts.destination = Some(folder);
+        plan.facts.error_policy = request.errors;
         plan.expected.insert(link.clone(), entry);
         Ok(plan)
     }

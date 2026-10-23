@@ -809,6 +809,7 @@ impl<'a> Planner<'a> {
 
     fn finish(mut self) -> Plan {
         self.plan.facts.origin = self.request.origin.clone();
+        self.plan.facts.error_policy = self.request.errors;
         self.plan.facts.items = self.request.sources.len().max(self.request.renames.len()) as u64;
         self.plan
     }
@@ -956,7 +957,11 @@ impl Engine {
         progress.items_done = planner.counted;
         progress.state = JobState::Counting;
         sink.progress(&progress);
-        Ok(planner.finish())
+        let mut plan = planner.finish();
+        // After the plan, before the confirmation: a veto spares the owner
+        // a question (R25 commit 71).
+        plan.facts.hook_warnings = self.before_hooks(&plan, control)?;
+        Ok(plan)
     }
 
     /// Plans a job on a selection frozen at the moment of confirmation:

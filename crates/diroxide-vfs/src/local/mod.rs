@@ -28,6 +28,7 @@ pub(crate) mod copy;
 pub(crate) mod entry;
 pub(crate) mod owners;
 pub(crate) mod probe;
+pub(crate) mod resume;
 pub(crate) mod trashing;
 pub(crate) mod volumes;
 pub(crate) mod watch;
@@ -44,8 +45,8 @@ use crate::capabilities::Capabilities;
 use crate::error::VfsError;
 use crate::names;
 use crate::provider::{
-    AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Provider, ReadSeek, WatchHandle,
-    WatchSink, WriteMode,
+    AttributeChange, CopyHint, FileWriter, LinkKind, LinkRequest, Provider, ReadSeek,
+    ResumableWrite, WatchHandle, WatchSink, WriteMode,
 };
 use crate::sys;
 use crate::trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
@@ -474,6 +475,11 @@ impl Provider for LocalProvider {
         let target = Self::path_of(to)?;
         Self::refuse_name(to, &target)?;
         copy::copy_within(&source, &target, copy::hint(&source, &target), ctx)
+    }
+
+    /// The kept write of `local::resume`, wherever the place is writable.
+    fn as_resumable(&self) -> Option<&dyn ResumableWrite> {
+        Some(self)
     }
 }
 

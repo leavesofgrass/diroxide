@@ -10,6 +10,10 @@
 //! and an [`UndoLog`] of moves, trashings and created entries, kept on
 //! disk by the [`Journal`]. Nothing here runs a shell.
 //!
+//! The transfer queue is the jobs list (R25, part 1): the [`Queue`] decides
+//! when a confirmed job starts, by class and host; a lost host is one fact
+//! for every job on it, behind its connection gate ([`Gates`]).
+//!
 //! The order is create, verify, then destroy (plan section 5.4). The
 //! [`fake`] provider has the latency, stall and "lies" switches the tests
 //! of that order need.
@@ -23,8 +27,17 @@ pub mod access;
 pub mod engine;
 pub mod error;
 pub mod fake;
+pub mod gate;
+#[cfg(test)]
+mod gate_tests;
+pub mod hooks;
+#[cfg(test)]
+mod hooks_tests;
 pub mod join;
 pub mod journal;
+#[cfg(test)]
+mod limit_tests;
+pub mod limiter;
 pub mod links;
 pub mod options;
 pub mod pace;
@@ -33,6 +46,10 @@ pub mod parts;
 pub mod plan;
 mod planner;
 pub mod progress;
+pub mod queue;
+pub mod resume;
+#[cfg(test)]
+mod resume_tests;
 mod run;
 #[cfg(test)]
 mod run_tests;
@@ -51,9 +68,17 @@ pub use engine::{
     numbered_name,
 };
 pub use error::OpsError;
-pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, SlowPlace};
+pub use fake::{
+    CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, LinkDrop, SlowPlace,
+};
+pub use gate::{ConnectionAnswer, ConnectionQuestion, GateEvent, Gates, Waiter};
+pub use hooks::{
+    HookCall, HookEvent, HookItem, HookReport, HookResult, HookRunner, HookStatus, HookVerdict,
+    OnSilence, WakingHook,
+};
 pub use join::{JoinFacts, JoinOutcome, Verdict};
 pub use journal::{Interrupted, Journal};
+pub use limiter::{LimitScope, Limiter, SpeedLimit};
 pub use links::LinkForm;
 pub use options::EngineOptions;
 pub use pace::{FakePacer, Pacer, SystemPacer};
@@ -61,6 +86,8 @@ pub use part_names::{Discovery, PartSet, SetProblem};
 pub use parts::{PartInfo, PartsError, PartsReader};
 pub use plan::{ListingGroup, Plan, PlanFacts, Preflight, Step};
 pub use progress::JobProgress;
+pub use queue::{Cancelled, Grant, HostKey, JobClass, Queue, QueueLimits};
+pub use resume::{JobNotice, Ledger, NotResumed, Partial};
 pub use sidecar::{Sidecar, SidecarRead};
 pub use split::{SplitFacts, SplitFile};
 pub use undo::{LeftAs, Relinked, UndoLog, UndoRecord};
