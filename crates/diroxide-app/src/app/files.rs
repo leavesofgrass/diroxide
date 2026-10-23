@@ -1382,6 +1382,11 @@ impl App {
             }
             None => {
                 self.quick = None;
+                // A folder that is still listing stops, and keeps what
+                // came (R25 commit 77).
+                if let Some(effects) = self.stop_listing() {
+                    return effects;
+                }
                 // With no job to cancel, Cancel takes the panel's filter
                 // off (W3a): "Filter off, 120 shown".
                 if self.panel(self.active).filter().is_some() {

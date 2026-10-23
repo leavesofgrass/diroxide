@@ -180,6 +180,9 @@ pub enum Load {
     /// are the job's, already said by the job's result, so they are not
     /// said again.
     AfterJob,
+    /// The rest of a listing that comes in batches (lane A2, R25 commit
+    /// 77): the panel moved with the first batch, and the others fill it.
+    Stream,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,6 +191,12 @@ struct Loading {
     place: Place,
     focus: Option<String>,
     how: Load,
+    /// The marks still to restore as their rows arrive, in a listing that
+    /// comes in batches.
+    marks: Vec<String>,
+    /// The focused row after the last batch: when the owner moves the
+    /// focus, the focus wanted is dropped.
+    left_on: Option<String>,
 }
 
 /// A folder's cursor and marks, kept when the panel leaves it.
@@ -514,7 +523,94 @@ impl Panel {
             place,
             focus,
             how,
+            marks: Vec::new(),
+            left_on: None,
         });
+    }
+
+    /// The listing this panel waits for.
+    pub fn loading_request(&self) -> Option<RequestId> {
+        self.loading.as_ref().map(|l| l.request)
+    }
+
+    /// Whether the listing on its way comes in batches and the panel shows
+    /// its first rows already.
+    pub fn is_streaming(&self) -> bool {
+        self.loading.as_ref().is_some_and(|l| l.how == Load::Stream)
+    }
+
+    /// Takes one batch of a listing that comes in batches (lane A2, R25
+    /// commit 77). The first batch of a new place moves the panel there
+    /// as a finished listing would, and the panel keeps waiting for the
+    /// rest; each later batch adds its rows. The focus and the marks keep
+    /// to the id rule (plan section 5.2): rows are never matched by
+    /// position, the focus wanted goes to its row when it arrives unless
+    /// the owner moved it meanwhile, and the marks a folder had come back
+    /// to their rows as they arrive. A batch of the place the panel shows
+    /// already (a reload) is kept for the end, so no row and no mark goes
+    /// away in between. Returns what the first batch did.
+    pub fn stream_batch(
+        &mut self,
+        request: RequestId,
+        entries: Vec<Entry>,
+        types: &TypeRegistry,
+        clock: &dyn Clock,
+    ) -> Option<Refreshed> {
+        let loading = self.loading.as_ref().filter(|l| l.request == request)?;
+        if loading.how != Load::Stream {
+            let moved = loading.place != self.place || !self.listed;
+            if !moved {
+                return None;
+            }
+            let wanted = loading.focus.clone();
+            let memory = matches!(loading.how, Load::Back | Load::Forward)
+                .then(|| self.memory.get(&loading.place).cloned())
+                .flatten();
+            let refreshed = self.finish(entries, types, clock);
+            let focus = wanted
+                .or_else(|| memory.as_ref().and_then(|m| m.focus.clone()))
+                .filter(|name| self.list.focused().is_none_or(|row| row.id != *name));
+            self.loading = Some(Loading {
+                request,
+                place: self.place.clone(),
+                focus,
+                how: Load::Stream,
+                marks: memory.map(|m| m.marks).unwrap_or_default(),
+                left_on: self.list.focused().map(|row| row.id.clone()),
+            });
+            self.follow_stream();
+            return Some(refreshed);
+        }
+        let mut all = self.all_entries.clone();
+        all.extend(entries);
+        self.set_entries_counted(all, types, clock);
+        self.follow_stream();
+        None
+    }
+
+    /// Puts the marks and the focus a streamed listing still wants on
+    /// their rows, as they arrive.
+    fn follow_stream(&mut self) {
+        let Some(loading) = self.loading.as_mut() else {
+            return;
+        };
+        let now_on = self.list.focused().map(|row| row.id.clone());
+        if now_on != loading.left_on {
+            // The owner moved the focus: it stays where they put it.
+            loading.focus = None;
+        }
+        if let Some(name) = loading.focus.clone()
+            && self.list.focus_id(&name)
+        {
+            loading.focus = None;
+        }
+        if !loading.marks.is_empty() {
+            let marks: HashSet<String> = loading.marks.iter().cloned().collect();
+            self.list.select_matching(|row| marks.contains(&row.id));
+            let listed: HashSet<&str> = self.list.rows().iter().map(|r| r.id.as_str()).collect();
+            loading.marks.retain(|id| !listed.contains(id.as_str()));
+        }
+        loading.left_on = self.list.focused().map(|row| row.id.clone());
     }
 
     /// Whether `request` is the listing this panel waits for.
@@ -565,7 +661,7 @@ impl Panel {
                         self.history.push(self.place.clone());
                     }
                 }
-                Load::Open | Load::Reload | Load::Refresh | Load::AfterJob => {
+                Load::Open | Load::Reload | Load::Refresh | Load::AfterJob | Load::Stream => {
                     if self.listed && loading.place != self.place {
                         self.history.push(self.place.clone());
                         self.forward.clear();
@@ -590,6 +686,25 @@ impl Panel {
         }
         refreshed.focus_was = self.list.focused().map(|r| r.label.clone());
         refreshed.rows = self.set_entries_counted(entries, types, clock);
+        // The end of a streamed listing: the marks still wanted come back,
+        // and the focus goes where it was wanted, unless the owner moved it.
+        if loading.how == Load::Stream {
+            let marks: HashSet<String> = loading.marks.iter().cloned().collect();
+            if !marks.is_empty() {
+                self.list.select_matching(|row| marks.contains(&row.id));
+            }
+            let now_on = self.list.focused().map(|r| r.id.clone());
+            if now_on == loading.left_on
+                && let Some(name) = &loading.focus
+            {
+                self.list.focus_id(name);
+            }
+            refreshed.added = 0;
+            refreshed.removed = 0;
+            refreshed.rows = RowsReplaced::default();
+            self.listed = true;
+            return refreshed;
+        }
         if moved {
             refreshed.rows = RowsReplaced::default();
             let memory = matches!(loading.how, Load::Back | Load::Forward)

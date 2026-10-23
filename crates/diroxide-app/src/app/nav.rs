@@ -32,6 +32,16 @@ pub(super) fn is_program(entry: &Entry) -> bool {
     }
 }
 
+/// A streamed listing in a panel (R25 commit 77): when it began, when its
+/// count was last said, and whether the owner stopped it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct StreamNote {
+    request: RequestId,
+    began: diroxide_core::Timestamp,
+    said: Option<diroxide_core::Timestamp>,
+    stopped: bool,
+}
+
 impl App {
     /// Lists a place into a panel, as a new place.
     pub(super) fn open(&mut self, side: Side, place: Place, focus: Option<String>) -> Vec<Effect> {
@@ -50,6 +60,12 @@ impl App {
         if &place != self.panel(side).place() {
             self.keep_selection(side);
         }
+        // A listing still on its way is not waited for any more: it stops,
+        // so a slow remote folder does not keep listing for nothing.
+        if let Some(old) = self.panel(side).loading_request() {
+            self.request(Request::StopListing(old));
+        }
+        self.streams[side.index()] = None;
         let request = self.ids.request();
         self.panel_mut(side)
             .begin_load_as(request, place.clone(), focus, how);
@@ -196,6 +212,9 @@ impl App {
             self.organize.labels.apply_to_entries(&place, &mut entries);
         }
         let how = self.panel(side).loading_how().unwrap_or(Load::Open);
+        if how == Load::Stream {
+            return self.stream_listed(side, entries);
+        }
         let clock = std::sync::Arc::clone(&self.clock);
         let refreshed = self.panels[side.index()].finish(entries, &self.types, clock.as_ref());
         let active = side == self.active;
@@ -330,6 +349,142 @@ impl App {
             None => Message::from_error("open", &shown, error),
         };
         vec![Effect::Redraw(Redraw::TitleLine), self.say(message)]
+    }
+
+    /// A batch of a listing that comes in batches (R25 commit 77): the
+    /// first moves the panel to its place with its rows, and the others
+    /// add theirs, the focus and the marks keeping to the id rule. The
+    /// count is said at most every progress interval in screen-reader
+    /// mode ("Listing reports: 2,000 so far"), and shown at most twice a
+    /// second otherwise.
+    pub(super) fn list_batch(
+        &mut self,
+        request: RequestId,
+        place: &Place,
+        mut entries: Vec<Entry>,
+    ) -> Vec<Effect> {
+        let Some(side) = Side::BOTH
+            .into_iter()
+            .find(|s| self.panel(*s).waits_for(request))
+        else {
+            return Vec::new();
+        };
+        self.organize.labels.apply_to_entries(place, &mut entries);
+        let clock = std::sync::Arc::clone(&self.clock);
+        let first =
+            self.panels[side.index()].stream_batch(request, entries, &self.types, clock.as_ref());
+        if !self.panel(side).is_streaming() {
+            return Vec::new();
+        }
+        let now = self.now();
+        let active = side == self.active;
+        let mut effects = Vec::new();
+        if active || !self.screen_reader {
+            effects.push(self.redraw_panel(side));
+        }
+        if first.is_some() {
+            self.streams[side.index()] = Some(StreamNote {
+                request,
+                began: now,
+                said: None,
+                stopped: false,
+            });
+            if active {
+                effects.push(Effect::Redraw(Redraw::TitleLine));
+            }
+            return effects;
+        }
+        let interval = if self.screen_reader {
+            self.settings.progress_interval_seconds.saturating_mul(1000)
+        } else {
+            crate::jobs::SIGHTED_INTERVAL_MS
+        };
+        let Some(note) = self.streams[side.index()].as_mut() else {
+            return effects;
+        };
+        let since = note.said.unwrap_or(note.began);
+        if !active || crate::jobs::millis_between(since, now) < interval {
+            return effects;
+        }
+        note.said = Some(now);
+        let text = format!(
+            "Listing {}: {} so far",
+            place_leaf(self.panel(side).place()),
+            crate::messages::grouped(self.panel(side).all_entries().len() as u64)
+        );
+        let message = if self.screen_reader {
+            Message::info(text)
+        } else {
+            Message::status(text)
+        };
+        effects.push(self.say(message));
+        effects
+    }
+
+    /// Stops the active panel's streamed listing (Cancel while it lists):
+    /// what came is kept and listed.
+    pub(super) fn stop_listing(&mut self) -> Option<Vec<Effect>> {
+        let side = self.active;
+        if !self.panel(side).is_streaming() {
+            return None;
+        }
+        let request = self.panel(side).loading_request()?;
+        if let Some(note) = self.streams[side.index()].as_mut() {
+            note.stopped = true;
+        }
+        self.request(Request::StopListing(request));
+        Some(vec![self.say(Message::info("Stopping the listing."))])
+    }
+
+    /// The end of a streamed listing: the whole list, and the count said
+    /// as a finished listing says it, or that it stopped.
+    fn stream_listed(&mut self, side: Side, entries: Vec<Entry>) -> Vec<Effect> {
+        let clock = std::sync::Arc::clone(&self.clock);
+        self.panels[side.index()].finish(entries, &self.types, clock.as_ref());
+        let note = self.streams[side.index()].take();
+        let place = self.panel(side).place().clone();
+        let view_line = self.folder_view_on_entering(side);
+        if place.kind() == diroxide_core::PlaceKind::Local {
+            let now = self.now().unix_seconds();
+            let home = self.home.clone();
+            self.visits.record(&place, now, home.as_ref());
+        }
+        self.request(Request::Watch {
+            side,
+            place: Some(place),
+        });
+        let active = side == self.active;
+        let mut effects = Vec::new();
+        if active || !self.screen_reader {
+            effects.push(self.redraw_panel(side));
+        }
+        if !active {
+            return effects;
+        }
+        let panel = self.panel(side);
+        let rows = panel.list().len() as u64;
+        let items = if rows == 1 {
+            "1 item".to_owned()
+        } else {
+            format!("{} items", crate::messages::grouped(rows))
+        };
+        let mut text = if note.is_some_and(|n| n.stopped) {
+            format!("Listing stopped: {items} shown")
+        } else {
+            format!("{}, {items}", place_leaf(panel.place()))
+        };
+        if let Some(parent) = panel.place().parent() {
+            text.push_str(&format!(
+                ", in {}",
+                diroxide_core::names::display_name(&parent.to_string())
+            ));
+        }
+        if let Some(view) = view_line {
+            text.push_str(&format!(". {view}"));
+        }
+        effects.push(Effect::Redraw(Redraw::TitleLine));
+        effects.push(self.say(Message::info(text)));
+        effects
     }
 
     pub(super) fn list_progress(&mut self, request: RequestId, so_far: u64) -> Vec<Effect> {

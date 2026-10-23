@@ -283,6 +283,9 @@ pub enum Request {
     Run(Box<Plan>),
     /// One of the Jobs list's actions, or a queue setting (lane A2).
     Queue(crate::jobs::QueueRequest),
+    /// Stop a listing the app no longer waits for, or one the owner
+    /// stopped: what came is kept (lane A2, R25 commit 77).
+    StopListing(diroxide_core::RequestId),
     /// Answer a question a worker waits on.
     Answer {
         /// The question.

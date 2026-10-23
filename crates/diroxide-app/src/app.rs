@@ -137,6 +137,16 @@ pub enum AppEvent {
         /// The entries, or why not.
         result: Result<Vec<Entry>, VfsError>,
     },
+    /// A batch of a listing that comes in batches: its rows, as they
+    /// arrive (lane A2, R25 commit 77).
+    ListBatch {
+        /// The request.
+        request: RequestId,
+        /// The place listed.
+        place: Place,
+        /// The batch's entries.
+        entries: Vec<Entry>,
+    },
     /// A listing is on its way: how many entries so far.
     ListProgress {
         /// The request.
@@ -761,6 +771,9 @@ pub struct App {
     components: component_ui::ComponentState,
     /// The Jobs list and the queue's questions (lane A2).
     jobs_ui: jobs_ui::JobsState,
+    /// Each panel's streamed listing: when it began, when its count was
+    /// last said, and whether the owner stopped it (lane A2).
+    streams: [Option<nav::StreamNote>; 2],
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1081,6 +1094,7 @@ impl App {
             plugins: plugin_ui::PluginState::default(),
             components: component_ui::ComponentState::default(),
             jobs_ui: jobs_ui::JobsState::default(),
+            streams: [None, None],
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1478,6 +1492,11 @@ impl App {
                 result,
             } => self.listed(request, &place, result),
             AppEvent::ListProgress { request, so_far } => self.list_progress(request, so_far),
+            AppEvent::ListBatch {
+                request,
+                place,
+                entries,
+            } => self.list_batch(request, &place, entries),
             AppEvent::PlaceFacts {
                 place,
                 capabilities,

@@ -487,6 +487,9 @@ pub struct Runtime {
     /// The active panel's place, marks and focus after the last batch,
     /// for the navigation hooks.
     nav_seen: Option<(Place, usize, Option<String>)>,
+    /// The listings on their way, each with its cancel, so a listing the
+    /// app no longer waits for stops (lane A2, R25 commit 77).
+    listings: Arc<Mutex<HashMap<RequestId, CancelToken>>>,
 }
 
 impl fmt::Debug for Runtime {
@@ -565,6 +568,7 @@ impl Runtime {
             lost: HashMap::new(),
             hooks,
             nav_seen: None,
+            listings: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -880,6 +884,9 @@ impl Runtime {
             self.worker(move |shared| list_archive(shared, &registry, &archives, request, place));
             return;
         }
+        let cancel = CancelToken::new();
+        lock(&self.listings).insert(request, cancel.clone());
+        let listings = Arc::clone(&self.listings);
         self.worker(move |shared| {
             let progress = Arc::new(ListingProgress {
                 request,
@@ -891,15 +898,20 @@ impl Runtime {
             });
             let ctx = OpContext::new()
                 .with_progress(progress)
-                .with_secrets(secrets);
+                .with_secrets(secrets)
+                .with_cancel(cancel.clone());
             let result = registry.resolve(&place).and_then(|provider| {
-                let entries = provider.list(&place, &ctx)?;
+                let entries = match provider.as_streaming() {
+                    Some(streaming) => list_streamed(shared, streaming, request, &place, &ctx)?,
+                    None => provider.list(&place, &ctx)?,
+                };
                 shared.send(AppEvent::PlaceFacts {
                     place: place.clone(),
                     capabilities: provider.capabilities(&place),
                 });
                 Ok(entries)
             });
+            lock(&listings).remove(&request);
             shared.send(AppEvent::Listed {
                 request,
                 place,
@@ -1050,6 +1062,11 @@ impl Runtime {
                 self.carry_granted(granted);
             }
             Request::Queue(request) => self.queue_request(request),
+            Request::StopListing(listing) => {
+                if let Some(cancel) = lock(&self.listings).get(&listing) {
+                    cancel.cancel();
+                }
+            }
             Request::Watch { side, place } => self.watch(side, place),
             Request::Places => self.worker(|shared| {
                 shared.send(AppEvent::Places(diroxide_vfs::local_places()));
@@ -2410,6 +2427,37 @@ fn list_archive(
         place,
         result,
     });
+}
+
+/// A listing that comes in batches (R25 commit 77): each batch goes to
+/// the app as it arrives, so the rows appear as the provider sends them;
+/// the whole list ends the listing as any listing does. A stop asked by
+/// the app keeps what came: the panel lists it, and says it stopped.
+fn list_streamed(
+    shared: &Arc<Shared>,
+    streaming: &dyn diroxide_vfs::StreamingList,
+    request: RequestId,
+    place: &Place,
+    ctx: &OpContext,
+) -> Result<Vec<diroxide_core::Entry>, diroxide_vfs::VfsError> {
+    let mut all = Vec::new();
+    let outcome = streaming.list_batches(place, ctx, &mut |batch| {
+        if ctx.cancel.is_cancelled() {
+            return std::ops::ControlFlow::Break(());
+        }
+        all.extend(batch.iter().cloned());
+        shared.send(AppEvent::ListBatch {
+            request,
+            place: place.clone(),
+            entries: batch,
+        });
+        std::ops::ControlFlow::Continue(())
+    });
+    match outcome {
+        Ok(()) => Ok(all),
+        Err(diroxide_vfs::VfsError::Cancelled) if ctx.cancel.is_cancelled() => Ok(all),
+        Err(error) => Err(error),
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

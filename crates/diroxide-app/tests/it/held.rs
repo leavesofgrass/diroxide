@@ -55,7 +55,6 @@ impl Held {
     }
 
     /// Lists in batches of this many entries (0: whole).
-    #[allow(dead_code)]
     pub fn set_batch(&self, entries: usize) {
         self.batch.store(entries, Ordering::SeqCst);
     }

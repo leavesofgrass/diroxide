@@ -39,6 +39,8 @@ mod searching;
 mod selecting;
 mod session;
 mod split_join;
+// Streamed listings reach the panel (lane A2).
+mod streaming;
 mod viewer;
 mod views;
 // Watch this folder (W3t).
