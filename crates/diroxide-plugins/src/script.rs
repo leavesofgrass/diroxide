@@ -13,11 +13,16 @@
 //! - [`header`] reads the `diro:` lines (R3 section 5.1, completed by R22
 //!   section 2.6); [`recipe`] holds the run keys a header and a
 //!   manifest-only command share, and defines `unattended` once.
+//! - [`interpreter`] chooses the program that runs a script on each
+//!   system: Git's bash and never WSL's on Windows, `py -3` before any
+//!   Python on PATH and never the Store stub, PowerShell with the
+//!   per-process policy override the consent text names.
 //!
 //! W4b owns this module and its submodules (alpha 2, commits 18 to 28 of
 //! R22's order).
 
 pub mod header;
+pub mod interpreter;
 mod read;
 pub mod recipe;
 
