@@ -1068,9 +1068,15 @@ impl Runtime {
                 }
             }
             Request::Watch { side, place } => self.watch(side, place),
-            Request::Places => self.worker(|shared| {
-                shared.send(AppEvent::Places(diroxide_vfs::local_places()));
-            }),
+            Request::Places => {
+                let sources = self.plugins.site_sources();
+                self.worker(move |shared| {
+                    shared.send(AppEvent::Places(diroxide_vfs::local_places()));
+                    // The plugins' sites, asked without signing in.
+                    let sites = plugins::sites_of(&sources);
+                    shared.send(AppEvent::Sites(sites));
+                });
+            }
             Request::SaveSession(session) => {
                 if let Some(paths) = &self.paths
                     && let Err(error) = diroxide_config::save_session(paths, &session)

@@ -1878,6 +1878,14 @@ impl App {
             Outcome::Process(Err(error)) => {
                 use diroxide_plugins::PluginError;
                 let quiet = self.failure_said_lately(&running.plugin);
+                // The plugin's next step, from its error's hint (S-A's
+                // request 3), said after the failure, its name last.
+                let hint = match &error {
+                    PluginError::Remote {
+                        hint: Some(hint), ..
+                    } if !hint.trim().is_empty() => Some(hint.clone()),
+                    _ => None,
+                };
                 summary = match &error {
                     PluginError::Remote { code, .. }
                         if *code == ErrorKind::RequestCancelled.code() =>
@@ -1901,6 +1909,17 @@ impl App {
                     said.push(Message::info(summary.clone()));
                 } else if !quiet {
                     said.push(Message::error(summary.clone()));
+                    if let Some(hint) = hint {
+                        let hint = diroxide_plugins::services::clean_text(
+                            &hint,
+                            diroxide_plugins::services::MAX_ANNOUNCE_CHARS,
+                        );
+                        said.push(Message::info(format!(
+                            "{} By {}.",
+                            hint.trim_end_matches('.'),
+                            running.source
+                        )));
+                    }
                     if let Some(last) = &finished.last_error {
                         said.push(Message::info(lines::last_error(last)));
                     }

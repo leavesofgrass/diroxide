@@ -324,6 +324,16 @@ impl App {
         if let Some(home) = &self.home {
             push(home.to_string(), "home folder".to_owned());
         }
+        // The Sites group (R25 commit 78): each site its kind first, then
+        // its state word, the plugin that offers it last.
+        for site in &self.sites {
+            let mut kind = format!("site {}, {}", site.name, site.state);
+            if let Some(detail) = &site.detail {
+                kind.push_str(&format!(", {detail}"));
+            }
+            kind.push_str(&format!(", by {}", site.plugin));
+            push(site.place.to_string(), kind);
+        }
         for place in &self.places {
             push(place.place.to_string(), place.words.clone());
         }

@@ -38,6 +38,8 @@ mod searching;
 // Selection on the filter language (W3a).
 mod selecting;
 mod session;
+// Sites in the go-to-place list and the connect flow (lane A2).
+mod sites;
 mod split_join;
 // Streamed listings reach the panel (lane A2).
 mod streaming;

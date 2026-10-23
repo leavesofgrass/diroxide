@@ -790,9 +790,9 @@ impl App {
     /// typed terms narrowing it (path jump).
     pub(super) fn go_places(&mut self) -> Vec<Effect> {
         let side = self.active;
-        if self.places.is_empty() {
-            self.request(Request::Places);
-        }
+        // The local places once; the plugins' sites every time, since a
+        // site connects and disconnects (R25 commit 78).
+        self.request(Request::Places);
         // Tab completes a bookmark by its name or its place (W3a); the
         // list under the field narrows over every place as you type.
         let field = EntryField::new("Go to a place", CompletionSource::Bookmarks)
@@ -805,6 +805,13 @@ impl App {
 
     pub(super) fn places_arrived(&mut self, places: Vec<LocalPlace>) -> Vec<Effect> {
         self.places = places;
+        self.refresh_candidates()
+    }
+
+    /// The places the plugins offer arrived: the go-to-place list's Sites
+    /// group follows.
+    pub(super) fn sites_arrived(&mut self, sites: Vec<super::SiteRow>) -> Vec<Effect> {
+        self.sites = sites;
         self.refresh_candidates()
     }
 

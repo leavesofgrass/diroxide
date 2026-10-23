@@ -203,6 +203,9 @@ pub enum AppEvent {
     },
     /// The drives, the root, the home folder and the mounts.
     Places(Vec<LocalPlace>),
+    /// The places the plugins offer, such as saved sites, for the
+    /// go-to-place list's Sites group (lane A2, R25 commit 78).
+    Sites(Vec<SiteRow>),
     /// A program that had the terminal ended.
     ProgramEnded {
         /// What ran, as said: "Shell", "Command", the edited file's name.
@@ -403,6 +406,22 @@ pub enum AppEvent {
         /// The lines, meaning first.
         lines: Vec<String>,
     },
+}
+
+/// A place a plugin offers, for the go-to-place list (R25 commit 78):
+/// a saved site, or a host from a configuration file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SiteRow {
+    /// Its spoken name: "build".
+    pub name: String,
+    /// Where Enter goes.
+    pub place: Place,
+    /// Its state in words: "saved", "connected", "from ssh config".
+    pub state: String,
+    /// More words, read after the state.
+    pub detail: Option<String>,
+    /// The plugin that offers it, said last.
+    pub plugin: String,
 }
 
 /// What an open dialog is for: what its answer does. The [`Dialog`] is
@@ -774,6 +793,8 @@ pub struct App {
     /// Each panel's streamed listing: when it began, when its count was
     /// last said, and whether the owner stopped it (lane A2).
     streams: [Option<nav::StreamNote>; 2],
+    /// The places the plugins offer, for the Sites group (lane A2).
+    sites: Vec<SiteRow>,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1095,6 +1116,7 @@ impl App {
             components: component_ui::ComponentState::default(),
             jobs_ui: jobs_ui::JobsState::default(),
             streams: [None, None],
+            sites: Vec::new(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1520,6 +1542,7 @@ impl App {
             }
             AppEvent::NotWatched { side, place } => self.not_watched(side, &place),
             AppEvent::Places(places) => self.places_arrived(places),
+            AppEvent::Sites(sites) => self.sites_arrived(sites),
             AppEvent::ProgramEnded {
                 what,
                 folder,
