@@ -13,3 +13,7 @@ Thumbs.db
 # Machine-specific and owner-rules files kept out of the repository (master copies in the owner's wiki)
 /CLAUDE.md
 /.claude/settings.json
+
+# Python test caches left by the example plugins' tests.
+__pycache__/
+*.pyc
