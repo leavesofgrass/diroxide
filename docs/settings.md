@@ -19,10 +19,11 @@ The config folder holds these files:
 - `banks.toml` holds the banks of command buttons, including the function key bar.
 - `filetypes.toml` is a placeholder that later alphas fill in.
 - A `themes` folder holds your own theme files.
+- A `plugins` folder holds your plugins, one folder each, and its `scripts` folder holds your script commands. [Plugins](plugins.md) and [script commands](script-commands.md) describe them.
 
-Later alphas add more files, such as the tools list and the plugins folder. They are described when they arrive.
+Later alphas add more files, such as the tools list. They are described when they arrive.
 
-The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. It also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now.
+The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. It also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now. A `plugins` folder holds what you turned on (`consent.toml`), a folder for each plugin with its log and its data, and a `runs` folder for the short-lived files of a running script. A `components` folder holds the optional components you installed, one folder each. [Optional components](components.md) describes them.
 
 ## How diroxide treats these files
 
@@ -87,6 +88,15 @@ These settings are for the filter language, search, compare and the key presets.
 - Compare (`compare.*`): eleven settings, in one table, `[compare]`. Six leave differences out: `compare.ignore_line_endings` (on), `compare.ignore_trailing_space`, `compare.ignore_space_amount`, `compare.ignore_all_space`, `compare.ignore_blank_lines` and `compare.ignore_case` (all off). `compare.algorithm` is patience, histogram or myers (patience). `compare.deadline_ms` (2000) is how long a compare looks for the fewest changes, `compare.text_limit_mib` (16) the largest file compared as text, `compare.large_files` (ask, head or bytes) what to do past that, and `compare.context` (2; 0 to 9) the lines shown around a change. [Compare files](compare.md) says what each does.
 - Label colors (`label_blue`, `label_orange`, `label_purple`, `label_yellow`, `label_gray` and `label_brown`): the theme roles that color a label's word. They are keys of the `[colors]` table, like the other roles.
 
+### Plugins and optional components
+
+Two settings matter for plugins and components in practice. [The settings reference](settings-reference.md) lists them under Plugins. You turn a plugin on and off from the Plugins menu or with `diro plugin enable` and `diro plugin disable`. The record, with the fingerprints, is kept in `consent.toml` in the state folder.
+
+- Plugin time limit (`plugins.timeout_ms`, 10000; 1000 to 600000): how long a plugin may take to answer before it is reported and left.
+- Components list (`components_source`, empty): where you keep your own copy of the optional components, a folder or a repository written `owner/name`. Empty means the public list only. It is tried before the public address. Nothing else names it, and the question that asks to download says only "From your own components source." [Optional components](components.md) describes it.
+
+A plugin's own settings are listed in its manifest. They show under the plugin's name in the Settings list, with help on each row.
+
 ### The viewer, the quick view, archives and split sizes
 
 Four groups of settings cover the viewer, the quick view, archives and split sizes. [The settings reference](settings-reference.md) lists every one with its default and range, under Viewer and quick view and under Archives and split.
@@ -112,7 +122,7 @@ hex_row = "narrow"
 wait_ms = 800
 ```
 
-Some settings are kept now and do nothing yet: plugins, the components list, thumbnails, and hiding the menu bar and focus mode in the GUI. The reference marks each as coming with a later alpha.
+Some settings are kept now and do nothing yet: thumbnails, and hiding the menu bar and focus mode in the GUI. The reference marks each as coming with a later alpha.
 
 ## Themes and colors
 
@@ -184,5 +194,7 @@ To go back to the defaults, move the config folder aside by renaming it, and sta
 - [Customizing keys](customizing-keys.md)
 - [Search and the filter language](search.md)
 - [Labels and bookmarks](labels-bookmarks.md)
+- [Plugins](plugins.md)
+- [Optional components](components.md)
 - [Privacy](privacy.md)
 - [The documentation index](README.md)

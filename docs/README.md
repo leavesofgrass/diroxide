@@ -1,10 +1,10 @@
 # diroxide documentation
 
-diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, keyboard first and accessible first. Its command is `diro`. It is in its alpha series: the guides here describe what alpha 1 does, and each later alpha adds its own guides.
+diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, keyboard first and accessible first. Its command is `diro`. It is in its alpha series: the guides here describe what alpha 1 does and what has been added since, and each later alpha adds its own guides.
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, files and archives, finding things, keys, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, files and archives, finding things, plugins, scripts and optional components, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -14,9 +14,10 @@ If you are new, begin with the [quick start](quickstart.md).
 
 - [Quick start](quickstart.md): from a built program to copying, renaming and deleting a file, in ten minutes.
 - [Known limits](known-limits.md): what does not work yet, and what has not been tested.
-- [Privacy](privacy.md): what stays on your computer, and when diroxide uses the network. In alpha 1 it does not.
+- [Privacy](privacy.md): what stays on your computer, what plugins can see, and the one time diroxide uses the network, which is a download that asks first.
+- [Security](security.md): what a plugin, a script and a downloaded component can and cannot do, and what diroxide checks.
 - [Accessibility statement](accessibility.md): what diroxide promises, how it is checked, and what has and has not been heard.
-- [What is new](../CHANGELOG.md): the changelog.
+- [What is new](whats-new.md): what each alpha added, in plain words. [The changelog](../CHANGELOG.md) has the full list.
 
 ## For people who use diroxide
 
@@ -48,6 +49,14 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Compare files](compare.md): what two files differ in, said in words first, the change list, the cases that sound the same, binary and large files, and `diro diff`.
 - [Watching a folder](watching.md): hearing when a new file has finished arriving, in the program and with `diro watch`.
 
+### Plugins, scripts and optional components
+
+- [Plugins](plugins.md): what a plugin is, the three kinds, turning one on and what the question says, managing them, what you hear when one runs, the nine examples, and `diro plugin`.
+- [Script commands](script-commands.md): a command from one file in bash, Python or PowerShell: the header, what the script is given, directives, output modes, exit codes, which program runs it on each system, and `--explain`.
+- [Writing a plugin](writing-a-plugin.md): `diro plugin new`, the manifest, the protocol in a page, the services diroxide offers, lists of rows that are not files, places, previewers and converters, and the conformance checks.
+- [Optional components](components.md): helper programs, plugins and data packs fetched only after you say yes, checked before use, installed from a file with no network, and removed by a list. Includes `diro components`.
+- [Security](security.md): what diroxide checks, what it protects, and what a plugin could still do.
+
 ### Keys and settings
 
 - [Every key](keyboard.md): the default keys for the terminal and the graphical interface (GUI), the keys a terminal may keep and the keys screen readers keep, generated from the keymap. Each key preset has its own sheet, linked from [customizing keys](customizing-keys.md).
@@ -59,7 +68,6 @@ If you are new, begin with the [quick start](quickstart.md).
 
 These guides are not written yet, because the features they describe are not in alpha 1. Each arrives with the alpha that ships its feature.
 
-- Plugins, writing a plugin, script commands and optional components.
 - SSH and remote places.
 - The GUI.
 - Tools and conversions, previews of more kinds of document, and git.
