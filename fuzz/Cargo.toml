@@ -114,3 +114,15 @@ path = "fuzz_targets/archive_roundtrip.rs"
 test = false
 doc = false
 bench = false
+
+# The components list reader (W4c). Its seeds are the fixture lists
+# under `fixtures/components/manifests/`.
+[dependencies.diroxide-components]
+path = "../crates/diroxide-components"
+
+[[bin]]
+name = "component_manifest"
+path = "fuzz_targets/component_manifest.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,15 @@
+# expect: unpacked_size
+format = 1
+
+[[component]]
+id = "case-unpack-no-size"
+title = "Refused: unpack-no-size"
+kind = "data"
+version = "0.1.0"
+license = "MIT"
+action = "unpack"
+
+[[component.file]]
+name = "a.zip"
+size = 3
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

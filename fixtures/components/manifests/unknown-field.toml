@@ -1,0 +1,18 @@
+# expect: ok
+# A later list's fields are ignored, so it still loads.
+format = 1
+signature = "later"
+
+[[component]]
+id = "later"
+title = "A later component"
+kind = "data"
+version = "1.0.0"
+license = "MIT"
+rating = 5
+
+[[component.file]]
+name = "later.bin"
+size = 3
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+mirror_hint = "later"

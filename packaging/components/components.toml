@@ -1,0 +1,24 @@
+# The optional components this repository builds (plan section 5.14).
+#
+# cargo xtask components reads this file, packs each file from the
+# folders named in its `pack` list (the files git tracks there, in a zip
+# written the same way on every computer), computes each size and
+# SHA-256, and writes crates/diroxide-components/components.toml, the
+# public list the diro binary embeds. Never type a size or a hash: the
+# xtask computes them, and cargo xtask regen --check fails when the list
+# is stale.
+#
+# Per component: id, title (what it is, meaning first), kind (plugin,
+# helper or data), version, license (SPDX), license_note, credit,
+# features, needs_tools, needs_components, protocol, min_diro, action
+# (place or unpack), folder (the id by default).
+# Per file ([[component.file]]): name, target (a triple, or any), exec,
+# strip, url (only when the file is not a release asset of this project),
+# and pack: a list of { from = "folder", as = "path in the zip",
+# optional = true when the folder may not be there yet }.
+#
+# A file is published as a release asset under the tag <id>-<version>;
+# the program derives its address from the repository, that tag and the
+# file's name, so no account name is written here.
+
+format = 1

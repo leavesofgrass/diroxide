@@ -1,0 +1,15 @@
+# expect: SHA-256
+format = 1
+
+[[component]]
+id = "case-short-hash"
+title = "Refused: short-hash"
+kind = "data"
+version = "0.1.0"
+license = "MIT"
+
+
+[[component.file]]
+name = "a.zip"
+size = 3
+sha256 = "abc"

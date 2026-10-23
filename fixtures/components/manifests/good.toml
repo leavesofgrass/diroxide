@@ -1,0 +1,50 @@
+# expect: ok
+# A data pack that unpacks, and a plugin with a build per computer.
+format = 1
+diro = "0.1.0-alpha.2"
+generated_by = "fixture"
+
+[[component]]
+id = "example-pack"
+title = "Example pack"
+kind = "data"
+version = "0.1.0"
+license = "Apache-2.0 OR MIT"
+credit = "Ada Example"
+features = ["examples"]
+action = "unpack"
+unpacked_size = 4096
+
+[[component.file]]
+name = "example-pack-0.1.0.zip"
+size = 3
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+target = "any"
+
+[[component]]
+id = "example-plugin"
+title = "Example places plugin"
+kind = "plugin"
+version = "0.2.0"
+license = "MIT"
+license_note = "unconfirmed"
+needs_tools = ["ssh"]
+protocol = 1
+min_diro = "0.1.0-alpha.2"
+action = "place"
+folder = "plugins-example"
+
+[[component.file]]
+name = "example-plugin.exe"
+size = 3
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+target = "x86_64-pc-windows-msvc"
+exec = "example-plugin.exe"
+
+[[component.file]]
+name = "example-plugin"
+size = 3
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+target = "x86_64-unknown-linux-gnu"
+exec = "example-plugin"
+url = "https://example.invalid/example-plugin"

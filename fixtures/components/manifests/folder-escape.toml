@@ -1,0 +1,15 @@
+# expect: not plain names
+format = 1
+
+[[component]]
+id = "case-folder-escape"
+title = "Refused: folder-escape"
+kind = "data"
+version = "0.1.0"
+license = "MIT"
+folder = "../outside"
+
+[[component.file]]
+name = "a.zip"
+size = 3
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
