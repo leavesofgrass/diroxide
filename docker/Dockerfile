@@ -35,6 +35,7 @@ RUN apt-get update \
       libarchive-tools \
       curl \
       wget \
+      python3 \
       poppler-utils \
       openssh-server \
  && rm -rf /var/lib/apt/lists/*
