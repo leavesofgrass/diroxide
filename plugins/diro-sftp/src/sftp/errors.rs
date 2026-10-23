@@ -212,18 +212,45 @@ pub fn refine(op: Op, error: &SftpError, session: &Session, path: &[u8]) -> Opti
                 .filter(|n| n.iter().any(|e| e.filename != b"." && e.filename != b".."))
                 .map(|_| RpcError::new(ErrorKind::NotEmpty, lines::NOT_EMPTY))
         }
-        Check::Space => space_in_words(message).map(|kind| {
-            let sentence = if kind == ErrorKind::NoSpace {
-                lines::NO_SPACE
-            } else {
-                lines::TOO_LARGE
-            };
-            match server_said(message) {
-                Some(hint) => RpcError::with_hint(kind, sentence, hint),
-                None => RpcError::new(kind, sentence),
-            }
-        }),
+        Check::Space => space_in_words(message)
+            .or_else(|| full_volume(session, path).then_some(ErrorKind::NoSpace))
+            .map(|kind| {
+                let sentence = if kind == ErrorKind::NoSpace {
+                    lines::NO_SPACE
+                } else {
+                    lines::TOO_LARGE
+                };
+                match server_said(message) {
+                    Some(hint) => RpcError::with_hint(kind, sentence, hint),
+                    None => RpcError::new(kind, sentence),
+                }
+            }),
     }
+}
+
+/// Free space under this is a full volume, for a write the server failed
+/// in plain words.
+pub const FULL_BELOW: u64 = 1024 * 1024;
+
+/// Whether the volume holding `path` is full, by `statvfs@openssh.com`
+/// where the server has it: OpenSSH's own server answers a full disk with
+/// a plain FAILURE whose words are only "Failure" (the container's
+/// capture, S-C), so the words alone cannot tell.
+fn full_volume(session: &Session, path: &[u8]) -> bool {
+    let parent = match path.iter().rposition(|b| *b == b'/') {
+        Some(0) | None => b"/".to_vec(),
+        Some(at) => path[..at].to_vec(),
+    };
+    [path.to_vec(), parent].iter().any(|at| {
+        session.statvfs(at, None).ok().flatten().is_some_and(|vfs| {
+            let unit = if vfs.frsize > 0 {
+                vfs.frsize
+            } else {
+                vfs.bsize
+            };
+            vfs.bavail.saturating_mul(unit) < FULL_BELOW
+        })
+    })
 }
 
 #[cfg(test)]

@@ -5,15 +5,16 @@
 //!   under the plugin's runtime folder: only the owner's account can
 //!   reach it. The folder and the socket are removed when the connection
 //!   ends.
-//! - **On Windows** a socket on 127.0.0.1 only, never another interface,
-//!   so nothing outside the computer reaches it and no firewall question
-//!   is raised. Any account on the computer could connect to it, so the
-//!   proof is what keeps them out: without the token, a peer learns one
-//!   random nonce and nothing else, and after [`MAX_REFUSALS`] bad
-//!   proofs the endpoint closes. A named pipe that only the owner's
-//!   account can open needs a security descriptor, an `unsafe` call this
-//!   crate does not make; it is the contract change request of this lane
-//!   (a user-only pipe in `diroxide-vfs`'s platform module).
+//! - **On Windows** a named pipe only the owner's account can open
+//!   (answer 101): `diroxide_vfs::OwnerPipe`, whose security descriptor
+//!   holds one entry for that account, created as the name's first
+//!   instance so nothing can squat it, refusing clients from other
+//!   computers. The `unsafe` calls it needs live in `diroxide-vfs`'s
+//!   platform module; this crate makes none. The two-way proof stays as a
+//!   second layer: without the token, a peer learns one random nonce and
+//!   nothing else, and after [`MAX_REFUSALS`] bad proofs the endpoint
+//!   closes. A socket on 127.0.0.1 remains for the tests of the proof
+//!   ([`Listener::open_loopback`]).
 //!
 //! Every connection to the endpoint is one prompt: the helper's hello,
 //! the plugin's challenge, the helper's proven prompt, the answer. The
@@ -81,15 +82,23 @@ pub enum Conn {
     /// Over a socket file.
     #[cfg(unix)]
     Unix(std::os::unix::net::UnixStream),
+    /// Over the owner's named pipe.
+    #[cfg(windows)]
+    Pipe(diroxide_vfs::PipeStream),
 }
 
 impl Conn {
     /// Sets how long a read may wait.
-    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
         match self {
             Conn::Tcp(stream) => stream.set_read_timeout(timeout),
             #[cfg(unix)]
             Conn::Unix(stream) => stream.set_read_timeout(timeout),
+            #[cfg(windows)]
+            Conn::Pipe(stream) => {
+                stream.set_timeout(timeout);
+                Ok(())
+            }
         }
     }
 }
@@ -100,6 +109,8 @@ impl Read for Conn {
             Conn::Tcp(stream) => stream.read(buf),
             #[cfg(unix)]
             Conn::Unix(stream) => stream.read(buf),
+            #[cfg(windows)]
+            Conn::Pipe(stream) => stream.read(buf),
         }
     }
 }
@@ -110,6 +121,8 @@ impl Write for Conn {
             Conn::Tcp(stream) => stream.write(buf),
             #[cfg(unix)]
             Conn::Unix(stream) => stream.write(buf),
+            #[cfg(windows)]
+            Conn::Pipe(stream) => stream.write(buf),
         }
     }
 
@@ -118,6 +131,8 @@ impl Write for Conn {
             Conn::Tcp(stream) => stream.flush(),
             #[cfg(unix)]
             Conn::Unix(stream) => stream.flush(),
+            #[cfg(windows)]
+            Conn::Pipe(stream) => stream.flush(),
         }
     }
 }
@@ -126,11 +141,17 @@ enum Bound {
     Tcp(TcpListener),
     #[cfg(unix)]
     Unix(std::os::unix::net::UnixListener),
+    #[cfg(windows)]
+    Pipe(diroxide_vfs::OwnerPipe),
 }
 
+/// The start of every askpass pipe's name; the helper connects to no
+/// other pipe.
+pub const PIPE_NAME_PREFIX: &str = "diroxide-askpass-";
+
 impl Bound {
-    fn accept(&self) -> io::Result<Conn> {
-        let conn = match self {
+    fn accept(&mut self) -> io::Result<Conn> {
+        let mut conn = match self {
             Bound::Tcp(listener) => {
                 let (stream, _) = listener.accept()?;
                 stream.set_nonblocking(false)?;
@@ -142,6 +163,11 @@ impl Bound {
                 stream.set_nonblocking(false)?;
                 Conn::Unix(stream)
             }
+            #[cfg(windows)]
+            Bound::Pipe(pipe) => match pipe.accept(Duration::from_millis(20), None)? {
+                Some(stream) => Conn::Pipe(stream),
+                None => return Err(io::ErrorKind::WouldBlock.into()),
+            },
         };
         conn.set_read_timeout(Some(STEP_TIMEOUT))?;
         Ok(conn)
@@ -168,17 +194,41 @@ impl std::fmt::Debug for Listener {
     }
 }
 
+fn tag(bytes: usize) -> String {
+    random()
+        .unwrap_or_default()
+        .iter()
+        .take(bytes)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+fn bind_loopback() -> io::Result<(Bound, String, Option<PathBuf>)> {
+    let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))?;
+    listener.set_nonblocking(true)?;
+    let endpoint = format!("tcp:{}", listener.local_addr()?);
+    Ok((Bound::Tcp(listener), endpoint, None))
+}
+
 fn bind(runtime: Option<&Path>) -> io::Result<(Bound, String, Option<PathBuf>)> {
+    #[cfg(windows)]
+    {
+        let _ = runtime;
+        // Twelve random bytes in the name: a fresh one per connection.
+        let name = format!("{PIPE_NAME_PREFIX}{}", tag(12));
+        let pipe = diroxide_vfs::OwnerPipe::create(&name)?;
+        Ok((Bound::Pipe(pipe), format!("pipe:{name}"), None))
+    }
+    #[cfg(not(windows))]
+    bind_socket(runtime)
+}
+
+#[cfg(not(windows))]
+fn bind_socket(runtime: Option<&Path>) -> io::Result<(Bound, String, Option<PathBuf>)> {
     #[cfg(unix)]
     if let Some(runtime) = runtime {
         use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-        let tag: String = random()
-            .unwrap_or_default()
-            .iter()
-            .take(6)
-            .map(|b| format!("{b:02x}"))
-            .collect();
-        let folder = runtime.join(format!("askpass-{tag}"));
+        let folder = runtime.join(format!("askpass-{}", tag(6)));
         std::fs::DirBuilder::new().mode(0o700).create(&folder)?;
         let socket = folder.join("s");
         let listener = std::os::unix::net::UnixListener::bind(&socket)?;
@@ -188,10 +238,7 @@ fn bind(runtime: Option<&Path>) -> io::Result<(Bound, String, Option<PathBuf>)> 
         return Ok((Bound::Unix(listener), endpoint, Some(folder)));
     }
     let _ = runtime;
-    let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))?;
-    listener.set_nonblocking(true)?;
-    let endpoint = format!("tcp:{}", listener.local_addr()?);
-    Ok((Bound::Tcp(listener), endpoint, None))
+    bind_loopback()
 }
 
 fn serve_one(stream: &mut Conn, token: &Token, handler: &Handler) -> Result<(), bool> {
@@ -232,8 +279,21 @@ impl Listener {
     /// Opens an endpoint whose prompts `handler` answers; `runtime` is
     /// the plugin's own folder for the socket on Unix.
     pub fn open(runtime: Option<&Path>, handler: Handler) -> io::Result<Self> {
+        Self::start(bind(runtime)?, handler)
+    }
+
+    /// An endpoint on 127.0.0.1 whatever the system: the proof alone
+    /// guards it. For the tests of the proof, never a connection's.
+    pub fn open_loopback(handler: Handler) -> io::Result<Self> {
+        Self::start(bind_loopback()?, handler)
+    }
+
+    fn start(
+        (bound, endpoint, folder): (Bound, String, Option<PathBuf>),
+        handler: Handler,
+    ) -> io::Result<Self> {
         let token = Token::new().ok_or_else(|| io::Error::other("no random numbers"))?;
-        let (bound, endpoint, folder) = bind(runtime)?;
+        let mut bound = bound;
         let stop = Arc::new(AtomicBool::new(false));
         let refused = Arc::new(AtomicUsize::new(0));
         let answered = Arc::new(AtomicUsize::new(0));
@@ -256,6 +316,11 @@ impl Listener {
                             }
                             Err(_) => continue,
                         };
+                        // A helper that arrived while the endpoint was
+                        // closing gets nothing.
+                        if stop.load(Ordering::SeqCst) {
+                            break;
+                        }
                         let (refused, answered, token, handler, stop) = (
                             Arc::clone(&refused),
                             Arc::clone(&answered),
@@ -291,7 +356,8 @@ impl Listener {
     }
 
     /// The endpoint as the helper's environment names it:
-    /// `tcp:127.0.0.1:PORT` or `unix:/path`.
+    /// `pipe:diroxide-askpass-HEX` on Windows, `unix:/path` on Unix, or
+    /// `tcp:127.0.0.1:PORT`.
     pub fn endpoint(&self) -> &str {
         &self.endpoint
     }
@@ -339,10 +405,28 @@ impl Drop for Listener {
     }
 }
 
-/// Connects to an endpoint the helper was given: only 127.0.0.1 or a
-/// socket file, never another host.
+/// Connects to an endpoint the helper was given: only 127.0.0.1, a socket
+/// file, or on Windows an askpass pipe in the local namespace, never
+/// another host.
 pub fn connect(endpoint: &str) -> io::Result<Conn> {
     let refuse = || io::Error::new(io::ErrorKind::InvalidInput, "not a local endpoint");
+    if let Some(name) = endpoint.strip_prefix("pipe:") {
+        let ours = name.starts_with(PIPE_NAME_PREFIX)
+            && name.len() > PIPE_NAME_PREFIX.len()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        if !ours {
+            return Err(refuse());
+        }
+        #[cfg(windows)]
+        return Ok(Conn::Pipe(diroxide_vfs::PipeStream::connect(
+            name,
+            Some(STEP_TIMEOUT),
+        )?));
+        #[cfg(not(windows))]
+        return Err(refuse());
+    }
     if let Some(address) = endpoint.strip_prefix("tcp:") {
         let address: SocketAddr = address.parse().map_err(|_| refuse())?;
         if !address.ip().is_loopback() {
@@ -372,6 +456,9 @@ mod tests {
             "tcp:build.example:22",
             "tcp:0.0.0.0:22",
             "pipe:x",
+            "pipe:diroxide-askpass-",
+            "pipe:diroxide-askpass-../x",
+            r"pipe:\\server\pipe\diroxide-askpass-1",
             "",
         ] {
             assert_eq!(
@@ -382,12 +469,25 @@ mod tests {
         }
     }
 
+    /// Answer 101: on Windows a connection's endpoint is an owner-only
+    /// pipe with a fresh name, never a socket.
+    #[cfg(windows)]
     #[test]
-    fn the_windows_endpoint_listens_on_loopback_only() {
-        if cfg!(unix) {
-            return;
-        }
-        let listener = Listener::open(None, Arc::new(|_: &Prompt| Reply::Refuse)).unwrap();
+    fn the_windows_endpoint_is_an_owner_only_pipe() {
+        let one = Listener::open(None, Arc::new(|_: &Prompt| Reply::Refuse)).unwrap();
+        let two = Listener::open(None, Arc::new(|_: &Prompt| Reply::Refuse)).unwrap();
+        let name = one.endpoint().strip_prefix("pipe:").unwrap();
+        assert!(name.starts_with(PIPE_NAME_PREFIX), "{name}");
+        assert_eq!(name.len(), PIPE_NAME_PREFIX.len() + 24);
+        assert_ne!(one.endpoint(), two.endpoint());
+        // The name is taken while the endpoint is open: nobody else can
+        // create it.
+        assert!(diroxide_vfs::OwnerPipe::create(name).is_err());
+    }
+
+    #[test]
+    fn the_loopback_endpoint_listens_on_loopback_only() {
+        let listener = Listener::open_loopback(Arc::new(|_: &Prompt| Reply::Refuse)).unwrap();
         let address: SocketAddr = listener
             .endpoint()
             .strip_prefix("tcp:")

@@ -1,0 +1,10 @@
+# A plain ssh configuration for the tests that run the plugin's program
+# through the host: no Include line, so nothing outside the fixtures is
+# read, never the owner's own configuration.
+
+Host fixture-one
+    HostName one.example
+    User ada
+
+Host fixture-two
+    HostName two.example

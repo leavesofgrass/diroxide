@@ -6,7 +6,9 @@
 //! codec and the multiplexer. The provider methods are served by
 //! [`crate::provider`] (S-B, commits 57 to 64); a provider call that needs
 //! a connection and has none answers `auth_required` ("Not connected"),
-//! the answer the host meets by connecting.
+//! the answer the host meets by connecting. The sites lane (S-C, commits
+//! 72 to 76) adds `provider/places` and the commands of
+//! [`crate::sites::commands`]: the Sites list and the site commands.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -20,6 +22,8 @@ use serde_json::Value;
 use crate::provider::{Call, Opener, Provider, SshOpener};
 use crate::rpc::{Cancel, Handler, Peer, WORKERS};
 use crate::settings::Settings;
+use crate::sites::commands::{self, Run};
+use crate::sites::{KeyStore, MemoryKeyring, Sites, SystemKeyring};
 
 /// The scheme this plugin serves.
 pub const SCHEME: &str = "sftp";
@@ -45,6 +49,7 @@ pub const PROVIDER_METHODS: &[&str] = &[
     "copy_hint",
     "copy",
     "volumes",
+    "places",
 ];
 
 /// What the plugin knows from the host.
@@ -57,6 +62,9 @@ pub struct State {
     pub state_dir: Option<PathBuf>,
     /// The host's spool folder, where file transfers land.
     pub spool_dir: Option<PathBuf>,
+    /// For one connection: what its saved site changes in how ssh is
+    /// started (the sites lane, S-C); `None` for a place no site names.
+    pub site: Option<crate::sites::model::SiteOptions>,
 }
 
 /// The plugin.
@@ -64,27 +72,44 @@ pub struct State {
 pub struct Plugin {
     state: Mutex<State>,
     provider: Arc<Provider>,
+    sites: Arc<Sites>,
 }
 
 impl Plugin {
     /// A plugin that has not been initialized, whose connections start
-    /// the OpenSSH client.
+    /// the OpenSSH client and whose saved passwords go to the system's
+    /// keyring (opt-in per site; answer 83).
     pub fn new() -> Arc<Self> {
-        Self::with_opener(Arc::new(SshOpener::new()))
+        Self::with_parts(Arc::new(SshOpener::new()), SystemKeyring::new())
     }
 
     /// The same, with connections opened by `opener` (a test's fake
-    /// server, or ssh with another helper program).
+    /// server, or ssh with another helper program) and a keyring in
+    /// memory, so a test never touches the system's.
     pub fn with_opener(opener: Arc<dyn Opener>) -> Arc<Self> {
+        Self::with_parts(opener, MemoryKeyring::new())
+    }
+
+    /// The same, with both parts chosen.
+    pub fn with_parts(opener: Arc<dyn Opener>, keyring: Arc<dyn KeyStore>) -> Arc<Self> {
+        let provider = Arc::new(Provider::new(opener));
+        let sites = Arc::new(Sites::with_keyring(keyring));
+        provider.set_sites(Arc::clone(&sites));
         Arc::new(Self {
             state: Mutex::new(State::default()),
-            provider: Arc::new(Provider::new(opener)),
+            provider,
+            sites,
         })
     }
 
     /// The provider, for its connections.
     pub fn provider(&self) -> &Arc<Provider> {
         &self.provider
+    }
+
+    /// The saved sites and the hosts of the ssh configuration.
+    pub fn sites(&self) -> &Arc<Sites> {
+        &self.sites
     }
 
     /// A copy of what it knows now.
@@ -107,6 +132,9 @@ impl Handler for Plugin {
             state.spool_dir = Some(params.dirs.spool.as_str())
                 .filter(|dir| !dir.is_empty())
                 .map(PathBuf::from);
+            self.sites.set_dir(state.state_dir.clone());
+            self.sites
+                .set_config_file(state.settings.ssh_config_file.clone());
         }
         InitializeResult {
             protocol: PROTOCOL,
@@ -119,6 +147,8 @@ impl Handler for Plugin {
                     scheme: SCHEME.to_owned(),
                     methods: PROVIDER_METHODS.iter().map(|m| (*m).to_owned()).collect(),
                 }],
+                commands: commands::COMMANDS.iter().map(|c| (*c).to_owned()).collect(),
+                listers: vec![commands::LISTER.to_owned()],
                 concurrency: u32::try_from(WORKERS).ok(),
                 transfer: vec!["inline".to_owned(), "file".to_owned()],
                 ..PluginCapabilities::default()
@@ -135,6 +165,20 @@ impl Handler for Plugin {
         cancel: &Cancel,
     ) -> Result<Value, RpcError> {
         cancel.check()?;
+        if method == methods::PROVIDER_PLACES {
+            return Ok(self.sites.places(&self.provider));
+        }
+        if method == methods::COMMAND_RUN {
+            let state = self.state();
+            return commands::run(&Run {
+                peer,
+                params: &params,
+                cancel,
+                state: &state,
+                sites: &self.sites,
+                provider: &self.provider,
+            });
+        }
         if method.starts_with("provider/") {
             let state = self.state();
             let call = Call {
@@ -159,15 +203,18 @@ impl Handler for Plugin {
         if method == methods::SETTINGS_CHANGED
             && let Some(Value::Object(values)) = params.get("settings")
         {
+            let settings = Settings::from_values(values);
+            self.sites.set_config_file(settings.ssh_config_file.clone());
             self.state
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .settings = Settings::from_values(values);
+                .settings = settings;
         }
     }
 
     fn shutdown(&self) {
         self.provider.close_all();
+        self.sites.clear_session();
     }
 }
 

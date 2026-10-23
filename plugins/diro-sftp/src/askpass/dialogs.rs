@@ -201,6 +201,15 @@ impl Asker {
         reply(&kind, answer)
     }
 
+    /// Says a line to the owner, as a status (the sites lane's notice that
+    /// a saved password was refused).
+    pub fn say(&self, text: &str) {
+        self.peer.notify(
+            methods::UI_ANNOUNCE,
+            params(json!({"text": text, "importance": "status"})),
+        );
+    }
+
     /// The endpoint's handler for this connection.
     pub fn handler(self: &Arc<Self>) -> Handler {
         let asker = Arc::clone(self);

@@ -51,6 +51,20 @@ jobs:
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --all-features
+      # The SFTP plugin against a real OpenSSH server (answer 99), on the
+      # Linux leg only: in the development image, which holds Debian's
+      # openssh-server. The tests start and stop their own sshd on a
+      # loopback port inside the container, with keys and a password made
+      # for the run; nothing listens outside it (docker/sftp/).
+      - name: SFTP plugin against OpenSSH, in the development container
+        if: runner.os == 'Linux'
+        run: |
+          docker build --file docker/Dockerfile --tag diroxide-dev .
+          docker run --rm --user root --volume "$PWD:/work" --workdir /work \
+            --env CARGO_TARGET_DIR=/target --env CARGO_TERM_COLOR=never \
+            --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory \
+            --env GIT_CONFIG_VALUE_0=/work \
+            diroxide-dev bash docker/sftp/run-tests.sh
 
   docs:
     name: Rustdoc, warnings denied

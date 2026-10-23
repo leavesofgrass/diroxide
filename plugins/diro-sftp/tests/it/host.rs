@@ -26,6 +26,7 @@ pub struct TestHost {
     waiting: Arc<Mutex<HashMap<i64, Sender<Value>>>>,
     notices: Arc<Mutex<Vec<Value>>>,
     asked: Arc<Mutex<Vec<Value>>>,
+    requests: Arc<Mutex<Vec<Value>>>,
     plugin: Arc<Plugin>,
 }
 
@@ -45,11 +46,13 @@ impl TestHost {
         let waiting: Arc<Mutex<HashMap<i64, Sender<Value>>>> = Arc::default();
         let notices: Arc<Mutex<Vec<Value>>> = Arc::default();
         let asked: Arc<Mutex<Vec<Value>>> = Arc::default();
+        let requests: Arc<Mutex<Vec<Value>>> = Arc::default();
         {
-            let (waiting, notices, asked) = (
+            let (waiting, notices, asked, requests) = (
                 Arc::clone(&waiting),
                 Arc::clone(&notices),
                 Arc::clone(&asked),
+                Arc::clone(&requests),
             );
             let mut out = host_out.clone();
             let mut answers: VecDeque<Value> = answers.into();
@@ -60,9 +63,16 @@ impl TestHost {
                         continue;
                     };
                     if message.get("method").is_some() && message.get("id").is_some() {
-                        // The plugin asks the host: ui/ask.
-                        asked.lock().unwrap().push(message["params"].clone());
-                        let answer = answers.pop_front().unwrap_or(json!({"cancelled": true}));
+                        requests.lock().unwrap().push(message.clone());
+                        // The plugin asks the host: ui/ask takes the next
+                        // scripted answer; any other request (lister/open,
+                        // panel/set) is done and answered at once.
+                        let answer = if message["method"] == "ui/ask" {
+                            asked.lock().unwrap().push(message["params"].clone());
+                            answers.pop_front().unwrap_or(json!({"cancelled": true}))
+                        } else {
+                            json!({})
+                        };
                         let reply =
                             json!({"jsonrpc": "2.0", "id": message["id"], "result": answer});
                         let _ = writeln!(out, "{reply}");
@@ -86,6 +96,7 @@ impl TestHost {
             waiting,
             notices,
             asked,
+            requests,
             plugin,
         };
         let init = host.call(
@@ -150,6 +161,43 @@ impl TestHost {
     /// The questions the plugin asked.
     pub fn asked(&self) -> Vec<Value> {
         self.asked.lock().unwrap().clone()
+    }
+
+    /// The parameters of every request of `method` the plugin made.
+    pub fn requests(&self, method: &str) -> Vec<Value> {
+        self.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|m| m["method"] == method)
+            .map(|m| m["params"].clone())
+            .collect()
+    }
+
+    /// Runs one of the plugin's commands with a context: the row id
+    /// selected in a lister, or none, and the active panel's place.
+    pub fn command(&self, command: &str, row: Option<&str>, active: &str) -> Result<Value, Value> {
+        let selection: Vec<Value> = row
+            .map(|id| json!({"name": id, "kind": "item", "extra": {"id": id}}))
+            .into_iter()
+            .collect();
+        self.call(
+            "command/run",
+            json!({
+                "command": format!("sftp.{command}"),
+                "context": {
+                    "protocol": 1,
+                    "command": format!("sftp.{command}"),
+                    "locale": "en-US",
+                    "active": {"place": active, "provider": "local"},
+                    "other": {"place": active, "provider": "local"},
+                    "selection": selection,
+                    "selection_count": 0,
+                    "selection_from_cursor": false,
+                    "selection_truncated": false,
+                },
+            }),
+        )
     }
 
     /// Waits until `done` holds, up to ten seconds.

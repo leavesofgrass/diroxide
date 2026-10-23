@@ -1,0 +1,10 @@
+# The PAM stack of the SFTP test server, which run-tests.sh puts in place
+# of /etc/pam.d/sshd in the throwaway development container only (never
+# on a real machine). sshd runs as the container's own user, so pam_unix
+# may check that user's password (through unix_chkpwd) and nothing else;
+# the modules of Debian's own stack that need root (pam_loginuid,
+# pam_limits, pam_selinux) are left out.
+auth     required pam_unix.so
+account  required pam_unix.so
+session  required pam_permit.so
+password required pam_deny.so

@@ -3,7 +3,9 @@
 //! owners and groups.
 //!
 //! It also holds the kill-on-close job object of Windows, which the
-//! process helper of `diroxide-tools` puts every process tree in.
+//! process helper of `diroxide-tools` puts every process tree in, and the
+//! owner-only named pipe of Windows, the SFTP plugin's askpass endpoint
+//! (plan answer 101).
 //!
 //! This is the one module in the workspace allowed to use `unsafe`, for
 //! calls into the platform. Every `unsafe` block here carries a comment
@@ -15,11 +17,15 @@
 //! same signatures, so the provider above calls them without `cfg`.
 #![allow(unsafe_code)]
 
+#[cfg(windows)]
+mod owner_pipe;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
 mod windows;
 
+#[cfg(windows)]
+pub use owner_pipe::{OwnerPipe, PipeStream, plain_pipe_name};
 #[cfg(unix)]
 pub(crate) use unix::*;
 #[cfg(windows)]

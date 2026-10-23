@@ -74,10 +74,20 @@ struct Remembered {
 /// was typed (a session that needed one is never reopened unasked), and
 /// ssh's own password for the connection's account (answer 87). Wiped
 /// when it is dropped.
+///
+/// A site's saved password (this session's, or the keyring's; answer 83)
+/// is offered before the connection opens ([`Memory::offer`]) and given
+/// to ssh at most once, for ssh's own password prompt of this
+/// connection's account and nothing else. When ssh asks again in the same
+/// session, what it was given was refused: it is forgotten and the owner
+/// is asked (S-C, R25 commit 74).
 #[derive(Default)]
 pub struct Memory {
     typed: AtomicBool,
     password: Mutex<Option<Remembered>>,
+    offered: Mutex<Option<Secret>>,
+    from_store: AtomicBool,
+    store_refused: AtomicBool,
 }
 
 impl fmt::Debug for Memory {
@@ -139,18 +149,73 @@ impl Memory {
             .take();
     }
 
+    /// Offers a site's saved password for ssh's own password prompt of
+    /// this connection's account, once.
+    pub fn offer(&self, secret: Secret) {
+        *self.offered.lock().unwrap_or_else(PoisonError::into_inner) = Some(secret);
+    }
+
+    fn take_offered(&self) -> Option<Secret> {
+        self.offered
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+    }
+
+    /// The password the owner typed for this connection's account and ssh
+    /// kept, for the question after a successful login; `None` when the
+    /// remembered one came from a store, or there is none.
+    pub fn typed_password(&self) -> Option<Secret> {
+        if self.from_store.load(Ordering::SeqCst) {
+            return None;
+        }
+        self.password
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .map(|r| r.secret.clone())
+    }
+
+    /// Whether the saved password was given to ssh and ssh asked again.
+    pub fn store_refused(&self) -> bool {
+        self.store_refused.load(Ordering::SeqCst)
+    }
+
+    /// Whether the password ssh kept came from a store.
+    pub fn from_store(&self) -> bool {
+        self.from_store.load(Ordering::SeqCst)
+    }
+
+    /// ssh asked for the account's password again: what it was given was
+    /// refused, so it is forgotten; `true` when it came from a store.
+    fn refused(&self) -> bool {
+        self.forget();
+        self.take_offered();
+        let stored = self.from_store.swap(false, Ordering::SeqCst);
+        if stored {
+            self.store_refused.store(true, Ordering::SeqCst);
+        }
+        stored
+    }
+
     /// One session's askpass handler. ssh's own password prompt for
     /// `account` (the user and host of the connection's `ssh -G` answer,
-    /// and nothing else: a jump host's prompt names another host) is
-    /// answered from memory when the owner typed it before; everything
-    /// else goes to `asker`, the owner. With no asker (a second session)
-    /// nothing is asked: what memory cannot answer is refused.
+    /// and nothing else: a jump host's prompt names another host; `None`
+    /// for a connection through a jump host or a proxy command, so nothing
+    /// is ever filled in there) is answered from memory when the owner
+    /// typed it before, else with the site's offered password, once;
+    /// everything else goes to `asker`, the owner. When ssh asks for the
+    /// account's password a second time in one session, what it was given
+    /// was refused: it is forgotten and the owner is asked. With no asker
+    /// (a second session) nothing is asked: what memory cannot answer is
+    /// refused.
     pub fn handler(
         self: &Arc<Self>,
         asker: Option<Arc<Asker>>,
         account: Option<(String, String)>,
     ) -> Handler {
         let memory = Arc::clone(self);
+        let answered = Arc::new(AtomicBool::new(false));
         Arc::new(move |prompt: &Prompt| {
             let kind = classify(prompt);
             let ours = |user: &str, host: &str| {
@@ -160,9 +225,21 @@ impl Memory {
             };
             if let PromptKind::HostPassword { user, host } = &kind
                 && ours(user, host)
-                && let Some(secret) = memory.remembered(user, host)
             {
-                return Reply::Answer(secret);
+                if answered.swap(true, Ordering::SeqCst) {
+                    if memory.refused()
+                        && let Some(asker) = &asker
+                    {
+                        asker.say(crate::sites::words::STORED_REFUSED);
+                    }
+                } else if let Some(secret) = memory.remembered(user, host) {
+                    return Reply::Answer(secret);
+                } else if let Some(secret) = memory.take_offered() {
+                    memory.mark_typed();
+                    memory.from_store.store(true, Ordering::SeqCst);
+                    memory.remember(user, host, secret.clone());
+                    return Reply::Answer(secret);
+                }
             }
             let Some(asker) = &asker else {
                 return Reply::Refuse;
@@ -237,6 +314,12 @@ impl fmt::Debug for Opened {
 pub trait Opener: Send + Sync + fmt::Debug {
     /// Opens one session.
     fn open(&self, request: &OpenRequest<'_>) -> Result<Opened, RpcError>;
+
+    /// The askpass helper program its sessions use, for `doctor`'s
+    /// self-test; none for an opener that runs no ssh.
+    fn helper(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// The opener that starts the OpenSSH client.
@@ -416,6 +499,10 @@ impl SshOpener {
 }
 
 impl Opener for SshOpener {
+    fn helper(&self) -> Option<PathBuf> {
+        self.helper.clone()
+    }
+
     fn open(&self, request: &OpenRequest<'_>) -> Result<Opened, RpcError> {
         let host = request.target.host();
         let settings = &request.state.settings;
@@ -447,6 +534,17 @@ impl Opener for SshOpener {
                     .map(|d| d.join("ssh-debug.log"))
             })
             .flatten();
+        let site = request.state.site.clone().unwrap_or_default();
+        let remote = match &site.sftp_server_program {
+            Some(program) => Remote::program(program).map_err(|e| {
+                RpcError::with_hint(
+                    ErrorKind::InvalidParams,
+                    lines::cannot_connect(host),
+                    e.to_string(),
+                )
+            })?,
+            None => Remote::Subsystem,
+        };
         let options = SessionOptions {
             target: request.target,
             resolved: &resolved,
@@ -454,16 +552,23 @@ impl Opener for SshOpener {
             settings,
             interactive,
             windows: cfg!(windows),
-            key_file: None,
-            add_keys_to_agent: false,
+            key_file: site.key_file,
+            add_keys_to_agent: site.add_key_to_agent,
             debug_log,
-            remote: Remote::Subsystem,
+            remote,
         };
         let may_ask = options.may_ask();
         let listener = if may_ask {
+            // Through a jump host or a proxy command, another server could
+            // ask in the very words of ssh's own password prompt (S-A's
+            // warning): no prompt there is ours, so nothing is filled in
+            // or remembered, and the owner is asked every time.
+            let through_proxy =
+                resolved.proxy_jump().is_some() || resolved.proxy_command().is_some();
             let account = resolved
                 .user()
                 .zip(resolved.hostname())
+                .filter(|_| !through_proxy)
                 .map(|(u, h)| (u.to_owned(), h.to_owned()));
             let tries = resolved
                 .get("numberofpasswordprompts")
@@ -638,7 +743,18 @@ impl Connection {
         interactive: bool,
         call: &Call<'_>,
     ) -> Result<Arc<Self>, RpcError> {
-        let memory = Memory::new();
+        Self::open_with(opener, target, interactive, call, Memory::new())
+    }
+
+    /// The same, with a memory made beforehand: one that holds a site's
+    /// offered password (S-C, R25 commit 74).
+    pub fn open_with(
+        opener: Arc<dyn Opener>,
+        target: &Target,
+        interactive: bool,
+        call: &Call<'_>,
+        memory: Arc<Memory>,
+    ) -> Result<Arc<Self>, RpcError> {
         let opened = opener.open(&OpenRequest {
             target,
             interactive,

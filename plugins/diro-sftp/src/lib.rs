@@ -23,12 +23,14 @@
 //! section 5.8, item 3); it is pure Rust, with no C build.
 
 pub mod askpass;
+pub mod doctor;
 pub mod lines;
 pub mod plugin;
 pub mod provider;
 pub mod rpc;
 pub mod settings;
 pub mod sftp;
+pub mod sites;
 pub mod ssh;
 
 /// The default SFTP port.

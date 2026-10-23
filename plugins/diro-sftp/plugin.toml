@@ -4,8 +4,8 @@
 #
 # The provider's methods: connect, list, stat, ranged reads, the write
 # session, the operations, server-side copy and volumes (S-B, R25 commits
-# 57 to 64); places and the commands (sites, connect, disconnect, doctor)
-# come with S-C. No trash (answer 86) and no watch: SFTP has neither.
+# 57 to 64); places, the Sites list and the site commands (S-C, commits
+# 72 to 75). No trash (answer 86) and no watch: SFTP has neither.
 
 [plugin]
 id = "sftp"
@@ -29,7 +29,9 @@ command = ["./diro-sftp.exe"]
 
 [permissions]
 fs = "none"
-panel = "none"
+# Connect opens a site's start folder in the active panel and its local
+# folder in the other (R24 section 3.2); nothing else moves a panel.
+panel = "write"
 
 [permissions.declared]
 network = "connects to the servers you open, through ssh"
@@ -53,6 +55,7 @@ server_side_copy = true
 methods = [
     "connect", "list", "stat", "read", "write_begin", "write_chunk", "write_end",
     "create_dir", "rename", "remove", "set_attributes", "copy_hint", "copy", "volumes",
+    "places",
 ]
 lease = "listers"
 
@@ -103,3 +106,108 @@ key = "ssh_debug_log"
 type = "bool"
 default = false
 description = "Write ssh's debug log to this plugin's state folder. Off by default."
+
+# The commands (R24, "The plugin's shape"; R25 commits 73 to 75). Run
+# from the Sites list, a command acts on its row; run from a panel that
+# shows an sftp place, on that place's connection.
+
+[[command]]
+id = "sites"
+name = "SFTP sites"
+description = "Lists your saved sites and the hosts of your ssh config."
+selection = "none"
+
+[[command]]
+id = "connect"
+name = "Connect to the site"
+description = "Connects and opens the site's start folders."
+
+[[command]]
+id = "disconnect"
+name = "Disconnect from the site"
+description = "Closes the site's connection quietly."
+
+[[command]]
+id = "cancel_connection"
+name = "Cancel the site's connection"
+description = "Ends ssh at once, even in the middle of a transfer."
+
+[[command]]
+id = "new_site"
+name = "New SFTP site"
+description = "Saves a new site; on a host from your ssh config, saves it."
+
+[[command]]
+id = "edit_site"
+name = "Edit the site"
+description = "Changes the site's name, address, group, folder or secret mode."
+
+[[command]]
+id = "delete_site"
+name = "Delete the site"
+description = "Deletes the saved site after asking; starts on No."
+
+[[command]]
+id = "forget_password"
+name = "Forget the site's password"
+description = "Removes its saved password from memory and the keyring."
+
+[[command]]
+id = "doctor"
+name = "SFTP doctor"
+description = "Says which ssh, the agent, the config and the helper's test."
+selection = "none"
+
+# The Sites list: Enter connects; the actions by key.
+[[lister]]
+id = "sites"
+name = "SFTP sites"
+activate = "connect"
+
+[[lister.columns]]
+id = "state"
+header = "State"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "address"
+header = "Address"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "group"
+header = "Group"
+kind = "text"
+sorts = true
+
+[[lister.action]]
+key = "alt+n"
+command = "new_site"
+selection = "none"
+
+[[lister.action]]
+key = "alt+e"
+command = "edit_site"
+selection = "one"
+
+[[lister.action]]
+key = "alt+d"
+command = "delete_site"
+selection = "one"
+
+[[lister.action]]
+key = "alt+x"
+command = "disconnect"
+selection = "one"
+
+[[lister.action]]
+key = "alt+c"
+command = "cancel_connection"
+selection = "one"
+
+[[lister.action]]
+key = "alt+f"
+command = "forget_password"
+selection = "one"

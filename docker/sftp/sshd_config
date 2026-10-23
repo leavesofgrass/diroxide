@@ -1,0 +1,35 @@
+# The SFTP plugin's test server (R25 commit 76; answer 99): OpenSSH's own
+# sshd, started and stopped by the plugin's container tests themselves,
+# as the container's ordinary user, on a loopback port only, so nothing
+# listens outside the container or the runner.
+#
+# The tests fill in every @NAME@: a fresh folder of their own, a free
+# port, the user, the case's sign-in lines, the SFTP subsystem and any
+# extra lines. The host key, the client key and the password are made at
+# test time, in that folder or by run-tests.sh, and never committed.
+
+ListenAddress 127.0.0.1
+Port @PORT@
+HostKey @DIR@/host_ed25519
+PidFile @DIR@/sshd.pid
+AuthorizedKeysFile @DIR@/authorized_keys
+AllowUsers @USER@
+PermitRootLogin no
+# The folder is the test's own, under the container's /tmp.
+StrictModes no
+UsePAM yes
+PrintMotd no
+PrintLastLog no
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+PermitTTY no
+LogLevel ERROR
+
+# The case's sign-in methods.
+@AUTH@
+
+# The case's extra lines: a noisy shell startup file, a try limit.
+@EXTRA@
+
+Subsystem sftp @SUBSYSTEM@
