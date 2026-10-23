@@ -327,6 +327,8 @@ impl ProcessSpec {
     /// Starts the program.
     pub fn spawn(&self) -> Result<ProcessHandle, ProcessError> {
         let mut wrap = CommandWrap::from(self.command()?);
+        // On Unix the guard is unit: a process group has no handle to keep.
+        #[allow(clippy::let_unit_value)]
         let guard = platform::wrap(&mut wrap, self.tie, self.creation_flags());
         let child = wrap.spawn().map_err(|e| self.start_error(&e))?;
         Ok(ProcessHandle {
