@@ -49,6 +49,8 @@ diroxide-app = { path = "crates/diroxide-app", version = "0.1.0-alpha.1" }
 diroxide-tui = { path = "crates/diroxide-tui", version = "0.1.0-alpha.1" }
 diroxide-gui = { path = "crates/diroxide-gui", version = "0.1.0-alpha.1" }
 diroxide-cli = { path = "crates/diroxide-cli", version = "0.1.0-alpha.1" }
+# Optional components: pins, the embedded list, the downloader (W4c).
+diroxide-components = { path = "crates/diroxide-components", version = "0.1.0-alpha.1" }
 
 # Used by the contract (Phase 0 and the Wave 1 amendments).
 anyhow = "1.0.100"

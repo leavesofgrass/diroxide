@@ -1,0 +1,37 @@
+//! Optional components (plan section 5.14): the plugins, helper programs
+//! and data packs diroxide can use but does not ship, and the one way
+//! they are fetched, checked, installed and removed.
+//!
+//! The model is textweaver's components crate, the owner's own code,
+//! relicensed under answer 3 (R22 section 6.1): each [`Component`] has an
+//! id, a title, a kind, a version, a license, the features that need it,
+//! a folder under the components folder, and its files, each pinned by
+//! size and SHA-256 ([`FilePin`]). The pins are the contract, not the
+//! addresses: a file whose size or hash does not match is refused,
+//! whoever served it.
+//!
+//! - [`Component::status_in`] says from the sizes whether a component is
+//!   installed; [`Component::verify_in`] hashes every file.
+//! - [`Component::removal_in`] lists every path Remove would take away,
+//!   and [`Removal::run`] removes those and nothing else: a file the owner
+//!   put in the folder stays.
+//!
+//! Nothing here asks the owner: the app and `diro components` say the
+//! size and the license and wait for a yes before anything is fetched.
+
+mod component;
+mod error;
+pub mod pin;
+pub mod receipt;
+
+pub use component::{
+    Action, Checked, Component, FileState, Kind, LOCK_NAME, Origin, PART_SUFFIX, Removal,
+    SIDECAR_SUFFIX, STAGING_SUFFIX, Status, is_https,
+};
+pub use error::ComponentError;
+pub use pin::{FilePin, hash_file, host_target, is_plain_name, sha256_hex};
+pub use receipt::{Receipt, ReceiptFile};
+
+/// The User-Agent every request carries: the project, nothing about the
+/// owner or the computer (the privacy rule).
+pub const USER_AGENT: &str = "diroxide-research (+https://diroxide.app)";

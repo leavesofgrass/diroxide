@@ -946,6 +946,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "diroxide-components"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "diroxide-core",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "diroxide-config"
 version = "0.1.0-alpha.1"
 dependencies = [
