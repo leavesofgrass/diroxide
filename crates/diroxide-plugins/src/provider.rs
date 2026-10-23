@@ -45,6 +45,7 @@ use std::ops::ControlFlow;
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use diroxide_core::{Attributes, Entry, Place};
+use diroxide_vfs::provider::{LinkKind, LinkRequest};
 use diroxide_vfs::{
     AttributeChange, Capabilities, CopyHint, FileWriter, OpContext, Provider, ReadSeek, SpaceInfo,
     StreamingList, TrashCheck, VfsError, VolumeInfo, VolumeKind, WatchHandle, WatchSink, WriteMode,
@@ -295,10 +296,7 @@ impl PluginProvider {
         if !self.has("connect") {
             return Ok(());
         }
-        let authority = place
-            .remote()
-            .map(|r| format!("{}://{}", r.scheme(), r.host()))
-            .unwrap_or_default();
+        let authority = authority_of(place);
         let mut connected = self
             .connected
             .lock()
@@ -715,6 +713,27 @@ impl Provider for PluginProvider {
         .map(|_| ())
     }
 
+    fn create_link(
+        &self,
+        place: &Place,
+        request: &LinkRequest,
+        ctx: &OpContext,
+    ) -> Result<(), VfsError> {
+        let kind = match request.kind {
+            LinkKind::Symbolic => "symbolic",
+            LinkKind::Hard => "hard",
+            LinkKind::Junction => "junction",
+        };
+        self.call(
+            "create_link",
+            "make links",
+            place,
+            json!({"place": place.to_string(), "target": request.target, "kind": kind}),
+            ctx,
+        )
+        .map(|_| ())
+    }
+
     fn remove(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         self.call(
             "remove",
@@ -923,10 +942,7 @@ impl PluginProvider {
         if !self.has("volumes") {
             return Ok(Vec::new());
         }
-        let authority = place
-            .remote()
-            .map(|r| format!("{}://{}", r.scheme(), r.host()))
-            .unwrap_or_default();
+        let authority = authority_of(place);
         let answer = self.call(
             "volumes",
             "list volumes",
@@ -1582,4 +1598,25 @@ mod tests {
         assert_eq!(read_all(&toy.provider, &p("/r/other.bin")), b"fresh");
         toy.host.shutdown_all(crate::host::QUIT_BUDGET);
     }
+}
+
+/// The authority of a remote place, `scheme://user@host:port` with the user
+/// and the port only when the place has them, so two accounts or two ports
+/// on one host are two sign-ins (S-B's request).
+fn authority_of(place: &Place) -> String {
+    place
+        .remote()
+        .map(|r| {
+            let mut s = format!("{}://", r.scheme());
+            if let Some(user) = r.user() {
+                s.push_str(user);
+                s.push('@');
+            }
+            s.push_str(r.host());
+            if let Some(port) = r.port() {
+                s.push_str(&format!(":{port}"));
+            }
+            s
+        })
+        .unwrap_or_default()
 }
