@@ -17,6 +17,7 @@ pub mod connect;
 pub mod fake;
 pub mod list;
 pub mod read;
+pub mod write;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -243,11 +244,27 @@ impl Provider {
                 let at = At::from_params(call.params, "place")?;
                 read::read(&self.connection(&at.target)?, &at, call)
             }
+            methods::PROVIDER_WRITE_BEGIN => {
+                let at = At::from_params(call.params, "place")?;
+                write::begin(&self.connection(&at.target)?, &at, call)
+            }
+            methods::PROVIDER_WRITE_CHUNK => write::chunk(&self.writing(call)?, call),
+            methods::PROVIDER_WRITE_END => write::end(&self.writing(call)?, call),
             other => Err(RpcError::new(
                 ErrorKind::Unsupported,
                 format!("{other} is not served by this plugin"),
             )),
         }
+    }
+
+    /// The connection that holds the write session a request names.
+    fn writing(&self, call: &Call<'_>) -> Result<Arc<Connection>, RpcError> {
+        let id = call.text("write_id").unwrap_or_default();
+        self.lock()
+            .values()
+            .find(|c| !c.is_gone() && c.writes().has(id))
+            .cloned()
+            .ok_or_else(write::no_session)
     }
 
     /// Takes one notification: `provider/disconnect` closes the place's

@@ -31,6 +31,7 @@ use diroxide_core::Secret;
 use diroxide_plugins::protocol::{ErrorKind, Params, RpcError, methods};
 use serde_json::{Value, json};
 
+use super::write::Writes;
 use super::{Call, authority};
 use crate::askpass::classify::{PromptKind, classify};
 use crate::askpass::dialogs::{ANSWER_LIMIT, Asker, PASSWORD_TRIES, host_key_refusal};
@@ -600,6 +601,7 @@ pub struct Connection {
     stop: AtomicBool,
     second_tried: AtomicBool,
     closing: Cancel,
+    writes: Writes,
 }
 
 impl fmt::Debug for Connection {
@@ -644,6 +646,7 @@ impl Connection {
             stop: AtomicBool::new(false),
             second_tried: AtomicBool::new(false),
             closing: Cancel::new(),
+            writes: Writes::default(),
         });
         Self::watch(&connection);
         Ok(connection)
@@ -699,6 +702,11 @@ impl Connection {
             }
             links.push(link);
         }
+    }
+
+    /// The open write sessions.
+    pub fn writes(&self) -> &Writes {
+        &self.writes
     }
 
     /// How many sessions are open: one, or two once a transfer opened the
@@ -817,6 +825,7 @@ impl Connection {
     /// Closes the connection quietly: it was not lost.
     pub fn close(&self) {
         self.closing.cancel();
+        self.writes.close_all();
         self.stop.store(true, Ordering::SeqCst);
         self.gone.store(true, Ordering::SeqCst);
         let links: Vec<Arc<Link>> = self.links().drain(..).collect();

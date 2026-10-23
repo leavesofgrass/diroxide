@@ -41,9 +41,10 @@ scheme = "sftp"
 name = "SFTP"
 separator = "/"
 case_sensitive = true
+writable = true
 links = true
 attributes = true
-methods = ["connect", "list", "stat", "read"]
+methods = ["connect", "list", "stat", "read", "write_begin", "write_chunk", "write_end"]
 lease = "listers"
 
 [[setting]]

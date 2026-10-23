@@ -30,7 +30,15 @@ pub const NAME: &str = "SFTP places";
 
 /// The provider methods this build answers, without the `provider/`
 /// prefix; the host calls nothing else.
-pub const PROVIDER_METHODS: &[&str] = &["connect", "list", "stat", "read"];
+pub const PROVIDER_METHODS: &[&str] = &[
+    "connect",
+    "list",
+    "stat",
+    "read",
+    "write_begin",
+    "write_chunk",
+    "write_end",
+];
 
 /// What the plugin knows from the host.
 #[derive(Clone, Debug, Default)]

@@ -32,6 +32,8 @@ mod read;
 mod session;
 #[cfg(all(windows, feature = "fake-ssh"))]
 mod spikes;
+#[cfg(feature = "fake-ssh")]
+mod write;
 
 use std::path::{Path, PathBuf};
 

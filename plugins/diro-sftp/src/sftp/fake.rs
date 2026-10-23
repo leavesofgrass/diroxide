@@ -157,6 +157,11 @@ impl FakeFs {
         self.nodes.get(path)
     }
 
+    /// Every path it holds, in order.
+    pub fn paths(&self) -> Vec<Vec<u8>> {
+        self.nodes.keys().cloned().collect()
+    }
+
     fn children(&self, path: &[u8]) -> Vec<Vec<u8>> {
         self.nodes
             .keys()
@@ -223,6 +228,15 @@ pub struct Faults {
     /// `/etc/passwd`, a name with a NUL and an empty name, as a hostile
     /// server might.
     pub hostile_names: bool,
+    /// A WRITE keeps at most this many of its bytes and still answers OK,
+    /// as a server that lies does.
+    pub short_writes: Option<usize>,
+    /// The WRITE of this number, counted from 1, answers a failure: "No
+    /// space left on device".
+    pub fail_write_at: Option<usize>,
+    /// Closing a file opened for writing answers a failure: "Disk quota
+    /// exceeded"; the bytes stay.
+    pub fail_close: bool,
 }
 
 /// The names a hostile server adds to a listing.
@@ -273,6 +287,7 @@ struct Server {
     faults: Faults,
     handles: HashMap<Vec<u8>, Open>,
     next_handle: u64,
+    writes: usize,
 }
 
 fn status(id: u32, code: u32, words: &str) -> Response {
@@ -440,8 +455,16 @@ impl Server {
                     write: true,
                 }) => {
                     let p = p.clone();
+                    self.writes += 1;
+                    if self.faults.fail_write_at == Some(self.writes) {
+                        return status(id, status::FAILURE, "No space left on device");
+                    }
                     let Some(Node::File(bytes)) = fs.nodes.get_mut(&p) else {
                         return status(id, status::FAILURE, "Gone");
+                    };
+                    let data = match self.faults.short_writes {
+                        Some(keep) => &data[..keep.min(data.len())],
+                        None => &data[..],
                     };
                     let start = usize::try_from(offset).unwrap_or(usize::MAX);
                     if start > bytes.len() {
@@ -451,13 +474,16 @@ impl Server {
                     if end > bytes.len() {
                         bytes.resize(end, 0);
                     }
-                    bytes[start..end].copy_from_slice(&data);
+                    bytes[start..end].copy_from_slice(data);
                     status(id, status::OK, "Success")
                 }
                 Some(_) => status(id, status::PERMISSION_DENIED, "Not open for writing"),
                 None => status(id, status::FAILURE, "Bad handle"),
             },
             Request::Close { id, handle } => match self.handles.remove(&handle) {
+                Some(Open::File { write: true, .. }) if self.faults.fail_close => {
+                    status(id, status::FAILURE, "Disk quota exceeded")
+                }
                 Some(_) => status(id, status::OK, "Success"),
                 None => status(id, status::FAILURE, "Bad handle"),
             },
@@ -475,7 +501,16 @@ impl Server {
                 }
                 status(id, status::OK, "Success")
             }
-            Request::Fsetstat { id, .. } => status(id, status::OK, "Success"),
+            Request::Fsetstat { id, handle, attrs } => {
+                // A size cuts or grows the open file, as ftruncate does.
+                if let (Some(size), Some(Open::File { path: p, .. })) =
+                    (attrs.size, self.handles.get(&handle))
+                    && let Some(Node::File(bytes)) = fs.nodes.get_mut(p)
+                {
+                    bytes.resize(usize::try_from(size).unwrap_or(usize::MAX), 0);
+                }
+                status(id, status::OK, "Success")
+            }
             Request::Remove { id, path: p } => {
                 let at = path(&p);
                 match fs.node(&at) {
@@ -703,6 +738,7 @@ pub fn serve(
         faults: faults.clone(),
         handles: HashMap::new(),
         next_handle: 0,
+        writes: 0,
     };
     let mut answered = 0usize;
     let mut held: Vec<Response> = Vec::new();

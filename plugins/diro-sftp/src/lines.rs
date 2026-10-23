@@ -146,6 +146,32 @@ pub fn names_skipped(count: usize) -> String {
     }
 }
 
+/// A folder where a file was meant.
+pub const IS_A_FOLDER: &str = "A folder has that name.";
+
+/// A name already taken, and the write must not replace it.
+pub const NAME_TAKEN: &str = "The name is taken.";
+
+/// A path whose folder is not a folder.
+pub const NOT_A_FOLDER: &str = "Its folder is not a folder.";
+
+/// A second write to one file while the first runs.
+pub const WRITE_RUNNING: &str = "Another write to this file is running.";
+
+/// A chunk at the wrong offset.
+pub const OUT_OF_ORDER: &str = "A chunk came out of order.";
+
+/// A write session that is no longer open.
+pub const WRITE_ENDED: &str = "The write session ended.";
+
+/// The server holds a size other than the bytes sent.
+pub const SIZE_DIFFERS: &str = "Size differs after writing.";
+
+/// "The server holds 12 bytes of 20 sent."
+pub fn size_held(held: u64, sent: u64) -> String {
+    format!("The server holds {held} bytes of {sent} sent.")
+}
+
 /// What ssh last printed, cleaned and placed last in a hint.
 pub fn ssh_said(text: &str) -> Option<String> {
     let last = text
@@ -179,6 +205,13 @@ mod tests {
             NOT_SFTP.to_owned(),
             names_skipped(1),
             names_skipped(12_000),
+            IS_A_FOLDER.to_owned(),
+            NAME_TAKEN.to_owned(),
+            NOT_A_FOLDER.to_owned(),
+            WRITE_RUNNING.to_owned(),
+            OUT_OF_ORDER.to_owned(),
+            WRITE_ENDED.to_owned(),
+            SIZE_DIFFERS.to_owned(),
         ] {
             assert!(line.chars().count() <= MAX_LINE_CELLS, "{line}");
         }
