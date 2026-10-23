@@ -114,3 +114,16 @@ path = "fuzz_targets/archive_roundtrip.rs"
 test = false
 doc = false
 bench = false
+
+# The plugin protocol's targets (W4a-1). Each body is a plain function in
+# diroxide-plugins' `fuzzing` module, so the seeds under
+# `fixtures/plugins/seeds/` replay in the crate's normal tests.
+[dependencies.diroxide-plugins]
+path = "../crates/diroxide-plugins"
+
+[[bin]]
+name = "plugin_framing"
+path = "fuzz_targets/plugin_framing.rs"
+test = false
+doc = false
+bench = false

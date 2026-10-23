@@ -26,6 +26,9 @@ pub enum PluginError {
         /// The system's words.
         message: String,
     },
+    /// A size, queue or rate limit was reached; the text says which.
+    #[error("{0}")]
+    Limit(String),
     /// The plugin did not answer in time.
     #[error("{0} did not answer in time")]
     Timeout(String),

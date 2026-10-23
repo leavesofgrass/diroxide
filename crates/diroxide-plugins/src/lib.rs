@@ -23,6 +23,8 @@
 //! and W3b) owns this crate.
 
 pub mod error;
+pub mod framing;
+pub mod fuzzing;
 pub mod host;
 pub mod manifest;
 pub mod protocol;
@@ -35,4 +37,4 @@ pub use host::{Host, HostServices, PanelSnapshot, PluginInfo};
 pub use manifest::{Capability, CommandSpec, HookKind, Manifest};
 pub use protocol::{ErrorKind, Id, Incoming, Notification, Request, Response, RpcError};
 pub use shapes::{PanelRef, WireContext, WireEntry, WireImportance, WirePlace};
-pub use transport::{PluginTransport, StdioTransport};
+pub use transport::{MemoryPeer, MemoryTransport, PluginTransport, StdioTransport};

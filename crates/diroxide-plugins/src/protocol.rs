@@ -22,6 +22,8 @@
 //! The full message list is [`methods::ALL`], and the protocol reference,
 //! `docs/dev/plugin-protocol.md`, is generated from it by
 //! [`reference::page`] (`cargo xtask regen`).
+//! Lines are read with a bound and written from a queue by
+//! [`crate::framing`].
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};

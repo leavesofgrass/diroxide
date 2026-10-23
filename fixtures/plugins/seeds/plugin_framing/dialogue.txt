@@ -1,0 +1,12 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":1,"host":{"name":"diroxide","version":"0.1.0-alpha.2"},"plugin_id":"line-counter","locale":"en-US"}}
+{"jsonrpc":"2.0","id":1,"result":{"protocol":1,"plugin":{"name":"Line counter","version":"0.1.0"},"plugin_capabilities":{"commands":["count_lines"]}}}
+{"jsonrpc":"2.0","method":"initialized"}
+debug: still here
+{"jsonrpc":"2.0","method":"ui/announce","params":{"text":"Lines: 42, files: 1","importance":"info"}}
+{"jsonrpc":"2.0","method":"$/progress","params":{"token":"p1","value":{"kind":"report","current":12,"total":300,"unit":"files"}}}
+{"jsonrpc":"2.0","id":"x","error":{"code":-32010,"message":"no such object","data":{"kind":"not_found","place":"/home/ada/a.txt"}}}
+{not json
+
+{"jsonrpc":"2.0","id":2,"method":"shutdown"}
+{"jsonrpc":"2.0","id":2,"result":null}
+{"jsonrpc":"2.0","method":"exit"}
