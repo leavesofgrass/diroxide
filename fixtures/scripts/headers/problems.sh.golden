@@ -1,0 +1,24 @@
+settings: 11
+name: (file name)
+description: This script makes thumbnails.
+key: (none)
+selection: Any, places: Any
+needs: [], os: []
+mode: terminal, per: Selection, stdin: Json, cwd: Active
+timeout: none, selection_file: lines
+confirm: (none), prompt: (none)
+unattended: true, dry_run: false, cursor_fallback: true
+exit_words: {}, interpreter: []
+Error, line 13: a diro: line has no value. Write it as diro: key = "value".
+Error, line 14: "Name" is not a key. Use a key such as name, description or timeout.
+Error, name (line 2): is not in quotes. Put the value in quotes: "Make thumbnails".
+Error, unattended (line 7): is set twice; line 6 sets it first. Keep one of the two lines.
+Error, key (line 10): "ctrl+banana" is not a key name. Write a key such as "ctrl+alt+t".
+Error, selection (line 4): "several" is not a known value. Use one of: none, one, two, any, many.
+Error, needs (line 11): is text, not a list. Write it as a list: ["magick"].
+Error, protocol (line 12): the script speaks protocol 2; diroxide speaks 1. Use a version of the script made for this diroxide.
+Error, timeout (line 8): "soon" is not a duration. Write a duration such as "30s" or "5m", or "none".
+Error, mode (line 5): uses the terminal, and the command is unattended. Use output-pane or run, or remove unattended.
+Error, timeout (line 8): is not set, and an unattended command must end. Add a timeout such as timeout = "5m".
+Warning, colour (line 3): is not a header key, so it is ignored. Check its spelling, or remove the line.
+Warning, description (line 9): starts with filler ("this script"). Say what it does first, within 40 characters.

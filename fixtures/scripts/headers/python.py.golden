@@ -1,0 +1,11 @@
+settings: 5
+name: Python check
+description: Checks the selected files for long lines.
+key: (none)
+selection: Any, places: Any
+needs: [], os: [Linux, Macos]
+mode: output-pane, per: Selection, stdin: Json, cwd: Active
+timeout: none, selection_file: lines
+confirm: (none), prompt: (none)
+unattended: false, dry_run: true, cursor_fallback: true
+exit_words: {3: "Some lines are long."}, interpreter: []

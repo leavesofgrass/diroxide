@@ -143,3 +143,12 @@ path = "fuzz_targets/manifest_toml.rs"
 test = false
 doc = false
 bench = false
+
+# The script header reader (W4b). Its seeds are the scripts under
+# `fixtures/scripts/headers/`.
+[[bin]]
+name = "script_header"
+path = "fuzz_targets/script_header.rs"
+test = false
+doc = false
+bench = false

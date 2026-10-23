@@ -2,20 +2,24 @@
 //! `plugins/scripts/` with a header comment becomes a command:
 //!
 //! ```text
-//! #!/bin/sh
-//! # diro: name = "Make thumbnails"
-//! # diro: key = "ctrl+alt+t"
+//! #!/usr/bin/env bash
+//! # diro: name = "Total size of selection"
+//! # diro: selection_file = "nul"
 //! ```
 //!
-//! diroxide runs it with the context in environment variables
-//! (`DIRO_ACTIVE`, `DIRO_OTHER`, `DIRO_CURSOR`, `DIRO_SELECTION_FILE`) and
-//! as JSON on standard input. Output lines that start with `diro:` are
-//! directives; the rest goes to the output pane. The exit code is the
-//! status. One-line commands with placeholders (`{file}`, `{files}`,
-//! `{dir}`, `{other}`, `{dest}`) are the smallest script command; they
-//! expand into an argument list, never a shell string.
+//! A manifest-only `[[command]]` with an `argv` and no `[run]` program is
+//! the smallest script command, and runs the same way.
 //!
-//! Wave 3 (W3b) owns this module.
+//! - [`header`] reads the `diro:` lines (R3 section 5.1, completed by R22
+//!   section 2.6); [`recipe`] holds the run keys a header and a
+//!   manifest-only command share, and defines `unattended` once.
+//!
+//! W4b owns this module and its submodules (alpha 2, commits 18 to 28 of
+//! R22's order).
+
+pub mod header;
+mod read;
+pub mod recipe;
 
 use std::path::Path;
 
@@ -23,49 +27,8 @@ use diroxide_core::Place;
 
 use crate::error::PluginError;
 
-/// What a script's header says.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ScriptHeader {
-    /// The command's name.
-    pub name: Option<String>,
-    /// A default key.
-    pub key: Option<String>,
-    /// One sentence for F1 help.
-    pub description: Option<String>,
-}
-
-/// Reads the header: `diro:` lines in the comments at the top, after `#`,
-/// `//`, `--` or `REM`. Reading stops at the first line that is not a
-/// comment or blank.
-pub fn parse_header(text: &str) -> ScriptHeader {
-    let mut header = ScriptHeader::default();
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("#!") {
-            continue;
-        }
-        let Some(comment) = ["#", "//", "--", "REM ", "rem "]
-            .iter()
-            .find_map(|mark| trimmed.strip_prefix(mark))
-        else {
-            break;
-        };
-        let Some(setting) = comment.trim().strip_prefix("diro:") else {
-            continue;
-        };
-        let Some((key, value)) = setting.split_once('=') else {
-            continue;
-        };
-        let value = value.trim().trim_matches('"').to_owned();
-        match key.trim() {
-            "name" => header.name = Some(value),
-            "key" => header.key = Some(value),
-            "description" => header.description = Some(value),
-            _ => {}
-        }
-    }
-    header
-}
+pub use header::{HeaderReport, ScriptHeader, parse_header};
+pub use recipe::{CwdChoice, ListForm, Per, Recipe, RunMode, StdinForm};
 
 /// A directive a script prints.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -192,19 +155,6 @@ mod tests {
             cursor: Some(p("/home/ada/a.png")),
             selection: vec![p("/home/ada/a.png"), p("/home/ada/b.png")],
         }
-    }
-
-    #[test]
-    fn headers_read_from_comments() {
-        let text = "#!/bin/sh\n# diro: name = \"Make thumbnails\"\n# diro: key = \"ctrl+alt+t\"\n# other comment\necho hi\n# diro: description = \"ignored\"\n";
-        let header = parse_header(text);
-        assert_eq!(header.name.as_deref(), Some("Make thumbnails"));
-        assert_eq!(header.key.as_deref(), Some("ctrl+alt+t"));
-        assert_eq!(header.description, None);
-        assert_eq!(
-            parse_header("-- diro: name = \"Lua one\"").name.as_deref(),
-            Some("Lua one")
-        );
     }
 
     #[test]

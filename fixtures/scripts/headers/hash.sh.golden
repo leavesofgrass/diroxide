@@ -1,0 +1,11 @@
+settings: 6
+name: Total size of selection
+description: Says how many items are selected and how big they are.
+key: (none)
+selection: Any, places: Local
+needs: [], os: []
+mode: output-pane, per: Selection, stdin: Json, cwd: Active
+timeout: 5m, selection_file: nul
+confirm: (none), prompt: (none)
+unattended: false, dry_run: false, cursor_fallback: true
+exit_words: {}, interpreter: []
