@@ -77,7 +77,12 @@ fn the_first_hit_arrives_before_the_walk_ends() {
     assert_eq!(notes.hits.len(), 30);
     let first = notes.first.unwrap() - started;
     let total = ended - started;
-    assert!(first * 4 < total, "first hit at {first:?} of {total:?}");
+    // Streaming means the first hit comes long before the walk ends (an
+    // engine that collected everything first would report it at the end).
+    // A loaded machine stretches the first hit more than the whole walk,
+    // so the bound is half the walk, not a quarter: 133 ms of 505 ms was
+    // seen with two builders compiling beside the check.
+    assert!(first * 2 < total, "first hit at {first:?} of {total:?}");
     assert_eq!(summary.status_line(), "Done: 30 found in 31 folders");
     // Folders are hits too when the expression lets them through.
     assert!(notes.hits.iter().all(|hit| hit.depth == 2));
