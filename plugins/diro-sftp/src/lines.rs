@@ -137,6 +137,15 @@ pub const SHELL_PRINTED_HINT: &str = "Make its startup file quiet for sftp.";
 /// The far end answered, but not in SFTP.
 pub const NOT_SFTP: &str = "The server did not speak SFTP.";
 
+/// "2 names skipped: unsafe.", for names a listing could not show.
+pub fn names_skipped(count: usize) -> String {
+    if count == 1 {
+        "1 name skipped: unsafe.".to_owned()
+    } else {
+        format!("{count} names skipped: unsafe.")
+    }
+}
+
 /// What ssh last printed, cleaned and placed last in a hint.
 pub fn ssh_said(text: &str) -> Option<String> {
     let last = text
@@ -168,6 +177,8 @@ mod tests {
             SHELL_PRINTED.to_owned(),
             SHELL_PRINTED_HINT.to_owned(),
             NOT_SFTP.to_owned(),
+            names_skipped(1),
+            names_skipped(12_000),
         ] {
             assert!(line.chars().count() <= MAX_LINE_CELLS, "{line}");
         }

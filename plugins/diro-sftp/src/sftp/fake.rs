@@ -219,7 +219,23 @@ pub struct Faults {
     pub no_posix_rename: bool,
     /// The server offers `copy-data` (OpenSSH 9.0 and later).
     pub copy_data: bool,
+    /// A folder's first READDIR also names `.`, `..` twice over, `a/b`,
+    /// `/etc/passwd`, a name with a NUL and an empty name, as a hostile
+    /// server might.
+    pub hostile_names: bool,
 }
+
+/// The names a hostile server adds to a listing.
+pub const HOSTILE_NAMES: [&[u8]; 8] = [
+    b".",
+    b"..",
+    b".",
+    b"..",
+    b"a/b",
+    b"/etc/passwd",
+    b"nul\0name",
+    b"",
+];
 
 /// The extensions the fake offers in its VERSION answer.
 pub fn extensions(faults: &Faults) -> Vec<(Vec<u8>, Vec<u8>)> {
@@ -281,6 +297,7 @@ impl Server {
         let mut fs = fs.lock().unwrap_or_else(PoisonError::into_inner);
         fs.calls.push(request.name());
         let home = fs.home.clone();
+        let hostile = self.faults.hostile_names;
         let path = |p: &[u8]| normal(&home, p);
         match request {
             Request::Init { .. } => Response::Version {
@@ -332,7 +349,7 @@ impl Server {
                         return status(id, status::EOF, "End of file");
                     }
                     let end = (*at + BATCH).min(names.len());
-                    let entries = names[*at..end]
+                    let mut entries: Vec<NameEntry> = names[*at..end]
                         .iter()
                         .map(|full| NameEntry {
                             filename: name(full).to_vec(),
@@ -340,6 +357,16 @@ impl Server {
                             attrs: fs.attrs(full).unwrap_or_default(),
                         })
                         .collect();
+                    if hostile && *at == 0 {
+                        entries.extend(HOSTILE_NAMES.iter().map(|n| NameEntry {
+                            filename: n.to_vec(),
+                            longname: Vec::new(),
+                            attrs: Attrs {
+                                permissions: Some(FILE_MODE),
+                                ..Attrs::default()
+                            },
+                        }));
+                    }
                     *at = end;
                     Response::Name { id, entries }
                 }

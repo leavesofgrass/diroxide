@@ -15,6 +15,7 @@
 
 pub mod connect;
 pub mod fake;
+pub mod list;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -229,13 +230,13 @@ impl Provider {
         call.cancel.check()?;
         match method {
             methods::PROVIDER_CONNECT => self.connect(call),
-            methods::PROVIDER_LIST | methods::PROVIDER_STAT => {
+            methods::PROVIDER_LIST => {
                 let at = At::from_params(call.params, "place")?;
-                self.connection(&at.target)?;
-                Err(RpcError::new(
-                    ErrorKind::Unsupported,
-                    format!("{method} is not served yet"),
-                ))
+                list::list(&self.connection(&at.target)?, &at, call)
+            }
+            methods::PROVIDER_STAT => {
+                let at = At::from_params(call.params, "place")?;
+                list::stat(&self.connection(&at.target)?, &at, call)
             }
             other => Err(RpcError::new(
                 ErrorKind::Unsupported,

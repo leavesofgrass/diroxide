@@ -165,6 +165,7 @@ fn serve_sftp(config: &Value) {
         no_statvfs: flag("no_statvfs"),
         no_posix_rename: flag("no_posix_rename"),
         copy_data: flag("copy_data"),
+        hostile_names: flag("hostile_names"),
     };
     let fs = Arc::new(Mutex::new(fs));
     match config.get("for_ms").and_then(Value::as_u64) {
