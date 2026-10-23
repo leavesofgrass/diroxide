@@ -155,10 +155,17 @@ struct Saw {
 /// leave.
 fn serve_one(listener: TcpListener) -> Saw {
     let mut saw = Saw::default();
-    listener.set_nonblocking(false).unwrap();
-    let Ok((mut stream, _)) = listener.accept() else {
-        return saw;
+    // ssh may fail before it connects: wait for it a while, never for ever.
+    listener.set_nonblocking(true).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut stream = loop {
+        match listener.accept() {
+            Ok((stream, _)) => break stream,
+            Err(_) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
+            Err(_) => return saw,
+        }
     };
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
@@ -191,6 +198,10 @@ struct Run {
     flags: (&'static str, u32),
     env: (&'static str, &'static [(&'static str, &'static str)]),
     pause_ms: u64,
+    /// The configuration file's text (empty for SF1).
+    config: String,
+    /// Options passed before the others (the plugin's Windows overrides).
+    overrides: &'static [&'static str],
 }
 
 /// What one run showed.
@@ -252,7 +263,7 @@ fn run_once(run: &Run, dir: &Path, n: usize) -> Outcome {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = thread::spawn(move || serve_one(listener));
-    let config = dir.join("empty_config");
+    let config = dir.join(format!("config_{n}"));
     let known = dir.join(format!("known_hosts_{n}"));
     let global = dir.join(format!("known_hosts_global_{n}"));
     let stamp = std::time::SystemTime::now()
@@ -260,13 +271,14 @@ fn run_once(run: &Run, dir: &Path, n: usize) -> Outcome {
         .map(|d| d.as_millis())
         .unwrap_or_default();
     let record = dir.join(format!("helper_{n}_{stamp}.jsonl"));
-    std::fs::write(&config, b"").unwrap();
+    std::fs::write(&config, run.config.as_bytes()).unwrap();
     std::fs::write(&known, b"").unwrap();
     std::fs::write(&global, b"").unwrap();
     let mut command = Command::new(&run.program);
     command
         .arg("-F")
         .arg(&config)
+        .args(run.overrides)
         .args(["-o", "BatchMode=no", "-o", "StrictHostKeyChecking=ask"])
         .arg("-o")
         .arg(format!("UserKnownHostsFile={}", known.display()))
@@ -285,10 +297,6 @@ fn run_once(run: &Run, dir: &Path, n: usize) -> Outcome {
             "PasswordAuthentication=no",
             "-o",
             "ConnectTimeout=10",
-            "-o",
-            "ControlMaster=no",
-            "-o",
-            "ControlPath=none",
             "-o",
             "LogLevel=ERROR",
             "-T",
@@ -459,6 +467,8 @@ fn spike_sf1_windows_askpass_matrix() {
                         flags: flag,
                         env,
                         pause_ms,
+                        config: String::new(),
+                        overrides: &["-o", "ControlMaster=no", "-o", "ControlPath=none"],
                     },
                     &dir,
                     n,
@@ -503,4 +513,80 @@ fn spike_sf1_windows_askpass_matrix() {
     println!("{report}");
     std::fs::write(std::env::temp_dir().join("sf1-results.txt"), &report).unwrap();
     assert!(n > 0, "no ssh program on this computer");
+}
+
+/// Spike SF5 (R24): a user's `ControlMaster` line makes the Windows build
+/// fail, and the plugin's two overrides fix it. The configuration names a
+/// control path under the test's own folder.
+///
+/// **Results, Friday, October 23, 2026:** with `ControlMaster auto`,
+/// `ControlPath` and `ControlPersist 60` in the configuration, the in-box
+/// OpenSSH for Windows 9.5p2 fails at once ("getsockname failed: Not a
+/// socket", exit code -1) before it connects; with `-o ControlMaster=no
+/// -o ControlPath=none` it reaches the host key question through the
+/// helper, three runs of three; `ControlPersist=no` is not needed. Git's
+/// MSYS 10.3p1 reaches the question with or without the overrides. One
+/// earlier run, before the fake server stopped waiting for a client that
+/// never came, saw the overridden run wait 15 seconds with no key
+/// exchange; it did not come back in three repeats.
+#[test]
+#[ignore = "spike SF5: starts the real ssh.exe of this computer; run by hand"]
+fn spike_sf5_controlmaster_on_windows() {
+    let dir = std::env::temp_dir().join("sf5");
+    std::fs::create_dir_all(&dir).unwrap();
+    let config = format!(
+        "Host *\n    ControlMaster auto\n    ControlPath {}/cm-%C\n    ControlPersist 60\n",
+        dir.display().to_string().replace('\\', "/")
+    );
+    let mut report = String::new();
+    let mut n = 100;
+    for program in programs() {
+        let _ = writeln!(
+            report,
+            "PROGRAM {} : {}",
+            program.display(),
+            version(&program)
+        );
+        for overrides in [
+            [].as_slice(),
+            &["-o", "ControlMaster=no", "-o", "ControlPath=none"],
+            &[
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "ControlPath=none",
+                "-o",
+                "ControlPersist=no",
+            ],
+        ] {
+            n += 1;
+            let outcome = run_once(
+                &Run {
+                    program: program.clone(),
+                    flags: ("no window", CREATE_NO_WINDOW),
+                    env: (
+                        "askpass, force",
+                        &[("SSH_ASKPASS", "HELPER"), ("SSH_ASKPASS_REQUIRE", "force")],
+                    ),
+                    pause_ms: 0,
+                    config: config.clone(),
+                    overrides,
+                },
+                &dir,
+                n,
+            );
+            let _ = writeln!(
+                report,
+                "RUN {n}: overrides {}: exit {:?}, timed out {}, {:.1} s, helper calls {}; stderr [{}]",
+                overrides.join(" "),
+                outcome.exit,
+                outcome.timed_out,
+                outcome.seconds,
+                outcome.helper_calls.len(),
+                outcome.stderr
+            );
+        }
+    }
+    println!("{report}");
+    std::fs::write(std::env::temp_dir().join("sf5-results.txt"), &report).unwrap();
 }

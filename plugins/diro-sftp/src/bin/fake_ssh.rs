@@ -17,7 +17,9 @@
 //!   answered and its exit code (`"accept"` names the one answer that
 //!   counts as right, and `"tries"` how many times a prompt is asked
 //!   before ssh gives up); `{"stderr": TEXT}`, `{"exit": CODE}` and
-//!   `{"sleep_ms": N}` do what they say.
+//!   `{"sleep_ms": N}` do what they say; `{"child_sleep_ms": N}` starts a
+//!   copy of the program that sleeps, as ssh's own children would, and
+//!   logs its process id.
 //!
 //! **As an askpass recorder** (spike SF1): when `FAKE_ASKPASS_RECORD`
 //! names a file, the program is an `SSH_ASKPASS` stand-in that appends one
@@ -174,6 +176,19 @@ fn run_script(script: &[Value], log: Option<&str>) -> ExitCode {
             let _ = writeln!(stderr, "{text}");
         } else if let Some(ms) = step.get("sleep_ms").and_then(Value::as_u64) {
             thread::sleep(Duration::from_millis(ms));
+        } else if let Some(ms) = step.get("child_sleep_ms").and_then(Value::as_u64) {
+            let child = env::current_exe().ok().and_then(|exe| {
+                Command::new(exe)
+                    .args(["--sleep", &ms.to_string()])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .ok()
+            });
+            if let (Some(log), Some(child)) = (log, child) {
+                append(log, &json!({"child": child.id()}));
+            }
         } else if let Some(code) = step.get("exit").and_then(Value::as_u64) {
             return ExitCode::from(u8::try_from(code).unwrap_or(255));
         } else if step.get("drain").is_some() {
@@ -189,8 +204,13 @@ fn main() -> ExitCode {
     if let Ok(file) = env::var("FAKE_ASKPASS_RECORD") {
         return record(&file);
     }
-    let config = config();
     let args: Vec<String> = env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("--sleep") {
+        let ms = args.get(1).and_then(|n| n.parse().ok()).unwrap_or(0);
+        thread::sleep(Duration::from_millis(ms));
+        return ExitCode::SUCCESS;
+    }
+    let config = config();
     let log = config.get("log").and_then(Value::as_str);
     if let Some(log) = log {
         let exe = env::current_exe()
