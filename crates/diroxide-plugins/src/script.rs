@@ -29,14 +29,19 @@
 //! - [`placeholders`] fills a manifest-only command's `argv` per
 //!   argument (never a shell string), splits a long `{files}` into
 //!   batches, and says the argument list in words for `--explain`.
+//! - [`consent`] keeps the owner's yes with the hashes of the manifest and
+//!   the program (a change asks again) and words the question; [`installed`]
+//!   finds and checks the plugins and scripts in the plugins folder.
 //!
 //! W4b owns this module and its submodules (alpha 2, commits 18 to 28 of
 //! R22's order).
 
 pub mod command;
+pub mod consent;
 pub mod context;
 pub mod directives;
 pub mod header;
+pub mod installed;
 pub mod interpreter;
 pub mod placeholders;
 mod read;

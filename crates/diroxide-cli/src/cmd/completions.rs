@@ -361,43 +361,102 @@ pub fn command() -> Command {
                 .about("Serve the app over JSON-RPC on standard input and output")
                 .arg(flag("stdio", "Use standard input and output")),
         ))
-        .subcommand(no_help(
-            Command::new("plugin")
-                .about("Plugin tooling")
-                .disable_help_subcommand(true)
-                .subcommand(no_help(Command::new("list").about("List the plugins")))
-                .subcommand(no_help(
-                    Command::new("new")
-                        .about("Write a working skeleton of a new plugin")
-                        .arg(named("name", "Its name"))
-                        .arg(
-                            Arg::new("language")
-                                .long("language")
-                                .value_parser(["python", "bash"])
-                                .help("Its language"),
-                        ),
+        .subcommand(plugin_command())
+}
+
+/// `diro plugin` as `cmd/plugin.rs` reads it (W4b), for completion only.
+fn plugin_command() -> Command {
+    let name = || named("name", "The plugin or script, by id or name");
+    let yes = || flag("yes", "Answer yes to the question").short('y');
+    Command::new("plugin")
+        .about("Plugins and script commands")
+        .disable_help_subcommand(true)
+        .arg(
+            flag(
+                "portable",
+                "Use the settings and plugins beside the program",
+            )
+            .global(true),
+        )
+        .subcommand(Command::new("list").about("Each plugin and script: name, state, kind, id"))
+        .subcommand(
+            Command::new("new")
+                .about("Write a working skeleton of a new plugin or script")
+                .arg(named(
+                    "name",
+                    "Its name: lowercase letters, digits, - and _",
                 ))
-                .subcommand(no_help(
-                    Command::new("enable")
-                        .about("Enable a plugin")
-                        .arg(named("name", "The plugin")),
-                ))
-                .subcommand(no_help(
-                    Command::new("disable")
-                        .about("Disable a plugin")
-                        .arg(named("name", "The plugin")),
-                ))
-                .subcommand(no_help(
-                    Command::new("run")
-                        .about("Run a plugin's command")
-                        .arg(named("name", "The command")),
-                ))
-                .subcommand(no_help(
-                    Command::new("log")
-                        .about("Print a plugin's log")
-                        .arg(named("name", "The plugin")),
-                )),
-        ))
+                .arg(
+                    Arg::new("language")
+                        .long("language")
+                        .value_parser(["python", "bash"])
+                        .help("Its language"),
+                )
+                .arg(
+                    Arg::new("kind")
+                        .long("kind")
+                        .value_parser(["command", "lister", "provider"])
+                        .help("For Python: a command, a lister or a provider"),
+                )
+                .arg(
+                    Arg::new("dir")
+                        .long("dir")
+                        .value_name("FOLDER")
+                        .value_hint(ValueHint::DirPath)
+                        .help("Where to write it; the plugins folder by default"),
+                ),
+        )
+        .subcommand(
+            Command::new("enable")
+                .about("Say what it may do, ask, then enable it")
+                .arg(yes())
+                .arg(name()),
+        )
+        .subcommand(
+            Command::new("disable")
+                .about("Forget that it was enabled")
+                .arg(name()),
+        )
+        .subcommand(
+            Command::new("run")
+                .about("Run it once on the paths after --")
+                .arg(yes())
+                .arg(flag("explain", "Say what it would run; run nothing"))
+                .arg(name())
+                .arg(Arg::new("command").help("The command, for a plugin with several"))
+                .arg(
+                    Arg::new("paths")
+                        .last(true)
+                        .num_args(0..)
+                        .value_hint(ValueHint::AnyPath)
+                        .help("The selection"),
+                ),
+        )
+        .subcommand(
+            Command::new("restart")
+                .about("Start it, check that it answers, stop it")
+                .arg(yes())
+                .arg(name()),
+        )
+        .subcommand(
+            Command::new("log")
+                .about("The last lines of its log")
+                .arg(name()),
+        )
+        .subcommand(
+            Command::new("check")
+                .about("Every problem, its field and its fix")
+                .arg(
+                    Arg::new("target")
+                        .value_hint(ValueHint::AnyPath)
+                        .help("A plugin or script, by name or path; every one by default"),
+                ),
+        )
+        .subcommand(
+            Command::new("install")
+                .about("Copy a plugin folder or a script in; it is not enabled")
+                .arg(named("path", "The plugin folder or script").value_hint(ValueHint::AnyPath)),
+        )
 }
 
 /// `diro components` as `cmd/components.rs` reads it (W4c), for
