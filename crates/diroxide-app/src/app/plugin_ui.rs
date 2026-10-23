@@ -1923,8 +1923,7 @@ impl App {
             kind: JobKind::PluginCommand,
             summary,
             failed,
-            skipped: Vec::new(),
-            warnings: Vec::new(),
+            ..FinishedJob::default()
         });
         for message in said {
             effects.push(self.say(message));

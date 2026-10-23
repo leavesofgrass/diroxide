@@ -804,7 +804,7 @@ command = "app.settings"
 access = "s"
 
 [[menu.item]]
-command = "jobs.history"
+command = "jobs.list"
 access = "j"
 
 [[menu.item]]

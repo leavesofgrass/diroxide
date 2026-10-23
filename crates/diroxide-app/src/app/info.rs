@@ -123,6 +123,11 @@ impl App {
                 text.push_str(&format!(". {detail}"));
             }
         }
+        // The jobs that wait their turn, each in its row's words (R25,
+        // 2.2: Say Status gives all of them).
+        for row in self.waiting_status() {
+            text.push_str(&format!(". {row}"));
+        }
         // Watch this folder (W3t).
         if let Some(watch) = self.watch_status() {
             text.push_str(&format!(". {watch}"));

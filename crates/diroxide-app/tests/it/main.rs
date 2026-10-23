@@ -17,6 +17,10 @@ mod comparing;
 mod dialogs;
 // The panel filter on the filter language (W3a).
 mod filtering;
+// A place behind a gate, for held jobs and streamed listings (lane A2).
+mod held;
+// The transfer queue and the Jobs list (lane A2).
+mod jobs;
 mod keys;
 mod labels;
 mod palette;

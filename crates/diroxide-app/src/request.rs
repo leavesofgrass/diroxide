@@ -104,6 +104,12 @@ impl Question {
             Question::OnlineOnly { .. } => None,
         }
     }
+
+    /// Whether the job that asks gives its queue slot back while it waits
+    /// for the answer (R25, 2.2): every job's question does.
+    pub fn gives_slot_back(&self) -> bool {
+        self.job().is_some()
+    }
 }
 
 /// The answer to a [`Question`].
@@ -256,8 +262,12 @@ pub enum Request {
         /// What the job to undo did.
         record: Box<UndoRecord>,
     },
-    /// Run a plan the user confirmed, exactly as it was shown.
+    /// Run a plan the user confirmed, exactly as it was shown: the queue
+    /// starts it now or when its turn comes, and says which as
+    /// [`AppEvent::Queue`](crate::AppEvent::Queue).
     Run(Box<Plan>),
+    /// One of the Jobs list's actions, or a queue setting (lane A2).
+    Queue(crate::jobs::QueueRequest),
     /// Answer a question a worker waits on.
     Answer {
         /// The question.

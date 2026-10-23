@@ -30,6 +30,8 @@ mod files;
 mod filtering;
 mod folder_views;
 mod info;
+// The Jobs list, the queue's actions and questions (lane A2).
+mod jobs_ui;
 mod keys;
 mod labeling;
 mod nav;
@@ -377,6 +379,9 @@ pub enum AppEvent {
     /// Something about optional components: the list, a download's
     /// progress and end, a check, a removal (W4d).
     Component(Box<crate::components::ComponentEvent>),
+    /// What the transfer queue did: a job started, a job waits its turn,
+    /// the queue's order (lane A2).
+    Queue(Box<crate::jobs::QueueNote>),
 }
 
 /// What an open dialog is for: what its answer does. The [`Dialog`] is
@@ -589,6 +594,9 @@ enum Purpose {
     Plugin(Box<plugin_ui::Wants>),
     /// A dialog of the optional components (W4d).
     Component(Box<component_ui::Wants>),
+    /// The Jobs list, a job's actions, and the queue's questions (lane
+    /// A2).
+    Jobs(Box<jobs_ui::Wants>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -740,6 +748,8 @@ pub struct App {
     plugins: plugin_ui::PluginState,
     /// Optional components (W4d).
     components: component_ui::ComponentState,
+    /// The Jobs list and the queue's questions (lane A2).
+    jobs_ui: jobs_ui::JobsState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1059,6 +1069,7 @@ impl App {
             comparing: comparing::CompareState::default(),
             plugins: plugin_ui::PluginState::default(),
             components: component_ui::ComponentState::default(),
+            jobs_ui: jobs_ui::JobsState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1540,6 +1551,7 @@ impl App {
             AppEvent::Problem(message) => vec![self.say(message)],
             AppEvent::Plugin(event) => self.plugin_event(*event),
             AppEvent::Component(event) => self.component_event(*event),
+            AppEvent::Queue(note) => self.queue_note(*note),
         }
     }
 
@@ -1604,6 +1616,10 @@ impl App {
         }
         // The optional components and Get example plugins (W4d).
         if let Some(effects) = self.components_dispatch(command) {
+            return effects;
+        }
+        // The Jobs list and the queue (lane A2).
+        if let Some(effects) = self.jobs_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

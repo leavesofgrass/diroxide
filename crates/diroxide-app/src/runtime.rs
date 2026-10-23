@@ -52,6 +52,8 @@ mod archive_jobs;
 mod components;
 // Plugins and script commands (W4d).
 mod plugins;
+// The transfer queue (lane A2, R25 commit 79).
+mod queue;
 
 use crate::app::{App, AppEvent};
 use crate::request::{AskId, Question, Reply, Request, Spawn, SpawnKind};
@@ -445,6 +447,8 @@ pub struct Runtime {
     arrivals: Option<diroxide_ops::tracker::WatchRun>,
     /// The running search and its control (W3a).
     search: Option<(u64, diroxide_search::SearchControl)>,
+    /// The transfer queue: when a confirmed plan starts (lane A2).
+    scheduler: queue::Scheduler,
 }
 
 impl fmt::Debug for Runtime {
@@ -503,6 +507,7 @@ impl Runtime {
             archive_secrets: Arc::new(Mutex::new(HashMap::new())),
             arrivals: None,
             search: None,
+            scheduler: queue::Scheduler::default(),
         }
     }
 
@@ -852,6 +857,17 @@ impl Runtime {
     }
 
     fn cancel(&mut self, job: JobId) {
+        // A job that waits its turn leaves the queue at once: nothing was
+        // done, and its report says it was cancelled (R25, 2.2).
+        let (waiting, granted) = self.scheduler.cancel(job);
+        if let Some(plan) = waiting {
+            lock(&self.jobs).remove(&job);
+            let mut report = diroxide_ops::JobReport::new(job, plan.kind);
+            report.cancelled = true;
+            self.queue
+                .push_back(AppEvent::JobFinished(Box::new(report)));
+        }
+        self.carry_granted(granted);
         if let Some(running) = lock(&self.jobs).get(&job) {
             running.control.cancel.cancel();
         }
@@ -910,7 +926,14 @@ impl Runtime {
                 });
             }
             Request::Run(plan) => self.run(*plan),
-            Request::Answer { ask, reply } => self.shared.answer(ask, reply),
+            Request::Answer { ask, reply } => {
+                // A job that asked gave its slot back; its answer waits for
+                // the slot again (R25, 2.2).
+                let job = lock(&self.shared.asks).get(&ask).and_then(|(job, _)| *job);
+                let granted = self.scheduler.answer(job, ask, reply);
+                self.carry_granted(granted);
+            }
+            Request::Queue(request) => self.queue_request(request),
             Request::Watch { side, place } => self.watch(side, place),
             Request::Places => self.worker(|shared| {
                 shared.send(AppEvent::Places(diroxide_vfs::local_places()));
@@ -1465,16 +1488,107 @@ impl Runtime {
         control
     }
 
+    /// A confirmed plan goes to the queue, which starts it now or holds it
+    /// until its turn; its control is noted at once, so Cancel, Pause and
+    /// a speed limit reach a waiting job too.
     fn run(&mut self, plan: Plan) {
+        if diroxide_ops::JobClass::of_plan(&plan) == diroxide_ops::JobClass::Unqueued {
+            self.start_plan(plan);
+            return;
+        }
+        self.register(plan.job);
+        let granted = self.scheduler.submit(plan);
+        self.carry_granted(granted);
+    }
+
+    /// Starts what the queue granted, delivers the answers it let go, and
+    /// tells the app.
+    fn carry_granted(&mut self, granted: queue::Granted) {
+        for note in granted.notes {
+            self.queue.push_back(AppEvent::Queue(Box::new(note)));
+        }
+        for (ask, reply) in granted.answers {
+            self.shared.answer(ask, reply);
+        }
+        for plan in granted.start {
+            self.start_plan(plan);
+        }
+    }
+
+    /// One of the Jobs list's actions, or a queue setting.
+    fn queue_request(&mut self, request: crate::jobs::QueueRequest) {
+        use crate::jobs::QueueRequest as Q;
+        let control = |runtime: &Self, job: JobId| {
+            lock(&runtime.jobs)
+                .get(&job)
+                .map(|running| running.control.clone())
+        };
+        let granted = match request {
+            Q::RunNow(job) => self.scheduler.run_now(job),
+            Q::MoveUp(job) => self.scheduler.shift(job, queue::Shift::Up).1,
+            Q::MoveDown(job) => self.scheduler.shift(job, queue::Shift::Down).1,
+            Q::MoveToFront(job) => self.scheduler.shift(job, queue::Shift::Front).1,
+            Q::MoveToEnd(job) => self.scheduler.shift(job, queue::Shift::End).1,
+            Q::Pause(job) | Q::Resume(job) => {
+                if let Some(control) = control(self, job) {
+                    if matches!(request, Q::Pause(_)) {
+                        control.pause();
+                    } else {
+                        control.resume();
+                    }
+                }
+                queue::Granted::default()
+            }
+            Q::PauseQueue => self.scheduler.set_paused(true),
+            Q::ResumeQueue => self.scheduler.set_paused(false),
+            Q::PauseAll | Q::ResumeAll => {
+                let pause = request == Q::PauseAll;
+                for running in lock(&self.jobs).values() {
+                    if pause {
+                        running.control.pause();
+                    } else {
+                        running.control.resume();
+                    }
+                }
+                self.scheduler.set_paused(pause)
+            }
+            Q::SpeedLimit {
+                job: Some(job),
+                limit,
+            } => {
+                if let Some(control) = control(self, job) {
+                    control.set_speed_limit(limit);
+                }
+                queue::Granted::default()
+            }
+            Q::SpeedLimit { job: None, limit } => {
+                self.engine.speed_limit().set(limit);
+                queue::Granted::default()
+            }
+            Q::LimitScope(scope) => {
+                self.engine.speed_limit().set_scope(scope);
+                queue::Granted::default()
+            }
+            Q::Limits(limits) => self.scheduler.set_limits(limits),
+            Q::ErrorPolicy { job, policy } => {
+                self.scheduler.set_error_policy(job, policy);
+                queue::Granted::default()
+            }
+        };
+        self.carry_granted(granted);
+    }
+
+    /// Runs a plan on a worker now, with the control noted for it.
+    fn start_plan(&mut self, plan: Plan) {
         let engine = self.engine.clone();
-        let control = JobControl::new();
         let jobs = Arc::clone(&self.jobs);
-        lock(&jobs).insert(
-            plan.job,
-            RunningJob {
-                control: control.clone(),
-            },
-        );
+        let control = lock(&jobs)
+            .entry(plan.job)
+            .or_insert_with(|| RunningJob {
+                control: JobControl::new(),
+            })
+            .control
+            .clone();
         self.worker(move |shared| {
             let sink = forward_sink(plan.job, shared, &engine, &control);
             let report = engine.run(&plan, &control, &sink);
@@ -1662,13 +1776,34 @@ impl Runtime {
         }
         let events: Vec<AppEvent> = self.queue.drain(..).collect();
         for event in &events {
-            if let AppEvent::Plugin(plugin) = event
-                && let crate::plugins::PluginEvent::Found(catalog) = plugin.as_ref()
-                && self
-                    .plugins
-                    .adopt(catalog, &self.shared, self.paths.as_ref(), &self.base)
-            {
-                self.rebuild_registry();
+            match event {
+                AppEvent::Plugin(plugin) => {
+                    if let crate::plugins::PluginEvent::Found(catalog) = plugin.as_ref()
+                        && self.plugins.adopt(
+                            catalog,
+                            &self.shared,
+                            self.paths.as_ref(),
+                            &self.base,
+                        )
+                    {
+                        self.rebuild_registry();
+                    }
+                }
+                // The queue hears what its jobs do as it passes: a job's
+                // end frees its slots, a question gives them back.
+                AppEvent::JobFinished(report) => {
+                    let granted = self.scheduler.finished(report.job);
+                    self.carry_granted(granted);
+                }
+                AppEvent::Asks { question, .. } => {
+                    if let Some(job) = question.job()
+                        && question.gives_slot_back()
+                    {
+                        let granted = self.scheduler.asking(job);
+                        self.carry_granted(granted);
+                    }
+                }
+                _ => {}
             }
         }
         events

@@ -318,8 +318,7 @@ impl App {
             kind: JobKind::Download,
             summary: summary.clone(),
             failed: if ready { Vec::new() } else { lines.clone() },
-            skipped: Vec::new(),
-            warnings: Vec::new(),
+            ..FinishedJob::default()
         });
         self.request(Request::Components(Box::new(ComponentRequest::List)));
         if ready {
