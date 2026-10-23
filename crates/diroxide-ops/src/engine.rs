@@ -22,6 +22,7 @@ use diroxide_core::{
 use diroxide_vfs::{CancelToken, Registry, VfsError};
 
 use crate::error::OpsError;
+use crate::gate::{ConnectionAnswer, ConnectionQuestion, Gates};
 use crate::journal::Journal;
 use crate::options::EngineOptions;
 use crate::pace::{Pacer, SystemPacer};
@@ -254,6 +255,18 @@ pub trait JobSink: Send + Sync {
     /// settle (the engine retries a lost network on its own first, and
     /// skips a class already answered "Skip all like this").
     fn error(&self, error: &ItemError) -> ErrorAction;
+
+    /// Answers the one question for a host whose connection did not come
+    /// back within its budget of tries (R25, 2.4): Keep waiting, Try again
+    /// now or Cancel these jobs. Asked once per host and round, through
+    /// the sink of the one job that probes for all of them. The default,
+    /// for a frontend that has no such question, is
+    /// [`ConnectionAnswer::AskEachJob`]: the jobs stop waiting and each
+    /// asks about its item, as before the gate.
+    fn connection(&self, question: &ConnectionQuestion) -> ConnectionAnswer {
+        let _ = question;
+        ConnectionAnswer::AskEachJob
+    }
 }
 
 /// Cancels or pauses a running job. Cloning shares the control.
@@ -426,7 +439,7 @@ impl JobReport {
 /// ("Copy", "Move to the trash"), except where the verb needs its object
 /// and would read wrong before "finished": "Permissions finished: 1
 /// done.", not "Change the attributes of finished".
-fn summary_word(kind: JobKind) -> String {
+pub(crate) fn summary_word(kind: JobKind) -> String {
     match kind {
         JobKind::SetAttributes => "Permissions".to_owned(),
         JobKind::SetTimes => "Times".to_owned(),
@@ -468,18 +481,35 @@ pub struct Engine {
     options: EngineOptions,
     pacer: Arc<dyn Pacer>,
     journal: Option<Journal>,
+    gates: Gates,
 }
 
 impl Engine {
     /// An engine that reaches places through this registry, with the
-    /// default options, the real clock and no journal.
+    /// default options, the real clock, no journal and its own connection
+    /// gates.
     pub fn new(registry: Arc<Registry>) -> Self {
         Self {
             registry,
             options: EngineOptions::default(),
             pacer: Arc::new(SystemPacer::new()),
             journal: None,
+            gates: Gates::new(),
         }
+    }
+
+    /// The same engine sharing these connection gates: an engine made
+    /// again over a new registry keeps the hosts it knows lost, and their
+    /// waiting jobs.
+    pub fn with_gates(mut self, gates: Gates) -> Self {
+        self.gates = gates;
+        self
+    }
+
+    /// The connection gates, one per host, shared by every clone of this
+    /// engine (R25, 2.4).
+    pub fn gates(&self) -> &Gates {
+        &self.gates
     }
 
     /// The same engine with these options.

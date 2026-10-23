@@ -11,7 +11,8 @@
 //! disk by the [`Journal`]. Nothing here runs a shell.
 //!
 //! The transfer queue is the jobs list (R25, part 1): the [`Queue`] decides
-//! when a confirmed job starts, by class and host.
+//! when a confirmed job starts, by class and host; a lost host is one fact
+//! for every job on it, behind its connection gate ([`Gates`]).
 //!
 //! The order is create, verify, then destroy (plan section 5.4). The
 //! [`fake`] provider has the latency, stall and "lies" switches the tests
@@ -26,6 +27,9 @@ pub mod access;
 pub mod engine;
 pub mod error;
 pub mod fake;
+pub mod gate;
+#[cfg(test)]
+mod gate_tests;
 pub mod join;
 pub mod journal;
 pub mod links;
@@ -55,7 +59,10 @@ pub use engine::{
     numbered_name,
 };
 pub use error::OpsError;
-pub use fake::{CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, SlowPlace};
+pub use fake::{
+    CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, LinkDrop, SlowPlace,
+};
+pub use gate::{ConnectionAnswer, ConnectionQuestion, GateEvent, Gates, Waiter};
 pub use join::{JoinFacts, JoinOutcome, Verdict};
 pub use journal::{Interrupted, Journal};
 pub use links::LinkForm;

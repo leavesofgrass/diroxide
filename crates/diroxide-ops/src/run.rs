@@ -46,9 +46,11 @@ use diroxide_vfs::{
 use sha2::{Digest, Sha256};
 
 use crate::engine::{Conflict, Engine, ItemError, JobControl, JobReport, JobSink, Reconciliation};
+use crate::gate;
 use crate::journal::JournalWriter;
 use crate::plan::{Plan, Step, is_read_only};
 use crate::progress::{Estimator, JobProgress};
+use crate::queue::HostKey;
 use crate::undo::{LeftAs, UndoRecord};
 
 mod access;
@@ -79,6 +81,23 @@ enum Outcome {
 enum Stop {
     Failed(String),
     Cancelled,
+}
+
+/// What the gates of a step's hosts said about a lost network.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Gated {
+    /// No remote place: the item's own silent retries apply.
+    NoHost,
+    /// Every host answers a probe: a passing failure, retried as usual.
+    Answers,
+    /// A lost host is back: try again at once.
+    Back,
+    /// Cancelled while waiting.
+    Cancelled,
+    /// The loss is final, with the provider's reason.
+    LostForGood(String),
+    /// No one could answer the host's question: ask about the item.
+    AskEachJob,
 }
 
 impl From<Stop> for Outcome {
@@ -204,6 +223,12 @@ pub(crate) struct Run<'a> {
     /// The job stops at its first failure (its error policy) and has had
     /// one: no step after it runs.
     halted: bool,
+    /// A host of the job is lost for good: the job ends as cancelled,
+    /// the reason in its failure.
+    host_gone: bool,
+    /// The places of the step at work, for the hosts a lost network
+    /// waits for.
+    here: Vec<Place>,
     split: Option<split::SplitState>,
     join: Option<join::JoinState>,
 }
@@ -272,6 +297,8 @@ impl<'a> Run<'a> {
             journal: None,
             paused_said: false,
             halted: false,
+            host_gone: false,
+            here: Vec::new(),
             split: None,
             join: None,
         }
@@ -412,6 +439,24 @@ impl<'a> Run<'a> {
                 return Err(Stop::Failed(error.to_string()));
             }
             let options = self.engine.options();
+            if class.retries_on_its_own() {
+                // A remote host goes through its gate: one fact per host,
+                // waited for together (R25, 2.4).
+                match self.through_gates(place) {
+                    Gated::NoHost | Gated::Answers => {}
+                    Gated::Back => {
+                        self.report.retries += 1;
+                        continue;
+                    }
+                    Gated::Cancelled => return Err(Stop::Cancelled),
+                    Gated::LostForGood(reason) => {
+                        self.halted = true;
+                        self.host_gone = true;
+                        return Err(Stop::Failed(reason));
+                    }
+                    Gated::AskEachJob => automatic = automatic.max(options.network_retries),
+                }
+            }
             if class.retries_on_its_own() && automatic < options.network_retries {
                 // Silent and counted: 5, 15 and 45 seconds by default.
                 automatic += 1;
@@ -452,6 +497,74 @@ impl<'a> Run<'a> {
                 ErrorAction::Cancel => return Err(Stop::Cancelled),
             }
         }
+    }
+
+    /// Takes a lost network on a remote place to its hosts' gates, in
+    /// sorted order: a host that answers a probe at once is passed; the
+    /// job waits at a lost one, saying so once, until it is back, the job
+    /// is cancelled, the loss is final, or no one can answer the question.
+    fn through_gates(&self, place: &Place) -> Gated {
+        let mut hosts: Vec<(HostKey, Place)> = Vec::new();
+        for at in std::iter::once(place).chain(self.here.iter()) {
+            if let (Some(host), Some(root)) = (HostKey::of(at), gate::host_root(at))
+                && !hosts.iter().any(|(known, _)| *known == host)
+            {
+                hosts.push((host, root));
+            }
+        }
+        if hosts.is_empty() {
+            return Gated::NoHost;
+        }
+        hosts.sort_by(|a, b| a.0.cmp(&b.0));
+        let engine = self.engine;
+        let control = self.control;
+        let item = self.shared.progress().current.clone();
+        let mut waited = false;
+        for (host, root) in &hosts {
+            let visit = gate::Visit {
+                host,
+                probe: root,
+                waiter: gate::Waiter {
+                    job: self.plan.job,
+                    kind: self.plan.kind,
+                    item: item.clone(),
+                },
+                registry: engine.registry(),
+                pacer: engine.pacer(),
+                options: engine.options(),
+                cancel: &control.cancel,
+                sink: self.sink,
+            };
+            if engine.gates().answers(&visit) {
+                continue;
+            }
+            self.emit_waiting(host.name());
+            let outcome = engine.gates().wait(&visit);
+            self.emit_back();
+            match outcome {
+                gate::Outcome::Back => waited = true,
+                gate::Outcome::Cancelled => return Gated::Cancelled,
+                gate::Outcome::LostForGood(reason) => return Gated::LostForGood(reason),
+                gate::Outcome::AskEachJob => return Gated::AskEachJob,
+            }
+        }
+        if waited { Gated::Back } else { Gated::Answers }
+    }
+
+    /// Says once that the job waits for a host, quietly for the stall
+    /// detector: "Copying waits for build".
+    fn emit_waiting(&self, host: &str) {
+        self.shared.quiet.store(true, Ordering::Relaxed);
+        self.shared.progress().waits_for = Some(host.to_owned());
+        self.emit(JobState::WaitingForConnection);
+    }
+
+    /// The wait is over: back to running, the estimate started over.
+    fn emit_back(&self) {
+        self.shared.progress().waits_for = None;
+        self.shared.quiet.store(false, Ordering::Relaxed);
+        self.shared.estimator().reset();
+        self.emit(JobState::Running);
     }
 
     fn provider(&mut self, place: &Place) -> Result<Arc<dyn Provider>, Stop> {
@@ -554,6 +667,10 @@ impl<'a> Run<'a> {
                 continue;
             }
             let step = &steps[index];
+            self.here = std::iter::once(step.subject())
+                .chain(step.result())
+                .cloned()
+                .collect();
             self.set_current(step.subject());
             let before = self.mark();
             let outcome = match self.lost_under(step.subject()) {
@@ -570,7 +687,11 @@ impl<'a> Run<'a> {
                 break;
             }
             if self.halted {
-                self.report.stopped = true;
+                if self.host_gone {
+                    self.report.cancelled = true;
+                } else {
+                    self.report.stopped = true;
+                }
                 break;
             }
             index += 1;

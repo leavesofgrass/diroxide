@@ -20,6 +20,11 @@
 //! - Faults ([`Fault`], [`CallFault`]): a chosen error at a place, on any
 //!   call or on one kind of call, always or a number of times, optionally
 //!   after N bytes of a read or a write.
+//! - A lost connection (R25): places taken offline
+//!   ([`FakeProvider::take_offline`]) fail every call with a lost network,
+//!   transfers already open included, until brought back; a drop
+//!   ([`LinkDrop`]) cuts one transfer after N bytes and leaves its place
+//!   offline.
 //!
 //! A write shows its unfinished name (`.diro-part-` and eight hex digits)
 //! in the folder while it runs, as the local provider's committing writer
@@ -200,6 +205,41 @@ pub struct FakeSwitches {
     /// item: `GoneNotInTrash` is a trash that lost it, `NotChecked` a
     /// plugin's trash that cannot tell. `None` answers `InTrash`.
     pub trash_check: Option<TrashCheck>,
+    /// Places that cannot be reached: every call at or inside one fails
+    /// with a lost network, as a host that went away (R25's offline mode).
+    /// A test brings a place back by taking it off the list.
+    pub offline: Vec<Place>,
+    /// Connections that drop in the middle of a transfer (R25's drop
+    /// mode), each once.
+    pub drops: Vec<LinkDrop>,
+}
+
+/// A connection that drops after a number of bytes (R25's drop mode): a
+/// read or a write of a file at or inside `within` fails with a lost
+/// network once its transfer reaches `after_bytes`, counted from the start
+/// of the file, and the place goes offline when `goes_offline` says so.
+/// Each drop fires once, then is gone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LinkDrop {
+    /// Where the connection drops.
+    pub within: Place,
+    /// How many bytes of the file get through first.
+    pub after_bytes: u64,
+    /// Whether the place stays unreachable afterwards (offline), until a
+    /// test brings it back.
+    pub goes_offline: bool,
+}
+
+impl LinkDrop {
+    /// A drop after `after_bytes` bytes at or inside `within`, the place
+    /// staying offline afterwards.
+    pub fn after(within: Place, after_bytes: u64) -> Self {
+        Self {
+            within,
+            after_bytes,
+            goes_offline: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -586,6 +626,9 @@ impl FakeProvider {
         if switches.latency.stall_after_calls == Some(calls) {
             thread::sleep(switches.latency.stall_for);
         }
+        if switches.offline.iter().any(|root| place.is_within(root)) {
+            return Err(VfsError::NetworkLost);
+        }
         if let Some(fault) = switches
             .faults
             .iter()
@@ -607,6 +650,52 @@ impl FakeProvider {
         }
         ctx.check()?;
         Ok(switches)
+    }
+
+    /// Takes a place offline: every call at or inside it fails with a lost
+    /// network until [`FakeProvider::bring_back`].
+    pub fn take_offline(&self, place: &Place) {
+        let mut switches = self.switches_mut();
+        if !switches.offline.contains(place) {
+            switches.offline.push(place.clone());
+        }
+    }
+
+    /// Brings an offline place back.
+    pub fn bring_back(&self, place: &Place) {
+        self.switches_mut().offline.retain(|root| root != place);
+    }
+
+    /// Whether a place is offline now.
+    pub fn is_offline(&self, place: &Place) -> bool {
+        self.switches()
+            .offline
+            .iter()
+            .any(|root| place.is_within(root))
+    }
+
+    /// The armed drop for a transfer at a place: where it fires.
+    fn drop_for(switches: &FakeSwitches, place: &Place) -> Option<LinkDrop> {
+        switches
+            .drops
+            .iter()
+            .find(|drop| place.is_within(&drop.within))
+            .cloned()
+    }
+
+    /// Fires a drop: `true` when it was still armed (it is gone now, and
+    /// its place offline when it says so), `false` when another transfer
+    /// fired it first.
+    fn fire(&self, drop: &LinkDrop) -> bool {
+        let mut switches = self.switches_mut();
+        let Some(at) = switches.drops.iter().position(|armed| armed == drop) else {
+            return false;
+        };
+        switches.drops.remove(at);
+        if drop.goes_offline && !switches.offline.contains(&drop.within) {
+            switches.offline.push(drop.within.clone());
+        }
+        true
     }
 
     fn volume_of(switches: &FakeSwitches, place: &Place) -> u64 {
@@ -732,11 +821,52 @@ impl SlowPlace {
     }
 }
 
-/// A reader that fails after a number of bytes.
+/// The connection a transfer runs over: a place that can go offline
+/// while it runs, and a drop that may fire in it.
+struct Link {
+    fake: FakeProvider,
+    place: Place,
+    drop: Option<LinkDrop>,
+}
+
+impl Link {
+    fn new(fake: &FakeProvider, place: &Place, switches: &FakeSwitches) -> Self {
+        Self {
+            fake: fake.clone(),
+            place: place.clone(),
+            drop: FakeProvider::drop_for(switches, place),
+        }
+    }
+
+    /// How many bytes from `at` may pass before the drop; `None` when no
+    /// drop is armed. An error when the place is offline, or the drop
+    /// fires at `at`.
+    fn room(&mut self, at: u64) -> io::Result<Option<u64>> {
+        if self.fake.is_offline(&self.place) {
+            return Err(io_error(&VfsError::NetworkLost));
+        }
+        let Some(drop) = &self.drop else {
+            return Ok(None);
+        };
+        if at < drop.after_bytes {
+            return Ok(Some(drop.after_bytes - at));
+        }
+        let drop = drop.clone();
+        self.drop = None;
+        if self.fake.fire(&drop) {
+            return Err(io_error(&VfsError::NetworkLost));
+        }
+        Ok(None)
+    }
+}
+
+/// A reader that fails after a number of bytes, and over a connection
+/// that may drop.
 struct FaultyReader {
     inner: Cursor<Vec<u8>>,
     fail_at: Option<u64>,
     error: Option<VfsError>,
+    link: Link,
 }
 
 impl Read for FaultyReader {
@@ -746,12 +876,15 @@ impl Read for FaultyReader {
         {
             return Err(io_error(error));
         }
-        let limit = match self.fail_at {
+        let mut limit = match self.fail_at {
             Some(at) => usize::try_from(at.saturating_sub(self.inner.position()))
                 .unwrap_or(usize::MAX)
                 .min(buf.len()),
             None => buf.len(),
         };
+        if let Some(room) = self.link.room(self.inner.position())? {
+            limit = limit.min(usize::try_from(room).unwrap_or(usize::MAX));
+        }
         self.inner.read(&mut buf[..limit])
     }
 }
@@ -768,10 +901,15 @@ struct FakeWriter {
     pos: usize,
     seekable: bool,
     fail_at: Option<(u64, VfsError)>,
+    link: Link,
 }
 
 impl Write for FakeWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let mut bytes = bytes;
+        if let Some(room) = self.link.room(self.pos as u64)? {
+            bytes = &bytes[..bytes.len().min(usize::try_from(room).unwrap_or(usize::MAX))];
+        }
         let end = self.pos + bytes.len();
         if let Some((at, error)) = &self.fail_at
             && end as u64 > *at
@@ -955,6 +1093,7 @@ impl Provider for FakeProvider {
             inner: Cursor::new(node.data),
             fail_at: fault.and_then(|f| f.at_byte),
             error: fault.map(|f| f.error.clone()),
+            link: Link::new(self, place, &switches),
         }))
     }
 
@@ -1011,6 +1150,7 @@ impl Provider for FakeProvider {
             pos: 0,
             seekable: switches.seekable_writes,
             fail_at,
+            link: Link::new(self, place, &switches),
         }))
     }
 
@@ -1560,6 +1700,47 @@ mod tests {
         drop(writer);
         assert!(!fake.exists(&p("/a/x")));
         assert!(fake.unfinished().is_empty());
+    }
+
+    #[test]
+    fn an_offline_place_and_a_drop_lose_the_connection() {
+        let fake = FakeProvider::new();
+        let host = Place::parse("sftp://build/").unwrap();
+        let file = Place::parse("sftp://build/srv/big.bin").unwrap();
+        let data: Vec<u8> = (0..100u8).collect();
+        fake.add_file(&file, &data);
+        let ctx = OpContext::new();
+        fake.switches_mut()
+            .drops
+            .push(LinkDrop::after(host.clone(), 40));
+        let mut reader = fake.read(&file, &ctx).unwrap();
+        let mut got = Vec::new();
+        let error = reader.read_to_end(&mut got).unwrap_err();
+        assert_eq!(got.len(), 40, "the bytes before the drop got through");
+        assert_eq!(error.kind(), io::ErrorKind::NetworkDown);
+        assert!(fake.is_offline(&file));
+        assert_eq!(fake.stat(&file, &ctx).unwrap_err(), VfsError::NetworkLost);
+        fake.bring_back(&host);
+        assert!(fake.stat(&host, &ctx).is_ok(), "the root answers again");
+        let mut again = Vec::new();
+        fake.read(&file, &ctx)
+            .unwrap()
+            .read_to_end(&mut again)
+            .unwrap();
+        assert_eq!(again, data, "a drop fires once");
+        // A write cut the same way leaves nothing at the target.
+        let target = Place::parse("sftp://build/srv/up.bin").unwrap();
+        fake.switches_mut()
+            .drops
+            .push(LinkDrop::after(host.clone(), 30));
+        let mut writer = fake.write(&target, WriteMode::CreateNew, &ctx).unwrap();
+        assert!(writer.write_all(&data).is_err());
+        drop(writer);
+        assert!(!fake.exists(&target));
+        assert!(fake.unfinished().is_empty());
+        fake.bring_back(&host);
+        fake.take_offline(&host);
+        assert!(fake.list(&host, &ctx).is_err());
     }
 
     #[test]
