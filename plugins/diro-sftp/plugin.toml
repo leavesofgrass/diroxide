@@ -44,7 +44,13 @@ case_sensitive = true
 writable = true
 links = true
 attributes = true
-methods = ["connect", "list", "stat", "read", "write_begin", "write_chunk", "write_end"]
+# Asked per connection: provider/connect answers whether this server
+# renames over a file (posix-rename); one that cannot refuses in words.
+atomic_rename = true
+methods = [
+    "connect", "list", "stat", "read", "write_begin", "write_chunk", "write_end",
+    "create_dir", "rename", "remove", "set_attributes",
+]
 lease = "listers"
 
 [[setting]]
@@ -82,6 +88,12 @@ key = "chunk_kib"
 type = "int"
 default = 32
 description = "Kilobytes in one SFTP request, at most 128."
+
+[[setting]]
+key = "sessions"
+type = "int"
+default = 2
+description = "Sessions one server may get. Two let a listing run beside a copy."
 
 [[setting]]
 key = "ssh_debug_log"

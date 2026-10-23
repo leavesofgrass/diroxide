@@ -670,7 +670,8 @@ impl Connection {
             }
             links.first().cloned().ok_or_else(|| self.lost_error())?
         };
-        let may = !self.memory.typed() || self.memory.has_password();
+        let may = self.state.settings.sessions > 1
+            && (!self.memory.typed() || self.memory.has_password());
         if may && !self.second_tried.swap(true, Ordering::SeqCst) {
             let connection = Arc::clone(self);
             let _ = thread::Builder::new()

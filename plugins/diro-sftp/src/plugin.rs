@@ -38,6 +38,10 @@ pub const PROVIDER_METHODS: &[&str] = &[
     "write_begin",
     "write_chunk",
     "write_end",
+    "create_dir",
+    "rename",
+    "remove",
+    "set_attributes",
 ];
 
 /// What the plugin knows from the host.

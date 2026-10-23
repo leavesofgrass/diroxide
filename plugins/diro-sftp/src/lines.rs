@@ -172,6 +172,36 @@ pub fn size_held(held: u64, sent: u64) -> String {
     format!("The server holds {held} bytes of {sent} sent.")
 }
 
+/// SFTP has no trash (answer 86).
+pub const NO_TRASH: &str = "SFTP has no trash.";
+
+/// What a delete over SFTP does instead.
+pub const NO_TRASH_HINT: &str = "Delete lists each item, then asks.";
+
+/// A replacing rename on a server without `posix-rename`.
+pub const NO_ATOMIC_RENAME: &str = "This server cannot rename over a file.";
+
+/// Links on a server that cannot make them.
+pub const NO_LINKS: &str = "This server cannot make links.";
+
+/// Dates SFTP version 3 can carry.
+pub const DATES_KEPT: &str = "SFTP keeps dates from 1970 to 2106.";
+
+/// "Permissions now 644.", after a change the server kept.
+pub fn permissions_now(mode: u32) -> String {
+    format!("Permissions now {mode:o}.")
+}
+
+/// "Server kept 600, not 644.", after a change the server did not keep.
+pub fn permissions_kept(held: u32, asked: u32) -> String {
+    format!("Server kept {held:o}, not {asked:o}.")
+}
+
+/// "Permissions sent: 644. Not read back.", when the server says nothing.
+pub fn permissions_unknown(asked: u32) -> String {
+    format!("Permissions sent: {asked:o}. Not read back.")
+}
+
 /// What ssh last printed, cleaned and placed last in a hint.
 pub fn ssh_said(text: &str) -> Option<String> {
     let last = text
@@ -212,6 +242,14 @@ mod tests {
             OUT_OF_ORDER.to_owned(),
             WRITE_ENDED.to_owned(),
             SIZE_DIFFERS.to_owned(),
+            NO_TRASH.to_owned(),
+            NO_TRASH_HINT.to_owned(),
+            NO_ATOMIC_RENAME.to_owned(),
+            NO_LINKS.to_owned(),
+            DATES_KEPT.to_owned(),
+            permissions_now(0o4755),
+            permissions_kept(0o4755, 0o2777),
+            permissions_unknown(0o4755),
         ] {
             assert!(line.chars().count() <= MAX_LINE_CELLS, "{line}");
         }

@@ -43,6 +43,9 @@ sha2 = "0.11.1"
 thiserror = "2.0.18"
 
 [dev-dependencies]
+# The host's own settings, for the provider contract list run through the
+# real host (already under diroxide-plugins; no new crate).
+diroxide-config = { path = "../../crates/diroxide-config", version = "0.1.0-alpha.1" }
 proptest = "1.11.0"
 tempfile = "3.27.0"
 

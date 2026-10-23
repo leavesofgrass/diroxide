@@ -16,6 +16,7 @@
 pub mod connect;
 pub mod fake;
 pub mod list;
+pub mod ops;
 pub mod read;
 pub mod write;
 
@@ -250,6 +251,24 @@ impl Provider {
             }
             methods::PROVIDER_WRITE_CHUNK => write::chunk(&self.writing(call)?, call),
             methods::PROVIDER_WRITE_END => write::end(&self.writing(call)?, call),
+            methods::PROVIDER_TRASH => ops::trash(),
+            methods::PROVIDER_CREATE_DIR
+            | methods::PROVIDER_REMOVE
+            | methods::PROVIDER_SET_ATTRIBUTES
+            | CREATE_LINK => {
+                let at = At::from_params(call.params, "place")?;
+                let connection = self.connection(&at.target)?;
+                match method {
+                    methods::PROVIDER_CREATE_DIR => ops::create_dir(&connection, &at, call),
+                    methods::PROVIDER_REMOVE => ops::remove(&connection, &at, call),
+                    methods::PROVIDER_SET_ATTRIBUTES => ops::set_attributes(&connection, &at, call),
+                    _ => ops::create_link(&connection, &at, call),
+                }
+            }
+            methods::PROVIDER_RENAME => {
+                let at = At::from_params(call.params, "from")?;
+                ops::rename(&self.connection(&at.target)?, &at, call)
+            }
             other => Err(RpcError::new(
                 ErrorKind::Unsupported,
                 format!("{other} is not served by this plugin"),
@@ -282,6 +301,10 @@ impl Provider {
         }
     }
 }
+
+/// Makes a link: served for when the host's provider methods gain it
+/// (a contract request of this lane); not in the manifest's list yet.
+pub const CREATE_LINK: &str = "provider/create_link";
 
 /// "Not connected to build.example.", with the next step.
 pub fn not_connected(target: &Target) -> RpcError {

@@ -212,6 +212,7 @@ dependencies = [
 name = "diro-sftp"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "diroxide-config",
  "diroxide-core",
  "diroxide-plugins",
  "diroxide-tools",
