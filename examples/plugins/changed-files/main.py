@@ -30,6 +30,7 @@ _lock = threading.Lock()
 
 settings = {}
 cancelled = set()
+state_of = {"initialized": False}
 state = {"repository": None}
 
 
@@ -82,6 +83,10 @@ def call(method, params):
         message = _incoming.get()
         if message is None:
             raise SystemExit(0)
+        if message.get("method") == "$/cancel_request":
+            # A cancel counts at once, even while this call waits.
+            cancelled.add((message.get("params") or {}).get("id"))
+            continue
         if message.get("id") == my_id and "method" not in message:
             if "error" in message:
                 raise Refused(message["error"])
@@ -90,14 +95,28 @@ def call(method, params):
 
 
 def _read_input():
+    """Reads messages on a thread of its own, so a command can look for a
+    cancel while it works. A batch is refused (-32600) and a line that is
+    not JSON answered (-32700), as the protocol asks; other stray lines
+    are passed over."""
     for line in sys.stdin:
         line = line.strip()
+        if line.startswith("["):
+            send({"jsonrpc": "2.0", "id": None, "error": {
+                "code": -32600, "message": "batches are not taken",
+                "data": {"kind": "invalid_request"}}})
+            continue
         if not line.startswith("{"):
             continue
         try:
-            _incoming.put(json.loads(line))
+            message = json.loads(line)
         except ValueError:
-            log("a line that is not JSON came in", "warn")
+            send({"jsonrpc": "2.0", "id": None, "error": {
+                "code": -32700, "message": "a line is not JSON",
+                "data": {"kind": "parse_error"}}})
+            continue
+        if isinstance(message, dict):
+            _incoming.put(message)
     _incoming.put(None)
 
 
@@ -168,7 +187,7 @@ def parse_status(output):
         rows.append({
             "name": "%s, %s" % (word, path),
             "kind": "item",
-            "extra": {"state": word, "path": path},
+            "extra": {"id": path, "state": word, "path": path},
         })
     return rows
 
@@ -191,7 +210,7 @@ def open_lister():
     if untracked:
         title += ", %d untracked" % untracked
     call("lister/open", {"lister": "changes", "title": title, "rows": rows,
-                         "panel": "active"})
+                         "total": len(rows), "panel": "active"})
     return rows
 
 
@@ -253,7 +272,14 @@ def handle(message):
     params = message.get("params") or {}
     if method is None:
         return
+    if not state_of["initialized"] and method not in ("initialize", "exit"):
+        # Before initialize, a request is refused and a notification
+        # dropped.
+        if request_id is not None:
+            fail(request_id, -32002, "initialize comes first", "not_initialized")
+        return
     if method == "initialize":
+        state_of["initialized"] = True
         settings.update(params.get("settings") or {})
         _watch_parent(params.get("process_id"))
         reply(request_id, {
@@ -277,7 +303,10 @@ def handle(message):
         try:
             COMMANDS[command](request_id, params)
         except Refused as refused:
-            fail(request_id, -32099, "diroxide refused: %s" % refused)
+            if request_id in cancelled:
+                fail(request_id, -32800, "cancelled", "request_cancelled")
+            else:
+                fail(request_id, -32099, "diroxide refused: %s" % refused)
     elif method == "shutdown":
         reply(request_id, None)
     elif method == "exit":

@@ -789,39 +789,11 @@ fn plugin_host(id: &str, state: &Path) -> Host {
 }
 
 fn b64(bytes: &[u8]) -> String {
-    use std::fmt::Write as _;
-    // Standard base64, written here so the test needs no new dependency.
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::new();
-    for chunk in bytes.chunks(3) {
-        let n = chunk.iter().fold(0u32, |n, b| (n << 8) | u32::from(*b)) << (8 * (3 - chunk.len()));
-        for i in 0..4 {
-            if i <= chunk.len() {
-                let _ = out.write_char(char::from(TABLE[((n >> (18 - 6 * i)) & 63) as usize]));
-            } else {
-                out.push('=');
-            }
-        }
-    }
-    out
+    crate::base64::encode(bytes)
 }
 
 fn from_b64(text: &str) -> Vec<u8> {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = Vec::new();
-    let mut bits = 0u32;
-    let mut count = 0;
-    for c in text.bytes().filter(|c| *c != b'=') {
-        let value = TABLE.iter().position(|t| *t == c).unwrap() as u32;
-        bits = (bits << 6) | value;
-        count += 6;
-        if count >= 8 {
-            count -= 8;
-            out.push((bits >> count) as u8);
-            bits &= (1 << count) - 1;
-        }
-    }
-    out
+    crate::base64::decode(text).unwrap()
 }
 
 fn provider_error(host: &Host, method: &str, params: serde_json::Value) -> i64 {
@@ -1008,29 +980,47 @@ fn memfs_copies_a_folder_both_ways_with_equal_bytes() {
     host.shutdown_all(QUIT_BUDGET);
 }
 
-/// What a lister plugin's host needs of the app: the active panel.
-struct RepositoryPanel(Place);
+/// What a lister plugin's host needs of the app: the active panel, and
+/// a record of the lister and documents it is shown.
+#[derive(Default)]
+struct RepositoryPanel {
+    place: Option<Place>,
+    listers: std::sync::Mutex<Vec<crate::listers::ListerView>>,
+    documents: std::sync::Mutex<Vec<crate::TextDocument>>,
+    said: std::sync::Mutex<Vec<String>>,
+}
 
 impl crate::host::HostServices for RepositoryPanel {
-    fn announce(&self, _message: diroxide_core::Message) {}
-    fn ask_yes_no(&self, _question: &str) -> Option<bool> {
-        None
+    fn announce(&self, message: diroxide_core::Message) {
+        self.said.lock().unwrap().push(message.text);
     }
-    fn ask_text(&self, _label: &str, _initial: &str) -> Option<String> {
-        None
+
+    fn ask(&self, _question: &crate::Question) -> crate::Answer {
+        crate::Answer::Cancelled
     }
-    fn panel(&self, side: Option<diroxide_core::Side>) -> crate::host::PanelSnapshot {
-        crate::host::PanelSnapshot {
-            side: side.unwrap_or(diroxide_core::Side::Left),
-            place: self.0.clone(),
-            cursor: None,
-            selection: Vec::new(),
-        }
+
+    fn panel(&self, which: crate::PanelChoice) -> Option<crate::PanelSnapshot> {
+        let side = match which {
+            crate::PanelChoice::Right => diroxide_core::Side::Right,
+            _ => diroxide_core::Side::Left,
+        };
+        self.place
+            .clone()
+            .map(|place| crate::PanelSnapshot::at(side, place))
+    }
+
+    fn open_lister(&self, lister: &crate::listers::ListerView) -> Result<(), crate::RpcError> {
+        self.listers.lock().unwrap().push(lister.clone());
+        Ok(())
+    }
+
+    fn show_text(&self, document: &crate::TextDocument) -> Result<(), crate::RpcError> {
+        self.documents.lock().unwrap().push(document.clone());
+        Ok(())
     }
 }
 
 #[test]
-#[ignore = "waits for W4a-2: the host serves panel/get, tools/run, lister/open and ui/show_text from commits 10, 12 and 14; run with --run-ignored once they merge"]
 fn changed_files_shows_a_lister_through_the_host() {
     if !python_present() {
         return;
@@ -1055,10 +1045,13 @@ fn changed_files_shows_a_lister_through_the_host() {
     let folder = examples().join("changed-files");
     let text = fs::read_to_string(folder.join("plugin.toml")).unwrap();
     let manifest = Manifest::from_toml(&text).unwrap();
-    let place = Place::parse(&repository.to_string_lossy()).unwrap();
+    let services = std::sync::Arc::new(RepositoryPanel {
+        place: Some(Place::parse(&repository.to_string_lossy()).unwrap()),
+        ..RepositoryPanel::default()
+    });
     let mut host = Host::new(&PluginSettings::default())
         .with_state_dir(scratch.path().join("state"))
-        .with_services(std::sync::Arc::new(RepositoryPanel(place)));
+        .with_services(services.clone());
     host.add(PluginInfo {
         manifest,
         folder,
@@ -1072,5 +1065,59 @@ fn changed_files_shows_a_lister_through_the_host() {
         )
         .unwrap();
     assert_eq!(result["done"], 1);
+    let listers = services.listers.lock().unwrap().clone();
+    assert_eq!(listers.len(), 1, "{:?}", services.said.lock().unwrap());
+    let lister = &listers[0];
+    assert!(
+        lister.title.starts_with("Changed files: 1, 1 untracked"),
+        "{}",
+        lister.title
+    );
+    assert_eq!(lister.rows[0].name, "Untracked, notes.txt");
+    assert_eq!(lister.rows[0].extra["id"], "notes.txt");
+    assert_eq!(lister.activate(), Some("diff"));
+    // Enter on the row: its diff, here none for an untracked file.
+    let context = json!({ "selection": [
+        { "name": "Untracked, notes.txt", "kind": "item",
+          "extra": { "id": "notes.txt", "state": "Untracked", "path": "notes.txt" } }
+    ] });
+    let result = host
+        .call(
+            "changed-files",
+            methods::COMMAND_RUN,
+            json!({ "command": "diff", "context": context }),
+        )
+        .unwrap();
+    assert_eq!(result["done"], 1);
+    assert_eq!(
+        *services.said.lock().unwrap(),
+        ["No changes to show for notes.txt. By Changed files."]
+    );
     host.shutdown_all(QUIT_BUDGET);
+}
+
+// Every Python example through W4a-2's conformance suite (R22 section
+// 8.4: each shipped example is a conformance subject).
+
+fn conformance_of(name: &str) {
+    if !python_present() {
+        return;
+    }
+    let report = crate::conformance::run(&examples().join(name));
+    assert!(report.passed(), "{name}:\n{}", report.text());
+}
+
+#[test]
+fn the_line_counter_passes_the_conformance_suite() {
+    conformance_of("line-counter");
+}
+
+#[test]
+fn the_changed_files_lister_passes_the_conformance_suite() {
+    conformance_of("changed-files");
+}
+
+#[test]
+fn the_toy_provider_passes_the_conformance_suite() {
+    conformance_of("memfs");
 }

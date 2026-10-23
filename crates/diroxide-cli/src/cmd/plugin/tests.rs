@@ -519,3 +519,29 @@ fn preview_and_convert_run_a_recipe_once_after_the_question() {
         Err(CliError::Failed(_))
     ));
 }
+
+/// R22's commit 17 check, from the shell: the line counter passes every
+/// group of the conformance suite.
+#[test]
+fn conformance_passes_the_line_counter_group_by_group() {
+    if Lookup::system().python(&[]).is_err() {
+        eprintln!("Python 3 was not found; this test is skipped here");
+        return;
+    }
+    let folders = Folders::new();
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/plugins/line-counter")
+        .to_string_lossy()
+        .into_owned();
+    let (code, out, _) = folders.run(&["conformance", &example], &[], "");
+    assert_eq!(code, 0, "{out}");
+    assert!(out.lines().any(|l| l.starts_with("Pass")), "{out}");
+    assert!(!out.lines().any(|l| l.starts_with("Fail")), "{out}");
+    fs::write(
+        folders.scripts().join("tidy.sh"),
+        "# diro: name = \"Tidy\"\n",
+    )
+    .unwrap();
+    let (code, out, _) = folders.run(&["conformance", "tidy"], &[], "");
+    assert_eq!(code, 2, "{out}");
+}

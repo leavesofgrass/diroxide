@@ -26,6 +26,9 @@
 //! - `diro plugin preview PLUGIN ID FILE` and `diro plugin convert PLUGIN
 //!   ID FILE [--to FOLDER]`: a manifest's previewer or converter run the
 //!   way the host will run it.
+//! - `diro plugin conformance PATH`: W4a-2's conformance suite over a
+//!   plugin folder, "Pass" or "Fail" per check group, exit 0 when every
+//!   group passed.
 //!
 //! `--portable` uses the folders beside the program. Exit codes: 0 done,
 //! 1 failed or declined, 2 wrong use, 3 partly done. Every line a plugin
@@ -106,6 +109,8 @@ pub enum PluginAction {
         /// The file.
         file: String,
     },
+    /// Run the conformance suite over a plugin folder.
+    Conformance(String),
     /// Run a converter on a file.
     Convert {
         /// The plugin.
@@ -157,6 +162,7 @@ pub fn help_text() -> String {
         "diro plugin install PATH         copy a plugin folder or a script in; not enabled",
         "diro plugin preview PLUGIN ID FILE  show what its previewer shows for FILE",
         "diro plugin convert PLUGIN ID FILE [--to FOLDER]  convert FILE with its converter",
+        "diro plugin conformance PATH     the protocol's checks over a plugin folder, a line a group",
         "",
         "Options:",
         "--yes       answer yes to the question; it is still printed",
@@ -232,6 +238,7 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
         Some("restart") => PluginAction::Restart(one("restart")?),
         Some("log") => PluginAction::Log(one("log")?),
         Some("install") => PluginAction::Install(one("install")?),
+        Some("conformance") => PluginAction::Conformance(one("conformance")?),
         Some("check") => PluginAction::Check(words.next()),
         Some(verb @ ("preview" | "convert")) => {
             let plugin = one(verb)?;
@@ -254,7 +261,7 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
         }
         Some(other) => {
             return Err(CliError::Failed(format!(
-                "diro plugin has no {other}; use list, new, enable, disable, run, restart, log, check, install, preview or convert"
+                "diro plugin has no {other}; use list, new, enable, disable, run, restart, log, check, install, preview, convert or conformance"
             )));
         }
     };
@@ -383,6 +390,7 @@ pub fn run_in(args: &PluginArgs, mut env: Env<'_>, out: &mut dyn Write) -> Resul
         PluginAction::Log(name) => log(name, &env, out),
         PluginAction::Check(target) => check(target.as_deref(), &env, out),
         PluginAction::Install(path) => install(path, &env, out),
+        PluginAction::Conformance(path) => conformance(path, &env, out),
         PluginAction::Preview { plugin, id, file } => {
             recipe(plugin, id, file, None, args.yes, &env, out)
         }
@@ -929,7 +937,8 @@ fn say_events(host: &Host, out: &mut dyn Write) -> Result<(), CliError> {
             | HostEvent::Crashed { message, .. }
             | HostEvent::TurnedOff { message, .. }
             | HostEvent::Flooded { message, .. }
-            | HostEvent::Waiting { message, .. } => message,
+            | HostEvent::Waiting { message, .. }
+            | HostEvent::ProviderLost { message, .. } => message,
             HostEvent::IdleStopped { .. } => continue,
         };
         writeln!(out, "{}", message.text).map_err(write_error)?;
@@ -1125,6 +1134,30 @@ fn check(target: Option<&str>, env: &Env<'_>, out: &mut dyn Write) -> Result<i32
     } else {
         0
     })
+}
+
+/// `conformance PATH`: a plugin folder by path, or an installed plugin by
+/// name, through the conformance suite; its report and its exit code.
+fn conformance(target: &str, env: &Env<'_>, out: &mut dyn Write) -> Result<i32, CliError> {
+    let path = Path::new(target);
+    let folder = if path.join(Manifest::FILE).is_file() {
+        path.to_path_buf()
+    } else {
+        match found(target, env)? {
+            Installed::Plugin(plugin) => plugin.folder.clone(),
+            Installed::Script(script) => {
+                writeln!(
+                    out,
+                    "{} is a script; the conformance suite is for plugin folders. Try diro plugin check {}.",
+                    script.header.header.name_or(&script.id),
+                    script.id
+                )
+                .map_err(write_error)?;
+                return Ok(2);
+            }
+        }
+    };
+    Ok(diroxide_plugins::conformance::run_cli(&folder, out))
 }
 
 /// `preview` (with `to` None) or `convert` (with `to` Some): a manifest's

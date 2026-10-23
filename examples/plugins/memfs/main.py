@@ -31,6 +31,7 @@ _lock = threading.Lock()
 
 settings = {"batch_lists": True}
 cancelled = set()
+state_of = {"initialized": False}
 
 # The error codes of the provider outcomes (the protocol's -32010 range).
 NOT_FOUND = (-32010, "not_found")
@@ -71,14 +72,28 @@ def notify(method, params):
 
 
 def _read_input():
+    """Reads messages on a thread of its own, so a command can look for a
+    cancel while it works. A batch is refused (-32600) and a line that is
+    not JSON answered (-32700), as the protocol asks; other stray lines
+    are passed over."""
     for line in sys.stdin:
         line = line.strip()
+        if line.startswith("["):
+            send({"jsonrpc": "2.0", "id": None, "error": {
+                "code": -32600, "message": "batches are not taken",
+                "data": {"kind": "invalid_request"}}})
+            continue
         if not line.startswith("{"):
             continue
         try:
-            _incoming.put(json.loads(line))
+            message = json.loads(line)
         except ValueError:
+            send({"jsonrpc": "2.0", "id": None, "error": {
+                "code": -32700, "message": "a line is not JSON",
+                "data": {"kind": "parse_error"}}})
             continue
+        if isinstance(message, dict):
+            _incoming.put(message)
     _incoming.put(None)
 
 
@@ -318,7 +333,14 @@ def handle(message):
     params = message.get("params") or {}
     if method is None:
         return
+    if not state_of["initialized"] and method not in ("initialize", "exit"):
+        # Before initialize, a request is refused and a notification
+        # dropped.
+        if request_id is not None:
+            fail(request_id, -32002, "initialize comes first", "not_initialized")
+        return
     if method == "initialize":
+        state_of["initialized"] = True
         settings.update(params.get("settings") or {})
         _watch_parent(params.get("process_id"))
         names = sorted(m.split("/", 1)[1] for m in METHODS)

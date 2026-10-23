@@ -525,7 +525,7 @@ mod tests {
     }
 
     #[test]
-    fn the_python_skeletons_pass_their_own_tests() {
+    fn the_python_skeletons_pass_their_own_tests_and_the_conformance_suite() {
         let Ok(python) = Lookup::system().python(&[]) else {
             eprintln!("Python 3 was not found; this test is skipped here");
             return;
@@ -550,6 +550,8 @@ mod tests {
                 "{name}: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
+            let report = crate::conformance::run(&folder);
+            assert!(report.passed(), "{name}:\n{}", report.text());
         }
     }
 }

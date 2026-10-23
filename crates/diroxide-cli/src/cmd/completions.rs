@@ -477,6 +477,14 @@ fn plugin_command() -> Command {
                 .arg(named("path", "The plugin folder or script").value_hint(ValueHint::AnyPath)),
         )
         .subcommand(
+            Command::new("conformance")
+                .about("The protocol's checks over a plugin folder, a line a group")
+                .arg(
+                    named("path", "The plugin folder, or an installed plugin's name")
+                        .value_hint(ValueHint::DirPath),
+                ),
+        )
+        .subcommand(
             Command::new("preview")
                 .about("Show what a plugin's previewer shows for a file")
                 .arg(yes())
