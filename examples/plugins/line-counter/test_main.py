@@ -155,6 +155,36 @@ class LineCounterTest(unittest.TestCase):
         self.assertEqual(answer["error"]["code"], -32601)
         self.plugin.stop()
 
+    def test_a_cancel_is_seen_between_files(self):
+        self.plugin.start()
+        places = [self.write("c%03d.txt" % n, "x\n" * 50) for n in range(400)]
+        self.plugin.next_id += 1
+        request_id = self.plugin.next_id
+        self.plugin.send({"jsonrpc": "2.0", "id": request_id,
+                          "method": "command/run",
+                          "params": {"command": "count_lines",
+                                     "context": context(places)}})
+        self.plugin.notify("$/cancel_request", {"id": request_id})
+        while True:
+            message = self.plugin.receive()
+            if message.get("id") == request_id:
+                break
+        # Cancelled, or done before the cancel arrived: both are answers.
+        if "error" in message:
+            self.assertEqual(message["error"]["code"], -32800)
+        else:
+            self.assertEqual(message["result"]["done"], 400)
+        self.plugin.stop()
+
+    def test_a_long_file_counts_every_line(self):
+        self.plugin.start()
+        path = self.write("long.txt", "line\n" * 20000)
+        _, notes = self.plugin.request(
+            "command/run",
+            {"command": "count_lines", "context": context([path])})
+        self.assertEqual(notes[-1]["params"]["text"], "Lines: 20000, files: 1")
+        self.plugin.stop()
+
     def test_it_ends_when_its_input_ends(self):
         self.plugin.start()
         self.plugin.child.stdin.close()

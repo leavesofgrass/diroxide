@@ -42,6 +42,8 @@ pub mod command;
 pub mod consent;
 pub mod context;
 pub mod directives;
+#[cfg(test)]
+mod examples;
 pub mod header;
 pub mod installed;
 pub mod interpreter;
