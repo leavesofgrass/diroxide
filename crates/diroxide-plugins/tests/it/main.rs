@@ -4,6 +4,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 #[cfg(feature = "fake-plugin")]
+mod conformance;
+#[cfg(feature = "fake-plugin")]
 mod fake_plugin;
 mod spikes;
 mod spikes_more;
