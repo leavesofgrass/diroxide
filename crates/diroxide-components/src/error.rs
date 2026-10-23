@@ -24,6 +24,9 @@ pub enum ComponentError {
     /// The list itself is wrong; the words say where.
     #[error("{0}")]
     Manifest(String),
+    /// The owner was not asked, or said yes to another component.
+    #[error("the download of {0} was not agreed to")]
+    NotAsked(String),
     /// Another download or install of the same component is running.
     #[error("{0} is already being downloaded")]
     Busy(String),
@@ -101,6 +104,7 @@ impl Explain for ComponentError {
     fn next_step(&self) -> String {
         match self {
             ComponentError::NotKnown(_) => "Run diro components list for the ids.".to_owned(),
+            ComponentError::NotAsked(_) => "Answer the question first.".to_owned(),
             ComponentError::Busy(_) => "Wait for it to finish.".to_owned(),
             ComponentError::Cancelled => "It resumes from where it stopped.".to_owned(),
             ComponentError::NoTransport => "Install curl, or install from a file.".to_owned(),

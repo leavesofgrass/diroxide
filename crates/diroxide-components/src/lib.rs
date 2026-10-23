@@ -25,12 +25,23 @@
 //!   PATH, each with the neutral [`USER_AGENT`] and nothing else about the
 //!   owner.
 //!
+//! - The [`Downloader`] fetches a component's files for this computer
+//!   from the owner's own source, then the public address, through a
+//!   `.part` file per file with a note of where its bytes came from;
+//!   Escape stops it and the next try resumes; nothing moves into the
+//!   component's folder before every file matched its pin. It takes a
+//!   [`Consent`], which only the owner's yes makes.
+//!
 //! Nothing here asks the owner: the app and `diro components` say the
 //! size and the license and wait for a yes before anything is fetched.
 
 mod component;
 pub mod curl;
+pub mod download;
+#[cfg(test)]
+mod download_tests;
 mod error;
+pub mod fake;
 pub mod fetch;
 #[cfg(feature = "fetch")]
 pub mod http;
@@ -47,6 +58,9 @@ pub use component::{
     SIDECAR_SUFFIX, STAGING_SUFFIX, Status, is_https,
 };
 pub use curl::{CurlFetcher, WgetFetcher};
+pub use download::{
+    Address, Consent, Downloader, Event, FreeSpace, Outcome, Progress, Source, Sources, SystemSpace,
+};
 pub use error::ComponentError;
 pub use fetch::{FetchError, Fetched, Fetcher, LocalFetcher, Request, StandardFetcher};
 #[cfg(feature = "fetch")]

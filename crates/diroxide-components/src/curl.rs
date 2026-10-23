@@ -8,8 +8,9 @@
 //! arguments of the tools registry (fail on HTTP errors, quiet, redirects
 //! over `https` only), at most five redirects, a 30-second connect limit,
 //! a speed floor (slower than 1,000 bytes a second for 60 seconds stops
-//! it), the pin as the size ceiling, the project's neutral User-Agent, and
-//! `--continue-at` with the exact byte to resume from. A private source's
+//! it), the pin as the size ceiling, the project's neutral User-Agent, no
+//! output buffering, and `--continue-at` with the exact byte to resume
+//! from. A private source's
 //! token goes in as a configuration line on standard input
 //! (`--config -`), never as an argument. wget gets `--no-config` first,
 //! `https` only, and never a token; it always fetches the whole file.
@@ -106,6 +107,10 @@ impl CurlFetcher {
         }
         args.push("--user-agent".into());
         args.push(USER_AGENT.into());
+        // Bytes are handed on as they arrive, so progress is true and a
+        // stop keeps everything that came (spike S3: without it, curl
+        // held up to 16 KB in its output buffer).
+        args.push("--no-buffer".into());
         if request.from > 0 {
             args.push("--continue-at".into());
             args.push(request.from.to_string().into());
@@ -446,6 +451,7 @@ mod tests {
                 "4096",
                 "--user-agent",
                 USER_AGENT,
+                "--no-buffer",
                 "--output",
                 "-",
                 "--url",

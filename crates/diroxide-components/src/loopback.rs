@@ -63,7 +63,9 @@ impl Seen {
 
 #[derive(Default)]
 struct State {
-    files: HashMap<String, (Served, usize)>,
+    /// Each file's steps, the request count; a request takes the next
+    /// step, and the last one repeats.
+    files: HashMap<String, (Vec<Served>, usize)>,
     seen: Vec<Seen>,
 }
 
@@ -115,16 +117,22 @@ impl Server {
     }
 
     pub(crate) fn serve(&self, path: &str, bytes: &[u8], mode: Mode) {
-        lock(&self.state).files.insert(
-            format!("/{}", path.trim_start_matches('/')),
-            (
-                Served {
-                    bytes: bytes.to_vec(),
-                    mode,
-                },
-                0,
-            ),
+        self.serve_steps(
+            path,
+            vec![Served {
+                bytes: bytes.to_vec(),
+                mode,
+            }],
         );
+    }
+
+    /// A file served one way for the first request, the next way for the
+    /// second, and so on; the last way repeats. A step whose bytes differ
+    /// from the first step's has another entity tag.
+    pub(crate) fn serve_steps(&self, path: &str, steps: Vec<Served>) {
+        lock(&self.state)
+            .files
+            .insert(format!("/{}", path.trim_start_matches('/')), (steps, 0));
     }
 
     pub(crate) fn seen(&self) -> Vec<Seen> {
@@ -178,21 +186,24 @@ fn handle(stream: TcpStream, state: &Mutex<State>, stop: &AtomicBool) -> std::io
         let mut state = lock(state);
         state.seen.push(seen);
         match state.files.get_mut(&path) {
-            Some((served, hits)) => {
+            Some((steps, hits)) if !steps.is_empty() => {
                 *hits += 1;
-                Some((served.clone(), *hits))
+                let step = steps[(*hits - 1).min(steps.len() - 1)].clone();
+                let changed = step.bytes != steps[0].bytes;
+                Some((step, *hits, changed))
             }
-            None => None,
+            _ => None,
         }
     };
     let mut out = stream;
-    let Some((served, hits)) = served else {
+    let Some((served, hits, changed)) = served else {
         return respond(&mut out, "404 Not Found", &[], b"");
     };
+    let first = if changed { "\"v2\"" } else { "\"v1\"" };
     let (bytes, etag) = match &served.mode {
         Mode::ChangesAfterFirst(next) if hits > 1 => (next.clone(), "\"v2\""),
-        Mode::Longer(extra) => ([served.bytes.clone(), extra.clone()].concat(), "\"v1\""),
-        _ => (served.bytes.clone(), "\"v1\""),
+        Mode::Longer(extra) => ([served.bytes.clone(), extra.clone()].concat(), first),
+        _ => (served.bytes.clone(), first),
     };
     let len = bytes.len() as u64;
     let tag = ("ETag", etag.to_owned());
@@ -214,8 +225,9 @@ fn handle(stream: TcpStream, state: &Mutex<State>, stop: &AtomicBool) -> std::io
             _ => respond(&mut out, "200 OK", &[tag], &bytes),
         },
         Mode::Truncate(keep) => {
-            let head =
-                format!("HTTP/1.1 200 OK\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n");
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {len}\r\nETag: {etag}\r\nConnection: close\r\n\r\n"
+            );
             out.write_all(head.as_bytes())?;
             out.write_all(&bytes[..(*keep).min(bytes.len())])?;
             out.flush()

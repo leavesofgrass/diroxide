@@ -99,6 +99,7 @@ fn curl_gets_the_safe_list_and_its_bytes_arrive() {
             "1000",
             "--user-agent",
             USER_AGENT,
+            "--no-buffer",
             "--output",
             "-",
             "--url",
