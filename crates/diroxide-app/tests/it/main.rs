@@ -24,6 +24,8 @@ mod jobs;
 mod keys;
 mod labels;
 mod palette;
+// The queue's settings, messages and questions (lane A2).
+mod queue;
 // Plugins and script commands (W4d).
 mod plugins;
 mod preview;

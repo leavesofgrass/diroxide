@@ -382,6 +382,17 @@ pub enum AppEvent {
     /// What the transfer queue did: a job started, a job waits its turn,
     /// the queue's order (lane A2).
     Queue(Box<crate::jobs::QueueNote>),
+    /// A host's connection gate: back, keep waiting, jobs cancelled or
+    /// stopped for good (R25, 2.4).
+    Gate(diroxide_ops::GateEvent),
+    /// What a running job says once beside its progress: a file resumed,
+    /// or one that starts again and why.
+    JobNotice {
+        /// The job.
+        job: JobId,
+        /// The lines, meaning first.
+        lines: Vec<String>,
+    },
 }
 
 /// What an open dialog is for: what its answer does. The [`Dialog`] is
@@ -1443,6 +1454,7 @@ impl App {
     pub fn handle(&mut self, event: AppEvent) -> Vec<Effect> {
         let mut effects = self.handle_event(event);
         effects.extend(self.plugin_queue_next());
+        effects.extend(self.jobs_queue_next());
         self.follow_cursor();
         self.mark_requests(effects)
     }
@@ -1552,6 +1564,8 @@ impl App {
             AppEvent::Plugin(event) => self.plugin_event(*event),
             AppEvent::Component(event) => self.component_event(*event),
             AppEvent::Queue(note) => self.queue_note(*note),
+            AppEvent::Gate(event) => self.gate_event(&event),
+            AppEvent::JobNotice { job, lines } => self.job_notice(job, lines),
         }
     }
 
@@ -1560,6 +1574,7 @@ impl App {
     pub fn dispatch(&mut self, command: &Command) -> Vec<Effect> {
         let mut effects = self.dispatch_command(command);
         effects.extend(self.plugin_queue_next());
+        effects.extend(self.jobs_queue_next());
         self.follow_cursor();
         self.mark_requests(effects)
     }

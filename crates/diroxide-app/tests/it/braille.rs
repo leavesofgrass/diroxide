@@ -162,7 +162,7 @@ fn the_ten_minute_check_reads_on_a_40_cell_line() {
     s.focus("report.pdf");
     s.key("f5");
     s.key("y");
-    fact(&s.key("ctrl+q")[0], "Quit? 1 job is running.");
+    fact(&s.key("ctrl+q")[0], "1 job is not finished.");
     s.key("n");
     s.key("escape");
     // Every message said in the walk: its first words are in the first

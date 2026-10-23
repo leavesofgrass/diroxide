@@ -48,9 +48,9 @@ pub use schema::{Choice, SCHEMA, SettingGroup, SettingInfo, SettingKind};
 pub use session::{Layout, PanelState, SessionState, load_session, save_session};
 pub use settings::{
     ArchiveSettings, CompareAlgorithm, CompareSettings, CompletionList, ConfirmSettings,
-    DRIVE_KINDS, FilterCase, HexRow, Highlighting, LargeFilePolicy, PluginSettings,
-    QuickViewSettings, ScreenReaderMode, SecretEcho, Settings, SingleLetters, ViewerSettings,
-    WeekStart,
+    DRIVE_KINDS, FilterCase, HexRow, Highlighting, JobSettings, LargeFilePolicy, OnErrors,
+    PluginSettings, QuickViewSettings, ScreenReaderMode, SecretEcho, Settings, SingleLetters,
+    SpeedLimitScope, ViewerSettings, WeekStart,
 };
 pub use store::{ConfigProblem, Loaded, problems_line, write_atomic, write_reference};
 

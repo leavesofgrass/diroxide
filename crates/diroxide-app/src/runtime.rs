@@ -40,7 +40,8 @@ use diroxide_core::{
     RequestId, Secret, SecretRequest, Side,
 };
 use diroxide_ops::{
-    Conflict, Engine, EngineOptions, ItemError, JobControl, JobProgress, JobSink, Journal, Plan,
+    Conflict, ConnectionAnswer, ConnectionQuestion, Engine, EngineOptions, ItemError, JobControl,
+    JobNotice, JobProgress, JobSink, Journal, Ledger, Plan,
 };
 use diroxide_vfs::{
     CancelToken, OpContext, ProgressSink, ProgressUpdate, Registry, SecretSource, WatchHandle,
@@ -369,6 +370,29 @@ impl JobSink for ForwardSink {
             _ => ErrorAction::Cancel,
         }
     }
+
+    /// The one question for a lost host (R25, 2.4), through the app; a
+    /// cancel while it waits answers Keep waiting, and the gate then sees
+    /// the job's own cancel.
+    fn connection(&self, question: &ConnectionQuestion) -> ConnectionAnswer {
+        let asked = Question::Connection {
+            job: self.job,
+            question: question.clone(),
+        };
+        let keep = Reply::Connection(ConnectionAnswer::KeepWaiting);
+        match self.shared.ask(asked, &self.cancel, keep) {
+            Reply::Connection(answer) => answer,
+            _ => ConnectionAnswer::KeepWaiting,
+        }
+    }
+
+    /// A line the job says once: a file resumed, or one that could not be.
+    fn notice(&self, notice: &JobNotice) {
+        self.shared.send(AppEvent::JobNotice {
+            job: self.job,
+            lines: notice.lines(),
+        });
+    }
 }
 
 /// Asks the app for a secret on behalf of a listing or a job (ADR-0009).
@@ -449,6 +473,13 @@ pub struct Runtime {
     search: Option<(u64, diroxide_search::SearchControl)>,
     /// The transfer queue: when a confirmed plan starts (lane A2).
     scheduler: queue::Scheduler,
+    /// The ledger of partial files, kept across engines made again: in
+    /// the state folder once the paths are known (R25, 2.5).
+    ledger: Arc<Ledger>,
+    /// The `[jobs]` settings last applied (lane A2).
+    job_settings: Option<diroxide_config::JobSettings>,
+    /// The hosts each plugin said it lost, for a loss that turns final.
+    lost: HashMap<String, Vec<diroxide_ops::HostKey>>,
 }
 
 impl fmt::Debug for Runtime {
@@ -479,20 +510,30 @@ impl Runtime {
                 crate::archives::install(&registry, crate::archives::provider(&settings, None));
             (registry, Some(provider), Some(settings))
         };
+        let shared = Arc::new(Shared {
+            sender: Mutex::new(sender),
+            busy: AtomicUsize::new(0),
+            waker: Mutex::new(None),
+            asks: Mutex::new(HashMap::new()),
+            next_ask: AtomicU64::new(0),
+        });
+        let ledger = Arc::new(Ledger::in_memory());
+        let engine = Engine::new(Arc::clone(&registry)).with_ledger(Arc::clone(&ledger));
+        // A host's gate speaks through the app: back, keep waiting, the
+        // jobs cancelled or stopped (R25, 2.4). The gates outlive every
+        // engine made again, and so does this listener.
+        let speaker = Arc::clone(&shared);
+        engine
+            .gates()
+            .on_event(move |event| speaker.send(AppEvent::Gate(event.clone())));
         Self {
-            engine: Engine::new(Arc::clone(&registry)),
+            engine,
             base: Arc::clone(&registry),
             plugins: plugins::PluginRuntime::default(),
             components: components::ComponentRuntime::default(),
             components_source: String::new(),
             registry,
-            shared: Arc::new(Shared {
-                sender: Mutex::new(sender),
-                busy: AtomicUsize::new(0),
-                waker: Mutex::new(None),
-                asks: Mutex::new(HashMap::new()),
-                next_ask: AtomicU64::new(0),
-            }),
+            shared,
             receiver,
             queue: VecDeque::new(),
             jobs: Arc::new(Mutex::new(HashMap::new())),
@@ -508,6 +549,9 @@ impl Runtime {
             arrivals: None,
             search: None,
             scheduler: queue::Scheduler::default(),
+            ledger,
+            job_settings: None,
+            lost: HashMap::new(),
         }
     }
 
@@ -548,13 +592,56 @@ impl Runtime {
     /// providers, with an engine over it (W4d).
     fn rebuild_registry(&mut self) {
         let registry = Arc::new(self.plugins.registry_with_providers(&self.base));
-        let mut engine =
-            Engine::new(Arc::clone(&registry)).with_options(self.engine.options().clone());
+        self.engine = self.engine_over(Arc::clone(&registry));
+        self.registry = registry;
+    }
+
+    /// An engine over a registry that keeps what every engine shares: the
+    /// options, the journal, the connection gates and their waiting jobs,
+    /// the ledger of partial files and the global speed limit (lane A2).
+    fn engine_over(&self, registry: Arc<Registry>) -> Engine {
+        let mut engine = Engine::new(registry)
+            .with_options(self.engine.options().clone())
+            .with_gates(self.engine.gates().clone())
+            .with_ledger(Arc::clone(&self.ledger))
+            .with_speed_limit(self.engine.speed_limiter());
         if let Some(journal) = self.engine.journal() {
             engine = engine.with_journal(journal.clone());
         }
-        self.engine = engine;
-        self.registry = registry;
+        engine
+    }
+
+    /// The `[jobs]` settings, applied when they change: the queue's
+    /// limits, the global speed limit and its scope, and the retries
+    /// (R25 commit 80).
+    pub fn apply_job_settings(&mut self, settings: &diroxide_config::JobSettings) {
+        if self.job_settings.as_ref() == Some(settings) {
+            return;
+        }
+        self.job_settings = Some(*settings);
+        let limits = diroxide_ops::QueueLimits {
+            per_host: usize::try_from(settings.per_host).unwrap_or(2).max(1),
+            remote: usize::try_from(settings.remote).unwrap_or(4).max(1),
+            ..diroxide_ops::QueueLimits::default()
+        };
+        let granted = self.scheduler.set_limits(limits);
+        self.carry_granted(granted);
+        let limiter = self.engine.speed_limit();
+        let limit = diroxide_ops::SpeedLimit::bytes_per_second(
+            settings.speed_limit_kb.saturating_mul(1000),
+        );
+        if limiter.limit() != limit {
+            limiter.set(limit);
+        }
+        limiter.set_scope(match settings.speed_limit_scope {
+            diroxide_config::SpeedLimitScope::Remote => diroxide_ops::LimitScope::RemoteJobs,
+            diroxide_config::SpeedLimitScope::All => diroxide_ops::LimitScope::AllJobs,
+        });
+        let mut options = self.engine.options().clone();
+        retries_from(&mut options, settings);
+        if &options != self.engine.options() {
+            self.engine = self.engine.clone().with_options(options);
+        }
     }
 
     /// The same runtime with plugins off for the session (`--no-plugins`):
@@ -617,6 +704,21 @@ impl Runtime {
     /// journal is written in the state folder, and the session, the
     /// prompts' histories and changed settings are saved there.
     pub fn with_paths(mut self, paths: Paths) -> Self {
+        // The ledger of partial files lives in the state folder, so the
+        // next start finds what a crash left; one that cannot be read is
+        // said and kept, and this session's stays in memory.
+        match Ledger::open(&paths.state_dir) {
+            Ok(ledger) => {
+                self.ledger = Arc::new(ledger);
+                self.engine = self.engine.with_ledger(Arc::clone(&self.ledger));
+            }
+            Err(error) => self.queue.push_back(AppEvent::Problem(Message::could_not(
+                "read",
+                "the list of partial files",
+                &error.to_string(),
+                "",
+            ))),
+        }
         self.engine = self
             .engine
             .with_journal(Journal::new(paths.state_dir.clone()));
@@ -1788,6 +1890,9 @@ impl Runtime {
                     {
                         self.rebuild_registry();
                     }
+                    if let crate::plugins::PluginEvent::Host(host) = plugin.as_ref() {
+                        self.host_event(host);
+                    }
                 }
                 // The queue hears what its jobs do as it passes: a job's
                 // end frees its slots, a question gives them back.
@@ -1807,6 +1912,36 @@ impl Runtime {
             }
         }
         events
+    }
+
+    /// What a plugin host's event means for the connection gates: a lost
+    /// provider holds its host's jobs waiting (`provider/lost`), and a
+    /// plugin turned off for good stops them with its reason, so a job
+    /// stops only when the loss is final.
+    fn host_event(&mut self, event: &diroxide_plugins::host::HostEvent) {
+        use diroxide_plugins::host::HostEvent;
+        match event {
+            HostEvent::ProviderLost {
+                plugin, authority, ..
+            } => {
+                let place = Place::parse(authority)
+                    .or_else(|_| Place::parse(&format!("{authority}/")))
+                    .ok();
+                if let Some(host) = place.as_ref().and_then(diroxide_ops::HostKey::of) {
+                    self.engine.gates().lost(&host);
+                    let hosts = self.lost.entry(plugin.clone()).or_default();
+                    if !hosts.contains(&host) {
+                        hosts.push(host);
+                    }
+                }
+            }
+            HostEvent::TurnedOff { plugin, message } => {
+                for host in self.lost.remove(plugin).unwrap_or_default() {
+                    self.engine.gates().lost_for_good(&host, &message.text);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Waits up to `timeout` for a result, then takes what is ready.
@@ -1846,6 +1981,7 @@ impl Runtime {
     /// not mark them) after it.
     pub fn carry_out(&mut self, app: &mut App, effects: Vec<Effect>) -> Vec<Effect> {
         self.apply_archive_settings(&app.settings().archives);
+        self.apply_job_settings(&app.settings().jobs);
         self.plugins.set_settings(&app.settings().plugins);
         if self.components_source != app.settings().components_source {
             self.components_source = app.settings().components_source.clone();
@@ -2268,7 +2404,16 @@ pub fn engine_options(
     let mut options = EngineOptions::default();
     options.replace_keeps_old_in_trash = settings.replace_to_trash;
     options.protected = protected;
+    retries_from(&mut options, &settings.jobs);
     options
+}
+
+/// The silent tries after a lost network, from the `[jobs]` settings: the
+/// count and the first wait; each next wait is three times longer (R25,
+/// 2.3).
+fn retries_from(options: &mut EngineOptions, settings: &diroxide_config::JobSettings) {
+    options.network_retries = u32::try_from(settings.network_retries).unwrap_or(3);
+    options.network_retry_wait = Duration::from_secs(settings.network_retry_seconds.max(1));
 }
 
 #[cfg(test)]

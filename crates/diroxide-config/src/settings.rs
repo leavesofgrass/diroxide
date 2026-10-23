@@ -234,6 +234,76 @@ impl Default for ConfirmSettings {
     }
 }
 
+/// Which jobs the speed limit slows (R25 N8).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeedLimitScope {
+    /// Jobs on remote servers.
+    #[default]
+    Remote,
+    /// Every job.
+    All,
+}
+
+/// What a new job does when an item fails (R25 N9).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OnErrors {
+    /// Ask about each failure.
+    #[default]
+    Ask,
+    /// Skip what fails and list it at the end.
+    ContinueAndList,
+    /// Stop at the first failure.
+    StopAtFirst,
+}
+
+impl OnErrors {
+    /// The job's error policy.
+    pub const fn policy(self) -> diroxide_core::job::ErrorPolicy {
+        match self {
+            OnErrors::Ask => diroxide_core::job::ErrorPolicy::Ask,
+            OnErrors::ContinueAndList => diroxide_core::job::ErrorPolicy::ContinueAndList,
+            OnErrors::StopAtFirst => diroxide_core::job::ErrorPolicy::StopAtFirst,
+        }
+    }
+}
+
+/// The transfer queue's settings, `[jobs]` (R25 commit 80).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JobSettings {
+    /// Jobs that run at once on one remote server.
+    pub per_host: u64,
+    /// Jobs that run at once on remote servers in all.
+    pub remote: u64,
+    /// The speed limit in KB a second; 0 is none.
+    pub speed_limit_kb: u64,
+    /// Which jobs the speed limit slows.
+    pub speed_limit_scope: SpeedLimitScope,
+    /// Silent tries after a lost network, before the job asks.
+    pub network_retries: u64,
+    /// The first wait before such a try, in seconds; each next is three
+    /// times longer.
+    pub network_retry_seconds: u64,
+    /// What a new job does when an item fails.
+    pub on_errors: OnErrors,
+}
+
+impl Default for JobSettings {
+    fn default() -> Self {
+        Self {
+            per_host: 2,
+            remote: 4,
+            speed_limit_kb: 0,
+            speed_limit_scope: SpeedLimitScope::Remote,
+            network_retries: 3,
+            network_retry_seconds: 5,
+            on_errors: OnErrors::Ask,
+        }
+    }
+}
+
 /// How many bytes a row of hex shows in the viewer (alpha.2).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -529,6 +599,8 @@ pub struct Settings {
     pub replace_to_trash: bool,
     /// Refuse names other systems cannot store.
     pub portable_names: bool,
+    /// The transfer queue (alpha 2).
+    pub jobs: JobSettings,
     /// The theme's name.
     pub theme: String,
     /// Follow the system's light or dark appearance.
@@ -606,6 +678,7 @@ impl Default for Settings {
             trash_drives: vec!["fixed".to_owned()],
             replace_to_trash: true,
             portable_names: true,
+            jobs: JobSettings::default(),
             theme: diroxide_theme::DEFAULT_THEME.to_owned(),
             follow_system_appearance: false,
             colors: BTreeMap::new(),
@@ -656,6 +729,23 @@ fn remove_dotted(table: &mut Table, key: &str) -> Option<Value> {
             .get_mut(first)
             .and_then(Value::as_table_mut)
             .and_then(|inner| remove_dotted(inner, rest)),
+    }
+}
+
+/// A number with its unit in words, one of a unit in the singular: "1
+/// job", "2 jobs", "1 second", "500 KB a second".
+fn number_words(n: i64, unit: &str) -> String {
+    let singular = match unit {
+        "jobs" => "job",
+        "tries" => "try",
+        "seconds" => "second",
+        "milliseconds" => "millisecond",
+        other => other,
+    };
+    if n == 1 {
+        format!("{n} {singular}")
+    } else {
+        format!("{n} {unit}")
     }
 }
 
@@ -889,7 +979,11 @@ impl Settings {
                 .iter()
                 .find(|c| c.value == text)
                 .map_or_else(|| text.clone(), |c| c.words.to_owned()),
-            (SettingKind::Number { unit, .. }, Value::Integer(n)) => format!("{n} {unit}"),
+            // No speed limit reads as off (lane A2).
+            (SettingKind::Number { .. }, Value::Integer(0)) if key == "jobs.speed_limit_kb" => {
+                "off".to_owned()
+            }
+            (SettingKind::Number { unit, .. }, Value::Integer(n)) => number_words(*n, unit),
             (_, Value::String(text)) if text.is_empty() => "none".to_owned(),
             (_, Value::String(text)) => text.clone(),
             (_, Value::Array(items)) if items.is_empty() => "none".to_owned(),

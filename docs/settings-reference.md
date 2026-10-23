@@ -236,6 +236,62 @@ Portable names. Refuses names that other systems cannot store, such as a colon o
 - Holds: true or false.
 - Default: `true`.
 
+## Jobs and transfers
+
+### jobs.per_host
+
+Jobs at once per server. How many jobs run at once on one remote server; more wait their turn. Jobs on this computer always start at once.
+
+- Holds: a number of jobs, 1 to 8.
+- Default: `2`.
+
+### jobs.remote
+
+Remote jobs at once. How many jobs on remote servers run at once in all; more wait their turn.
+
+- Holds: a number of jobs, 1 to 16.
+- Default: `4`.
+
+### jobs.speed_limit_kb
+
+Speed limit. The most a job may read and write in a second, in KB. 0 is no limit. The Speed limit command changes it for one job.
+
+- Holds: a number of KB a second, 0 to 10000000.
+- Default: `0`.
+
+### jobs.speed_limit_scope
+
+Speed limit for. Which jobs the speed limit slows: those on remote servers, or every job.
+
+- Holds: one of remote or all.
+- Default: `"remote"`.
+- `remote`: jobs on remote servers.
+- `all`: every job.
+
+### jobs.network_retries
+
+Tries on a lost network. How many times a lost network is tried again, without a word, before the job asks. Each wait is three times the one before.
+
+- Holds: a number of tries, 0 to 10.
+- Default: `3`.
+
+### jobs.network_retry_seconds
+
+First wait before a try. How long the first wait is before a lost network is tried again: 5 seconds gives waits of 5, 15 and 45 seconds.
+
+- Holds: a number of seconds, 1 to 600.
+- Default: `5`.
+
+### jobs.on_errors
+
+On errors. What a new job does when an item fails: ask each time, go on and list the failures at the end, or stop at the first.
+
+- Holds: one of ask, continue_and_list or stop_at_first.
+- Default: `"ask"`.
+- `ask`: ask about each error.
+- `continue_and_list`: continue and list errors.
+- `stop_at_first`: stop at the first error.
+
 ## Look
 
 ### theme

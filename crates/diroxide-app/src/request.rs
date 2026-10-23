@@ -84,6 +84,16 @@ pub enum Question {
         /// Its size, when known.
         size: Option<u64>,
     },
+    /// A host whose connection did not come back within its budget of
+    /// tries (R25, 2.4): one question per host, asked by the job that
+    /// probes for every job waiting on it; Keep waiting first. The answer
+    /// is [`Reply::Connection`].
+    Connection {
+        /// The job that asks for every job on the host.
+        job: JobId,
+        /// The host and its waiting jobs.
+        question: diroxide_ops::ConnectionQuestion,
+    },
     /// An archive limit's question ("Expands to 40 GB from 40 KB. Unpack?
     /// y or n"), asked once per kind in a job, starting on No; the answer
     /// is [`Reply::Confirm`].
@@ -99,16 +109,19 @@ impl Question {
     /// The job that asks, when a job does.
     pub fn job(&self) -> Option<JobId> {
         match self {
-            Question::Conflict { job, .. } | Question::Error { job, .. } => Some(*job),
+            Question::Conflict { job, .. }
+            | Question::Error { job, .. }
+            | Question::Connection { job, .. } => Some(*job),
             Question::Secret { job, .. } | Question::Limit { job, .. } => *job,
             Question::OnlineOnly { .. } => None,
         }
     }
 
     /// Whether the job that asks gives its queue slot back while it waits
-    /// for the answer (R25, 2.2): every job's question does.
+    /// for the answer (R25, 2.2): every job's question does, except the
+    /// connection question, whose job probes for every job on its host.
     pub fn gives_slot_back(&self) -> bool {
-        self.job().is_some()
+        self.job().is_some() && !matches!(self, Question::Connection { .. })
     }
 }
 
@@ -123,6 +136,8 @@ pub enum Reply {
     Secret(Option<Secret>),
     /// Yes or no, to a limit's question.
     Confirm(bool),
+    /// The answer to the connection question.
+    Connection(diroxide_ops::ConnectionAnswer),
 }
 
 /// An archive job planned and waiting to run: what the pack, unpack and

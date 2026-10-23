@@ -199,11 +199,16 @@ impl App {
     pub(super) fn plan_job(
         &mut self,
         side: Side,
-        request: JobRequest,
+        mut request: JobRequest,
         note: Option<String>,
         then: Then,
         confirm: bool,
     ) -> Vec<Effect> {
+        // A new job's error policy is the setting's unless its request
+        // named one (R25 N9).
+        if request.errors.is_ask() {
+            request.errors = self.settings.jobs.on_errors.policy();
+        }
         self.note_job_facts(&request);
         self.flows.insert(
             request.id,
@@ -1054,6 +1059,7 @@ impl App {
             )
         });
         let never_ran = self.jobs.waits(report.job);
+        let closed = self.forget_job_questions(report.job);
         self.jobs.finished(FinishedJob {
             job: report.job,
             kind: report.kind,
@@ -1160,7 +1166,9 @@ impl App {
         } else {
             Message::warning(text)
         };
-        let mut effects = vec![Effect::Redraw(Redraw::JobsLine), self.say(message)];
+        let mut effects = closed;
+        effects.push(Effect::Redraw(Redraw::JobsLine));
+        effects.push(self.say(message));
         effects.extend(self.refresh_jobs_list());
         // A job that never started changed nothing: no panel is read again.
         if never_ran {
@@ -1276,6 +1284,7 @@ impl App {
                 )
             }
             Question::Limit { question, .. } => self.ask_limit(ask, &question),
+            Question::Connection { job, question } => self.ask_connection(ask, job, question),
             Question::OnlineOnly { name, size } => {
                 let size = size
                     .map(|s| format!(", {}", diroxide_core::format::human_size(s)))

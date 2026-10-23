@@ -15,14 +15,14 @@
 //! - The list follows the jobs while it is open: a row keeps its focus by
 //!   the job's id from group to group.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use diroxide_core::job::ErrorPolicy;
 use diroxide_core::{
     Command, ConflictPolicy, Effect, JobId, JobKind, JobRequest, JobState, Key, Layer, ListModel,
     ListRow, Message, Redraw,
 };
-use diroxide_ops::SpeedLimit;
+use diroxide_ops::{ConnectionAnswer, ConnectionQuestion, GateEvent, SpeedLimit};
 
 use super::{App, Purpose, Then};
 use crate::commands::ids;
@@ -30,7 +30,7 @@ use crate::dialog::{Dialog, with_default_no};
 use crate::entry::{CompletionSource, EntryField};
 use crate::jobs::{FinishedJob, JobFacts, JobGroup, QueueNote, QueueRequest, short_verb};
 use crate::keymap::Lookup;
-use crate::request::Request;
+use crate::request::{AskId, Reply, Request};
 
 /// What the Jobs list keeps between its dialogs.
 #[derive(Debug, Default)]
@@ -42,6 +42,9 @@ pub(super) struct JobsState {
     /// A job that moved in line: its new place is said when the queue's
     /// next view comes.
     moved: Option<JobId>,
+    /// Connection questions that wait behind an open dialog, in the order
+    /// they came (R25, 2.4: never replacing one).
+    pending: VecDeque<(AskId, JobId, ConnectionQuestion)>,
 }
 
 /// What a dialog of the Jobs list is for.
@@ -67,6 +70,14 @@ pub(super) enum Wants {
     /// A waiting job's error policy.
     ErrorPolicy {
         /// The job.
+        job: JobId,
+    },
+    /// The one question for a lost host: Keep waiting, Try again now,
+    /// Cancel these jobs.
+    Connection {
+        /// The question's number, for the answer.
+        ask: AskId,
+        /// The job that asks for every job on the host.
         job: JobId,
     },
 }
@@ -364,6 +375,18 @@ impl App {
                 effects.push(self.say(Message::info(line)));
                 effects
             }
+            Wants::Connection { ask, .. } => {
+                let answer = row
+                    .and_then(|r| r.parse::<usize>().ok())
+                    .and_then(|at| ConnectionAnswer::CHOICES.get(at))
+                    .map_or(ConnectionAnswer::KeepWaiting, |(answer, _)| *answer);
+                let effects = self.close_top();
+                self.request(Request::Answer {
+                    ask,
+                    reply: Reply::Connection(answer),
+                });
+                effects
+            }
             Wants::ConfirmCancel { .. } => Vec::new(),
         }
     }
@@ -530,8 +553,94 @@ impl App {
         match wants {
             Wants::ConfirmCancel { .. } => vec![self.say(Message::info("Not cancelled."))],
             Wants::SpeedLimit { .. } => vec![self.say(Message::info("Speed limit unchanged."))],
+            // Escape keeps waiting, the safe answer the focus starts on.
+            Wants::Connection { ask, .. } => {
+                self.request(Request::Answer {
+                    ask,
+                    reply: Reply::Connection(ConnectionAnswer::KeepWaiting),
+                });
+                Vec::new()
+            }
             _ => Vec::new(),
         }
+    }
+
+    /// The one question for a lost host (R25, 2.4): "build is not
+    /// answering.", "3 jobs wait for it.", then Keep waiting (where the
+    /// focus starts), Try again now and Cancel these jobs. It waits behind
+    /// any open dialog and never replaces one.
+    pub(super) fn ask_connection(
+        &mut self,
+        ask: AskId,
+        job: JobId,
+        question: ConnectionQuestion,
+    ) -> Vec<Effect> {
+        if !self.dialogs.is_empty() {
+            self.jobs_ui.pending.push_back((ask, job, question));
+            return Vec::new();
+        }
+        let lines = question.lines();
+        let rows = ConnectionAnswer::CHOICES
+            .iter()
+            .enumerate()
+            .map(|(at, (_, label))| ListRow::new(at.to_string(), *label))
+            .collect();
+        let mut choices = ListModel::new(lines[0].clone()).with_rows(rows);
+        choices.set_help("Up and Down choose, Enter answers, Escape keeps waiting.");
+        self.open_dialog(
+            Dialog::Question { lines, choices },
+            Purpose::Jobs(Box::new(Wants::Connection { ask, job })),
+        )
+    }
+
+    /// Opens a connection question that waited, when no dialog is open.
+    pub(super) fn jobs_queue_next(&mut self) -> Vec<Effect> {
+        if !self.dialogs.is_empty() {
+            return Vec::new();
+        }
+        match self.jobs_ui.pending.pop_front() {
+            Some((ask, job, question)) => self.ask_connection(ask, job, question),
+            None => Vec::new(),
+        }
+    }
+
+    /// A job ended: a question it asked for its host is gone with it, and
+    /// closes when it is the dialog on top.
+    pub(super) fn forget_job_questions(&mut self, job: JobId) -> Vec<Effect> {
+        self.jobs_ui.pending.retain(|(_, asker, _)| *asker != job);
+        self.jobs_ui.facts.remove(&job);
+        self.jobs_ui.policies.remove(&job);
+        let asked_by_it = matches!(
+            self.opens.last().map(|o| &o.purpose),
+            Some(Purpose::Jobs(w)) if matches!(**w, Wants::Connection { job: asker, .. } if asker == job)
+        );
+        if asked_by_it {
+            self.close_top()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// What a host's gate says, once: "build is back. Copy goes on.",
+    /// "Waiting for build.", one line for each job cancelled or stopped.
+    pub(super) fn gate_event(&mut self, event: &GateEvent) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        for line in event.lines() {
+            effects.push(self.say(Message::info(line)));
+        }
+        effects
+    }
+
+    /// What a running job says once: "Resuming report.iso at 410 MB of
+    /// 800 MB", or "Not resumed: the source changed." and "Starting again
+    /// from the start.".
+    pub(super) fn job_notice(&mut self, job: JobId, lines: Vec<String>) -> Vec<Effect> {
+        let _ = job;
+        let mut effects = Vec::new();
+        for line in lines {
+            effects.push(self.say(Message::info(line)));
+        }
+        effects
     }
 
     /// The Jobs list's own keys: the trash key cancels the focused job,
@@ -605,13 +714,19 @@ impl App {
         effects
     }
 
-    /// The global speed limit, for the runtime now.
+    /// The global speed limit: the `jobs.speed_limit_kb` setting, kept in
+    /// `config.toml`; the runtime follows it. Its own line is said by the
+    /// caller, in plain units.
     pub(super) fn set_global_speed_limit(&mut self, limit: Option<SpeedLimit>) -> Vec<Effect> {
-        self.request(Request::Queue(QueueRequest::SpeedLimit {
-            job: None,
-            limit,
-        }));
-        Vec::new()
+        let kb = limit.map_or(0, |limit| limit.get().div_ceil(1000));
+        let value = i64::try_from(kb).unwrap_or(i64::MAX);
+        let mut effects =
+            self.apply_setting("jobs.speed_limit_kb", Some(toml::Value::Integer(value)));
+        if effects.iter().any(|e| matches!(e, Effect::Announce(_))) {
+            effects.retain(|e| !matches!(e, Effect::Announce(_)));
+            self.status_log.pop();
+        }
+        effects
     }
 
     /// Retry the failed items: a new job over the job's own sources that
@@ -646,6 +761,7 @@ impl App {
             request = request.to(destination.clone());
         }
         request.conflicts = ConflictPolicy::Skip;
+        request.errors = self.settings.jobs.on_errors.policy();
         let side = self.active;
         let note = Some("Retry: what is already there is skipped".to_owned());
         self.plan_job(side, request, note, Then::Report, true)
