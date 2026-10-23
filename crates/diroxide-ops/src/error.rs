@@ -70,6 +70,13 @@ pub enum OpsError {
     /// their own. The text is the link's name.
     #[error("links have no permissions of their own: {0}")]
     LinkSelected(String),
+    /// A plugin's `before_*` hook stopped the job before its question:
+    /// the line says why and ends with the plugin's name ("Delete
+    /// stopped: keep.txt is protected (Folder guard)"), or says the hook
+    /// did not answer in time and its manifest says to stop. Said as it
+    /// is, never inside "Could not ...".
+    #[error("{0}")]
+    HookStopped(String),
 }
 
 impl Explain for OpsError {
@@ -79,7 +86,9 @@ impl Explain for OpsError {
             OpsError::NothingSelected => "Select something first, or move to an entry.".to_owned(),
             OpsError::NoDestination => "Open the destination in the other panel.".to_owned(),
             OpsError::NoName => "Type a name.".to_owned(),
-            OpsError::NotBuilt(_) | OpsError::NothingToUndo => String::new(),
+            OpsError::NotBuilt(_) | OpsError::NothingToUndo | OpsError::HookStopped(_) => {
+                String::new()
+            }
             OpsError::TrashNotConfirmed(_) => {
                 "Look for it in the trash, and check the drive.".to_owned()
             }

@@ -30,6 +30,9 @@ pub mod fake;
 pub mod gate;
 #[cfg(test)]
 mod gate_tests;
+pub mod hooks;
+#[cfg(test)]
+mod hooks_tests;
 pub mod join;
 pub mod journal;
 #[cfg(test)]
@@ -69,6 +72,10 @@ pub use fake::{
     CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, LinkDrop, SlowPlace,
 };
 pub use gate::{ConnectionAnswer, ConnectionQuestion, GateEvent, Gates, Waiter};
+pub use hooks::{
+    HookCall, HookEvent, HookItem, HookReport, HookResult, HookRunner, HookStatus, HookVerdict,
+    OnSilence, WakingHook,
+};
 pub use join::{JoinFacts, JoinOutcome, Verdict};
 pub use journal::{Interrupted, Journal};
 pub use limiter::{LimitScope, Limiter, SpeedLimit};

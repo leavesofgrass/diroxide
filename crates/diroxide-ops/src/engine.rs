@@ -23,6 +23,7 @@ use diroxide_vfs::{CancelToken, Registry, VfsError};
 
 use crate::error::OpsError;
 use crate::gate::{ConnectionAnswer, ConnectionQuestion, Gates};
+use crate::hooks::{self, HookCall, HookRunner};
 use crate::journal::Journal;
 use crate::limiter::{Limiter, SpeedLimit};
 use crate::options::EngineOptions;
@@ -512,6 +513,7 @@ pub struct Engine {
     gates: Gates,
     ledger: Arc<Ledger>,
     limiter: Arc<Limiter>,
+    hooks: Option<Arc<dyn HookRunner>>,
 }
 
 impl Engine {
@@ -527,6 +529,31 @@ impl Engine {
             gates: Gates::new(),
             ledger: Arc::new(Ledger::in_memory()),
             limiter: Arc::new(Limiter::new()),
+            hooks: None,
+        }
+    }
+
+    /// The same engine asking these plugins' hooks (R25 commit 71):
+    /// `before_*` at the end of [`Engine::plan_with`], `after_*` when a
+    /// run ends.
+    pub fn with_hooks(mut self, runner: Arc<dyn HookRunner>) -> Self {
+        self.hooks = Some(runner);
+        self
+    }
+
+    /// Asks the `before_*` hooks of a planned job, after the plan and
+    /// before the confirmation: each on a thread of its own, at most its
+    /// time limit. Returns the lines to say while the job goes on, or
+    /// [`OpsError::HookStopped`] with the line that stopped it. Nothing
+    /// when the engine has no runner or the job's kind has no event.
+    pub fn before_hooks(&self, plan: &Plan, control: &JobControl) -> Result<Vec<String>, OpsError> {
+        let (Some(runner), Some(call)) = (&self.hooks, HookCall::of(plan)) else {
+            return Ok(Vec::new());
+        };
+        match hooks::ask_before(runner, &call, &control.cancel) {
+            None => Err(OpsError::Vfs(VfsError::Cancelled)),
+            Some(Ok(warnings)) => Ok(warnings),
+            Some(Err(line)) => Err(OpsError::HookStopped(line)),
         }
     }
 
@@ -650,7 +677,12 @@ impl Engine {
             let mut run = Run::new(self, plan, control, sink, &shared);
             run.execute();
             drop(stop);
-            run.into_report()
+            let report = run.into_report();
+            // The after hooks hear the report once, never waited for.
+            if let Some(runner) = &self.hooks {
+                hooks::send_after(runner, &report);
+            }
+            report
         })
     }
 
