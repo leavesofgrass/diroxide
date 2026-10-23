@@ -339,7 +339,7 @@ pub fn chunk(connection: &Arc<Connection>, call: &Call<'_>) -> Result<Value, Rpc
         .link
         .session()
         .write_pipelined(&session.handle, offset, &data, Some(call.cancel))
-        .map_err(|e| connection.fail(Op::Write, &e))?;
+        .map_err(|e| connection.fail_at(Op::Write, &e, session.link.session(), &session.partial))?;
     session.next += data.len() as u64;
     Ok(json!({"length": session.next}))
 }
@@ -377,7 +377,7 @@ fn verify(connection: &Arc<Connection>, session: &Open, call: &Call<'_>) -> Resu
         ));
     }
     sftp.close(&session.handle)
-        .map_err(|e| connection.fail(Op::Close, &e))
+        .map_err(|e| connection.fail_at(Op::Close, &e, sftp, &session.partial))
 }
 
 /// Puts the verified partial file in place.

@@ -149,7 +149,7 @@ fn stat_reads_files_folders_and_links_itself() {
             json!({"place": "sftp://build.example/srv/report.txt"}),
         )
         .unwrap_err();
-    assert_eq!(kind(&not_folder), "failed");
+    assert_eq!(kind(&not_folder), "not_a_directory");
 }
 
 #[test]

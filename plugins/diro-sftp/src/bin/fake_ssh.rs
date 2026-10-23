@@ -16,7 +16,8 @@
 //!   runs `SSH_ASKPASS` with the prompt as ssh does and logs whether it
 //!   answered and its exit code (`"accept"` names the one answer that
 //!   counts as right, and `"tries"` how many times a prompt is asked
-//!   before ssh gives up); `{"stderr": TEXT}`, `{"exit": CODE}` and
+//!   before ssh gives up); `{"stderr": TEXT}`, `{"stdout": TEXT}`,
+//!   `{"exit": CODE}` and
 //!   `{"sleep_ms": N}` do what they say; `{"child_sleep_ms": N}` starts a
 //!   copy of the program that sleeps, as ssh's own children would, and
 //!   logs its process id; `{"serve": {"files": {PATH: TEXT}, "dirs":
@@ -225,6 +226,12 @@ fn run_script(script: &[Value], log: Option<&str>) -> ExitCode {
             }
         } else if let Some(text) = step.get("stderr").and_then(Value::as_str) {
             let _ = writeln!(stderr, "{text}");
+        } else if let Some(text) = step.get("stdout").and_then(Value::as_str) {
+            // Text on standard output before any SFTP, as a shell startup
+            // file that prints does.
+            let mut stdout = io::stdout();
+            let _ = stdout.write_all(text.as_bytes());
+            let _ = stdout.flush();
         } else if let Some(ms) = step.get("sleep_ms").and_then(Value::as_u64) {
             thread::sleep(Duration::from_millis(ms));
         } else if let Some(ms) = step.get("child_sleep_ms").and_then(Value::as_u64) {

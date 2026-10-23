@@ -109,7 +109,7 @@ fn read_range(
     loop {
         let handle = session
             .read_handle(&at.path, cancel)
-            .map_err(|e| connection.fail(Op::Read, &e))?;
+            .map_err(|e| connection.fail_at(Op::Read, &e, session, &at.path))?;
         let mut got = 0u64;
         let mut counted = |bytes: &[u8]| {
             got += bytes.len() as u64;

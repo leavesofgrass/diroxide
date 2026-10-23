@@ -143,7 +143,7 @@ pub fn copy(connection: &Arc<Connection>, from: &At, call: &Call<'_>) -> Result<
     let partial = unfinished_path(&folder, &to.path, "");
     let read = sftp
         .open(&from.path, open::READ, Attrs::default(), cancel)
-        .map_err(|e| connection.fail(Op::Read, &e))?;
+        .map_err(|e| connection.fail_at(Op::Read, &e, sftp, &from.path))?;
     let write = match sftp.open(
         &partial,
         open::WRITE | open::CREAT | open::TRUNC,
@@ -174,7 +174,7 @@ pub fn copy(connection: &Arc<Connection>, from: &At, call: &Call<'_>) -> Result<
         .and_then(ops::expect_ok);
     let checked = copied
         .and_then(|()| fstat_size(sftp, &write, cancel))
-        .map_err(|e| connection.fail(Op::Copy, &e))
+        .map_err(|e| connection.fail_at(Op::Copy, &e, sftp, &partial))
         .and_then(|held| {
             let wanted = source.size.unwrap_or(held);
             if held == wanted {
@@ -190,7 +190,7 @@ pub fn copy(connection: &Arc<Connection>, from: &At, call: &Call<'_>) -> Result<
     let _ = sftp.close(&read);
     let closed = sftp
         .close(&write)
-        .map_err(|e| connection.fail(Op::Close, &e));
+        .map_err(|e| connection.fail_at(Op::Close, &e, sftp, &partial));
     if let Err(error) = checked.and(closed) {
         if !connection.is_gone() {
             remove_partial();

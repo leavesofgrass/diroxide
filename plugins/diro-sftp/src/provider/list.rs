@@ -164,8 +164,8 @@ pub fn list(connection: &Arc<Connection>, at: &At, call: &Call<'_>) -> Result<Va
     let link = connection.link()?;
     let session = link.session();
     let cancel = Some(call.cancel);
-    let handle =
-        ops::opendir(session, &at.path, cancel).map_err(|e| connection.fail(Op::List, &e))?;
+    let handle = ops::opendir(session, &at.path, cancel)
+        .map_err(|e| connection.fail_at(Op::List, &e, session, &at.path))?;
     let token = call.text("partial_token");
     let mut gathered = Gathered::default();
     let mut sent = 0usize;

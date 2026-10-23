@@ -230,6 +230,72 @@ pub fn home_on(host: &str) -> String {
 /// A server without `statvfs@openssh.com`.
 pub const NO_FREE_SPACE: &str = "This server does not report free space.";
 
+/// A host key the owner did not accept, or ssh could not ask about.
+pub const KEY_NOT_TRUSTED: &str = "Host key not trusted. Not connected.";
+
+/// The next step after [`KEY_NOT_TRUSTED`].
+pub const KEY_NOT_TRUSTED_HINT: &str = "Accept the new key only if you know it.";
+
+/// "Sign-in refused by build.example."
+pub fn sign_in_refused(host: &str) -> String {
+    format!("Sign-in refused by {host}.")
+}
+
+/// The next step after a refused sign-in.
+pub const SIGN_IN_HINT: &str = "Check the user name, key or password.";
+
+/// "No SFTP service on build.example."
+pub fn no_sftp_on(host: &str) -> String {
+    format!("No SFTP service on {host}.")
+}
+
+/// The next step for a server with no SFTP subsystem.
+pub const NO_SFTP_HINT: &str = "Ask for the sftp subsystem to be on.";
+
+/// The next step when the network or the address is in doubt.
+pub const CHECK_NETWORK: &str = "Check the address and the network.";
+
+/// "Connection refused by build.example."
+pub fn refused_by(host: &str) -> String {
+    format!("Connection refused by {host}.")
+}
+
+/// The next step after a refused connection.
+pub const IS_SSH_RUNNING: &str = "Is its SSH server running on that port?";
+
+/// "Unknown host: build.example."
+pub fn unknown_host(host: &str) -> String {
+    format!("Unknown host: {host}.")
+}
+
+/// The next step for a name that does not resolve.
+pub const CHECK_NAME: &str = "Check the name, or your network.";
+
+/// "No route to build.example."
+pub fn no_route(host: &str) -> String {
+    format!("No route to {host}.")
+}
+
+/// The owner's ssh configuration has an error.
+pub const BAD_CONFIG: &str = "Your ssh config has an error.";
+
+/// The next step after [`BAD_CONFIG`].
+pub const BAD_CONFIG_HINT: &str = "Fix the line ssh names, then try again.";
+
+/// "Connection closed by build.example."
+pub fn closed_by(host: &str) -> String {
+    format!("Connection closed by {host}.")
+}
+
+/// A full disk or a quota, from the server's words.
+pub const NO_SPACE: &str = "The server's disk or quota is full.";
+
+/// A file larger than the server takes.
+pub const TOO_LARGE: &str = "The file is too large for the server.";
+
+/// A folder that is not empty.
+pub const NOT_EMPTY: &str = "The folder is not empty.";
+
 /// What ssh last printed, cleaned and placed last in a hint.
 pub fn ssh_said(text: &str) -> Option<String> {
     let last = text
@@ -286,6 +352,24 @@ mod tests {
             copying_on("build.example"),
             home_on("build.example"),
             NO_FREE_SPACE.to_owned(),
+            KEY_NOT_TRUSTED.to_owned(),
+            KEY_NOT_TRUSTED_HINT.to_owned(),
+            sign_in_refused("build.example"),
+            SIGN_IN_HINT.to_owned(),
+            no_sftp_on("build.example"),
+            NO_SFTP_HINT.to_owned(),
+            CHECK_NETWORK.to_owned(),
+            refused_by("build.example"),
+            IS_SSH_RUNNING.to_owned(),
+            unknown_host("build.example"),
+            CHECK_NAME.to_owned(),
+            no_route("build.example"),
+            BAD_CONFIG.to_owned(),
+            BAD_CONFIG_HINT.to_owned(),
+            closed_by("build.example"),
+            NO_SPACE.to_owned(),
+            TOO_LARGE.to_owned(),
+            NOT_EMPTY.to_owned(),
         ] {
             assert!(line.chars().count() <= MAX_LINE_CELLS, "{line}");
         }

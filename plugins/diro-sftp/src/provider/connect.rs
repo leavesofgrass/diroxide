@@ -45,6 +45,7 @@ use crate::sftp::session::{Session, SessionConfig};
 use crate::ssh::launch::own_program;
 use crate::ssh::locate::probe;
 use crate::ssh::options::{Remote, SessionOptions};
+use crate::ssh::stderr::{self, Cause, refusal};
 use crate::ssh::{Found, Launch, SearchPlaces, SshProcess, Target, locate, resolve};
 
 /// How often the watcher looks at a connection's links.
@@ -371,8 +372,15 @@ impl SshOpener {
         found: &Found,
     ) -> RpcError {
         let host = request.target.host();
-        if matches!(error, SftpError::Cancelled) {
-            return errors::map(Op::Connect, error, host);
+        match error {
+            SftpError::Cancelled => return errors::map(Op::Connect, error, host),
+            // A shell that printed text, or a far end that is not SFTP,
+            // may keep ssh running: it is ended at once.
+            SftpError::ShellChatter(_) | SftpError::Protocol(_) => {
+                process.kill();
+                return errors::map(Op::Connect, error, host);
+            }
+            _ => {}
         }
         if process.wait_timeout(LAST_WORDS).is_none() {
             process.kill();
@@ -396,17 +404,10 @@ impl SshOpener {
                 lines[1..].join("\n"),
             );
         }
-        match error {
-            SftpError::ShellChatter(_) | SftpError::Protocol(_) | SftpError::TimedOut => {
-                errors::map(Op::Connect, error, host)
-            }
-            _ => match lines::ssh_said(&stderr) {
-                Some(hint) => {
-                    RpcError::with_hint(ErrorKind::Unavailable, lines::cannot_connect(host), hint)
-                }
-                None => RpcError::new(ErrorKind::Unavailable, lines::cannot_connect(host)),
-            },
+        if matches!(error, SftpError::TimedOut) && stderr::classify(&stderr) == Cause::Unknown {
+            return errors::map(Op::Connect, error, host);
         }
+        refusal(&stderr, host, request.target.port())
     }
 }
 
@@ -790,6 +791,19 @@ impl Connection {
             .is_ok_and(|l| l.session().extensions().has("copy-data"))
     }
 
+    /// An SFTP failure on `path` as the host's error: a plain FAILURE is
+    /// read by the operation's check first (R24 section 2.6), then
+    /// mapped as [`Connection::fail`] does.
+    pub fn fail_at(
+        self: &Arc<Self>,
+        op: Op,
+        error: &SftpError,
+        session: &Session,
+        path: &[u8],
+    ) -> RpcError {
+        errors::refine(op, error, session, path).unwrap_or_else(|| self.fail(op, error))
+    }
+
     /// What the server offers, for `provider/connect`'s answer.
     pub fn capabilities(&self) -> Value {
         let Ok(link) = self.link() else {
@@ -844,8 +858,8 @@ impl Connection {
     }
 
     /// The reason a dead link gives, in words.
-    fn reason(&self, _stderr: &str) -> String {
-        lines::connection_lost(self.target.host())
+    fn reason(&self, stderr: &str) -> String {
+        stderr::lost_reason(stderr, self.target.host())
     }
 
     /// The connection is lost: its links end, and the host is told once.

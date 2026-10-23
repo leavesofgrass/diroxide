@@ -42,18 +42,19 @@ fn plain_name(at: &At) -> Result<(), RpcError> {
 
 fn mkdir(connection: &Arc<Connection>, path: &[u8], call: &Call<'_>) -> Result<(), RpcError> {
     let link = connection.link()?;
-    let path = path.to_vec();
-    link.session()
+    let session = link.session();
+    let wanted = path.to_vec();
+    session
         .call(
             |id| Request::Mkdir {
                 id,
-                path,
+                path: wanted,
                 attrs: Attrs::default(),
             },
             Some(call.cancel),
         )
         .and_then(ops::expect_ok)
-        .map_err(|e| connection.fail(Op::MakeFolder, &e))
+        .map_err(|e| connection.fail_at(Op::MakeFolder, &e, session, path))
 }
 
 /// `provider/create_dir`: one folder, or with `parents` every missing
@@ -116,7 +117,7 @@ pub fn remove(connection: &Arc<Connection>, at: &At, call: &Call<'_>) -> Result<
     };
     connection.forget(&at.path);
     done.and_then(ops::expect_ok)
-        .map_err(|e| connection.fail(op, &e))?;
+        .map_err(|e| connection.fail_at(op, &e, session, &at.path))?;
     Ok(Value::Null)
 }
 
@@ -182,7 +183,7 @@ pub fn rename(connection: &Arc<Connection>, from: &At, call: &Call<'_>) -> Resul
     };
     result
         .and_then(ops::expect_ok)
-        .map_err(|e| connection.fail(Op::Rename, &e))?;
+        .map_err(|e| connection.fail_at(Op::Rename, &e, session, &to.path))?;
     Ok(Value::Null)
 }
 
@@ -298,7 +299,7 @@ pub fn create_link(
         }
     };
     done.and_then(ops::expect_ok)
-        .map_err(|e| connection.fail(Op::Link, &e))?;
+        .map_err(|e| connection.fail_at(Op::Link, &e, session, &at.path))?;
     Ok(Value::Null)
 }
 
