@@ -41,6 +41,9 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.146"
 sha2 = "0.11.1"
 thiserror = "2.0.18"
+# The sites file: comment-keeping edits of `sites.toml` (R24 section
+# 3.2). Already in this lock through diroxide-config; pure Rust.
+toml_edit = "0.25.15"
 
 [dev-dependencies]
 # The host's own settings, for the provider contract list run through the

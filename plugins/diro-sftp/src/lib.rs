@@ -29,6 +29,7 @@ pub mod provider;
 pub mod rpc;
 pub mod settings;
 pub mod sftp;
+pub mod sites;
 pub mod ssh;
 
 /// The default SFTP port.

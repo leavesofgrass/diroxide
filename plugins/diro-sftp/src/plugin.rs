@@ -20,6 +20,7 @@ use serde_json::Value;
 use crate::provider::{Call, Opener, Provider, SshOpener};
 use crate::rpc::{Cancel, Handler, Peer, WORKERS};
 use crate::settings::Settings;
+use crate::sites::Sites;
 
 /// The scheme this plugin serves.
 pub const SCHEME: &str = "sftp";
@@ -64,6 +65,7 @@ pub struct State {
 pub struct Plugin {
     state: Mutex<State>,
     provider: Arc<Provider>,
+    sites: Arc<Sites>,
 }
 
 impl Plugin {
@@ -79,12 +81,18 @@ impl Plugin {
         Arc::new(Self {
             state: Mutex::new(State::default()),
             provider: Arc::new(Provider::new(opener)),
+            sites: Arc::new(Sites::new()),
         })
     }
 
     /// The provider, for its connections.
     pub fn provider(&self) -> &Arc<Provider> {
         &self.provider
+    }
+
+    /// The saved sites and the hosts of the ssh configuration.
+    pub fn sites(&self) -> &Arc<Sites> {
+        &self.sites
     }
 
     /// A copy of what it knows now.
@@ -107,6 +115,9 @@ impl Handler for Plugin {
             state.spool_dir = Some(params.dirs.spool.as_str())
                 .filter(|dir| !dir.is_empty())
                 .map(PathBuf::from);
+            self.sites.set_dir(state.state_dir.clone());
+            self.sites
+                .set_config_file(state.settings.ssh_config_file.clone());
         }
         InitializeResult {
             protocol: PROTOCOL,
@@ -159,10 +170,12 @@ impl Handler for Plugin {
         if method == methods::SETTINGS_CHANGED
             && let Some(Value::Object(values)) = params.get("settings")
         {
+            let settings = Settings::from_values(values);
+            self.sites.set_config_file(settings.ssh_config_file.clone());
             self.state
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .settings = Settings::from_values(values);
+                .settings = settings;
         }
     }
 
