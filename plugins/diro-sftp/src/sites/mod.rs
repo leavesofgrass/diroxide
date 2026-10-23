@@ -10,6 +10,7 @@
 //!   `Include` lines name are read (answer 94); ssh resolves the rest.
 //! - **Every row's state is a word,** right after the name.
 
+pub mod commands;
 pub mod lister;
 pub mod model;
 pub mod store;
@@ -101,6 +102,18 @@ impl Sites {
             ConfigSource::Fixed(places) => Some(places),
         };
         places.map(|p| config_hosts(&p)).unwrap_or_default()
+    }
+
+    /// `provider/places`: the sites and the configuration's hosts for the
+    /// go-to-place list, each with its state word; listing them never
+    /// signs in. A refused sites file leaves the saved sites out and
+    /// keeps the configuration's hosts.
+    pub fn places(&self, provider: &crate::provider::Provider) -> serde_json::Value {
+        let rows = match self.rows(|site| commands::state_of(provider, site)) {
+            Ok((rows, _)) => rows,
+            Err(_) => lister::rows(&[], &self.config_hosts().hosts, |_| words::SAVED),
+        };
+        lister::places(&rows)
     }
 
     /// The saved site a connection to `target` uses, when one matches.

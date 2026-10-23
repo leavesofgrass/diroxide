@@ -107,11 +107,6 @@ pub fn field_refused(field: &str) -> String {
     format!("Not saved: the {field} was not valid.")
 }
 
-/// A host from the ssh configuration was saved as an alias site.
-pub fn saved_as_alias(name: &str) -> String {
-    format!("Saved {name} as a site, ssh supplies the rest.")
-}
-
 // --- Secrets and the keyring (R24 section 3.4; answer 83).
 
 /// The question after a successful login, never before.

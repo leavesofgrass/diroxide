@@ -187,6 +187,23 @@ impl Provider {
             .collect()
     }
 
+    /// Whether a connection to a target `of` names is open (`Some(true)`),
+    /// was lost and said (`Some(false)`), or there is none: the state word
+    /// of a site's row (S-C, R25 commit 73).
+    pub fn link_state(&self, of: impl Fn(&Target) -> bool) -> Option<bool> {
+        let connections = self.lock();
+        let mut lost = false;
+        for (target, connection) in connections.iter() {
+            if of(target) {
+                if !connection.is_gone() {
+                    return Some(true);
+                }
+                lost |= connection.lost_was_said();
+            }
+        }
+        lost.then_some(false)
+    }
+
     /// `provider/connect`: opens the connection to the place's target, or
     /// finds the one open, and answers its capabilities.
     pub fn connect(&self, call: &Call<'_>) -> Result<Value, RpcError> {

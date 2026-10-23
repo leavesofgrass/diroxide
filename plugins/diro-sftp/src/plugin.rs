@@ -6,7 +6,9 @@
 //! codec and the multiplexer. The provider methods are served by
 //! [`crate::provider`] (S-B, commits 57 to 64); a provider call that needs
 //! a connection and has none answers `auth_required` ("Not connected"),
-//! the answer the host meets by connecting.
+//! the answer the host meets by connecting. The sites lane (S-C, commits
+//! 72 to 76) adds `provider/places` and the commands of
+//! [`crate::sites::commands`]: the Sites list and the site commands.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -21,6 +23,7 @@ use crate::provider::{Call, Opener, Provider, SshOpener};
 use crate::rpc::{Cancel, Handler, Peer, WORKERS};
 use crate::settings::Settings;
 use crate::sites::Sites;
+use crate::sites::commands::{self, Run};
 
 /// The scheme this plugin serves.
 pub const SCHEME: &str = "sftp";
@@ -46,6 +49,7 @@ pub const PROVIDER_METHODS: &[&str] = &[
     "copy_hint",
     "copy",
     "volumes",
+    "places",
 ];
 
 /// What the plugin knows from the host.
@@ -130,6 +134,8 @@ impl Handler for Plugin {
                     scheme: SCHEME.to_owned(),
                     methods: PROVIDER_METHODS.iter().map(|m| (*m).to_owned()).collect(),
                 }],
+                commands: commands::COMMANDS.iter().map(|c| (*c).to_owned()).collect(),
+                listers: vec![commands::LISTER.to_owned()],
                 concurrency: u32::try_from(WORKERS).ok(),
                 transfer: vec!["inline".to_owned(), "file".to_owned()],
                 ..PluginCapabilities::default()
@@ -146,6 +152,20 @@ impl Handler for Plugin {
         cancel: &Cancel,
     ) -> Result<Value, RpcError> {
         cancel.check()?;
+        if method == methods::PROVIDER_PLACES {
+            return Ok(self.sites.places(&self.provider));
+        }
+        if method == methods::COMMAND_RUN {
+            let state = self.state();
+            return commands::run(&Run {
+                peer,
+                params: &params,
+                cancel,
+                state: &state,
+                sites: &self.sites,
+                provider: &self.provider,
+            });
+        }
         if method.starts_with("provider/") {
             let state = self.state();
             let call = Call {
