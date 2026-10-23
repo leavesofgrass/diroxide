@@ -12,6 +12,8 @@
 
 use std::ffi::OsStr;
 
+pub mod classify;
+pub mod fingerprint;
 pub mod helper;
 pub mod listener;
 pub mod proof;
