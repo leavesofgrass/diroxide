@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod askpass;
+mod codec;
 mod conformance;
 #[cfg(feature = "fake-ssh")]
 mod dialogs;

@@ -27,6 +27,7 @@ pub mod lines;
 pub mod plugin;
 pub mod rpc;
 pub mod settings;
+pub mod sftp;
 pub mod ssh;
 
 /// The default SFTP port.

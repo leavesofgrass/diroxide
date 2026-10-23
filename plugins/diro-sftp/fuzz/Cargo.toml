@@ -1,0 +1,28 @@
+# The SFTP plugin's fuzz target (R25 commit 54), a workspace of its own:
+# libFuzzer is C++, so it never enters the plugin's own build. Run on a
+# nightly toolchain, from plugins/diro-sftp:
+#
+#   cargo fuzz run sftp_packet ../../fixtures/sftp/seeds/sftp_packet
+
+[workspace]
+
+[package]
+name = "diro-sftp-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+diro-sftp = { path = ".." }
+
+[[bin]]
+name = "sftp_packet"
+path = "fuzz_targets/sftp_packet.rs"
+test = false
+doc = false
+bench = false
