@@ -1369,11 +1369,96 @@ fn a_lost_network_is_retried_on_its_own_then_asked_and_skip_all_skips_its_class(
     assert_eq!(asked[0].error, VfsError::NetworkLost);
     assert_eq!(asked[1].error, VfsError::InUse);
     assert_eq!(report.failed.len(), 3);
+    // R25 commit 67: the waits grow, 5, 15 and 45 seconds, then the
+    // question; the second network failure is skipped by its class.
     assert!(
-        pacer.now() >= Duration::from_secs(15),
-        "three waits of five seconds"
+        pacer.now() >= Duration::from_secs(65),
+        "waits of 5, 15 and 45 seconds: {:?}",
+        pacer.now()
     );
-    assert!(pacer.now() < Duration::from_secs(16));
+    assert!(pacer.now() < Duration::from_secs(66));
+    assert_eq!(report.retries, 3, "counted, never said one by one");
+}
+
+/// R25 commit 67: the error policy, as a table. Asking asks; continue and
+/// list never asks, for an error or a name taken, and lists every failure;
+/// stop at the first stops there, unasked, and says so first.
+#[test]
+fn the_error_policy_asks_lists_or_stops() {
+    use diroxide_core::job::ErrorPolicy;
+
+    let failing = || {
+        let fake = tree();
+        for place in ["/a/notes.txt", "/a/photos/one.jpg"] {
+            fake.switches_mut().call_faults.push(CallFault::new(
+                FakeCall::Read,
+                p(place),
+                VfsError::InUse,
+            ));
+        }
+        // A name taken, which asking would ask about.
+        fake.add_file(&p("/b/photos/trip/two.jpg"), b"old");
+        fake
+    };
+    let job = |policy| {
+        request(JobKind::Copy, &["/a/notes.txt", "/a/photos"])
+            .to(p("/b"))
+            .on_errors(policy)
+    };
+    // Ask: two errors and one conflict are asked.
+    let fake = failing();
+    let sink = Script::default();
+    let asked = run(&engine(&fake), &job(ErrorPolicy::Ask), &sink);
+    assert_eq!(sink.failed.lock().unwrap().len(), 2);
+    assert_eq!(sink.asked.lock().unwrap().len(), 1);
+    assert_eq!(asked.failed.len(), 2);
+    assert!(!asked.stopped);
+    // Continue and list: nothing asked, everything else done, the
+    // failures and the name taken listed.
+    let fake = failing();
+    let sink = Script::default();
+    let listed = run(&engine(&fake), &job(ErrorPolicy::ContinueAndList), &sink);
+    assert!(sink.failed.lock().unwrap().is_empty(), "no error asked");
+    assert!(sink.asked.lock().unwrap().is_empty(), "no conflict asked");
+    assert!(
+        !sink
+            .states
+            .lock()
+            .unwrap()
+            .contains(&JobState::WaitingForAnswer)
+    );
+    assert_eq!(listed.failed.len(), 2);
+    assert!(
+        listed
+            .skipped
+            .iter()
+            .any(|(place, why)| *place == p("/a/photos/trip/two.jpg") && why == "the name is taken")
+    );
+    assert_eq!(fake.contents(&p("/b/photos/trip/two.jpg")).unwrap(), b"old");
+    assert!(!listed.stopped && !listed.cancelled);
+    assert!(listed.summary().starts_with("Copy had 2 failures"));
+    // Stop at the first: the first file fails, nothing after it runs.
+    let fake = failing();
+    let sink = Script::default();
+    let stopped = run(&engine(&fake), &job(ErrorPolicy::StopAtFirst), &sink);
+    assert!(
+        sink.failed.lock().unwrap().is_empty(),
+        "stopping asks nothing"
+    );
+    assert!(stopped.stopped);
+    assert_eq!(stopped.failed.len(), 1);
+    assert_eq!(stopped.failed[0].0, p("/a/notes.txt"));
+    assert!(stopped.done.is_empty(), "{:?}", stopped.done);
+    assert!(!fake.exists(&p("/b/photos/one.jpg")));
+    assert_eq!(
+        stopped.summary(),
+        "Copy stopped at the first error: 0 done."
+    );
+    assert!(within_cells(
+        &stopped.summary(),
+        "Copy stopped at the first error"
+    ));
+    assert!(fake.unfinished().is_empty());
 }
 
 #[test]
@@ -1407,6 +1492,19 @@ fn retry_tries_again_and_succeeds() {
     assert_eq!(report.done.len(), 1);
     assert!(quiet.failed.lock().unwrap().is_empty(), "never asked");
     assert_eq!(report.warnings[0].1, "done after 2 automatic retries");
+    assert_eq!(report.retries, 2);
+    let once = tree();
+    once.switches_mut()
+        .call_faults
+        .push(CallFault::new(FakeCall::Read, p("/a/notes.txt"), VfsError::NetworkLost).times(1));
+    let pacer = Arc::new(FakePacer::new());
+    let report = run(
+        &engine(&once).with_pacer(pacer.clone()),
+        &request(JobKind::Copy, &["/a/notes.txt"]).to(p("/b")),
+        &Script::default(),
+    );
+    assert_eq!(report.warnings[0].1, "done after 1 automatic retry");
+    assert_eq!(pacer.now(), Duration::from_secs(5), "the first wait only");
 }
 
 #[test]

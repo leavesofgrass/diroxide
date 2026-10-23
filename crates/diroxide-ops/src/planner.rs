@@ -809,6 +809,7 @@ impl<'a> Planner<'a> {
 
     fn finish(mut self) -> Plan {
         self.plan.facts.origin = self.request.origin.clone();
+        self.plan.facts.error_policy = self.request.errors;
         self.plan.facts.items = self.request.sources.len().max(self.request.renames.len()) as u64;
         self.plan
     }

@@ -351,6 +351,13 @@ pub struct JobReport {
     pub warnings: Vec<(Place, String)>,
     /// Whether the job was cancelled before its end.
     pub cancelled: bool,
+    /// Whether the job stopped at its first failure, as its error policy
+    /// said ([`diroxide_core::job::ErrorPolicy::StopAtFirst`]); the failure
+    /// is in `failed`.
+    pub stopped: bool,
+    /// How many times the engine tried an item again on its own, silently,
+    /// after a lost network: counted here and never said one by one.
+    pub retries: u32,
     /// The check of what the job made against a fresh read, when it ran.
     pub reconciliation: Option<Reconciliation>,
     /// What the Undo command can reverse.
@@ -373,6 +380,8 @@ impl JobReport {
             failed: Vec::new(),
             warnings: Vec::new(),
             cancelled: false,
+            stopped: false,
+            retries: 0,
             reconciliation: None,
             undo: UndoRecord::for_job(job, kind),
             joined: None,
@@ -381,8 +390,9 @@ impl JobReport {
 
     /// The report in one line, the problems first (R8): "Copy had 8
     /// failures: 290 done, 2 skipped."; "Copy cancelled: 2 done."; "Copy
-    /// finished with 1 warning: 3 done."; "Copy finished: 3 done, 1
-    /// skipped." A missing result counts as a failure.
+    /// stopped at the first error: 2 done."; "Copy finished with 1
+    /// warning: 3 done."; "Copy finished: 3 done, 1 skipped." A missing
+    /// result counts as a failure.
     pub fn summary(&self) -> String {
         let verb = summary_word(self.kind);
         let mut counts = vec![format!("{} done", self.done.len())];
@@ -393,6 +403,8 @@ impl JobReport {
         let failures = self.failed.len() + missing;
         let head = if self.cancelled {
             format!("{verb} cancelled")
+        } else if self.stopped {
+            format!("{verb} stopped at the first error")
         } else if failures > 0 {
             format!(
                 "{verb} had {}",

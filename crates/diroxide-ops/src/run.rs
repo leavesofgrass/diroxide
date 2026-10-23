@@ -31,6 +31,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use diroxide_core::catalog;
+use diroxide_core::format::count;
+use diroxide_core::job::ErrorPolicy;
 use diroxide_core::names::spell_out;
 use diroxide_core::{
     ConflictAction, ConflictKind, ConflictPolicy, Entry, EntryKind, ErrorAction, JobKind, JobState,
@@ -199,12 +201,18 @@ pub(crate) struct Run<'a> {
     lost: Vec<(Place, String)>,
     journal: Option<JournalWriter>,
     paused_said: bool,
+    /// The job stops at its first failure (its error policy) and has had
+    /// one: no step after it runs.
+    halted: bool,
     split: Option<split::SplitState>,
     join: Option<join::JoinState>,
 }
 
 /// The reason a step is skipped when its entry changed since the plan.
 const CHANGED: &str = "it changed since the plan";
+
+/// The reason a folder is left when its job stopped at its first error.
+const STOPPED: &str = "the job stopped at its first error";
 
 /// How closely an entry must match what the plan saw.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -263,8 +271,22 @@ impl<'a> Run<'a> {
             lost: Vec::new(),
             journal: None,
             paused_said: false,
+            halted: false,
             split: None,
             join: None,
+        }
+    }
+
+    /// Whether the job runs unattended: its error policy continues and
+    /// lists, so it never opens a question, for an error or a name taken.
+    fn unattended(&self) -> bool {
+        self.plan.facts.error_policy == ErrorPolicy::ContinueAndList
+    }
+
+    /// Notes a failed item: a job that stops at its first failure stops.
+    fn note_failure(&mut self) {
+        if self.plan.facts.error_policy == ErrorPolicy::StopAtFirst {
+            self.halted = true;
         }
     }
 
@@ -373,7 +395,9 @@ impl<'a> Run<'a> {
             let error = match op(self) {
                 Ok(value) => {
                     if automatic > 0 {
-                        self.warn(place, format!("done after {automatic} automatic retries"));
+                        let retries =
+                            count(u64::from(automatic), "automatic retry", "automatic retries");
+                        self.warn(place, format!("done after {retries}"));
                     }
                     return Ok(value);
                 }
@@ -389,12 +413,22 @@ impl<'a> Run<'a> {
             }
             let options = self.engine.options();
             if class.retries_on_its_own() && automatic < options.network_retries {
+                // Silent and counted: 5, 15 and 45 seconds by default.
                 automatic += 1;
-                let wait = options.network_retry_wait;
+                self.report.retries += 1;
+                let wait = options.retry_wait(automatic);
                 if !crate::pace::wait(self.engine.pacer(), wait, &self.control.cancel) {
                     return Err(Stop::Cancelled);
                 }
                 continue;
+            }
+            match self.plan.facts.error_policy {
+                ErrorPolicy::Ask => {}
+                ErrorPolicy::ContinueAndList => return Err(Stop::Failed(error.to_string())),
+                ErrorPolicy::StopAtFirst => {
+                    self.halted = true;
+                    return Err(Stop::Failed(error.to_string()));
+                }
             }
             let item = ItemError {
                 kind: self.plan.kind,
@@ -535,6 +569,10 @@ impl<'a> Run<'a> {
                 self.report.cancelled = true;
                 break;
             }
+            if self.halted {
+                self.report.stopped = true;
+                break;
+            }
             index += 1;
         }
         self.finish();
@@ -575,6 +613,7 @@ impl<'a> Run<'a> {
             }
             Outcome::Failed(cause) => {
                 self.report.failed.push((subject.clone(), cause.clone()));
+                self.note_failure();
                 "failed"
             }
             Outcome::Cancelled => "cancelled",
@@ -609,7 +648,10 @@ impl<'a> Run<'a> {
         match outcome {
             Outcome::Done => self.report.done.push(place.clone()),
             Outcome::Skipped(reason) => self.report.skipped.push((place.clone(), reason.clone())),
-            Outcome::Failed(cause) => self.report.failed.push((place.clone(), cause.clone())),
+            Outcome::Failed(cause) => {
+                self.report.failed.push((place.clone(), cause.clone()));
+                self.note_failure();
+            }
             Outcome::Cancelled => {}
         }
     }
@@ -842,7 +884,8 @@ impl<'a> Run<'a> {
         let asks = matches!(
             self.plan.conflicts,
             ConflictPolicy::Ask | ConflictPolicy::Rename
-        ) && !self.answers.contains_key(&kind);
+        ) && !self.answers.contains_key(&kind)
+            && !self.unattended();
         if asks {
             let answer = self.ask_conflict(&Conflict {
                 kind,
@@ -944,6 +987,9 @@ impl<'a> Run<'a> {
                     (ConflictPolicy::Newer, ConflictKind::FileOverFile) => {
                         ConflictAction::ReplaceIfNewer
                     }
+                    // Unattended: never a question; the name taken is
+                    // skipped and listed.
+                    _ if self.unattended() => ConflictAction::Skip,
                     _ => {
                         let answer = self.ask_conflict(&Conflict {
                             kind,
@@ -1590,6 +1636,9 @@ impl<'a> Run<'a> {
             if !self.hold() {
                 return Outcome::Cancelled;
             }
+            if self.halted {
+                return Outcome::Skipped(STOPPED.to_owned());
+            }
             let (Ok(child_from), Ok(child_to)) = (from.join(&child.name), to.join(&child.name))
             else {
                 continue;
@@ -1618,7 +1667,7 @@ impl<'a> Run<'a> {
                 let left = source.list(from, &ctx).map_or(0, |entries| entries.len());
                 Outcome::Skipped(format!(
                     "Folder kept: {} inside were not moved",
-                    diroxide_core::format::count(left as u64, "item", "items")
+                    count(left as u64, "item", "items")
                 ))
             }
             Err(VfsError::Cancelled) => Outcome::Cancelled,
