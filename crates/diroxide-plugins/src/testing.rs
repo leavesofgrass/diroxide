@@ -24,9 +24,10 @@ use serde_json::{Value, json};
 use crate::ask::{Answer, Question, TextDocument};
 use crate::error::PluginError;
 use crate::framing::{Frame, RawLine, classify};
-use crate::host::{HostServices, Launcher, PanelSnapshot, PluginInfo};
+use crate::host::{HostServices, Launcher, PluginInfo};
 use crate::log::PluginLog;
 use crate::manifest::Manifest;
+use crate::panels::{PanelChange, PanelChoice, PanelSnapshot};
 use crate::protocol::{
     ErrorKind, Id, Incoming, Notification, Params, Request, Response, RpcError, methods,
     parse_line, to_line,
@@ -134,20 +135,7 @@ impl Launcher for FakeLauncher {
 /// after it.
 pub fn plugin_info(extra: &str) -> PluginInfo {
     let text = format!(
-        "[plugin]
-id = \"line-counter\"
-name = \"Line counter\"
-version = \"0.1.0\"
-protocol = 1
-
-[run]
-command = [\"x\"]
-startup_timeout = \"1s\"
-{extra}
-[[command]]
-id = \"echo\"
-name = \"Echo\"
-"
+        "[plugin]\nid = \"line-counter\"\nname = \"Line counter\"\nversion = \"0.1.0\"\nprotocol = 1\n\n[run]\ncommand = [\"x\"]\nstartup_timeout = \"1s\"\n{extra}\n[[command]]\nid = \"echo\"\nname = \"Echo\"\n"
     );
     let report = Manifest::check(&text);
     let problems = report.text();
@@ -174,6 +162,9 @@ pub struct RecordingServices {
     documents: Mutex<Vec<TextDocument>>,
     answers: Mutex<VecDeque<Answer>>,
     responder: Mutex<Option<Responder>>,
+    panels: Mutex<Vec<PanelSnapshot>>,
+    changes: Mutex<Vec<PanelChange>>,
+    executed: Mutex<Vec<(String, Params)>>,
 }
 
 impl std::fmt::Debug for RecordingServices {
@@ -217,6 +208,22 @@ impl RecordingServices {
     pub fn documents(&self) -> Vec<TextDocument> {
         locked(&self.documents).clone()
     }
+
+    /// Sets the panels `panel/get` reads: the first is active and on the
+    /// left, the second the other.
+    pub fn set_panels(&self, panels: Vec<PanelSnapshot>) {
+        *locked(&self.panels) = panels;
+    }
+
+    /// The panel changes asked for, in order.
+    pub fn changes(&self) -> Vec<PanelChange> {
+        locked(&self.changes).clone()
+    }
+
+    /// The commands run, by id, with their arguments.
+    pub fn executed(&self) -> Vec<(String, Params)> {
+        locked(&self.executed).clone()
+    }
 }
 
 impl HostServices for RecordingServices {
@@ -239,14 +246,27 @@ impl HostServices for RecordingServices {
         Ok(())
     }
 
-    fn panel(&self, _side: Option<diroxide_core::Side>) -> PanelSnapshot {
-        PanelSnapshot {
-            side: diroxide_core::Side::Left,
-            place: diroxide_core::Place::parse(if cfg!(windows) { "C:\\" } else { "/" })
-                .unwrap_or_else(|_| panic!("the root place reads")),
-            cursor: None,
-            selection: Vec::new(),
-        }
+    fn panel(&self, which: PanelChoice) -> Option<PanelSnapshot> {
+        let panels = locked(&self.panels);
+        let index = match which {
+            PanelChoice::Active | PanelChoice::Left => 0,
+            PanelChoice::Other | PanelChoice::Right => 1,
+        };
+        panels.get(index).cloned()
+    }
+
+    fn set_panel(&self, change: &PanelChange) -> Result<(), RpcError> {
+        locked(&self.changes).push(change.clone());
+        Ok(())
+    }
+
+    fn execute(
+        &self,
+        command: &diroxide_core::CommandId,
+        args: &Params,
+    ) -> Result<Value, RpcError> {
+        locked(&self.executed).push((command.to_string(), args.clone()));
+        Ok(Value::Null)
     }
 }
 

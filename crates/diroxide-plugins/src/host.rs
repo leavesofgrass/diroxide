@@ -22,7 +22,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use diroxide_config::PluginSettings;
-use diroxide_core::{Message, Place, Side};
+use diroxide_core::{CommandId, Message};
 use diroxide_tools::process::ProcessSpec;
 use serde_json::{Map, Value};
 
@@ -33,6 +33,7 @@ use crate::lines;
 use crate::live::{LivePlugin, Notice, RequestKind};
 use crate::log::{PluginLog, Source};
 use crate::manifest::Manifest;
+use crate::panels::{Denials, PanelChange, PanelChoice, PanelSnapshot};
 use crate::protocol::{ErrorKind, Notification, PROTOCOL, Params, Request, RpcError, methods};
 use crate::router::{CancelFlag, Connection, Event, Inbound, Outcome};
 use crate::services::{AnnounceLimiter, ProgressBoard, Waiting, announcement, settings_for};
@@ -54,19 +55,6 @@ pub struct PluginInfo {
     pub folder: PathBuf,
     /// Whether the user enabled it.
     pub enabled: bool,
-}
-
-/// A panel as a plugin sees it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PanelSnapshot {
-    /// Which panel.
-    pub side: Side,
-    /// Its place.
-    pub place: Place,
-    /// The entry under the cursor.
-    pub cursor: Option<Place>,
-    /// The selected entries.
-    pub selection: Vec<Place>,
 }
 
 /// What the host offers plugins, implemented by the app over its own state,
@@ -103,8 +91,34 @@ pub trait HostServices: Send + Sync {
         ))
     }
 
-    /// `panel/get`: a panel's state; `None` for the active one.
-    fn panel(&self, side: Option<Side>) -> PanelSnapshot;
+    /// `panel/get`: a panel's state; `None` where there are no panels
+    /// (`diro serve` with no frontend), which the default says.
+    fn panel(&self, which: PanelChoice) -> Option<PanelSnapshot> {
+        let _ = which;
+        None
+    }
+
+    /// `panel/set`: the change made through ordinary app commands, so the
+    /// app says its usual position message. The default has no panels.
+    fn set_panel(&self, change: &PanelChange) -> Result<(), RpcError> {
+        let _ = change;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host has no panels",
+        ))
+    }
+
+    /// `command/execute`: runs a diroxide command by id with its
+    /// arguments, as a key would; the manifest's patterns were checked
+    /// first. The result is the command's, or null. The default runs
+    /// nothing.
+    fn execute(&self, command: &CommandId, args: &Params) -> Result<Value, RpcError> {
+        let _ = args;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            format!("this host cannot run {command}"),
+        ))
+    }
 }
 
 /// Something the app says or shows about a plugin. Each carries its
@@ -735,11 +749,18 @@ impl Host {
             calls: Calls {
                 plugin_id: manifest.id.clone(),
                 name: name.clone(),
+                manifest: manifest.clone(),
                 confirmed: started.result.plugin_capabilities.clone(),
                 services: self.services.clone(),
                 history: Arc::clone(&self.history),
                 live: live_cell,
                 log: log.clone(),
+                voice: Voice {
+                    services: self.services.clone(),
+                    events: Arc::clone(&self.events),
+                    plugin: manifest.id.clone(),
+                },
+                denials: Denials::default(),
             },
             log: log.clone(),
             flood: Mutex::new(FloodGuard::default()),
@@ -852,6 +873,16 @@ impl Host {
             slot.crashes.reset();
             slot.starts.reset();
         }
+    }
+
+    /// How many of a plugin's calls its manifest refused while it ran
+    /// last.
+    pub fn refusals(&self, plugin: &str) -> usize {
+        self.inbounds
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+            .map_or(0, |inbound| inbound.calls.denials.count())
     }
 
     /// The plugin's log.
@@ -1148,14 +1179,6 @@ mod tests {
         }
         fn ask(&self, _: &Question) -> Answer {
             Answer::Cancelled
-        }
-        fn panel(&self, _: Option<Side>) -> PanelSnapshot {
-            PanelSnapshot {
-                side: Side::Left,
-                place: Place::parse(if cfg!(windows) { "C:\\" } else { "/" }).unwrap(),
-                cursor: None,
-                selection: Vec::new(),
-            }
         }
     }
 
