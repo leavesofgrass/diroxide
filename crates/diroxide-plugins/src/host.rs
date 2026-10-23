@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -23,7 +24,7 @@ use std::time::{Duration, Instant};
 use diroxide_config::PluginSettings;
 use diroxide_core::{Message, Place, Side};
 use diroxide_tools::process::ProcessSpec;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::error::PluginError;
 use crate::lines;
@@ -32,6 +33,7 @@ use crate::log::{PluginLog, Source};
 use crate::manifest::Manifest;
 use crate::protocol::{ErrorKind, Notification, PROTOCOL, Params, Request, RpcError, methods};
 use crate::router::{CancelFlag, Connection, Event, Inbound, Outcome};
+use crate::services::{AnnounceLimiter, ProgressBoard, Waiting, announcement, settings_for};
 use crate::session::{InitializeParams, SessionError, handshake, unconfirmed};
 use crate::supervisor::{
     Action, CrashPolicy, CrashVerdict, Flood, FloodGuard, SystemTicker, Ticker,
@@ -81,6 +83,13 @@ pub trait HostServices: Send + Sync {
 
     /// `panel/get`: a panel's state; `None` for the active one.
     fn panel(&self, side: Option<Side>) -> PanelSnapshot;
+
+    /// `$/progress`, as the job's sentence: shown in the jobs line, said on
+    /// Say Status, or at once when it says the plugin waits for the owner.
+    /// By default it is announced like any message.
+    fn progress(&self, message: Message) {
+        self.announce(message);
+    }
 }
 
 /// Something the app says or shows about a plugin. Each carries its
@@ -98,8 +107,16 @@ pub enum HostEvent {
     Waiting {
         /// The plugin's id.
         plugin: String,
-        /// The method waiting.
-        method: String,
+        /// "Count lines: waiting for the plugin"
+        message: Message,
+    },
+    /// Something a plugin said or reported, when the host has no services
+    /// to say it through (tests, `diro plugin run`).
+    Said {
+        /// The plugin's id.
+        plugin: String,
+        /// The cleaned, attributed message.
+        message: Message,
     },
     /// A request timed out.
     TimedOut {
@@ -205,8 +222,44 @@ struct Slot {
     log: PluginLog,
 }
 
-/// The handler of one connection's inbound traffic: progress and log
-/// lines feed the supervisor; floods stop the plugin.
+/// Where a plugin's words go: the app's services, or, without them (tests,
+/// `diro plugin run`), the host's events.
+#[derive(Clone)]
+struct Voice {
+    services: Option<Arc<dyn HostServices>>,
+    events: Arc<Mutex<Vec<HostEvent>>>,
+    plugin: String,
+}
+
+impl Voice {
+    fn say(&self, message: Message) {
+        match &self.services {
+            Some(services) => services.announce(message),
+            None => self.push(message),
+        }
+    }
+
+    fn progress(&self, message: Message) {
+        match &self.services {
+            Some(services) => services.progress(message),
+            None => self.push(message),
+        }
+    }
+
+    fn push(&self, message: Message) {
+        self.events
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(HostEvent::Said {
+                plugin: self.plugin.clone(),
+                message,
+            });
+    }
+}
+
+/// The handler of one connection's inbound traffic: announcements, log
+/// lines and progress (host services, part one); progress and log lines
+/// also feed the supervisor; floods stop the plugin.
 struct PluginInbound {
     name: String,
     live: OnceLock<Weak<LivePlugin>>,
@@ -214,6 +267,10 @@ struct PluginInbound {
     flood: Mutex<FloodGuard>,
     flooded: Mutex<bool>,
     ticker: Arc<dyn Ticker>,
+    voice: Voice,
+    limiter: Mutex<AnnounceLimiter>,
+    board: Mutex<ProgressBoard>,
+    stray_said: AtomicBool,
 }
 
 impl PluginInbound {
@@ -236,6 +293,75 @@ impl PluginInbound {
             }
         }
     }
+
+    fn announce(&self, params: &Params) {
+        let Some(message) = announcement(params, &self.name) else {
+            return;
+        };
+        let admitted = self
+            .limiter
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .admit(self.ticker.now());
+        if admitted {
+            self.voice.say(message);
+        } else {
+            self.count(Flood::Folded);
+        }
+    }
+
+    fn progress(&self, params: &Params) {
+        let Some(token) = params.get("token").and_then(Value::as_str) else {
+            return;
+        };
+        let value = params.get("value").cloned().unwrap_or(Value::Null);
+        let (said, waiting) = self
+            .board
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .update(token, &value, &self.name, self.ticker.now());
+        if let Some(live) = self.live() {
+            let state = match waiting {
+                Waiting::Began => Some(true),
+                Waiting::Ended => Some(false),
+                Waiting::Same => None,
+            };
+            live.progress(token, state);
+        }
+        if let Some(message) = said {
+            self.voice.progress(message);
+        }
+    }
+
+    /// The fold line and the progress held back, once their time comes;
+    /// tokens of answered requests are forgotten.
+    fn tick(&self) {
+        let now = self.ticker.now();
+        let fold = self
+            .limiter
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .fold(now, &self.name);
+        if let Some(message) = fold {
+            self.voice.say(message);
+        }
+        let held = self
+            .board
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .flush(&self.name, now);
+        for message in held {
+            self.voice.progress(message);
+        }
+        if let Some(live) = self.live() {
+            let mut board = self.board.lock().unwrap_or_else(PoisonError::into_inner);
+            for token in board.tokens() {
+                if live.request_of(&token).is_none() {
+                    board.forget(&token);
+                }
+            }
+        }
+    }
 }
 
 impl Inbound for PluginInbound {
@@ -248,18 +374,8 @@ impl Inbound for PluginInbound {
 
     fn notification(&self, notification: &Notification) {
         match notification.method.as_str() {
-            methods::PROGRESS => {
-                let token = notification.params.get("token").and_then(Value::as_str);
-                let waiting = notification
-                    .params
-                    .get("value")
-                    .and_then(|v| v.get("state"))
-                    .and_then(Value::as_str)
-                    .map(|state| state == "waiting_for_user");
-                if let (Some(token), Some(live)) = (token, self.live()) {
-                    live.progress(token, waiting);
-                }
-            }
+            methods::UI_ANNOUNCE => self.announce(&notification.params),
+            methods::PROGRESS => self.progress(&notification.params),
             methods::LOG => {
                 let level = match notification.params.get("level").and_then(Value::as_str) {
                     Some("error") => "error",
@@ -284,7 +400,13 @@ impl Inbound for PluginInbound {
     fn event(&self, event: &Event) {
         match event {
             Event::ParseFailure(_) | Event::TooLong(_) => self.count(Flood::ParseFailures),
-            Event::Stray(_) => self.count(Flood::Stray),
+            Event::Stray(_) => {
+                self.count(Flood::Stray);
+                if !self.stray_said.swap(true, Ordering::SeqCst) {
+                    self.voice
+                        .say(Message::info(lines::wrote_stray_text(&self.name)));
+                }
+            }
             Event::UnknownAnswer(_) | Event::Ended => {}
         }
     }
@@ -300,7 +422,9 @@ pub struct Host {
     ticker: Arc<dyn Ticker>,
     slots: Mutex<HashMap<String, Arc<Mutex<Slot>>>>,
     inbounds: Mutex<HashMap<String, Arc<PluginInbound>>>,
-    events: Mutex<Vec<HostEvent>>,
+    events: Arc<Mutex<Vec<HostEvent>>>,
+    services: Option<Arc<dyn HostServices>>,
+    settings: Mutex<HashMap<String, Map<String, Value>>>,
     off: bool,
 }
 
@@ -325,7 +449,9 @@ impl Host {
             ticker: Arc::new(SystemTicker::new()),
             slots: Mutex::new(HashMap::new()),
             inbounds: Mutex::new(HashMap::new()),
-            events: Mutex::new(Vec::new()),
+            events: Arc::new(Mutex::new(Vec::new())),
+            services: None,
+            settings: Mutex::new(HashMap::new()),
             off: false,
         }
     }
@@ -351,6 +477,47 @@ impl Host {
     pub fn with_ticker(mut self, ticker: Arc<dyn Ticker>) -> Self {
         self.ticker = ticker;
         self
+    }
+
+    /// The same host speaking through the app's services.
+    pub fn with_services(mut self, services: Arc<dyn HostServices>) -> Self {
+        self.services = Some(services);
+        self
+    }
+
+    /// The owner's values for a plugin's settings. They go to the plugin
+    /// in `initialize`, and at once in `settings/changed` (the whole
+    /// object, defaults included) when it is running.
+    pub fn set_settings(&self, plugin: &str, values: Map<String, Value>) {
+        self.settings
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(plugin.to_owned(), values);
+        let Some(info) = self.plugin(plugin) else {
+            return;
+        };
+        let live = self
+            .slot(info)
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .live
+            .clone();
+        if let Some(live) = live
+            && !live.is_ended()
+        {
+            let mut params = Params::new();
+            params.insert(
+                "settings".to_owned(),
+                Value::Object(self.settings_of(&info.manifest)),
+            );
+            let _ = live.connection().notify(methods::SETTINGS_CHANGED, params);
+        }
+    }
+
+    fn settings_of(&self, manifest: &Manifest) -> Map<String, Value> {
+        let settings = self.settings.lock().unwrap_or_else(PoisonError::into_inner);
+        let empty = Map::new();
+        settings_for(manifest, settings.get(&manifest.id).unwrap_or(&empty))
     }
 
     /// Turns every plugin off for this session (`--no-plugins`).
@@ -449,6 +616,7 @@ impl Host {
 
     fn event(&self, event: HostEvent) {
         self.events
+            .as_ref()
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(event);
@@ -520,6 +688,7 @@ impl Host {
             .launch(info, log)
             .map_err(|e| SessionError::Broken(lines::could_not_start(name, &e.to_string())))?;
         let mut params = InitializeParams::for_plugin(&manifest.id);
+        params.settings = self.settings_of(manifest);
         params.dirs.plugin = info.folder.display().to_string();
         if let Some(state) = &self.state_dir {
             params.dirs.state = state.join(&manifest.id).display().to_string();
@@ -551,6 +720,14 @@ impl Host {
             flood: Mutex::new(FloodGuard::default()),
             flooded: Mutex::new(false),
             ticker: Arc::clone(&self.ticker),
+            voice: Voice {
+                services: self.services.clone(),
+                events: Arc::clone(&self.events),
+                plugin: manifest.id.clone(),
+            },
+            limiter: Mutex::new(AnnounceLimiter::new(self.ticker.now())),
+            board: Mutex::new(ProgressBoard::default()),
+            stray_said: AtomicBool::new(false),
         });
         let connection = Connection::open(
             name,
@@ -595,9 +772,17 @@ impl Host {
             methods::CONVERT_RUN => RequestKind::Convert,
             _ => RequestKind::Request,
         };
+        // The sentences name the command when there is one: "Count lines:
+        // waiting for the plugin".
+        let label = params
+            .get("command")
+            .and_then(Value::as_str)
+            .filter(|_| method == methods::COMMAND_RUN)
+            .and_then(|id| info.manifest.command(id))
+            .map_or_else(|| info.manifest.name.clone(), |c| c.name.clone());
         let live = self.live(info)?;
         let name = info.manifest.name.clone();
-        live.call(method, params, kind)
+        live.call_labeled(method, params, kind, &label)
             .map_err(|error| match ErrorKind::from_code(error.code) {
                 Some(ErrorKind::TimedOut) => PluginError::Timeout(name),
                 Some(ErrorKind::PluginUnavailable) => PluginError::Stopped(name),
@@ -742,19 +927,24 @@ impl Host {
             }
             for notice in live.take_notices() {
                 match notice {
-                    Notice::Slow(request) => self.event(HostEvent::Waiting {
+                    Notice::Slow { label, .. } => self.event(HostEvent::Waiting {
                         plugin: id.clone(),
-                        method: live
-                            .connection()
-                            .router()
-                            .method_of(&request)
-                            .unwrap_or_default(),
+                        message: Message::progress(lines::waiting_for_plugin(&label)),
                     }),
-                    Notice::TimedOut(_, after) => self.event(HostEvent::TimedOut {
+                    Notice::TimedOut { label, after, .. } => self.event(HostEvent::TimedOut {
                         plugin: id.clone(),
-                        message: Message::error(lines::timed_out(&name, after)),
+                        message: Message::error(lines::timed_out(&label, after)),
                     }),
                 }
+            }
+            let inbound = self
+                .inbounds
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(&id)
+                .cloned();
+            if let Some(inbound) = inbound {
+                inbound.tick();
             }
         }
     }
@@ -838,6 +1028,7 @@ mod tests {
     struct FakeLauncher {
         mode: Mutex<Mode>,
         launches: Mutex<usize>,
+        seen: Arc<Mutex<Vec<crate::testing::Transcript>>>,
     }
 
     impl FakeLauncher {
@@ -845,6 +1036,7 @@ mod tests {
             Arc::new(Self {
                 mode: Mutex::new(mode),
                 launches: Mutex::new(0),
+                seen: Arc::new(Mutex::new(Vec::new())),
             })
         }
     }
@@ -858,7 +1050,11 @@ mod tests {
             *self.launches.lock().unwrap() += 1;
             let mode = *self.mode.lock().unwrap();
             let (host, peer) = MemoryTransport::pair(&info.manifest.name)?;
-            thread::spawn(move || FakePlugin::new(mode).serve(peer));
+            let seen = Arc::clone(&self.seen);
+            thread::spawn(move || {
+                let transcript = FakePlugin::new(mode).serve(peer);
+                seen.lock().unwrap().push(transcript);
+            });
             Ok(Arc::new(host))
         }
     }
@@ -880,6 +1076,171 @@ mod tests {
             .with_ticker(Arc::clone(ticker) as Arc<dyn Ticker>);
         host.add(info(extra));
         host
+    }
+
+    fn run_echo(host: &Host) {
+        let mut params = Map::new();
+        params.insert("command".into(), serde_json::json!("echo"));
+        host.call("line-counter", methods::COMMAND_RUN, Value::Object(params))
+            .unwrap();
+    }
+
+    fn said(host: &Host) -> Vec<String> {
+        host.take_events()
+            .into_iter()
+            .filter_map(|e| match e {
+                HostEvent::Said { message, .. } => Some(message.text),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_plugins_words_and_progress_are_said_with_its_name_last() {
+        let ticker = Arc::new(ManualTicker::new());
+        let host = host(FakeLauncher::new(Mode::Talk), &ticker, "");
+        run_echo(&host);
+        // The report came within half a second of the start, so only the
+        // start, the announcement and the end are said.
+        assert_eq!(
+            said(&host),
+            [
+                "Count lines: started (Line counter)",
+                "Lines: 42, files: 1. By Line counter.",
+                "Count lines done: 3 files (Line counter)"
+            ]
+        );
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    #[test]
+    fn a_spoof_is_cleaned_and_attributed() {
+        let ticker = Arc::new(ManualTicker::new());
+        let host = host(FakeLauncher::new(Mode::Spoof), &ticker, "");
+        run_echo(&host);
+        assert_eq!(said(&host), ["Moved to the trash. By Line counter."]);
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    #[test]
+    fn a_flood_of_announcements_is_folded_into_one_line() {
+        let ticker = Arc::new(ManualTicker::new());
+        let host = host(FakeLauncher::new(Mode::Flood), &ticker, "");
+        run_echo(&host);
+        let first = said(&host);
+        assert_eq!(first.len(), 20);
+        assert_eq!(first[0], "Message 0. By Line counter.");
+        ticker.advance(Duration::from_secs(1));
+        host.tick();
+        assert_eq!(said(&host), ["80 more messages from Line counter"]);
+        assert!(host.is_running("line-counter"));
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    #[test]
+    fn stray_text_is_said_once_a_session() {
+        let ticker = Arc::new(ManualTicker::new());
+        let host = host(FakeLauncher::new(Mode::Stray), &ticker, "");
+        run_echo(&host);
+        run_echo(&host);
+        assert_eq!(said(&host), ["Line counter wrote stray text; see its log."]);
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    /// Records what the host says through the app's services.
+    #[derive(Default)]
+    struct Services {
+        said: Mutex<Vec<Message>>,
+    }
+
+    impl HostServices for Services {
+        fn announce(&self, message: Message) {
+            self.said.lock().unwrap().push(message);
+        }
+        fn ask_yes_no(&self, _: &str) -> Option<bool> {
+            None
+        }
+        fn ask_text(&self, _: &str, _: &str) -> Option<String> {
+            None
+        }
+        fn panel(&self, _: Option<Side>) -> PanelSnapshot {
+            PanelSnapshot {
+                side: Side::Left,
+                place: Place::parse(if cfg!(windows) { "C:\\" } else { "/" }).unwrap(),
+                cursor: None,
+                selection: Vec::new(),
+            }
+        }
+    }
+
+    #[test]
+    fn with_services_the_app_hears_the_plugin() {
+        let ticker = Arc::new(ManualTicker::new());
+        let services = Arc::new(Services::default());
+        let host = host(FakeLauncher::new(Mode::Talk), &ticker, "")
+            .with_services(Arc::clone(&services) as Arc<dyn HostServices>);
+        run_echo(&host);
+        let said: Vec<String> = services
+            .said
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|m| m.text.clone())
+            .collect();
+        assert_eq!(said.len(), 3);
+        assert_eq!(said[1], "Lines: 42, files: 1. By Line counter.");
+        assert!(host.take_events().is_empty());
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    #[test]
+    fn settings_go_in_initialize_and_settings_changed() {
+        let launcher = FakeLauncher::new(Mode::Echo);
+        let ticker = Arc::new(ManualTicker::new());
+        let host = host(
+            Arc::clone(&launcher),
+            &ticker,
+            "\n[[setting]]\nkey = \"depth\"\ntype = \"int\"\ndefault = 3\n",
+        );
+        let mut values = Map::new();
+        values.insert("depth".into(), serde_json::json!(5));
+        values.insert("not_declared".into(), serde_json::json!(true));
+        host.set_settings("line-counter", values);
+        run_echo(&host);
+        let mut values = Map::new();
+        values.insert("depth".into(), serde_json::json!(7));
+        host.set_settings("line-counter", values);
+        host.shutdown_all(QUIT_BUDGET);
+        for _ in 0..200 {
+            if !launcher.seen.lock().unwrap().is_empty() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        let seen = launcher.seen.lock().unwrap();
+        let received = &seen[0].received;
+        let initialize = received
+            .iter()
+            .find_map(|m| match m {
+                crate::protocol::Incoming::Request(r) if r.method == methods::INITIALIZE => {
+                    Some(r.params.clone())
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(initialize["settings"], serde_json::json!({"depth": 5}));
+        let changed = received
+            .iter()
+            .find_map(|m| match m {
+                crate::protocol::Incoming::Notification(n)
+                    if n.method == methods::SETTINGS_CHANGED =>
+                {
+                    Some(n.params.clone())
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(changed["settings"], serde_json::json!({"depth": 7}));
     }
 
     #[test]

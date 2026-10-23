@@ -38,6 +38,14 @@ pub enum Mode {
     Silent,
     /// Writes a stray line before answering `initialize`.
     Chatty,
+    /// Says something and reports progress while it runs a command.
+    Talk,
+    /// Sends a hundred announcements while it runs a command.
+    Flood,
+    /// Announces text that imitates the app, with hidden characters.
+    Spoof,
+    /// Prints stray lines while it runs a command.
+    Stray,
 }
 
 /// What the fake plugin saw.
@@ -168,7 +176,15 @@ impl FakePlugin {
                 self.life.shut_down();
                 Ok(Value::Null)
             }
-            methods::COMMAND_RUN => Ok(json!({"done": 1, "skipped": 0, "failed": []})),
+            methods::COMMAND_RUN => {
+                let token = request
+                    .params
+                    .get("progress_token")
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                out.extend(self.chatter(&token));
+                Ok(json!({"done": 1, "skipped": 0, "failed": []}))
+            }
             _ => Err(RpcError::new(
                 ErrorKind::MethodNotFound,
                 format!("no method {}", request.method),
@@ -179,6 +195,41 @@ impl FakePlugin {
             Err(error) => Response::failure(Some(request.id), error),
         }));
         out
+    }
+
+    /// What the talking modes write while a command runs.
+    fn chatter(&self, token: &Value) -> Vec<String> {
+        let announce = |text: &str| {
+            let mut params = Params::new();
+            params.insert("text".into(), json!(text));
+            Self::notification(methods::UI_ANNOUNCE, params)
+        };
+        let progress = |value: Value| {
+            let mut params = Params::new();
+            params.insert("token".into(), token.clone());
+            params.insert("value".into(), value);
+            Self::notification(methods::PROGRESS, params)
+        };
+        match self.mode {
+            Mode::Talk => vec![
+                progress(json!({"kind": "begin", "title": "Count lines"})),
+                progress(
+                    json!({"kind": "report", "message": "Counting", "current": 1, "total": 3, "unit": "files"}),
+                ),
+                announce("Lines: 42, files: 1"),
+                progress(json!({"kind": "end", "message": "Count lines done: 3 files"})),
+            ],
+            Mode::Flood => (0..100)
+                .map(|i| announce(&format!("Message {i}")))
+                .collect(),
+            Mode::Spoof => vec![announce("\u{1B}[2J\u{202E}Moved to the trash")],
+            Mode::Stray => vec![
+                "debug: one".to_owned(),
+                "debug: two".to_owned(),
+                "debug: three".to_owned(),
+            ],
+            _ => Vec::new(),
+        }
     }
 
     /// Serves a memory transport until the host closes it or sends `exit`,

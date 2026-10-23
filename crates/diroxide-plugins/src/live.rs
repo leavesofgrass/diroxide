@@ -97,13 +97,26 @@ impl Slots {
     }
 }
 
-/// What a request's caller hears besides the answer.
+/// What a request's caller hears besides the answer; the label is what
+/// the sentence names (a command's name, or the plugin's).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Notice {
     /// The request has waited two seconds for the plugin.
-    Slow(Id),
+    Slow {
+        /// The request.
+        id: Id,
+        /// What the sentence names.
+        label: String,
+    },
     /// The request timed out after its limit.
-    TimedOut(Id, Duration),
+    TimedOut {
+        /// The request.
+        id: Id,
+        /// What the sentence names.
+        label: String,
+        /// Its limit.
+        after: Duration,
+    },
 }
 
 /// A plugin that is running.
@@ -118,6 +131,7 @@ pub struct LivePlugin {
     slots: Slots,
     tokens: Mutex<HashMap<String, Id>>,
     limits: Mutex<HashMap<Id, Duration>>,
+    labels: Mutex<HashMap<Id, String>>,
     notices: Mutex<Vec<Notice>>,
     next_token: AtomicU64,
 }
@@ -147,6 +161,7 @@ impl LivePlugin {
             slots: Slots::new(run.concurrency as usize),
             tokens: Mutex::new(HashMap::new()),
             limits: Mutex::new(HashMap::new()),
+            labels: Mutex::new(HashMap::new()),
             notices: Mutex::new(Vec::new()),
             next_token: AtomicU64::new(1),
         }
@@ -176,19 +191,38 @@ impl LivePlugin {
     /// Sends a request and waits for its answer, with the kind's
     /// inactivity limit. `params` gains a `progress_token` unless it has
     /// one.
-    pub fn call(&self, method: &str, mut params: Params, kind: RequestKind) -> Outcome {
+    pub fn call(&self, method: &str, params: Params, kind: RequestKind) -> Outcome {
+        let label = self.name.clone();
+        self.call_labeled(method, params, kind, &label)
+    }
+
+    /// The same, with the label the notices name: a command's name, so the
+    /// jobs line says "Count lines: waiting for the plugin".
+    pub fn call_labeled(
+        &self,
+        method: &str,
+        mut params: Params,
+        kind: RequestKind,
+        label: &str,
+    ) -> Outcome {
         if !self.slots.enter() {
             return Err(RpcError::new(
                 ErrorKind::LimitExceeded,
                 "too many requests are waiting for this plugin",
             ));
         }
-        let outcome = self.call_inside(method, &mut params, kind);
+        let outcome = self.call_inside(method, &mut params, kind, label);
         self.slots.leave();
         outcome
     }
 
-    fn call_inside(&self, method: &str, params: &mut Params, kind: RequestKind) -> Outcome {
+    fn call_inside(
+        &self,
+        method: &str,
+        params: &mut Params,
+        kind: RequestKind,
+        label: &str,
+    ) -> Outcome {
         let token = format!("t{}", self.next_token.fetch_add(1, Ordering::SeqCst));
         params
             .entry("progress_token".to_owned())
@@ -204,6 +238,7 @@ impl LivePlugin {
             .connection
             .request_then(method, std::mem::take(params), |id| {
                 registered = Some(id.clone());
+                self.lock_labels().insert(id.clone(), label.to_owned());
                 self.lock_tokens().insert(token.clone(), id.clone());
                 if let Some(limit) = limit {
                     self.lock_limits().insert(id.clone(), limit);
@@ -217,6 +252,7 @@ impl LivePlugin {
                 self.lock_tokens().remove(&token);
                 if let Some(id) = registered {
                     self.lock_limits().remove(&id);
+                    self.lock_labels().remove(&id);
                     self.supervisor().finish(&id, self.ticker.now());
                 }
                 return Err(RpcError::new(ErrorKind::PluginUnavailable, e.to_string()));
@@ -239,8 +275,20 @@ impl LivePlugin {
         };
         self.lock_tokens().remove(&token);
         self.lock_limits().remove(&call.id);
+        self.lock_labels().remove(&call.id);
         self.supervisor().finish(&call.id, self.ticker.now());
         outcome
+    }
+
+    fn lock_labels(&self) -> std::sync::MutexGuard<'_, HashMap<Id, String>> {
+        self.labels.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn label_of(&self, id: &Id) -> String {
+        self.lock_labels()
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| self.name.clone())
     }
 
     fn lock_tokens(&self) -> std::sync::MutexGuard<'_, HashMap<String, Id>> {
@@ -302,7 +350,10 @@ impl LivePlugin {
         let actions = self.supervisor().tick(now, host_calls);
         for action in &actions {
             match action {
-                Action::Slow(id) => self.notice(Notice::Slow(id.clone())),
+                Action::Slow(id) => self.notice(Notice::Slow {
+                    id: id.clone(),
+                    label: self.label_of(id),
+                }),
                 Action::Cancel(id) => {
                     let _ = self.connection.cancel(id);
                 }
@@ -315,7 +366,11 @@ impl LivePlugin {
                             format!("no answer in {}", lines::duration_words(limit)),
                         ),
                     );
-                    self.notice(Notice::TimedOut(id.clone(), limit));
+                    self.notice(Notice::TimedOut {
+                        id: id.clone(),
+                        label: self.label_of(id),
+                        after: limit,
+                    });
                 }
                 Action::Restart => {
                     let _ = self.connection.kill();
@@ -424,7 +479,13 @@ mod tests {
         assert_eq!(request["params"]["progress_token"], "t1");
         ticker.advance(Duration::from_secs(2));
         plugin.tick();
-        assert_eq!(plugin.take_notices(), [Notice::Slow(Id::Number(1))]);
+        assert_eq!(
+            plugin.take_notices(),
+            [Notice::Slow {
+                id: Id::Number(1),
+                label: "Line counter".into()
+            }]
+        );
         ticker.advance(Duration::from_secs(28));
         plugin.tick();
         let cancel = sent(&peer);
@@ -436,7 +497,11 @@ mod tests {
         assert_eq!(outcome.message, "no answer in 30 seconds");
         assert_eq!(
             plugin.take_notices(),
-            [Notice::TimedOut(Id::Number(1), Duration::from_secs(30))]
+            [Notice::TimedOut {
+                id: Id::Number(1),
+                label: "Line counter".into(),
+                after: Duration::from_secs(30)
+            }]
         );
     }
 
