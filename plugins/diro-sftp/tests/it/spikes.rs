@@ -49,7 +49,7 @@
 //!   ssh, so the same road; the container tests (S-C) prove each.
 
 use std::fmt::Write as _;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -170,14 +170,18 @@ fn serve_one(listener: TcpListener) -> Saw {
         .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
     let _ = stream.write_all(b"SSH-2.0-diroxideSpike_1.0\r\n");
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
-    let mut line = String::new();
-    if reader.read_line(&mut line).is_err() {
-        return saw;
+    // The banner is read a byte at a time: the client's first packet often
+    // arrives in the same read, and a buffered reader would swallow it.
+    let mut line = Vec::new();
+    let mut byte = [0u8; 1];
+    while line.last() != Some(&b'\n') && line.len() < 256 {
+        if stream.read_exact(&mut byte).is_err() {
+            return saw;
+        }
+        line.push(byte[0]);
     }
-    saw.banner = line.trim().to_owned();
+    saw.banner = String::from_utf8_lossy(&line).trim().to_owned();
     // The client's KEXINIT; nothing of it matters to this spike.
-    let mut stream = reader.into_inner();
     if read_packet(&mut stream).is_err() {
         return saw;
     }
@@ -526,9 +530,8 @@ fn spike_sf1_windows_askpass_matrix() {
 /// -o ControlPath=none` it reaches the host key question through the
 /// helper, three runs of three; `ControlPersist=no` is not needed. Git's
 /// MSYS 10.3p1 reaches the question with or without the overrides. One
-/// earlier run, before the fake server stopped waiting for a client that
-/// never came, saw the overridden run wait 15 seconds with no key
-/// exchange; it did not come back in three repeats.
+/// earlier overridden run waited 15 seconds with no key exchange: the
+/// fake server's own buffered banner read (see SF1b), since fixed.
 #[test]
 #[ignore = "spike SF5: starts the real ssh.exe of this computer; run by hand"]
 fn spike_sf5_controlmaster_on_windows() {
@@ -589,4 +592,231 @@ fn spike_sf5_controlmaster_on_windows() {
     }
     println!("{report}");
     std::fs::write(std::env::temp_dir().join("sf5-results.txt"), &report).unwrap();
+}
+
+/// Spike SF1, second half (R25 commit 51): the whole road with the
+/// plugin's own pieces. ssh is started by the plugin's launcher (no
+/// console window, in a job), its helper is the plugin's own program, and
+/// the question reaches the plugin's endpoint after the proof, where a
+/// test handler records it and says no.
+///
+/// **Results, Friday, October 23, 2026:** with the in-box OpenSSH for
+/// Windows 9.5p2 and Git's MSYS 10.3p1 alike, the host key question
+/// reached the plugin's endpoint once, after the proof, with no proof
+/// refused; ssh ended with 255 ("Host key verification failed.") at once
+/// and the known-hosts file stayed empty.
+#[test]
+#[ignore = "spike SF1: starts the real ssh.exe of this computer; run by hand"]
+fn spike_sf1_the_plugins_own_helper_carries_the_question() {
+    use std::sync::{Arc, Mutex};
+
+    use diro_sftp::askpass::{Listener, Prompt, Reply};
+    use diro_sftp::ssh::Launch;
+
+    let dir = std::env::temp_dir().join("sf1-real");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut report = String::new();
+    for program in programs() {
+        let seen: Arc<Mutex<Vec<Prompt>>> = Arc::new(Mutex::new(Vec::new()));
+        let handler_seen = Arc::clone(&seen);
+        let mut listener = Listener::open(
+            Some(&dir),
+            Arc::new(move |prompt: &Prompt| {
+                handler_seen.lock().unwrap().push(prompt.clone());
+                Reply::Refuse
+            }),
+        )
+        .unwrap();
+        let tcp = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = tcp.local_addr().unwrap().port();
+        let server = thread::spawn(move || serve_one(tcp));
+        let config = dir.join("empty_config");
+        let known = dir.join("known_hosts");
+        std::fs::write(&config, b"").unwrap();
+        std::fs::write(&known, b"").unwrap();
+        let args: Vec<std::ffi::OsString> = [
+            "-F".to_owned(),
+            config.display().to_string(),
+            "-o".to_owned(),
+            format!("UserKnownHostsFile={}", known.display()),
+            "-o".to_owned(),
+            format!("GlobalKnownHostsFile={}", known.display()),
+            "-o".to_owned(),
+            "IdentityAgent=none".to_owned(),
+            "-o".to_owned(),
+            "UpdateHostKeys=no".to_owned(),
+            "-o".to_owned(),
+            "BatchMode=no".to_owned(),
+            "-o".to_owned(),
+            "ControlMaster=no".to_owned(),
+            "-o".to_owned(),
+            "ControlPath=none".to_owned(),
+            "-o".to_owned(),
+            "LogLevel=ERROR".to_owned(),
+            "-s".to_owned(),
+            "-T".to_owned(),
+            "-p".to_owned(),
+            port.to_string(),
+            "-l".to_owned(),
+            "spike".to_owned(),
+            "--".to_owned(),
+            "127.0.0.1".to_owned(),
+            "sftp".to_owned(),
+        ]
+        .into_iter()
+        .map(Into::into)
+        .collect();
+        let started = Instant::now();
+        let mut ssh = Launch {
+            program: program.clone(),
+            args,
+            askpass: Some(listener.askpass_env(crate::plugin_exe())),
+        }
+        .spawn()
+        .unwrap();
+        let status = ssh.wait_timeout(Duration::from_secs(20));
+        if status.is_none() {
+            ssh.kill();
+        }
+        let _ = server.join();
+        let prompts = seen.lock().unwrap().clone();
+        let _ = writeln!(
+            report,
+            "PROGRAM {}: exit {:?} in {:.1} s; prompts through the plugin's endpoint {}; refused proofs {}; first [{}]; stderr [{}]",
+            version(&program),
+            status.and_then(|s| s.code()),
+            started.elapsed().as_secs_f64(),
+            prompts.len(),
+            listener.refused(),
+            prompts
+                .first()
+                .map(|p| p.text().replace('\n', "|"))
+                .unwrap_or_default(),
+            printable(ssh.stderr_text().as_bytes())
+        );
+        assert_eq!(std::fs::read(&known).unwrap(), b"", "known hosts changed");
+        assert_eq!(prompts.len(), 1, "{report}");
+        assert!(prompts[0].text().contains("continue connecting"));
+        listener.close();
+    }
+    println!("{report}");
+    std::fs::write(std::env::temp_dir().join("sf1-real-results.txt"), &report).unwrap();
+}
+
+/// Spike SF1b: ssh inside the host's jobs. The host's process helper
+/// starts the plugin as a tree (a kill-on-close job and process-wrap's
+/// job); the plugin starts ssh. Three ways, three times each: ssh started
+/// straight through the process helper's tree, and ssh started by the
+/// plugin's own launcher from a plugin that runs as a tree and from one
+/// that runs with no job (a relay mode of the fake ssh stands in for the
+/// plugin and calls the launcher itself).
+///
+/// **Results, Friday, October 23, 2026, on Windows 11 with the in-box
+/// OpenSSH for Windows 9.5p2:** every way connects and reaches the host
+/// key question, nine runs of nine, under nextest and with the test
+/// program run alone. (An earlier reading that a tree start hung ssh was
+/// this file's own fake server swallowing the client's first packet with
+/// a buffered read of the banner; fixed, it is gone.)
+#[test]
+#[ignore = "spike SF1b: starts the real ssh.exe of this computer; run by hand"]
+fn spike_sf1b_ssh_inside_the_hosts_jobs() {
+    let dir = std::env::temp_dir().join("sf1b");
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = programs().into_iter().next().unwrap();
+    for _ in 0..3 {
+        let tcp = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = tcp.local_addr().unwrap().port();
+        let server = thread::spawn(move || serve_one(tcp));
+        let config = dir.join("empty_config");
+        let known = dir.join("known_hosts");
+        std::fs::write(&config, b"").unwrap();
+        std::fs::write(&known, b"").unwrap();
+        let started = Instant::now();
+        let mut handle = diroxide_tools::ProcessSpec::new(&program)
+            .arg("-F")
+            .arg(&config)
+            .arg("-o")
+            .arg(format!("UserKnownHostsFile={}", known.display()))
+            .args([
+                "-o",
+                "IdentityAgent=none",
+                "-o",
+                "BatchMode=no",
+                "-s",
+                "-T",
+                "-p",
+            ])
+            .arg(port.to_string())
+            .args(["--", "127.0.0.1", "sftp"])
+            .env("SSH_ASKPASS", FAKE_SSH)
+            .env("SSH_ASKPASS_REQUIRE", "force")
+            .env("FAKE_ASKPASS_RECORD", dir.join("r.jsonl"))
+            .stderr(diroxide_tools::Stream::Piped)
+            .spawn()
+            .unwrap();
+        let status = handle.wait_timeout(Duration::from_secs(15)).unwrap();
+        if status.is_none() {
+            let _ = handle.kill_tree();
+        }
+        let saw = server.join().unwrap_or_default();
+        println!(
+            "CASE ssh through the process helper's tree: exit {:?} in {:.1} s, kex {}",
+            status.and_then(|s| s.code()),
+            started.elapsed().as_secs_f64(),
+            saw.kex_init
+        );
+        assert!(saw.kex_init);
+    }
+    for tie in [
+        diroxide_tools::Tie::Tree,
+        diroxide_tools::Tie::Tree,
+        diroxide_tools::Tie::Tree,
+        diroxide_tools::Tie::Detached,
+        diroxide_tools::Tie::Detached,
+        diroxide_tools::Tie::Detached,
+    ] {
+        let tcp = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = tcp.local_addr().unwrap().port();
+        let server = thread::spawn(move || serve_one(tcp));
+        let config = dir.join("empty_config");
+        let known = dir.join("known_hosts");
+        std::fs::write(&config, b"").unwrap();
+        std::fs::write(&known, b"").unwrap();
+        let started = Instant::now();
+        let mut handle = diroxide_tools::ProcessSpec::new(FAKE_SSH)
+            .arg("--relay")
+            .arg(&program)
+            .arg("-F")
+            .arg(&config)
+            .arg("-o")
+            .arg(format!("UserKnownHostsFile={}", known.display()))
+            .args([
+                "-o",
+                "IdentityAgent=none",
+                "-o",
+                "BatchMode=no",
+                "-s",
+                "-T",
+                "-p",
+            ])
+            .arg(port.to_string())
+            .args(["--", "127.0.0.1", "sftp"])
+            .env("SSH_ASKPASS", FAKE_SSH)
+            .env("SSH_ASKPASS_REQUIRE", "force")
+            .env("FAKE_ASKPASS_RECORD", dir.join("r.jsonl"))
+            .stdin(diroxide_tools::Stream::Null)
+            .stdout(diroxide_tools::Stream::Null)
+            .tie(tie)
+            .spawn()
+            .unwrap();
+        let status = handle.wait_timeout(Duration::from_secs(25)).unwrap();
+        let saw = server.join().unwrap_or_default();
+        println!(
+            "CASE plugin tied {tie:?}, ssh by its launcher: relay exit {:?} in {:.1} s, kex {}",
+            status.and_then(|s| s.code()),
+            started.elapsed().as_secs_f64(),
+            saw.kex_init
+        );
+        assert!(saw.kex_init);
+    }
 }

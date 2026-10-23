@@ -200,7 +200,45 @@ fn run_script(script: &[Value], log: Option<&str>) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `--relay PROGRAM ARGS...`: starts ssh with the plugin's own launcher,
+/// as the plugin does, its askpass helper taken from this program's
+/// `SSH_ASKPASS`, and ends with ssh's exit code, or 99 when it has not
+/// ended in 15 seconds: a spike's stand-in for the plugin inside the
+/// host's jobs.
+fn relay(args: &[String]) -> ExitCode {
+    use diro_sftp::ssh::{AskpassEnv, Launch};
+
+    let Some((program, rest)) = args.split_first() else {
+        return ExitCode::from(2);
+    };
+    let launch = Launch {
+        program: PathBuf::from(program),
+        args: rest.iter().map(Into::into).collect(),
+        askpass: env::var_os("SSH_ASKPASS").map(|helper| AskpassEnv {
+            helper: PathBuf::from(helper),
+            endpoint: "tcp:127.0.0.1:9".to_owned(),
+            token: "00".to_owned(),
+        }),
+    };
+    let Ok(mut ssh) = launch.spawn() else {
+        return ExitCode::from(3);
+    };
+    match ssh.wait_timeout(Duration::from_secs(15)) {
+        Some(status) => {
+            ExitCode::from(u8::try_from(status.code().unwrap_or(4) & 0xff).unwrap_or(4))
+        }
+        None => {
+            ssh.kill();
+            ExitCode::from(99)
+        }
+    }
+}
+
 fn main() -> ExitCode {
+    if env::args().nth(1).as_deref() == Some("--relay") {
+        let args: Vec<String> = env::args().skip(2).collect();
+        return relay(&args);
+    }
     if let Ok(file) = env::var("FAKE_ASKPASS_RECORD") {
         return record(&file);
     }

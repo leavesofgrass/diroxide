@@ -13,6 +13,11 @@
 use std::ffi::OsStr;
 
 pub mod helper;
+pub mod listener;
+pub mod proof;
+pub mod wire;
+
+pub use listener::{Handler, Listener, Prompt, Reply};
 
 /// The environment variable that names the plugin's endpoint for this
 /// connection; its presence makes the program the helper.

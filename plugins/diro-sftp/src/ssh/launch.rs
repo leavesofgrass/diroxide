@@ -3,8 +3,10 @@
 //! - **No console window, ever.** On Windows ssh starts with
 //!   `CREATE_NO_WINDOW` inside a job that dies with the plugin (the
 //!   process helper's tree); spike SF1 showed the helper it starts then
-//!   shares that windowless console. ssh is never started detached, which
-//!   gives the helper a console of its own.
+//!   shares that windowless console, and spike SF1b that ssh started this
+//!   way, from a plugin that itself runs as the host's tree, connects.
+//!   ssh is never started detached on Windows, which gives the helper a
+//!   console of its own.
 //! - **No terminal on Unix.** ssh starts in a session of its own, so it
 //!   has no controlling terminal to ask on; it is killed with its whole
 //!   group when the connection ends.
@@ -76,6 +78,10 @@ pub enum LaunchError {
     /// The system's words.
     #[error("ssh could not be started: {0}")]
     Start(String),
+    /// A program named without a full path is never started: the system
+    /// would look in the current folder first.
+    #[error("ssh must be named by a full path.")]
+    NotAbsolute,
 }
 
 /// The last bytes of ssh's standard error.
@@ -134,6 +140,9 @@ impl Launch {
 
     /// Starts ssh.
     pub fn spawn(&self) -> Result<SshProcess, LaunchError> {
+        if !self.program.is_absolute() {
+            return Err(LaunchError::NotAbsolute);
+        }
         let mut handle = self
             .spec()
             .spawn()
@@ -292,6 +301,13 @@ mod tests {
         // A connection that may not ask gets no helper at all.
         let (_, set) = launch(false).spec().environment_changes();
         assert!(set.is_empty());
+    }
+
+    #[test]
+    fn a_program_without_a_full_path_is_never_started() {
+        let mut bare = launch(false);
+        bare.program = PathBuf::from("ssh");
+        assert_eq!(bare.spawn().err(), Some(LaunchError::NotAbsolute));
     }
 
     #[test]
