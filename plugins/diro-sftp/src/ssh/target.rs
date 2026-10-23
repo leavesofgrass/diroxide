@@ -146,7 +146,7 @@ impl Target {
 
 impl fmt::Display for Target {
     /// The target as the owner reads it: "alice@build.example",
-    /// "build.example:2222", "[::1]".
+    /// "build.example:2222", `[::1]`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(user) = &self.user {
             write!(f, "{user}@")?;
