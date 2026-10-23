@@ -1,6 +1,14 @@
 //! Integration tests of the plugin protocol's contract.
 
+// Test helpers may unwrap: a failure is the test's failure.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+#[cfg(feature = "fake-plugin")]
+mod conformance;
+#[cfg(feature = "fake-plugin")]
+mod fake_plugin;
 mod spikes;
+mod spikes_more;
 
 use diroxide_plugins::protocol::{self, Incoming};
 use diroxide_plugins::{ErrorKind, Id, Response, RpcError};

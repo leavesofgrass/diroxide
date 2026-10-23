@@ -47,6 +47,9 @@ pub use provider::{
     StreamingList, WatchEvent, WatchHandle, WatchSink, WriteMode,
 };
 pub use registry::Registry;
+/// The kill-on-close job object of Windows, for the process helper.
+#[cfg(windows)]
+pub use sys::KillOnCloseJob;
 pub use trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
 pub use volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
 pub use walk::{SkipReason, WalkEvent, WalkOptions, WalkSummary, walk};

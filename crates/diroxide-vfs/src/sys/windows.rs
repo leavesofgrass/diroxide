@@ -1,6 +1,7 @@
 //! Windows: attributes, file ids, the change time and the link count read
 //! through a handle, the drive list, volumes, the no-replace rename,
-//! junctions, the copy call and the trash's post-check.
+//! junctions, the copy call and the trash's post-check; and the
+//! kill-on-close job object the process helper puts each process tree in.
 //!
 //! Paths given to the calls made here directly (not through the standard
 //! library, which converts long paths itself) go through [`wide`], which
@@ -14,7 +15,7 @@ use std::io;
 use std::mem::size_of;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -35,6 +36,11 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
+use windows_sys::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+    SetInformationJobObject,
+};
 
 use super::Identity;
 use crate::cancel::{OpContext, ProgressUpdate};
@@ -728,12 +734,106 @@ pub(crate) fn space(path: &Path) -> io::Result<(u64, u64)> {
     Ok((free, total))
 }
 
+/// A job object that ends every process in it when its last handle
+/// closes (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`): the process helper
+/// assigns each child it starts as a tree, so a host killed outright, whose
+/// handles the system closes, leaves no plugin or tool behind (spike S5;
+/// W4a-1's contract request). The host holds the only handle; dropping
+/// this value closes it and ends the processes.
+#[derive(Debug)]
+pub struct KillOnCloseJob(OwnedHandle);
+
+impl KillOnCloseJob {
+    /// Makes an anonymous job with the kill-on-close limit.
+    pub fn new() -> io::Result<Self> {
+        // SAFETY: no security attributes and no name are both allowed: an
+        // anonymous job with the default security, which this process alone
+        // can open.
+        let raw = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if raw.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: the handle was just returned, not null, by CreateJobObjectW,
+        // and nothing else owns it.
+        let job = Self(unsafe { OwnedHandle::from_raw_handle(raw) });
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        // SAFETY: the pointer and the length describe `info`, a plain
+        // struct of the class named, which lives across the call; the job
+        // handle is valid while `job` lives.
+        let ok = unsafe {
+            SetInformationJobObject(
+                job.0.as_raw_handle(),
+                JobObjectExtendedLimitInformation,
+                (&raw const info).cast::<c_void>(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+        };
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(job)
+    }
+
+    /// Puts a process in the job; the processes it starts afterwards are
+    /// in it too. A process already in another job joins as a nested job
+    /// (Windows 8 and later).
+    pub fn assign(&self, process: BorrowedHandle<'_>) -> io::Result<()> {
+        // SAFETY: both handles are valid for the call: the job's is owned by
+        // `self`, the process's is borrowed from its owner for the call.
+        let ok =
+            unsafe { AssignProcessToJobObject(self.0.as_raw_handle(), process.as_raw_handle()) };
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn text(units: &[u16]) -> String {
         String::from_utf16_lossy(&units[..units.len() - 1])
+    }
+
+    /// The process the job test puts in its job: this test binary again,
+    /// sleeping; an ordinary run does nothing here.
+    #[test]
+    fn job_sleeper() {
+        if std::env::args().any(|a| a == "job-sleep") {
+            std::thread::sleep(std::time::Duration::from_secs(60));
+        }
+    }
+
+    #[test]
+    fn closing_the_job_ends_its_processes() {
+        use std::os::windows::io::AsHandle;
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
+
+        let job = KillOnCloseJob::new().unwrap();
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "sys::windows::tests::job_sleeper",
+                "--nocapture",
+                "job-sleep",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        job.assign(child.as_handle()).unwrap();
+        assert!(child.try_wait().unwrap().is_none());
+        drop(job);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while child.try_wait().unwrap().is_none() {
+            assert!(Instant::now() < deadline, "the job's process outlived it");
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 
     #[test]

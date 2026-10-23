@@ -12,7 +12,7 @@
 //! - [`Host::shutdown_all`] ends every plugin in parallel within one budget
 //!   of two seconds; dropping the host kills what is left without waiting.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,22 +22,37 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use diroxide_config::PluginSettings;
-use diroxide_core::{Message, Place, Side};
+use diroxide_core::{CommandId, Entry, JobRequest, Message, Place};
+use diroxide_ops::JobReport;
 use diroxide_tools::process::ProcessSpec;
+use diroxide_vfs::{Registry, WatchEvent, WatchSink};
 use serde_json::{Map, Value};
 
+use crate::ask::{Answer, PromptHistory, Question, TextDocument};
+use crate::calls::Calls;
 use crate::error::PluginError;
+use crate::files::Files;
+use crate::hooks::{HookAfter, HookBefore, HookDecision, decide};
 use crate::lines;
-use crate::live::{LivePlugin, Notice, RequestKind};
+use crate::listers::{
+    ColumnValue, ListerView, MAX_LISTER_ROWS, column_params, read_column_values, read_rows,
+};
+use crate::live::{CallOptions, LivePlugin, Notice, RequestKind};
 use crate::log::{PluginLog, Source};
-use crate::manifest::Manifest;
+use crate::manifest::{HookSpec, Manifest};
+use crate::panels::{Denials, PanelChange, PanelChoice, PanelSnapshot};
 use crate::protocol::{ErrorKind, Notification, PROTOCOL, Params, Request, RpcError, methods};
 use crate::router::{CancelFlag, Connection, Event, Inbound, Outcome};
-use crate::services::{AnnounceLimiter, ProgressBoard, Waiting, announcement, settings_for};
+use crate::services::{
+    AnnounceLimiter, MAX_ANNOUNCE_CHARS, ProgressBoard, Waiting, announcement, clean_text,
+    settings_for,
+};
 use crate::session::{InitializeParams, SessionError, handshake, unconfirmed};
+use crate::spool::Spool;
 use crate::supervisor::{
     Action, CrashPolicy, CrashVerdict, Flood, FloodGuard, SystemTicker, Ticker,
 };
+use crate::tools::ToolBox;
 use crate::transport::{PluginTransport, StdioTransport, resolve_program};
 
 /// How long quitting waits for every plugin in all.
@@ -54,41 +69,95 @@ pub struct PluginInfo {
     pub enabled: bool,
 }
 
-/// A panel as a plugin sees it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PanelSnapshot {
-    /// Which panel.
-    pub side: Side,
-    /// Its place.
-    pub place: Place,
-    /// The entry under the cursor.
-    pub cursor: Option<Place>,
-    /// The selected entries.
-    pub selection: Vec<Place>,
-}
-
 /// What the host offers plugins, implemented by the app over its own state,
 /// dialogs and job engine, so a plugin's operations get the same safety,
-/// trash, progress and undo as built-in ones.
+/// trash, progress and undo as built-in ones. Every method runs on one of
+/// the router's worker threads, never the input thread, and may block
+/// while the owner answers; the time does not count against the plugin.
 pub trait HostServices: Send + Sync {
-    /// `ui/announce`: says a message.
+    /// `ui/announce`: says a message, already cleaned and attributed.
     fn announce(&self, message: Message);
-
-    /// `ui/ask`: asks a yes-or-no question through an accessible dialog.
-    /// `None` when the user cancels.
-    fn ask_yes_no(&self, question: &str) -> Option<bool>;
-
-    /// `ui/ask`: asks for text, with a label. `None` when cancelled.
-    fn ask_text(&self, label: &str, initial: &str) -> Option<String>;
-
-    /// `panel/get`: a panel's state; `None` for the active one.
-    fn panel(&self, side: Option<Side>) -> PanelSnapshot;
 
     /// `$/progress`, as the job's sentence: shown in the jobs line, said on
     /// Say Status, or at once when it says the plugin waits for the owner.
     /// By default it is announced like any message.
     fn progress(&self, message: Message) {
         self.announce(message);
+    }
+
+    /// `ui/ask`: one accessible dialog, the app's own: modal, titled with
+    /// [`Question::title`] (the plugin's name last), closed by Escape
+    /// ([`Answer::Cancelled`]), focus returned. A destructive confirm
+    /// starts on No. A typed kind offers [`Question::history`] and
+    /// [`Question::completion`]; a secret is never echoed.
+    fn ask(&self, question: &Question) -> Answer;
+
+    /// `ui/show_text`: the document in the viewer, titled with its
+    /// title. When [`TextDocument::wait`] is set, returns when the owner
+    /// closes it. The default says this host has no viewer.
+    fn show_text(&self, document: &TextDocument) -> Result<(), RpcError> {
+        let _ = document;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host has no viewer",
+        ))
+    }
+
+    /// `panel/get`: a panel's state; `None` where there are no panels
+    /// (`diro serve` with no frontend), which the default says.
+    fn panel(&self, which: PanelChoice) -> Option<PanelSnapshot> {
+        let _ = which;
+        None
+    }
+
+    /// `panel/set`: the change made through ordinary app commands, so the
+    /// app says its usual position message. The default has no panels.
+    fn set_panel(&self, change: &PanelChange) -> Result<(), RpcError> {
+        let _ = change;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host has no panels",
+        ))
+    }
+
+    /// `fs/mkdir`, `fs/rename`, `fs/copy`, `fs/move` and `fs/delete`: runs
+    /// the job a plugin asked for exactly as a built-in one, with the plan,
+    /// the listing, the confirmation that starts on No, the trash by
+    /// default and the undo log; the request's origin names the plugin, and
+    /// the app gives it a job id. `cancel` rises when the plugin cancels
+    /// its request or stops; the job stops with it. The default runs
+    /// nothing.
+    fn run_job(&self, request: &JobRequest, cancel: &CancelFlag) -> Result<JobReport, RpcError> {
+        let _ = (request, cancel);
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host runs no file jobs for plugins",
+        ))
+    }
+
+    /// `lister/open`: shows a plugin's lister in a panel, its rows item
+    /// rows that no file command takes. Enter runs
+    /// [`ListerView::activate`], keys run [`ListerView::action_for`];
+    /// more rows come from [`Host::lister_rows`], and leaving it calls
+    /// [`Host::lister_closed`]. The default has no panels.
+    fn open_lister(&self, lister: &ListerView) -> Result<(), RpcError> {
+        let _ = lister;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host has no panels",
+        ))
+    }
+
+    /// `command/execute`: runs a diroxide command by id with its
+    /// arguments, as a key would; the manifest's patterns were checked
+    /// first. The result is the command's, or null. The default runs
+    /// nothing.
+    fn execute(&self, command: &CommandId, args: &Params) -> Result<Value, RpcError> {
+        let _ = args;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            format!("this host cannot run {command}"),
+        ))
     }
 }
 
@@ -151,6 +220,16 @@ pub enum HostEvent {
     IdleStopped {
         /// The plugin's id.
         plugin: String,
+    },
+    /// A plugin's provider lost a device or a session
+    /// (`provider/lost`): panels at the authority show it in words.
+    ProviderLost {
+        /// The plugin's id.
+        plugin: String,
+        /// The authority lost, such as `mtp://phone`.
+        authority: String,
+        /// "Phone disconnected (MTP)", the plugin's name last.
+        message: Message,
     },
 }
 
@@ -225,14 +304,14 @@ struct Slot {
 /// Where a plugin's words go: the app's services, or, without them (tests,
 /// `diro plugin run`), the host's events.
 #[derive(Clone)]
-struct Voice {
+pub(crate) struct Voice {
     services: Option<Arc<dyn HostServices>>,
     events: Arc<Mutex<Vec<HostEvent>>>,
     plugin: String,
 }
 
 impl Voice {
-    fn say(&self, message: Message) {
+    pub(crate) fn say(&self, message: Message) {
         match &self.services {
             Some(services) => services.announce(message),
             None => self.push(message),
@@ -244,6 +323,13 @@ impl Voice {
             Some(services) => services.progress(message),
             None => self.push(message),
         }
+    }
+
+    pub(crate) fn events_push(&self, event: HostEvent) {
+        self.events
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(event);
     }
 
     fn push(&self, message: Message) {
@@ -262,7 +348,8 @@ impl Voice {
 /// also feed the supervisor; floods stop the plugin.
 struct PluginInbound {
     name: String,
-    live: OnceLock<Weak<LivePlugin>>,
+    live: Arc<OnceLock<Weak<LivePlugin>>>,
+    calls: Calls,
     log: PluginLog,
     flood: Mutex<FloodGuard>,
     flooded: Mutex<bool>,
@@ -271,9 +358,62 @@ struct PluginInbound {
     limiter: Mutex<AnnounceLimiter>,
     board: Mutex<ProgressBoard>,
     stray_said: AtomicBool,
+    watches: Mutex<HashMap<String, (Place, WatchSink)>>,
 }
 
 impl PluginInbound {
+    /// `provider/changed`: each change to the watch's sink, as the
+    /// provider trait's events; an unknown watch or change is dropped.
+    fn changed(&self, params: &Params) {
+        let Some(id) = params.get("watch_id").and_then(Value::as_str) else {
+            return;
+        };
+        let watches = self.watches.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some((folder, sink)) = watches.get(id) else {
+            return;
+        };
+        let changes = params
+            .get("changes")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for change in changes {
+            let place = change
+                .get("place")
+                .and_then(Value::as_str)
+                .and_then(|p| Place::parse(p).ok())
+                .filter(|p| p.parent().as_ref() == Some(folder));
+            let event = match (change.get("kind").and_then(Value::as_str), place) {
+                (Some("created"), Some(place)) => WatchEvent::Created(place),
+                (Some("modified"), Some(place)) => WatchEvent::Changed(place),
+                (Some("removed"), Some(place)) => WatchEvent::Removed(place),
+                (Some("renamed"), Some(place)) => WatchEvent::RenamedIn(place),
+                _ => WatchEvent::Rescan,
+            };
+            sink(event);
+        }
+    }
+
+    /// `provider/lost`: said once, with the plugin's name last.
+    fn lost(&self, params: &Params) {
+        let authority = params
+            .get("authority")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let reason = params
+            .get("reason")
+            .and_then(Value::as_str)
+            .map(|r| clean_text(r, MAX_ANNOUNCE_CHARS))
+            .filter(|r| !r.is_empty())
+            .unwrap_or_else(lines::connection_lost);
+        self.voice.events_push(HostEvent::ProviderLost {
+            plugin: self.voice.plugin.clone(),
+            authority,
+            message: Message::warning(lines::with_source(&reason, &self.name)),
+        });
+    }
+
     fn live(&self) -> Option<Arc<LivePlugin>> {
         self.live.get().and_then(Weak::upgrade)
     }
@@ -315,6 +455,18 @@ impl PluginInbound {
             return;
         };
         let value = params.get("value").cloned().unwrap_or(Value::Null);
+        if value.get("kind").and_then(Value::as_str) == Some("partial") {
+            if let Some(live) = self.live() {
+                let entries = value
+                    .get("entries")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                live.partial(token, entries);
+                live.progress(token, None);
+            }
+            return;
+        }
         let (said, waiting) = self
             .board
             .lock()
@@ -365,16 +517,15 @@ impl PluginInbound {
 }
 
 impl Inbound for PluginInbound {
-    fn request(&self, request: &Request, _cancel: &CancelFlag) -> Outcome {
-        Err(RpcError::new(
-            ErrorKind::MethodNotFound,
-            format!("the host does not serve {} yet", request.method),
-        ))
+    fn request(&self, request: &Request, cancel: &CancelFlag) -> Outcome {
+        self.calls.serve(request, cancel)
     }
 
     fn notification(&self, notification: &Notification) {
         match notification.method.as_str() {
             methods::UI_ANNOUNCE => self.announce(&notification.params),
+            methods::PROVIDER_CHANGED => self.changed(&notification.params),
+            methods::PROVIDER_LOST => self.lost(&notification.params),
             methods::PROGRESS => self.progress(&notification.params),
             methods::LOG => {
                 let level = match notification.params.get("level").and_then(Value::as_str) {
@@ -407,7 +558,14 @@ impl Inbound for PluginInbound {
                         .say(Message::info(lines::wrote_stray_text(&self.name)));
                 }
             }
-            Event::UnknownAnswer(_) | Event::Ended => {}
+            Event::Ended => {
+                // The host removes the spool files it made, and only
+                // those, when the session ends.
+                if let Some(spool) = &self.calls.files.spool {
+                    spool.remove_made();
+                }
+            }
+            Event::UnknownAnswer(_) => {}
         }
     }
 }
@@ -425,6 +583,9 @@ pub struct Host {
     events: Arc<Mutex<Vec<HostEvent>>>,
     services: Option<Arc<dyn HostServices>>,
     settings: Mutex<HashMap<String, Map<String, Value>>>,
+    history: Arc<Mutex<PromptHistory>>,
+    registry: Option<Arc<Registry>>,
+    tools: ToolBox,
     off: bool,
 }
 
@@ -452,6 +613,9 @@ impl Host {
             events: Arc::new(Mutex::new(Vec::new())),
             services: None,
             settings: Mutex::new(HashMap::new()),
+            history: Arc::new(Mutex::new(PromptHistory::default())),
+            registry: None,
+            tools: ToolBox::default(),
             off: false,
         }
     }
@@ -476,6 +640,20 @@ impl Host {
     /// The same host with another clock (tests move it by hand).
     pub fn with_ticker(mut self, ticker: Arc<dyn Ticker>) -> Self {
         self.ticker = ticker;
+        self
+    }
+
+    /// The same host reaching files through these providers, for the
+    /// plugins' `fs/*` calls.
+    pub fn with_registry(mut self, registry: Arc<Registry>) -> Self {
+        self.registry = Some(registry);
+        self
+    }
+
+    /// The same host finding the plugins' tools here (tests put fakes
+    /// on a test PATH).
+    pub fn with_tools(mut self, tools: ToolBox) -> Self {
+        self.tools = tools;
         self
     }
 
@@ -713,9 +891,46 @@ impl Host {
         for warning in &started.result.warnings {
             log.write(Source::Plugin("warn"), warning);
         }
+        let spool = self.state_dir.as_ref().and_then(|state| {
+            match Spool::create(state.join(&manifest.id).join("spool")) {
+                Ok(spool) => Some(Arc::new(spool)),
+                Err(e) => {
+                    log.write(Source::Host, &format!("the spool could not be made: {e}"));
+                    None
+                }
+            }
+        });
+        let live_cell = Arc::new(OnceLock::new());
         let inbound = Arc::new(PluginInbound {
             name: name.clone(),
-            live: OnceLock::new(),
+            live: Arc::clone(&live_cell),
+            calls: Calls {
+                plugin_id: manifest.id.clone(),
+                name: name.clone(),
+                manifest: manifest.clone(),
+                confirmed: started.result.plugin_capabilities.clone(),
+                services: self.services.clone(),
+                history: Arc::clone(&self.history),
+                live: live_cell,
+                log: log.clone(),
+                voice: Voice {
+                    services: self.services.clone(),
+                    events: Arc::clone(&self.events),
+                    plugin: manifest.id.clone(),
+                },
+                denials: Denials::default(),
+                files: Files {
+                    registry: self.registry.clone(),
+                    spool,
+                    own_schemes: manifest
+                        .providers
+                        .iter()
+                        .map(|p| p.scheme.clone())
+                        .collect(),
+                    plugin: name.clone(),
+                },
+                tools: self.tools.clone(),
+            },
             log: log.clone(),
             flood: Mutex::new(FloodGuard::default()),
             flooded: Mutex::new(false),
@@ -728,6 +943,7 @@ impl Host {
             limiter: Mutex::new(AnnounceLimiter::new(self.ticker.now())),
             board: Mutex::new(ProgressBoard::default()),
             stray_said: AtomicBool::new(false),
+            watches: Mutex::new(HashMap::new()),
         });
         let connection = Connection::open(
             name,
@@ -753,6 +969,18 @@ impl Host {
     /// Calls a method on a plugin, starting it if needed, on the caller's
     /// thread. The method's kind decides its inactivity limit.
     pub fn call(&self, plugin: &str, method: &str, params: Value) -> Result<Value, PluginError> {
+        self.call_with(plugin, method, params, CallOptions::default())
+    }
+
+    /// The same, with a cancel token and a taker of partial batches (a
+    /// provider's streamed listing).
+    pub fn call_with(
+        &self,
+        plugin: &str,
+        method: &str,
+        params: Value,
+        options: CallOptions<'_>,
+    ) -> Result<Value, PluginError> {
         let info = self
             .plugin(plugin)
             .ok_or_else(|| PluginError::Unknown(plugin.to_owned()))?;
@@ -782,7 +1010,7 @@ impl Host {
             .map_or_else(|| info.manifest.name.clone(), |c| c.name.clone());
         let live = self.live(info)?;
         let name = info.manifest.name.clone();
-        live.call_labeled(method, params, kind, &label)
+        live.call_with(method, params, kind, &label, options)
             .map_err(|error| match ErrorKind::from_code(error.code) {
                 Some(ErrorKind::TimedOut) => PluginError::Timeout(name),
                 Some(ErrorKind::PluginUnavailable) => PluginError::Stopped(name),
@@ -827,6 +1055,178 @@ impl Host {
             slot.crashes.reset();
             slot.starts.reset();
         }
+    }
+
+    /// `hook/before`: asks a hooked plugin whether a job may go on, with
+    /// the hook's own time limit, and decides by its answer or, when it
+    /// is silent, by its `on_timeout`. Not wired to the job engine in this
+    /// alpha.
+    pub fn hook_before(
+        &self,
+        plugin: &str,
+        hook: &HookSpec,
+        before: &HookBefore,
+        verb: &str,
+    ) -> HookDecision {
+        let name = self
+            .plugin(plugin)
+            .map_or_else(|| plugin.to_owned(), |p| p.manifest.name.clone());
+        let outcome = serde_json::to_value(before)
+            .map_err(|e| PluginError::Protocol(e.to_string()))
+            .and_then(|params| self.call(plugin, methods::HOOK_BEFORE, params));
+        decide(hook, &outcome, verb, &name)
+    }
+
+    /// `hook/after`: tells a hooked plugin what happened, starting it if
+    /// needed; never waited for.
+    pub fn hook_after(&self, plugin: &str, after: &HookAfter) -> Result<(), PluginError> {
+        let info = self
+            .plugin(plugin)
+            .ok_or_else(|| PluginError::Unknown(plugin.to_owned()))?;
+        let live = self.live(info)?;
+        match serde_json::to_value(after) {
+            Ok(Value::Object(params)) => live.connection().notify(methods::HOOK_AFTER, params),
+            _ => Err(PluginError::Protocol(
+                "the event could not be written".to_owned(),
+            )),
+        }
+    }
+
+    /// `lister/rows`: more rows of a lister from `offset`, or all of them
+    /// again when `refresh`; at most [`MAX_LISTER_ROWS`].
+    pub fn lister_rows(
+        &self,
+        plugin: &str,
+        lister: &str,
+        offset: u64,
+        refresh: bool,
+    ) -> Result<Vec<Entry>, PluginError> {
+        let answer = self.call(
+            plugin,
+            methods::LISTER_ROWS,
+            serde_json::json!({"lister": lister, "offset": offset, "limit": MAX_LISTER_ROWS, "refresh": refresh}),
+        )?;
+        read_rows(answer.get("rows"), MAX_LISTER_ROWS)
+            .map(|(rows, _)| rows)
+            .map_err(|e| PluginError::Protocol(e.message))
+    }
+
+    /// `lister/closed`: the owner left a lister, so the plugin can free
+    /// it. Nothing is sent to a plugin that is not running.
+    pub fn lister_closed(&self, plugin: &str, lister: &str) {
+        self.notify_running(
+            plugin,
+            methods::LISTER_CLOSED,
+            serde_json::json!({"lister": lister}),
+        );
+    }
+
+    /// `column/format`: a batch of a declared column's values for places
+    /// of one folder, each cleaned to 40 cells, "pending" where the plugin
+    /// answered none.
+    pub fn column_values(
+        &self,
+        plugin: &str,
+        column: &str,
+        folder: &Place,
+        places: &[Place],
+    ) -> Result<BTreeMap<String, ColumnValue>, PluginError> {
+        let declared = self
+            .plugin(plugin)
+            .is_some_and(|p| p.manifest.columns.iter().any(|c| c.id == column));
+        if !declared {
+            return Err(PluginError::Protocol(format!(
+                "the manifest declares no column {column}"
+            )));
+        }
+        let texts: Vec<String> = places.iter().map(ToString::to_string).collect();
+        let params = column_params(column, &folder.to_string(), &texts)
+            .map_err(|e| PluginError::Limit(e.message))?;
+        let answer = self.call(plugin, methods::COLUMN_FORMAT, params)?;
+        Ok(read_column_values(&answer, &texts))
+    }
+
+    fn notify_running(&self, plugin: &str, method: &str, params: Value) {
+        let live = self
+            .slots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+            .and_then(|slot| {
+                slot.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .live
+                    .clone()
+            });
+        if let (Some(live), Value::Object(params)) = (live, params)
+            && !live.is_ended()
+        {
+            let _ = live.connection().notify(method, params);
+        }
+    }
+
+    /// Kills a running plugin at once, its whole tree, without the polite
+    /// ending: what it was serving fails, and nothing it had not committed
+    /// is committed. It starts again at its next use.
+    pub fn kill(&self, plugin: &str) {
+        let slot = self
+            .slots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+            .cloned();
+        if let Some(slot) = slot
+            && let Some(live) = slot
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .live
+                .take()
+        {
+            live.kill();
+        }
+    }
+
+    /// Sends a running plugin's `provider/changed` for a watch to `sink`,
+    /// until [`Host::remove_watch`].
+    pub fn add_watch(&self, plugin: &str, watch_id: &str, folder: Place, sink: WatchSink) {
+        if let Some(inbound) = self
+            .inbounds
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+        {
+            inbound
+                .watches
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(watch_id.to_owned(), (folder, sink));
+        }
+    }
+
+    /// Forgets a watch.
+    pub fn remove_watch(&self, plugin: &str, watch_id: &str) {
+        if let Some(inbound) = self
+            .inbounds
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+        {
+            inbound
+                .watches
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(watch_id);
+        }
+    }
+
+    /// How many of a plugin's calls its manifest refused while it ran
+    /// last.
+    pub fn refusals(&self, plugin: &str) -> usize {
+        self.inbounds
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+            .map_or(0, |inbound| inbound.calls.denials.count())
     }
 
     /// The plugin's log.
@@ -1021,43 +1421,7 @@ impl Drop for Host {
 mod tests {
     use super::*;
     use crate::supervisor::ManualTicker;
-    use crate::testing::{FakePlugin, Mode};
-    use crate::transport::MemoryTransport;
-
-    /// Starts in-process fake plugins in a mode.
-    struct FakeLauncher {
-        mode: Mutex<Mode>,
-        launches: Mutex<usize>,
-        seen: Arc<Mutex<Vec<crate::testing::Transcript>>>,
-    }
-
-    impl FakeLauncher {
-        fn new(mode: Mode) -> Arc<Self> {
-            Arc::new(Self {
-                mode: Mutex::new(mode),
-                launches: Mutex::new(0),
-                seen: Arc::new(Mutex::new(Vec::new())),
-            })
-        }
-    }
-
-    impl Launcher for FakeLauncher {
-        fn launch(
-            &self,
-            info: &PluginInfo,
-            _log: &PluginLog,
-        ) -> Result<Arc<dyn PluginTransport>, PluginError> {
-            *self.launches.lock().unwrap() += 1;
-            let mode = *self.mode.lock().unwrap();
-            let (host, peer) = MemoryTransport::pair(&info.manifest.name)?;
-            let seen = Arc::clone(&self.seen);
-            thread::spawn(move || {
-                let transcript = FakePlugin::new(mode).serve(peer);
-                seen.lock().unwrap().push(transcript);
-            });
-            Ok(Arc::new(host))
-        }
-    }
+    use crate::testing::{FakeLauncher, Mode};
 
     fn info(extra: &str) -> PluginInfo {
         let text = format!(
@@ -1138,6 +1502,27 @@ mod tests {
     }
 
     #[test]
+    fn a_lost_connection_is_an_event_with_the_plugin_last() {
+        let ticker = Arc::new(ManualTicker::new());
+        let host = host(FakeLauncher::new(Mode::Lost), &ticker, "");
+        run_echo(&host);
+        let lost: Vec<HostEvent> = host
+            .take_events()
+            .into_iter()
+            .filter(|e| matches!(e, HostEvent::ProviderLost { .. }))
+            .collect();
+        assert_eq!(
+            lost,
+            [HostEvent::ProviderLost {
+                plugin: "line-counter".into(),
+                authority: "memfs://box".into(),
+                message: Message::warning("Box unplugged (Line counter)"),
+            }]
+        );
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    #[test]
     fn stray_text_is_said_once_a_session() {
         let ticker = Arc::new(ManualTicker::new());
         let host = host(FakeLauncher::new(Mode::Stray), &ticker, "");
@@ -1157,19 +1542,8 @@ mod tests {
         fn announce(&self, message: Message) {
             self.said.lock().unwrap().push(message);
         }
-        fn ask_yes_no(&self, _: &str) -> Option<bool> {
-            None
-        }
-        fn ask_text(&self, _: &str, _: &str) -> Option<String> {
-            None
-        }
-        fn panel(&self, _: Option<Side>) -> PanelSnapshot {
-            PanelSnapshot {
-                side: Side::Left,
-                place: Place::parse(if cfg!(windows) { "C:\\" } else { "/" }).unwrap(),
-                cursor: None,
-                selection: Vec::new(),
-            }
+        fn ask(&self, _: &Question) -> Answer {
+            Answer::Cancelled
         }
     }
 
@@ -1211,13 +1585,7 @@ mod tests {
         values.insert("depth".into(), serde_json::json!(7));
         host.set_settings("line-counter", values);
         host.shutdown_all(QUIT_BUDGET);
-        for _ in 0..200 {
-            if !launcher.seen.lock().unwrap().is_empty() {
-                break;
-            }
-            thread::sleep(Duration::from_millis(5));
-        }
-        let seen = launcher.seen.lock().unwrap();
+        let seen = launcher.transcripts_after(1);
         let received = &seen[0].received;
         let initialize = received
             .iter()
@@ -1267,7 +1635,7 @@ mod tests {
         assert!(host.is_running("line-counter"));
         host.call("line-counter", methods::COMMAND_RUN, Value::Null)
             .unwrap();
-        assert_eq!(*launcher.launches.lock().unwrap(), 1);
+        assert_eq!(launcher.launches(), 1);
         let started = Instant::now();
         host.shutdown_all(QUIT_BUDGET);
         assert!(started.elapsed() < QUIT_BUDGET + Duration::from_secs(1));
@@ -1371,7 +1739,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(*launcher.launches.lock().unwrap(), 3);
+        assert_eq!(launcher.launches(), 3);
         assert!(
             host.call("line-counter", "command/run", Value::Null)
                 .is_err()

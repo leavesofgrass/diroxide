@@ -5,6 +5,96 @@
 
 use std::time::Duration;
 
+/// One line of the owner's Braille display, in cells: a line's meaning
+/// must be whole within it.
+pub const MAX_LINE_CELLS: usize = 40;
+
+/// A plugin's dialog title, its name last so a question never sounds like
+/// diroxide's own: "Trust this host? (SFTP places)"; with no title of its
+/// own, "SFTP places asks".
+pub fn dialog_title(title: &str, plugin: &str) -> String {
+    if title.trim().is_empty() {
+        format!("{plugin} asks")
+    } else {
+        with_source(title, plugin)
+    }
+}
+
+/// A plugin's text document's title, its name last: "Diff of a.txt
+/// (Git)"; with no title of its own, "Text (Git)".
+pub fn document_title(title: &str, plugin: &str) -> String {
+    if title.trim().is_empty() {
+        with_source("Text", plugin)
+    } else {
+        with_source(title, plugin)
+    }
+}
+
+/// The title of the host's own question before a plugin replaces a
+/// file: "Replace a file? (Line counter)".
+pub fn replace_title(plugin: &str) -> String {
+    with_source("Replace a file?", plugin)
+}
+
+/// The lines of that question, meaning first: "Replace report.txt?" and
+/// "It cannot be undone."
+pub fn replace_lines(name: &str) -> Vec<String> {
+    vec![
+        format!("Replace {name}?"),
+        "It cannot be undone.".to_owned(),
+    ]
+}
+
+/// A job a plugin's hook stopped: "Copy stopped: keep.txt is protected
+/// (Guard)".
+pub fn hook_cancelled(verb: &str, reason: &str, plugin: &str) -> String {
+    let reason = if reason.trim().is_empty() {
+        "no reason given"
+    } else {
+        reason
+    };
+    with_source(&format!("{verb} stopped: {reason}"), plugin)
+}
+
+/// A hook that did not answer: "Copy goes on: no answer (Guard)", or,
+/// when its manifest says silence cancels, "Copy stopped: no answer
+/// (Guard)".
+pub fn hook_silent(verb: &str, cancels: bool, plugin: &str) -> String {
+    let what = if cancels { "stopped" } else { "goes on" };
+    with_source(&format!("{verb} {what}: no answer"), plugin)
+}
+
+/// A file command on a lister's row: "This row is not a file."
+pub fn not_a_file() -> String {
+    "This row is not a file.".to_owned()
+}
+
+/// A lister cut at its cap: "First 5,000 shown, narrow the search."
+pub fn lister_capped() -> String {
+    "First 5,000 shown, narrow the search.".to_owned()
+}
+
+/// A column value not answered yet: "pending", never an empty cell.
+pub fn pending() -> String {
+    "pending".to_owned()
+}
+
+/// A provider's lost connection when the plugin gave no reason.
+pub fn connection_lost() -> String {
+    "Connection lost".to_owned()
+}
+
+/// What a text prompt says when the text does not fit the plugin's
+/// pattern and the plugin gave no words of its own.
+pub fn text_does_not_fit() -> String {
+    "That text is not accepted here.".to_owned()
+}
+
+/// A completion that has not answered yet: "Searching for candidates".
+pub fn searching() -> String {
+    "Searching for candidates".to_owned()
+}
+
 /// A duration in words: "10 seconds", "1 second", "2 minutes", "under a
 /// second".
 pub fn duration_words(duration: Duration) -> String {

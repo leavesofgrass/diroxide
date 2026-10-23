@@ -1,0 +1,14 @@
+# Hooks: a before event is answered continue or cancel with a reason; an
+# after event is a notification and is never answered.
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":1}}
+< {"jsonrpc":"2.0","id":1,"result":"*"}
+> {"jsonrpc":"2.0","method":"initialized"}
+> {"jsonrpc":"2.0","id":2,"method":"hook/before","params":{"event":"before_delete","job":7,"items":[{"from":"/w/a.txt","kind":"file"}],"count":1,"summary":"Delete 1 file to the trash"}}
+< {"jsonrpc":"2.0","id":2,"result":{"action":"continue"}}
+> {"jsonrpc":"2.0","id":3,"method":"hook/before","params":{"event":"before_delete","job":8,"items":[{"from":"/w/keep.txt","kind":"file"}],"count":1,"summary":"Delete 1 file to the trash"}}
+< {"jsonrpc":"2.0","id":3,"result":{"action":"cancel","reason":"keep.txt is protected"}}
+> {"jsonrpc":"2.0","method":"hook/after","params":{"event":"after_delete","job":7,"status":"done","items":[{"from":"/w/a.txt","kind":"file","result":"done"}]}}
+> {"jsonrpc":"2.0","id":4,"method":"shutdown"}
+< {"jsonrpc":"2.0","id":4,"result":null}
+> {"jsonrpc":"2.0","method":"exit"}
+< exit
