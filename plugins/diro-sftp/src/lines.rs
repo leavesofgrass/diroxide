@@ -296,6 +296,17 @@ pub const TOO_LARGE: &str = "The file is too large for the server.";
 /// A folder that is not empty.
 pub const NOT_EMPTY: &str = "The folder is not empty.";
 
+/// "Reconnected to build.example.", a status line after an automatic
+/// reconnect.
+pub fn reconnected(host: &str) -> String {
+    format!("Reconnected to {host}.")
+}
+
+/// "Connection cancelled: build.example.", after Cancel connection.
+pub fn connection_cancelled(host: &str) -> String {
+    format!("Connection cancelled: {host}.")
+}
+
 /// What ssh last printed, cleaned and placed last in a hint.
 pub fn ssh_said(text: &str) -> Option<String> {
     let last = text
@@ -370,6 +381,8 @@ mod tests {
             NO_SPACE.to_owned(),
             TOO_LARGE.to_owned(),
             NOT_EMPTY.to_owned(),
+            reconnected("build.example"),
+            connection_cancelled("build.example"),
         ] {
             assert!(line.chars().count() <= MAX_LINE_CELLS, "{line}");
         }

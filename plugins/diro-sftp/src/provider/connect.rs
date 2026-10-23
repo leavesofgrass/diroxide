@@ -21,7 +21,7 @@
 
 use std::fmt;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::thread;
@@ -57,6 +57,10 @@ pub const CONNECTING_EVERY: Duration = Duration::from_secs(5);
 /// How long ssh has to end after its session failed, so its last words
 /// can be read.
 pub const LAST_WORDS: Duration = Duration::from_secs(3);
+
+/// A loss within this long of an automatic reconnect is said, not tried
+/// again, so a server that keeps dropping is never retried in a loop.
+pub const RECONNECT_QUIET: Duration = Duration::from_secs(60);
 
 /// ssh's own password for the connection's account, as the owner typed
 /// it.
@@ -557,14 +561,23 @@ impl Link {
             .is_some_and(|p| p.try_wait().is_some())
     }
 
-    /// ssh's last words, for the reason a link was lost.
+    /// ssh's last words, for the reason a link was lost: read once its
+    /// standard error has ended, or after half a second.
     pub fn stderr(&self) -> String {
-        self.process
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .as_ref()
-            .map(SshProcess::stderr_text)
-            .unwrap_or_default()
+        let deadline = Instant::now() + Duration::from_millis(500);
+        loop {
+            {
+                let process = self.process.lock().unwrap_or_else(PoisonError::into_inner);
+                match process.as_ref() {
+                    None => return String::new(),
+                    Some(p) if p.stderr_ended() || Instant::now() >= deadline => {
+                        return p.stderr_text();
+                    }
+                    Some(_) => {}
+                }
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
     }
 
     /// Ends the link: ssh and everything it started.
@@ -603,6 +616,9 @@ pub struct Connection {
     second_tried: AtomicBool,
     closing: Cancel,
     writes: Writes,
+    handling: AtomicBool,
+    last_reconnect: Mutex<Option<Instant>>,
+    reconnects: AtomicUsize,
 }
 
 impl fmt::Debug for Connection {
@@ -648,6 +664,9 @@ impl Connection {
             second_tried: AtomicBool::new(false),
             closing: Cancel::new(),
             writes: Writes::default(),
+            handling: AtomicBool::new(false),
+            last_reconnect: Mutex::new(None),
+            reconnects: AtomicUsize::new(0),
         });
         Self::watch(&connection);
         Ok(connection)
@@ -776,7 +795,9 @@ impl Connection {
     /// An SFTP failure as the host's error; a lost session also loses the
     /// connection, which the host then hears about once.
     pub fn fail(self: &Arc<Self>, op: Op, error: &SftpError) -> RpcError {
-        if errors::is_lost(error) {
+        // Only a link still in use loses the connection: a call that met
+        // a link already replaced by a reconnect does not.
+        if errors::is_lost(error) && self.links().iter().any(|l| l.is_dead()) {
             let connection = Arc::clone(self);
             let _ = thread::Builder::new()
                 .name("sftp-lost".to_owned())
@@ -862,12 +883,77 @@ impl Connection {
         stderr::lost_reason(stderr, self.target.host())
     }
 
-    /// The connection is lost: its links end, and the host is told once.
-    pub fn lost(&self) {
-        if self.gone.swap(true, Ordering::SeqCst) {
+    /// How many automatic reconnects worked.
+    pub fn reconnects(&self) -> usize {
+        self.reconnects.load(Ordering::SeqCst)
+    }
+
+    /// Whether a lost link may be reopened unasked (R24 section 1.7): the
+    /// connection needed no typed secret, it is not closing, and it was
+    /// not reconnected in the last minute.
+    fn may_reconnect(&self) -> bool {
+        !self.memory.typed()
+            && !self.closing.is_cancelled()
+            && self
+                .last_reconnect
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_none_or(|at| at.elapsed() >= RECONNECT_QUIET)
+    }
+
+    /// One automatic reconnect: the same target, asking nothing (no
+    /// helper, `BatchMode=yes`), never taking focus.
+    fn reconnect(self: &Arc<Self>) -> bool {
+        *self
+            .last_reconnect
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
+        let opened = self.opener.open(&OpenRequest {
+            target: &self.target,
+            interactive: false,
+            second: false,
+            peer: &self.peer,
+            memory: &self.memory,
+            cancel: &self.closing,
+            state: &self.state,
+            progress: None,
+        });
+        let Ok(opened) = opened else {
+            return false;
+        };
+        let link = Link::new(opened);
+        if self.closing.is_cancelled() {
+            link.kill();
+            return false;
+        }
+        self.links().push(link);
+        self.reconnects.fetch_add(1, Ordering::SeqCst);
+        let mut params = Params::new();
+        params.insert("text".into(), json!(lines::reconnected(self.host())));
+        params.insert("importance".into(), json!("status"));
+        self.peer.notify(methods::UI_ANNOUNCE, params);
+        true
+    }
+
+    /// The connection is lost. Its links end and its write sessions with
+    /// them (their unfinished files stay for a resume). One automatic
+    /// reconnect is tried for a connection that needed no typed secret;
+    /// when it works the connection goes on and only a status line is
+    /// said. Otherwise the connection is gone and the host is told once.
+    pub fn lost(self: &Arc<Self>) {
+        if self.is_gone() || self.handling.swap(true, Ordering::SeqCst) {
             return;
         }
-        self.closing.cancel();
+        // A late call for a link a reconnect already replaced: nothing is
+        // lost now.
+        let dead = {
+            let links = self.links();
+            links.is_empty() || links.iter().any(|l| l.is_dead())
+        };
+        if !dead {
+            self.handling.store(false, Ordering::SeqCst);
+            return;
+        }
         let links: Vec<Arc<Link>> = self.links().drain(..).collect();
         let stderr = links
             .iter()
@@ -877,8 +963,34 @@ impl Connection {
         for link in &links {
             link.kill();
         }
+        self.writes.clear();
+        self.second_tried.store(false, Ordering::SeqCst);
+        if self.may_reconnect() && self.reconnect() {
+            self.handling.store(false, Ordering::SeqCst);
+            Self::watch(self);
+            return;
+        }
+        self.gone.store(true, Ordering::SeqCst);
+        self.closing.cancel();
         self.memory.forget();
         self.say_lost(&self.reason(&stderr));
+    }
+
+    /// "Cancel connection": ssh is killed at once, whatever it was doing,
+    /// and the host is told; nothing reconnects (R24 section 1.7).
+    pub fn cancel(&self) {
+        if self.gone.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        self.closing.cancel();
+        self.stop.store(true, Ordering::SeqCst);
+        let links: Vec<Arc<Link>> = self.links().drain(..).collect();
+        for link in &links {
+            link.kill();
+        }
+        self.writes.clear();
+        self.memory.forget();
+        self.say_lost(&lines::connection_cancelled(self.host()));
     }
 
     fn say_lost(&self, reason: &str) {

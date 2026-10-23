@@ -37,6 +37,8 @@ mod modes;
 mod ops;
 #[cfg(feature = "fake-ssh")]
 mod read;
+#[cfg(feature = "fake-ssh")]
+mod reconnect;
 mod session;
 #[cfg(all(windows, feature = "fake-ssh"))]
 mod spikes;

@@ -127,6 +127,12 @@ impl Writes {
         self.lock().remove(id).ok_or_else(no_session)
     }
 
+    /// Forgets every session, its link lost: nothing can be closed; the
+    /// partial files stay for a resume.
+    pub fn clear(&self) {
+        self.lock().clear();
+    }
+
     /// Closes every session's handle, as the connection goes; the partial
     /// files stay for a resume.
     pub fn close_all(&self) {

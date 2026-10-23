@@ -138,8 +138,9 @@ fn a_refused_open_says_it_cannot_connect() {
 #[test]
 fn a_cut_link_is_said_once_and_the_connection_forgotten() {
     let (host, opener, _root) = fake_host(Faults::default());
-    connect(&host, "sftp://build.example/").unwrap();
+    // A connection that needed a typed secret is not reopened unasked.
     opener.as_if_typed(true);
+    connect(&host, "sftp://build.example/").unwrap();
     opener.cut_all();
     assert!(host.wait_for(|h| !h.notices("provider/lost").is_empty()));
     std::thread::sleep(Duration::from_millis(400));

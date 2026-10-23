@@ -222,6 +222,20 @@ impl Provider {
         }
     }
 
+    /// "Cancel connection" (R24 section 1.7): kills the target's ssh at
+    /// once and sends `provider/lost`; `false` when none was open. The
+    /// command that offers it is the sites lane's (S-C).
+    pub fn cancel_connection(&self, target: &Target) -> bool {
+        let connection = self.lock().remove(target);
+        match connection {
+            Some(connection) => {
+                connection.cancel();
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Closes every connection: the plugin is shutting down.
     pub fn close_all(&self) {
         let all: Vec<Arc<Connection>> = self.lock().drain().map(|(_, c)| c).collect();
