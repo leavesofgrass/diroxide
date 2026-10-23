@@ -186,6 +186,43 @@ pub fn forget_keys(keymap: &mut Keymap) {
     }
 }
 
+/// The owner's `keymap.toml` lines for the contributing plugins' commands
+/// (W4d's request 2, lane A2): each line of this column takes its
+/// command's keys over from the plugin's proposal, a key another command
+/// holds is taken from it as any line of the file does, and `none`
+/// unbinds it. Lines for a command no enabled plugin offers wait in the
+/// file. Returns the commands the owner's lines set.
+pub fn apply_owner_keys(
+    keymap: &mut Keymap,
+    catalog: &Catalog,
+    owner: &diroxide_config::KeymapConfig,
+) -> Vec<CommandId> {
+    let mut set = Vec::new();
+    for line in owner.column(keymap.column()) {
+        if catalog.command(&line.command).is_none() {
+            continue;
+        }
+        let bound: Vec<(Layer, Key)> = keymap
+            .bindings()
+            .iter()
+            .filter(|b| b.command == line.command)
+            .map(|b| (b.layer, b.key))
+            .collect();
+        for (layer, key) in bound {
+            keymap.unbind(layer, &key, &line.command);
+        }
+        for key in line
+            .keys
+            .iter()
+            .filter(|k| k.code != diroxide_core::KeyCode::Insert)
+        {
+            keymap.bind(line.layer, *key, &line.command, true, None, KeyChoice::Take);
+        }
+        set.push(line.command.clone());
+    }
+    set
+}
+
 /// A proposal in words, for Manage plugins: "Ctrl+Alt+L, proposed" or
 /// "Ctrl+Alt+L not bound: it already runs Copy".
 pub fn proposal_words(proposal: &Proposal) -> String {

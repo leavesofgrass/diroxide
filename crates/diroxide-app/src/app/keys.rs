@@ -208,6 +208,8 @@ impl App {
         self.keymap = self
             .layered(self.keymap.column())
             .with_single_letters(self.settings.single_letters);
+        // The plugins' keys are not in the layers: bound again (lane A2).
+        self.bind_plugin_keys();
     }
 
     /// Change key for a command, as the Keys list's Change key does: the

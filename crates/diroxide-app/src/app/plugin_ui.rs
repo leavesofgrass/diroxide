@@ -90,6 +90,9 @@ pub(super) struct PluginState {
     scanned: bool,
     /// What happened to each proposed key.
     proposals: Vec<Proposal>,
+    /// The plugin commands whose keys the owner's `keymap.toml` sets
+    /// (lane A2).
+    owner_set: Vec<CommandId>,
     /// Plugin dialogs waiting behind a confirmation or a question.
     queue: VecDeque<(CallId, String, Call)>,
     /// The plugin commands running, by job.
@@ -235,6 +238,83 @@ impl App {
     /// What happened to the enabled plugins' proposed keys.
     pub fn plugin_key_proposals(&self) -> &[Proposal] {
         &self.plugins.proposals
+    }
+
+    /// Binds the plugins' keys again: each command's proposed key where it
+    /// is free, then the owner's `keymap.toml` lines for plugin commands,
+    /// which win (lane A2). Called when a catalog comes and whenever the
+    /// keymap is made again from its layers.
+    pub(super) fn bind_plugin_keys(&mut self) {
+        registry::forget_keys(&mut self.keymap);
+        self.plugins.proposals = registry::propose_keys(&mut self.keymap, &self.plugins.catalog);
+        let set =
+            registry::apply_owner_keys(&mut self.keymap, &self.plugins.catalog, &self.keys.owner);
+        for proposal in &mut self.plugins.proposals {
+            if set.contains(&proposal.command) {
+                proposal.bound = false;
+                proposal.why = Some("set in keymap.toml".to_owned());
+            }
+        }
+        self.plugins.owner_set = set;
+    }
+
+    /// The Keys list's rows for the plugins' commands (lane A2): the
+    /// command's name first, its keys, how it got them, and the plugin
+    /// last.
+    pub(super) fn plugin_key_rows(&self, query: &str) -> Vec<ListRow> {
+        let query = query.trim().to_lowercase();
+        self.plugins
+            .catalog
+            .commands()
+            .filter(|c| {
+                query.is_empty()
+                    || c.name.to_lowercase().contains(&query)
+                    || c.source.to_lowercase().contains(&query)
+            })
+            .map(|c| {
+                let keys = self.keymap.keys_in(Layer::Global, &c.id);
+                let keys_words = if keys.is_empty() {
+                    "no key".to_owned()
+                } else {
+                    keys.iter()
+                        .map(|k| crate::keymap::written(k, self.keymap.platform()))
+                        .collect::<Vec<_>>()
+                        .join(" or ")
+                };
+                let state = if self.plugins.owner_set.contains(&c.id) {
+                    "set in keymap.toml".to_owned()
+                } else {
+                    match self.plugins.proposals.iter().find(|p| p.command == c.id) {
+                        Some(p) if p.bound => "proposed".to_owned(),
+                        Some(p) => {
+                            let key = Key::parse(&p.key).map_or_else(
+                                |_| p.key.clone(),
+                                |k| crate::keymap::written(&k, self.keymap.platform()),
+                            );
+                            let why = p.why.clone().unwrap_or_default();
+                            format!("{key} not bound: {why}")
+                        }
+                        None => "not proposed".to_owned(),
+                    }
+                };
+                ListRow::new(c.id.as_str(), c.name.clone()).with_details([
+                    keys_words,
+                    state,
+                    format!("by {}", c.source),
+                ])
+            })
+            .collect()
+    }
+
+    /// Enter on a plugin command's row of the Keys list: how its key is
+    /// changed, in words.
+    pub(super) fn plugin_key_row_entered(&mut self, id: &CommandId) -> Option<Vec<Effect>> {
+        let command = self.plugins.catalog.command(id)?.clone();
+        let text = format!(
+            "{}: change its key in keymap.toml under \"{}\". By {}.",
+            command.name, command.id, command.source
+        );
+        Some(vec![self.say(Message::info(text))])
     }
 
     /// The palette's list for a query, the enabled plugins' commands with
@@ -515,9 +595,8 @@ impl App {
     /// A new catalog: the proposed keys bound again, an open Manage
     /// plugins list made again, a command waiting for its enable run.
     fn catalog_found(&mut self, catalog: Catalog) -> Vec<Effect> {
-        registry::forget_keys(&mut self.keymap);
-        self.plugins.proposals = registry::propose_keys(&mut self.keymap, &catalog);
         self.plugins.catalog = catalog;
+        self.bind_plugin_keys();
         self.plugins.scanned = true;
         let mut effects = Vec::new();
         let rows = self.manage_rows();
