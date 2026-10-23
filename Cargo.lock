@@ -876,11 +876,13 @@ name = "diroxide-app"
 version = "0.1.0-alpha.1"
 dependencies = [
  "diroxide-archive",
+ "diroxide-components",
  "diroxide-config",
  "diroxide-core",
  "diroxide-diff",
  "diroxide-filetype",
  "diroxide-ops",
+ "diroxide-plugins",
  "diroxide-preview",
  "diroxide-search",
  "diroxide-theme",
@@ -891,6 +893,7 @@ dependencies = [
  "opener",
  "regex",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "toml",

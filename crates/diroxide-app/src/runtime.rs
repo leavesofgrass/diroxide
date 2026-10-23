@@ -48,6 +48,8 @@ use diroxide_vfs::{
 };
 
 mod archive_jobs;
+// Plugins and script commands (W4d).
+mod plugins;
 
 use crate::app::{App, AppEvent};
 use crate::request::{AskId, Question, Reply, Request, Spawn, SpawnKind};
@@ -230,8 +232,22 @@ impl Shared {
         self.busy.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// One worker fewer; never below none, so a plugin's question asked
+    /// outside any job cannot wrap the count (W4d).
     fn end(&self) {
-        self.busy.fetch_sub(1, Ordering::SeqCst);
+        let _ = self
+            .busy
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                Some(n.saturating_sub(1))
+            });
+    }
+
+    /// Counts a worker idle while its plugin waits for the owner, when one
+    /// is counted at all; returns whether it did.
+    fn lower(&self) -> bool {
+        self.busy
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .is_ok()
     }
 
     /// Asks a question and waits for the answer, counting the worker as
@@ -394,6 +410,11 @@ struct RunningJob {
 /// Carries out I/O effects and requests, and queues their results.
 pub struct Runtime {
     registry: Arc<Registry>,
+    /// The registry without the plugins' providers, which each new
+    /// catalog adds again (W4d).
+    base: Arc<Registry>,
+    /// Plugins and script commands (W4d).
+    plugins: plugins::PluginRuntime,
     engine: Engine,
     shared: Arc<Shared>,
     receiver: Receiver<AppEvent>,
@@ -450,6 +471,8 @@ impl Runtime {
         };
         Self {
             engine: Engine::new(Arc::clone(&registry)),
+            base: Arc::clone(&registry),
+            plugins: plugins::PluginRuntime::default(),
             registry,
             shared: Arc::new(Shared {
                 sender: Mutex::new(sender),
@@ -501,7 +524,17 @@ impl Runtime {
             return;
         }
         let provider = crate::archives::provider(settings, self.paths.as_ref());
-        let (registry, provider) = crate::archives::install(&self.registry, provider);
+        let (registry, provider) = crate::archives::install(&self.base, provider);
+        self.base = registry;
+        self.archives = Some(provider);
+        self.archive_settings = Some(settings.clone());
+        self.rebuild_registry();
+    }
+
+    /// Makes the registry again from the base and the enabled plugins'
+    /// providers, with an engine over it (W4d).
+    fn rebuild_registry(&mut self) {
+        let registry = Arc::new(self.plugins.registry_with_providers(&self.base));
         let mut engine =
             Engine::new(Arc::clone(&registry)).with_options(self.engine.options().clone());
         if let Some(journal) = self.engine.journal() {
@@ -509,8 +542,30 @@ impl Runtime {
         }
         self.engine = engine;
         self.registry = registry;
-        self.archives = Some(provider);
-        self.archive_settings = Some(settings.clone());
+    }
+
+    /// The same runtime with plugins off for the session (`--no-plugins`):
+    /// nothing is started, and the Plugins menu says so (W4d).
+    pub fn without_plugins(mut self) -> Self {
+        self.plugins.turn_off();
+        self
+    }
+
+    /// The same runtime starting plugins through another launcher: tests
+    /// start the in-process fakes (W4d).
+    pub fn with_plugin_launcher(
+        mut self,
+        launcher: Arc<dyn diroxide_plugins::host::Launcher>,
+    ) -> Self {
+        self.plugins.set_launcher(launcher);
+        self
+    }
+
+    /// Stops every running plugin politely, within two seconds; a
+    /// frontend calls it at quit (dropping the runtime kills what is
+    /// left without waiting).
+    pub fn stop_plugins(&mut self) {
+        self.plugins.shutdown();
     }
 
     /// Sets the editor from the `editor` setting: a program's name on the
@@ -642,13 +697,11 @@ impl Runtime {
                 self.cancel(*job);
                 true
             }
+            // A plugin's command runs through the app, which checks its
+            // conditions and consent and makes it a job (W4d).
             Effect::RunPlugin(call) => {
-                self.queue.push_back(AppEvent::Problem(Message::could_not(
-                    "run",
-                    &call.plugin,
-                    "plugins come with a later alpha",
-                    "",
-                )));
+                self.queue
+                    .push_back(AppEvent::Command(call.command.clone()));
                 true
             }
             Effect::OpenExternally(place) => {
@@ -776,6 +829,7 @@ impl Runtime {
         if let Some(running) = lock(&self.jobs).get(&job) {
             running.control.cancel.cancel();
         }
+        self.plugins.cancel(job);
         let asks: Vec<AskId> = lock(&self.shared.asks)
             .iter()
             .filter(|(_, (asker, _))| *asker == Some(job))
@@ -789,6 +843,14 @@ impl Runtime {
     /// Carries out one request from the app.
     pub fn request(&mut self, request: Request) {
         match request {
+            Request::Plugins(request) => {
+                let shared = Arc::clone(&self.shared);
+                let worker = |work: Work| {
+                    spawn_worker(&shared, work);
+                };
+                self.plugins
+                    .request(*request, &self.shared, self.paths.as_ref(), &worker);
+            }
             Request::Plan(job) => {
                 let engine = self.engine.clone();
                 let control = JobControl::new();
@@ -1552,12 +1614,25 @@ impl Runtime {
         Some(path)
     }
 
-    /// Takes the results that are ready, without waiting.
+    /// Takes the results that are ready, without waiting. A plugin
+    /// catalog is adopted as it passes: the hosts of the enabled plugins
+    /// and their providers (W4d).
     pub fn poll(&mut self) -> Vec<AppEvent> {
         while let Ok(event) = self.receiver.try_recv() {
             self.queue.push_back(event);
         }
-        self.queue.drain(..).collect()
+        let events: Vec<AppEvent> = self.queue.drain(..).collect();
+        for event in &events {
+            if let AppEvent::Plugin(plugin) = event
+                && let crate::plugins::PluginEvent::Found(catalog) = plugin.as_ref()
+                && self
+                    .plugins
+                    .adopt(catalog, &self.shared, self.paths.as_ref(), &self.base)
+            {
+                self.rebuild_registry();
+            }
+        }
+        events
     }
 
     /// Waits up to `timeout` for a result, then takes what is ready.
@@ -1597,6 +1672,7 @@ impl Runtime {
     /// not mark them) after it.
     pub fn carry_out(&mut self, app: &mut App, effects: Vec<Effect>) -> Vec<Effect> {
         self.apply_archive_settings(&app.settings().archives);
+        self.plugins.set_settings(&app.settings().plugins);
         let mut screen = Vec::new();
         for effect in effects {
             if effect == Effect::AppRequests {
@@ -1975,6 +2051,19 @@ fn list_archive(
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Work for a worker thread, with what the workers share.
+type Work = Box<dyn FnOnce(&Arc<Shared>) + Send>;
+
+/// Runs work on a worker thread, counted busy until it ends.
+fn spawn_worker(shared: &Arc<Shared>, work: Work) {
+    let shared = Arc::clone(shared);
+    shared.begin();
+    thread::spawn(move || {
+        work(&shared);
+        shared.end();
+    });
 }
 
 fn forward_sink(

@@ -287,6 +287,11 @@ pub fn build_on(
     let app = App::new(app_options);
     let editor = app.settings().editor.clone();
     let mut runtime = Runtime::new(registry).with_engine_options(engine);
+    if options.no_plugins {
+        // `--no-plugins`: nothing starts, and the Plugins menu says so
+        // (W4d).
+        runtime = runtime.without_plugins();
+    }
     runtime.set_editor(&editor);
     if let Some(paths) = paths {
         runtime = runtime.with_paths(paths.clone());

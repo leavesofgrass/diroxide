@@ -676,7 +676,8 @@ impl App {
         let mut plan = match result {
             Ok(plan) => plan,
             Err(error) => {
-                self.flows.remove(&job);
+                let removed = self.flows.remove(&job);
+                self.plugin_job_ended(removed.as_ref(), Err(error.to_string()));
                 self.jobs.finish(job);
                 let message = match &error {
                     OpsError::Refused(sentence)
@@ -871,7 +872,11 @@ impl App {
         };
         let mut effects = Vec::new();
         if plan.steps.is_empty() {
-            self.flows.remove(&job);
+            let removed = self.flows.remove(&job);
+            self.plugin_job_ended(
+                removed.as_ref(),
+                Ok(Box::new(JobReport::new(job, plan.kind))),
+            );
             self.jobs.finish(job);
             effects.push(Effect::Redraw(Redraw::JobsLine));
             if let Some((place, reason)) = plan.facts.left_out.first() {
@@ -984,6 +989,8 @@ impl App {
 
     pub(super) fn job_finished(&mut self, report: JobReport) -> Vec<Effect> {
         let flow = self.flows.remove(&report.job);
+        // A plugin's file job: the plugin hears its report (W4d).
+        self.plugin_job_ended(flow.as_ref(), Ok(Box::new(report.clone())));
         self.jobs.finished(FinishedJob {
             job: report.job,
             kind: report.kind,
@@ -1251,6 +1258,10 @@ impl App {
     /// Escape outside a dialog: stops the job in front.
     pub(super) fn cancel_front_job(&mut self) -> Vec<Effect> {
         match self.jobs.newest() {
+            // A plugin command says its own name (W4d).
+            Some(job) if let Some(words) = self.plugin_cancel_words(job) => {
+                vec![Effect::CancelJob(job), self.say(Message::info(words))]
+            }
             Some(job) => {
                 let word = self
                     .jobs

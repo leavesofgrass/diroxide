@@ -451,7 +451,7 @@ impl App {
 
     pub(super) fn open_palette(&mut self) -> Vec<Effect> {
         let field = EntryField::new("Command palette", CompletionSource::Commands);
-        let list = self.palette.list_with("", &self.keymap, Some(&self.menus));
+        let list = self.palette_list("");
         let dialog = Dialog::Edit {
             field,
             candidates: Some(list),
@@ -484,16 +484,18 @@ impl App {
 
     pub(super) fn open_menu(&mut self, id: &str) -> Vec<Effect> {
         let caps = self.active_capabilities();
-        let Some(list) = self.menus.list(id, &self.keymap, &caps) else {
+        // The enabled plugins' commands join the menus (W4d).
+        let Some(list) = self.menu_list(id, &caps) else {
             return vec![self.say(Message::info(format!("No menu is named {id}.")))];
         };
-        self.open_dialog(
-            Dialog::Choose {
-                list,
-                on_enter: Command::new(ids::MENU),
-            },
-            Purpose::Menu(id.to_owned()),
-        )
+        let dialog = Dialog::Choose {
+            list,
+            on_enter: Command::new(ids::MENU),
+        };
+        match self.menu_saying(id) {
+            Some(message) => self.open_dialog_saying(dialog, Purpose::Menu(id.to_owned()), message),
+            None => self.open_dialog(dialog, Purpose::Menu(id.to_owned())),
+        }
     }
 
     /// Left or Right in a menu: the menu before or after on the bar.

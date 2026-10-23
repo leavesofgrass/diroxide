@@ -484,7 +484,8 @@ pub mod ids {
         PREVIEW_NEXT_FILE = "preview.next-file";
         /// Shows the panel's file before in the preview without leaving it
         PREVIEW_PREVIOUS_FILE = "preview.previous-file";
-        /// List the plugins.
+        /// Manage plugins: the plugins and scripts, their state, and
+        /// what each may do (W4d).
         PLUGINS = "plugins.list";
         /// Yes, in a question.
         YES = "dialog.yes";
@@ -2296,8 +2297,8 @@ pub static CATALOG: [CommandInfo; 213] = [
     ),
     command(
         ids::PLUGINS,
-        "Plugins",
-        "Lists the plugins and what they may do. Plugins come with a later alpha.",
+        "Manage plugins",
+        "Lists the plugins and scripts with their state; each is enabled after its question, or disabled.",
         Global,
         &[],
         &[],

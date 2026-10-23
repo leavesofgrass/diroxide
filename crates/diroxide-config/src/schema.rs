@@ -1243,7 +1243,7 @@ pub const SCHEMA: [SettingInfo; 91] = [
         group: G::Plugins,
         kind: K::Names,
         default: "[]",
-        help: "The plugins you turned on, by name. None is on until you turn it on.",
+        help: "Reserved. Manage plugins in the Plugins menu turns a plugin on, after its question.",
         arrives: Some("alpha.4"),
     },
     SettingInfo {
@@ -1257,7 +1257,7 @@ pub const SCHEMA: [SettingInfo; 91] = [
         },
         default: "10000",
         help: "How long a plugin may take to answer before it is reported and left.",
-        arrives: Some("alpha.4"),
+        arrives: None,
     },
     SettingInfo {
         key: "components_source",

@@ -18,6 +18,8 @@ mod filtering;
 mod keys;
 mod labels;
 mod palette;
+// Plugins and script commands (W4d).
+mod plugins;
 mod preview;
 // Saved searches, the Space list, sizes and newest files (W3a).
 mod search_tools;

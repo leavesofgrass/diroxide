@@ -32,6 +32,8 @@ mod keys;
 mod labeling;
 mod nav;
 mod organize;
+// Plugins and script commands (W4d).
+mod plugin_ui;
 mod preview;
 // Saved searches, the Space list, sizes and newest files (W3a).
 mod search_tools;
@@ -367,6 +369,9 @@ pub enum AppEvent {
     },
     /// Something outside the app failed, already in words.
     Problem(Message),
+    /// Something about plugins: the catalog, a plugin's call, its words,
+    /// its progress, a command's end (W4d).
+    Plugin(Box<crate::plugins::PluginEvent>),
 }
 
 /// What an open dialog is for: what its answer does. The [`Dialog`] is
@@ -575,6 +580,8 @@ enum Purpose {
     JobItems,
     /// A dialog of Change key, the Keys list or the presets (W3k).
     Keys(Box<keys::KeysPurpose>),
+    /// A plugin's dialog, or one of Manage plugins (W4d).
+    Plugin(Box<plugin_ui::Wants>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -624,6 +631,8 @@ enum Then {
     /// under the "no trash" question ("This drive has no trash. Delete 3
     /// items for good?").
     NoTrash(Message),
+    /// A plugin's file job: the plugin hears its report (W4d).
+    PluginJob(crate::plugins::CallId),
 }
 
 /// Type-ahead: the text typed so far and when it was last typed.
@@ -720,6 +729,8 @@ pub struct App {
     tools: search_tools::ToolsState,
     /// The compare on its way (W3a).
     comparing: comparing::CompareState,
+    /// Plugins and script commands (W4d).
+    plugins: plugin_ui::PluginState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1037,6 +1048,7 @@ impl App {
             searching: searching::SearchState::default(),
             tools: search_tools::ToolsState::default(),
             comparing: comparing::CompareState::default(),
+            plugins: plugin_ui::PluginState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1051,6 +1063,7 @@ impl App {
     pub fn start(&mut self) -> Vec<Effect> {
         let mut effects = self.startup_lines();
         self.sweep_at_start();
+        self.plugins_start();
         for side in Side::BOTH {
             let place = self.panel(side).place().clone();
             let focus = self.restored_focus(side);
@@ -1407,7 +1420,8 @@ impl App {
     /// [`Effect::AppRequests`], where [`Runtime::carry_out`](crate::Runtime::carry_out)
     /// takes them.
     pub fn handle(&mut self, event: AppEvent) -> Vec<Effect> {
-        let effects = self.handle_event(event);
+        let mut effects = self.handle_event(event);
+        effects.extend(self.plugin_queue_next());
         self.follow_cursor();
         self.mark_requests(effects)
     }
@@ -1497,6 +1511,14 @@ impl App {
                 search,
                 found,
                 missing,
+                ..
+            } if self.plugin_owns_search(search) => {
+                self.plugin_places_found(search, found, missing)
+            }
+            AppEvent::LabeledFound {
+                search,
+                found,
+                missing,
                 unreadable,
             } => self.labeled_found(search, found, missing, unreadable),
             AppEvent::StaleChecked {
@@ -1506,13 +1528,15 @@ impl App {
             } => self.stale_checked(search, row, freshness),
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
+            AppEvent::Plugin(event) => self.plugin_event(*event),
         }
     }
 
     /// Runs a command and returns what to do about it, with
     /// [`Effect::AppRequests`] at the end when it queued requests.
     pub fn dispatch(&mut self, command: &Command) -> Vec<Effect> {
-        let effects = self.dispatch_command(command);
+        let mut effects = self.dispatch_command(command);
+        effects.extend(self.plugin_queue_next());
         self.follow_cursor();
         self.mark_requests(effects)
     }
@@ -1561,6 +1585,10 @@ impl App {
         }
         // Compare files, its properties and the differences (W3a).
         if let Some(effects) = self.compare_dispatch(command) {
+            return effects;
+        }
+        // Manage plugins and the plugins' own commands (W4d).
+        if let Some(effects) = self.plugins_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {
@@ -1662,7 +1690,7 @@ impl App {
             Action::FilterClear => self.filter_clear(),
             Action::Sort => self.sort_by(&command.id),
             Action::SortList => self.sort_list(),
-            Action::Plugins => vec![self.say(Message::info("Plugins come with a later alpha."))],
+            Action::Plugins => self.open_manage_plugins(),
             Action::Quit | Action::QuitToFolder => self.ask_quit(false),
             Action::QuitKeepFolder => self.ask_quit(true),
             Action::Help => self.help(),

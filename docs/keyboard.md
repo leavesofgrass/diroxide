@@ -240,7 +240,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Reset all keys. Takes every change of yours out of keymap.toml, after asking; the preset stays. (keys.reset-all)
 - Single letters. Chooses what a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. (keys.single-letters)
 - Change a key. Waits for a command's new key, says it back, and says what it already does. (keys.change)
-- Plugins. Lists the plugins and what they may do. Plugins come with a later alpha. (plugins.list)
+- Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
 
 ## In the GUI
 
@@ -478,7 +478,7 @@ The GUI arrives in a later alpha; these are its keys. On macOS the GUI uses Comm
 - Reset all keys. Takes every change of yours out of keymap.toml, after asking; the preset stays. (keys.reset-all)
 - Single letters. Chooses what a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. (keys.single-letters)
 - Change a key. Waits for a command's new key, says it back, and says what it already does. (keys.change)
-- Plugins. Lists the plugins and what they may do. Plugins come with a later alpha. (plugins.list)
+- Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
 
 ## Keys a terminal may keep
 

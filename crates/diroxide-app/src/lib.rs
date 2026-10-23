@@ -34,6 +34,8 @@ pub mod menu;
 pub mod messages;
 pub mod palette;
 pub mod panel;
+// Plugins and script commands in the app (W4d).
+pub mod plugins;
 pub mod quickview;
 pub mod request;
 pub mod runtime;

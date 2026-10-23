@@ -605,9 +605,10 @@ fn details_context_menu_help_and_the_key_bar() {
     let said = f.s.key("f3");
     assert!(said[0].starts_with("report.pdf, in "), "{said:?}");
     assert_eq!(f.s.key("escape"), ["Viewer closed: report.pdf"]);
+    // Manage plugins (W4d): the list opens, its empty line meaning first.
     assert_eq!(
         f.s.command(ids::PLUGINS),
-        ["Plugins come with a later alpha."]
+        ["Manage plugins, No plugins or scripts. Get example plugins is in the Plugins menu"]
     );
 }
 

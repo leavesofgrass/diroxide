@@ -26,6 +26,10 @@ diroxide-theme.workspace = true
 # The quick view's "Open in textweaver" finds `tw` through the tools
 # registry (W2e).
 diroxide-tools.workspace = true
+# The plugin host, script commands and their consent (W4d), and the
+# optional components' downloader and its lines (W4d).
+diroxide-plugins.workspace = true
+diroxide-components.workspace = true
 diroxide-vfs.workspace = true
 dirs.workspace = true
 jiff.workspace = true
@@ -33,6 +37,8 @@ opener.workspace = true
 # The viewer's search (W2d).
 regex.workspace = true
 serde.workspace = true
+# The plugin protocol's values: settings, a command's parameters (W4d).
+serde_json.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 # The Keys list writes keymap.toml one line at a time, keeping the owner's

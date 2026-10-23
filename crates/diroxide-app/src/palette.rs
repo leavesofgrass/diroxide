@@ -60,11 +60,11 @@ pub struct Palette {
     uses: Vec<Uses>,
 }
 
-fn rank(info: &CommandInfo, wanted: &str) -> Option<u8> {
+fn rank(id: &CommandId, name: &str, wanted: &str) -> Option<u8> {
     if wanted.is_empty() {
         return Some(0);
     }
-    let name = info.name.to_lowercase();
+    let name = name.to_lowercase();
     if name.starts_with(wanted) {
         Some(0)
     } else if name
@@ -74,7 +74,7 @@ fn rank(info: &CommandInfo, wanted: &str) -> Option<u8> {
         Some(1)
     } else if name.contains(wanted) {
         Some(2)
-    } else if info.id.as_str().contains(wanted) {
+    } else if id.as_str().contains(wanted) {
         Some(3)
     } else {
         None
@@ -197,29 +197,44 @@ impl Palette {
     /// says the menu that holds it instead ("Switch bank, View menu"), so
     /// every row says how to reach the command again (answer 49).
     pub fn list_with(&self, query: &str, keymap: &Keymap, menus: Option<&Menus>) -> ListModel {
+        self.list_with_extra(query, keymap, menus, &[])
+    }
+
+    /// The same list with more commands after the built-in ones, ranked
+    /// with them: the enabled plugins' commands, by id and name (W4d).
+    pub fn list_with_extra(
+        &self,
+        query: &str,
+        keymap: &Keymap,
+        menus: Option<&Menus>,
+        extra: &[(CommandId, String)],
+    ) -> ListModel {
         let wanted = query.trim().to_lowercase();
         let standing = self.standing();
-        let mut ranked: Vec<(u8, usize, usize, &CommandInfo)> = reachable()
+        let commands = reachable()
+            .map(|info| (info.id.clone(), info.name.to_owned()))
+            .chain(extra.iter().cloned());
+        let mut ranked: Vec<(u8, usize, usize, CommandId, String)> = commands
             .enumerate()
-            .filter_map(|(order, info)| {
-                let class = rank(info, &wanted)?;
+            .filter_map(|(order, (id, name))| {
+                let class = rank(&id, &name, &wanted)?;
                 let used = standing
                     .iter()
-                    .find(|(id, _)| id == &info.id)
+                    .find(|(used, _)| used == &id)
                     .map_or(RECENT_LIMIT, |(_, place)| *place);
-                Some((class, used, order, info))
+                Some((class, used, order, id, name))
             })
             .collect();
-        ranked.sort_by_key(|(class, recency, order, _)| (*class, *recency, *order));
+        ranked.sort_by_key(|(class, recency, order, _, _)| (*class, *recency, *order));
         let rows = ranked
             .into_iter()
-            .map(|(_, _, _, info)| {
-                let key = keymap.key_text(&info.id);
-                let row = ListRow::new(info.id.as_str(), info.name);
+            .map(|(_, _, _, id, name)| {
+                let key = keymap.key_text(&id);
+                let row = ListRow::new(id.as_str(), name);
                 if !key.is_empty() {
                     return row.with_details([key]);
                 }
-                match menus.and_then(|m| m.holder_of(&info.id)) {
+                match menus.and_then(|m| m.holder_of(&id)) {
                     Some(menu) => row.with_details([format!("{menu} menu")]),
                     None => row,
                 }

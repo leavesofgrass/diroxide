@@ -844,7 +844,7 @@ access = "p"
 
 [[menu.item]]
 command = "plugins.list"
-access = "p"
+access = "m"
 
 [[menu]]
 id = "help"

@@ -268,6 +268,10 @@ pub struct Setup {
     pub home: Option<Place>,
     /// Records programs and opened files.
     pub recorder: Arc<Recorder>,
+    /// Starts plugins in the test's own way, never a real process (W4d).
+    pub plugin_launcher: Option<Arc<dyn diroxide_plugins::host::Launcher>>,
+    /// Starts with plugins off, as `--no-plugins` does (W4d).
+    pub no_plugins: bool,
 }
 
 impl Default for Setup {
@@ -277,6 +281,8 @@ impl Default for Setup {
             paths: None,
             home: None,
             recorder: Arc::new(Recorder::default()),
+            plugin_launcher: None,
+            no_plugins: false,
         }
     }
 }
@@ -349,6 +355,12 @@ impl Session {
             .with_opener(setup.recorder.clone());
         if let Some(paths) = paths {
             runtime = runtime.with_paths(paths.clone());
+        }
+        if let Some(launcher) = setup.plugin_launcher.clone() {
+            runtime = runtime.with_plugin_launcher(launcher);
+        }
+        if setup.no_plugins {
+            runtime = runtime.without_plugins();
         }
         let mut session = Self {
             app,
