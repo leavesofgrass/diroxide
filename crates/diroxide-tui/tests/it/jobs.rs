@@ -57,3 +57,48 @@ fn the_jobs_list_says_each_group_and_keeps_the_cursor_on_its_focus() {
     assert!(s.app().dialog().is_none());
     cursor_at(&s, 0, row);
 }
+
+#[test]
+fn the_connection_question_reads_its_facts_first_with_the_cursor_on_keep_waiting() {
+    use diroxide_app::request::{AskId, ConnectionQuestion, Question, Waiter};
+    use diroxide_core::{JobId, JobKind};
+
+    let dir = temp();
+    let work = fixture(dir.path());
+    let (mut a, mut r) = app(place(&work), place(&work), settings(Layout::Stacked));
+    let mut s = session(&mut a, &mut r, 100, 30, true);
+    let clock = Clock::at_start();
+    start(&mut s, &clock);
+    let row = s.screen().cursor_line.unwrap();
+    let question = ConnectionQuestion {
+        host: "build".into(),
+        jobs: (1..=3)
+            .map(|n| Waiter {
+                job: JobId::new(n),
+                kind: JobKind::Copy,
+                item: None,
+            })
+            .collect(),
+    };
+    s.event(
+        AppEvent::Asks {
+            ask: AskId::new(5),
+            question: Question::Connection {
+                job: JobId::new(1),
+                question,
+            },
+        },
+        clock.now(),
+    );
+    settle(&mut s, &clock);
+    let screen = s.screen();
+    let first = line_of(&screen, "build is not answering.");
+    assert!(screen.lines[first + 1].starts_with("3 jobs wait for it."));
+    cursor_at(&s, 0, line_of(&screen, "Keep waiting"));
+    line_of(&screen, "Try again now");
+    line_of(&screen, "Cancel these jobs");
+    // Escape keeps waiting and gives the panel its cursor back.
+    press(&mut s, &clock, "escape");
+    assert!(s.app().dialog().is_none());
+    cursor_at(&s, 0, row);
+}

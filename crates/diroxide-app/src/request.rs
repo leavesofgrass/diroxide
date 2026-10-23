@@ -22,6 +22,10 @@ use diroxide_core::{
 };
 use diroxide_ops::{Conflict, ItemError, Plan, UndoRecord};
 
+/// The connection question's shapes, for frontends that draw or answer it
+/// (lane A2).
+pub use diroxide_ops::{ConnectionAnswer, ConnectionQuestion, Waiter};
+
 /// One question a job or a listing is waiting on, numbered by the runtime
 /// so the answer finds its way back.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
