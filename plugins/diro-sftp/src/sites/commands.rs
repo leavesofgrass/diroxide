@@ -42,6 +42,7 @@ pub const COMMANDS: &[&str] = &[
     "edit_site",
     "delete_site",
     "forget_password",
+    "doctor",
 ];
 
 /// How long a host call other than a question may take.
@@ -267,6 +268,7 @@ pub fn run(run: &Run<'_>) -> Result<Value, RpcError> {
         "edit_site" => edit_site(run),
         "delete_site" => delete_site(run),
         "forget_password" => forget_password(run),
+        "doctor" => doctor(run),
         other => Err(RpcError::new(
             ErrorKind::MethodNotFound,
             format!("no command {other}"),
@@ -567,6 +569,23 @@ fn delete_site(run: &Run<'_>) -> Result<Value, RpcError> {
     let _ = run.sites.forget_secret(&site);
     run.announce(&words::site_deleted(&site.name), "info");
     Ok(done(1))
+}
+
+/// Doctor: the plugin's report, one fact a line, in the viewer; no
+/// network (crate::doctor).
+fn doctor(run: &Run<'_>) -> Result<Value, RpcError> {
+    let facts = crate::doctor::gather(
+        &run.state.settings,
+        run.sites,
+        run.provider.helper().as_deref(),
+        run.state.state_dir.as_deref(),
+    );
+    let lines = crate::doctor::report(&facts);
+    run.host(
+        methods::UI_SHOW_TEXT,
+        json!({"title": "SFTP doctor", "text": lines, "kind": "plain"}),
+    )?;
+    Ok(done(lines.len()))
 }
 
 /// Forget password: asked first, starting on No; removes the site's

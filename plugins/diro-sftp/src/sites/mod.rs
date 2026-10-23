@@ -238,20 +238,30 @@ impl Sites {
         }
     }
 
-    /// The hosts of the ssh configuration; none when there is no home
-    /// folder.
-    pub fn config_hosts(&self) -> HostList {
+    fn config_places(&self) -> Option<ConfigPlaces> {
         let source = self
             .config
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
-        let places = match source {
+        match source {
             ConfigSource::Owner => ConfigPlaces::for_user(None),
             ConfigSource::Setting(file) => ConfigPlaces::for_user(Some(&file)),
             ConfigSource::Fixed(places) => Some(places),
-        };
-        places.map(|p| config_hosts(&p)).unwrap_or_default()
+        }
+    }
+
+    /// The hosts of the ssh configuration; none when there is no home
+    /// folder.
+    pub fn config_hosts(&self) -> HostList {
+        self.config_places()
+            .map(|p| config_hosts(&p))
+            .unwrap_or_default()
+    }
+
+    /// The configuration file the hosts are read from.
+    pub fn config_file(&self) -> Option<PathBuf> {
+        self.config_places().map(|p| p.file)
     }
 
     /// `provider/places`: the sites and the configuration's hosts for the

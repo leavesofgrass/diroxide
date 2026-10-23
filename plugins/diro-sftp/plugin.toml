@@ -152,6 +152,12 @@ id = "forget_password"
 name = "Forget the site's password"
 description = "Removes its saved password from memory and the keyring."
 
+[[command]]
+id = "doctor"
+name = "SFTP doctor"
+description = "Says which ssh, the agent, the config and the helper's test."
+selection = "none"
+
 # The Sites list: Enter connects; the actions by key.
 [[lister]]
 id = "sites"

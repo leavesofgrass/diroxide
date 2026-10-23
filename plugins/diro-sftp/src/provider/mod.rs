@@ -253,6 +253,11 @@ impl Provider {
         Ok(answer)
     }
 
+    /// The askpass helper program its connections use, for `doctor`.
+    pub fn helper(&self) -> Option<std::path::PathBuf> {
+        self.opener.helper()
+    }
+
     /// Gives the provider the plugin's sites, so a connection to a saved
     /// site uses its options and its saved password.
     pub fn set_sites(&self, sites: Arc<crate::sites::Sites>) {

@@ -17,6 +17,8 @@ mod copy;
 #[cfg(feature = "fake-ssh")]
 mod dialogs;
 #[cfg(feature = "fake-ssh")]
+mod doctor;
+#[cfg(feature = "fake-ssh")]
 mod errors;
 #[cfg(feature = "fake-ssh")]
 mod fake_server;

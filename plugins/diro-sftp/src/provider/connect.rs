@@ -314,6 +314,12 @@ impl fmt::Debug for Opened {
 pub trait Opener: Send + Sync + fmt::Debug {
     /// Opens one session.
     fn open(&self, request: &OpenRequest<'_>) -> Result<Opened, RpcError>;
+
+    /// The askpass helper program its sessions use, for `doctor`'s
+    /// self-test; none for an opener that runs no ssh.
+    fn helper(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// The opener that starts the OpenSSH client.
@@ -493,6 +499,10 @@ impl SshOpener {
 }
 
 impl Opener for SshOpener {
+    fn helper(&self) -> Option<PathBuf> {
+        self.helper.clone()
+    }
+
     fn open(&self, request: &OpenRequest<'_>) -> Result<Opened, RpcError> {
         let host = request.target.host();
         let settings = &request.state.settings;
