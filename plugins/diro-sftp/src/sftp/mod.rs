@@ -4,6 +4,7 @@
 //! server's in tests).
 
 pub mod codec;
+pub mod fake;
 pub mod fuzzing;
 
 pub use codec::{Attrs, CodecError, NameEntry, Request, Response};

@@ -19,7 +19,10 @@
 //!   before ssh gives up); `{"stderr": TEXT}`, `{"exit": CODE}` and
 //!   `{"sleep_ms": N}` do what they say; `{"child_sleep_ms": N}` starts a
 //!   copy of the program that sleeps, as ssh's own children would, and
-//!   logs its process id.
+//!   logs its process id; `{"serve": {"files": {PATH: TEXT}, "dirs":
+//!   [PATH], "faults": {...}}}` serves the fake SFTP server
+//!   (`diro_sftp::sftp::fake`) on standard input and output until the
+//!   input ends, as `ssh -s sftp` does once it is signed in.
 //!
 //! **As an askpass recorder** (spike SF1): when `FAKE_ASKPASS_RECORD`
 //! names a file, the program is an `SSH_ASKPASS` stand-in that appends one
@@ -132,6 +135,37 @@ fn ask(prompt: &str) -> (Option<i32>, Option<String>) {
     }
 }
 
+/// Serves the fake SFTP server on standard input and output.
+fn serve_sftp(config: &Value) {
+    use std::sync::{Arc, Mutex};
+
+    use diro_sftp::sftp::fake::{FakeFs, Faults, serve};
+
+    let mut fs = FakeFs::default();
+    if let Some(dirs) = config.get("dirs").and_then(Value::as_array) {
+        for dir in dirs.iter().filter_map(Value::as_str) {
+            fs.add_dir(dir.as_bytes());
+        }
+    }
+    if let Some(files) = config.get("files").and_then(Value::as_object) {
+        for (path, text) in files {
+            fs.add_file(path.as_bytes(), text.as_str().unwrap_or("").as_bytes());
+        }
+    }
+    let f = config.get("faults").cloned().unwrap_or(Value::Null);
+    let n = |key: &str| f.get(key).and_then(Value::as_u64).map(|n| n as usize);
+    let flag = |key: &str| f.get(key).and_then(Value::as_bool).unwrap_or(false);
+    let faults = Faults {
+        stall_after: n("stall_after"),
+        short_reads: n("short_reads"),
+        out_of_order: flag("out_of_order"),
+        reuse_ids: flag("reuse_ids"),
+        drop_after_bytes: n("drop_after_bytes"),
+        no_statvfs: flag("no_statvfs"),
+    };
+    let _ = serve(io::stdin(), io::stdout(), Arc::new(Mutex::new(fs)), faults);
+}
+
 fn run_script(script: &[Value], log: Option<&str>) -> ExitCode {
     let mut stderr = io::stderr();
     for step in script {
@@ -191,6 +225,8 @@ fn run_script(script: &[Value], log: Option<&str>) -> ExitCode {
             }
         } else if let Some(code) = step.get("exit").and_then(Value::as_u64) {
             return ExitCode::from(u8::try_from(code).unwrap_or(255));
+        } else if let Some(serve) = step.get("serve") {
+            serve_sftp(serve);
         } else if step.get("drain").is_some() {
             // Waits for standard input to end, as a session does.
             let mut sink = Vec::new();

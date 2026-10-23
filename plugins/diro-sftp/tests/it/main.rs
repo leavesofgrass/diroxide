@@ -11,6 +11,8 @@ mod conformance;
 #[cfg(feature = "fake-ssh")]
 mod dialogs;
 #[cfg(feature = "fake-ssh")]
+mod fake_server;
+#[cfg(feature = "fake-ssh")]
 mod fakes;
 #[cfg(feature = "fake-ssh")]
 mod hosts;
