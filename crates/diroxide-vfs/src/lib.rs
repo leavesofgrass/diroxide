@@ -50,6 +50,10 @@ pub use registry::Registry;
 /// The kill-on-close job object of Windows, for the process helper.
 #[cfg(windows)]
 pub use sys::KillOnCloseJob;
+/// The owner-only named pipe of Windows, for the SFTP plugin's askpass
+/// endpoint (plan answer 101).
+#[cfg(windows)]
+pub use sys::{OwnerPipe, PipeStream, plain_pipe_name};
 pub use trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
 pub use volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
 pub use walk::{SkipReason, WalkEvent, WalkOptions, WalkSummary, walk};

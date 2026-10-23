@@ -19,25 +19,31 @@ use crate::plugin_exe;
 const SECRET: &str = "fixture-secret-correct-horse";
 
 fn listener(seen: &Arc<Mutex<Vec<Prompt>>>) -> Listener {
-    let seen = Arc::clone(seen);
     let root = std::env::temp_dir();
-    Listener::open(
-        Some(&root),
-        Arc::new(move |prompt: &Prompt| {
-            seen.lock().unwrap().push(prompt.clone());
-            let text = prompt.text();
-            if prompt.kind.as_deref() == Some("confirm") {
-                Reply::Confirm
-            } else if text.contains("password") {
-                Reply::Answer(Secret::new(SECRET.to_owned()))
-            } else if text.contains("continue connecting") {
-                Reply::Answer(Secret::new("yes".to_owned()))
-            } else {
-                Reply::Refuse
-            }
-        }),
-    )
-    .unwrap()
+    Listener::open(Some(&root), handler(seen)).unwrap()
+}
+
+/// The same answers on 127.0.0.1, where only the proof guards the
+/// endpoint (on Windows a connection's endpoint is the owner's pipe).
+fn loopback_listener(seen: &Arc<Mutex<Vec<Prompt>>>) -> Listener {
+    Listener::open_loopback(handler(seen)).unwrap()
+}
+
+fn handler(seen: &Arc<Mutex<Vec<Prompt>>>) -> diro_sftp::askpass::Handler {
+    let seen = Arc::clone(seen);
+    Arc::new(move |prompt: &Prompt| {
+        seen.lock().unwrap().push(prompt.clone());
+        let text = prompt.text();
+        if prompt.kind.as_deref() == Some("confirm") {
+            Reply::Confirm
+        } else if text.contains("password") {
+            Reply::Answer(Secret::new(SECRET.to_owned()))
+        } else if text.contains("continue connecting") {
+            Reply::Answer(Secret::new("yes".to_owned()))
+        } else {
+            Reply::Refuse
+        }
+    })
 }
 
 fn helper(endpoint: &str, token: &str, kind: Option<&str>, prompt: &str) -> Output {
@@ -147,14 +153,15 @@ fn a_wrong_token_is_refused_and_three_close_the_endpoint() {
 #[test]
 fn a_replayed_question_is_refused() {
     let seen = Arc::new(Mutex::new(Vec::new()));
-    let listener = listener(&seen);
+    // The replay is the same exchange on every endpoint; the loopback one
+    // shows it on every system.
+    let listener = loopback_listener(&seen);
     let token = Token::from_hex(&token_of(&listener)).unwrap();
-    let address = listener.endpoint().strip_prefix("tcp:").map(str::to_owned);
-    let Some(address) = address else {
-        // The Unix socket is the owner's alone; the replay is the same
-        // exchange and the TCP case shows it.
-        return;
-    };
+    let address = listener
+        .endpoint()
+        .strip_prefix("tcp:")
+        .map(str::to_owned)
+        .unwrap();
     let prompt = b"ada@build.example's password: ";
     let helper_nonce = random().unwrap();
     let mut first = std::net::TcpStream::connect(&address).unwrap();
