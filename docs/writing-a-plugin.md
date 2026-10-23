@@ -188,13 +188,23 @@ The steps:
 
 A plugin asks diroxide with requests of its own. Each is allowed by something in the manifest. A call that is not allowed gets -32030, and the person using the plugin hears one sentence.
 
-- Say, ask and show: `ui/announce`, `ui/ask` and `ui/show_text` are always allowed, because they only show things. `ui/ask` has five kinds: `confirm`, `choose`, `text`, `path` and `secret`. A confirm of a destructive thing starts on No. Escape is an answer, `{"cancelled": true}`, not an error. A secret is never echoed, never logged, never kept in history and never completed. The dialog is diroxide's own, its title ends with your plugin's name, and the person's thinking time does not count against your timeout.
+- Say, ask and show: `ui/announce`, `ui/ask` and `ui/show_text` are always allowed, because they only show things. `ui/ask` has five kinds: `confirm`, `choose`, `text`, `path` and `secret`. A confirm of a destructive thing starts on No. Escape is an answer, `{"cancelled": true}`, not an error. A secret is never echoed, never logged, never kept in history and never completed. The dialog is diroxide's own, its title ends with your plugin's name, and the person's thinking time does not count against your timeout. A `text` or `path` question can complete as the person types: `complete` names a source diroxide knows (`path`, `place`, `command`, `label`, `type` or `history`), a fixed `list` of candidates, or `plugin`, which sends you `completion/query` with the text so far. A prompt with a `prompt_id` keeps its own history. A `secret` never completes and never keeps history.
 - Panels: `panel/get` reads a panel's place, cursor and selection (needs `panel = "read"`). `panel/set` changes a place, the cursor or the marks (needs `panel = "write"`). `command/execute` runs a diroxide command by id (needs a matching `commands` pattern).
 - Files: `fs/list`, `fs/stat` and `fs/read` need `fs = "read"`. `fs/write`, `fs/mkdir`, `fs/rename`, `fs/copy`, `fs/move` and `fs/delete` need `fs = "write"`, and they run as jobs. A copy of yours shows the same plan, the same question and the same Undo as a copy started from the panels. Delete goes to the trash by default, after a listing. You cannot turn any of this off. Names you create follow the portable-name rules, so a plugin cannot make a name with a control character, a colon or a trailing dot through diroxide.
 - Programs: `tools/run` runs a program named in `permissions.tools`, with an argument list and never a shell line. `tools/find` says whether a tool is found. `tools/launch` starts a program from `permissions.launch` detached.
 - Large data goes through the spool: a folder diroxide makes for your plugin, with owner-only rights. A `spool_path` must be a regular file directly inside it. Anything else is refused.
 
 Say in the manifest only what you need. The shorter the list in the consent question, the easier it is to say yes with open eyes.
+
+## Following diroxide from outside: diro serve
+
+`diro serve --stdio` starts the app with no screen and speaks this same protocol on its standard input and output, with the program that started it in the plugin's seat. A self-voicing helper or a Braille helper can use it to follow what happens and to drive it.
+
+- The first message is `initialize`, with protocol 1 and the helper's name. Until it is answered, every other request gets -32002. After `shutdown` is answered, only `exit` counts. `exit` or the end of the input ends the server.
+- The services a helper can call are `command/execute` (a command by id with `args`, or in the text form, `text`), `key/press` (one key by name, as a frontend sends it), `panel/get`, `panel/set`, `dialog/get` (the open dialog's name and focus), `ui/announce` and `shutdown`. It has no `fs/*` or `ui/ask` services for a helper yet.
+- The events are notifications. Each comes before the answer to the request that caused it:
+  - `ui/announce`: every announcement, with its importance, `status`, `info`, `warning` or `error`. A line the helper announced itself comes back cleaned, with the helper's name last.
+  - `panel/changed`: a panel whose folder, focus or selection changed. Its `changes` list names which, with the words `folder`, `focus` and `selection`. It then gives the `panel` (`left` or `right`), whether it is `active`, and its `place`, `cursor` and `selection`.
 
 ## Lists of rows that are not files
 
@@ -225,6 +235,8 @@ selection = "many"
 ```
 
 The command `show` asks the active panel where it is with `panel/get`, runs git through `tools/run`, and opens the lister with `lister/open`. Each row's name puts the state first, "Modified, src/lib.rs", so the meaning is in the first cells of the Braille line. Enter runs the `activate` command on the row. The rows are sortable, filterable and markable like any rows, and a built-in file command on one answers "This row is not a file." because the row is not one.
+
+In the program, the lister opens over the panels, like search results, and says "Changed files, 2 rows (Changed files)". Space marks a row, the sort keys open "Sort the rows by" with a choice for each column, Ctrl+S opens "Filter the rows by", Enter runs the `activate` command and an action key runs its command, both on the marked rows or the row you are on, and Ctrl+R sends your plugin `lister/rows` with `refresh` set, so it answers with all the rows again. At the end of a long list, diroxide sends `lister/rows` with an `offset` by itself, to ask for the next rows. A file key such as F5 says "This row is not a file." Escape closes the lister, and you get `lister/closed`. [Plugins](plugins.md) lists the keys.
 
 Build it with `diro plugin new my-changes --language python --kind lister`.
 
@@ -397,7 +409,7 @@ They are in the `examples/plugins` folder of the source, and in the optional com
 1. Total size of selection (`scripts/total-size.sh`). A short bash script that reads the selection list and says how many items there are and how big they are. It shows the header, the NUL list, the directives file and the exit codes. [Script commands](script-commands.md) takes it apart.
 2. Select empty folders (`scripts/select-empty-folders.sh`). Marks the empty folders of the active panel with `select` directives, which wait until the script ends so the panel does not move while you listen.
 3. Line counter (`line-counter`). The protocol example above: settings, cancel, progress, error kinds and a per-file result list, standard library only.
-4. Search the whole computer (`system-index`). Three commands and no code. Everything's `es` on Windows, `plocate` on Linux and `mdfind` on macOS take a typed query, and the output lines become a list of real files in a panel. It shows `prompt`, `mode = "lister"`, `list`, `max_rows`, `os`, `needs` and `exit_words`. You hear "214 results for report, from Everything", or "No results for report.", or "First 5,000 shown, narrow the search.".
+4. Search the whole computer (`system-index`). Three commands and no code. Everything's `es` on Windows, `plocate` on Linux and `mdfind` on macOS take a typed query, and the output lines become a list of real files in a panel. It shows `prompt`, `mode = "lister"`, `list`, `max_rows`, `os`, `needs` and `exit_words`. You hear "214 results for report, from Search the whole computer", or "No results for report.", or "First 5,000 shown, narrow the search.".
 5. Compare in a diff tool (`compare-files`). Two commands and no code, with a setting that holds your diff program and its options. It shows `mode = "launch"` and the placeholders `{file}`, `{other_file}`, `{files}` and `{setting.tool}`. A terminal diff such as `vimdiff` needs `mode = "terminal-wait"`.
 6. Changed files (`changed-files`). The lister example above: rows that are not files, Enter bound to a command, a context action, raw tool output through `tools/run`, and a text document with `ui/show_text`.
 7. Memory files, toy (`memfs`). The provider example above.

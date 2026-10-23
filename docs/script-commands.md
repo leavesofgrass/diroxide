@@ -12,7 +12,7 @@ Every command line and every example script in this guide was run, and every scr
 - Its extension picks the program that runs it: `.sh` and `.bash` with bash, `.py` with Python 3, `.ps1` with PowerShell, and `.cmd` and `.bat` on Windows as themselves. On Linux and macOS any other file runs directly when it is executable, so the system reads its first line.
 - Its first lines are a header of comments that names the command and says how it runs.
 - The file's name without its extension is the script's id: lowercase letters, digits, `-` and `_`, from 2 to 40 characters, starting and ending with a letter or a digit. A name with anything else is refused with the first bad character spelled out, for example "U+0020 is not allowed in a name", because a name that needs quoting is how files go wrong.
-- Nothing runs until you turn it on. Scripts run only from `plugins/scripts`, never from the current folder and never from an archive.
+- Nothing runs until you turn it on. Scripts run only from `plugins/scripts`, never from the current folder and never from an archive. The example pack's own scripts, in the components folder, are the one exception. They are pinned and still need your yes.
 - On Linux and macOS, diroxide refuses to start a script when its file or its folder can be changed by anyone but you. It says "others can change its file" or "others can change its folder".
 
 ## Make one
@@ -140,7 +140,7 @@ About the command:
 
 - `name`: what the menu and the palette show. Put the meaning first, within 40 characters. Without it the file's name is used, with underscores read as spaces.
 - `description`: one sentence for the help key. Say what it does first, and do not start with "This script".
-- `key`: a key you propose, such as `"ctrl+alt+t"`. It binds only when it is free, and it shows as proposed. You can always change it in the Keys list.
+- `key`: a key you propose, such as `"ctrl+alt+t"`. It binds only when it is free, in no terminal's way and not a single letter. Manage plugins, on the plugin's Commands and keys row, says what happened: "Ctrl+Alt+L, proposed", or "Ctrl+Alt+L not bound: it already runs Copy". The Keys list and `keymap.toml` do not hold a plugin's keys yet.
 - `menu`: where it shows. The Plugins menu when absent.
 
 What it needs:
@@ -163,12 +163,12 @@ How it runs:
 
 Questions:
 
-- `confirm`: a question diroxide asks first. It starts on No.
-- `prompt`: one line diroxide asks first, with the history and completion of other text entries. The answer arrives as `DIRO_INPUT` and as `{input}`. An empty answer cancels the run.
+- `confirm`: a question diroxide asks first, with your script's name last: "Say hello to the name you type? No is the default. y or n (Ask first)". It starts on No, and Escape says "Ask first: cancelled."
+- `prompt`: one line diroxide asks first, in a field named for the prompt with the script's name last, "Name to greet (Ask first)". The field remembers what you typed before. The answer arrives as `DIRO_INPUT` and as `{input}`. An empty answer cancels the run.
 
 Promises:
 
-- `dry_run`: `"supported"` promises that when `DIRO_DRY_RUN=1` is set, the script prints what it would do, changes nothing and exits 0. A command that makes this promise also gets a "(preview)" entry in the palette. A script without the key gets none, because diroxide cannot look inside a script and never claims a preview it cannot guarantee.
+- `dry_run`: `"supported"` promises that when `DIRO_DRY_RUN=1` is set, the script prints what it would do, changes nothing and exits 0. The key is read and checked, and the program does not offer a preview with it yet. diroxide cannot look inside a script, so it will never claim a preview the script has not promised.
 - `unattended`: `"ok"` promises that the script never asks (no `prompt`, no `confirm`, no terminal mode and no reading of standard input), that it always ends within its `timeout`, that it honors `DIRO_UNATTENDED=1`, and that under `DIRO_DRY_RUN=1` it changes nothing. `diro plugin check` fails a script that says `unattended` and also sets a prompt, a question, a terminal mode or no timeout. Only such a script may be run by a saved task with nobody there, and the consent question then adds "It can run without asking."
 
 Reading and talking back:
@@ -284,13 +284,13 @@ It needs no selection, so `selection` is `none`. It changes only the marks, whic
 
 The `mode` key says where a script's output lines go.
 
-- `output-pane` (the default): each line shows as it comes.
-- `run`: the output is kept in the command's log and shown only if the script fails.
-- `output-viewer`: the output is shown in the viewer when the script ends.
-- `output-column`: the script runs once for each item, and its first output line becomes that item's custom column.
-- `terminal`: the screen is handed over to the script, then given back. For a program that needs the terminal, such as an editor.
-- `terminal-wait`: as `terminal`, then diroxide says "Press Enter to go back." before it returns.
-- `lister`: each output line is a place, and the places open as a list of real files. View, copy and the filter work on them as on any panel. `list` says whether the places end in a line break or a NUL byte, and `max_rows` caps the list. A list cut at its cap says "First 5,000 shown, narrow the search." The title puts the count first: "214 results for report, from Everything". A place that no longer exists stays in the list as "Missing, report-old.pdf".
+- `output-pane` (the default): the output lines are kept as they come. When the script ends, they open as a list named "Output of NAME (NAME)", one line to a row, and Escape closes it. A script that printed nothing opens no list.
+- `run`: the output is kept in the command's log and not shown.
+- `output-viewer`: as `output-pane` in the program today: a list when the script ends.
+- `output-column`: the script runs once for each item, and its first output line becomes that item's custom column. The program does not show the column yet.
+- `terminal`: for a program that needs the terminal, such as an editor. The program does not hand the screen over yet.
+- `terminal-wait`: as `terminal`, then diroxide says "Press Enter to go back." before it returns. The program does not hand the screen over yet.
+- `lister`: each output line is a place, and the places open as a results list of real files, like a search. View, copy and the filter work on them as on a search's results. `list` says whether the places end in a line break or a NUL byte, and `max_rows` caps the list. A list cut at its cap says "First 5,000 shown, narrow the search." The title puts the count first: "214 results for report, from Search the whole computer". A place that no longer exists stays in the list as "Missing, report-old.pdf".
 - `launch`: diroxide starts the program on its own, so it stays open after diroxide returns, and answers at once with "Started meld." Use it for a diff tool or an editor.
 
 Output is cleaned of escape sequences and control characters, a line is cut at 2,000 characters, and the whole output at 1 MB. "Output cut at 1 MB." says it happened.

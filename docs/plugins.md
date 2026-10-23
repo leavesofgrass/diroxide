@@ -23,7 +23,7 @@ A plugin adds something diroxide does not do by itself. It can add a command, a 
 
 ## What a plugin can add
 
-- Commands. They show in the Plugins menu, the command palette and the banks. A command that cannot run now is shown disabled with its reason, for example "Search with Everything, disabled" and "Needs es, not found."
+- Commands. They show in the Plugins menu and the command palette, and `menus.toml` and `banks.toml` may name them. A command that cannot run now is shown disabled with its reason, for example "Search with Everything, disabled" and "Needs es, not found."
 - Lists of rows that are not files, such as the changed files of a git folder. A row says its meaning first. Enter runs the plugin's own command for the row. A file command on such a row, for example F5, says "This row is not a file."
 - Places. A plugin can serve a file system at a name of its own, such as `memfs:/` in the toy example. Copy, view, rename and delete then work there as in any place, with the same plan, the same confirmation and the same Undo as anywhere else.
 - Previewers and converters. Today you run them from a shell with `diro plugin preview` and `diro plugin convert`. The preview region and the conversions dialog come with a later alpha.
@@ -31,8 +31,8 @@ A plugin adds something diroxide does not do by itself. It can add a command, a 
 
 ## Where plugins live
 
-- The config folder has a `plugins` folder. A plugin is a folder in it. A script is a file in its `scripts` folder, `plugins/scripts`. Scripts run only from there, never from the current folder and never from an archive.
-- The state folder has a `plugins` folder too. It holds `consent.toml`, which records what you turned on, one folder for each plugin with its log and its data, and a `runs` folder for the short-lived files of a running script.
+- The config folder has a `plugins` folder. A plugin is a folder in it. A script is a file in its `scripts` folder, `plugins/scripts`. Scripts run only from there, never from the current folder and never from an archive. The one exception is the example pack, whose plugins and scripts are listed in Manage plugins from the components folder.
+- The state folder has a `plugins` folder too. It holds `consent.toml`, which records what you turned on, one folder for each plugin with its log, its data and its `settings.toml`, and a `runs` folder for the short-lived files of a running script.
 - A plugin that came as an optional component lives in the `components` folder of the state folder. [Optional components](components.md) says more.
 - With `--portable`, all of these sit beside the program. [Settings and where the files live](settings.md) says where the folders are on each system.
 
@@ -58,7 +58,7 @@ While it runs it can do what you can.
 Enable it? y or n
 ```
 
-On Windows the second row reads "It runs: py -3 main.py". The answer starts on No. After it, you hear "Enabled: Line counter." or "Not enabled."
+On Windows the second row reads "It runs: py -3 main.py". The answer starts on No. In the program, the question comes first and the rows are listed under it, as "In the program" says below. After it, you hear "Enabled: Line counter." or "Not enabled."
 
 What the rows mean:
 
@@ -149,26 +149,110 @@ diro plugin conformance line-counter
 
 Runs the protocol checks over a plugin folder. [Writing a plugin](writing-a-plugin.md) says what they check.
 
+```bash
+diro run line-counter.count_lines
+```
+
+Runs an enabled plugin's command without the panels, in the current folder, and says what the app says: "Count lines: started (Line counter)", the plugin's own words, and "Count lines done (Line counter)". A command's id is its plugin's id, a dot, and its own id. A script's is `script.` and its name, for example `script.total-size`. For a plugin that is not turned on, it says "Say hello is not enabled. Enable it in Manage plugins." and runs nothing.
+
 `diro plugin new` writes a working skeleton, and `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file. Both are in [writing a plugin](writing-a-plugin.md).
 
 ## In the program
 
-These screens are the ones to expect in the terminal.
+These are the screens, in the terminal.
 
-- The Plugins menu (Alt+P, or F9 and then Plugins) lists the commands of the plugins you turned on, under the plugin's name, and ends with Manage plugins and Get example plugins. A plugin that is not turned on adds nothing to the menu. It shows up only in Manage plugins.
-- Manage plugins is a list, one row for each plugin and script, the name first and the state after it: "Line counter: not enabled, plugin 0.1.0". These are the words `diro plugin list` prints. Enter on a row offers to turn it on or off, to show its settings and to show its log. Turning on asks the question above.
-- A plugin's command runs as a job. The jobs line says "Count lines: started (Line counter)". Escape cancels it. If the plugin takes more than two seconds to answer, the line says "Count lines: waiting for the plugin".
-- A question a plugin asks is a dialog of diroxide's own. It has a title with the plugin's name last, for example "Trust this host? (SFTP places)", it closes on Escape, and focus goes back to where it was. It waits behind a confirmation of a delete and never covers one.
-- A plugin's settings show in the Settings list under the plugin's name, with the help key on each row. A change reaches the plugin at once.
+### The Plugins menu
+
+Alt+P opens the Plugins menu. It lists Manage plugins (M) and Get example plugins (G) first. After them come the commands of each plugin you turned on, the command's name first and its key after it, for example "Count lines, Ctrl+Alt+L". The same commands are in the command palette. A plugin that is not turned on adds nothing to the menu or the palette. It shows up only in Manage plugins.
+
+A command that cannot run now is read "Search with Everything, disabled", with the reason under it: "Needs es, not found." The reason is also said when you try to run it.
+
+With `diro --no-plugins` the menu holds only Manage plugins and Get example plugins, and it says "Plugins are off for this session."
+
+### Manage plugins
+
+Manage plugins is a list with one row for each plugin and script, the name first, then the state, then the kind: "Line counter: not enabled, plugin 0.1.0" and "Total size: enabled, script". These are the words `diro plugin list` prints. The state is "not enabled", "enabled", "changed, asks again" or "has errors".
+
+Enter on a row opens a list named for the plugin. It offers, in this order:
+
+- Enable, for a plugin that is not enabled. For one that changed: Enable again, and Disable. For an enabled one: Disable.
+- "Why it has errors", for a plugin whose manifest or header has errors. It says the first one.
+- "Turn it on again", for a plugin that diroxide turned off after repeated crashes.
+- "Commands and keys", for a plugin that has commands. Each command is a row with its key beside it: "Ctrl+Alt+L, proposed", or "Ctrl+Alt+L not bound: it already runs Copy", or "no key". A command that cannot run now adds its reason.
+- "Settings", for a plugin that has settings.
+- "Log, the last error first". The log opens as a list, "Log of Line counter", with "Last error:" at the top and then the lines, newest first.
+
+Enable asks the question. Disable takes effect at once.
+
+### The question
+
+The question is the first line, and the rest is listed under it, one row to a line. For the line counter:
+
+```text
+Enable Line counter, version 0.1.0? No is the default. y or n
+It runs: python3 main.py
+diroxide checks: it may read files.
+The plugin states, unchecked:
+no network.
+only the files it is given.
+no other programs.
+While it runs it can do what you can.
+```
+
+Press n or Escape and you hear "Not enabled." Press y and you hear "Enabled: Line counter." A plugin that changed since you enabled it asks "Line counter changed since you enabled it. Enable it again? No is the default. y or n", with the same rows under it. If you run a command of a changed plugin, this question comes first, and the command runs after your yes.
+
+If a plugin's command is run while it is not enabled, you hear "Line counter is not enabled. Enable it in Manage plugins."
+
+### A command running
+
+A plugin's command runs as a job.
+
+- The jobs line says "Count lines: started (Line counter)". If the plugin takes more than two seconds to answer, it says "Count lines: waiting for the plugin".
+- Escape cancels it. You hear "Count lines: cancelling" and then "Count lines: cancelled."
+- When it ends, the plugin's own announcement comes first, "Lines: 4, files: 1. By Line counter.", and the job's end is shown: "Count lines done: 1 item (Line counter)". A failure says what failed, then "Last error:" and "Next: diro plugin log line-counter".
+- A script that sets a question says it before it runs: "Say hello to the name you type? No is the default. y or n (Ask first)". A script that sets a prompt asks for a line, and the field is named "Name to greet (Ask first)". An empty answer, or Escape, says "Ask first: cancelled."
+- When a script in `output-pane` or `output-viewer` mode ends and printed lines, they open as a list named "Output of Print names (Print names)", one line to a row. Escape closes it.
+- When a script in `lister` mode ends, its places open as a results list like a search: "214 results for report, from Search the whole computer", with real files that you can view and copy. "No results for report." says there were none.
+
+### A question a plugin asks
+
+A question a plugin asks is a dialog of diroxide's own. It has the plugin's name last: "Trust this host? No is the default. y or n (Line counter)", with the plugin's message lines under it. It closes on Escape, and focus goes back to where it was. There are five kinds: yes or no, a choice from a list (with Space to mark several), a line of text, a place, and a secret that is never shown. A plugin's text prompt can offer choices as you type, and says how many: "3 candidates".
+
+A plugin's question waits behind a confirmation, a password prompt, a job's question, a field you are typing in, and another question, and opens when they close. It never covers one.
+
+### A list of rows that are not files
+
+A plugin can open a list of rows that are not files, such as the changed files of a git folder. It opens over the panels, like search results, and says "Changed files, 2 rows (Line counter)". A row says its name first and its columns after it: "b.txt, state Modified, lines 12, 2 of 2".
+
+- Up and Down move. At the end of a long list, diroxide asks the plugin for more rows by itself.
+- Space marks and unmarks a row: you hear "Marked" or "Unmarked".
+- The sort keys open "Sort the rows by", a choice of the name and each column. The same choice again reverses it: "Sorted by lines", then "Sorted by lines, reversed".
+- Ctrl+S opens "Filter the rows by". Rows whose name or columns hold the text stay. "Filter off" says it is cleared.
+- Enter runs the plugin's own command for the marked rows, or for the row you are on. The plugin's other action keys, such as Alt+S for "stage" in the changed-files example, do the same with their commands.
+- Ctrl+R asks the plugin for the rows again.
+- A key that acts on files, such as F5 or F8, says "This row is not a file."
+- Escape closes the list and says "Lister closed (Changed files)".
+
+Today a list always opens over the panels, whichever panel the plugin names.
+
+### Settings
+
+The Settings list has a row, "Plugin settings", with the words "each plugin's own, under its name". Enter on it lists the plugins that have settings: "Line counter, not enabled, 1 setting". Enter on one opens "Settings of Line counter", one row for each setting: "Skip blank, off". Enter flips a switch, or opens the choices, or opens a field to type in. The help key (F1) says what the setting does, what it holds and its default. A change reaches the plugin at once and is said: "Skip blank: on (Line counter)". The same list opens from Manage plugins, on a plugin's Settings row.
+
+The values are kept in `settings.toml` in the plugin's folder of the state folder.
+
+### Get example plugins
+
+Plugins menu, G. If the example plugins are not here yet, it asks first, as [optional components](components.md) describes. If they are, it says "Already installed: Example plugins. Manage plugins lists them." Nothing in the pack is turned on. After a yes and "Ready: diro-examples 0.1.0.", Manage plugins lists the examples, each "not enabled".
 
 ## What you hear
 
 A plugin cannot pass for diroxide. Every sentence it causes puts its meaning in the first 40 characters and its own name last:
 
 - A plugin's own announcement: "Lines: 42, files: 1. By Line counter."
-- The start of a command: "Count lines: started (Line counter)". The end: "Count lines done: 3 files (Line counter)". A cancel: "Count lines: cancelled."
+- The start of a command: "Count lines: started (Line counter)". The end: "Count lines done: 3 items (Line counter)". A cancel: "Count lines: cancelling" and then "Count lines: cancelled."
 - Progress: "Counting 12 of 300 files (Line counter)". In screen-reader mode it is spoken at most every ten seconds, and Say status (Ctrl+D) gives it when you ask.
-- A question's title: "Replace a file? (Line counter)". When a plugin gives no title, it reads "Line counter asks".
+- A question: "Replace a file? (Line counter)", or "Trust this host? No is the default. y or n (Line counter)" for a yes or no question. When a plugin gives no title, it reads "Line counter asks".
 - A plugin that talks a lot: "12 more messages from Line counter" says that some were folded together.
 - A plugin's text is cleaned first. Control and direction characters and terminal escape sequences are removed, and a very long line is cut.
 
@@ -217,13 +301,14 @@ To get them, ask for the component. It names the size and license and asks first
 diro components download diro-examples
 ```
 
-The pack is not published with a release yet, so until it is, add `--source` with a folder that holds it, or install it from a file. [Optional components](components.md) shows how. Then copy the one you want into your plugins folder with `diro plugin install`, and read it before you turn it on.
+The pack is not published with a release yet, so until it is, add `--source` with a folder that holds it, or install it from a file. [Optional components](components.md) shows how. In the program, Manage plugins then lists the examples where they are, each with "example" beside it, and a plugin of your own with the same id wins. From a shell, copy the one you want into your plugins folder with `diro plugin install`. Read an example before you turn it on.
 
 ## Settings
 
 - `plugins.timeout_ms` (10000; 1000 to 600000): how long a plugin may take to answer before it is reported and left.
 - `components_source` names your own list of optional components. [Optional components](components.md) describes it.
-- A plugin's own settings are listed in its manifest and shown under its name.
+- A plugin's own settings are listed in its manifest and shown in the Settings list, on the "Plugin settings" row, as the section above says.
+- `plugins.enabled` is reserved. You turn a plugin on in Manage plugins or with `diro plugin enable`, and the record is `consent.toml`.
 
 [The settings reference](settings-reference.md) lists every setting with its default and range.
 

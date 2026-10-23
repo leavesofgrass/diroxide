@@ -90,12 +90,13 @@ These settings are for the filter language, search, compare and the key presets.
 
 ### Plugins and optional components
 
-Two settings matter for plugins and components in practice. [The settings reference](settings-reference.md) lists them under Plugins. You turn a plugin on and off from the Plugins menu or with `diro plugin enable` and `diro plugin disable`. The record, with the fingerprints, is kept in `consent.toml` in the state folder.
+[The settings reference](settings-reference.md) lists four settings under Plugins. You turn a plugin on and off in Manage plugins, in the Plugins menu, or with `diro plugin enable` and `diro plugin disable`. The record, with the fingerprints, is kept in `consent.toml` in the state folder. `plugins.enabled` is reserved and does nothing.
 
 - Plugin time limit (`plugins.timeout_ms`, 10000; 1000 to 600000): how long a plugin may take to answer before it is reported and left.
 - Components list (`components_source`, empty): where you keep your own copy of the optional components, a folder or a repository written `owner/name`. Empty means the public list only. It is tried before the public address. Nothing else names it, and the question that asks to download says only "From your own components source." [Optional components](components.md) describes it.
+- First-run list shown (`components_first_run_shown`, off): whether the first-run list of optional components was shown. Ask first-run choices again, in the Tools menu, turns it off.
 
-A plugin's own settings are listed in its manifest. They show under the plugin's name in the Settings list, with help on each row.
+A plugin's own settings are listed in its manifest. The Settings list has a row, "Plugin settings", that opens them: pick a plugin, then a setting. A change reaches the plugin at once, and the F1 help says what each setting does. The values are kept in `settings.toml` in the plugin's folder of the state folder. [Plugins](plugins.md) has the details.
 
 ### The viewer, the quick view, archives and split sizes
 
