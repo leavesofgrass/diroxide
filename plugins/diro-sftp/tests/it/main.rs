@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod askpass;
+mod captures;
 mod codec;
 mod conformance;
 #[cfg(feature = "fake-ssh")]
@@ -43,6 +44,8 @@ mod read;
 mod reconnect;
 #[cfg(feature = "fake-ssh")]
 mod secrets;
+#[cfg(all(unix, feature = "fake-ssh"))]
+mod server;
 mod session;
 #[cfg(feature = "fake-ssh")]
 mod sites;
