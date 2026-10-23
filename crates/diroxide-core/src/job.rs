@@ -280,9 +280,18 @@ impl ConflictAnswer {
 
 /// What a job is doing now, carried on every progress update so the app
 /// can say a change of state at once and progress only at its interval.
+///
+/// The transfer queue (R25, part 1) is the jobs list, not a second thing:
+/// a job waiting for a free slot is [`JobState::Queued`], and a job whose
+/// host went away waits as [`JobState::WaitingForConnection`] behind the
+/// host's one shared gate.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum JobState {
+    /// Planned and confirmed, waiting for a free slot of its class (two
+    /// running jobs per host, four remote jobs in all, one component
+    /// download at a time).
+    Queued,
     /// Walking the sources to count entries and bytes.
     #[default]
     Counting,
@@ -293,8 +302,11 @@ pub enum JobState {
     /// No progress for a while (a slow or lost network place).
     Stalled,
     /// Waiting for the user to answer a question (a conflict, an error, a
-    /// password).
+    /// password). A job that waits for an answer gives up its slot.
     WaitingForAnswer,
+    /// Its host was lost: the job waits while the host's gate tries the
+    /// connection again, and goes on by itself when it is back.
+    WaitingForConnection,
     /// Checking what was written against its source.
     Verifying,
     /// Done, cancelled or failed; the report says which.
@@ -302,18 +314,88 @@ pub enum JobState {
 }
 
 impl JobState {
+    /// Every state, in the order a job meets them; the word tests walk it.
+    pub const ALL: &'static [JobState] = &[
+        JobState::Queued,
+        JobState::Counting,
+        JobState::Running,
+        JobState::Paused,
+        JobState::Stalled,
+        JobState::WaitingForAnswer,
+        JobState::WaitingForConnection,
+        JobState::Verifying,
+        JobState::Finished,
+    ];
+
     /// The state in words, for the jobs line: "counting", "paused",
-    /// "waiting for an answer".
+    /// "waiting for an answer", "waiting its turn", "waiting for the
+    /// connection". Each fits 40 cells after a job's longest word.
     pub const fn word(self) -> &'static str {
         match self {
+            JobState::Queued => "waiting its turn",
             JobState::Counting => "counting",
             JobState::Running => "running",
             JobState::Paused => "paused",
             JobState::Stalled => "stalled",
             JobState::WaitingForAnswer => "waiting for an answer",
+            JobState::WaitingForConnection => "waiting for the connection",
             JobState::Verifying => "verifying",
             JobState::Finished => "finished",
         }
+    }
+
+    /// Whether the job holds no slot of the queue in this state: it waits
+    /// its turn, waits for an answer, or has finished. A job that waits for
+    /// an answer releases its slot, so one forgotten question cannot hold
+    /// the queue (R25, 2.2).
+    pub const fn holds_no_slot(self) -> bool {
+        matches!(
+            self,
+            JobState::Queued | JobState::WaitingForAnswer | JobState::Finished
+        )
+    }
+}
+
+/// What a job does when an item fails after the engine's own silent
+/// retries (R25 N9): ask, as alpha 1 always did; continue and list the
+/// failures at the end without a question, for unattended work; or stop
+/// at the first failure. Chosen per job, and as the default for waiting
+/// jobs in the settings.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ErrorPolicy {
+    /// Ask about each failure: Retry, Skip, Skip all like this or Cancel.
+    #[default]
+    Ask,
+    /// Skip what fails, never open a question, and list the failures in
+    /// the result.
+    ContinueAndList,
+    /// Stop the job at its first failure.
+    StopAtFirst,
+}
+
+impl ErrorPolicy {
+    /// Every policy, the default first.
+    pub const ALL: &'static [ErrorPolicy] = &[
+        ErrorPolicy::Ask,
+        ErrorPolicy::ContinueAndList,
+        ErrorPolicy::StopAtFirst,
+    ];
+
+    /// The choice as listed, verb first and inside 40 cells: "Ask about
+    /// each error", "Continue and list errors", "Stop at the first error".
+    pub const fn label(self) -> &'static str {
+        match self {
+            ErrorPolicy::Ask => "Ask about each error",
+            ErrorPolicy::ContinueAndList => "Continue and list errors",
+            ErrorPolicy::StopAtFirst => "Stop at the first error",
+        }
+    }
+
+    /// Whether this is the default, asking: a request leaves it out of its
+    /// text then, so old readers and old requests agree.
+    pub fn is_ask(&self) -> bool {
+        *self == ErrorPolicy::Ask
     }
 }
 
@@ -438,11 +520,16 @@ pub struct JobRequest {
     /// reads as new symbolic links with absolute targets.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<LinkEdit>,
+    /// What the job does when an item fails after the engine's own
+    /// retries ([`ErrorPolicy`]); asking unless chosen otherwise. A request
+    /// written before the queue reads as asking.
+    #[serde(default, skip_serializing_if = "ErrorPolicy::is_ask")]
+    pub errors: ErrorPolicy,
 }
 
 impl JobRequest {
     /// A request with sources, no destination, no new name, the default
-    /// conflict policy, and the user as its origin.
+    /// conflict and error policies, and the user as its origin.
     pub fn new(id: JobId, kind: JobKind, sources: Vec<Place>) -> Self {
         Self {
             id,
@@ -456,7 +543,14 @@ impl JobRequest {
             parts: None,
             attributes: None,
             link: None,
+            errors: ErrorPolicy::default(),
         }
+    }
+
+    /// The same request with an error policy.
+    pub fn on_errors(mut self, policy: ErrorPolicy) -> Self {
+        self.errors = policy;
+        self
     }
 
     /// The same request changing permissions, attributes or times as the
@@ -672,6 +766,67 @@ mod tests {
         );
         assert_eq!(PartSize::EqualParts(0).part_bytes(10), None);
         assert_eq!(PartSize::Bytes(0).parts_for(10), 0);
+    }
+
+    /// The queue's vocabulary (R25 commit 65): every state has its word,
+    /// each fits 40 cells after the longest progress word, and the states
+    /// that hold no slot are the waiting and finished ones.
+    #[test]
+    fn every_state_has_a_word_that_fits_40_cells() {
+        assert_eq!(JobState::ALL.len(), 9);
+        let mut words = std::collections::HashSet::new();
+        for state in JobState::ALL {
+            let word = state.word();
+            assert!(words.insert(word), "two states say {word}");
+            // A list row says the state first, then the job: the longest
+            // word leaves a third of the line for the verb and the target.
+            assert!(word.chars().count() <= 26, "{word}");
+            assert!(
+                crate::format::within_cells(&format!("{word}: copy 12 items"), word),
+                "{word}"
+            );
+            let json = serde_json::to_string(state).unwrap();
+            assert_eq!(serde_json::from_str::<JobState>(&json).unwrap(), *state);
+        }
+        assert_eq!(JobState::Queued.word(), "waiting its turn");
+        assert_eq!(
+            JobState::WaitingForConnection.word(),
+            "waiting for the connection"
+        );
+        assert_eq!(
+            serde_json::to_string(&JobState::WaitingForConnection).unwrap(),
+            "\"waiting-for-connection\""
+        );
+        assert!(JobState::Queued.holds_no_slot());
+        assert!(JobState::WaitingForAnswer.holds_no_slot());
+        assert!(!JobState::WaitingForConnection.holds_no_slot());
+        assert!(!JobState::Running.holds_no_slot());
+        assert_eq!(JobState::default(), JobState::Counting);
+    }
+
+    /// The error policy travels in the request, asking by default; a
+    /// request written before it reads as asking and writes nothing new.
+    #[test]
+    fn the_error_policy_travels_and_old_requests_ask() {
+        let old = r#"{"id":3,"kind":"copy","sources":[],"destination":null,"new_name":null,"conflicts":"ask"}"#;
+        let read: JobRequest = serde_json::from_str(old).unwrap();
+        assert_eq!(read.errors, ErrorPolicy::Ask);
+        let written = serde_json::to_string(&read).unwrap();
+        assert!(!written.contains("errors"), "{written}");
+        let unattended = JobRequest::new(JobId::new(4), JobKind::Copy, Vec::new())
+            .on_errors(ErrorPolicy::ContinueAndList);
+        let json = serde_json::to_string(&unattended).unwrap();
+        assert!(json.contains(r#""errors":"continue-and-list""#), "{json}");
+        assert_eq!(
+            serde_json::from_str::<JobRequest>(&json).unwrap(),
+            unattended
+        );
+        for policy in ErrorPolicy::ALL {
+            assert!(policy.label().chars().count() <= 40, "{policy:?}");
+            let json = serde_json::to_string(policy).unwrap();
+            assert_eq!(serde_json::from_str::<ErrorPolicy>(&json).unwrap(), *policy);
+        }
+        assert_eq!(ErrorPolicy::StopAtFirst.label(), "Stop at the first error");
     }
 
     #[test]

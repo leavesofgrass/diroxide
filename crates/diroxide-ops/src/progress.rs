@@ -33,6 +33,10 @@ pub struct JobProgress {
     pub seconds_left: Option<u64>,
     /// The name being worked on.
     pub current: Option<String>,
+    /// The host the job waits for, in [`JobState::WaitingForConnection`]:
+    /// its name as the owner knows it ("build"); `None` in every other
+    /// state.
+    pub waits_for: Option<String>,
 }
 
 impl JobProgress {
@@ -48,7 +52,16 @@ impl JobProgress {
             bytes_per_second: None,
             seconds_left: None,
             current: None,
+            waits_for: None,
         }
+    }
+
+    /// A job that waits its turn in the queue, said before it has made any
+    /// progress: "Copying waits its turn".
+    pub fn queued(kind: JobKind) -> Self {
+        let mut progress = Self::start(kind, 0, None);
+        progress.state = JobState::Queued;
+        progress
     }
 
     /// The share done, in whole percent: by bytes when their total is
@@ -66,11 +79,17 @@ impl JobProgress {
 
     /// The jobs line, the key fact first and inside 40 cells: "Copying 30
     /// percent, 2 minutes left", "Copying paused at 30 percent", "Copying
-    /// waits for an answer".
+    /// waits for an answer", "Copying waits its turn", "Copying waits for
+    /// build".
     pub fn describe(&self) -> String {
         let word = self.kind.progress_word();
         let percent = self.percent();
         match self.state {
+            JobState::Queued => format!("{word} waits its turn"),
+            JobState::WaitingForConnection => match &self.waits_for {
+                Some(host) => format!("{word} waits for {host}"),
+                None => format!("{word} waits: no connection"),
+            },
             JobState::Counting if self.items_done > 0 => {
                 format!("{word}: counting, {} so far", self.items_done)
             }
@@ -261,17 +280,41 @@ mod tests {
         let mut p = JobProgress::start(JobKind::Trash, 3, None);
         p.items_done = 3;
         let keys = [
+            (JobState::Queued, "Moving to the trash waits its turn"),
             (JobState::Counting, "Moving to the trash: counting"),
             (JobState::Running, "Moving to the trash 100 percent"),
             (JobState::Paused, "Moving to the trash paused"),
             (JobState::Stalled, "Moving to the trash stalled"),
             (JobState::WaitingForAnswer, "Moving to the trash waits"),
+            (
+                JobState::WaitingForConnection,
+                "Moving to the trash waits: no connection",
+            ),
             (JobState::Verifying, "Verifying 100 percent"),
             (JobState::Finished, "Moving to the trash finished"),
         ];
+        assert_eq!(keys.len(), JobState::ALL.len(), "a state without a key");
         for (state, key) in keys {
             p.state = state;
             assert!(within_cells(&p.describe(), key), "{}", p.describe());
+        }
+    }
+
+    /// Golden lines for the queue's two states (R25 commit 65), for the
+    /// shortest and the longest progress words, with and without a host.
+    #[test]
+    fn the_queue_states_say_their_words() {
+        let mut copy = JobProgress::queued(JobKind::Copy);
+        assert_eq!(copy.describe(), "Copying waits its turn");
+        copy.state = JobState::WaitingForConnection;
+        assert_eq!(copy.describe(), "Copying waits: no connection");
+        copy.waits_for = Some("build".to_owned());
+        assert_eq!(copy.describe(), "Copying waits for build");
+        for kind in JobKind::ALL {
+            let mut p = JobProgress::queued(*kind);
+            assert!(p.describe().chars().count() <= 40, "{}", p.describe());
+            p.state = JobState::WaitingForConnection;
+            assert!(p.describe().chars().count() <= 40, "{}", p.describe());
         }
     }
 
