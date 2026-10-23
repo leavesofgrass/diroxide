@@ -1,11 +1,18 @@
 //! `diro serve --stdio`: the app core over JSON-RPC 2.0, one JSON object a
 //! line, the same protocol the plugins speak, with the connecting program
 //! in the plugin's seat (research/plugin-protocol.md, sections 3.1 and
-//! 3.6; the Decisions settled for Wave 1).
+//! 3.6; R22 section 2.5 and commit 42).
 //!
-//! The lifecycle: the connecting program sends `initialize` first; before
-//! it, every other request is answered -32002 and notifications are
-//! dropped. Then:
+//! The session is the plugins' own ([`Lifecycle`]): the connecting program
+//! sends `initialize` first, with the protocol's major version (1); before
+//! it is answered every other request gets -32002 and notifications are
+//! dropped; another protocol is refused in words and the session waits
+//! for one it can take; after `shutdown` is answered only `exit` counts,
+//! and a request gets -32600. `exit`, or the end of the input, ends the
+//! server. The same fixture dialogues that check a plugin's answering side
+//! (`fixtures/plugins/dialogues/`) check this one.
+//!
+//! The services a client calls:
 //!
 //! - `command/execute`: a command by id, with `args`, or in the command
 //!   text form as `text` ("file.copy dest=D:\backup"); the result is what
@@ -14,12 +21,19 @@
 //! - `panel/get` and `panel/set`: a panel's place, cursor, selection, sort
 //!   and filter; set changes the place, the cursor and the marks.
 //! - `dialog/get`: the open dialog's name and focus.
-//! - `shutdown`: answered with null; the server ends.
+//! - `ui/announce`: says a line through diroxide, cleaned, with the
+//!   client's name last (it comes back as the announcement event).
+//! - `shutdown`: answered with null.
 //!
-//! Every announcement goes out as a `ui/announce` notification, before the
-//! answer to the request that caused it, with its importance (`status`,
-//! `info`, `warning`, `error`), so a self-voicing or Braille helper can
-//! follow along (R2). The end of the input ends the server cleanly.
+//! The events, each a notification sent before the answer to the request
+//! that caused it, so a self-voicing or Braille helper can follow along
+//! (R2):
+//!
+//! - `ui/announce`: every announcement, with its importance (`status`,
+//!   `info`, `warning`, `error`);
+//! - `panel/changed`: a panel whose folder, focus or selection changed,
+//!   with `changes` naming which, then its place, its cursor and its
+//!   selection.
 
 use std::io::{BufRead, Write};
 
@@ -32,24 +46,36 @@ use diroxide_core::{
 use diroxide_plugins::protocol::{
     self, ErrorKind, Id, Incoming, Notification, Request, Response, RpcError, methods,
 };
+use diroxide_plugins::services::{attribute, clean_text};
+use diroxide_plugins::session::{Gate, Lifecycle};
 use serde_json::{Map, Value, json};
 
 use crate::CliError;
 use crate::open::{OpenOptions, build, current_place, paths};
 
 /// The methods the server answers.
-pub const METHODS: [&str; 7] = [
-    "command/execute",
+pub const METHODS: [&str; 8] = [
+    methods::COMMAND_EXECUTE,
     "key/press",
     methods::PANEL_GET,
     methods::PANEL_SET,
     "dialog/get",
+    methods::UI_ANNOUNCE,
     methods::INITIALIZE,
     methods::SHUTDOWN,
 ];
 
+/// The notification of a panel's change.
+pub const PANEL_CHANGED: &str = "panel/changed";
+
+/// The notifications the server sends.
+pub const EVENTS: [&str; 2] = [methods::UI_ANNOUNCE, PANEL_CHANGED];
+
 /// Argument names whose values are places.
 const PLACE_ARGUMENTS: [&str; 6] = ["place", "dest", "to", "from", "source", "target"];
+
+/// The longest line a client may announce, in characters.
+const MAX_CLIENT_ANNOUNCE: usize = 300;
 
 fn importance(message: &Message) -> &'static str {
     match (message.importance, message.kind) {
@@ -60,11 +86,31 @@ fn importance(message: &Message) -> &'static str {
     }
 }
 
-/// Serves until `shutdown` or the end of the input, with the platform's
+/// Serves until `exit` or the end of the input, with the platform's
 /// config and state folders. Returns the exit code.
 pub fn run(input: &mut dyn BufRead, out: &mut dyn Write) -> Result<i32, CliError> {
     let here = current_place()?;
     run_with(input, out, paths(false).as_ref(), &here)
+}
+
+/// What a panel showed: for the change events.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PanelState {
+    place: String,
+    cursor: Option<String>,
+    selection: Vec<String>,
+    active: bool,
+}
+
+fn panel_state(app: &App, side: Side) -> PanelState {
+    let panel = app.panel(side);
+    let list = panel.list();
+    PanelState {
+        place: panel.place().to_string(),
+        cursor: list.focused().map(|r| r.id.clone()),
+        selection: list.selected_ids().into_iter().map(str::to_owned).collect(),
+        active: app.active_side() == side,
+    }
 }
 
 struct Server<'a> {
@@ -72,6 +118,11 @@ struct Server<'a> {
     paths: Option<&'a Paths>,
     here: &'a Place,
     app: Option<(App, Runtime)>,
+    life: Lifecycle,
+    /// The client's name, from its `initialize`, last in what it says.
+    client: String,
+    /// Whether `shutdown` was answered, for the exit code.
+    shut_down: bool,
 }
 
 impl Server<'_> {
@@ -82,9 +133,22 @@ impl Server<'_> {
         self.out.flush().map_err(failed)
     }
 
-    /// Carries effects out, sends each announcement as a notification, and
-    /// returns what was said.
+    fn panels(&self) -> Option<[PanelState; 2]> {
+        let (app, _) = self.app.as_ref()?;
+        Some([panel_state(app, Side::Left), panel_state(app, Side::Right)])
+    }
+
+    /// Carries effects out, sends each announcement as a notification,
+    /// then each panel that changed, and returns what was said.
     fn carry(&mut self, effects: Vec<Effect>) -> Result<Vec<String>, CliError> {
+        let before = self.panels();
+        let said = self.carry_only(effects)?;
+        self.notify_changes(before)?;
+        Ok(said)
+    }
+
+    /// Carries effects out and sends each announcement as a notification.
+    fn carry_only(&mut self, effects: Vec<Effect>) -> Result<Vec<String>, CliError> {
         let Some((app, runtime)) = self.app.as_mut() else {
             return Ok(Vec::new());
         };
@@ -102,6 +166,37 @@ impl Server<'_> {
         Ok(said)
     }
 
+    /// Sends `panel/changed` for each panel whose folder, focus or
+    /// selection differs from `before`.
+    fn notify_changes(&mut self, before: Option<[PanelState; 2]>) -> Result<(), CliError> {
+        if let (Some(before), Some(after)) = (before, self.panels()) {
+            for (side, (old, new)) in Side::BOTH.into_iter().zip(before.iter().zip(after.iter())) {
+                let mut changes = Vec::new();
+                if old.place != new.place {
+                    changes.push("folder");
+                }
+                if old.cursor != new.cursor || (new.active && !old.active) {
+                    changes.push("focus");
+                }
+                if old.selection != new.selection {
+                    changes.push("selection");
+                }
+                if changes.is_empty() {
+                    continue;
+                }
+                let mut params = Map::new();
+                params.insert("panel".into(), json!(side.word()));
+                params.insert("active".into(), json!(new.active));
+                params.insert("changes".into(), json!(changes));
+                params.insert("place".into(), json!(new.place));
+                params.insert("cursor".into(), json!(new.cursor));
+                params.insert("selection".into(), json!(new.selection));
+                self.send(&Notification::new(PANEL_CHANGED, params))?;
+            }
+        }
+        Ok(())
+    }
+
     fn outcome(&self, said: Vec<String>) -> Value {
         let dialog = self
             .app
@@ -111,6 +206,10 @@ impl Server<'_> {
     }
 
     fn initialize(&mut self, params: &Map<String, Value>) -> Result<Value, RpcError> {
+        let asked = self.life.initialize(params)?;
+        if !asked.host.name.trim().is_empty() {
+            self.client = clean_text(&asked.host.name, 40);
+        }
         let places: Vec<String> = params
             .get("places")
             .and_then(Value::as_array)
@@ -125,18 +224,28 @@ impl Server<'_> {
             places,
             ..OpenOptions::default()
         };
-        let (mut app, runtime) = build(&options, self.paths, self.here)
-            .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
+        let built = build(&options, self.paths, self.here)
+            .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()));
+        let (mut app, runtime) = match built {
+            Ok(built) => built,
+            Err(error) => {
+                // The session waits for an initialize it can take.
+                self.life = Lifecycle::new();
+                return Err(error);
+            }
+        };
         app.set_screen_reader(true);
         let start = app.start();
         self.app = Some((app, runtime));
         self.carry(start)
             .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
+        let version = env!("CARGO_PKG_VERSION");
         Ok(json!({
-            "name": "diroxide",
-            "version": env!("CARGO_PKG_VERSION"),
             "protocol": protocol::PROTOCOL,
-            "server_capabilities": { "methods": METHODS },
+            "name": "diroxide",
+            "version": version,
+            "plugin": { "name": "diroxide", "version": version },
+            "server_capabilities": { "methods": METHODS, "events": EVENTS },
         }))
     }
 
@@ -198,14 +307,28 @@ impl Server<'_> {
     }
 
     fn event(&mut self, event: AppEvent) -> Result<Value, RpcError> {
+        let before = self.panels();
         let Some((app, _)) = self.app.as_mut() else {
             return Err(RpcError::new(ErrorKind::NotInitialized, "not initialized"));
         };
         let effects = app.handle(event);
-        let said = self
-            .carry(effects)
-            .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
+        let failed = |e: CliError| RpcError::new(ErrorKind::Failed, e.to_string());
+        let said = self.carry_only(effects).map_err(failed)?;
+        self.notify_changes(before).map_err(failed)?;
         Ok(self.outcome(said))
+    }
+
+    /// `ui/announce` from the client: cleaned, cut, its name last, and
+    /// said as the app says anything.
+    fn announce(&mut self, params: &Map<String, Value>) -> Result<Value, RpcError> {
+        let text = params
+            .get("text")
+            .and_then(Value::as_str)
+            .map(|t| clean_text(t, MAX_CLIENT_ANNOUNCE))
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| RpcError::new(ErrorKind::InvalidParams, "text is missing"))?;
+        let message = Message::info(attribute(&text, &self.client));
+        self.event(AppEvent::Problem(message))
     }
 
     fn panel_get(&self, params: &Map<String, Value>) -> Result<Value, RpcError> {
@@ -246,15 +369,15 @@ impl Server<'_> {
             let here = self.here.clone();
             let place = Place::resolve(place, &here)
                 .map_err(|e| RpcError::new(ErrorKind::InvalidParams, e.to_string()))?;
+            let before = self.panels();
             let effects = self
                 .app
                 .as_mut()
                 .map(|(app, _)| app.open_place(side, place))
                 .unwrap_or_default();
-            said.extend(
-                self.carry(effects)
-                    .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?,
-            );
+            let failed = |e: CliError| RpcError::new(ErrorKind::Failed, e.to_string());
+            said.extend(self.carry_only(effects).map_err(failed)?);
+            self.notify_changes(before).map_err(failed)?;
         }
         let refresh = params.get("refresh").and_then(Value::as_bool) == Some(true);
         let clear = params.get("clear_selection").and_then(Value::as_bool) == Some(true);
@@ -264,6 +387,7 @@ impl Server<'_> {
             .and_then(Value::as_str)
             .map(str::to_owned);
         let mut found = true;
+        let marks_before = self.panels();
         if let Some((app, _)) = self.app.as_mut() {
             if clear {
                 let marked: Vec<String> = app
@@ -281,20 +405,15 @@ impl Server<'_> {
                 found = app.focus_name(side, &name);
             }
         }
+        // The marks and the cursor changed outside a command: their events.
+        self.notify_changes(marks_before)
+            .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
         if refresh {
-            let effects = self
-                .app
-                .as_mut()
-                .map(|(app, _)| {
-                    app.handle(AppEvent::Command(Command::new(
-                        diroxide_app::commands::ids::RELOAD,
-                    )))
-                })
-                .unwrap_or_default();
-            said.extend(
-                self.carry(effects)
-                    .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?,
-            );
+            let reload = AppEvent::Command(Command::new(diroxide_app::commands::ids::RELOAD));
+            let said_now = self.event(reload)?;
+            if let Some(lines) = said_now["said"].as_array() {
+                said.extend(lines.iter().filter_map(|l| l.as_str().map(str::to_owned)));
+            }
         }
         Ok(json!({ "applied": true, "cursor_found": found, "said": said }))
     }
@@ -309,28 +428,19 @@ impl Server<'_> {
         })
     }
 
-    fn answer(&mut self, request: &Request) -> (Result<Value, RpcError>, bool) {
+    fn answer(&mut self, request: &Request) -> Result<Value, RpcError> {
         let params = &request.params;
-        if self.app.is_none() && request.method != methods::INITIALIZE {
-            if request.method == methods::SHUTDOWN {
-                return (Ok(Value::Null), true);
-            }
-            return (
-                Err(RpcError::new(
-                    ErrorKind::NotInitialized,
-                    "initialize comes first",
-                )),
-                false,
-            );
-        }
-        let result = match request.method.as_str() {
-            methods::INITIALIZE if self.app.is_some() => Err(RpcError::new(
-                ErrorKind::InvalidRequest,
-                "the server is already initialized",
-            )),
+        match request.method.as_str() {
             methods::INITIALIZE => self.initialize(params),
-            methods::SHUTDOWN => return (Ok(Value::Null), true),
-            "command/execute" => self.command(params),
+            methods::SHUTDOWN => {
+                self.life.shut_down();
+                self.shut_down = true;
+                if let Some((_, runtime)) = self.app.as_mut() {
+                    runtime.stop_plugins();
+                }
+                Ok(Value::Null)
+            }
+            methods::COMMAND_EXECUTE => self.command(params),
             "key/press" => match params.get("key").and_then(Value::as_str).map(Key::parse) {
                 Some(Ok(key)) => self.event(AppEvent::Key(key)),
                 _ => Err(RpcError::new(
@@ -341,12 +451,12 @@ impl Server<'_> {
             methods::PANEL_GET => self.panel_get(params),
             methods::PANEL_SET => self.panel_set(params),
             "dialog/get" => self.dialog_get(),
+            methods::UI_ANNOUNCE => self.announce(params),
             method => Err(RpcError::new(
                 ErrorKind::MethodNotFound,
                 format!("{method} is not a method of diro serve"),
             )),
-        };
-        (result, false)
+        }
     }
 }
 
@@ -369,7 +479,9 @@ fn argument(name: &str, value: &Value) -> Option<ArgValue> {
     })
 }
 
-/// Serves with these folders, the current folder `here`.
+/// Serves with these folders, the current folder `here`. The exit code is
+/// 0 after `shutdown` and `exit` or at the end of the input, 1 when `exit`
+/// came without `shutdown`.
 pub fn run_with(
     input: &mut dyn BufRead,
     out: &mut dyn Write,
@@ -382,31 +494,53 @@ pub fn run_with(
         paths,
         here,
         app: None,
+        life: Lifecycle::new(),
+        client: "the client".to_owned(),
+        shut_down: false,
     };
     let mut line = String::new();
     loop {
         line.clear();
         if input.read_line(&mut line).map_err(failed)? == 0 {
+            if let Some((_, runtime)) = server.app.as_mut() {
+                runtime.stop_plugins();
+            }
             return Ok(0);
         }
         if line.trim().is_empty() || !protocol::is_message_line(&line) {
             continue;
         }
-        match protocol::parse_line(&line) {
-            Ok(Incoming::Request(request)) => {
-                let id: Id = request.id.clone();
-                let (result, stop) = server.answer(&request);
-                let response = match result {
-                    Ok(value) => Response::success(id, value),
-                    Err(error) => Response::failure(Some(id), error),
-                };
-                server.send(&response)?;
-                if stop {
-                    return Ok(0);
-                }
+        let incoming = match protocol::parse_line(&line) {
+            Ok(incoming) => incoming,
+            Err(error) => {
+                server.send(&Response::failure(None, error))?;
+                continue;
             }
-            Ok(Incoming::Notification(_) | Incoming::Response(_)) => {}
-            Err(error) => server.send(&Response::failure(None, error))?,
+        };
+        match server.life.gate(&incoming) {
+            Gate::Proceed => {}
+            Gate::Drop => continue,
+            Gate::Exit => {
+                if let Some((_, runtime)) = server.app.as_mut() {
+                    runtime.stop_plugins();
+                }
+                // `exit` after `shutdown` is a clean end; before it, not.
+                return Ok(i32::from(!server.shut_down));
+            }
+            Gate::Refuse(error) => {
+                if let Incoming::Request(request) = incoming {
+                    server.send(&Response::failure(Some(request.id), error))?;
+                }
+                continue;
+            }
+        }
+        if let Incoming::Request(request) = incoming {
+            let id: Id = request.id.clone();
+            let response = match server.answer(&request) {
+                Ok(value) => Response::success(id, value),
+                Err(error) => Response::failure(Some(id), error),
+            };
+            server.send(&response)?;
         }
     }
 }
@@ -414,6 +548,8 @@ pub fn run_with(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diroxide_plugins::testing::json_matches;
+    use std::path::PathBuf;
 
     fn session(input: &str) -> Vec<Value> {
         let dir = tempfile::tempdir().unwrap();
@@ -435,14 +571,20 @@ mod tests {
         format!("{value}\n")
     }
 
+    fn initialize(id: u64, places: &[String]) -> String {
+        line(
+            json!({"jsonrpc": "2.0", "id": id, "method": "initialize", "params": {"protocol": 1, "host": {"name": "Braille helper", "version": "1.0"}, "places": places}}),
+        )
+    }
+
     #[test]
     fn initialize_comes_first_and_a_session_runs_commands_by_name() {
-        let here = env!("CARGO_MANIFEST_DIR");
+        let here = env!("CARGO_MANIFEST_DIR").to_owned();
         let input = [
             line(json!({"jsonrpc": "2.0", "id": 1, "method": "panel/get"})),
             "stray output, not answered\n".to_owned(),
             "{not json\n".to_owned(),
-            line(json!({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"places": [here, format!("{here}/src")]}})),
+            initialize(2, &[here.clone(), format!("{here}/src")]),
             line(json!({"jsonrpc": "2.0", "id": 3, "method": "panel/get", "params": {"panel": "right"}})),
             line(json!({"jsonrpc": "2.0", "id": 4, "method": "command/execute", "params": {"command": "view.sort-size"}})),
             line(json!({"jsonrpc": "2.0", "id": 5, "method": "panel/set", "params": {"cursor": "Cargo.toml", "select": ["Cargo.toml"]}})),
@@ -458,6 +600,7 @@ mod tests {
         assert_eq!(responses[0]["error"]["code"], -32002);
         assert_eq!(responses[1]["error"]["code"], -32700);
         assert_eq!(responses[2]["result"]["name"], "diroxide");
+        assert_eq!(responses[2]["result"]["protocol"], 1);
         assert_eq!(
             responses[3]["result"]["title"]
                 .as_str()
@@ -489,17 +632,122 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_and_the_end_of_input_end_cleanly() {
+    fn a_client_hears_focus_folder_and_selection_before_the_answer() {
+        let here = env!("CARGO_MANIFEST_DIR").to_owned();
         let input = [
-            line(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize"})),
+            initialize(1, &[here.clone(), here.clone()]),
+            line(json!({"jsonrpc": "2.0", "id": 2, "method": "panel/set", "params": {"cursor": "Cargo.toml"}})),
+            line(json!({"jsonrpc": "2.0", "id": 3, "method": "key/press", "params": {"key": "space"}})),
+            line(json!({"jsonrpc": "2.0", "id": 4, "method": "panel/set", "params": {"place": format!("{here}/src")}})),
+            line(json!({"jsonrpc": "2.0", "id": 5, "method": "ui/announce", "params": {"text": "Reading \u{1b}[31mnow"}})),
+        ]
+        .concat();
+        let messages = session(&input);
+        let changed = |id: u64| -> Vec<Vec<String>> {
+            let at = messages.iter().position(|m| m["id"] == id).unwrap();
+            let start = messages[..at]
+                .iter()
+                .rposition(|m| m.get("id").is_some())
+                .map_or(0, |p| p + 1);
+            messages[start..at]
+                .iter()
+                .filter(|m| m["method"] == PANEL_CHANGED)
+                .map(|m| {
+                    m["params"]["changes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|c| c.as_str().unwrap().to_owned())
+                        .collect()
+                })
+                .collect()
+        };
+        assert_eq!(changed(2), [vec!["focus".to_owned()]]);
+        assert!(
+            changed(3)[0].contains(&"selection".to_owned()),
+            "{:?}",
+            changed(3)
+        );
+        assert!(
+            changed(4)[0].contains(&"folder".to_owned()),
+            "{:?}",
+            changed(4)
+        );
+        let said = messages.iter().find(|m| {
+            m["method"] == "ui/announce" && m["params"]["text"] == "Reading now. By Braille helper."
+        });
+        assert!(
+            said.is_some(),
+            "cleaned, the client's name last: {messages:#?}"
+        );
+    }
+
+    #[test]
+    fn shutdown_then_only_exit_counts() {
+        let input = [
+            line(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocol": 1}})),
             line(json!({"jsonrpc": "2.0", "id": 2, "method": "shutdown"})),
-            line(json!({"jsonrpc": "2.0", "id": 3, "method": "initialize"})),
+            line(json!({"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {"protocol": 1}})),
+            line(json!({"jsonrpc": "2.0", "method": "exit"})),
+            line(json!({"jsonrpc": "2.0", "id": 4, "method": "panel/get"})),
         ]
         .concat();
         let messages = session(&input);
         let last = messages.last().unwrap();
-        assert_eq!(last["id"], 2);
-        assert_eq!(last["result"], Value::Null);
+        assert_eq!(last["id"], 3, "nothing is answered after exit");
+        assert_eq!(last["error"]["code"], -32600);
+        let shutdown = messages.iter().find(|m| m["id"] == 2).unwrap();
+        assert_eq!(shutdown["result"], Value::Null);
         assert!(session("").is_empty());
+    }
+
+    /// The plugins' fixture dialogues, replayed against the server, whose
+    /// answering side keeps the same lifecycle. `command/run` (a plugin's
+    /// request) becomes `dialog/get`, a request this server answers with a
+    /// result in any state; the hooks dialogue is a plugin's alone.
+    #[test]
+    fn the_session_dialogues_hold_against_diro_serve() {
+        let folder =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/plugins/dialogues");
+        let mut count = 0;
+        for entry in std::fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "txt")
+                || path.file_stem().is_some_and(|s| s == "hooks")
+            {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            let sent: String = text
+                .lines()
+                .filter_map(|l| l.strip_prefix("> "))
+                .map(|l| format!("{}\n", l.replace("\"command/run\"", "\"dialog/get\"")))
+                .collect();
+            let wanted: Vec<&str> = text
+                .lines()
+                .filter_map(|l| l.strip_prefix("< "))
+                .filter(|l| *l != "exit")
+                .collect();
+            let written: Vec<Value> = session(&sent)
+                .into_iter()
+                .filter(|m| m.get("id").is_some())
+                .collect();
+            assert_eq!(
+                written.len(),
+                wanted.len(),
+                "{}: {written:#?}",
+                path.display()
+            );
+            for (want, got) in wanted.iter().zip(&written) {
+                let want: Value = serde_json::from_str(want).unwrap();
+                assert!(
+                    json_matches(&want, got),
+                    "{}: wanted {want}, wrote {got}",
+                    path.display()
+                );
+            }
+            count += 1;
+        }
+        assert!(count >= 5, "{count} dialogues");
     }
 }
