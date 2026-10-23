@@ -6,5 +6,9 @@
 pub mod codec;
 pub mod fake;
 pub mod fuzzing;
+pub mod mux;
+pub mod session;
 
 pub use codec::{Attrs, CodecError, NameEntry, Request, Response};
+pub use mux::{Mux, SftpError};
+pub use session::{Session, SessionConfig};

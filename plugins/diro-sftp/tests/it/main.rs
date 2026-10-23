@@ -21,6 +21,7 @@ mod launch;
 #[cfg(feature = "fake-ssh")]
 mod locate;
 mod modes;
+mod session;
 #[cfg(all(windows, feature = "fake-ssh"))]
 mod spikes;
 
