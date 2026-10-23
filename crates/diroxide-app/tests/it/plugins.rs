@@ -373,7 +373,11 @@ fn a_plugin_not_enabled_contributes_nothing_until_its_consent() {
     let w = world(MANIFEST);
     let mut s = session(&w, TestLauncher::with(&[]));
     s.command(ids::MENU_PLUGINS);
-    assert_eq!(rows(&s), ["Manage plugins"], "only the menu's own items");
+    assert_eq!(
+        rows(&s),
+        ["Manage plugins", "Get example plugins"],
+        "only the menu's own items"
+    );
     s.key("escape");
     let said = s.run_command(Command::new(id("line-counter.count")));
     assert_eq!(
@@ -699,7 +703,7 @@ fn no_plugins_starts_nothing_and_says_so() {
     );
     let said = s.command(ids::MENU_PLUGINS);
     assert_eq!(said, ["Plugins are off for this session."]);
-    assert_eq!(rows(&s), ["Manage plugins"]);
+    assert_eq!(rows(&s), ["Manage plugins", "Get example plugins"]);
     s.key("escape");
     let said = s.run_command(Command::new(id("line-counter.count")));
     assert_eq!(said, ["Plugins are off for this session."]);

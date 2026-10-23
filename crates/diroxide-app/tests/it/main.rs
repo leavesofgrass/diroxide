@@ -10,6 +10,8 @@ mod archives;
 mod bookmarks;
 mod braille;
 mod commands;
+// Optional components (W4d).
+mod components;
 // Compare files (W3a).
 mod comparing;
 mod dialogs;

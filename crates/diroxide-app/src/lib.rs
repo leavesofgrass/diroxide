@@ -25,6 +25,8 @@ pub mod app;
 pub mod archives;
 pub mod bookmarks;
 pub mod commands;
+// Optional components in the app (W4d).
+pub mod components;
 pub mod dialog;
 pub mod entry;
 pub mod jobs;

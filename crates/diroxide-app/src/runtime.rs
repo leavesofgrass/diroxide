@@ -48,6 +48,8 @@ use diroxide_vfs::{
 };
 
 mod archive_jobs;
+// Optional components (W4d).
+mod components;
 // Plugins and script commands (W4d).
 mod plugins;
 
@@ -415,6 +417,10 @@ pub struct Runtime {
     base: Arc<Registry>,
     /// Plugins and script commands (W4d).
     plugins: plugins::PluginRuntime,
+    /// Optional components (W4d).
+    components: components::ComponentRuntime,
+    /// The `components_source` setting, from the app's settings.
+    components_source: String,
     engine: Engine,
     shared: Arc<Shared>,
     receiver: Receiver<AppEvent>,
@@ -473,6 +479,8 @@ impl Runtime {
             engine: Engine::new(Arc::clone(&registry)),
             base: Arc::clone(&registry),
             plugins: plugins::PluginRuntime::default(),
+            components: components::ComponentRuntime::default(),
+            components_source: String::new(),
             registry,
             shared: Arc::new(Shared {
                 sender: Mutex::new(sender),
@@ -558,6 +566,24 @@ impl Runtime {
         launcher: Arc<dyn diroxide_plugins::host::Launcher>,
     ) -> Self {
         self.plugins.set_launcher(launcher);
+        self
+    }
+
+    /// The same runtime fetching components from the owner's source
+    /// alone, never a public address: tests, which never reach the
+    /// network (W4d).
+    pub fn with_components_offline(mut self) -> Self {
+        self.components.set_offline();
+        self
+    }
+
+    /// The same runtime fetching components through another fetcher
+    /// (tests record what is fetched) (W4d).
+    pub fn with_component_fetcher(
+        mut self,
+        fetcher: Arc<dyn diroxide_components::Fetcher>,
+    ) -> Self {
+        self.components.set_fetcher(fetcher);
         self
     }
 
@@ -830,6 +856,7 @@ impl Runtime {
             running.control.cancel.cancel();
         }
         self.plugins.cancel(job);
+        self.components.cancel(job);
         let asks: Vec<AskId> = lock(&self.shared.asks)
             .iter()
             .filter(|(_, (asker, _))| *asker == Some(job))
@@ -843,6 +870,18 @@ impl Runtime {
     /// Carries out one request from the app.
     pub fn request(&mut self, request: Request) {
         match request {
+            Request::Components(request) => {
+                let shared = Arc::clone(&self.shared);
+                let worker = |work: Work| {
+                    spawn_worker(&shared, work);
+                };
+                self.components.request(
+                    *request,
+                    self.paths.as_ref(),
+                    &self.components_source,
+                    &worker,
+                );
+            }
             Request::Plugins(request) => {
                 let shared = Arc::clone(&self.shared);
                 let worker = |work: Work| {
@@ -1673,6 +1712,9 @@ impl Runtime {
     pub fn carry_out(&mut self, app: &mut App, effects: Vec<Effect>) -> Vec<Effect> {
         self.apply_archive_settings(&app.settings().archives);
         self.plugins.set_settings(&app.settings().plugins);
+        if self.components_source != app.settings().components_source {
+            self.components_source = app.settings().components_source.clone();
+        }
         let mut screen = Vec::new();
         for effect in effects {
             if effect == Effect::AppRequests {

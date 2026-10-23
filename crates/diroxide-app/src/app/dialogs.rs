@@ -335,6 +335,7 @@ impl App {
         let mut effects = self.close_top();
         match purpose {
             Purpose::Plugin(wants) => effects.extend(self.plugin_escape(*wants)),
+            Purpose::Component(wants) => effects.extend(self.component_escape(*wants)),
             Purpose::RunPlan(plan) | Purpose::TypedPlan(plan, _) => {
                 let flow = self.flows.remove(&plan.job);
                 self.plugin_job_ended(flow.as_ref(), Err("the owner said no".to_owned()));
@@ -480,6 +481,7 @@ impl App {
             }
             Purpose::Keys(purpose) => effects.extend(self.keys_yes(*purpose)),
             Purpose::Plugin(wants) => effects.extend(self.plugin_yes(*wants)),
+            Purpose::Component(wants) => effects.extend(self.component_yes(*wants)),
             Purpose::Organize(wants) => effects.extend(self.organize_yes(*wants)),
             Purpose::FilterContents {
                 side,
@@ -703,6 +705,7 @@ impl App {
             }
             Purpose::Secret { ask } => self.secret_enter(ask),
             Purpose::Plugin(wants) => self.plugin_accept(*wants, row, text),
+            Purpose::Component(wants) => self.component_accept(*wants, row, text),
             Purpose::NewPassword { form, first } => {
                 let typed = match self.dialogs.last() {
                     Some((_, Dialog::Secret { typed, .. })) => typed.clone(),

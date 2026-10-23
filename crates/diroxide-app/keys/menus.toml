@@ -815,6 +815,14 @@ access = "k"
 menu = "keys"
 access = "e"
 
+[[menu.item]]
+command = "components.manage"
+access = "o"
+
+[[menu.item]]
+command = "components.first-run"
+access = "f"
+
 [[menu]]
 id = "keys"
 title = "Keys"
@@ -845,6 +853,10 @@ access = "p"
 [[menu.item]]
 command = "plugins.list"
 access = "m"
+
+[[menu.item]]
+command = "plugins.get-examples"
+access = "g"
 
 [[menu]]
 id = "help"

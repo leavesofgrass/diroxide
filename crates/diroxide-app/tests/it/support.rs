@@ -272,6 +272,8 @@ pub struct Setup {
     pub plugin_launcher: Option<Arc<dyn diroxide_plugins::host::Launcher>>,
     /// Starts with plugins off, as `--no-plugins` does (W4d).
     pub no_plugins: bool,
+    /// Fetches components in the test's own way (W4d).
+    pub component_fetcher: Option<Arc<dyn diroxide_components::Fetcher>>,
 }
 
 impl Default for Setup {
@@ -283,6 +285,7 @@ impl Default for Setup {
             recorder: Arc::new(Recorder::default()),
             plugin_launcher: None,
             no_plugins: false,
+            component_fetcher: None,
         }
     }
 }
@@ -352,7 +355,8 @@ impl Session {
         let app = App::new(options);
         let mut runtime = Runtime::new(Arc::new(registry))
             .with_launcher(setup.recorder.clone())
-            .with_opener(setup.recorder.clone());
+            .with_opener(setup.recorder.clone())
+            .with_components_offline();
         if let Some(paths) = paths {
             runtime = runtime.with_paths(paths.clone());
         }
@@ -361,6 +365,9 @@ impl Session {
         }
         if setup.no_plugins {
             runtime = runtime.without_plugins();
+        }
+        if let Some(fetcher) = setup.component_fetcher.clone() {
+            runtime = runtime.with_component_fetcher(fetcher);
         }
         let mut session = Self {
             app,

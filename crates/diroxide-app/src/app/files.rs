@@ -1258,8 +1258,12 @@ impl App {
     /// Escape outside a dialog: stops the job in front.
     pub(super) fn cancel_front_job(&mut self) -> Vec<Effect> {
         match self.jobs.newest() {
-            // A plugin command says its own name (W4d).
-            Some(job) if let Some(words) = self.plugin_cancel_words(job) => {
+            // A plugin command or a download says its own name (W4d).
+            Some(job)
+                if let Some(words) = self
+                    .plugin_cancel_words(job)
+                    .or_else(|| self.component_cancel_words(job)) =>
+            {
                 vec![Effect::CancelJob(job), self.say(Message::info(words))]
             }
             Some(job) => {

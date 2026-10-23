@@ -507,6 +507,18 @@ pub mod ids {
         KEYS_PRESET = "keys.preset";
     }
 
+    // Plugins and optional components (W4d, R22 commits 36 to 41).
+    ids! {
+        /// Download the example plugins, after the question with their
+        /// size and license.
+        PLUGINS_EXAMPLES = "plugins.get-examples";
+        /// The optional components, each with its state, size and
+        /// license.
+        COMPONENTS_MANAGE = "components.manage";
+        /// Show the first-run components list at the next start again.
+        COMPONENTS_FIRST_RUN = "components.first-run";
+    }
+
     // The arrival tracker's command (W3t, plan commit 34).
     ids! {
         /// Watch the active panel's folder and say each file that settles
@@ -620,7 +632,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 213] = [
+pub static CATALOG: [CommandInfo; 216] = [
     command(
         ids::QUIT,
         "Quit",
@@ -2299,6 +2311,30 @@ pub static CATALOG: [CommandInfo; 213] = [
         ids::PLUGINS,
         "Manage plugins",
         "Lists the plugins and scripts with their state; each is enabled after its question, or disabled.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::PLUGINS_EXAMPLES,
+        "Get example plugins",
+        "Downloads the example plugins after a question that says their size and license; nothing is enabled.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPONENTS_MANAGE,
+        "Manage optional components",
+        "Lists the optional components with their state, size and license, to download, verify or remove one.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPONENTS_FIRST_RUN,
+        "Ask first-run choices again",
+        "Offers the first-run list of optional components again at the next start.",
         Global,
         &[],
         &[],

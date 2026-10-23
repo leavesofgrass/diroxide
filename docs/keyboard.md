@@ -241,6 +241,9 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Single letters. Chooses what a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. (keys.single-letters)
 - Change a key. Waits for a command's new key, says it back, and says what it already does. (keys.change)
 - Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
+- Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
+- Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
+- Ask first-run choices again. Offers the first-run list of optional components again at the next start. (components.first-run)
 
 ## In the GUI
 
@@ -479,6 +482,9 @@ The GUI arrives in a later alpha; these are its keys. On macOS the GUI uses Comm
 - Single letters. Chooses what a key without Control or Alt does in a panel: jump to a name, run a command, or nothing. (keys.single-letters)
 - Change a key. Waits for a command's new key, says it back, and says what it already does. (keys.change)
 - Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
+- Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
+- Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
+- Ask first-run choices again. Offers the first-run list of optional components again at the next start. (components.first-run)
 
 ## Keys a terminal may keep
 

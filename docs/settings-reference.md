@@ -732,7 +732,13 @@ Components list. Where the list of optional components is read from. Empty means
 
 - Holds: text.
 - Default: `""`.
-- Comes with a later alpha.
+
+### components_first_run_shown
+
+First-run list shown. Whether the first-run list of optional components was shown. Ask first-run choices again turns it off.
+
+- Holds: true or false.
+- Default: `false`.
 
 ## Themes
 

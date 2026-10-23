@@ -22,6 +22,8 @@ mod archive_jobs;
 mod bookmarking;
 // Compare files (W3a).
 mod comparing;
+// Optional components (W4d).
+mod component_ui;
 mod dialogs;
 mod files;
 // The panel filter on the filter language (W3a).
@@ -372,6 +374,9 @@ pub enum AppEvent {
     /// Something about plugins: the catalog, a plugin's call, its words,
     /// its progress, a command's end (W4d).
     Plugin(Box<crate::plugins::PluginEvent>),
+    /// Something about optional components: the list, a download's
+    /// progress and end, a check, a removal (W4d).
+    Component(Box<crate::components::ComponentEvent>),
 }
 
 /// What an open dialog is for: what its answer does. The [`Dialog`] is
@@ -582,6 +587,8 @@ enum Purpose {
     Keys(Box<keys::KeysPurpose>),
     /// A plugin's dialog, or one of Manage plugins (W4d).
     Plugin(Box<plugin_ui::Wants>),
+    /// A dialog of the optional components (W4d).
+    Component(Box<component_ui::Wants>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -731,6 +738,8 @@ pub struct App {
     comparing: comparing::CompareState,
     /// Plugins and script commands (W4d).
     plugins: plugin_ui::PluginState,
+    /// Optional components (W4d).
+    components: component_ui::ComponentState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1049,6 +1058,7 @@ impl App {
             tools: search_tools::ToolsState::default(),
             comparing: comparing::CompareState::default(),
             plugins: plugin_ui::PluginState::default(),
+            components: component_ui::ComponentState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1529,6 +1539,7 @@ impl App {
             AppEvent::Answer { dialog, answer } => self.answer(dialog, answer),
             AppEvent::Problem(message) => vec![self.say(message)],
             AppEvent::Plugin(event) => self.plugin_event(*event),
+            AppEvent::Component(event) => self.component_event(*event),
         }
     }
 
@@ -1589,6 +1600,10 @@ impl App {
         }
         // Manage plugins and the plugins' own commands (W4d).
         if let Some(effects) = self.plugins_dispatch(command) {
+            return effects;
+        }
+        // The optional components and Get example plugins (W4d).
+        if let Some(effects) = self.components_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

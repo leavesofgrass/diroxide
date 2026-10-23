@@ -573,6 +573,9 @@ pub struct Settings {
     /// Where the components list is read from; empty for the public list
     /// (alpha.4).
     pub components_source: String,
+    /// Whether the first-run list of optional components was shown (built
+    /// in alpha 2's first stage, shown from its third; answer 93).
+    pub components_first_run_shown: bool,
     /// The plugins section.
     pub plugins: PluginSettings,
     /// Keys this version does not know, kept as they were.
@@ -624,6 +627,7 @@ impl Default for Settings {
             search_respect_ignore: false,
             compare: CompareSettings::default(),
             components_source: String::new(),
+            components_first_run_shown: false,
             plugins: PluginSettings::default(),
             unknown: BTreeMap::new(),
         }
