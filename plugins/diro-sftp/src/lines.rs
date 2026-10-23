@@ -79,9 +79,104 @@ pub fn too_old_for_passwords(windows: bool) -> Vec<String> {
     out
 }
 
+/// "Connection lost: build.example." (R24 section 1.7).
+pub fn connection_lost(host: &str) -> String {
+    format!("Connection lost: {host}.")
+}
+
+/// The next step after a lost connection.
+pub const OPEN_TO_RECONNECT: &str = "Open the place again to reconnect.";
+
+/// "Connecting to build.example.", the progress line while ssh starts.
+pub fn connecting(host: &str) -> String {
+    format!("Connecting to {host}.")
+}
+
+/// "Cannot connect to build.example.", when no pattern says more.
+pub fn cannot_connect(host: &str) -> String {
+    format!("Cannot connect to {host}.")
+}
+
+/// "No answer from build.example."
+pub fn no_answer(host: &str) -> String {
+    format!("No answer from {host}.")
+}
+
+/// An entry the server does not have.
+pub const NOT_THERE: &str = "It does not exist on the server.";
+
+/// The server refused for want of rights.
+pub fn denied() -> String {
+    "Permission denied by the server.".to_owned()
+}
+
+/// The server does not offer what was asked.
+pub fn server_cannot() -> String {
+    "The server cannot do this.".to_owned()
+}
+
+/// The server did not understand a request.
+pub fn not_understood() -> String {
+    "The server did not understand.".to_owned()
+}
+
+/// "Could not list the folder.", for a plain failure.
+pub fn could_not(what: &str) -> String {
+    format!("Could not {what}.")
+}
+
+/// A cancelled request.
+pub const CANCELLED: &str = "Cancelled.";
+
+/// A shell startup file printed text before the protocol began.
+pub const SHELL_PRINTED: &str = "The server's shell printed text first.";
+
+/// The way out of [`SHELL_PRINTED`].
+pub const SHELL_PRINTED_HINT: &str = "Make its startup file quiet for sftp.";
+
+/// The far end answered, but not in SFTP.
+pub const NOT_SFTP: &str = "The server did not speak SFTP.";
+
+/// What ssh last printed, cleaned and placed last in a hint.
+pub fn ssh_said(text: &str) -> Option<String> {
+    let last = text
+        .lines()
+        .map(str::trim)
+        .rfind(|line| !line.is_empty())
+        .map(|line| cleaned(line, 160))
+        .filter(|line| !line.is_empty())?;
+    Some(format!("ssh said: {last}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_provider_lines_fit_and_put_the_cause_first() {
+        for line in [
+            connection_lost("build.example"),
+            OPEN_TO_RECONNECT.to_owned(),
+            connecting("build.example"),
+            cannot_connect("build.example"),
+            no_answer("build.example"),
+            NOT_THERE.to_owned(),
+            denied(),
+            server_cannot(),
+            not_understood(),
+            could_not("list the folder"),
+            SHELL_PRINTED.to_owned(),
+            SHELL_PRINTED_HINT.to_owned(),
+            NOT_SFTP.to_owned(),
+        ] {
+            assert!(line.chars().count() <= MAX_LINE_CELLS, "{line}");
+        }
+        assert_eq!(
+            ssh_said("debug\n  Connection reset by peer\u{1B}[0m \n\n").as_deref(),
+            Some("ssh said: Connection reset by peer")
+        );
+        assert_eq!(ssh_said(" \n"), None);
+    }
 
     #[test]
     fn many_line_messages_keep_one_fact_a_line() {

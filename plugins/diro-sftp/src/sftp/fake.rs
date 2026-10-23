@@ -215,17 +215,26 @@ pub struct Faults {
     pub drop_after_bytes: Option<usize>,
     /// The server does not offer `statvfs@openssh.com`.
     pub no_statvfs: bool,
+    /// The server does not offer `posix-rename@openssh.com`.
+    pub no_posix_rename: bool,
+    /// The server offers `copy-data` (OpenSSH 9.0 and later).
+    pub copy_data: bool,
 }
 
 /// The extensions the fake offers in its VERSION answer.
 pub fn extensions(faults: &Faults) -> Vec<(Vec<u8>, Vec<u8>)> {
     let mut out = vec![
-        (b"posix-rename@openssh.com".to_vec(), b"1".to_vec()),
         (b"limits@openssh.com".to_vec(), b"1".to_vec()),
         (b"fsync@openssh.com".to_vec(), b"1".to_vec()),
     ];
+    if !faults.no_posix_rename {
+        out.insert(0, (b"posix-rename@openssh.com".to_vec(), b"1".to_vec()));
+    }
     if !faults.no_statvfs {
         out.push((b"statvfs@openssh.com".to_vec(), b"2".to_vec()));
+    }
+    if faults.copy_data {
+        out.push((b"copy-data".to_vec(), b"1".to_vec()));
     }
     out
 }
@@ -512,17 +521,19 @@ impl Server {
 
     fn extended(&self, fs: &mut FakeFs, id: u32, ext: &[u8], data: &[u8], home: &[u8]) -> Response {
         match ext {
-            b"posix-rename@openssh.com" => match read_strings(data, 2) {
-                Ok(parts) => {
-                    let (from, to) = (normal(home, &parts[0]), normal(home, &parts[1]));
-                    if matches!(fs.node(&to), Some(Node::Dir)) {
-                        return status(id, status::FAILURE, "Failure");
+            b"posix-rename@openssh.com" if !self.faults.no_posix_rename => {
+                match read_strings(data, 2) {
+                    Ok(parts) => {
+                        let (from, to) = (normal(home, &parts[0]), normal(home, &parts[1]));
+                        if matches!(fs.node(&to), Some(Node::Dir)) {
+                            return status(id, status::FAILURE, "Failure");
+                        }
+                        fs.nodes.remove(&to);
+                        rename(fs, &from, &to, id)
                     }
-                    fs.nodes.remove(&to);
-                    rename(fs, &from, &to, id)
+                    Err(_) => status(id, status::BAD_MESSAGE, "Bad message"),
                 }
-                Err(_) => status(id, status::BAD_MESSAGE, "Bad message"),
-            },
+            }
             b"statvfs@openssh.com" if !self.faults.no_statvfs => {
                 let used: u64 = fs
                     .nodes

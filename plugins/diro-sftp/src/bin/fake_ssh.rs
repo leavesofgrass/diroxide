@@ -20,9 +20,10 @@
 //!   `{"sleep_ms": N}` do what they say; `{"child_sleep_ms": N}` starts a
 //!   copy of the program that sleeps, as ssh's own children would, and
 //!   logs its process id; `{"serve": {"files": {PATH: TEXT}, "dirs":
-//!   [PATH], "faults": {...}}}` serves the fake SFTP server
+//!   [PATH], "faults": {...}, "for_ms": N}}` serves the fake SFTP server
 //!   (`diro_sftp::sftp::fake`) on standard input and output until the
-//!   input ends, as `ssh -s sftp` does once it is signed in.
+//!   input ends, as `ssh -s sftp` does once it is signed in, or for `N`
+//!   milliseconds and then ends, as an ssh that dies does.
 //!
 //! **As an askpass recorder** (spike SF1): when `FAKE_ASKPASS_RECORD`
 //! names a file, the program is an `SSH_ASKPASS` stand-in that appends one
@@ -162,8 +163,20 @@ fn serve_sftp(config: &Value) {
         reuse_ids: flag("reuse_ids"),
         drop_after_bytes: n("drop_after_bytes"),
         no_statvfs: flag("no_statvfs"),
+        no_posix_rename: flag("no_posix_rename"),
+        copy_data: flag("copy_data"),
     };
-    let _ = serve(io::stdin(), io::stdout(), Arc::new(Mutex::new(fs)), faults);
+    let fs = Arc::new(Mutex::new(fs));
+    match config.get("for_ms").and_then(Value::as_u64) {
+        // Serves for a while, then ends as a dying ssh does.
+        Some(ms) => {
+            thread::spawn(move || serve(io::stdin(), io::stdout(), fs, faults));
+            thread::sleep(Duration::from_millis(ms));
+        }
+        None => {
+            let _ = serve(io::stdin(), io::stdout(), fs, faults);
+        }
+    }
 }
 
 fn run_script(script: &[Value], log: Option<&str>) -> ExitCode {

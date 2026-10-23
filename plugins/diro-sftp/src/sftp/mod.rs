@@ -4,6 +4,7 @@
 //! server's in tests).
 
 pub mod codec;
+pub mod errors;
 pub mod fake;
 pub mod fuzzing;
 pub mod mux;
