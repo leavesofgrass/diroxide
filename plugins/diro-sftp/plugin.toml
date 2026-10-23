@@ -1,0 +1,89 @@
+# The SFTP places plugin (R24, "The plugin's shape"; answers 78 to 95).
+# One program in two modes: the plugin the host starts, and the askpass
+# helper ssh starts with DIRO_ASKPASS_ENDPOINT set (answer 82).
+#
+# The provider's methods grow as the lanes land: this build answers
+# connect, list and stat (S-A); reading, writing, the operations, volumes
+# and places come with S-B and S-C (R25 commits 57 to 76), and the
+# commands (sites, connect, disconnect, doctor) with S-C.
+
+[plugin]
+id = "sftp"
+name = "SFTP places"
+version = "0.1.0-alpha.1"
+description = "Opens sftp places through the OpenSSH client on this computer."
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+protocol = 1
+min_host = "0.1.0-alpha.1"
+
+[run]
+command = ["./diro-sftp"]
+start = "on_demand"
+concurrency = 16
+# A login lives in the plugin's memory, so it is never stopped for idling.
+idle_timeout = "never"
+
+[run.windows]
+command = ["./diro-sftp.exe"]
+
+[permissions]
+fs = "none"
+panel = "none"
+
+[permissions.declared]
+network = "connects to the servers you open, through ssh"
+files = "its own state folder; ssh reads your config and keys"
+programs = "ssh, found by the rules in its settings"
+
+[[provider]]
+scheme = "sftp"
+name = "SFTP"
+separator = "/"
+case_sensitive = true
+links = true
+attributes = true
+methods = ["connect", "list", "stat"]
+lease = "listers"
+
+[[setting]]
+key = "ssh_program"
+type = "path"
+default = ""
+description = "The ssh program to use. Empty finds the newest one on this computer."
+
+[[setting]]
+key = "ssh_config_file"
+type = "path"
+default = ""
+description = "An ssh configuration file to use instead of your own. Empty uses yours."
+
+[[setting]]
+key = "connect_timeout"
+type = "int"
+default = 20
+description = "Seconds to wait for a server, when your ssh configuration sets none."
+
+[[setting]]
+key = "keepalive_seconds"
+type = "int"
+default = 15
+description = "Seconds between keepalives, when your ssh configuration sets none."
+
+[[setting]]
+key = "requests"
+type = "int"
+default = 64
+description = "SFTP requests in flight for one transfer."
+
+[[setting]]
+key = "chunk_kib"
+type = "int"
+default = 32
+description = "Kilobytes in one SFTP request, at most 128."
+
+[[setting]]
+key = "ssh_debug_log"
+type = "bool"
+default = false
+description = "Write ssh's debug log to this plugin's state folder. Off by default."

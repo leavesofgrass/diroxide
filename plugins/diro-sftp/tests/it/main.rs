@@ -1,20 +1,33 @@
-//! Integration tests of the SFTP provider's contract.
+//! Integration tests of the SFTP places plugin: the program in both its
+//! modes, the conformance suite on it, and the spikes that ran on the
+//! owner's system (ignored elsewhere).
 
-use std::sync::Arc;
+// Test helpers may unwrap: a failure is the test's failure.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use diro_sftp::{HostKeyStatus, SftpProvider};
-use diroxide_core::Place;
-use diroxide_vfs::Registry;
+mod conformance;
+mod modes;
+#[cfg(all(windows, feature = "fake-ssh"))]
+mod spikes;
 
-#[test]
-fn sftp_places_resolve_to_the_provider() {
-    let mut registry = Registry::with_local();
-    registry.register("sftp", Arc::new(SftpProvider::new()));
-    let place = Place::parse("sftp://example.org/home").unwrap();
-    assert_eq!(registry.resolve(&place).unwrap().scheme(), "sftp");
-    assert!(
-        HostKeyStatus::Changed
-            .describe()
-            .starts_with("Host key changed")
-    );
+use std::path::{Path, PathBuf};
+
+/// The plugin's program, as cargo built it for these tests.
+pub fn plugin_exe() -> PathBuf {
+    PathBuf::from(env!("CARGO_BIN_EXE_diro-sftp"))
+}
+
+/// The plugin's own manifest with its program replaced by `exe`, in a
+/// folder of its own under `root`.
+pub fn plugin_folder(root: &Path, exe: &Path) -> PathBuf {
+    let manifest =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("plugin.toml")).unwrap();
+    let command = format!("['{}']", exe.display());
+    let manifest = manifest
+        .replace("[\"./diro-sftp.exe\"]", &command)
+        .replace("[\"./diro-sftp\"]", &command);
+    let folder = root.join("sftp");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("plugin.toml"), manifest).unwrap();
+    folder
 }
