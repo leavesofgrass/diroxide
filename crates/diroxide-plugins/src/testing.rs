@@ -32,11 +32,16 @@ use crate::protocol::{
     ErrorKind, Id, Incoming, Notification, Params, Request, Response, RpcError, methods,
     parse_line, to_line,
 };
+use crate::router::CancelFlag;
 use crate::session::{
     Gate, InitializeResult, Lifecycle, Peer, PluginCapabilities, ProviderCapability,
 };
 use crate::transport::{MemoryPeer, MemoryTransport, PluginTransport};
 use diroxide_core::Message;
+use diroxide_core::{ConflictAnswer, ErrorAction, JobRequest};
+use diroxide_ops::{
+    Conflict, Engine, ItemError, JobControl, JobProgress, JobReport, JobSink, Plan,
+};
 
 /// How the fake plugin behaves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -165,6 +170,26 @@ pub struct RecordingServices {
     panels: Mutex<Vec<PanelSnapshot>>,
     changes: Mutex<Vec<PanelChange>>,
     executed: Mutex<Vec<(String, Params)>>,
+    engine: Mutex<Option<(Engine, bool)>>,
+    jobs: Mutex<Vec<JobRequest>>,
+    plans: Mutex<Vec<Plan>>,
+}
+
+/// A job sink that skips every conflict and every error, for the stand-in
+/// host's jobs.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SkippingSink;
+
+impl JobSink for SkippingSink {
+    fn progress(&self, _progress: &JobProgress) {}
+
+    fn conflict(&self, _conflict: &Conflict) -> ConflictAnswer {
+        ConflictAnswer::skip()
+    }
+
+    fn error(&self, _error: &ItemError) -> ErrorAction {
+        ErrorAction::Skip
+    }
 }
 
 impl std::fmt::Debug for RecordingServices {
@@ -224,6 +249,23 @@ impl RecordingServices {
     pub fn executed(&self) -> Vec<(String, Params)> {
         locked(&self.executed).clone()
     }
+
+    /// Plans the plugins' file jobs with this engine, the built-in jobs'
+    /// own planner, and runs them when `run` is set (never a trash job in
+    /// a test: the trash is the real one).
+    pub fn plan_with(&self, engine: Engine, run: bool) {
+        *locked(&self.engine) = Some((engine, run));
+    }
+
+    /// The file jobs the plugins asked for, in order.
+    pub fn jobs(&self) -> Vec<JobRequest> {
+        locked(&self.jobs).clone()
+    }
+
+    /// Their plans, in order.
+    pub fn plans(&self) -> Vec<Plan> {
+        locked(&self.plans).clone()
+    }
 }
 
 impl HostServices for RecordingServices {
@@ -253,6 +295,24 @@ impl HostServices for RecordingServices {
             PanelChoice::Other | PanelChoice::Right => 1,
         };
         panels.get(index).cloned()
+    }
+
+    fn run_job(&self, request: &JobRequest, cancel: &CancelFlag) -> Result<JobReport, RpcError> {
+        locked(&self.jobs).push(request.clone());
+        let engine = locked(&self.engine).clone();
+        let Some((engine, run)) = engine else {
+            return Ok(JobReport::new(request.id, request.kind));
+        };
+        let plan = engine
+            .plan(request)
+            .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
+        locked(&self.plans).push(plan.clone());
+        if !run {
+            return Ok(JobReport::new(request.id, request.kind));
+        }
+        let mut control = JobControl::new();
+        control.cancel = cancel.token();
+        Ok(engine.run(&plan, &control, &SkippingSink))
     }
 
     fn set_panel(&self, change: &PanelChange) -> Result<(), RpcError> {

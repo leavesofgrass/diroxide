@@ -22,13 +22,16 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use diroxide_config::PluginSettings;
-use diroxide_core::{CommandId, Message};
+use diroxide_core::{CommandId, JobRequest, Message};
+use diroxide_ops::JobReport;
 use diroxide_tools::process::ProcessSpec;
+use diroxide_vfs::Registry;
 use serde_json::{Map, Value};
 
 use crate::ask::{Answer, PromptHistory, Question, TextDocument};
 use crate::calls::Calls;
 use crate::error::PluginError;
+use crate::files::Files;
 use crate::lines;
 use crate::live::{LivePlugin, Notice, RequestKind};
 use crate::log::{PluginLog, Source};
@@ -38,6 +41,7 @@ use crate::protocol::{ErrorKind, Notification, PROTOCOL, Params, Request, RpcErr
 use crate::router::{CancelFlag, Connection, Event, Inbound, Outcome};
 use crate::services::{AnnounceLimiter, ProgressBoard, Waiting, announcement, settings_for};
 use crate::session::{InitializeParams, SessionError, handshake, unconfirmed};
+use crate::spool::Spool;
 use crate::supervisor::{
     Action, CrashPolicy, CrashVerdict, Flood, FloodGuard, SystemTicker, Ticker,
 };
@@ -105,6 +109,21 @@ pub trait HostServices: Send + Sync {
         Err(RpcError::new(
             ErrorKind::Unsupported,
             "this host has no panels",
+        ))
+    }
+
+    /// `fs/mkdir`, `fs/rename`, `fs/copy`, `fs/move` and `fs/delete`: runs
+    /// the job a plugin asked for exactly as a built-in one, with the plan,
+    /// the listing, the confirmation that starts on No, the trash by
+    /// default and the undo log; the request's origin names the plugin, and
+    /// the app gives it a job id. `cancel` rises when the plugin cancels
+    /// its request or stops; the job stops with it. The default runs
+    /// nothing.
+    fn run_job(&self, request: &JobRequest, cancel: &CancelFlag) -> Result<JobReport, RpcError> {
+        let _ = (request, cancel);
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host runs no file jobs for plugins",
         ))
     }
 
@@ -453,6 +472,7 @@ pub struct Host {
     services: Option<Arc<dyn HostServices>>,
     settings: Mutex<HashMap<String, Map<String, Value>>>,
     history: Arc<Mutex<PromptHistory>>,
+    registry: Option<Arc<Registry>>,
     off: bool,
 }
 
@@ -481,6 +501,7 @@ impl Host {
             services: None,
             settings: Mutex::new(HashMap::new()),
             history: Arc::new(Mutex::new(PromptHistory::default())),
+            registry: None,
             off: false,
         }
     }
@@ -505,6 +526,13 @@ impl Host {
     /// The same host with another clock (tests move it by hand).
     pub fn with_ticker(mut self, ticker: Arc<dyn Ticker>) -> Self {
         self.ticker = ticker;
+        self
+    }
+
+    /// The same host reaching files through these providers, for the
+    /// plugins' `fs/*` calls.
+    pub fn with_registry(mut self, registry: Arc<Registry>) -> Self {
+        self.registry = Some(registry);
         self
     }
 
@@ -742,6 +770,15 @@ impl Host {
         for warning in &started.result.warnings {
             log.write(Source::Plugin("warn"), warning);
         }
+        let spool = self.state_dir.as_ref().and_then(|state| {
+            match Spool::create(state.join(&manifest.id).join("spool")) {
+                Ok(spool) => Some(Arc::new(spool)),
+                Err(e) => {
+                    log.write(Source::Host, &format!("the spool could not be made: {e}"));
+                    None
+                }
+            }
+        });
         let live_cell = Arc::new(OnceLock::new());
         let inbound = Arc::new(PluginInbound {
             name: name.clone(),
@@ -761,6 +798,16 @@ impl Host {
                     plugin: manifest.id.clone(),
                 },
                 denials: Denials::default(),
+                files: Files {
+                    registry: self.registry.clone(),
+                    spool,
+                    own_schemes: manifest
+                        .providers
+                        .iter()
+                        .map(|p| p.scheme.clone())
+                        .collect(),
+                    plugin: name.clone(),
+                },
             },
             log: log.clone(),
             flood: Mutex::new(FloodGuard::default()),

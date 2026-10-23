@@ -1045,7 +1045,9 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "diroxide-config",
  "diroxide-core",
+ "diroxide-ops",
  "diroxide-tools",
+ "diroxide-vfs",
  "proptest",
  "regex",
  "serde",

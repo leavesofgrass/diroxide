@@ -30,6 +30,21 @@ pub fn document_title(title: &str, plugin: &str) -> String {
     }
 }
 
+/// The title of the host's own question before a plugin replaces a
+/// file: "Replace a file? (Line counter)".
+pub fn replace_title(plugin: &str) -> String {
+    with_source("Replace a file?", plugin)
+}
+
+/// The lines of that question, meaning first: "Replace report.txt?" and
+/// "It cannot be undone."
+pub fn replace_lines(name: &str) -> Vec<String> {
+    vec![
+        format!("Replace {name}?"),
+        "It cannot be undone.".to_owned(),
+    ]
+}
+
 /// What a text prompt says when the text does not fit the plugin's
 /// pattern and the plugin gave no words of its own.
 pub fn text_does_not_fit() -> String {

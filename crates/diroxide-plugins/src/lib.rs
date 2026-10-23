@@ -46,8 +46,10 @@
 //! W4b owns [`script`].
 
 pub mod ask;
+pub mod base64;
 mod calls;
 pub mod error;
+pub mod files;
 pub mod framing;
 pub mod fuzzing;
 pub mod host;
@@ -63,6 +65,7 @@ pub mod script;
 pub mod services;
 pub mod session;
 pub mod shapes;
+pub mod spool;
 pub mod supervisor;
 pub mod testing;
 pub mod transport;

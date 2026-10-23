@@ -23,6 +23,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use diroxide_vfs::CancelToken;
 use serde_json::{Value, json};
 
 use crate::error::PluginError;
@@ -181,18 +182,25 @@ impl Router {
 }
 
 /// A flag the host raises when the plugin cancels one of its own requests.
+/// It shares its state with a provider [`CancelToken`], so a provider
+/// call or a job made for the request stops with it.
 #[derive(Clone, Debug, Default)]
-pub struct CancelFlag(Arc<AtomicBool>);
+pub struct CancelFlag(CancelToken);
 
 impl CancelFlag {
     /// Whether the plugin cancelled the request.
     pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.0.is_cancelled()
     }
 
     /// Raises the flag.
     pub fn cancel(&self) {
-        self.0.store(true, Ordering::SeqCst);
+        self.0.cancel();
+    }
+
+    /// The provider token that rises with the flag.
+    pub fn token(&self) -> CancelToken {
+        self.0.clone()
     }
 }
 

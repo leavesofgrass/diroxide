@@ -19,7 +19,10 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
 use diroxide_core::Message;
 use serde_json::{Value, json};
 
-use crate::ask::{Answer, Completion, CompletionWanted, PluginCompleter, PromptHistory};
+use crate::ask::{
+    Answer, Completion, CompletionWanted, PluginCompleter, PromptHistory, Question, QuestionKind,
+};
+use crate::files::{Files, report_value};
 use crate::host::{HostServices, Voice};
 use crate::lines;
 use crate::live::LivePlugin;
@@ -54,6 +57,8 @@ pub(crate) struct Calls {
     pub(crate) voice: Voice,
     /// The calls its manifest refused.
     pub(crate) denials: Denials,
+    /// What its `fs/*` calls reach.
+    pub(crate) files: Files,
 }
 
 fn not_served(method: &str) -> RpcError {
@@ -76,9 +81,19 @@ impl Calls {
                 format!("the host does not serve {method} yet"),
             ));
         }
-        let _ = cancel;
         self.permit(method, &request.params)?;
+        let params = &request.params;
+        let ctx = || diroxide_vfs::OpContext::new().with_cancel(cancel.token());
         match method {
+            methods::FS_LIST => self.files.list(params, &ctx()),
+            methods::FS_STAT => self.files.stat(params, &ctx()),
+            methods::FS_READ => self.files.read(params, &ctx()),
+            methods::FS_WRITE => self.fs_write(params, &ctx()),
+            methods::FS_MKDIR
+            | methods::FS_RENAME
+            | methods::FS_COPY
+            | methods::FS_MOVE
+            | methods::FS_DELETE => self.fs_job(method, params, cancel),
             methods::UI_ASK => self.ask(&request.params),
             methods::UI_SHOW_TEXT => self.show_text(&request.params),
             methods::PANEL_GET => self.panel_get(&request.params),
@@ -137,6 +152,80 @@ impl Calls {
         self.services
             .as_ref()
             .ok_or_else(|| RpcError::new(ErrorKind::Unsupported, "this host has no frontend"))
+    }
+
+    /// `fs/write`: a new file at once; an existing one only after the
+    /// owner says yes in the host's own question, which starts on No.
+    fn fs_write(&self, params: &Params, ctx: &diroxide_vfs::OpContext) -> Outcome {
+        let (place, exists) = self.files.write_target(params, ctx)?;
+        if exists {
+            let skip = params.get("conflict").and_then(Value::as_str) == Some("skip");
+            let services = self.services.as_ref().filter(|_| !skip);
+            let Some(services) = services else {
+                return if skip {
+                    Ok(json!({"written": false, "skipped": true}))
+                } else {
+                    Err(RpcError::new(
+                        ErrorKind::AlreadyExists,
+                        "the file exists and nobody can confirm replacing it",
+                    ))
+                };
+            };
+            let name = place.name().unwrap_or_default();
+            let question = Question {
+                plugin_id: self.plugin_id.clone(),
+                plugin: self.name.clone(),
+                title: lines::replace_title(&self.name),
+                lines: lines::replace_lines(name),
+                kind: QuestionKind::Confirm {
+                    destructive: true,
+                    yes_label: None,
+                    no_label: None,
+                },
+                prompt_id: None,
+                history: Vec::new(),
+                completion: None,
+            };
+            if services.ask(&question) != Answer::Confirmed(true) {
+                return Ok(json!({"written": false, "skipped": true}));
+            }
+        }
+        self.files.write(params, &place, exists, ctx)
+    }
+
+    /// The job methods: each request becomes the engine's job, run by the
+    /// app like a built-in one, with the same plan, listing, confirmation,
+    /// trash and undo.
+    fn fs_job(&self, method: &str, params: &Params, cancel: &CancelFlag) -> Outcome {
+        let jobs = self.files.job(method, params)?;
+        let services = self.services()?;
+        let mut done = 0;
+        let mut skipped = 0;
+        let mut failed = Vec::new();
+        let mut cancelled = false;
+        let mut summaries = Vec::new();
+        for job in &jobs {
+            if cancel.is_cancelled() {
+                cancelled = true;
+                break;
+            }
+            let report = services.run_job(job, cancel)?;
+            let value = report_value(&report);
+            done += value["done"].as_u64().unwrap_or(0);
+            skipped += value["skipped"].as_u64().unwrap_or(0);
+            if let Some(items) = value["failed"].as_array() {
+                failed.extend(items.iter().cloned());
+            }
+            cancelled |= report.cancelled;
+            summaries.push(report.summary());
+        }
+        Ok(json!({
+            "done": done,
+            "skipped": skipped,
+            "failed": failed,
+            "cancelled": cancelled,
+            "summary": summaries.join(" "),
+        }))
     }
 
     /// `panel/get`: a panel's place, cursor, selection, sort and filter.
@@ -644,6 +733,166 @@ pub(crate) mod tests {
         assert_eq!(executed[0].1["to"], "x");
         assert_eq!(host.refusals("line-counter"), 3);
         host.shutdown_all(QUIT_BUDGET);
+    }
+
+    /// A host with the local disk, a state folder (so a spool), and the
+    /// plugin's manifest lines `extra`.
+    fn files_host(
+        services: &Arc<RecordingServices>,
+        root: &std::path::Path,
+        extra: &str,
+    ) -> (Host, diroxide_core::Place) {
+        let registry = Arc::new(diroxide_vfs::Registry::with_local());
+        let ticker = Arc::new(ManualTicker::new());
+        let mut host = Host::new(&PluginSettings::default())
+            .with_state_dir(root.join("state"))
+            .with_registry(Arc::clone(&registry))
+            .with_launcher(FakeLauncher::new(Mode::Call))
+            .with_ticker(Arc::clone(&ticker) as Arc<dyn Ticker>)
+            .with_services(Arc::clone(services) as Arc<dyn HostServices>);
+        host.add(plugin_info(extra));
+        services.plan_with(diroxide_ops::Engine::new(registry), true);
+        std::fs::create_dir_all(root.join("work").join("out")).unwrap();
+        std::fs::write(root.join("work").join("a.txt"), b"alpha").unwrap();
+        let work = diroxide_core::Place::parse(&root.join("work").display().to_string()).unwrap();
+        (host, work)
+    }
+
+    const WRITE: &str = "\n[permissions]\nfs = \"write\"\n";
+
+    /// The check of R22's commit 11: a plugin's copy has the same plan and
+    /// undo as a built-in copy; a delete goes to the trash by default.
+    #[test]
+    fn a_plugins_copy_is_a_built_in_copy() {
+        let root = tempfile::tempdir().unwrap();
+        let services = RecordingServices::new();
+        let (host, work) = files_host(&services, root.path(), WRITE);
+        let a = work.join("a.txt").unwrap();
+        let out = work.join("out").unwrap();
+        let copied = call(
+            &host,
+            methods::FS_COPY,
+            json!({"items": [a.to_string()], "to": out.to_string()}),
+        );
+        assert_eq!(copied["done"], 1, "{copied}");
+        assert_eq!(copied["summary"], "Copy finished: 1 done.");
+        assert_eq!(
+            std::fs::read(root.path().join("work").join("out").join("a.txt")).unwrap(),
+            b"alpha"
+        );
+        let built_in = diroxide_ops::Engine::new(Arc::new(diroxide_vfs::Registry::with_local()))
+            .plan(
+                &diroxide_core::JobRequest::new(
+                    diroxide_core::JobId::new(0),
+                    diroxide_core::JobKind::Copy,
+                    vec![a.clone()],
+                )
+                .to(out.clone()),
+            )
+            .unwrap();
+        let plans = services.plans();
+        assert_eq!(plans[0].steps, built_in.steps);
+        let jobs = services.jobs();
+        assert_eq!(
+            jobs[0].origin,
+            diroxide_core::JobOrigin::Plugin("Line counter".into())
+        );
+        // The delete is planned, never run here: the trash is the real one.
+        services.plan_with(
+            diroxide_ops::Engine::new(Arc::new(diroxide_vfs::Registry::with_local())),
+            false,
+        );
+        call(
+            &host,
+            methods::FS_DELETE,
+            json!({"items": [out.join("a.txt").unwrap().to_string()]}),
+        );
+        let jobs = services.jobs();
+        assert_eq!(jobs[1].kind, diroxide_core::JobKind::Trash);
+        assert_eq!(services.plans()[1].kind, diroxide_core::JobKind::Trash);
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    #[test]
+    fn reads_and_writes_go_through_the_providers_and_the_spool() {
+        let root = tempfile::tempdir().unwrap();
+        let services = RecordingServices::new();
+        let (host, work) = files_host(&services, root.path(), WRITE);
+        let a = work.join("a.txt").unwrap().to_string();
+        let read = call(&host, methods::FS_READ, json!({"place": a}));
+        assert_eq!(read["data"], crate::base64::encode(b"alpha"));
+        let spooled = call(
+            &host,
+            methods::FS_READ,
+            json!({"place": a, "transfer": "file", "spool_path": "a.part"}),
+        );
+        assert_eq!(spooled["length"], 5);
+        let spool = root.path().join("state").join("line-counter").join("spool");
+        assert_eq!(std::fs::read(spool.join("a.part")).unwrap(), b"alpha");
+        let escaped = call(
+            &host,
+            methods::FS_READ,
+            json!({"place": a, "transfer": "file", "spool_path": "../escape.part"}),
+        );
+        assert_eq!(escaped["error"]["code"], -32030);
+        // Replacing asks the owner first, and No keeps the file.
+        services.answer(Answer::Confirmed(false));
+        let kept = call(
+            &host,
+            methods::FS_WRITE,
+            json!({"place": a, "data": crate::base64::encode(b"beta")}),
+        );
+        assert_eq!(kept, json!({"written": false, "skipped": true}));
+        assert_eq!(
+            std::fs::read(root.path().join("work").join("a.txt")).unwrap(),
+            b"alpha"
+        );
+        let question = &services.questions()[0];
+        assert_eq!(question.title, "Replace a file? (Line counter)");
+        assert_eq!(question.lines, ["Replace a.txt?", "It cannot be undone."]);
+        services.answer(Answer::Confirmed(true));
+        let replaced = call(
+            &host,
+            methods::FS_WRITE,
+            json!({"place": a, "data": crate::base64::encode(b"beta")}),
+        );
+        assert_eq!(replaced["written"], true);
+        assert_eq!(
+            std::fs::read(root.path().join("work").join("a.txt")).unwrap(),
+            b"beta"
+        );
+        let odd = call(
+            &host,
+            methods::FS_WRITE,
+            json!({"place": format!("{}.", work.join("odd").unwrap()), "data": ""}),
+        );
+        assert_eq!(odd["error"]["code"], -32016);
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    #[test]
+    fn file_calls_need_their_permission_and_never_loop_back() {
+        let root = tempfile::tempdir().unwrap();
+        let services = RecordingServices::new();
+        let (reader, work) = files_host(&services, root.path(), "\n[permissions]\nfs = \"read\"\n");
+        let a = work.join("a.txt").unwrap().to_string();
+        assert!(
+            call(&reader, methods::FS_STAT, json!({"place": a}))
+                .get("error")
+                .is_none()
+        );
+        let refused = call(&reader, methods::FS_DELETE, json!({"items": [a]}));
+        assert_eq!(refused["error"]["code"], -32030);
+        reader.shutdown_all(QUIT_BUDGET);
+        let provider = "\n[permissions]\nfs = \"write\"\n\n[[provider]]\nscheme = \"memfs\"\nname = \"Memory files\"\nmethods = [\"list\", \"stat\"]\n";
+        let (own, _) = files_host(&services, root.path(), provider);
+        let looped = call(
+            &own,
+            methods::FS_STAT,
+            json!({"place": "memfs://box/a.txt"}),
+        );
+        assert_eq!(looped["error"]["code"], -32032);
+        own.shutdown_all(QUIT_BUDGET);
     }
 
     #[test]
