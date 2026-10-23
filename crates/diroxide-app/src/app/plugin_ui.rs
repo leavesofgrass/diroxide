@@ -136,6 +136,8 @@ pub(super) enum Wants {
     Output,
     /// An item's commands and keys.
     Commands,
+    /// The plugins that have settings, from the Settings list.
+    SettingsPlugins,
     /// An item's settings.
     Settings { id: String },
     /// A setting's choices.
@@ -700,6 +702,34 @@ impl App {
         )
     }
 
+    /// The plugins that have settings, from the Settings list's "Plugin
+    /// settings": each by its name, with its state and how many it has.
+    pub(super) fn open_plugin_settings(&mut self) -> Vec<Effect> {
+        let rows = self
+            .plugins
+            .catalog
+            .items
+            .iter()
+            .filter(|item| !item.settings.is_empty())
+            .map(|item| {
+                ListRow::new(item.id.clone(), item.name.clone()).with_details([
+                    item.state.words().to_owned(),
+                    diroxide_core::format::count(item.settings.len() as u64, "setting", "settings"),
+                ])
+            })
+            .collect();
+        let mut list = ListModel::new("Plugin settings").with_rows(rows);
+        list.set_empty_text("No plugin has settings");
+        list.set_help("Up and Down choose, Enter opens a plugin's settings, Escape goes back.");
+        self.open_dialog(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::ACCEPT),
+            },
+            Purpose::Plugin(Box::new(Wants::SettingsPlugins)),
+        )
+    }
+
     fn open_settings_of(&mut self, id: &str) -> Vec<Effect> {
         let Some(item) = self.plugins.catalog.item(id).cloned() else {
             return Vec::new();
@@ -916,6 +946,10 @@ impl App {
             Wants::Output | Wants::Commands | Wants::Log => Vec::new(),
             Wants::Settings { id } => match row {
                 Some(key) => self.plugin_setting_chosen(&id, &key),
+                None => Vec::new(),
+            },
+            Wants::SettingsPlugins => match row {
+                Some(id) => self.open_settings_of(&id),
                 None => Vec::new(),
             },
             Wants::SettingChoice { id, key } => {

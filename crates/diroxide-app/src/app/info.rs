@@ -532,6 +532,9 @@ impl App {
         if key == settings::KEYS_ROW {
             return self.open_keys_list();
         }
+        if key == settings::PLUGINS_ROW {
+            return self.open_plugin_settings();
+        }
         if key == "preset" {
             return self.preset_chooser();
         }

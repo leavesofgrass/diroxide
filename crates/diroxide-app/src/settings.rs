@@ -69,6 +69,10 @@ pub fn filter_options(settings: &Settings) -> diroxide_core::filter::FilterOptio
 /// The id of the Settings list's row that opens the Keys list (W3k).
 pub const KEYS_ROW: &str = "\u{1}keys";
 
+/// The id of the Settings list's row that opens the plugins' own
+/// settings, each under its plugin's name (W4d).
+pub const PLUGINS_ROW: &str = "\u{1}plugins";
+
 /// The Settings list, one row per setting in schema order: the name, then
 /// the value in words. Each row's id is the setting's key, so F1 on it
 /// gives [`setting_help`] and Enter can change it. The Keys list's row,
@@ -82,6 +86,12 @@ pub fn settings_list(settings: &Settings) -> ListModel {
         if info.key == "single_letters" {
             rows.push(
                 ListRow::new(KEYS_ROW, "Keys list").with_details(["every command and its key"]),
+            );
+        }
+        if info.key == "plugins.enabled" {
+            rows.push(
+                ListRow::new(PLUGINS_ROW, "Plugin settings")
+                    .with_details(["each plugin's own, under its name"]),
             );
         }
         rows.push(
@@ -138,10 +148,24 @@ mod tests {
     fn the_list_says_each_setting_and_its_value() {
         let settings = Settings::default();
         let list = settings_list(&settings);
-        assert_eq!(list.len(), SCHEMA.len() + 1, "and the Keys list's row");
+        assert_eq!(
+            list.len(),
+            SCHEMA.len() + 2,
+            "and the Keys list's and the plugin settings' rows"
+        );
         assert_eq!(
             list.announce_focus(),
-            format!("Layout, side by side, 1 of {}", SCHEMA.len() + 1)
+            format!("Layout, side by side, 1 of {}", SCHEMA.len() + 2)
+        );
+        let plugins = list
+            .rows()
+            .iter()
+            .position(|r| r.id == PLUGINS_ROW)
+            .unwrap();
+        assert_eq!(list.rows()[plugins + 1].id, "plugins.enabled");
+        assert_eq!(
+            list.rows()[plugins].spoken(),
+            "Plugin settings, each plugin's own, under its name"
         );
         let keys = list.rows().iter().position(|r| r.id == KEYS_ROW).unwrap();
         assert_eq!(list.rows()[keys + 1].id, "single_letters");

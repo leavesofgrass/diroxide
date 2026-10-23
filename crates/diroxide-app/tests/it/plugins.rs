@@ -1206,3 +1206,22 @@ fn a_lister_asks_for_more_rows_at_its_end() {
         "the rows again: {said:?}"
     );
 }
+
+#[test]
+fn the_settings_list_reaches_each_plugins_settings() {
+    let w = world(MANIFEST);
+    let mut s = session(&w, TestLauncher::with(&[]));
+    s.command(ids::SETTINGS);
+    let at = rows(&s)
+        .iter()
+        .position(|r| r.starts_with("Plugin settings"))
+        .unwrap();
+    for _ in 0..at {
+        s.key("down");
+    }
+    s.key("enter");
+    assert_eq!(s.dialog_title().as_deref(), Some("Plugin settings"));
+    assert_eq!(rows(&s), ["Line counter, not enabled, 1 setting"]);
+    s.key("enter");
+    assert_eq!(rows(&s), ["Skip blank, off"]);
+}
