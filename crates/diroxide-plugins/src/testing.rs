@@ -198,6 +198,7 @@ pub struct RecordingServices {
     engine: Mutex<Option<(Engine, bool)>>,
     jobs: Mutex<Vec<JobRequest>>,
     plans: Mutex<Vec<Plan>>,
+    listers: Mutex<Vec<crate::listers::ListerView>>,
 }
 
 /// A job sink that skips every conflict and every error, for the stand-in
@@ -287,6 +288,11 @@ impl RecordingServices {
         locked(&self.jobs).clone()
     }
 
+    /// The listers opened, in order.
+    pub fn listers(&self) -> Vec<crate::listers::ListerView> {
+        locked(&self.listers).clone()
+    }
+
     /// Their plans, in order.
     pub fn plans(&self) -> Vec<Plan> {
         locked(&self.plans).clone()
@@ -320,6 +326,11 @@ impl HostServices for RecordingServices {
             PanelChoice::Other | PanelChoice::Right => 1,
         };
         panels.get(index).cloned()
+    }
+
+    fn open_lister(&self, lister: &crate::listers::ListerView) -> Result<(), RpcError> {
+        locked(&self.listers).push(lister.clone());
+        Ok(())
     }
 
     fn run_job(&self, request: &JobRequest, cancel: &CancelFlag) -> Result<JobReport, RpcError> {
@@ -486,6 +497,30 @@ impl FakePlugin {
         };
         let mut out = Vec::new();
         let result = match request.method.as_str() {
+            methods::COLUMN_FORMAT => {
+                let places: Vec<String> = request
+                    .params
+                    .get("places")
+                    .and_then(Value::as_array)
+                    .map(|p| {
+                        p.iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_owned)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                // Every place but the last is answered; the last stays
+                // pending.
+                let values: serde_json::Map<String, Value> = places
+                    .iter()
+                    .take(places.len().saturating_sub(1))
+                    .map(|p| (p.clone(), json!({"text": "Modified", "sort": "1"})))
+                    .collect();
+                Ok(json!({"values": values}))
+            }
+            methods::LISTER_ROWS => Ok(json!({"rows": [
+                {"name": "Added, more.txt", "kind": "item", "extra": {"id": "more.txt"}}
+            ]})),
             methods::COMPLETION_QUERY => {
                 let text = request
                     .params

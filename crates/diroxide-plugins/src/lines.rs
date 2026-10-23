@@ -45,6 +45,21 @@ pub fn replace_lines(name: &str) -> Vec<String> {
     ]
 }
 
+/// A file command on a lister's row: "This row is not a file."
+pub fn not_a_file() -> String {
+    "This row is not a file.".to_owned()
+}
+
+/// A lister cut at its cap: "First 5,000 shown, narrow the search."
+pub fn lister_capped() -> String {
+    "First 5,000 shown, narrow the search.".to_owned()
+}
+
+/// A column value not answered yet: "pending", never an empty cell.
+pub fn pending() -> String {
+    "pending".to_owned()
+}
+
 /// A provider's lost connection when the plugin gave no reason.
 pub fn connection_lost() -> String {
     "Connection lost".to_owned()

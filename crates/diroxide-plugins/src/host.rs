@@ -12,7 +12,7 @@
 //! - [`Host::shutdown_all`] ends every plugin in parallel within one budget
 //!   of two seconds; dropping the host kills what is left without waiting.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,7 +22,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use diroxide_config::PluginSettings;
-use diroxide_core::{CommandId, JobRequest, Message, Place};
+use diroxide_core::{CommandId, Entry, JobRequest, Message, Place};
 use diroxide_ops::JobReport;
 use diroxide_tools::process::ProcessSpec;
 use diroxide_vfs::{Registry, WatchEvent, WatchSink};
@@ -33,6 +33,9 @@ use crate::calls::Calls;
 use crate::error::PluginError;
 use crate::files::Files;
 use crate::lines;
+use crate::listers::{
+    ColumnValue, ListerView, MAX_LISTER_ROWS, column_params, read_column_values, read_rows,
+};
 use crate::live::{CallOptions, LivePlugin, Notice, RequestKind};
 use crate::log::{PluginLog, Source};
 use crate::manifest::Manifest;
@@ -128,6 +131,19 @@ pub trait HostServices: Send + Sync {
         Err(RpcError::new(
             ErrorKind::Unsupported,
             "this host runs no file jobs for plugins",
+        ))
+    }
+
+    /// `lister/open`: shows a plugin's lister in a panel, its rows item
+    /// rows that no file command takes. Enter runs
+    /// [`ListerView::activate`], keys run [`ListerView::action_for`];
+    /// more rows come from [`Host::lister_rows`], and leaving it calls
+    /// [`Host::lister_closed`]. The default has no panels.
+    fn open_lister(&self, lister: &ListerView) -> Result<(), RpcError> {
+        let _ = lister;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host has no panels",
         ))
     }
 
@@ -1030,6 +1046,79 @@ impl Host {
             slot.off = None;
             slot.crashes.reset();
             slot.starts.reset();
+        }
+    }
+
+    /// `lister/rows`: more rows of a lister from `offset`, or all of them
+    /// again when `refresh`; at most [`MAX_LISTER_ROWS`].
+    pub fn lister_rows(
+        &self,
+        plugin: &str,
+        lister: &str,
+        offset: u64,
+        refresh: bool,
+    ) -> Result<Vec<Entry>, PluginError> {
+        let answer = self.call(
+            plugin,
+            methods::LISTER_ROWS,
+            serde_json::json!({"lister": lister, "offset": offset, "limit": MAX_LISTER_ROWS, "refresh": refresh}),
+        )?;
+        read_rows(answer.get("rows"), MAX_LISTER_ROWS)
+            .map(|(rows, _)| rows)
+            .map_err(|e| PluginError::Protocol(e.message))
+    }
+
+    /// `lister/closed`: the owner left a lister, so the plugin can free
+    /// it. Nothing is sent to a plugin that is not running.
+    pub fn lister_closed(&self, plugin: &str, lister: &str) {
+        self.notify_running(
+            plugin,
+            methods::LISTER_CLOSED,
+            serde_json::json!({"lister": lister}),
+        );
+    }
+
+    /// `column/format`: a batch of a declared column's values for places
+    /// of one folder, each cleaned to 40 cells, "pending" where the plugin
+    /// answered none.
+    pub fn column_values(
+        &self,
+        plugin: &str,
+        column: &str,
+        folder: &Place,
+        places: &[Place],
+    ) -> Result<BTreeMap<String, ColumnValue>, PluginError> {
+        let declared = self
+            .plugin(plugin)
+            .is_some_and(|p| p.manifest.columns.iter().any(|c| c.id == column));
+        if !declared {
+            return Err(PluginError::Protocol(format!(
+                "the manifest declares no column {column}"
+            )));
+        }
+        let texts: Vec<String> = places.iter().map(ToString::to_string).collect();
+        let params = column_params(column, &folder.to_string(), &texts)
+            .map_err(|e| PluginError::Limit(e.message))?;
+        let answer = self.call(plugin, methods::COLUMN_FORMAT, params)?;
+        Ok(read_column_values(&answer, &texts))
+    }
+
+    fn notify_running(&self, plugin: &str, method: &str, params: Value) {
+        let live = self
+            .slots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(plugin)
+            .and_then(|slot| {
+                slot.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .live
+                    .clone()
+            });
+        if let (Some(live), Value::Object(params)) = (live, params)
+            && !live.is_ended()
+        {
+            let _ = live.connection().notify(method, params);
         }
     }
 

@@ -100,6 +100,7 @@ impl Calls {
             methods::TOOLS_LAUNCH => {
                 crate::tools::launch(params, &self.manifest.permissions, &self.tools)
             }
+            methods::LISTER_OPEN => self.open_lister(params),
             methods::FS_LIST => self.files.list(params, &ctx()),
             methods::FS_STAT => self.files.stat(params, &ctx()),
             methods::FS_READ => self.files.read(params, &ctx()),
@@ -265,6 +266,14 @@ impl Calls {
             notice.insert("chunk".into(), json!(chunk));
             let _ = live.connection().notify(methods::TOOLS_OUTPUT, notice);
         })
+    }
+
+    /// `lister/open`: a declared lister, its first rows, in a panel.
+    fn open_lister(&self, params: &Params) -> Outcome {
+        let view = crate::listers::read_open(params, &self.manifest, &self.name)?;
+        let rows = view.rows.len();
+        self.services()?.open_lister(&view)?;
+        Ok(json!({"opened": true, "rows": rows}))
     }
 
     /// `panel/get`: a panel's place, cursor, selection, sort and filter.
@@ -978,6 +987,50 @@ pub(crate) mod tests {
             .collect();
         assert!(chunks.iter().any(|c| c.ends_with("arg=one")), "{chunks:?}");
         assert!(chunks.iter().any(|c| c.ends_with("arg=two")), "{chunks:?}");
+    }
+
+    const LISTER: &str = "\n[[lister]]\nid = \"changed\"\nname = \"Changed files\"\nactivate = \"echo\"\n[[lister.columns]]\nid = \"state\"\nheader = \"State\"\nkind = \"text\"\n\n[[column]]\nid = \"git\"\nheader = \"Git\"\nkind = \"text\"\n";
+
+    /// The check of R22's commit 14 with the fake host: `lister/open`
+    /// shows item rows, more come by `lister/rows`, and `column/format`
+    /// round-trips with a value still pending.
+    #[test]
+    fn a_lister_opens_and_a_column_round_trips() {
+        let services = RecordingServices::new();
+        let (host, _) = host_with(&services, LISTER);
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../fixtures/plugins/shapes/lister-open-changed.json"
+        ))
+        .unwrap();
+        let opened = call(&host, methods::LISTER_OPEN, fixture["params"].clone());
+        assert_eq!(opened, fixture["result"]);
+        let view = &services.listers()[0];
+        assert_eq!(view.title, "Changed files in diroxide (Line counter)");
+        assert_eq!(view.activate(), Some("echo"));
+        assert!(
+            view.rows
+                .iter()
+                .all(|r| r.kind == diroxide_core::EntryKind::Item)
+        );
+        let undeclared = call(&host, methods::LISTER_OPEN, json!({"lister": "other"}));
+        assert_eq!(undeclared["error"]["code"], -32030);
+        let more = host
+            .lister_rows("line-counter", "changed", 3, false)
+            .unwrap();
+        assert_eq!(more[0].extra["id"], "more.txt");
+        host.lister_closed("line-counter", "changed");
+        let folder = root("repo");
+        let places = [folder.join("a.txt").unwrap(), folder.join("b.txt").unwrap()];
+        let values = host
+            .column_values("line-counter", "git", &folder, &places)
+            .unwrap();
+        assert_eq!(values[&places[0].to_string()].text, "Modified");
+        assert_eq!(values[&places[1].to_string()].text, "pending");
+        assert!(
+            host.column_values("line-counter", "size", &folder, &places)
+                .is_err()
+        );
+        host.shutdown_all(QUIT_BUDGET);
     }
 
     #[test]
