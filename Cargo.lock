@@ -4504,6 +4504,7 @@ dependencies = [
  "diroxide-archive",
  "diroxide-core",
  "diroxide-ops",
+ "diroxide-plugins",
  "diroxide-search",
  "diroxide-vfs",
  "resvg",

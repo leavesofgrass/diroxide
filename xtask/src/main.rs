@@ -4,7 +4,8 @@
 //!   and every internal dependency points the allowed way
 //!   (docs/dev/architecture.md).
 //! - `regen [--check]`: writes every generated page (`docs/keyboard.md`,
-//!   `docs/settings-reference.md`), or checks that each is current.
+//!   `docs/settings-reference.md`, `docs/dev/plugin-protocol.md`), or
+//!   checks that each is current.
 //! - `keyboard [--check]`: writes `docs/keyboard.md` from the keymap's
 //!   defaults, as two lists (terminal, GUI), or checks that it is
 //!   current.
@@ -28,6 +29,7 @@ mod docs_check;
 mod keyboard;
 mod logo;
 mod native;
+mod plugin_doc;
 mod regen;
 mod sample;
 mod settings_doc;

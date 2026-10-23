@@ -4,7 +4,8 @@
 //! of every agent's checks from Wave 1 on.
 //!
 //! Today it writes `docs/keyboard.md`, the keymap presets' sheets
-//! (`docs/keyboard-NAME.md`) and `docs/settings-reference.md`.
+//! (`docs/keyboard-NAME.md`), `docs/settings-reference.md` and the plugin
+//! protocol reference, `docs/dev/plugin-protocol.md`.
 //! `THIRD-PARTY-NOTICES.md` joins it when the notices task arrives.
 
 use std::fs;
@@ -12,12 +13,13 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::{keyboard, settings_doc};
+use crate::{keyboard, plugin_doc, settings_doc};
 
 /// Each generated page: its path from the root, and its text.
 fn pages() -> Vec<(String, String)> {
     let mut pages = keyboard::all_pages();
     pages.push((settings_doc::PAGE.to_owned(), settings_doc::generate()));
+    pages.push((plugin_doc::PAGE.to_owned(), plugin_doc::generate()));
     pages
 }
 
