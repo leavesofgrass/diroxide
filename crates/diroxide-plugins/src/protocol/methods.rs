@@ -145,6 +145,9 @@ pub const UI_SHOW_DIFF: &str = "ui/show_diff";
 pub const PANEL_GET: &str = "panel/get";
 /// Plugin to host, request: change a panel.
 pub const PANEL_SET: &str = "panel/set";
+/// Host to a serve client, notification: a panel's place, cursor or
+/// selection changed (W4d's request; `diro serve` sends it).
+pub const PANEL_CHANGED: &str = "panel/changed";
 /// Plugin to host, request: run a diroxide command by id.
 pub const COMMAND_EXECUTE: &str = "command/execute";
 /// Plugin to host, request: list a folder through the providers.
@@ -337,7 +340,7 @@ use Call::{Notification as N, Request as R};
 use Sender::{Either as E, Host as H, Plugin as P};
 
 /// Every method, in the reference's order.
-pub const ALL: [Method; 64] = [
+pub const ALL: [Method; 65] = [
     method(
         INITIALIZE,
         H,
@@ -771,6 +774,15 @@ pub const ALL: [Method; 64] = [
         NOW,
     ),
     method(
+        PANEL_CHANGED,
+        H,
+        N,
+        A::Services,
+        "a serve client",
+        "Tells a serve client that a panel's place, cursor or selection changed.",
+        NOW,
+    ),
+    method(
         COMMAND_EXECUTE,
         P,
         R,
@@ -982,8 +994,9 @@ mod tests {
         // place/describe, tools/launch, fs/stage, fs/commit,
         // provider/volumes and completion/query (12 requests), and
         // lister/closed, column/changed, tools/output and provider/lost
-        // (4 notifications). R25 adds provider/places (1 request).
-        assert_eq!(counts(), (37 + 12 + 1, 10 + 4));
+        // (4 notifications). R25 adds provider/places (1 request). W4d adds
+        // panel/changed, the serve event (1 notification).
+        assert_eq!(counts(), (37 + 12 + 1, 10 + 4 + 1));
     }
 
     #[test]

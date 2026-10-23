@@ -151,7 +151,7 @@ One Cargo workspace, edition 2024, resolver 3, toolchain pinned to 1.96 (the too
 - `diroxide-core`: ids, errors, `Place` and `Entry`, the list model, commands and effects, messages and announcement kinds, the clock trait. No I/O.
 - `diroxide-vfs`: the `Provider` trait, places, capabilities, cancellation, the registry, and the local provider.
 - `diroxide-archive`: the archive provider for zip, 7z, tar, tar.gz, tar.xz and xz, reading and writing, with limits.
-- `diroxide-sftp`: the SFTP provider plugin, over the machine's OpenSSH client first (answer 78), on russh later as a component.
+- `diro-sftp` (under `plugins/`, its own workspace; answer 94): the SFTP provider plugin, over the machine's OpenSSH client first (answer 78), on russh later as a component.
 - `diroxide-ops`: the job engine: copy, move, delete, rename, make directory, links, attributes, times, trash, conflicts, progress, undo log.
 - `diroxide-search`: name and content search, dirsize, duplicates, results as a lister.
 - `diroxide-filetype`: detection and the file-type registry with actions.
@@ -165,7 +165,7 @@ One Cargo workspace, edition 2024, resolver 3, toolchain pinned to 1.96 (the too
 - `diroxide-cli`: the `diro` binary: open, serve, search, convert, plugin tooling.
 - `xtask`: deps, regen, keyboard, settings reference, notices, icons, dist, bench.
 
-Sixteen crates. textweaver reached 36; a file manager needs fewer. A crate is added only when a wave's brief says so.
+Seventeen crates in the workspace since alpha 2 added `diroxide-components`, and the plugins under `plugins/` each in a workspace of their own. textweaver reached 36; a file manager needs fewer. A crate is added only when a wave's brief says so.
 
 ### 5.2 The core model
 
@@ -182,7 +182,7 @@ A `Provider` trait with `list`, `stat`, `read`, `write`, `create_dir`, `rename`,
 
 - **Local** (in `diroxide-vfs`): `std::fs` with platform details behind a small `sys` module: Windows attributes, long paths, reparse points, drive listing from `GetLogicalDrives` (never touching the drive, as textweaver's browser does); Unix modes, owners and groups; macOS resource forks ignored.
 - **Archive** (`diroxide-archive`): zip through the `zip` crate (deflate, bzip2, zstd, lzma and xz entries), 7z through `sevenz-rust2` (LZMA, LZMA2, BZIP2, PPMd, with writing), tar and its gzip and xz wrappers through `tar`, `flate2` and `liblzma` or `lzma-rust2` (question 6), plain `.xz` as a one-member archive. Reading lists and reads members in place; writing packs a selection into a new archive or adds to one, as a job with progress. Limits from textweaver's archive module: member size, bytes decompressed, 7z dictionary size, entry count, nesting depth of four, normalized names so a member called `../../x` cannot leave the archive, junk entries hidden.
-- **SFTP** (`diroxide-sftp`): a provider plugin that speaks the SFTP protocol, in pure Rust, over `ssh -s sftp` to the OpenSSH client on the machine (answer 78), so the owner's agent, key files, known_hosts and ssh configuration work as they are and no key, host key or cipher is diroxide's; a connection per host kept open, listings and transfers streamed; passwords and new host keys asked through diro's own askpass helper, never on a command line. A self-contained plugin on russh and russh-sftp comes later as an optional component for machines without OpenSSH.
+- **SFTP** (`diro-sftp`): a provider plugin that speaks the SFTP protocol, in pure Rust, over `ssh -s sftp` to the OpenSSH client on the machine (answer 78), so the owner's agent, key files, known_hosts and ssh configuration work as they are and no key, host key or cipher is diroxide's; a connection per host kept open, listings and transfers streamed; passwords and new host keys asked through diro's own askpass helper, never on a command line. A self-contained plugin on russh and russh-sftp comes later as an optional component for machines without OpenSSH.
 - **MTP** (`diro-mtp`, a plugin provider; the owner's Directory Opus list, Sunday, October 11, 2026): phones, tablets and cameras that speak MTP or PTP, as a place `mtp://device/storage/path`. On Windows through the Windows Portable Devices API, reached with the `windows` crate's bindings (pure Rust, no C compiler), which covers MTP and PTP alike; on Linux through GVfs when it is running (the device appears as a folder under the user's runtime folder, and `gio mount -l` lists it), and through libmtp inside the plugin otherwise; on macOS through libmtp in the plugin, since the system has no MTP support of its own. The provider's capabilities say what MTP can do: list, read, write whole files, make and remove folders, rename; no partial writes, no times set, no links. Listings are slow, so they are cached for the session and refreshed on request; a transfer is a job with progress every ten seconds; the device's storages are listed as volumes with their free space; a device that asks for permission on its own screen is said in words ("Phone is asking for permission: unlock it and allow file transfer"). alpha.8 (question 47).
 - **Plugin providers** (section 5.8): S3, WebDAV and anything else, served by a process plugin that implements the provider methods.
 
@@ -243,7 +243,7 @@ The owner wants to automate file management in bash and Python before Lua, and t
 
 **Safety.** A plugin runs with the user's rights, so the manifest's capability list is shown on first enable and nothing is enabled by default. A plugin crash or timeout is reported and the app continues. `--no-plugins` starts clean. Plugins never receive a shell string; `tools/run` takes an argument list. Each plugin has its own log in the state folder.
 
-**Why this works for SSH.** SSH comes through the `diroxide-sftp` plugin because the owner needs it from the start, and the plugin leans on the OpenSSH client (answer 78) so the riskiest code in the series is not written at all. The provider protocol lets the same thing be done by a Python plugin with paramiko for a protocol diroxide does not carry.
+**Why this works for SSH.** SSH comes through the `diro-sftp` plugin because the owner needs it from the start, and the plugin leans on the OpenSSH client (answer 78) so the riskiest code in the series is not written at all. The provider protocol lets the same thing be done by a Python plugin with paramiko for a protocol diroxide does not carry.
 
 ### 5.9 Previews, tools and conversions
 

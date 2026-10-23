@@ -49,7 +49,7 @@ diroxide has no voice of its own. It writes short lines that put their meaning f
 
 ## Plugins
 
-Plugins, in any language, come in a later alpha.
+Plugins run as separate programs in any language, talking to diroxide over a small line-based protocol, and a script in bash, Python or PowerShell becomes a command with a five-line header and no protocol at all. Alt+P opens the Plugins menu; a plugin runs only after you enable it, and every line it causes ends with its name. The example plugins come as an optional component you can fetch from the Plugins menu. See [Plugins](docs/plugins.md), [Script commands](docs/script-commands.md) and [Writing a plugin](docs/writing-a-plugin.md).
 
 ## Learn more
 

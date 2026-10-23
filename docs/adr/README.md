@@ -13,6 +13,7 @@ Each record keeps one decision: its context, the decision, the alternatives weig
 - [ADR-0007: Frontends over one core](0007-frontends-over-one-core.md)
 - [ADR-0008: Safety rules](0008-safety-rules.md)
 - [ADR-0009: Secrets and the masked prompt](0009-secrets-and-the-masked-prompt.md)
+- [ADR-0010: The optional components](0010-the-optional-components.md)
 
 ## The template
 
