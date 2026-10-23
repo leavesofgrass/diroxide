@@ -30,6 +30,7 @@ pub mod lines;
 pub mod log;
 pub mod manifest;
 pub mod protocol;
+pub mod router;
 pub mod script;
 pub mod session;
 pub mod shapes;
