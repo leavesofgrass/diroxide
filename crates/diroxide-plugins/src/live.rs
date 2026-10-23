@@ -458,6 +458,13 @@ impl LivePlugin {
                 }
                 Action::TimedOut(id) => {
                     let limit = self.lock_limits().remove(id).unwrap_or_default();
+                    // The notice goes first: giving the request up wakes its
+                    // caller, who may look for the event at once.
+                    self.notice(Notice::TimedOut {
+                        id: id.clone(),
+                        label: self.label_of(id),
+                        after: limit,
+                    });
                     self.connection.router().give_up(
                         id,
                         RpcError::new(
@@ -465,11 +472,6 @@ impl LivePlugin {
                             format!("no answer in {}", lines::duration_words(limit)),
                         ),
                     );
-                    self.notice(Notice::TimedOut {
-                        id: id.clone(),
-                        label: self.label_of(id),
-                        after: limit,
-                    });
                 }
                 Action::Restart => {
                     let _ = self.connection.kill();

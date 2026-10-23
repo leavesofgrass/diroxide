@@ -42,8 +42,8 @@ pub use error::{CoreError, Explain, PlaceError};
 pub use filter::{Filter, FilterError, FilterOptions};
 pub use ids::{DialogId, IdSource, JobId, RequestId, Side, TabId};
 pub use job::{
-    ConflictAction, ConflictAnswer, ConflictKind, ConflictPolicy, ErrorAction, JobKind, JobOrigin,
-    JobRequest, JobState, PartSize,
+    ConflictAction, ConflictAnswer, ConflictKind, ConflictPolicy, ErrorAction, ErrorPolicy,
+    JobKind, JobOrigin, JobRequest, JobState, PartSize,
 };
 pub use keys::{Key, KeyCode, KeyColumn, Layer, Modifiers};
 pub use list::{FrozenSelection, ListModel, ListRow, Move, RowsReplaced};
