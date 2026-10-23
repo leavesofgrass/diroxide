@@ -7,6 +7,7 @@ pub mod hosts;
 pub mod launch;
 pub mod locate;
 pub mod options;
+pub mod stderr;
 pub mod target;
 pub mod version;
 

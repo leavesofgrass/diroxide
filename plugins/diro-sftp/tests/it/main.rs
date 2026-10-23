@@ -9,21 +9,41 @@ mod askpass;
 mod codec;
 mod conformance;
 #[cfg(feature = "fake-ssh")]
+mod connect;
+#[cfg(feature = "fake-ssh")]
+mod contract;
+#[cfg(feature = "fake-ssh")]
+mod copy;
+#[cfg(feature = "fake-ssh")]
 mod dialogs;
+#[cfg(feature = "fake-ssh")]
+mod errors;
 #[cfg(feature = "fake-ssh")]
 mod fake_server;
 #[cfg(feature = "fake-ssh")]
 mod fakes;
 #[cfg(feature = "fake-ssh")]
+mod host;
+#[cfg(feature = "fake-ssh")]
 mod hosts;
 #[cfg(feature = "fake-ssh")]
 mod launch;
 #[cfg(feature = "fake-ssh")]
+mod list;
+#[cfg(feature = "fake-ssh")]
 mod locate;
 mod modes;
+#[cfg(feature = "fake-ssh")]
+mod ops;
+#[cfg(feature = "fake-ssh")]
+mod read;
+#[cfg(feature = "fake-ssh")]
+mod reconnect;
 mod session;
 #[cfg(all(windows, feature = "fake-ssh"))]
 mod spikes;
+#[cfg(feature = "fake-ssh")]
+mod write;
 
 use std::path::{Path, PathBuf};
 

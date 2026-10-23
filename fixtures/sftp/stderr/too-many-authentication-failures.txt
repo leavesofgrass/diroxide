@@ -1,0 +1,2 @@
+Received disconnect from 192.0.2.7 port 22:2: Too many authentication failures
+Disconnected from 192.0.2.7 port 22

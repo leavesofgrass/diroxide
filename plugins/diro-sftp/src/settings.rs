@@ -29,6 +29,9 @@ pub struct Settings {
     pub chunk_kib: u32,
     /// Whether ssh writes a debug log to the plugin's state folder (off).
     pub ssh_debug_log: bool,
+    /// Sessions a server may get (answer 87: up to two, so a listing
+    /// never waits behind a copy); 1 for a server that allows one.
+    pub sessions: u32,
 }
 
 impl Default for Settings {
@@ -41,6 +44,7 @@ impl Default for Settings {
             requests: 64,
             chunk_kib: 32,
             ssh_debug_log: false,
+            sessions: 2,
         }
     }
 }
@@ -85,6 +89,7 @@ impl Settings {
                 .get("ssh_debug_log")
                 .and_then(Value::as_bool)
                 .unwrap_or(default.ssh_debug_log),
+            sessions: number(values, "sessions", default.sessions, 1, 2),
         }
     }
 }
@@ -105,7 +110,8 @@ mod tests {
             "requests": 100000,
             "chunk_kib": 4096,
             "ssh_debug_log": true,
-            "keepalive_seconds": "fifteen"
+            "keepalive_seconds": "fifteen",
+            "sessions": 9
         }) else {
             unreachable!()
         };
@@ -120,5 +126,6 @@ mod tests {
         assert_eq!(settings.chunk_kib, CHUNK_KIB_CAP);
         assert!(settings.ssh_debug_log);
         assert_eq!(settings.keepalive_seconds, 15);
+        assert_eq!(settings.sessions, 2);
     }
 }

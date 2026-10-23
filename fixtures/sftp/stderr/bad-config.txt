@@ -1,0 +1,2 @@
+/home/ada/.ssh/config: line 4: Bad configuration option: colour
+/home/ada/.ssh/config: terminating, 1 bad configuration options
