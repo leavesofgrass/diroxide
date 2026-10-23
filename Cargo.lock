@@ -949,6 +949,7 @@ dependencies = [
 name = "diroxide-components"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "diroxide-archive",
  "diroxide-core",
  "diroxide-tools",
  "diroxide-vfs",
@@ -958,6 +959,7 @@ dependencies = [
  "thiserror 2.0.21",
  "toml",
  "ureq",
+ "zip",
 ]
 
 [[package]]

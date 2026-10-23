@@ -9,6 +9,9 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+# Unpacking a component's archive and reading a zip to install from, with
+# that crate's limits and name rules.
+diroxide-archive.workspace = true
 diroxide-core.workspace = true
 # curl and wget, found through the tools registry (answer 44).
 diroxide-tools.workspace = true
@@ -24,6 +27,8 @@ ureq = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+# Hostile archives for the unpack tests, written member by member.
+zip.workspace = true
 
 [features]
 # The built-in HTTPS client: ureq with rustls, whose ring provider

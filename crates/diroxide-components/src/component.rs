@@ -372,6 +372,12 @@ impl Component {
                 }
                 continue;
             }
+            if self.unpacks(file) {
+                // An archive counts by its receipt only: one still packed
+                // is not installed yet.
+                missing.push(file.name.clone());
+                continue;
+            }
             match fs::symlink_metadata(dir.join(&file.name)) {
                 Ok(m) if m.is_file() && m.len() == file.size => {}
                 Ok(_) => return Status::Damaged(file.name.clone()),
@@ -385,6 +391,11 @@ impl Component {
         } else {
             Status::Partial(missing)
         }
+    }
+
+    /// Whether `file` is an archive this component unpacks.
+    pub fn unpacks(&self, file: &FilePin) -> bool {
+        self.action == Action::Unpack && crate::unpack::is_archive(&file.name)
     }
 
     /// Checks each file by size and hash: each placed file against its pin,
@@ -406,9 +417,14 @@ impl Component {
                 }
                 continue;
             }
+            let state = if self.unpacks(file) {
+                FileState::Missing
+            } else {
+                check_one(&dir.join(&file.name), file.size, &file.sha256)
+            };
             checked.push(Checked {
                 path: file.name.clone(),
-                state: check_one(&dir.join(&file.name), file.size, &file.sha256),
+                state,
             });
         }
         checked

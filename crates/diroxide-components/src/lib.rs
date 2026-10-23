@@ -32,6 +32,12 @@
 //!   component's folder before every file matched its pin. It takes a
 //!   [`Consent`], which only the owner's yes makes.
 //!
+//! - An `unpack` component's archives are unpacked through
+//!   `diroxide-archive` with plain names only, no links, within the list's
+//!   `unpacked_size`, and a receipt takes each archive's place
+//!   ([`unpack_in`]); [`install_from`] installs from a zip file or a folder
+//!   with the same pins, for a computer without a network.
+//!
 //! Nothing here asks the owner: the app and `diro components` say the
 //! size and the license and wait for a yes before anything is fetched.
 
@@ -52,6 +58,9 @@ pub mod pin;
 pub mod receipt;
 #[cfg(test)]
 mod transport_tests;
+pub mod unpack;
+#[cfg(test)]
+mod unpack_tests;
 
 pub use component::{
     Action, Checked, Component, FileState, Kind, LOCK_NAME, Origin, PART_SUFFIX, Removal,
@@ -68,6 +77,7 @@ pub use http::HttpFetcher;
 pub use manifest::{Manifest, Refusal};
 pub use pin::{FilePin, hash_file, host_target, is_plain_name, sha256_hex};
 pub use receipt::{Receipt, ReceiptFile};
+pub use unpack::{LeftOut, install_from, unpack_in};
 
 /// The User-Agent every request carries: the project, nothing about the
 /// owner or the computer (the privacy rule).

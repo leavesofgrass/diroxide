@@ -461,7 +461,7 @@ impl Downloader {
         if component.action == Action::Unpack {
             events(&Event::Unpacking);
         }
-        outcome.left_out = finish(component, &dest, &staging, &outcome.fetched)?;
+        outcome.left_out = finish_with(component, &dest, &staging, &outcome.fetched, ctx)?;
         Ok(outcome)
     }
 }
@@ -919,11 +919,12 @@ fn remove_if_there(path: &Path) -> Result<(), ComponentError> {
 /// unpacks the component's archives when its action is
 /// [`Action::Unpack`]. Returns the archive members left out, with the
 /// reason.
-pub(crate) fn finish(
+pub(crate) fn finish_with(
     component: &Component,
     dest: &Path,
     staging: &Path,
     names: &[String],
+    ctx: &OpContext,
 ) -> Result<Vec<(String, String)>, ComponentError> {
     fs::create_dir_all(dest).map_err(|e| ComponentError::io(dest, e))?;
     for name in names {
@@ -938,6 +939,18 @@ pub(crate) fn finish(
         {
             set_executable(&to);
         }
+    }
+    if component.action == Action::Unpack {
+        return crate::unpack::unpack_in(component, dest, ctx).inspect_err(|_| {
+            // A checked archive that could not be unpacked goes back to the
+            // staging folder: the folder does not claim to hold the
+            // component, and the next try needs no new download.
+            for name in names {
+                if crate::unpack::is_archive(name) {
+                    let _ = fs::rename(dest.join(name), staging.join(name));
+                }
+            }
+        });
     }
     Ok(Vec::new())
 }
