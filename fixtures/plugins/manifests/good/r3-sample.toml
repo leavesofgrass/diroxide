@@ -1,0 +1,55 @@
+[plugin]
+id = "line-counter"
+name = "Line counter"
+version = "0.1.0"
+description = "Counts the lines of the selected text files."
+authors = ["Ada Example"]
+license = "MIT"
+protocol = 1
+min_host = "0.1.0-alpha.2"
+
+[run]
+command = ["python3", "main.py"]
+cwd = "."
+start = "on_demand"
+concurrency = 1
+idle_timeout = "5m"
+startup_timeout = "10s"
+shutdown_grace = "3s"
+max_message_bytes = 8388608
+
+[run.windows]
+command = ["py", "-3", "main.py"]
+
+[timeouts]
+request = "30s"
+preview = "5s"
+hook = "2s"
+command = "none"
+convert = "none"
+
+[permissions]
+fs = "read"
+tools = ["magick"]
+panel = "write"
+commands = ["panel.*"]
+
+[permissions.declared]
+network = "none"
+files = "only the files I am given"
+programs = "none"
+
+[[command]]
+id = "count_lines"
+name = "Count lines in files"
+description = "Says how many lines the selected files hold."
+key = "ctrl+alt+l"
+menu = "Plugins"
+selection = "any"
+places = "local"
+
+[[setting]]
+key = "skip_blank"
+type = "bool"
+default = false
+description = "Do not count blank lines."

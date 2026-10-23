@@ -1,0 +1,1 @@
+Error, run.command: is missing. Add command = ["python3", "main.py"], the program and its arguments.

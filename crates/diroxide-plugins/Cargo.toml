@@ -14,10 +14,15 @@ publish.workspace = true
 [dependencies]
 diroxide-config.workspace = true
 diroxide-core.workspace = true
+diroxide-tools.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 toml.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

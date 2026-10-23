@@ -1,0 +1,1 @@
+Error, plugin.version: "first" is not a version. Write a semantic version such as "0.1.0".

@@ -18,6 +18,8 @@ diroxide-archive.workspace = true
 diroxide-components.workspace = true
 diroxide-core.workspace = true
 diroxide-ops.workspace = true
+# The plugin protocol reference is generated from the methods module.
+diroxide-plugins.workspace = true
 # The bench's search scenarios run the search engine itself (W3s's
 # request 2, as P2b did for the archive scenarios).
 diroxide-search.workspace = true

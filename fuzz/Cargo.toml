@@ -123,6 +123,23 @@ path = "../crates/diroxide-components"
 [[bin]]
 name = "component_manifest"
 path = "fuzz_targets/component_manifest.rs"
+
+# The plugin protocol's targets (W4a-1). Each body is a plain function in
+# diroxide-plugins' `fuzzing` module, so the seeds under
+# `fixtures/plugins/seeds/` replay in the crate's normal tests.
+[dependencies.diroxide-plugins]
+path = "../crates/diroxide-plugins"
+
+[[bin]]
+name = "plugin_framing"
+path = "fuzz_targets/plugin_framing.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "manifest_toml"
+path = "fuzz_targets/manifest_toml.rs"
 test = false
 doc = false
 bench = false

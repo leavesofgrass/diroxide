@@ -1,0 +1,16 @@
+[plugin]
+id = "pdf-first-page"
+name = "PDF first page"
+version = "0.1.0"
+protocol = 1
+
+[[previewer]]
+id = "first_page"
+name = "First page of a PDF, as text"
+argv = ["pdftotext", "-l", "1", "{file}", "-"]
+priority = "high"
+
+[previewer.match]
+mime = ["application/pdf"]
+extensions = ["pdf"]
+max_size = 104857600

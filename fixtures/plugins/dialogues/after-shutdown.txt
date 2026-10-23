@@ -1,0 +1,11 @@
+# After shutdown is answered only exit counts: a request is refused, a
+# notification is dropped.
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":1}}
+< {"jsonrpc":"2.0","id":1,"result":"*"}
+> {"jsonrpc":"2.0","id":2,"method":"shutdown"}
+< {"jsonrpc":"2.0","id":2,"result":null}
+> {"jsonrpc":"2.0","id":3,"method":"command/run","params":{"command":"echo"}}
+< {"jsonrpc":"2.0","id":3,"error":{"code":-32600,"message":"shutting down, only exit is accepted","data":{"kind":"invalid_request"}}}
+> {"jsonrpc":"2.0","method":"settings/changed","params":{"settings":{}}}
+> {"jsonrpc":"2.0","method":"exit"}
+< exit

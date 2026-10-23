@@ -1,0 +1,1 @@
+Error, previewer[0].match: is missing or empty. Add a [previewer.match] table with mime, extensions or types.

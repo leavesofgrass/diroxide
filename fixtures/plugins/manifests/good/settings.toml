@@ -1,0 +1,34 @@
+[plugin]
+id = "line-counter"
+name = "Line counter"
+version = "0.1.0"
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]
+
+[[setting]]
+key = "skip_blank"
+type = "bool"
+default = false
+
+[[setting]]
+key = "depth"
+type = "int"
+default = 3
+
+[[setting]]
+key = "style"
+type = "choice"
+default = "short"
+choices = ["short", "long"]
+
+[[setting]]
+key = "extra_args"
+type = "argv"
+default = ["--quiet"]
+
+[[setting]]
+key = "folder"
+type = "path"
+default = ""

@@ -1,0 +1,17 @@
+[plugin]
+id = "diff-two"
+name = "Diff two files"
+version = "0.1.0"
+protocol = 1
+
+[[command]]
+id = "open_diff"
+name = "Open the two marked files in Meld"
+selection = "two"
+needs = ["meld"]
+argv = ["meld", "{files}"]
+mode = "launch"
+os = ["linux", "windows"]
+
+[permissions]
+launch = ["meld"]

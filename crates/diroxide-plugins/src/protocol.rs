@@ -7,7 +7,8 @@
 //! - One message per line. The host ends lines with `\n` and accepts `\n`
 //!   or `\r\n`. Batches (JSON arrays) are refused with
 //!   [`ErrorKind::InvalidRequest`].
-//! - A standard-output line that does not start with `{` (after spaces) is
+//! - A standard-output line that does not start with `{` or `[` (after
+//!   spaces) is
 //!   stray output, logged and not answered ([`is_message_line`]); a line
 //!   that starts with `{` and does not parse is answered with a parse error
 //!   and a null id.
@@ -19,8 +20,11 @@
 //!   from LSP, and diroxide's range from -32010 to -32099, with `data.kind`
 //!   naming the kind.
 //!
-//! Phase 0: the envelope types, the codes, the method names and the parser.
-//! Wave 3 (W3a) owns this module and the full message list.
+//! The full message list is [`methods::ALL`], and the protocol reference,
+//! `docs/dev/plugin-protocol.md`, is generated from it by
+//! [`reference::page`] (`cargo xtask regen`).
+//! Lines are read with a bound and written from a queue by
+//! [`crate::framing`].
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
@@ -104,6 +108,9 @@ pub enum ErrorKind {
     TooLarge,
     /// -32022: the item changed under the call.
     Conflict,
+    /// -32023: the other side could not be verified (a changed host key,
+    /// an unverified file); `data.hint` says it in words.
+    Untrusted,
     /// -32030: from the host: the manifest does not permit this call.
     DeniedByHost,
     /// -32031: from the host: a message size or rate limit.
@@ -121,7 +128,7 @@ pub enum ErrorKind {
 
 impl ErrorKind {
     /// Every kind, in code order within each group.
-    pub const ALL: [ErrorKind; 26] = [
+    pub const ALL: [ErrorKind; 27] = [
         ErrorKind::ParseError,
         ErrorKind::InvalidRequest,
         ErrorKind::MethodNotFound,
@@ -142,6 +149,7 @@ impl ErrorKind {
         ErrorKind::NoSpace,
         ErrorKind::TooLarge,
         ErrorKind::Conflict,
+        ErrorKind::Untrusted,
         ErrorKind::DeniedByHost,
         ErrorKind::LimitExceeded,
         ErrorKind::Reentrant,
@@ -173,6 +181,7 @@ impl ErrorKind {
             ErrorKind::NoSpace => -32020,
             ErrorKind::TooLarge => -32021,
             ErrorKind::Conflict => -32022,
+            ErrorKind::Untrusted => -32023,
             ErrorKind::DeniedByHost => -32030,
             ErrorKind::LimitExceeded => -32031,
             ErrorKind::Reentrant => -32032,
@@ -205,6 +214,7 @@ impl ErrorKind {
             ErrorKind::NoSpace => "no_space",
             ErrorKind::TooLarge => "too_large",
             ErrorKind::Conflict => "conflict",
+            ErrorKind::Untrusted => "untrusted",
             ErrorKind::DeniedByHost => "denied_by_host",
             ErrorKind::LimitExceeded => "limit_exceeded",
             ErrorKind::Reentrant => "reentrant",
@@ -218,83 +228,54 @@ impl ErrorKind {
     pub fn from_code(code: i64) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.code() == code)
     }
+
+    /// The kind by its `snake_case` name, if any.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.name() == name)
+    }
+
+    /// What the kind means, one sentence, for the protocol reference.
+    pub const fn meaning(self) -> &'static str {
+        match self {
+            ErrorKind::ParseError => "The line was not valid JSON.",
+            ErrorKind::InvalidRequest => "The JSON was not a valid message, or it was a batch.",
+            ErrorKind::MethodNotFound => {
+                "No such method; unknown notifications are ignored instead."
+            }
+            ErrorKind::InvalidParams => "The parameters were wrong.",
+            ErrorKind::InternalError => "Something failed inside the receiver.",
+            ErrorKind::NotInitialized => "A request came before initialize was answered.",
+            ErrorKind::RequestCancelled => "The request was cancelled.",
+            ErrorKind::NotFound => "The place does not exist.",
+            ErrorKind::AlreadyExists => "The place exists and the call does not overwrite.",
+            ErrorKind::PermissionDenied => "The backend refused.",
+            ErrorKind::NotADirectory => "A folder was needed.",
+            ErrorKind::IsADirectory => "A file was needed.",
+            ErrorKind::NotEmpty => "A folder to remove has entries.",
+            ErrorKind::InvalidName => "The name breaks a rule of the provider.",
+            ErrorKind::Unsupported => "The method or an option is not supported.",
+            ErrorKind::Unavailable => "Offline or busy; retry later.",
+            ErrorKind::AuthRequired => "Credentials are missing or were rejected.",
+            ErrorKind::NoSpace => "The quota or the disk is full.",
+            ErrorKind::TooLarge => "The item exceeds a limit.",
+            ErrorKind::Conflict => "The item changed under the call.",
+            ErrorKind::Untrusted => {
+                "The other side could not be verified; data.hint says why in words."
+            }
+            ErrorKind::DeniedByHost => "From the host: the manifest does not permit this call.",
+            ErrorKind::LimitExceeded => "From the host: a size, queue or rate limit.",
+            ErrorKind::Reentrant => "From the host: the call would loop back into the plugin.",
+            ErrorKind::PluginUnavailable => {
+                "From the host: the plugin is not running, crashed or is off."
+            }
+            ErrorKind::TimedOut => "From the host: no answer in time.",
+            ErrorKind::Failed => "Anything else, in the plugin's own words.",
+        }
+    }
 }
 
-/// Method names: `area/verb_noun`, in `snake_case`. Names starting `rpc.`
-/// are reserved by JSON-RPC and never used. The full message list is W3a's
-/// (R3's section 3); these are the ones the plan and section 7 name.
-pub mod methods {
-    /// Host to plugin: start; carries the protocol version and the host's
-    /// capabilities.
-    pub const INITIALIZE: &str = "initialize";
-    /// Host to plugin: stop.
-    pub const SHUTDOWN: &str = "shutdown";
-    /// Either way: cancel an outstanding request.
-    pub const CANCEL_REQUEST: &str = "$/cancel_request";
-    /// Either way: progress of a request, and partial results.
-    pub const PROGRESS: &str = "$/progress";
-    /// Host to plugin: run one of the plugin's commands.
-    pub const COMMAND_RUN: &str = "command/run";
-    /// Host to plugin: make a preview.
-    pub const PREVIEW_RENDER: &str = "preview/render";
-    /// Host to plugin: run a conversion.
-    pub const CONVERT_RUN: &str = "convert/run";
-    /// Host to plugin: a hooked event happened.
-    pub const HOOK_EVENT: &str = "hook/event";
-    /// Host to plugin: sign in to an authority (a host, a bucket).
-    pub const PROVIDER_CONNECT: &str = "provider/connect";
-    /// Host to plugin: the last lease on an authority ended.
-    pub const PROVIDER_DISCONNECT: &str = "provider/disconnect";
-    /// Host to plugin: list a folder, possibly in batches.
-    pub const PROVIDER_LIST: &str = "provider/list";
-    /// Host to plugin: one entry's details.
-    pub const PROVIDER_STAT: &str = "provider/stat";
-    /// Host to plugin: read a range of a file.
-    pub const PROVIDER_READ: &str = "provider/read";
-    /// Host to plugin: start writing a file.
-    pub const PROVIDER_WRITE_BEGIN: &str = "provider/write_begin";
-    /// Host to plugin: one chunk of a write.
-    pub const PROVIDER_WRITE_CHUNK: &str = "provider/write_chunk";
-    /// Host to plugin: commit or abandon a write.
-    pub const PROVIDER_WRITE_END: &str = "provider/write_end";
-    /// Host to plugin: make a folder.
-    pub const PROVIDER_CREATE_DIR: &str = "provider/create_dir";
-    /// Host to plugin: rename or move within the provider.
-    pub const PROVIDER_RENAME: &str = "provider/rename";
-    /// Host to plugin: remove one entry.
-    pub const PROVIDER_REMOVE: &str = "provider/remove";
-    /// Host to plugin: move one entry to the provider's trash.
-    pub const PROVIDER_TRASH: &str = "provider/trash";
-    /// Host to plugin: change attributes and times.
-    pub const PROVIDER_SET_ATTRIBUTES: &str = "provider/set_attributes";
-    /// Host to plugin: whether a server-side copy is possible.
-    pub const PROVIDER_COPY_HINT: &str = "provider/copy_hint";
-    /// Host to plugin: copy on the server.
-    pub const PROVIDER_COPY: &str = "provider/copy";
-    /// Host to plugin: start watching a folder.
-    pub const PROVIDER_WATCH: &str = "provider/watch";
-    /// Host to plugin: stop watching.
-    pub const PROVIDER_UNWATCH: &str = "provider/unwatch";
-    /// Plugin to host: something changed in a watched folder.
-    pub const PROVIDER_CHANGED: &str = "provider/changed";
-    /// Plugin to host: say something.
-    pub const UI_ANNOUNCE: &str = "ui/announce";
-    /// Plugin to host: ask yes or no, choose, type, or a secret.
-    pub const UI_ASK: &str = "ui/ask";
-    /// Plugin to host: read a panel's place, selection and cursor.
-    pub const PANEL_GET: &str = "panel/get";
-    /// Plugin to host: change a panel.
-    pub const PANEL_SET: &str = "panel/set";
-    /// Plugin to host: the prefix of file operations through the job
-    /// engine (`fs/list`, `fs/copy`).
-    pub const FS_PREFIX: &str = "fs/";
-    /// Plugin to host: run a registered tool.
-    pub const TOOLS_RUN: &str = "tools/run";
-    /// Plugin to host: read a setting.
-    pub const CONFIG_GET: &str = "config/get";
-    /// Plugin to host: write to the plugin's log.
-    pub const LOG: &str = "log";
-}
+pub mod methods;
+pub mod reference;
 
 /// A request id: a number or a string.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -401,6 +382,22 @@ impl RpcError {
         }
     }
 
+    /// An error of a kind with a hint, the next step in words, in
+    /// `data.hint`; `untrusted` always carries one ("The server's host key
+    /// changed since you last connected.").
+    pub fn with_hint(kind: ErrorKind, message: impl Into<String>, hint: impl Into<String>) -> Self {
+        let mut error = Self::new(kind, message);
+        if let Some(data) = error.data.as_mut() {
+            data.hint = Some(hint.into());
+        }
+        error
+    }
+
+    /// The hint in `data.hint`, if any.
+    pub fn hint(&self) -> Option<&str> {
+        self.data.as_ref().and_then(|d| d.hint.as_deref())
+    }
+
     /// The kind, by `data.kind` when it names one, else by the code.
     pub fn kind(&self) -> Option<ErrorKind> {
         self.data
@@ -477,10 +474,11 @@ struct Raw {
     error: Option<RpcError>,
 }
 
-/// Whether a line is meant as a message: it starts with `{` after optional
-/// spaces. Any other output line is stray, logged and not answered.
+/// Whether a line is meant as a message: it starts with `{` (or `[`, a
+/// batch, which is refused) after optional spaces. Any other output line
+/// is stray, logged and not answered.
 pub fn is_message_line(line: &str) -> bool {
-    line.trim_start().starts_with('{')
+    line.trim_start().starts_with(['{', '['])
 }
 
 /// Reads one line as a message. The error is the answer to send back, with
@@ -611,6 +609,31 @@ mod tests {
             to_line(&failure).unwrap(),
             r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32601,"message":"no such method","data":{"kind":"method_not_found"}}}"#
         );
+    }
+
+    #[test]
+    fn untrusted_carries_its_hint_in_words() {
+        let error = RpcError::with_hint(
+            ErrorKind::Untrusted,
+            "the host key changed",
+            "The server's host key changed since you last connected.",
+        );
+        let line = to_line(&Response::failure(Some(Id::Number(3)), error)).unwrap();
+        assert_eq!(
+            line,
+            r#"{"jsonrpc":"2.0","id":3,"error":{"code":-32023,"message":"the host key changed","data":{"kind":"untrusted","hint":"The server's host key changed since you last connected."}}}"#
+        );
+        match parse_line(&line).unwrap() {
+            Incoming::Response(r) => {
+                let error = r.error.unwrap();
+                assert_eq!(error.kind(), Some(ErrorKind::Untrusted));
+                assert_eq!(
+                    error.hint(),
+                    Some("The server's host key changed since you last connected.")
+                );
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

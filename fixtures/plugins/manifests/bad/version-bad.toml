@@ -1,0 +1,8 @@
+[plugin]
+id = "line-counter"
+name = "Line counter"
+version = "first"
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]

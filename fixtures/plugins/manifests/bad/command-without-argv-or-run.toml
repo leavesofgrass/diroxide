@@ -1,0 +1,9 @@
+[plugin]
+id = "recipe"
+name = "A recipe"
+version = "0.1.0"
+protocol = 1
+
+[[command]]
+id = "go"
+name = "Go"

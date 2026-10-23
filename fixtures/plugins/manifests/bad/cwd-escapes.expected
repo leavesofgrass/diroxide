@@ -1,0 +1,1 @@
+Error, run.cwd: "../elsewhere" leaves the plugin's folder. Use a folder inside the plugin's folder, such as ".".

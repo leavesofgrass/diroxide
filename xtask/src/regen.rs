@@ -4,9 +4,9 @@
 //! of every agent's checks from Wave 1 on.
 //!
 //! Today it writes `docs/keyboard.md`, the keymap presets' sheets
-//! (`docs/keyboard-NAME.md`), `docs/settings-reference.md` and the
-//! components list the binary embeds
-//! (`crates/diroxide-components/components.toml`).
+//! (`docs/keyboard-NAME.md`), `docs/settings-reference.md`, the plugin
+//! protocol reference (`docs/dev/plugin-protocol.md`) and the components
+//! list the binary embeds (`crates/diroxide-components/components.toml`).
 //! `THIRD-PARTY-NOTICES.md` joins it when the notices task arrives.
 
 use std::fs;
@@ -14,13 +14,14 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::{components, keyboard, settings_doc};
+use crate::{components, keyboard, plugin_doc, settings_doc};
 
 /// Each generated page: its path from the root, and its text.
 fn pages(root: &Path) -> Result<Vec<(String, String)>> {
     let mut pages = keyboard::all_pages();
     pages.push((settings_doc::PAGE.to_owned(), settings_doc::generate()));
     pages.push(components::page(root)?);
+    pages.push((plugin_doc::PAGE.to_owned(), plugin_doc::generate()));
     Ok(pages)
 }
 

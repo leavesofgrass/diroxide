@@ -1,5 +1,7 @@
 //! Integration tests of the plugin protocol's contract.
 
+mod spikes;
+
 use diroxide_plugins::protocol::{self, Incoming};
 use diroxide_plugins::{ErrorKind, Id, Response, RpcError};
 

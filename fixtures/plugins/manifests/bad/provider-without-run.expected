@@ -1,0 +1,1 @@
+Error, provider: a [[provider]] needs a program, and there is no [run]. Add a [run] table with the plugin's command.

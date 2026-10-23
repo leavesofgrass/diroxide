@@ -1,0 +1,18 @@
+# Framing on the answering side: stray text is not answered, a line that
+# starts with { and does not parse gets -32700 with a null id, a batch
+# gets -32600, params that are not an object get -32602, an unknown
+# request gets -32601 and an unknown notification is ignored.
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":1}}
+< {"jsonrpc":"2.0","id":1,"result":"*"}
+> debug: this is not a message
+> {not json
+< {"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"*","data":{"kind":"parse_error"}}}
+> [{"jsonrpc":"2.0","id":2,"method":"command/run"}]
+< {"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"batches are not supported","data":{"kind":"invalid_request"}}}
+> {"jsonrpc":"2.0","id":3,"method":"command/run","params":[1,2]}
+< {"jsonrpc":"2.0","id":null,"error":{"code":-32602,"message":"params is not an object","data":{"kind":"invalid_params"}}}
+> {"jsonrpc":"2.0","id":4,"method":"no/such_method"}
+< {"jsonrpc":"2.0","id":4,"error":{"code":-32601,"message":"*","data":{"kind":"method_not_found"}}}
+> {"jsonrpc":"2.0","method":"no/such_notification"}
+> {"jsonrpc":"2.0","id":5,"method":"command/run","params":{"command":"echo","extra_field_from_the_future":true}}
+< {"jsonrpc":"2.0","id":5,"result":"*"}

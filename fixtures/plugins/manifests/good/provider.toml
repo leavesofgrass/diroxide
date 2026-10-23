@@ -1,0 +1,16 @@
+[plugin]
+id = "line-counter"
+name = "Line counter"
+version = "0.1.0"
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]
+
+[[provider]]
+scheme = "mem"
+name = "Memory files"
+writable = true
+atomic_rename = true
+methods = ["connect", "read", "write_begin", "write_chunk", "write_end", "create_dir", "rename", "remove"]
+lease = "listers"

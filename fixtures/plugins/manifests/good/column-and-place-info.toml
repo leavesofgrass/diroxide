@@ -1,0 +1,21 @@
+[plugin]
+id = "line-counter"
+name = "Line counter"
+version = "0.1.0"
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]
+
+[[column]]
+id = "git"
+header = "Git"
+kind = "text"
+applies_to = ["**"]
+batch = 500
+
+[[place_info]]
+marker = ".git"
+
+[[place_info]]
+scheme = "github"

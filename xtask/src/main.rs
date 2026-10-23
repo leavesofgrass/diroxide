@@ -4,8 +4,8 @@
 //!   and every internal dependency points the allowed way
 //!   (docs/dev/architecture.md).
 //! - `regen [--check]`: writes every generated page (`docs/keyboard.md`,
-//!   `docs/settings-reference.md`, the components list), or checks that
-//!   each is current.
+//!   `docs/settings-reference.md`, `docs/dev/plugin-protocol.md`, the
+//!   components list), or checks that each is current.
 //! - `components [--check]`: builds the optional components this
 //!   repository makes, writes them as a folder source under the target
 //!   folder, and writes the public list the binary embeds.
@@ -33,6 +33,7 @@ mod docs_check;
 mod keyboard;
 mod logo;
 mod native;
+mod plugin_doc;
 mod regen;
 mod sample;
 mod settings_doc;

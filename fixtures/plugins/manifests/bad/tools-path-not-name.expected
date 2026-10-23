@@ -1,0 +1,1 @@
+Error, permissions.tools[0]: "/usr/bin/git" is not a tool name. Name the tool, not its path: letters, digits, - _ and . only.
