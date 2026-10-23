@@ -630,8 +630,83 @@ impl Server {
                 data: LIMITS.encode(),
             },
             b"fsync@openssh.com" => status(id, status::OK, "Success"),
+            b"copy-data" if self.faults.copy_data => self.copy_data(fs, id, data),
             _ => status(id, status::OP_UNSUPPORTED, "Unsupported"),
         }
+    }
+}
+
+/// A `copy-data` request: the handle read from, the offset, the length,
+/// the handle written to, the offset there.
+type CopyRequest = (Vec<u8>, u64, u64, Vec<u8>, u64);
+
+/// Reads `copy-data`'s request.
+fn copy_request(data: &[u8]) -> Option<CopyRequest> {
+    fn u32_at(data: &[u8], at: usize) -> Option<u32> {
+        Some(u32::from_be_bytes(data.get(at..at + 4)?.try_into().ok()?))
+    }
+    fn u64_at(data: &[u8], at: usize) -> Option<u64> {
+        Some(u64::from_be_bytes(data.get(at..at + 8)?.try_into().ok()?))
+    }
+    let mut at = 0;
+    let string = |at: &mut usize| -> Option<Vec<u8>> {
+        let len = u32_at(data, *at)? as usize;
+        let bytes = data.get(*at + 4..*at + 4 + len)?.to_vec();
+        *at += 4 + len;
+        Some(bytes)
+    };
+    let from = string(&mut at)?;
+    let offset = u64_at(data, at)?;
+    let length = u64_at(data, at + 8)?;
+    at += 16;
+    let to = string(&mut at)?;
+    let write_at = u64_at(data, at)?;
+    (data.len() == at + 8).then_some((from, offset, length, to, write_at))
+}
+
+impl Server {
+    /// `copy-data`: bytes from one open file to another on the server; a
+    /// length of 0 is to the end; the same handle twice is refused.
+    fn copy_data(&self, fs: &mut FakeFs, id: u32, data: &[u8]) -> Response {
+        let Some((from, offset, length, to, write_at)) = copy_request(data) else {
+            return status(id, status::BAD_MESSAGE, "Bad message");
+        };
+        if from == to {
+            return status(id, status::FAILURE, "Same handle");
+        }
+        let (
+            Some(Open::File { path: src, .. }),
+            Some(Open::File {
+                path: dst,
+                write: true,
+            }),
+        ) = (self.handles.get(&from), self.handles.get(&to))
+        else {
+            return status(id, status::FAILURE, "Bad handle");
+        };
+        let Some(source) = fs.file(src).map(<[u8]>::to_vec) else {
+            return status(id, status::FAILURE, "Gone");
+        };
+        let start = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(source.len());
+        let end = if length == 0 {
+            source.len()
+        } else {
+            start
+                .saturating_add(usize::try_from(length).unwrap_or(usize::MAX))
+                .min(source.len())
+        };
+        let Some(Node::File(bytes)) = fs.nodes.get_mut(dst) else {
+            return status(id, status::FAILURE, "Gone");
+        };
+        let at = usize::try_from(write_at).unwrap_or(usize::MAX);
+        let stop = at + (end - start);
+        if bytes.len() < stop {
+            bytes.resize(stop, 0);
+        }
+        bytes[at..stop].copy_from_slice(&source[start..end]);
+        status(id, status::OK, "Success")
     }
 }
 
@@ -651,6 +726,16 @@ fn rename(fs: &mut FakeFs, from: &[u8], to: &[u8], id: u32) -> Response {
         if let Some(node) = fs.nodes.remove(&key) {
             let mut new = to.to_vec();
             new.extend_from_slice(&key[from.len()..]);
+            // An entry keeps its permissions and times when it moves, as
+            // an inode does; whatever the new name held before is gone.
+            fs.modes.remove(&new);
+            fs.times.remove(&new);
+            if let Some(mode) = fs.modes.remove(&key) {
+                fs.modes.insert(new.clone(), mode);
+            }
+            if let Some(times) = fs.times.remove(&key) {
+                fs.times.insert(new.clone(), times);
+            }
             fs.nodes.insert(new, node);
         }
     }

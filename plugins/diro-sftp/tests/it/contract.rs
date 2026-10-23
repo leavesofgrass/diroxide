@@ -166,6 +166,16 @@ fn the_provider_contract_list_holds_through_the_host() {
         Some(Attributes::Unix(0o600))
     );
 
+    // Free space for the copy plan's room check, from statvfs; the fake
+    // server has no copy-data, so copies stream.
+    let space = provider.space(&home, &ctx).unwrap();
+    assert!(space.free_to_user.is_some_and(|free| free > 0));
+    assert!(space.total.is_some());
+    assert_eq!(
+        provider.copy_hint(&old, &p("sftp://build.example/home/ada/copy.txt")),
+        diroxide_vfs::CopyHint::Stream
+    );
+
     // Removes are permanent: there is no trash to fall back on.
     let caps = provider.capabilities(&old);
     assert!(caps.writable);

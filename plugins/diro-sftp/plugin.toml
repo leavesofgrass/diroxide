@@ -2,10 +2,10 @@
 # One program in two modes: the plugin the host starts, and the askpass
 # helper ssh starts with DIRO_ASKPASS_ENDPOINT set (answer 82).
 #
-# The provider's methods grow as the lanes land: this build answers
-# connect, list and stat (S-A); reading, writing, the operations, volumes
-# and places come with S-B and S-C (R25 commits 57 to 76), and the
-# commands (sites, connect, disconnect, doctor) with S-C.
+# The provider's methods: connect, list, stat, ranged reads, the write
+# session, the operations, server-side copy and volumes (S-B, R25 commits
+# 57 to 64); places and the commands (sites, connect, disconnect, doctor)
+# come with S-C. No trash (answer 86) and no watch: SFTP has neither.
 
 [plugin]
 id = "sftp"
@@ -44,12 +44,15 @@ case_sensitive = true
 writable = true
 links = true
 attributes = true
-# Asked per connection: provider/connect answers whether this server
-# renames over a file (posix-rename); one that cannot refuses in words.
+# Both asked per connection: provider/connect answers whether this server
+# renames over a file (posix-rename) and copies on its own (copy-data);
+# copy_hint says stream, and a replacing rename is refused in words, on a
+# server that cannot.
 atomic_rename = true
+server_side_copy = true
 methods = [
     "connect", "list", "stat", "read", "write_begin", "write_chunk", "write_end",
-    "create_dir", "rename", "remove", "set_attributes",
+    "create_dir", "rename", "remove", "set_attributes", "copy_hint", "copy", "volumes",
 ]
 lease = "listers"
 

@@ -784,6 +784,12 @@ impl Connection {
         errors::map(op, error, self.target.host())
     }
 
+    /// Whether the server copies on its own (`copy-data`).
+    pub fn can_copy_on_server(&self) -> bool {
+        self.link()
+            .is_ok_and(|l| l.session().extensions().has("copy-data"))
+    }
+
     /// What the server offers, for `provider/connect`'s answer.
     pub fn capabilities(&self) -> Value {
         let Ok(link) = self.link() else {

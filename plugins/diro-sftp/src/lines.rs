@@ -202,6 +202,34 @@ pub fn permissions_unknown(asked: u32) -> String {
     format!("Permissions sent: {asked:o}. Not read back.")
 }
 
+/// `copy_hint`'s words: both places on one server that copies.
+pub const COPY_ON_SERVER: &str = "Copied on the server.";
+
+/// `copy_hint`'s words: the places are on two servers or accounts.
+pub const COPY_OTHER_SERVER: &str = "Another server: copied through here.";
+
+/// `copy_hint`'s words: the server lacks `copy-data`.
+pub const NO_SERVER_COPY: &str = "This server cannot copy on its own.";
+
+/// `copy_hint`'s words: not connected, so nothing is asked.
+pub const COPY_NOT_CONNECTED: &str = "Not connected: copied through here.";
+
+/// A server-side copy of anything but a file.
+pub const COPY_FILES_ONLY: &str = "Only files are copied on the server.";
+
+/// "Copying on build.example.", while a server-side copy runs.
+pub fn copying_on(host: &str) -> String {
+    format!("Copying on {host}.")
+}
+
+/// "Home on build.example", the home folder's volume.
+pub fn home_on(host: &str) -> String {
+    format!("Home on {host}")
+}
+
+/// A server without `statvfs@openssh.com`.
+pub const NO_FREE_SPACE: &str = "This server does not report free space.";
+
 /// What ssh last printed, cleaned and placed last in a hint.
 pub fn ssh_said(text: &str) -> Option<String> {
     let last = text
@@ -250,6 +278,14 @@ mod tests {
             permissions_now(0o4755),
             permissions_kept(0o4755, 0o2777),
             permissions_unknown(0o4755),
+            COPY_ON_SERVER.to_owned(),
+            COPY_OTHER_SERVER.to_owned(),
+            NO_SERVER_COPY.to_owned(),
+            COPY_NOT_CONNECTED.to_owned(),
+            COPY_FILES_ONLY.to_owned(),
+            copying_on("build.example"),
+            home_on("build.example"),
+            NO_FREE_SPACE.to_owned(),
         ] {
             assert!(line.chars().count() <= MAX_LINE_CELLS, "{line}");
         }

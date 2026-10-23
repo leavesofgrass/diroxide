@@ -13,6 +13,8 @@ mod connect;
 #[cfg(feature = "fake-ssh")]
 mod contract;
 #[cfg(feature = "fake-ssh")]
+mod copy;
+#[cfg(feature = "fake-ssh")]
 mod dialogs;
 #[cfg(feature = "fake-ssh")]
 mod fake_server;

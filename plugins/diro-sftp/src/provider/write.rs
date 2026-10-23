@@ -42,7 +42,7 @@ use super::read::spool_file;
 use super::{At, Call, Connection, Link};
 use crate::lines;
 use crate::rpc::Cancel;
-use crate::sftp::codec::{Attrs, Request, Response, open, status, strings};
+use crate::sftp::codec::{Attrs, Request, open, status, strings};
 use crate::sftp::errors::Op;
 use crate::sftp::mux::SftpError;
 use crate::sftp::ops;
@@ -192,18 +192,14 @@ fn reopen(
 }
 
 /// The size the server holds for an open file.
-fn fstat_size(
+pub fn fstat_size(
     session: &crate::sftp::Session,
     handle: &[u8],
     cancel: Option<&Cancel>,
 ) -> Result<u64, SftpError> {
-    let handle = handle.to_vec();
-    match session.call(|id| Request::Fstat { id, handle }, cancel)? {
-        Response::Attrs { attrs, .. } => attrs
-            .size
-            .ok_or_else(|| SftpError::Protocol("the server gave no size".to_owned())),
-        other => Err(ops::refused(other)),
-    }
+    ops::fstat(session, handle, cancel)?
+        .size
+        .ok_or_else(|| SftpError::Protocol("the server gave no size".to_owned()))
 }
 
 /// `provider/write_begin`: checks the target and its folder, opens the
@@ -386,21 +382,55 @@ fn verify(connection: &Arc<Connection>, session: &Open, call: &Call<'_>) -> Resu
 
 /// Puts the verified partial file in place.
 fn commit(connection: &Arc<Connection>, session: &Open, call: &Call<'_>) -> Result<(), RpcError> {
-    let sftp = session.link.session();
-    let cancel = Some(call.cancel);
+    put_in_place(
+        connection,
+        session.link.session(),
+        &Placing {
+            partial: &session.partial,
+            target: &session.target,
+            folder: &session.folder,
+            overwrite: session.overwrite,
+        },
+        Some(call.cancel),
+    )
+}
+
+/// A verified partial file and where it goes.
+#[derive(Clone, Copy, Debug)]
+pub struct Placing<'a> {
+    /// The partial file.
+    pub partial: &'a [u8],
+    /// The target.
+    pub target: &'a [u8],
+    /// The target's folder.
+    pub folder: &'a [u8],
+    /// Whether it may replace what is there.
+    pub overwrite: bool,
+}
+
+/// Puts a verified partial file in place: plain RENAME for a new name
+/// (it never replaces), `posix-rename` over a target where offered, or
+/// the aside road, the old target removed only once the new one is in.
+pub fn put_in_place(
+    connection: &Arc<Connection>,
+    sftp: &crate::sftp::Session,
+    placing: &Placing<'_>,
+    cancel: Option<&Cancel>,
+) -> Result<(), RpcError> {
+    let session = placing;
     let rename = |from: &[u8], to: &[u8]| {
         let (from, to) = (from.to_vec(), to.to_vec());
         sftp.call(|id| Request::Rename { id, from, to }, cancel)
             .and_then(ops::expect_ok)
     };
-    let exists = match ops::lstat(sftp, &session.target, cancel) {
+    let exists = match ops::lstat(sftp, session.target, cancel) {
         Ok(_) => true,
         Err(error) if ops::is_status(&error, status::NO_SUCH_FILE) => false,
         Err(error) => return Err(connection.fail(Op::Stat, &error)),
     };
     if !exists {
-        return rename(&session.partial, &session.target).map_err(|e| {
-            if ops::lstat(sftp, &session.target, cancel).is_ok() {
+        return rename(session.partial, session.target).map_err(|e| {
+            if ops::lstat(sftp, session.target, cancel).is_ok() {
                 RpcError::new(ErrorKind::AlreadyExists, lines::NAME_TAKEN)
             } else {
                 connection.fail(Op::Rename, &e)
@@ -414,7 +444,7 @@ fn commit(connection: &Arc<Connection>, session: &Open, call: &Call<'_>) -> Resu
         return sftp
             .extended(
                 "posix-rename@openssh.com",
-                strings(&[&session.partial, &session.target]),
+                strings(&[session.partial, session.target]),
                 cancel,
             )
             .and_then(ops::expect_ok)
@@ -422,10 +452,10 @@ fn commit(connection: &Arc<Connection>, session: &Open, call: &Call<'_>) -> Resu
     }
     // No atomic replace: the old target aside, the new one in, then the
     // old one removed; a failure in the middle puts the old one back.
-    let aside = unfinished_path(&session.folder, &session.target, "aside");
-    rename(&session.target, &aside).map_err(|e| connection.fail(Op::Rename, &e))?;
-    if let Err(error) = rename(&session.partial, &session.target) {
-        let _ = rename(&aside, &session.target);
+    let aside = unfinished_path(session.folder, session.target, "aside");
+    rename(session.target, &aside).map_err(|e| connection.fail(Op::Rename, &e))?;
+    if let Err(error) = rename(session.partial, session.target) {
+        let _ = rename(&aside, session.target);
         return Err(connection.fail(Op::Rename, &error));
     }
     let path = aside.clone();

@@ -134,6 +134,42 @@ pub fn readlinks(
     Ok(out)
 }
 
+/// An open file's attributes.
+pub fn fstat(
+    session: &Session,
+    handle: &[u8],
+    cancel: Option<&Cancel>,
+) -> Result<Attrs, SftpError> {
+    let handle = handle.to_vec();
+    match session.call(|id| Request::Fstat { id, handle }, cancel)? {
+        Response::Attrs { attrs, .. } => Ok(attrs),
+        other => Err(refused(other)),
+    }
+}
+
+/// The data of a `copy-data` request (OpenSSH 9.0 and later): copy
+/// `length` bytes (0 is to the end) from `offset` of the file open as
+/// `from` to `write_at` of the file open as `to`.
+pub fn copy_data_request(
+    from: &[u8],
+    offset: u64,
+    length: u64,
+    to: &[u8],
+    write_at: u64,
+) -> Vec<u8> {
+    let mut data = Vec::with_capacity(from.len() + to.len() + 32);
+    let string = |data: &mut Vec<u8>, bytes: &[u8]| {
+        data.extend_from_slice(&u32::try_from(bytes.len()).unwrap_or(u32::MAX).to_be_bytes());
+        data.extend_from_slice(bytes);
+    };
+    string(&mut data, from);
+    data.extend_from_slice(&offset.to_be_bytes());
+    data.extend_from_slice(&length.to_be_bytes());
+    string(&mut data, to);
+    data.extend_from_slice(&write_at.to_be_bytes());
+    data
+}
+
 /// A child's path: the folder's path, a slash, the name.
 pub fn join(folder: &[u8], name: &[u8]) -> Vec<u8> {
     let mut path = folder.to_vec();
@@ -147,6 +183,24 @@ pub fn join(folder: &[u8], name: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn copy_data_is_two_handles_and_three_numbers() {
+        let data = copy_data_request(b"h1", 0, 0, b"h22", 7);
+        assert_eq!(
+            data,
+            [
+                &[0, 0, 0, 2][..],
+                b"h1",
+                &[0; 8],
+                &[0; 8],
+                &[0, 0, 0, 3],
+                b"h22",
+                &[0, 0, 0, 0, 0, 0, 0, 7],
+            ]
+            .concat()
+        );
+    }
 
     #[test]
     fn children_join_with_one_slash() {

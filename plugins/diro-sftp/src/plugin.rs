@@ -42,6 +42,9 @@ pub const PROVIDER_METHODS: &[&str] = &[
     "rename",
     "remove",
     "set_attributes",
+    "copy_hint",
+    "copy",
+    "volumes",
 ];
 
 /// What the plugin knows from the host.

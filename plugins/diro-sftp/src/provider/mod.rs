@@ -14,10 +14,12 @@
 //!   quietly: it was not lost, so nothing is said.
 
 pub mod connect;
+pub mod copy;
 pub mod fake;
 pub mod list;
 pub mod ops;
 pub mod read;
+pub mod volumes;
 pub mod write;
 
 use std::collections::HashMap;
@@ -268,6 +270,16 @@ impl Provider {
             methods::PROVIDER_RENAME => {
                 let at = At::from_params(call.params, "from")?;
                 ops::rename(&self.connection(&at.target)?, &at, call)
+            }
+            methods::PROVIDER_COPY_HINT => copy::copy_hint(self, call),
+            methods::PROVIDER_COPY => {
+                let at = At::from_params(call.params, "from")?;
+                copy::copy(&self.connection(&at.target)?, &at, call)
+            }
+            methods::PROVIDER_VOLUMES => {
+                let at = At::from_params(call.params, "place")
+                    .or_else(|_| At::from_params(call.params, "authority"))?;
+                volumes::volumes(&self.connection(&at.target)?, call)
             }
             other => Err(RpcError::new(
                 ErrorKind::Unsupported,
