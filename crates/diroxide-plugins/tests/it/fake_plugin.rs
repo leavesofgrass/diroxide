@@ -182,14 +182,23 @@ fn cancel_deaf_times_out_and_is_said() {
     let _supervisor = Host::start_supervisor(&f.host).unwrap();
     let error = run(&f.host, Value::Null).unwrap_err();
     assert_eq!(error, PluginError::Timeout("Fake plugin".into()));
-    let events = f.host.take_events();
-    assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, HostEvent::TimedOut { message, .. }
-            if message.text == "Echo timed out after 1 second.")),
-        "{events:?}"
-    );
+    // The caller's wait ends on its own deadline; the supervisor's tick
+    // records the event on its own thread, a moment later on a loaded
+    // runner, so the event is waited for, not expected at once.
+    let timed_out = |events: &[HostEvent]| {
+        events.iter().any(|e| {
+            matches!(e, HostEvent::TimedOut { message, .. }
+            if message.text == "Echo timed out after 1 second.")
+        })
+    };
+    let started = Instant::now();
+    let mut events = f.host.take_events();
+    while !timed_out(&events) && started.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(50));
+        f.host.tick();
+        events.extend(f.host.take_events());
+    }
+    assert!(timed_out(&events), "{events:?}");
     f.host.shutdown_all(QUIT_BUDGET);
 }
 
