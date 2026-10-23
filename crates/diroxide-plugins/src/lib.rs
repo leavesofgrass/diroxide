@@ -52,6 +52,7 @@ pub mod error;
 pub mod files;
 pub mod framing;
 pub mod fuzzing;
+pub mod hooks;
 pub mod host;
 pub mod lines;
 pub mod listers;

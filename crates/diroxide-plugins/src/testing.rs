@@ -518,6 +518,24 @@ impl FakePlugin {
                     .collect();
                 Ok(json!({"values": values}))
             }
+            methods::HOOK_BEFORE => {
+                let protected = request
+                    .params
+                    .get("items")
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item.get("from")
+                                .and_then(Value::as_str)
+                                .is_some_and(|from| from.ends_with("keep.txt"))
+                        })
+                    });
+                Ok(if protected {
+                    json!({"action": "cancel", "reason": "keep.txt is protected"})
+                } else {
+                    json!({"action": "continue"})
+                })
+            }
             methods::LISTER_ROWS => Ok(json!({"rows": [
                 {"name": "Added, more.txt", "kind": "item", "extra": {"id": "more.txt"}}
             ]})),

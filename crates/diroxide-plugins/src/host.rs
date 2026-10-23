@@ -32,13 +32,14 @@ use crate::ask::{Answer, PromptHistory, Question, TextDocument};
 use crate::calls::Calls;
 use crate::error::PluginError;
 use crate::files::Files;
+use crate::hooks::{HookAfter, HookBefore, HookDecision, decide};
 use crate::lines;
 use crate::listers::{
     ColumnValue, ListerView, MAX_LISTER_ROWS, column_params, read_column_values, read_rows,
 };
 use crate::live::{CallOptions, LivePlugin, Notice, RequestKind};
 use crate::log::{PluginLog, Source};
-use crate::manifest::Manifest;
+use crate::manifest::{HookSpec, Manifest};
 use crate::panels::{Denials, PanelChange, PanelChoice, PanelSnapshot};
 use crate::protocol::{ErrorKind, Notification, PROTOCOL, Params, Request, RpcError, methods};
 use crate::router::{CancelFlag, Connection, Event, Inbound, Outcome};
@@ -1046,6 +1047,41 @@ impl Host {
             slot.off = None;
             slot.crashes.reset();
             slot.starts.reset();
+        }
+    }
+
+    /// `hook/before`: asks a hooked plugin whether a job may go on, with
+    /// the hook's own time limit, and decides by its answer or, when it
+    /// is silent, by its `on_timeout`. Not wired to the job engine in this
+    /// alpha.
+    pub fn hook_before(
+        &self,
+        plugin: &str,
+        hook: &HookSpec,
+        before: &HookBefore,
+        verb: &str,
+    ) -> HookDecision {
+        let name = self
+            .plugin(plugin)
+            .map_or_else(|| plugin.to_owned(), |p| p.manifest.name.clone());
+        let outcome = serde_json::to_value(before)
+            .map_err(|e| PluginError::Protocol(e.to_string()))
+            .and_then(|params| self.call(plugin, methods::HOOK_BEFORE, params));
+        decide(hook, &outcome, verb, &name)
+    }
+
+    /// `hook/after`: tells a hooked plugin what happened, starting it if
+    /// needed; never waited for.
+    pub fn hook_after(&self, plugin: &str, after: &HookAfter) -> Result<(), PluginError> {
+        let info = self
+            .plugin(plugin)
+            .ok_or_else(|| PluginError::Unknown(plugin.to_owned()))?;
+        let live = self.live(info)?;
+        match serde_json::to_value(after) {
+            Ok(Value::Object(params)) => live.connection().notify(methods::HOOK_AFTER, params),
+            _ => Err(PluginError::Protocol(
+                "the event could not be written".to_owned(),
+            )),
         }
     }
 

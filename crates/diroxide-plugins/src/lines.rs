@@ -45,6 +45,25 @@ pub fn replace_lines(name: &str) -> Vec<String> {
     ]
 }
 
+/// A job a plugin's hook stopped: "Copy stopped: keep.txt is protected
+/// (Guard)".
+pub fn hook_cancelled(verb: &str, reason: &str, plugin: &str) -> String {
+    let reason = if reason.trim().is_empty() {
+        "no reason given"
+    } else {
+        reason
+    };
+    with_source(&format!("{verb} stopped: {reason}"), plugin)
+}
+
+/// A hook that did not answer: "Copy goes on: no answer (Guard)", or,
+/// when its manifest says silence cancels, "Copy stopped: no answer
+/// (Guard)".
+pub fn hook_silent(verb: &str, cancels: bool, plugin: &str) -> String {
+    let what = if cancels { "stopped" } else { "goes on" };
+    with_source(&format!("{verb} {what}: no answer"), plugin)
+}
+
 /// A file command on a lister's row: "This row is not a file."
 pub fn not_a_file() -> String {
     "This row is not a file.".to_owned()
