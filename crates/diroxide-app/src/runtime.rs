@@ -53,6 +53,8 @@ mod archive_jobs;
 mod components;
 // Plugins and script commands (W4d).
 mod plugins;
+// Hooks through the plugin hosts (lane A2, R25 commit 81).
+mod hooks;
 // The transfer queue (lane A2, R25 commit 79).
 mod queue;
 
@@ -480,6 +482,11 @@ pub struct Runtime {
     job_settings: Option<diroxide_config::JobSettings>,
     /// The hosts each plugin said it lost, for a loss that turns final.
     lost: HashMap<String, Vec<diroxide_ops::HostKey>>,
+    /// The engine's hook runner, through the plugin hosts (lane A2).
+    hooks: Arc<hooks::AppHooks>,
+    /// The active panel's place, marks and focus after the last batch,
+    /// for the navigation hooks.
+    nav_seen: Option<(Place, usize, Option<String>)>,
 }
 
 impl fmt::Debug for Runtime {
@@ -518,7 +525,11 @@ impl Runtime {
             next_ask: AtomicU64::new(0),
         });
         let ledger = Arc::new(Ledger::in_memory());
-        let engine = Engine::new(Arc::clone(&registry)).with_ledger(Arc::clone(&ledger));
+        let hooks = Arc::new(hooks::AppHooks::default());
+        let runner: Arc<dyn diroxide_ops::HookRunner> = hooks.clone();
+        let engine = Engine::new(Arc::clone(&registry))
+            .with_ledger(Arc::clone(&ledger))
+            .with_hooks(runner);
         // A host's gate speaks through the app: back, keep waiting, the
         // jobs cancelled or stopped (R25, 2.4). The gates outlive every
         // engine made again, and so does this listener.
@@ -552,6 +563,8 @@ impl Runtime {
             ledger,
             job_settings: None,
             lost: HashMap::new(),
+            hooks,
+            nav_seen: None,
         }
     }
 
@@ -604,7 +617,8 @@ impl Runtime {
             .with_options(self.engine.options().clone())
             .with_gates(self.engine.gates().clone())
             .with_ledger(Arc::clone(&self.ledger))
-            .with_speed_limit(self.engine.speed_limiter());
+            .with_speed_limit(self.engine.speed_limiter())
+            .with_hooks(self.hooks.clone());
         if let Some(journal) = self.engine.journal() {
             engine = engine.with_journal(journal.clone());
         }
@@ -1890,6 +1904,9 @@ impl Runtime {
                     {
                         self.rebuild_registry();
                     }
+                    if let crate::plugins::PluginEvent::Found(_) = plugin.as_ref() {
+                        self.hooks.set(self.plugins.hooked());
+                    }
                     if let crate::plugins::PluginEvent::Host(host) = plugin.as_ref() {
                         self.host_event(host);
                     }
@@ -1999,7 +2016,40 @@ impl Runtime {
         for request in app.take_requests() {
             self.request(request);
         }
+        self.observe_navigation(app);
         screen
+    }
+
+    /// Notes where the active panel is, its marks and its focus, and tells
+    /// the navigation hooks what changed, debounced (R25 commit 81): a new
+    /// folder is `enter_folder`, other changes `select`. Nothing is noted
+    /// while no plugin hooks them.
+    fn observe_navigation(&mut self, app: &App) {
+        if !self.hooks.wants_nav() {
+            self.nav_seen = None;
+            return;
+        }
+        let panel = app.active_panel();
+        if panel.is_loading() {
+            return;
+        }
+        let place = panel.place().clone();
+        let count = panel.list().selected_count();
+        let cursor = panel.list().focused().map(|row| row.id.clone());
+        let now = (place.clone(), count, cursor.clone());
+        let event = match &self.nav_seen {
+            Some(seen) if *seen == now => None,
+            Some((seen, ..)) if *seen == place => Some(hooks::NavEvent::Select {
+                place,
+                count: count as u64,
+                cursor,
+            }),
+            _ => Some(hooks::NavEvent::EnterFolder { place }),
+        };
+        self.nav_seen = Some(now);
+        if let Some(event) = event {
+            self.hooks.navigated(event);
+        }
     }
 
     /// Carries out effects, feeds their results back to the app, and

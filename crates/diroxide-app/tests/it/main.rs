@@ -19,6 +19,8 @@ mod dialogs;
 mod filtering;
 // A place behind a gate, for held jobs and streamed listings (lane A2).
 mod held;
+// Hooks through the plugin host (lane A2).
+mod hooks;
 // The transfer queue and the Jobs list (lane A2).
 mod jobs;
 mod keys;

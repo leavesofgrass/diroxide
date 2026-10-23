@@ -703,6 +703,10 @@ impl App {
                         Message::error(format!("{sentence}. {}", error.next_step()))
                     }
                     OpsError::NothingToUndo => Message::info("Nothing to undo"),
+                    // A hook's veto is its own sentence, the plugin last
+                    // (R25 commit 81): "Delete stopped: folder is
+                    // protected. By Folder guard."
+                    OpsError::HookStopped(line) => Message::warning(line.clone()),
                     // These say the whole sentence themselves: "Part 004 is
                     // missing. Nothing was joined."
                     OpsError::CannotJoin(sentence)
@@ -722,6 +726,10 @@ impl App {
         }
         plan.note = flow.note.clone();
         let mut effects = Vec::new();
+        // A hook that did not answer lets the job go on, and says so.
+        for warning in std::mem::take(&mut plan.facts.hook_warnings) {
+            effects.push(self.say(Message::warning(warning)));
+        }
         let mut forced = false;
         let questions = std::mem::take(&mut plan.facts.questions);
         let mut kept = Vec::new();

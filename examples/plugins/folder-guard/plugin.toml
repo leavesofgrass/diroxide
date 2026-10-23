@@ -1,0 +1,59 @@
+# Folder guard: an example diroxide plugin in Python, standard library
+# only. It stops a delete inside the folders you protect, before the
+# question is asked, and logs every delete after it runs. It shows the
+# two kinds of hook: one that is asked and may stop a job, and one that
+# is told what happened.
+
+[plugin]
+id = "folder-guard"
+name = "Folder guard"
+version = "0.1.0"
+description = "Stops deletes inside the folders you protect, and logs every delete."
+license = "Apache-2.0 OR MIT"
+protocol = 1
+min_host = "0.1.0-alpha.1"
+
+# How diroxide starts it: an argument list, never a shell line. On Windows
+# the py launcher, so the Store's python stub is never involved.
+[run]
+command = ["python3", "main.py"]
+start = "on_demand"
+concurrency = 1
+idle_timeout = "5m"
+
+[run.windows]
+command = ["py", "-3", "main.py"]
+
+# A hook's answer is waited for this long; then the job goes on, and says
+# so.
+[timeouts]
+hook = "2s"
+
+# What diroxide lets it do: nothing with files or panels. It hears about
+# deletes through its hooks only.
+[permissions]
+fs = "none"
+panel = "none"
+
+# What it says about itself, which diroxide shows and cannot check.
+[permissions.declared]
+network = "no network"
+files = "reads no files, writes only its own log"
+programs = "no other programs"
+
+# Asked before every delete, to the trash or for good, after the plan and
+# before the question; its answer can stop the delete. Silence lets it go
+# on.
+[[hook]]
+event = "before_delete"
+on_timeout = "continue"
+
+# Told after every delete, with what became of each item.
+[[hook]]
+event = "after_delete"
+
+[[setting]]
+key = "protected"
+type = "string"
+default = ""
+description = "The folders to protect, full paths, separated by semicolons."

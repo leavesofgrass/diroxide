@@ -452,6 +452,27 @@ impl PluginRuntime {
         changed
     }
 
+    /// The enabled plugins with hooks, for the engine's hook runner (lane
+    /// A2, R25 commit 81).
+    pub(crate) fn hooked(&self) -> Vec<super::hooks::Hooked> {
+        let mut hooked: Vec<super::hooks::Hooked> = self
+            .hosts
+            .iter()
+            .filter_map(|(id, host)| {
+                let manifest = host.item.manifest.as_ref()?;
+                (!manifest.hooks.is_empty()).then(|| super::hooks::Hooked {
+                    id: id.clone(),
+                    name: manifest.name.clone(),
+                    host: Arc::clone(&host.host),
+                    hooks: manifest.hooks.clone(),
+                    limit: manifest.timeouts.hook.unwrap_or(Duration::from_secs(2)),
+                })
+            })
+            .collect();
+        hooked.sort_by(|a, b| a.id.cmp(&b.id));
+        hooked
+    }
+
     /// The registry with every enabled plugin's providers added to `base`.
     pub(crate) fn registry_with_providers(&self, base: &Registry) -> Registry {
         let mut registry = base.clone();
