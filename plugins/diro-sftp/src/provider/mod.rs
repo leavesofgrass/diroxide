@@ -16,6 +16,7 @@
 pub mod connect;
 pub mod fake;
 pub mod list;
+pub mod read;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -237,6 +238,10 @@ impl Provider {
             methods::PROVIDER_STAT => {
                 let at = At::from_params(call.params, "place")?;
                 list::stat(&self.connection(&at.target)?, &at, call)
+            }
+            methods::PROVIDER_READ => {
+                let at = At::from_params(call.params, "place")?;
+                read::read(&self.connection(&at.target)?, &at, call)
             }
             other => Err(RpcError::new(
                 ErrorKind::Unsupported,

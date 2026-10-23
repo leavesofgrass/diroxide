@@ -43,7 +43,7 @@ separator = "/"
 case_sensitive = true
 links = true
 attributes = true
-methods = ["connect", "list", "stat"]
+methods = ["connect", "list", "stat", "read"]
 lease = "listers"
 
 [[setting]]

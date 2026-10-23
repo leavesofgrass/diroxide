@@ -514,6 +514,20 @@ impl Session {
         }
     }
 
+    /// Forgets and closes a path's cached read handle: the file was
+    /// written, renamed or removed, or the server no longer knows the
+    /// handle.
+    pub fn forget_handle(&self, path: &[u8]) {
+        let old = self
+            .handles
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(path);
+        if let Some(handle) = old {
+            let _ = self.close(&handle);
+        }
+    }
+
     /// How many handles the cache keeps open.
     pub fn cached_handles(&self) -> usize {
         self.handles

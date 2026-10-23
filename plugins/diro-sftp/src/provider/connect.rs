@@ -591,11 +591,15 @@ pub struct Connection {
     target: Target,
     peer: Arc<Peer>,
     memory: Arc<Memory>,
+    opener: Arc<dyn Opener>,
+    state: State,
     links: Mutex<Vec<Arc<Link>>>,
     ssh: Option<String>,
     gone: AtomicBool,
     said: AtomicBool,
     stop: AtomicBool,
+    second_tried: AtomicBool,
+    closing: Cancel,
 }
 
 impl fmt::Debug for Connection {
@@ -631,14 +635,84 @@ impl Connection {
             target: target.clone(),
             peer: Arc::clone(call.peer),
             memory,
+            opener,
+            state: call.state.clone(),
             links: Mutex::new(vec![Link::new(opened)]),
             ssh,
             gone: AtomicBool::new(false),
             said: AtomicBool::new(false),
             stop: AtomicBool::new(false),
+            second_tried: AtomicBool::new(false),
+            closing: Cancel::new(),
         });
         Self::watch(&connection);
         Ok(connection)
+    }
+
+    /// The session for a transfer (answer 87): the second session when it
+    /// is open, so a listing on the first never waits behind a copy. The
+    /// first transfer starts the second session in the background and
+    /// goes on on the first; later ones move over once it is up. A
+    /// connection that needed a typed secret other than ssh's own
+    /// password never opens a second one, since it would have to ask
+    /// again.
+    pub fn transfer_link(self: &Arc<Self>) -> Result<Arc<Link>, RpcError> {
+        if self.is_gone() {
+            return Err(self.lost_error());
+        }
+        let first = {
+            let links = self.links();
+            if let Some(second) = links.get(1) {
+                return Ok(Arc::clone(second));
+            }
+            links.first().cloned().ok_or_else(|| self.lost_error())?
+        };
+        let may = !self.memory.typed() || self.memory.has_password();
+        if may && !self.second_tried.swap(true, Ordering::SeqCst) {
+            let connection = Arc::clone(self);
+            let _ = thread::Builder::new()
+                .name("sftp-second".to_owned())
+                .spawn(move || connection.open_second());
+        }
+        Ok(first)
+    }
+
+    /// Opens the second session; on failure the connection keeps one.
+    fn open_second(&self) {
+        let opened = self.opener.open(&OpenRequest {
+            target: &self.target,
+            interactive: true,
+            second: true,
+            peer: &self.peer,
+            memory: &self.memory,
+            cancel: &self.closing,
+            state: &self.state,
+            progress: None,
+        });
+        if let Ok(opened) = opened {
+            let link = Link::new(opened);
+            let mut links = self.links();
+            if self.is_gone() || links.len() != 1 {
+                drop(links);
+                link.kill();
+                return;
+            }
+            links.push(link);
+        }
+    }
+
+    /// How many sessions are open: one, or two once a transfer opened the
+    /// second.
+    pub fn sessions(&self) -> usize {
+        self.links().len()
+    }
+
+    /// Forgets a path's cached read handles on every session: it was
+    /// written, renamed or removed.
+    pub fn forget(&self, path: &[u8]) {
+        for link in self.links().iter() {
+            link.session().forget_handle(path);
+        }
     }
 
     /// The target.
@@ -742,6 +816,7 @@ impl Connection {
 
     /// Closes the connection quietly: it was not lost.
     pub fn close(&self) {
+        self.closing.cancel();
         self.stop.store(true, Ordering::SeqCst);
         self.gone.store(true, Ordering::SeqCst);
         let links: Vec<Arc<Link>> = self.links().drain(..).collect();
@@ -762,6 +837,7 @@ impl Connection {
         if self.gone.swap(true, Ordering::SeqCst) {
             return;
         }
+        self.closing.cancel();
         let links: Vec<Arc<Link>> = self.links().drain(..).collect();
         let stderr = links
             .iter()

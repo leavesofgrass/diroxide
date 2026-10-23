@@ -30,7 +30,7 @@ pub const NAME: &str = "SFTP places";
 
 /// The provider methods this build answers, without the `provider/`
 /// prefix; the host calls nothing else.
-pub const PROVIDER_METHODS: &[&str] = &["connect", "list", "stat"];
+pub const PROVIDER_METHODS: &[&str] = &["connect", "list", "stat", "read"];
 
 /// What the plugin knows from the host.
 #[derive(Clone, Debug, Default)]
@@ -105,7 +105,7 @@ impl Handler for Plugin {
                     methods: PROVIDER_METHODS.iter().map(|m| (*m).to_owned()).collect(),
                 }],
                 concurrency: u32::try_from(WORKERS).ok(),
-                transfer: vec!["inline".to_owned()],
+                transfer: vec!["inline".to_owned(), "file".to_owned()],
                 ..PluginCapabilities::default()
             },
             warnings: Vec::new(),
