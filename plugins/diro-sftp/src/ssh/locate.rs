@@ -60,6 +60,10 @@ pub struct SearchPlaces {
     pub system_root: Option<PathBuf>,
     /// `%ProgramFiles%`.
     pub program_files: Option<PathBuf>,
+    /// The system's own folder, tried last: `/usr/bin` on Unix. Only
+    /// [`SearchPlaces::from_env`] names it, so a test sees only the
+    /// folders it builds.
+    pub system_bin: Option<PathBuf>,
     /// Whether to look as on Windows.
     pub windows: bool,
 }
@@ -71,6 +75,7 @@ impl SearchPlaces {
             path: std::env::var_os("PATH"),
             system_root: std::env::var_os("SystemRoot").map(PathBuf::from),
             program_files: std::env::var_os("ProgramFiles").map(PathBuf::from),
+            system_bin: (!cfg!(windows)).then(|| PathBuf::from("/usr/bin")),
             windows: cfg!(windows),
         }
     }
@@ -111,8 +116,8 @@ pub fn candidates(places: &SearchPlaces) -> Vec<(PathBuf, Origin)> {
             add(folder.join(program), Origin::Path);
         }
     }
-    if !places.windows {
-        add(PathBuf::from("/usr/bin").join(program), Origin::System);
+    if let Some(folder) = &places.system_bin {
+        add(folder.join(program), Origin::System);
     }
     out
 }
@@ -252,6 +257,7 @@ mod tests {
             path: Some(OsString::from(path)),
             system_root: Some(PathBuf::from(r"C:\Windows")),
             program_files: Some(PathBuf::from(r"C:\Program Files")),
+            system_bin: None,
             windows: true,
         }
     }
@@ -289,6 +295,7 @@ mod tests {
         }
         let places = SearchPlaces {
             path: Some(OsString::from(".:bin:/opt/ssh/bin:/usr/bin")),
+            system_bin: Some(PathBuf::from("/usr/bin")),
             windows: false,
             ..SearchPlaces::default()
         };
@@ -299,6 +306,22 @@ mod tests {
                 PathBuf::from("/opt/ssh/bin/ssh"),
                 PathBuf::from("/usr/bin/ssh")
             ]
+        );
+    }
+
+    /// Only the production caller names the system's own folder; places a
+    /// test builds hold nothing but its own folders, on every system.
+    #[test]
+    fn the_system_folder_comes_only_from_the_environment() {
+        let built = SearchPlaces {
+            path: Some(OsString::new()),
+            windows: false,
+            ..SearchPlaces::default()
+        };
+        assert!(candidates(&built).is_empty());
+        assert_eq!(
+            SearchPlaces::from_env().system_bin.is_some(),
+            !cfg!(windows)
         );
     }
 
