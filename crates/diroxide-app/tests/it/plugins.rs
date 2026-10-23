@@ -1312,3 +1312,46 @@ fn real_total_size_script_says_its_words_through_the_app() {
     );
     assert_eq!(s.app.jobs().line(), "No jobs");
 }
+
+/// An enabled plugin's provider is in the registry: a panel lists its
+/// place, and copying out of it runs as any copy does.
+#[test]
+fn an_enabled_plugins_provider_serves_a_panel() {
+    use diroxide_plugins::testing::memfs::MemFs;
+    use diroxide_plugins::testing::{FakeLauncher, Mode};
+    let manifest = format!(
+        "{MANIFEST}\n[[provider]]\nscheme = \"memfs\"\nname = \"Memory files\"\nwritable = true\nmethods = [\"connect\", \"list\", \"stat\", \"read\", \"write_begin\", \"write_chunk\", \"write_end\", \"create_dir\", \"rename\", \"remove\"]\n"
+    );
+    let w = world(&manifest);
+    enable(&w.paths);
+    let toy = Arc::new(Mutex::new(MemFs::default()));
+    toy.lock().unwrap().add_file("/docs/a.txt", b"alpha");
+    let launcher = FakeLauncher::new(Mode::Echo);
+    launcher.with_memfs(Arc::clone(&toy));
+    let here = place(&w.work);
+    let mut s = Session::open(
+        here.clone(),
+        here,
+        diroxide_vfs::Registry::with_local(),
+        Setup {
+            settings: settings(),
+            paths: Some(w.paths.clone()),
+            plugin_launcher: Some(launcher),
+            ..Setup::default()
+        },
+    );
+    let effects = s.app.open_place(
+        Side::Left,
+        diroxide_core::Place::parse("memfs://box/docs").unwrap(),
+    );
+    s.run(effects);
+    assert_eq!(s.names(Side::Left), ["a.txt"]);
+    s.focus("a.txt");
+    s.key("f5");
+    let said = s.key("y");
+    assert!(
+        said.iter().any(|l| l.starts_with("Copy finished")),
+        "{said:?}"
+    );
+    assert_eq!(fs::read(w.work.join("a.txt")).unwrap(), b"alpha");
+}
