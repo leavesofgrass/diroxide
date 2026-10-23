@@ -22,6 +22,8 @@
 //!   an arrival, until Ctrl+C; `--print0` for NUL-separated paths.
 //! - `diro plugin list|enable|disable|run|restart|log|check|install`:
 //!   plugins and script commands, nothing enabled without a yes (W4b).
+//! - `diro run COMMAND [NAME=VALUE...]`: one command, headless, in the
+//!   command text form the banks and `diro serve` share (W4b).
 //! - `diro components list|download|verify|remove|install`: optional
 //!   components, asked for before anything is fetched (W4c).
 //! - `diro --version`, `diro --help`.
@@ -78,6 +80,8 @@ pub enum Invocation {
     Watch(cmd::watch::WatchArgs),
     /// List, download, verify, remove or install optional components (W4c).
     Components(cmd::components::ComponentsArgs),
+    /// Run one command headless (W4b).
+    Run(cmd::run::RunArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -152,6 +156,7 @@ pub fn help_text() -> String {
         "diro watch [PATH]         say each file that settles in a folder; Ctrl+C stops",
         "diro plugin list          list the plugins and scripts: name, state, kind",
         "diro plugin run NAME [-- PATH...]  run a plugin or script once on PATH",
+        "diro run COMMAND [NAME=VALUE...]  run one command headless and say what it says",
         "diro components list      list the optional components: title, state, size, license",
         "diro components download ID  say its size and license, ask, then download it",
         "diro --version            print the version",
@@ -264,6 +269,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "diff" => cmd::diff::parse(&args[1..]).map(Invocation::Diff),
         "watch" => cmd::watch::parse(&args[1..]).map(Invocation::Watch),
         "components" => cmd::components::parse(&args[1..]).map(Invocation::Components),
+        "run" => cmd::run::parse(&args[1..]).map(Invocation::Run),
         _ => parse_open(&args).map(Invocation::Open),
     }
 }
@@ -299,6 +305,7 @@ pub fn run(
         Invocation::Diff(args) => cmd::diff::run(&args, out),
         Invocation::Watch(args) => cmd::watch::run(&args, out),
         Invocation::Components(args) => cmd::components::run(&args, out),
+        Invocation::Run(args) => cmd::run::run(&args, out),
     }
 }
 

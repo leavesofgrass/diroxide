@@ -3,7 +3,7 @@
 //! `keys.rs` and `init.rs`; W2g adds `archive.rs`, `split.rs` and
 //! `join.rs`; W3d adds `diff.rs`.
 //! `join.rs`; W3s owns `search.rs`; W3t owns `watch.rs`; W4c owns
-//! `components.rs`.
+//! `components.rs`; W4b owns `plugin.rs` and `run.rs`.
 
 pub mod archive;
 pub mod completions;
@@ -14,6 +14,7 @@ pub mod join;
 pub mod keys;
 pub mod ls;
 pub mod plugin;
+pub mod run;
 pub mod search;
 pub mod split;
 pub mod watch;

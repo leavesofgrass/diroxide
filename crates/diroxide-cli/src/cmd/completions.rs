@@ -362,6 +362,25 @@ pub fn command() -> Command {
                 .arg(flag("stdio", "Use standard input and output")),
         ))
         .subcommand(plugin_command())
+        .subcommand(
+            Command::new("run")
+                .about("Run one command headless and say what it says")
+                .arg(flag("yes", "Answer yes to the questions it asks").short('y'))
+                .arg(flag("portable", "Use the settings beside the program"))
+                .arg(
+                    Arg::new("other")
+                        .long("other")
+                        .value_name("PLACE")
+                        .value_hint(ValueHint::DirPath)
+                        .help("The other panel's place"),
+                )
+                .arg(named("command", "The command's id, such as file.copy"))
+                .arg(
+                    Arg::new("arguments")
+                        .num_args(0..)
+                        .help("Each argument as NAME=VALUE"),
+                ),
+        )
 }
 
 /// `diro plugin` as `cmd/plugin.rs` reads it (W4b), for completion only.
