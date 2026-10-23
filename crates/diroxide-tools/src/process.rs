@@ -28,7 +28,7 @@
 //! object without the kill-on-close limit (spike S5, Friday, October 23,
 //! 2026), so each tree is also put, the moment it starts and before it
 //! runs, in a kill-on-close job of its own
-//! ([`diroxide_vfs::KillOnCloseJob`]) whose only handle the host holds: a
+//! (`diroxide_vfs::KillOnCloseJob`, Windows only) whose only handle the host holds: a
 //! host killed outright closes it, and the tree ends. On Unix a process
 //! group outlives its parent; a plugin that exits when its input ends (the
 //! protocol asks it to) still goes, because the host's end of the pipe
