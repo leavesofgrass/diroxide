@@ -769,3 +769,308 @@ fn compare_marked_takes_exactly_two() {
         "Compare the two marked files needs two items; 3 are selected."
     );
 }
+
+// Sections 3.6 and 3.7: the lister and the toy provider through the real
+// host. The host serves the plugin's own requests from W4a-2's commits
+// 10 to 14; until then the provider methods, which go from the host to
+// the plugin, run now, and the lister's run waits.
+
+fn plugin_host(id: &str, state: &Path) -> Host {
+    let folder = examples().join(id);
+    let text = fs::read_to_string(folder.join("plugin.toml")).unwrap();
+    let manifest = Manifest::from_toml(&text).unwrap();
+    let mut host = Host::new(&PluginSettings::default()).with_state_dir(state);
+    host.add(PluginInfo {
+        manifest,
+        folder,
+        enabled: true,
+    });
+    host
+}
+
+fn b64(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    // Standard base64, written here so the test needs no new dependency.
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let n = chunk.iter().fold(0u32, |n, b| (n << 8) | u32::from(*b)) << (8 * (3 - chunk.len()));
+        for i in 0..4 {
+            if i <= chunk.len() {
+                let _ = out.write_char(char::from(TABLE[((n >> (18 - 6 * i)) & 63) as usize]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+fn from_b64(text: &str) -> Vec<u8> {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = Vec::new();
+    let mut bits = 0u32;
+    let mut count = 0;
+    for c in text.bytes().filter(|c| *c != b'=') {
+        let value = TABLE.iter().position(|t| *t == c).unwrap() as u32;
+        bits = (bits << 6) | value;
+        count += 6;
+        if count >= 8 {
+            count -= 8;
+            out.push((bits >> count) as u8);
+            bits &= (1 << count) - 1;
+        }
+    }
+    out
+}
+
+fn provider_error(host: &Host, method: &str, params: serde_json::Value) -> i64 {
+    match host.call("memfs", method, params) {
+        Err(crate::PluginError::Remote { code, .. }) => code,
+        other => panic!("{method}: {other:?}"),
+    }
+}
+
+/// Writes a file through a write session in two chunks, committed.
+fn memfs_write(host: &Host, place: &str, data: &[u8]) {
+    let session = host
+        .call(
+            "memfs",
+            "provider/write_begin",
+            json!({ "place": place, "conflict": "fail" }),
+        )
+        .unwrap();
+    let id = session["write_id"].as_str().unwrap().to_owned();
+    let half = data.len() / 2;
+    for (offset, part) in [(0, &data[..half]), (half, &data[half..])] {
+        host.call(
+            "memfs",
+            "provider/write_chunk",
+            json!({ "write_id": id, "offset": offset, "data": b64(part) }),
+        )
+        .unwrap();
+    }
+    host.call(
+        "memfs",
+        "provider/write_end",
+        json!({ "write_id": id, "commit": true }),
+    )
+    .unwrap();
+}
+
+#[test]
+fn memfs_keeps_the_provider_contract_through_the_host() {
+    if !python_present() {
+        return;
+    }
+    let scratch = tempfile::tempdir().unwrap();
+    let host = plugin_host("memfs", &scratch.path().join("state"));
+    let connected = host
+        .call("memfs", "provider/connect", json!({ "place": "memfs:/" }))
+        .unwrap();
+    assert_eq!(connected["display_name"], "Memory files (toy)");
+    let empty = host
+        .call("memfs", "provider/list", json!({ "place": "memfs:/" }))
+        .unwrap();
+    assert_eq!(empty["entries"], json!([]));
+    host.call(
+        "memfs",
+        "provider/create_dir",
+        json!({ "place": "memfs:/docs", "parents": false }),
+    )
+    .unwrap();
+    memfs_write(&host, "memfs:/docs/a.txt", b"0123456789");
+    let range = host
+        .call(
+            "memfs",
+            "provider/read",
+            json!({ "place": "memfs:/docs/a.txt", "offset": 3, "length": 4 }),
+        )
+        .unwrap();
+    assert_eq!(from_b64(range["data"].as_str().unwrap()), b"3456");
+    assert_eq!(range["eof"], false);
+    let session = host
+        .call(
+            "memfs",
+            "provider/write_begin",
+            json!({ "place": "memfs:/docs/gone.txt", "conflict": "fail" }),
+        )
+        .unwrap();
+    host.call(
+        "memfs",
+        "provider/write_end",
+        json!({ "write_id": session["write_id"], "commit": false }),
+    )
+    .unwrap();
+    assert_eq!(
+        provider_error(
+            &host,
+            "provider/stat",
+            json!({ "place": "memfs:/docs/gone.txt" })
+        ),
+        -32010
+    );
+    memfs_write(&host, "memfs:/taken.txt", b"t");
+    assert_eq!(
+        provider_error(
+            &host,
+            "provider/rename",
+            json!({ "from": "memfs:/docs", "to": "memfs:/taken.txt" })
+        ),
+        -32011
+    );
+    assert_eq!(
+        provider_error(&host, "provider/remove", json!({ "place": "memfs:/docs" })),
+        -32015
+    );
+    assert_eq!(
+        provider_error(
+            &host,
+            "provider/create_dir",
+            json!({ "place": "memfs:/../up", "parents": false })
+        ),
+        -32016
+    );
+    assert_eq!(
+        provider_error(
+            &host,
+            "provider/trash",
+            json!({ "place": "memfs:/taken.txt" })
+        ),
+        -32017
+    );
+    host.shutdown_all(QUIT_BUDGET);
+    assert!(!host.is_running("memfs"));
+}
+
+/// A local folder copied into memfs:/ and back, file by file, the way
+/// the job engine will through `PluginProvider`, with equal bytes.
+#[test]
+fn memfs_copies_a_folder_both_ways_with_equal_bytes() {
+    if !python_present() {
+        return;
+    }
+    let scratch = tempfile::tempdir().unwrap();
+    let source = scratch.path().join("source");
+    fs::create_dir_all(source.join("inner")).unwrap();
+    let files: Vec<(String, Vec<u8>)> = vec![
+        ("one.txt".into(), b"first file".to_vec()),
+        (
+            "inner/two.bin".into(),
+            (0..=255u8).cycle().take(70_000).collect(),
+        ),
+        ("empty.txt".into(), Vec::new()),
+    ];
+    for (name, data) in &files {
+        fs::write(source.join(name), data).unwrap();
+    }
+    let host = plugin_host("memfs", &scratch.path().join("state"));
+    host.call(
+        "memfs",
+        "provider/create_dir",
+        json!({ "place": "memfs:/copy/inner", "parents": true }),
+    )
+    .unwrap();
+    for (name, data) in &files {
+        memfs_write(&host, &format!("memfs:/copy/{name}"), data);
+    }
+    let back = scratch.path().join("back");
+    for (name, data) in &files {
+        let mut read = Vec::new();
+        loop {
+            let part = host
+                .call(
+                    "memfs",
+                    "provider/read",
+                    json!({ "place": format!("memfs:/copy/{name}"), "offset": read.len(), "length": 32_768 }),
+                )
+                .unwrap();
+            read.extend(from_b64(part["data"].as_str().unwrap()));
+            if part["eof"] == true {
+                break;
+            }
+        }
+        let target = back.join(name);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, &read).unwrap();
+        assert_eq!(&fs::read(&target).unwrap(), data, "{name}");
+    }
+    let listed = host
+        .call("memfs", "provider/list", json!({ "place": "memfs:/copy" }))
+        .unwrap();
+    let names: Vec<&str> = listed["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["empty.txt", "inner", "one.txt"]);
+    host.shutdown_all(QUIT_BUDGET);
+}
+
+/// What a lister plugin's host needs of the app: the active panel.
+struct RepositoryPanel(Place);
+
+impl crate::host::HostServices for RepositoryPanel {
+    fn announce(&self, _message: diroxide_core::Message) {}
+    fn ask_yes_no(&self, _question: &str) -> Option<bool> {
+        None
+    }
+    fn ask_text(&self, _label: &str, _initial: &str) -> Option<String> {
+        None
+    }
+    fn panel(&self, side: Option<diroxide_core::Side>) -> crate::host::PanelSnapshot {
+        crate::host::PanelSnapshot {
+            side: side.unwrap_or(diroxide_core::Side::Left),
+            place: self.0.clone(),
+            cursor: None,
+            selection: Vec::new(),
+        }
+    }
+}
+
+#[test]
+#[ignore = "waits for W4a-2: the host serves panel/get, tools/run, lister/open and ui/show_text from commits 10, 12 and 14; run with --run-ignored once they merge"]
+fn changed_files_shows_a_lister_through_the_host() {
+    if !python_present() {
+        return;
+    }
+    let Some(git) = Lookup::system().which_all("git").into_iter().next() else {
+        eprintln!("git was not found; this test is skipped here");
+        return;
+    };
+    let scratch = tempfile::tempdir().unwrap();
+    let repository = scratch.path().join("repository");
+    fs::create_dir_all(&repository).unwrap();
+    let git_in = |args: &[&str]| {
+        Command::new(&git)
+            .args(args)
+            .current_dir(&repository)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .unwrap()
+    };
+    assert!(git_in(&["init", "--quiet"]).status.success());
+    fs::write(repository.join("notes.txt"), b"new").unwrap();
+    let folder = examples().join("changed-files");
+    let text = fs::read_to_string(folder.join("plugin.toml")).unwrap();
+    let manifest = Manifest::from_toml(&text).unwrap();
+    let place = Place::parse(&repository.to_string_lossy()).unwrap();
+    let mut host = Host::new(&PluginSettings::default())
+        .with_state_dir(scratch.path().join("state"))
+        .with_services(std::sync::Arc::new(RepositoryPanel(place)));
+    host.add(PluginInfo {
+        manifest,
+        folder,
+        enabled: true,
+    });
+    let result = host
+        .call(
+            "changed-files",
+            methods::COMMAND_RUN,
+            json!({ "command": "show", "context": {} }),
+        )
+        .unwrap();
+    assert_eq!(result["done"], 1);
+    host.shutdown_all(QUIT_BUDGET);
+}

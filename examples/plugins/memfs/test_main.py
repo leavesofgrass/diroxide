@@ -115,6 +115,26 @@ class MemfsTest(unittest.TestCase):
                    if n["method"] == "$/progress"]
         self.assertEqual([len(b) for b in batches], [1000, 1000, 500])
 
+    def test_a_cancel_stops_a_large_listing(self):
+        self.p.ok("create_dir", place="memfs:/many", parents=False)
+        for n in range(3000):
+            self.p.write("memfs:/many/f%04d" % n, b"", chunks=1)
+        self.p.next_id += 1
+        request_id = self.p.next_id
+        self.p.send({"jsonrpc": "2.0", "id": request_id, "method": "provider/list",
+                     "params": {"place": "memfs:/many", "partial_token": "t2"}})
+        self.p.send({"jsonrpc": "2.0", "method": "$/cancel_request",
+                     "params": {"id": request_id}})
+        while True:
+            message = json.loads(self.p.child.stdout.readline().decode("utf-8"))
+            if message.get("id") == request_id:
+                break
+        # Cancelled between batches, or done before the cancel came.
+        if "error" in message:
+            self.assertEqual(message["error"]["code"], -32800)
+        else:
+            self.assertEqual(message["result"]["complete"], True)
+
     def test_stat_a_file_a_folder_and_a_missing_name(self):
         self.p.write("memfs:/a.txt", b"hello")
         self.assertEqual(self.p.ok("stat", place="memfs:/a.txt")["size"], 5)
