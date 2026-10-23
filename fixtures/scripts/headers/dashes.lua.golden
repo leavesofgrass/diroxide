@@ -1,0 +1,11 @@
+settings: 4
+name: Lua report
+description: 
+key: (none)
+selection: One, places: Any
+needs: [], os: []
+mode: output-pane, per: Selection, stdin: None, cwd: Active
+timeout: none, selection_file: lines
+confirm: (none), prompt: (none)
+unattended: false, dry_run: false, cursor_fallback: true
+exit_words: {}, interpreter: ["lua"]

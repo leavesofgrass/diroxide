@@ -1,0 +1,30 @@
+# PDF first page, as text: an example diroxide previewer with no code of
+# its own. It runs pdftotext on the first page and shows the text. The
+# preview region that shows it comes with a later alpha; until then try
+# it from a shell:
+#   diro plugin preview pdf-first-page first_page FILE.pdf
+
+[plugin]
+id = "pdf-first-page"
+name = "PDF first page, as text"
+version = "0.1.0"
+description = "Shows the first page of a PDF as text, through pdftotext."
+license = "Apache-2.0 OR MIT"
+protocol = 1
+min_host = "0.1.0-alpha.1"
+
+[permissions.declared]
+network = "no network"
+files = "only the file it previews"
+programs = "pdftotext only"
+
+[[previewer]]
+id = "first_page"
+name = "PDF first page, as text"
+priority = "normal"
+needs = ["pdftotext"]
+argv = ["pdftotext", "-l", "1", "-layout", "{input}", "-"]
+
+[previewer.match]
+mime = ["application/pdf"]
+extensions = ["pdf"]

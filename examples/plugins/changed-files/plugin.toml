@@ -1,0 +1,77 @@
+# Changed files: an example diroxide plugin in Python, standard library
+# only. A lister whose rows are not files: the changed files of the git
+# repository in the active panel, the state first. Enter shows a row's
+# diff. `diro plugin new NAME --language python --kind lister` writes a
+# copy of this folder under a new name.
+
+[plugin]
+id = "changed-files"
+name = "Changed files"
+version = "0.1.0"
+description = "Lists the changed files of a git repository, the state first."
+license = "Apache-2.0 OR MIT"
+protocol = 1
+min_host = "0.1.0-alpha.1"
+
+[run]
+command = ["python3", "main.py"]
+start = "on_demand"
+concurrency = 1
+idle_timeout = "5m"
+
+[run.windows]
+command = ["py", "-3", "main.py"]
+
+# What diroxide lets it do, and checks: read the panels, and run git
+# through diroxide, with an argument list.
+[permissions]
+fs = "read"
+panel = "read"
+tools = ["git"]
+
+[permissions.declared]
+network = "no network"
+files = "only through git, in the active folder"
+programs = "git only"
+
+[[command]]
+id = "show"
+name = "Show changed files"
+description = "Lists the changed files here, the state first."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "diff"
+name = "Show the diff of a changed file"
+description = "Shows the changes of the file on this row."
+selection = "one"
+
+[[command]]
+id = "stage"
+name = "Stage the marked files"
+description = "Adds the marked rows' files to the next commit."
+selection = "many"
+
+[[lister]]
+id = "changes"
+name = "Changed files"
+activate = "diff"
+
+[[lister.columns]]
+id = "state"
+header = "State"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "path"
+header = "Path"
+kind = "text"
+sorts = true
+
+[[lister.action]]
+key = "alt+s"
+command = "stage"
+selection = "many"

@@ -20,7 +20,10 @@
 //!   parts with a `.crc` sidecar, and put them back together.
 //! - `diro watch [PATH]`: say each file that settles in a folder, one line
 //!   an arrival, until Ctrl+C; `--print0` for NUL-separated paths.
-//! - `diro plugin list|new|enable|disable|run|log`: plugin tooling.
+//! - `diro plugin list|enable|disable|run|restart|log|check|install`:
+//!   plugins and script commands, nothing enabled without a yes (W4b).
+//! - `diro run COMMAND [NAME=VALUE...]`: one command, headless, in the
+//!   command text form the banks and `diro serve` share (W4b).
 //! - `diro components list|download|verify|remove|install`: optional
 //!   components, asked for before anything is fetched (W4c).
 //! - `diro --version`, `diro --help`.
@@ -56,7 +59,7 @@ pub enum Invocation {
     /// Search by name, kind, size, date and contents.
     Search(Box<cmd::search::SearchArgs>),
     /// Plugin tooling.
-    Plugin(cmd::plugin::PluginCommand),
+    Plugin(cmd::plugin::PluginArgs),
     /// List a place, or the paths on standard input.
     Ls(cmd::ls::LsArgs),
     /// Print a shell's completion script.
@@ -77,6 +80,8 @@ pub enum Invocation {
     Watch(cmd::watch::WatchArgs),
     /// List, download, verify, remove or install optional components (W4c).
     Components(cmd::components::ComponentsArgs),
+    /// Run one command headless (W4b).
+    Run(cmd::run::RunArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -149,7 +154,9 @@ pub fn help_text() -> String {
         "diro join PART            join a split file's parts back into one file",
         "diro diff BEFORE AFTER    compare two files: the verdict first, then each change",
         "diro watch [PATH]         say each file that settles in a folder; Ctrl+C stops",
-        "diro plugin list          list the plugins",
+        "diro plugin list          list the plugins and scripts: name, state, kind",
+        "diro plugin run NAME [-- PATH...]  run a plugin or script once on PATH",
+        "diro run COMMAND [NAME=VALUE...]  run one command headless and say what it says",
         "diro components list      list the optional components: title, state, size, license",
         "diro components download ID  say its size and license, ask, then download it",
         "diro --version            print the version",
@@ -173,6 +180,7 @@ pub fn help_text() -> String {
         "diro ls --help gives the options of diro ls; diro archive --help those of diro archive.",
         "diro diff --help gives the options of diro diff.",
         "diro components --help gives the options of diro components.",
+        "diro plugin --help gives the options of diro plugin.",
         "diro ls --help gives the options of diro ls; diro search --help and diro archive --help theirs.",
     ]
     .join("\n")
@@ -261,6 +269,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "diff" => cmd::diff::parse(&args[1..]).map(Invocation::Diff),
         "watch" => cmd::watch::parse(&args[1..]).map(Invocation::Watch),
         "components" => cmd::components::parse(&args[1..]).map(Invocation::Components),
+        "run" => cmd::run::parse(&args[1..]).map(Invocation::Run),
         _ => parse_open(&args).map(Invocation::Open),
     }
 }
@@ -285,7 +294,7 @@ pub fn run(
         Invocation::Open(options) => open::run(&options, out),
         Invocation::Serve => serve::run(input, out),
         Invocation::Search(args) => cmd::search::run(&args, out),
-        Invocation::Plugin(command) => cmd::plugin::run(&command, out),
+        Invocation::Plugin(args) => cmd::plugin::run(&args, input, out),
         Invocation::Ls(args) => cmd::ls::run(&args, input, out),
         Invocation::Completions(args) => cmd::completions::run(args, out),
         Invocation::Keys(args) => cmd::keys::run(&args, open::paths(false).as_ref(), out),
@@ -296,6 +305,7 @@ pub fn run(
         Invocation::Diff(args) => cmd::diff::run(&args, out),
         Invocation::Watch(args) => cmd::watch::run(&args, out),
         Invocation::Components(args) => cmd::components::run(&args, out),
+        Invocation::Run(args) => cmd::run::run(&args, out),
     }
 }
 

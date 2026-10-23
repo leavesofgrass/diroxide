@@ -1,0 +1,11 @@
+settings: 4
+name: Count words
+description: 
+key: (none)
+selection: Any, places: Any
+needs: ["node"], os: []
+mode: output-viewer, per: Selection, stdin: Json, cwd: Script
+timeout: none, selection_file: lines
+confirm: (none), prompt: (none)
+unattended: false, dry_run: false, cursor_fallback: true
+exit_words: {}, interpreter: []
