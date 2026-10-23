@@ -34,38 +34,64 @@
 //!   the leases, the idle timer and the crash and flood policies on a
 //!   clock tests move by hand; [`live`] runs one plugin; [`host`] starts
 //!   plugins on demand and turns what happens into events.
-//! - [`services`] are the host services a plugin calls: announcements
-//!   (cleaned, attributed with the plugin's name last, rate-limited), its
-//!   log, its settings and its progress; every sentence is in [`lines`].
-//! - [`testing`] has the in-process fake plugin and the dialogue driver;
-//!   [`fuzzing`] the bodies of the fuzz targets.
+//! - The host services a plugin calls, each checked against its manifest
+//!   in one place and served through the app's [`HostServices`]:
+//!   announcements, its log, its settings and its progress
+//!   ([`services`]); questions in five kinds with completion and history,
+//!   and text documents ([`ask`]); the panels and diroxide's commands
+//!   ([`panels`]); files through the providers and the job engine
+//!   ([`files`]), with the confined [`spool`] for large contents; tools
+//!   by name, never a shell ([`tools`]); and listers of rows that are not
+//!   files ([`listers`]). Places from a plugin are parsed, never trusted
+//!   ([`places`]). Every sentence is in [`lines`], the plugin's name last.
+//! - [`provider`] makes a plugin's file system a provider of the panels
+//!   and the job engine; [`hooks`] holds the hook shapes.
+//! - [`testing`] has the in-process fake plugin, its toy file system, the
+//!   recording services and the dialogue driver; the program
+//!   `diroxide-fake-plugin` (the `fake-plugin` feature) is the
+//!   misbehaving process of the test plan; [`conformance`] drives any
+//!   plugin through the protocol's checks for `diro plugin conformance`;
+//!   [`fuzzing`] holds the bodies of the fuzz targets.
 //!
-//! W4a-1 built the host up to here (alpha 2, commits 1 to 8 of R22's
-//! order); W4a-2 adds the rest of the host services, the plugin provider,
-//! listers, hooks, the fake plugin process and the conformance runner;
-//! W4b owns [`script`].
+//! W4a-1 built the host up to host services I (alpha 2, commits 1 to 8 of
+//! R22's order); W4a-2 built the rest (commits 9 to 17); W4b owns
+//! [`script`].
 
+pub mod ask;
+pub mod base64;
+mod calls;
+pub mod conformance;
 pub mod error;
+pub mod files;
 pub mod framing;
 pub mod fuzzing;
+pub mod hooks;
 pub mod host;
 pub mod lines;
+pub mod listers;
 pub mod live;
 pub mod log;
 pub mod manifest;
+pub mod panels;
+pub mod places;
 pub mod protocol;
+pub mod provider;
 pub mod router;
 pub mod script;
 pub mod services;
 pub mod session;
 pub mod shapes;
+pub mod spool;
 pub mod supervisor;
 pub mod testing;
+pub mod tools;
 pub mod transport;
 
+pub use ask::{Answer, Question, QuestionKind, TextDocument};
 pub use error::PluginError;
-pub use host::{Host, HostEvent, HostServices, Launcher, PanelSnapshot, PluginInfo};
+pub use host::{Host, HostEvent, HostServices, Launcher, PluginInfo};
 pub use manifest::{CommandSpec, Manifest, ManifestReport, Problem, Severity};
+pub use panels::{PanelChange, PanelChoice, PanelSnapshot};
 pub use protocol::{ErrorKind, Id, Incoming, Notification, Request, Response, RpcError};
 pub use shapes::{PanelRef, WireContext, WireEntry, WireImportance, WirePlace};
 pub use transport::{MemoryPeer, MemoryTransport, PluginTransport, StdioTransport};

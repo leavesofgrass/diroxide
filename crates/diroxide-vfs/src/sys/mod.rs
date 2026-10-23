@@ -2,6 +2,9 @@
 //! reparse points and the drive list from `GetLogicalDrives`; Unix modes,
 //! owners and groups.
 //!
+//! It also holds the kill-on-close job object of Windows, which the
+//! process helper of `diroxide-tools` puts every process tree in.
+//!
 //! This is the one module in the workspace allowed to use `unsafe`, for
 //! calls into the platform. Every `unsafe` block here carries a comment
 //! that says why it is sound, and is reviewed at integration. The Unix
@@ -19,6 +22,8 @@ mod windows;
 
 #[cfg(unix)]
 pub(crate) use unix::*;
+#[cfg(windows)]
+pub use windows::KillOnCloseJob;
 #[cfg(windows)]
 pub(crate) use windows::*;
 

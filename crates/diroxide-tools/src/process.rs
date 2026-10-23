@@ -21,13 +21,18 @@
 //!   reaches them.
 //!
 //! The unsafe system calls (job objects, process groups) live in the
-//! `process-wrap` crate, so this crate stays free of `unsafe`.
+//! `process-wrap` crate and in `diroxide-vfs`'s platform module, so this
+//! crate stays free of `unsafe`.
 //!
-//! Known limit (spike S5, Friday, October 23, 2026): `process-wrap`
-//! 10.0.1 creates its job object without the kill-on-close limit, so on
-//! Windows a host killed hard leaves the tree running, as a process group
-//! does on Unix. A plugin that exits when its input ends (the protocol
-//! asks it to) still goes, because the host's end of the pipe closes.
+//! **Dies with the host on Windows.** `process-wrap` 10.0.1 makes its job
+//! object without the kill-on-close limit (spike S5, Friday, October 23,
+//! 2026), so each tree is also put, the moment it starts and before it
+//! runs, in a kill-on-close job of its own
+//! ([`diroxide_vfs::KillOnCloseJob`]) whose only handle the host holds: a
+//! host killed outright closes it, and the tree ends. On Unix a process
+//! group outlives its parent; a plugin that exits when its input ends (the
+//! protocol asks it to) still goes, because the host's end of the pipe
+//! closes, and the known-limits page lists the rest.
 
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -322,13 +327,14 @@ impl ProcessSpec {
     /// Starts the program.
     pub fn spawn(&self) -> Result<ProcessHandle, ProcessError> {
         let mut wrap = CommandWrap::from(self.command()?);
-        platform::wrap(&mut wrap, self.tie, self.creation_flags());
+        let guard = platform::wrap(&mut wrap, self.tie, self.creation_flags());
         let child = wrap.spawn().map_err(|e| self.start_error(&e))?;
         Ok(ProcessHandle {
             id: child.id(),
             child,
             tie: self.tie,
             status: None,
+            _guard: guard,
         })
     }
 
@@ -370,6 +376,8 @@ pub struct ProcessHandle {
     id: u32,
     tie: Tie,
     status: Option<ExitStatus>,
+    /// The kill-on-close job on Windows, dropped after the kill.
+    _guard: platform::Guard,
 }
 
 impl ProcessHandle {
@@ -475,9 +483,18 @@ impl Drop for ProcessHandle {
 
 #[cfg(windows)]
 mod platform {
-    use process_wrap::std::{CommandWrap, CreationFlags, JobObject};
+    use std::io;
+    use std::os::windows::io::AsHandle;
+    use std::process::{Child, Command};
+    use std::sync::Arc;
+
+    use diroxide_vfs::KillOnCloseJob;
+    use process_wrap::std::{CommandWrap, CommandWrapper, CreationFlags, JobObject};
 
     use super::{CREATE_BREAKAWAY_FROM_JOB, ProcessError, ProcessHandle, ProcessSpec, Tie};
+
+    /// What a handle keeps alive: the tree's kill-on-close job.
+    pub(super) type Guard = Option<Arc<KillOnCloseJob>>;
 
     fn flags(value: u32) -> CreationFlags {
         let mut flags = CreationFlags(Default::default());
@@ -485,16 +502,42 @@ mod platform {
         flags
     }
 
-    pub(super) fn wrap(wrap: &mut CommandWrap, tie: Tie, creation_flags: u32) {
+    /// Puts the child in the kill-on-close job right after it is made,
+    /// while the job object wrapper still holds it suspended, so nothing
+    /// it starts escapes the job.
+    #[derive(Debug)]
+    struct KillOnClose(Arc<KillOnCloseJob>);
+
+    impl CommandWrapper for KillOnClose {
+        fn post_spawn(
+            &mut self,
+            _command: &mut Command,
+            child: &mut Child,
+            _core: &CommandWrap,
+        ) -> io::Result<()> {
+            // A refusal (an old system that cannot nest jobs) leaves the
+            // tree in its kill-on-drop job only: never a failed start.
+            let _ = self.0.assign(child.as_handle());
+            Ok(())
+        }
+    }
+
+    pub(super) fn wrap(wrap: &mut CommandWrap, tie: Tie, creation_flags: u32) -> Guard {
         match tie {
             Tie::Tree => {
                 wrap.wrap(flags(creation_flags));
+                let guard = KillOnCloseJob::new().ok().map(Arc::new);
+                if let Some(job) = &guard {
+                    wrap.wrap(KillOnClose(Arc::clone(job)));
+                }
                 wrap.wrap(JobObject);
+                guard
             }
             Tie::Detached => {
                 wrap.wrap(flags(creation_flags));
+                None
             }
-            Tie::Terminal => {}
+            Tie::Terminal => None,
         }
     }
 
@@ -518,6 +561,7 @@ mod platform {
                     child,
                     tie: Tie::Detached,
                     status: None,
+                    _guard: None,
                 })
                 .map_err(|e| spec.start_error(&e)),
         )
@@ -530,7 +574,10 @@ mod platform {
 
     use super::{ProcessError, ProcessHandle, ProcessSpec, Tie};
 
-    pub(super) fn wrap(wrap: &mut CommandWrap, tie: Tie, _creation_flags: u32) {
+    /// Nothing to keep alive: a process group has no handle.
+    pub(super) type Guard = ();
+
+    pub(super) fn wrap(wrap: &mut CommandWrap, tie: Tie, _creation_flags: u32) -> Guard {
         match tie {
             Tie::Tree => {
                 wrap.wrap(ProcessGroup::leader());
@@ -694,14 +741,12 @@ mod tests {
         assert!(wait_for_end(&lines), "a process of the tree survived");
     }
 
-    /// Spike S5, the hard half: a host killed outright. Ignored because it
-    /// fails today on Windows: `process-wrap` 10.0.1 makes its job object
-    /// without the kill-on-close limit, so the tree outlives the host (the
-    /// contract change request in the W4a-1 report). On Unix a process
-    /// group never dies with its parent; plugins exit when their input
-    /// ends instead.
+    /// Spike S5, the hard half: a host killed outright, as Task Manager
+    /// would. On Windows the kill-on-close job ends the tree with it. On
+    /// Unix a process group never dies with its parent (plugins exit when
+    /// their input ends instead), so the test is ignored there.
     #[test]
-    #[ignore = "known limit: the job object has no kill-on-close (spike S5)"]
+    #[cfg_attr(unix, ignore = "known limit: a process group outlives its parent")]
     fn a_tree_dies_with_a_host_killed_hard() {
         // The host is a helper that starts a tree and is then killed
         // alone, as Task Manager would.

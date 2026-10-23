@@ -1,0 +1,18 @@
+[plugin]
+id = "python-echo"
+name = "Python echo"
+version = "0.1.0"
+description = "Answers every command at once; the conformance suite's Python subject."
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]
+startup_timeout = "10s"
+
+[run.windows]
+command = ["py", "-3", "main.py"]
+
+[[command]]
+id = "echo"
+name = "Echo"
+description = "Says how many entries it was given."

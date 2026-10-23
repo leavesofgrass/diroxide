@@ -1,0 +1,19 @@
+{
+  "method": "lister/open",
+  "about": "The changed-files lister: item rows whose state comes first, their identity in the id extra value, opened in the active panel.",
+  "params": {
+    "lister": "changed",
+    "title": "Changed files in diroxide",
+    "panel": "active",
+    "total": 3,
+    "rows": [
+      {"name": "Modified, src/main.rs", "kind": "item", "extra": {"id": "src/main.rs", "state": "Modified", "path": "src/main.rs"}},
+      {"name": "Added, docs/plugins.md", "kind": "item", "extra": {"id": "docs/plugins.md", "state": "Added", "path": "docs/plugins.md"}},
+      {"name": "Untracked, notes.txt", "kind": "item", "extra": {"id": "notes.txt", "state": "Untracked", "path": "notes.txt"}}
+    ]
+  },
+  "result": {
+    "opened": true,
+    "rows": 3
+  }
+}

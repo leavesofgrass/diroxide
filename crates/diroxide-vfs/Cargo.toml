@@ -17,7 +17,9 @@ thiserror.workspace = true
 trash.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys.workspace = true
+# The job objects (JobObjects, and Threading for their extended limit
+# information) are the process helper's kill-on-close job, W4a-2's.
+windows-sys = { workspace = true, features = ["Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

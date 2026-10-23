@@ -10,9 +10,13 @@
 //! idle stop to the host.
 
 use std::collections::HashMap;
+use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Duration;
+
+use diroxide_vfs::CancelToken;
 
 use serde_json::{Value, json};
 
@@ -97,6 +101,30 @@ impl Slots {
     }
 }
 
+/// Takes each partial batch of entries as it arrives; `Break` stops the
+/// listing early (the request is cancelled and still answered).
+pub type Batches<'a> = &'a mut dyn FnMut(Vec<Value>) -> ControlFlow<()>;
+
+/// What a call may carry besides its parameters.
+#[derive(Default)]
+pub struct CallOptions<'a> {
+    /// Raised by the caller to cancel the request, which is still
+    /// answered: a provider call whose operation was cancelled.
+    pub cancel: Option<&'a CancelToken>,
+    /// Asks for a streamed answer (a `partial_token`) and takes its
+    /// batches.
+    pub batches: Option<Batches<'a>>,
+}
+
+impl std::fmt::Debug for CallOptions<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CallOptions")
+            .field("cancel", &self.cancel.is_some())
+            .field("batches", &self.batches.is_some())
+            .finish()
+    }
+}
+
 /// What a request's caller hears besides the answer; the label is what
 /// the sentence names (a command's name, or the plugin's).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -134,6 +162,7 @@ pub struct LivePlugin {
     labels: Mutex<HashMap<Id, String>>,
     notices: Mutex<Vec<Notice>>,
     next_token: AtomicU64,
+    partials: Mutex<HashMap<String, Sender<Vec<Value>>>>,
 }
 
 impl std::fmt::Debug for LivePlugin {
@@ -164,6 +193,7 @@ impl LivePlugin {
             labels: Mutex::new(HashMap::new()),
             notices: Mutex::new(Vec::new()),
             next_token: AtomicU64::new(1),
+            partials: Mutex::new(HashMap::new()),
         }
     }
 
@@ -201,9 +231,21 @@ impl LivePlugin {
     pub fn call_labeled(
         &self,
         method: &str,
+        params: Params,
+        kind: RequestKind,
+        label: &str,
+    ) -> Outcome {
+        self.call_with(method, params, kind, label, CallOptions::default())
+    }
+
+    /// The same, with a cancel token and a taker of partial batches.
+    pub fn call_with(
+        &self,
+        method: &str,
         mut params: Params,
         kind: RequestKind,
         label: &str,
+        options: CallOptions<'_>,
     ) -> Outcome {
         if !self.slots.enter() {
             return Err(RpcError::new(
@@ -211,9 +253,20 @@ impl LivePlugin {
                 "too many requests are waiting for this plugin",
             ));
         }
-        let outcome = self.call_inside(method, &mut params, kind, label);
+        let outcome = self.call_inside(method, &mut params, kind, label, options);
         self.slots.leave();
         outcome
+    }
+
+    fn lock_partials(&self) -> std::sync::MutexGuard<'_, HashMap<String, Sender<Vec<Value>>>> {
+        self.partials.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// A partial batch for a token: handed to the call that waits for it.
+    pub fn partial(&self, token: &str, entries: Vec<Value>) {
+        if let Some(sender) = self.lock_partials().get(token) {
+            let _ = sender.send(entries);
+        }
     }
 
     fn call_inside(
@@ -222,8 +275,17 @@ impl LivePlugin {
         params: &mut Params,
         kind: RequestKind,
         label: &str,
+        mut options: CallOptions<'_>,
     ) -> Outcome {
-        let token = format!("t{}", self.next_token.fetch_add(1, Ordering::SeqCst));
+        let number = self.next_token.fetch_add(1, Ordering::SeqCst);
+        let token = format!("t{number}");
+        let batches: Option<(String, Receiver<Vec<Value>>)> = options.batches.as_ref().map(|_| {
+            let partial = format!("p{number}");
+            let (sender, receiver) = mpsc::channel();
+            self.lock_partials().insert(partial.clone(), sender);
+            params.insert("partial_token".to_owned(), json!(partial));
+            (partial, receiver)
+        });
         params
             .entry("progress_token".to_owned())
             .or_insert_with(|| json!(token));
@@ -240,6 +302,9 @@ impl LivePlugin {
                 registered = Some(id.clone());
                 self.lock_labels().insert(id.clone(), label.to_owned());
                 self.lock_tokens().insert(token.clone(), id.clone());
+                if let Some((partial, _)) = &batches {
+                    self.lock_tokens().insert(partial.clone(), id.clone());
+                }
                 if let Some(limit) = limit {
                     self.lock_limits().insert(id.clone(), limit);
                 }
@@ -250,6 +315,10 @@ impl LivePlugin {
             Ok(call) => call,
             Err(e) => {
                 self.lock_tokens().remove(&token);
+                if let Some((partial, _)) = &batches {
+                    self.lock_tokens().remove(partial);
+                    self.lock_partials().remove(partial);
+                }
                 if let Some(id) = registered {
                     self.lock_limits().remove(&id);
                     self.lock_labels().remove(&id);
@@ -258,9 +327,28 @@ impl LivePlugin {
                 return Err(RpcError::new(ErrorKind::PluginUnavailable, e.to_string()));
             }
         };
+        let mut cancel_sent = false;
+        let mut stopped_early = false;
+        let deliver = |options: &mut CallOptions<'_>, stopped_early: &mut bool| {
+            if let (Some((_, receiver)), Some(take)) = (&batches, options.batches.as_mut()) {
+                while let Ok(batch) = receiver.try_recv() {
+                    if !*stopped_early && take(batch).is_break() {
+                        *stopped_early = true;
+                    }
+                }
+            }
+        };
         let outcome = loop {
-            if let Some(outcome) = call.wait(Duration::from_millis(100)) {
+            let wait = if batches.is_some() { 20 } else { 100 };
+            if let Some(outcome) = call.wait(Duration::from_millis(wait)) {
+                deliver(&mut options, &mut stopped_early);
                 break outcome;
+            }
+            deliver(&mut options, &mut stopped_early);
+            let asked = options.cancel.is_some_and(CancelToken::is_cancelled) || stopped_early;
+            if asked && !cancel_sent {
+                cancel_sent = true;
+                let _ = self.connection.cancel(&call.id);
             }
             if self.connection.is_ended() {
                 // The reading thread fails every request when the output
@@ -274,9 +362,20 @@ impl LivePlugin {
             }
         };
         self.lock_tokens().remove(&token);
+        if let Some((partial, _)) = &batches {
+            self.lock_tokens().remove(partial);
+            self.lock_partials().remove(partial);
+        }
         self.lock_limits().remove(&call.id);
         self.lock_labels().remove(&call.id);
         self.supervisor().finish(&call.id, self.ticker.now());
+        if stopped_early
+            && outcome
+                .as_ref()
+                .is_err_and(|e| e.code == ErrorKind::RequestCancelled.code())
+        {
+            return Ok(json!({"complete": false}));
+        }
         outcome
     }
 
