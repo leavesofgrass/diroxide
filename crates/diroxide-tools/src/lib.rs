@@ -3,9 +3,13 @@
 //! rule (then `tools.toml` overrides), and run with an argument list: no
 //! shell, no console window on Windows, output captured, cancellable.
 //!
+//! Every child diroxide starts, a plugin, a script command or a tool,
+//! goes through the process helper ([`process`]): no shell, no console
+//! window, and a tree that is killed as a whole.
+//!
 //! Phase 0: the table, the PATH rule and a plain run are here; version
 //! reading, cancellation while running and the Settings page data come in
-//! Wave 5 (W5a), which owns this crate.
+//! Wave 5 (W5a), which owns this crate; the process helper is W4a's.
 
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -16,6 +20,10 @@ use diroxide_config::ToolsConfig;
 use diroxide_core::Explain;
 use diroxide_vfs::OpContext;
 use thiserror::Error;
+
+pub mod process;
+
+pub use process::{ProcessError, ProcessHandle, ProcessSpec, Stream, Tie};
 
 /// One external tool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -11,6 +11,9 @@ publish.workspace = true
 diroxide-config.workspace = true
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
+# Process trees: a job object on Windows, a process group elsewhere, so a
+# plugin or a tool is stopped with everything it started (process.rs).
+process-wrap.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

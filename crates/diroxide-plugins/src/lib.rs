@@ -26,6 +26,7 @@ pub mod error;
 pub mod framing;
 pub mod fuzzing;
 pub mod host;
+pub mod log;
 pub mod manifest;
 pub mod protocol;
 pub mod script;

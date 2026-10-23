@@ -14,6 +14,7 @@ publish.workspace = true
 [dependencies]
 diroxide-config.workspace = true
 diroxide-core.workspace = true
+diroxide-tools.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
