@@ -230,10 +230,12 @@ impl Files {
             Some("file") => true,
             Some(other) => return Err(invalid(format!("transfer {other} is not inline or file"))),
         };
+        // Inline, 1 MiB at most; into the spool, the rest of the file
+        // unless the plugin names a length.
         let wanted = params
             .get("length")
             .and_then(Value::as_u64)
-            .unwrap_or(MAX_INLINE_READ);
+            .unwrap_or(if to_file { u64::MAX } else { MAX_INLINE_READ });
         if !to_file && wanted > MAX_INLINE_READ {
             return Err(RpcError::new(
                 ErrorKind::TooLarge,
@@ -263,9 +265,10 @@ impl Files {
                 .get("spool_path")
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid("a file transfer needs a spool_path"))?;
+            let left = size.map_or(wanted, |size| size.saturating_sub(offset));
             let mut file = self
                 .spool()?
-                .create_to_write(spool_path, wanted.min(size.unwrap_or(wanted)))
+                .create_to_write(spool_path, wanted.min(left))
                 .map_err(|r| r.to_rpc())?;
             length = std::io::copy(&mut limited, &mut file)
                 .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
@@ -612,6 +615,31 @@ mod tests {
             .read(&params(json!({"place": a, "length": 2_000_000})), &ctx)
             .unwrap_err();
         assert_eq!(too_big.code, -32021);
+    }
+
+    /// Into the spool, a read takes the rest of the file unless the plugin
+    /// names a length: the 1 MiB bound is the inline answer's only.
+    #[test]
+    fn a_spooled_read_takes_the_rest_of_the_file() {
+        let root = tempfile::tempdir().unwrap();
+        let (files, base) = files(root.path());
+        let big = vec![b'z'; 3 * 1024 * 1024];
+        std::fs::write(root.path().join("work").join("big.bin"), &big).unwrap();
+        let place = base.join("big.bin").unwrap().to_string();
+        let spooled = files
+            .read(
+                &params(json!({"place": place, "offset": 1024, "transfer": "file", "spool_path": "big.part"})),
+                &OpContext::new(),
+            )
+            .unwrap();
+        assert_eq!(spooled["length"], big.len() - 1024);
+        assert_eq!(spooled["eof"], true);
+        assert_eq!(
+            std::fs::metadata(root.path().join("spool").join("big.part"))
+                .unwrap()
+                .len(),
+            (big.len() - 1024) as u64
+        );
     }
 
     #[test]

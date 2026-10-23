@@ -558,7 +558,14 @@ impl Inbound for PluginInbound {
                         .say(Message::info(lines::wrote_stray_text(&self.name)));
                 }
             }
-            Event::UnknownAnswer(_) | Event::Ended => {}
+            Event::Ended => {
+                // The host removes the spool files it made, and only
+                // those, when the session ends.
+                if let Some(spool) = &self.calls.files.spool {
+                    spool.remove_made();
+                }
+            }
+            Event::UnknownAnswer(_) => {}
         }
     }
 }
