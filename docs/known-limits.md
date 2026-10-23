@@ -30,11 +30,18 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A script can start slowly: about a tenth of a second for bash and Python, and a third of a second to over a second and a half for PowerShell 5.1, on the test machine. Plugins stay running between uses for five minutes, so the cost is paid once.
 - PowerShell 7 has not been tried. Windows PowerShell 5.1 has, with the policy override. A `.cmd` or `.bat` script runs on Windows only.
 - On Windows, bash is Git for Windows' bash. The `bash.exe` in the system folder is WSL's launcher, and diroxide refuses it. Without Git for Windows, bash scripts do not run, and diroxide says so.
-- Hooks. A manifest may declare them and `diro plugin check` reads them, but diroxide does not run them yet. Also shape only for now: `column/format`, `column/changed`, `place/describe`, `completion/query`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit`. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare them and will be called when the feature that needs them arrives.
+- Hooks. A manifest may declare them and `diro plugin check` reads them, but diroxide does not run them yet. Also shape only for now: `column/format`, `column/changed`, `place/describe`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit`. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare them and will be called when the feature that needs them arrives.
 - File transfers through a plugin's place are inline only. Resuming a stopped transfer, and watching a folder through a plugin's place, are shapes without a working end-to-end test.
 - The preview region and the conversions dialog come in a later alpha. Until then `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
 - Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
-- `diro run` runs diroxide's own commands. It cannot run a plugin's command yet. Use `diro plugin run NAME`.
+- A plugin's columns are declared and not shown in the panels yet.
+- A list a plugin opens always opens over the panels, like search results, whichever panel the plugin names.
+- The Keys list and `keymap.toml` do not hold a plugin's keys yet. Manage plugins, on a plugin's Commands and keys row, says what happened to each proposed key.
+- A script's `dry_run` promise is read and checked, and the program offers no preview with it yet.
+- The `terminal`, `terminal-wait` and `output-column` modes of a script command are not shown by the program yet.
+- `diro serve` has no `fs/*` or `ui/ask` services for the program that connects to it. It sends `ui/announce` and `panel/changed` events.
+- Queued jobs, a per-host connection gate in the jobs line, and stopping a plugin's job when its place is lost for good come in a later alpha.
+- Scripts in the example pack run from the components folder, where they are pinned and still need your yes. Scripts you write run only from the `plugins/scripts` folder.
 - The conformance checks do not yet try a line over the length limit, or check that a plugin exits when diroxide is gone.
 - The lines a plugin causes were written to carry their meaning in the first 40 cells and are checked in tests. They have not been heard on a screen reader or read on a Braille display yet.
 
@@ -50,7 +57,8 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - After Escape, a stalled transfer in the built-in client can take a moment to stop, until the client's own time limits end it. `curl` and `wget` are ended at once.
 - A component that would run an installer is refused: "installers are not supported yet".
 - The downloaded programs are not code-signed, and neither are the builds of diroxide. Windows' SmartScreen and virus scanners may react.
-- The first-run list of components is built and is not shown yet, because the list holds only the examples.
+- The first-run list of components is built and is not shown at the first start yet, because the list holds only the examples. Ask first-run choices again, in the Tools menu, opens it, and it says "No optional components to choose from yet".
+- A no to a download is not remembered. Get example plugins asks again each time.
 - Installing from a zip file or a folder says "Not downloaded" when it finds none of the files, which is the wrong word for an install.
 
 ## Search and the filter language
@@ -112,7 +120,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - On Windows a text paste arrives as typed keys, so during Change key its first character is taken as the key. The questions that follow start on No. The capture says nothing about the terminal on Windows, because whether Windows reports keys exactly is not probed.
 - The Explorer and Finder preset has no Command+D, because on a Mac Command+D is Say status. In the Worker preset Alt+T sorts in a panel, so the Tools menu is F9, then T.
 - In the Explorer and Finder preset, Control with 1 to 7 sets the favorite labels, and macOS may keep those keys for Mission Control. That is checked when the GUI arrives on a Mac. The Labels submenu of the Edit menu is the sure way.
-- A key that a plugin or a script proposes binds only when it is free, and the Keys list says it is proposed.
+- A key that a plugin or a script proposes binds only when it is free and has no concern. The Keys list does not show it yet; Manage plugins does.
 
 ## The trash
 

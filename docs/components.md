@@ -44,7 +44,7 @@ Download diro-sftp 0.1.0, 4.2 MB? y or n
 
 If the component comes from your own source, the license row ends "From your own components source." and the address is never spoken.
 
-- Say no, and you hear "Not downloaded." The feature then says in words what it cannot do. diroxide remembers the no until the next start and does not ask again until then.
+- Say no, and you hear "Not downloaded." The feature then says in words what it cannot do. The question comes again the next time you ask, because diroxide does not remember a no between questions yet.
 - Say yes, and the download starts as a job. You hear "Downloading diro-sftp, 4.2 MB." and then a progress sentence, "Downloading diro-sftp: 40 percent." A step is spoken only when the percentage crosses a tenth and at least the progress interval has passed since the last one, ten seconds by default, so a short download says little more than its start and "Ready". The start, a stop, a failure and the end are always spoken.
 - Escape stops the download: "Download stopped; it resumes later." The next try goes on from the bytes already there.
 - When every file has arrived: "Checking the files." Then, for an archive, "Unpacking the files." Then "Ready: diro-sftp 0.1.0." The feature starts without a restart.
@@ -140,18 +140,28 @@ An unknown id says "Could not find the component nothing. Run diro components li
 
 ## Manage optional components
 
-In the program, Manage optional components is under the Tools menu and in the command palette. It is a list with one row for each component, the title first and the state after it:
+In the program, Manage optional components is in the Tools menu (Alt+T, then O) and in the command palette. It opens a list named "Optional components", one row for each component, the title first and the state after it:
 
 ```text
 Example plugins: installed, 75.8 KB, license Apache-2.0 OR MIT
 SFTP places plugin: not installed, 4.2 MB, license MIT
 ```
 
-The second row is an example of how a plugin looks once one is in the list. Enter on a row offers Download, Verify the files, Remove, Install from a zip file and Install from a folder. Download asks the question above. Remove lists each file and asks, as above. Delete on a row asks to remove it.
+The second row is an example of how a plugin looks once one is in the list.
 
-The Plugins menu has Get example plugins, which asks for the pack with the same question. The first time diroxide starts it can show a list of components to choose from, once, with nothing chosen. It is built, and it appears when the list holds something other than the examples, which means from the alpha that brings the SFTP plugin.
+Enter on a row opens a list named for the component, with what can be done now:
 
-A download runs as a job. The jobs line shows its progress in words, and Escape stops it.
+- "Download" when it is not installed, or "Download again" when it is partly installed or damaged. It asks the question above.
+- "Verify the files" and "Remove", when something is installed. Verify says "Checking the files." and then "Files check out: Example plugins." or, with a problem, a list that names each file. Remove lists every path it will take away, then "Removes 20 files. Yours stay.", and asks "Remove Example plugins? No is the default. y or n". A no says "Nothing was removed."
+- "Install from a zip file" and "Install from a folder", always. Each opens a field, "Install Example plugins from a folder", where you type a place on this computer. The install runs as a job, "Installing Example plugins".
+
+In the program, the question puts the first line and the question together, and lists the size and the license under them. The Example plugins question reads "Getting example plugins needs Example plugins 0.1.0. Download it now? No is the default. y or n", and under it "Size 75.8 KB, license Apache-2.0 OR MIT."
+
+The Plugins menu has Get example plugins (Alt+P, then G), which asks for the pack with that question. If the pack is already installed, it says "Already installed: Example plugins. Manage plugins lists them." After a yes, you hear "Ready: diro-examples 0.1.0.", and Manage plugins lists the examples, each "not enabled".
+
+The Tools menu has Ask first-run choices again (Alt+T, then F). It opens a list named "Optional components to get now". While the components list holds only the example pack, the list says "No optional components to choose from yet", and Escape says "Nothing downloaded." The list is also built to appear once, at the first start, from the alpha that brings the SFTP plugin as a component. Nothing is chosen in it by default.
+
+A download runs as a job. The jobs line shows its progress in words, a tenth at a time and never more often than the progress interval. Escape stops it: "Download: cancelling", and the next try goes on from the bytes already there.
 
 ## Install from a file
 
@@ -170,7 +180,7 @@ When a component is an archive, diroxide unpacks it itself, with strict rules:
 
 - Under the `components` folder of the state folder, one folder for each component: `components/diro-examples`. With `--portable`, beside the program.
 - During a download there is a staging folder, `diro-examples.partial`, beside the component's folder, with a lock file inside it. A second program that tries to fetch the same component hears "Already downloading: diro-examples." and "Wait for it to finish."
-- Plugins you install from the pack are copied into your plugins folder. The pack unpacks to `components/diro-examples/plugins`, with one folder for each plugin and a `scripts` folder for the scripts. To use one:
+- The example pack unpacks to `components/diro-examples/plugins`, with one folder for each plugin and a `scripts` folder for the scripts. In the program, Manage plugins lists them there, each with "example" beside it, and a plugin of your own with the same id wins. From a shell, copy one into your plugins folder to use it:
 
 ```bash
 diro plugin install changed-files
