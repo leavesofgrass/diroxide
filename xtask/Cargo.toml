@@ -13,6 +13,9 @@ diroxide-app.workspace = true
 # The bench's archive scenarios and the demo's locked.zip go through the
 # archive provider and its runners (P2b, W2g's request 1).
 diroxide-archive.workspace = true
+# cargo xtask components writes the list the components crate reads, and
+# reads it back with the same reader (W4c).
+diroxide-components.workspace = true
 diroxide-core.workspace = true
 diroxide-ops.workspace = true
 # The bench's search scenarios run the search engine itself (W3s's

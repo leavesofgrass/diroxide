@@ -4,7 +4,9 @@
 //! of every agent's checks from Wave 1 on.
 //!
 //! Today it writes `docs/keyboard.md`, the keymap presets' sheets
-//! (`docs/keyboard-NAME.md`) and `docs/settings-reference.md`.
+//! (`docs/keyboard-NAME.md`), `docs/settings-reference.md` and the
+//! components list the binary embeds
+//! (`crates/diroxide-components/components.toml`).
 //! `THIRD-PARTY-NOTICES.md` joins it when the notices task arrives.
 
 use std::fs;
@@ -12,18 +14,19 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::{keyboard, settings_doc};
+use crate::{components, keyboard, settings_doc};
 
 /// Each generated page: its path from the root, and its text.
-fn pages() -> Vec<(String, String)> {
+fn pages(root: &Path) -> Result<Vec<(String, String)>> {
     let mut pages = keyboard::all_pages();
     pages.push((settings_doc::PAGE.to_owned(), settings_doc::generate()));
-    pages
+    pages.push(components::page(root)?);
+    Ok(pages)
 }
 
 /// Writes every page whose text changed; says which.
 pub fn write(root: &Path) -> Result<bool> {
-    for (page, text) in pages() {
+    for (page, text) in pages(root)? {
         let path = root.join(&page);
         if fs::read_to_string(&path).is_ok_and(|on_disk| on_disk == text) {
             println!("regen: {page} is current.");
@@ -38,7 +41,7 @@ pub fn write(root: &Path) -> Result<bool> {
 /// Checks every page; fails when any is out of date.
 pub fn check(root: &Path) -> Result<bool> {
     let mut stale = Vec::new();
-    for (page, text) in pages() {
+    for (page, text) in pages(root)? {
         let on_disk = fs::read_to_string(root.join(&page)).unwrap_or_default();
         if on_disk != text {
             stale.push(page);

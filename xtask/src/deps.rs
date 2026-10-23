@@ -15,7 +15,7 @@ use toml::{Table, Value};
 
 /// Each crate and the workspace crates it may depend on. Keep in step with
 /// docs/dev/architecture.md.
-pub const ALLOWED: [(&str, &[&str]); 18] = [
+pub const ALLOWED: [(&str, &[&str]); 19] = [
     ("diroxide-core", &[]),
     ("diroxide-theme", &[]),
     ("diroxide-vfs", &["diroxide-core"]),
@@ -52,6 +52,18 @@ pub const ALLOWED: [(&str, &[&str]); 18] = [
         "diroxide-diff",
         &["diroxide-core", "diroxide-vfs", "diroxide-preview"],
     ),
+    // Optional components (W4c, plan section 5.14): the archive crate
+    // unpacks a component, the tools registry finds curl and wget.
+    (
+        "diroxide-components",
+        &[
+            "diroxide-core",
+            "diroxide-vfs",
+            "diroxide-config",
+            "diroxide-tools",
+            "diroxide-archive",
+        ],
+    ),
     (
         "diroxide-plugins",
         &[
@@ -77,6 +89,7 @@ pub const ALLOWED: [(&str, &[&str]); 18] = [
             "diroxide-preview",
             "diroxide-theme",
             "diroxide-diff",
+            "diroxide-components",
         ],
     ),
     (
@@ -105,6 +118,7 @@ pub const ALLOWED: [(&str, &[&str]); 18] = [
             "diroxide-gui",
             "diroxide-theme",
             "diroxide-diff",
+            "diroxide-components",
         ],
     ),
     ("diro", &["diroxide-cli"]),
@@ -119,6 +133,7 @@ pub const ALLOWED: [(&str, &[&str]); 18] = [
             "diroxide-config",
             "diroxide-app",
             "diroxide-theme",
+            "diroxide-components",
         ],
     ),
 ];

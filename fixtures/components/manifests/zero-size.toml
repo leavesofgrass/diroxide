@@ -1,0 +1,15 @@
+# expect: no size
+format = 1
+
+[[component]]
+id = "case-zero-size"
+title = "Refused: zero-size"
+kind = "data"
+version = "0.1.0"
+license = "MIT"
+
+
+[[component.file]]
+name = "a.zip"
+size = 0
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

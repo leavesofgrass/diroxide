@@ -928,6 +928,7 @@ dependencies = [
  "ctrlc",
  "diroxide-app",
  "diroxide-archive",
+ "diroxide-components",
  "diroxide-config",
  "diroxide-core",
  "diroxide-diff",
@@ -936,6 +937,7 @@ dependencies = [
  "diroxide-plugins",
  "diroxide-search",
  "diroxide-theme",
+ "diroxide-tools",
  "diroxide-tui",
  "diroxide-vfs",
  "ratatui",
@@ -943,6 +945,23 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "diroxide-components"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "diroxide-archive",
+ "diroxide-core",
+ "diroxide-tools",
+ "diroxide-vfs",
+ "serde",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
+ "ureq",
+ "zip",
 ]
 
 [[package]]
@@ -4502,6 +4521,7 @@ dependencies = [
  "anyhow",
  "diroxide-app",
  "diroxide-archive",
+ "diroxide-components",
  "diroxide-core",
  "diroxide-ops",
  "diroxide-search",

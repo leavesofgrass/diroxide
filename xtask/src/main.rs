@@ -4,7 +4,11 @@
 //!   and every internal dependency points the allowed way
 //!   (docs/dev/architecture.md).
 //! - `regen [--check]`: writes every generated page (`docs/keyboard.md`,
-//!   `docs/settings-reference.md`), or checks that each is current.
+//!   `docs/settings-reference.md`, the components list), or checks that
+//!   each is current.
+//! - `components [--check]`: builds the optional components this
+//!   repository makes, writes them as a folder source under the target
+//!   folder, and writes the public list the binary embeds.
 //! - `keyboard [--check]`: writes `docs/keyboard.md` from the keymap's
 //!   defaults, as two lists (terminal, GUI), or checks that it is
 //!   current.
@@ -22,6 +26,7 @@
 //! Later waves add `notices`, `icons` and `dist`.
 
 mod bench;
+mod components;
 mod demo;
 mod deps;
 mod docs_check;
@@ -37,7 +42,7 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | keyboard [--check] | logo | bench [--quick] [--only ID] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] | keyboard [--check] | logo | bench [--quick] [--only ID] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH";
 
 fn main() -> ExitCode {
     match run() {
@@ -67,6 +72,7 @@ fn run() -> Result<bool> {
         ["native", "--check"] | ["native"] => native::check(&root),
         ["regen"] => regen::write(&root),
         ["regen", "--check"] => regen::check(&root),
+        ["components", rest @ ..] => components::run(&root, rest),
         ["keyboard"] => keyboard::write(&root),
         ["keyboard", "--check"] => keyboard::check(&root),
         ["logo"] => logo::run(&root),

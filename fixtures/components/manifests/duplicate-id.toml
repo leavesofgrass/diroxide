@@ -1,0 +1,27 @@
+# expect: its id is listed twice
+format = 1
+
+[[component]]
+id = "twice"
+title = "First"
+kind = "data"
+version = "0.1.0"
+license = "MIT"
+
+[[component.file]]
+name = "a.bin"
+size = 3
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+
+[[component]]
+id = "twice"
+title = "Second"
+kind = "data"
+version = "0.1.0"
+license = "MIT"
+folder = "twice-again"
+
+[[component.file]]
+name = "a.bin"
+size = 3
+sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

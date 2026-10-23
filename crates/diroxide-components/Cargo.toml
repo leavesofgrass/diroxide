@@ -1,0 +1,50 @@
+[package]
+name = "diroxide-components"
+description = "Optional components for diroxide: pinned files, the embedded list, the downloader, install from a file, and the lines that say each step."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Unpacking a component's archive and reading a zip to install from, with
+# that crate's limits and name rules.
+diroxide-archive.workspace = true
+diroxide-core.workspace = true
+# curl and wget, found through the tools registry (answer 44).
+diroxide-tools.workspace = true
+# The cancel token a download shares with its job.
+diroxide-vfs.workspace = true
+# The components list, components.toml (R22 section 6.3).
+serde.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+# The built-in client, behind the `fetch` feature (answer 40).
+ureq = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+# Hostile archives for the unpack tests, written member by member.
+zip.workspace = true
+
+[features]
+# The built-in HTTPS client: ureq with rustls, whose ring provider
+# compiles C, the owner's one exception to the pure-Rust rule (answer 40).
+# Without it, downloads go through curl or wget from PATH.
+fetch = ["dep:ureq"]
+# Tests only: builds the stand-in for curl and wget that the fake-tools
+# tests put on a test PATH.
+fake-tools = []
+
+[[bin]]
+name = "diroxide-fake-tool"
+path = "src/bin/fake_tool.rs"
+required-features = ["fake-tools"]
+test = false
+doc = false
+
+[lints]
+workspace = true
