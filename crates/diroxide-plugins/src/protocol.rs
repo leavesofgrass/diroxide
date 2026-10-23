@@ -108,6 +108,9 @@ pub enum ErrorKind {
     TooLarge,
     /// -32022: the item changed under the call.
     Conflict,
+    /// -32023: the other side could not be verified (a changed host key,
+    /// an unverified file); `data.hint` says it in words.
+    Untrusted,
     /// -32030: from the host: the manifest does not permit this call.
     DeniedByHost,
     /// -32031: from the host: a message size or rate limit.
@@ -125,7 +128,7 @@ pub enum ErrorKind {
 
 impl ErrorKind {
     /// Every kind, in code order within each group.
-    pub const ALL: [ErrorKind; 26] = [
+    pub const ALL: [ErrorKind; 27] = [
         ErrorKind::ParseError,
         ErrorKind::InvalidRequest,
         ErrorKind::MethodNotFound,
@@ -146,6 +149,7 @@ impl ErrorKind {
         ErrorKind::NoSpace,
         ErrorKind::TooLarge,
         ErrorKind::Conflict,
+        ErrorKind::Untrusted,
         ErrorKind::DeniedByHost,
         ErrorKind::LimitExceeded,
         ErrorKind::Reentrant,
@@ -177,6 +181,7 @@ impl ErrorKind {
             ErrorKind::NoSpace => -32020,
             ErrorKind::TooLarge => -32021,
             ErrorKind::Conflict => -32022,
+            ErrorKind::Untrusted => -32023,
             ErrorKind::DeniedByHost => -32030,
             ErrorKind::LimitExceeded => -32031,
             ErrorKind::Reentrant => -32032,
@@ -209,6 +214,7 @@ impl ErrorKind {
             ErrorKind::NoSpace => "no_space",
             ErrorKind::TooLarge => "too_large",
             ErrorKind::Conflict => "conflict",
+            ErrorKind::Untrusted => "untrusted",
             ErrorKind::DeniedByHost => "denied_by_host",
             ErrorKind::LimitExceeded => "limit_exceeded",
             ErrorKind::Reentrant => "reentrant",
@@ -253,6 +259,9 @@ impl ErrorKind {
             ErrorKind::NoSpace => "The quota or the disk is full.",
             ErrorKind::TooLarge => "The item exceeds a limit.",
             ErrorKind::Conflict => "The item changed under the call.",
+            ErrorKind::Untrusted => {
+                "The other side could not be verified; data.hint says why in words."
+            }
             ErrorKind::DeniedByHost => "From the host: the manifest does not permit this call.",
             ErrorKind::LimitExceeded => "From the host: a size, queue or rate limit.",
             ErrorKind::Reentrant => "From the host: the call would loop back into the plugin.",
@@ -371,6 +380,22 @@ impl RpcError {
                 ..ErrorData::default()
             })),
         }
+    }
+
+    /// An error of a kind with a hint, the next step in words, in
+    /// `data.hint`; `untrusted` always carries one ("The server's host key
+    /// changed since you last connected.").
+    pub fn with_hint(kind: ErrorKind, message: impl Into<String>, hint: impl Into<String>) -> Self {
+        let mut error = Self::new(kind, message);
+        if let Some(data) = error.data.as_mut() {
+            data.hint = Some(hint.into());
+        }
+        error
+    }
+
+    /// The hint in `data.hint`, if any.
+    pub fn hint(&self) -> Option<&str> {
+        self.data.as_ref().and_then(|d| d.hint.as_deref())
     }
 
     /// The kind, by `data.kind` when it names one, else by the code.
@@ -584,6 +609,31 @@ mod tests {
             to_line(&failure).unwrap(),
             r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32601,"message":"no such method","data":{"kind":"method_not_found"}}}"#
         );
+    }
+
+    #[test]
+    fn untrusted_carries_its_hint_in_words() {
+        let error = RpcError::with_hint(
+            ErrorKind::Untrusted,
+            "the host key changed",
+            "The server's host key changed since you last connected.",
+        );
+        let line = to_line(&Response::failure(Some(Id::Number(3)), error)).unwrap();
+        assert_eq!(
+            line,
+            r#"{"jsonrpc":"2.0","id":3,"error":{"code":-32023,"message":"the host key changed","data":{"kind":"untrusted","hint":"The server's host key changed since you last connected."}}}"#
+        );
+        match parse_line(&line).unwrap() {
+            Incoming::Response(r) => {
+                let error = r.error.unwrap();
+                assert_eq!(error.kind(), Some(ErrorKind::Untrusted));
+                assert_eq!(
+                    error.hint(),
+                    Some("The server's host key changed since you last connected.")
+                );
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

@@ -311,6 +311,40 @@ impl WireContext {
     }
 }
 
+/// Text that is one string or a list of separate lines. A `ui/ask`
+/// message takes either, so a long question (a changed host key, with its
+/// fingerprint) reads line by line on a 40-cell Braille display instead of
+/// as one paragraph the reader must pan through.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum WireText {
+    /// One string; line breaks in it also separate lines.
+    One(String),
+    /// Separate lines, shown and spoken one after another.
+    Lines(Vec<String>),
+}
+
+impl Default for WireText {
+    fn default() -> Self {
+        Self::One(String::new())
+    }
+}
+
+impl WireText {
+    /// The lines, in order.
+    pub fn lines(&self) -> Vec<&str> {
+        match self {
+            WireText::One(text) => text.lines().collect(),
+            WireText::Lines(lines) => lines.iter().map(String::as_str).collect(),
+        }
+    }
+
+    /// The lines joined by line breaks.
+    pub fn joined(&self) -> String {
+        self.lines().join("\n")
+    }
+}
+
 /// How a plugin's message is said: `status`, `info`, `warning` or `error`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -438,6 +472,26 @@ mod tests {
         assert_eq!(back, context);
         let remote = PanelRef::for_place(&p("sftp://example.org/x"));
         assert_eq!(remote.provider, "sftp");
+    }
+
+    #[test]
+    fn a_message_is_one_text_or_separate_lines() {
+        let one: WireText = serde_json::from_value(json!("Trust this host?")).unwrap();
+        assert_eq!(one.lines(), ["Trust this host?"]);
+        let lines: WireText = serde_json::from_value(json!([
+            "Host key changed: example.org",
+            "Old: SHA256:abc",
+            "New: SHA256:def"
+        ]))
+        .unwrap();
+        assert_eq!(lines.lines().len(), 3);
+        assert_eq!(lines.lines()[0], "Host key changed: example.org");
+        assert_eq!(WireText::One("a\nb".into()).lines(), ["a", "b"]);
+        assert_eq!(lines.joined().lines().count(), 3);
+        assert_eq!(
+            serde_json::to_value(&one).unwrap(),
+            json!("Trust this host?")
+        );
     }
 
     #[test]

@@ -1247,6 +1247,7 @@ pub const PROVIDER_METHODS: &[&str] = &[
     "watch",
     "unwatch",
     "volumes",
+    "places",
 ];
 const PREVIEWER_KEYS: &[&str] = &["id", "name", "match", "priority", "argv", "needs"];
 const MATCH_KEYS: &[&str] = &["mime", "extensions", "types", "schemes", "max_size"];

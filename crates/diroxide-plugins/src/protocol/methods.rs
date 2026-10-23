@@ -83,8 +83,11 @@ pub const PROVIDER_WATCH: &str = "provider/watch";
 /// Host to plugin, request: stop watching.
 pub const PROVIDER_UNWATCH: &str = "provider/unwatch";
 /// Host to plugin, request: the storages an authority offers, with free
-/// and total bytes.
+/// and total bytes; with a `place`, the one volume that holds it.
 pub const PROVIDER_VOLUMES: &str = "provider/volumes";
+/// Host to plugin, request: the places the plugin offers (its sites), as
+/// rows with a state word first.
+pub const PROVIDER_PLACES: &str = "provider/places";
 /// Plugin to host, notification: something changed in a watched folder.
 pub const PROVIDER_CHANGED: &str = "provider/changed";
 /// Plugin to host, notification: a device was unplugged or a session
@@ -334,7 +337,7 @@ use Call::{Notification as N, Request as R};
 use Sender::{Either as E, Host as H, Plugin as P};
 
 /// Every method, in the reference's order.
-pub const ALL: [Method; 63] = [
+pub const ALL: [Method; 64] = [
     method(
         INITIALIZE,
         H,
@@ -575,8 +578,17 @@ pub const ALL: [Method; 63] = [
         R,
         A::Providers,
         "the provider's methods list",
-        "Lists an authority's storages with free and total bytes.",
-        LATER,
+        "Lists an authority's storages, free and total bytes; with a place, its one volume.",
+        NOW,
+    ),
+    method(
+        PROVIDER_PLACES,
+        H,
+        R,
+        A::Providers,
+        "the provider's methods list",
+        "Lists the places the plugin offers, such as its sites, each row state first.",
+        NOW,
     ),
     method(
         PROVIDER_CHANGED,
@@ -710,7 +722,7 @@ pub const ALL: [Method; 63] = [
         R,
         A::Services,
         "always",
-        "Asks one question in an accessible dialog; Escape is an answer.",
+        "Asks one question in a dialog; its message is one text or a list of lines.",
         NOW,
     ),
     method(
@@ -970,8 +982,8 @@ mod tests {
         // place/describe, tools/launch, fs/stage, fs/commit,
         // provider/volumes and completion/query (12 requests), and
         // lister/closed, column/changed, tools/output and provider/lost
-        // (4 notifications).
-        assert_eq!(counts(), (37 + 12, 10 + 4));
+        // (4 notifications). R25 adds provider/places (1 request).
+        assert_eq!(counts(), (37 + 12 + 1, 10 + 4));
     }
 
     #[test]
