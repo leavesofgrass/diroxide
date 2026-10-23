@@ -15,10 +15,10 @@ credit = "The diroxide project"
 features = ["examples"]
 min_diro = "0.1.0-alpha.2"
 action = "unpack"
-unpacked_size = 73264
+unpacked_size = 86101
 
 [[component.file]]
 name = "diro-examples-0.1.0.zip"
-size = 75850
-sha256 = "57b2f195ccd0139b4c976995c8393ef204289dc9a7b74a6da625882cc1ef9828"
+size = 89239
+sha256 = "ded73168021abc9eb702424c4eb380a7e0e2533a9f3cef14fec7d840aa16837d"
 target = "any"
