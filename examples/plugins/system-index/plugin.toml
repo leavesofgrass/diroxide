@@ -1,0 +1,73 @@
+# Search the whole computer: an example diroxide plugin with no code of
+# its own. It asks the index the system already keeps (Everything on
+# Windows, plocate on Linux, Spotlight on macOS), so diroxide builds
+# none, and opens the results as a lister of real files: view, copy and
+# filter work on them as on any panel. The query goes to a local program
+# only; other programs of yours can see it in the process list.
+
+[plugin]
+id = "system-index"
+name = "Search the whole computer"
+version = "0.1.0"
+description = "Finds files by name with the index the system already keeps."
+license = "Apache-2.0 OR MIT"
+protocol = 1
+min_host = "0.1.0-alpha.1"
+
+[permissions.declared]
+network = "no network"
+files = "none: it asks the system's own index"
+programs = "es, plocate or mdfind, whichever this system has"
+
+# Everything's es: one result a line (Windows names cannot hold a line
+# break, and es has no NUL option); exit code 8 means Everything is not
+# running.
+[[command]]
+id = "everything"
+name = "Search with Everything"
+description = "Finds files by name with Everything's index."
+selection = "none"
+places = "local"
+os = ["windows"]
+needs = ["es"]
+prompt = "Search the whole computer for:"
+mode = "lister"
+list = "lines"
+max_rows = 5000
+timeout = "60s"
+argv = ["es", "-n", "{max_rows}", "{input}"]
+exit_words = { 8 = "Everything is not running. Start it, then try again." }
+
+# plocate: NUL-separated, any case, existing files only (which also
+# answers an index that lags), at most max_rows.
+[[command]]
+id = "plocate"
+name = "Search with plocate"
+description = "Finds files by name with the plocate index."
+selection = "none"
+places = "local"
+os = ["linux"]
+needs = ["plocate"]
+prompt = "Search the whole computer for:"
+mode = "lister"
+list = "nul"
+max_rows = 5000
+timeout = "60s"
+argv = ["plocate", "-0", "-i", "-e", "-l", "{max_rows}", "--", "{input}"]
+
+# Spotlight's mdfind has no limit of its own: diroxide stops reading at
+# max_rows and stops the program.
+[[command]]
+id = "spotlight"
+name = "Search with Spotlight"
+description = "Finds files by name with the Spotlight index."
+selection = "none"
+places = "local"
+os = ["macos"]
+needs = ["mdfind"]
+prompt = "Search the whole computer for:"
+mode = "lister"
+list = "nul"
+max_rows = 5000
+timeout = "60s"
+argv = ["mdfind", "-0", "-name", "{input}"]

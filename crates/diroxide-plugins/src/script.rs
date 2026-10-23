@@ -32,6 +32,8 @@
 //! - [`consent`] keeps the owner's yes with the hashes of the manifest and
 //!   the program (a change asks again) and words the question; [`installed`]
 //!   finds and checks the plugins and scripts in the plugins folder.
+//! - [`recipes`] runs a manifest's previewer and converter recipes, for
+//!   `diro plugin preview` and `diro plugin convert`.
 //! - [`skeleton`] is `diro plugin new`: a copy of a shipped example with
 //!   its id and name replaced, so the two cannot drift apart.
 //!
@@ -50,6 +52,7 @@ pub mod interpreter;
 pub mod placeholders;
 mod read;
 pub mod recipe;
+pub mod recipes;
 pub mod runner;
 pub mod skeleton;
 pub mod words;

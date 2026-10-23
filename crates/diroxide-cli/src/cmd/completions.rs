@@ -457,6 +457,29 @@ fn plugin_command() -> Command {
                 .about("Copy a plugin folder or a script in; it is not enabled")
                 .arg(named("path", "The plugin folder or script").value_hint(ValueHint::AnyPath)),
         )
+        .subcommand(
+            Command::new("preview")
+                .about("Show what a plugin's previewer shows for a file")
+                .arg(yes())
+                .arg(named("plugin", "The plugin"))
+                .arg(named("id", "The previewer's id"))
+                .arg(named("file", "The file").value_hint(ValueHint::FilePath)),
+        )
+        .subcommand(
+            Command::new("convert")
+                .about("Convert a file with a plugin's converter")
+                .arg(yes())
+                .arg(named("plugin", "The plugin"))
+                .arg(named("id", "The converter's id"))
+                .arg(named("file", "The file").value_hint(ValueHint::FilePath))
+                .arg(
+                    Arg::new("to")
+                        .long("to")
+                        .value_name("FOLDER")
+                        .value_hint(ValueHint::DirPath)
+                        .help("Where to write; the file's folder by default"),
+                ),
+        )
 }
 
 /// `diro components` as `cmd/components.rs` reads it (W4c), for

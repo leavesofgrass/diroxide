@@ -438,3 +438,84 @@ fn new_refuses_odd_names_existing_ones_and_wrong_kinds() {
         Err(CliError::Failed(_))
     ));
 }
+
+/// A plugin whose previewer and converter run the system's bash with a
+/// fake tool, so no pdftotext or pandoc is needed.
+fn fake_recipes(folders: &Folders) -> bool {
+    let Ok(bash) = Lookup::system().bash() else {
+        eprintln!("bash was not found; this test is skipped here");
+        return false;
+    };
+    let folder = folders.root.path().join("config/plugins/fake-tools");
+    fs::create_dir_all(&folder).unwrap();
+    let preview = folder.join("preview.sh");
+    fs::write(&preview, "printf 'Title line\nbody text\n'\n").unwrap();
+    let convert = folder.join("convert.sh");
+    fs::write(&convert, "printf 'converted' > \"$2\"\n").unwrap();
+    let path = |p: &Path| format!("\"{}\"", p.to_string_lossy().replace('\\', "/"));
+    let program = path(&bash.program);
+    let manifest = format!(
+        "[plugin]\nid = \"fake-tools\"\nname = \"Fake tools\"\nversion = \"0.1.0\"\nprotocol = 1\n\n[[previewer]]\nid = \"first_page\"\nname = \"First page\"\nargv = [{program}, \"--noprofile\", \"--norc\", {}, \"{{input}}\"]\n\n[previewer.match]\nextensions = [\"pdf\"]\n\n[[converter]]\nid = \"to_docx\"\nname = \"To Word\"\nargv = [{program}, \"--noprofile\", \"--norc\", {}, \"{{input}}\", \"{{output}}\"]\n\n[converter.from]\nextensions = [\"md\"]\n\n[[converter.to]]\nid = \"docx\"\nname = \"Word document\"\nextension = \"docx\"\n",
+        path(&preview),
+        path(&convert)
+    );
+    fs::write(folder.join("plugin.toml"), manifest).unwrap();
+    true
+}
+
+#[test]
+fn preview_and_convert_run_a_recipe_once_after_the_question() {
+    let folders = Folders::new();
+    if !fake_recipes(&folders) {
+        return;
+    }
+    fs::write(folders.work().join("a.pdf"), b"%PDF").unwrap();
+    let (code, out, asked) = folders.run(
+        &["preview", "fake-tools", "first_page", "a.pdf"],
+        &[true],
+        "",
+    );
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(asked, ["Run it once? y or n"]);
+    assert!(
+        out.ends_with("Title line\nTitle line\nbody text\n"),
+        "{out}"
+    );
+    fs::write(folders.work().join("notes.md"), b"# x").unwrap();
+    let out_dir = folders.root.path().join("out");
+    fs::create_dir_all(&out_dir).unwrap();
+    let to = out_dir.to_string_lossy().into_owned();
+    let (code, out, _) = folders.run(
+        &[
+            "convert",
+            "fake-tools",
+            "to_docx",
+            "notes.md",
+            "--to",
+            &to,
+            "--yes",
+        ],
+        &[],
+        "",
+    );
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.ends_with("Converted: notes.md to notes.docx.\n"),
+        "{out}"
+    );
+    assert_eq!(fs::read(out_dir.join("notes.docx")).unwrap(), b"converted");
+    let (code, out, _) = folders.run(
+        &["preview", "fake-tools", "nope", "a.pdf", "--yes"],
+        &[],
+        "",
+    );
+    assert_eq!(code, 2);
+    assert!(
+        out.ends_with("Could not preview a.pdf: there is no previewer nope.\n"),
+        "{out}"
+    );
+    assert!(matches!(
+        parse(&args(&["list", "--to", "y"])),
+        Err(CliError::Failed(_))
+    ));
+}

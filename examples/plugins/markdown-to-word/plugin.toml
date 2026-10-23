@@ -1,0 +1,35 @@
+# Markdown to Word: an example diroxide converter with no code of its
+# own. It runs pandoc. diroxide gives it a staging path in the
+# destination folder as {output} and renames it into place only when
+# pandoc succeeds, so a failed or refused conversion leaves nothing. The
+# conversions dialog comes with a later alpha; until then try it from a
+# shell:
+#   diro plugin convert markdown-to-word md_to_docx FILE.md
+
+[plugin]
+id = "markdown-to-word"
+name = "Markdown to Word"
+version = "0.1.0"
+description = "Converts Markdown files to Word documents, through pandoc."
+license = "Apache-2.0 OR MIT"
+protocol = 1
+min_host = "0.1.0-alpha.1"
+
+[permissions.declared]
+network = "no network"
+files = "the file it converts, and the document it writes"
+programs = "pandoc only"
+
+[[converter]]
+id = "md_to_docx"
+name = "Markdown to Word"
+needs = ["pandoc"]
+argv = ["pandoc", "{input}", "-o", "{output}"]
+
+[converter.from]
+extensions = ["md", "markdown"]
+
+[[converter.to]]
+id = "docx"
+name = "Word document"
+extension = "docx"

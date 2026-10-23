@@ -23,6 +23,9 @@
 //!   fix; "Checked 1 plugin: no problems."
 //! - `diro plugin install PATH`: copies a plugin folder or a script into
 //!   the plugins folder; installing never enables.
+//! - `diro plugin preview PLUGIN ID FILE` and `diro plugin convert PLUGIN
+//!   ID FILE [--to FOLDER]`: a manifest's previewer or converter run the
+//!   way the host will run it.
 //!
 //! `--portable` uses the folders beside the program. Exit codes: 0 done,
 //! 1 failed or declined, 2 wrong use, 3 partly done. Every line a plugin
@@ -47,6 +50,7 @@ use diroxide_plugins::script::context::{Picked, RunContext, StateFolders};
 use diroxide_plugins::script::directives::Directive;
 use diroxide_plugins::script::installed::{self, Installed, scripts_dir};
 use diroxide_plugins::script::interpreter::Lookup;
+use diroxide_plugins::script::recipes;
 use diroxide_plugins::script::runner::{self, Cancel, RunEnv, RunSink};
 use diroxide_plugins::script::skeleton::{self, Kind as SkeletonKind, Language, SkeletonError};
 use diroxide_plugins::services::settings_for;
@@ -93,6 +97,24 @@ pub enum PluginAction {
     Check(Option<String>),
     /// Install a plugin folder or a script.
     Install(String),
+    /// Run a previewer on a file.
+    Preview {
+        /// The plugin.
+        plugin: String,
+        /// The previewer's id.
+        id: String,
+        /// The file.
+        file: String,
+    },
+    /// Run a converter on a file.
+    Convert {
+        /// The plugin.
+        plugin: String,
+        /// The converter's id.
+        id: String,
+        /// The file.
+        file: String,
+    },
 }
 
 /// `diro plugin` as typed.
@@ -112,6 +134,8 @@ pub struct PluginArgs {
     pub kind: Option<String>,
     /// `--dir`: where `new` writes.
     pub dir: Option<String>,
+    /// `--to`: where `convert` writes.
+    pub to: Option<String>,
 }
 
 /// The help for `diro plugin`, one usage a line, meaning first.
@@ -131,6 +155,8 @@ pub fn help_text() -> String {
         "diro plugin log NAME             the last lines of its log",
         "diro plugin check [NAME|PATH]    every problem, its field and its fix",
         "diro plugin install PATH         copy a plugin folder or a script in; not enabled",
+        "diro plugin preview PLUGIN ID FILE  show what its previewer shows for FILE",
+        "diro plugin convert PLUGIN ID FILE [--to FOLDER]  convert FILE with its converter",
         "",
         "Options:",
         "--yes       answer yes to the question; it is still printed",
@@ -151,6 +177,7 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
         language: None,
         kind: None,
         dir: None,
+        to: None,
     };
     let mut words = Vec::new();
     let mut paths = Vec::new();
@@ -165,7 +192,7 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
             "--yes" | "-y" => parsed.yes = true,
             "--portable" => parsed.portable = true,
             "--explain" => parsed.explain = true,
-            "--language" | "--kind" | "--dir" => {
+            "--language" | "--kind" | "--dir" | "--to" => {
                 let value = rest
                     .next()
                     .filter(|v| !v.is_empty())
@@ -173,7 +200,7 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
                 set_valued(&mut parsed, arg, value.clone());
             }
             option
-                if ["--language=", "--kind=", "--dir="]
+                if ["--language=", "--kind=", "--dir=", "--to="]
                     .iter()
                     .any(|p| option.starts_with(p)) =>
             {
@@ -206,6 +233,16 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
         Some("log") => PluginAction::Log(one("log")?),
         Some("install") => PluginAction::Install(one("install")?),
         Some("check") => PluginAction::Check(words.next()),
+        Some(verb @ ("preview" | "convert")) => {
+            let plugin = one(verb)?;
+            let id = one(verb)?;
+            let file = one(verb)?;
+            if verb == "preview" {
+                PluginAction::Preview { plugin, id, file }
+            } else {
+                PluginAction::Convert { plugin, id, file }
+            }
+        }
         Some("run") => {
             let name = one("run")?;
             let command = words.next();
@@ -217,7 +254,7 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
         }
         Some(other) => {
             return Err(CliError::Failed(format!(
-                "diro plugin has no {other}; use list, new, enable, disable, run, restart, log, check or install"
+                "diro plugin has no {other}; use list, new, enable, disable, run, restart, log, check, install, preview or convert"
             )));
         }
     };
@@ -227,6 +264,11 @@ pub fn parse(args: &[String]) -> Result<PluginArgs, CliError> {
     if !paths.is_empty() {
         return Err(CliError::Failed(
             "paths after -- go with diro plugin run".to_owned(),
+        ));
+    }
+    if parsed.to.is_some() && !matches!(parsed.action, PluginAction::Convert { .. }) {
+        return Err(CliError::Failed(
+            "--to goes with diro plugin convert".to_owned(),
         ));
     }
     let valued = parsed.language.is_some() || parsed.kind.is_some() || parsed.dir.is_some();
@@ -248,6 +290,7 @@ fn set_valued(parsed: &mut PluginArgs, flag: &str, value: String) {
     match flag {
         "--language" => parsed.language = Some(value),
         "--kind" => parsed.kind = Some(value),
+        "--to" => parsed.to = Some(value),
         _ => parsed.dir = Some(value),
     }
 }
@@ -340,6 +383,18 @@ pub fn run_in(args: &PluginArgs, mut env: Env<'_>, out: &mut dyn Write) -> Resul
         PluginAction::Log(name) => log(name, &env, out),
         PluginAction::Check(target) => check(target.as_deref(), &env, out),
         PluginAction::Install(path) => install(path, &env, out),
+        PluginAction::Preview { plugin, id, file } => {
+            recipe(plugin, id, file, None, args.yes, &env, out)
+        }
+        PluginAction::Convert { plugin, id, file } => recipe(
+            plugin,
+            id,
+            file,
+            Some(args.to.as_deref()),
+            args.yes,
+            &env,
+            out,
+        ),
     }
 }
 
@@ -1070,6 +1125,99 @@ fn check(target: Option<&str>, env: &Env<'_>, out: &mut dyn Write) -> Result<i32
     } else {
         0
     })
+}
+
+/// `preview` (with `to` None) or `convert` (with `to` Some): a manifest's
+/// recipe on one local file, after the consent question.
+fn recipe(
+    plugin: &str,
+    id: &str,
+    file: &str,
+    to: Option<Option<&str>>,
+    yes: bool,
+    env: &Env<'_>,
+    out: &mut dyn Write,
+) -> Result<i32, CliError> {
+    let verb = if to.is_some() { "convert" } else { "preview" };
+    let item = found(plugin, env)?;
+    let Installed::Plugin(entry) = &item else {
+        writeln!(out, "{} is a script; it has no {verb} recipe.", item.name())
+            .map_err(write_error)?;
+        return Ok(2);
+    };
+    let Some(manifest) = entry.report.manifest.as_ref() else {
+        return may_run(&item, yes, env, out).map(|_| 1);
+    };
+    let local = |text: &str| -> Result<PathBuf, CliError> {
+        let place = Place::resolve(text, &env.here).map_err(|e| {
+            CliError::Failed(diroxide_core::Message::from_error("use", text, &e).text)
+        })?;
+        place.local_path().map(PathBuf::from).ok_or_else(|| {
+            CliError::Failed(format!("Could not {verb} {text}: it is not a local file."))
+        })
+    };
+    let path = local(file)?;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| file.to_owned());
+    if !path.is_file() {
+        writeln!(out, "Could not {verb} {name}: it is not a file here.").map_err(write_error)?;
+        return Ok(1);
+    }
+    if !may_run(&item, yes, env, out)? {
+        return Ok(1);
+    }
+    let run_env = run_env_for(&item, env);
+    let text = fs::read_to_string(entry.folder.join(Manifest::FILE)).unwrap_or_default();
+    let result = match to {
+        None => recipes::preview(manifest, &text, id, &path, &run_env).map(|shown| {
+            let mut lines = vec![shown.summary];
+            lines.extend(shown.body);
+            if shown.cut {
+                lines.push("The preview was cut at 64 KB.".to_owned());
+            }
+            lines
+        }),
+        Some(folder) => {
+            let to_dir = match folder {
+                Some(text) => local(text)?,
+                None => path.parent().map(Path::to_path_buf).unwrap_or_default(),
+            };
+            let asker = env.asker;
+            let mut replace = |output: &Path| {
+                let shown = output
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                asker.present() && asker.confirm(&format!("{shown} exists. Replace it? y or n"))
+            };
+            recipes::convert(manifest, id, &path, &to_dir, &mut replace, &run_env).map(|made| {
+                let made = made
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                vec![format!("Converted: {name} to {made}.")]
+            })
+        }
+    };
+    match result {
+        Ok(lines) => {
+            for line in lines {
+                writeln!(out, "{line}").map_err(write_error)?;
+            }
+            Ok(0)
+        }
+        Err(error) => {
+            for line in error.lines(verb, &name) {
+                writeln!(out, "{line}").map_err(write_error)?;
+            }
+            Ok(match error {
+                recipes::RecipeError::NoSuch(_) => 2,
+                _ => 1,
+            })
+        }
+    }
 }
 
 /// Copies a folder's files, plain names only, never through a link.

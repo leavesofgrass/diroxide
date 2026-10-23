@@ -456,3 +456,316 @@ fn an_example_script_is_cancelled_in_words() {
     let report = run(&command, &bench.context(), &bench.env, &mut sink, &cancel).unwrap();
     assert_eq!(report.ending, Ending::Cancelled);
 }
+
+// Section 3.4: the system-index listers, with a fake index program.
+
+/// The system-index command of this system, its program a fake on the
+/// bench's PATH: a shell script elsewhere, a batch file on Windows.
+fn index_command(bench: &mut Bench, body: &str) -> Option<ScriptCommand> {
+    let text = fs::read_to_string(examples().join("system-index").join("plugin.toml")).unwrap();
+    let manifest = Manifest::check_for(&text, Os::current()).manifest.unwrap();
+    let wanted = match Os::current() {
+        Os::Windows => "everything",
+        Os::Linux => "plocate",
+        Os::Macos => "spotlight",
+    };
+    let index = manifest.commands.iter().position(|c| c.id == wanted)?;
+    let (command, problems) = ScriptCommand::from_manifest(
+        &manifest,
+        index,
+        &manifest.commands[index],
+        &examples().join("system-index"),
+    )?;
+    assert!(problems.is_empty(), "{problems:?}");
+    let tool = &command.needs[0];
+    let bin = bench.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let fake = if cfg!(windows) {
+        bin.join(format!("{tool}.cmd"))
+    } else {
+        bin.join(tool)
+    };
+    fs::write(&fake, body).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = std::env::join_paths([&bin]).unwrap();
+    bench.env.lookup.path = Some(path.clone());
+    bench.env.registry = bench.env.registry.clone().with_path(Some(path));
+    Some(command)
+}
+
+fn search(bench: &Bench, command: &ScriptCommand, query: &str) -> (RunReport, Recorder) {
+    let mut context = bench.context();
+    context.input = Some(query.to_owned());
+    bench.run(command, &context)
+}
+
+/// A fake that prints the places, one a line on Windows, NUL-ended
+/// elsewhere, then ends with `code`.
+fn printing(places: &[&str], code: i32) -> String {
+    if cfg!(windows) {
+        let mut text = String::from("@echo off\r\n");
+        for place in places {
+            text.push_str(&format!("echo {place}\r\n"));
+        }
+        text.push_str(&format!("exit /b {code}\r\n"));
+        text
+    } else {
+        let mut text = String::from("#!/bin/sh\n");
+        for place in places {
+            text.push_str(&format!("printf '%s\\0' '{place}'\n"));
+        }
+        text.push_str(&format!("exit {code}\n"));
+        text
+    }
+}
+
+#[test]
+fn a_search_opens_a_lister_of_the_places_found() {
+    let Some(mut bench) = Bench::new() else {
+        return;
+    };
+    let places: &[&str] = if cfg!(windows) {
+        &[
+            "C:\\Users\\Ada Example\\report.pdf",
+            "D:\\old\\report-old.pdf",
+        ]
+    } else {
+        &["/home/ada/report.pdf", "/home/ada/odd name report.txt"]
+    };
+    let Some(command) = index_command(&mut bench, &printing(places, 0)) else {
+        return;
+    };
+    let (report, _) = search(&bench, &command, "report");
+    assert_eq!(report.ending, Ending::Exited(0), "{:?}", report.stderr);
+    assert_eq!(report.places, places);
+    assert!(report.said.is_empty());
+    assert!(!report.capped);
+    assert_eq!(
+        crate::script::words::results_title(report.places.len(), "report", "Everything"),
+        "2 results for report, from Everything"
+    );
+}
+
+#[test]
+fn a_search_stops_at_its_cap_and_says_so() {
+    let Some(mut bench) = Bench::new() else {
+        return;
+    };
+    let body = if cfg!(windows) {
+        "@echo off\r\nfor /l %%i in (1,1,6000) do @echo C:\\data\\r%%i.txt\r\n".to_owned()
+    } else {
+        "#!/bin/sh\ni=0\nwhile [ $i -lt 6000 ]; do printf '/data/r%s\\0' \"$i\"; i=$((i+1)); done\n"
+            .to_owned()
+    };
+    let Some(command) = index_command(&mut bench, &body) else {
+        return;
+    };
+    let (report, _) = search(&bench, &command, "r");
+    assert!(report.capped);
+    assert_eq!(report.places.len(), 5000);
+    assert_eq!(
+        crate::script::words::first_shown(command.recipe.max_rows),
+        "First 5,000 shown, narrow the search."
+    );
+}
+
+#[test]
+fn a_search_says_its_exit_words_and_its_missing_tool() {
+    let Some(mut bench) = Bench::new() else {
+        return;
+    };
+    let Some(command) = index_command(&mut bench, &printing(&[], 8)) else {
+        return;
+    };
+    let (report, _) = search(&bench, &command, "report");
+    if cfg!(windows) {
+        assert_eq!(
+            report.said[0].text,
+            "Everything is not running. Start it, then try again. By Search the whole computer."
+        );
+    } else {
+        assert_eq!(
+            report.said[0].text,
+            format!("Could not run {}: code 8.", command.title)
+        );
+    }
+    let quiet = index_command(&mut bench, &printing(&[], 0)).unwrap();
+    let (report, _) = search(&bench, &quiet, "nothing");
+    assert!(report.places.is_empty());
+    assert_eq!(
+        crate::script::words::no_results("nothing"),
+        "No results for nothing."
+    );
+    bench.env.lookup.path = None;
+    bench.env.registry = bench.env.registry.clone().with_path(None);
+    let mut sink = Recorder::default();
+    let mut context = bench.context();
+    context.input = Some("report".to_owned());
+    let error = run(&quiet, &context, &bench.env, &mut sink, &Cancel::new()).unwrap_err();
+    assert_eq!(
+        error.sentence(&quiet.title),
+        format!("Needs {}, not found.", quiet.needs[0])
+    );
+    // An empty answer to the prompt cancels.
+    let (report, _) = search(&bench, &quiet, "");
+    assert_eq!(report.ending, Ending::Cancelled);
+}
+
+#[test]
+fn a_real_index_when_asked() {
+    if std::env::var_os("DIRO_TOOLS").is_none() {
+        eprintln!("set DIRO_TOOLS=1 to search with this system's real index");
+        return;
+    }
+    let Some(bench) = Bench::new() else { return };
+    let text = fs::read_to_string(examples().join("system-index").join("plugin.toml")).unwrap();
+    let manifest = Manifest::check_for(&text, Os::current()).manifest.unwrap();
+    let Some((index, spec)) = manifest
+        .commands
+        .iter()
+        .enumerate()
+        .find(|(_, c)| c.os.contains(&Os::current()))
+    else {
+        return;
+    };
+    let (command, _) =
+        ScriptCommand::from_manifest(&manifest, index, spec, &examples().join("system-index"))
+            .unwrap();
+    let (report, _) = search(&bench, &command, "diroxide");
+    assert!(
+        matches!(report.ending, Ending::Exited(0)),
+        "{:?}",
+        report.said
+    );
+}
+
+// Section 3.5: two files to the diff tool, started on its own.
+
+/// The compare command named `id`, its tool a recorder: the system's
+/// bash writing its arguments to a file, then lingering past the run.
+fn compare(bench: &mut Bench, id: &str) -> (ScriptCommand, PathBuf) {
+    let text = fs::read_to_string(examples().join("compare-files").join("plugin.toml")).unwrap();
+    let manifest = Manifest::check_for(&text, Os::current()).manifest.unwrap();
+    let index = manifest.commands.iter().position(|c| c.id == id).unwrap();
+    let (command, problems) = ScriptCommand::from_manifest(
+        &manifest,
+        index,
+        &manifest.commands[index],
+        &examples().join("compare-files"),
+    )
+    .unwrap();
+    assert!(problems.is_empty(), "{problems:?}");
+    let record = bench.root.path().join("work").join("arguments.txt");
+    let recorder = bench.root.path().join("scripts").join("recorder.sh");
+    fs::write(
+        &recorder,
+        format!(
+            "printf '%s\\n' \"$@\" > '{}'\nsleep 3\n",
+            record.to_string_lossy().replace('\\', "/")
+        ),
+    )
+    .unwrap();
+    let bash = bench.env.lookup.bash().unwrap();
+    let mut tool = vec![json!(bash.program.to_string_lossy())];
+    tool.extend(bash.args.iter().map(|a| json!(a.to_string_lossy())));
+    tool.push(json!(recorder.to_string_lossy()));
+    bench.env.settings = json!({ "tool": tool }).as_object().unwrap().clone();
+    (command, record)
+}
+
+fn recorded(record: &Path) -> Vec<String> {
+    for _ in 0..200 {
+        if let Ok(text) = fs::read_to_string(record)
+            && text.ends_with('\n')
+        {
+            return text.lines().map(str::to_owned).collect();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    panic!("the diff tool never ran");
+}
+
+#[test]
+fn compare_panels_launches_the_tool_detached_with_both_files() {
+    let Some(mut bench) = Bench::new() else {
+        return;
+    };
+    let (command, record) = compare(&mut bench, "compare_panels");
+    let mut context = bench.context();
+    let left = missing(&bench, "say \"hi\" left.txt").unwrap();
+    let right = missing(&bench, "-right side.txt").unwrap();
+    context.cursor = Some(left.clone());
+    context.other_cursor = Some(right.clone());
+    let started = std::time::Instant::now();
+    let (report, _) = bench.run(&command, &context);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "it waited for the tool"
+    );
+    assert_eq!(report.said[0].text, "Started bash.");
+    let arguments = recorded(&record);
+    assert_eq!(arguments, [left.place.to_string(), right.place.to_string()]);
+}
+
+#[test]
+fn compare_says_what_is_missing() {
+    let Some(mut bench) = Bench::new() else {
+        return;
+    };
+    let (command, _) = compare(&mut bench, "compare_panels");
+    let mut sink = Recorder::default();
+    let error = run(
+        &command,
+        &bench.context(),
+        &bench.env,
+        &mut sink,
+        &Cancel::new(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.sentence(&command.title),
+        "Both panels need a file under the cursor."
+    );
+    bench.env.settings = json!({ "tool": [] }).as_object().unwrap().clone();
+    let error = run(
+        &command,
+        &bench.context(),
+        &bench.env,
+        &mut sink,
+        &Cancel::new(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.sentence(&command.title),
+        "Choose tool in the plugin's settings first."
+    );
+}
+
+#[test]
+fn compare_marked_takes_exactly_two() {
+    let Some(mut bench) = Bench::new() else {
+        return;
+    };
+    let (command, record) = compare(&mut bench, "compare_marked");
+    let two = vec![
+        work_file(&bench, "one.txt", 1),
+        work_file(&bench, "two.txt", 1),
+    ];
+    let (report, _) = run_with(&bench, &command, two.clone());
+    assert_eq!(report.ending, Ending::Exited(0));
+    assert_eq!(recorded(&record).len(), 2);
+    let mut three = two;
+    three.push(work_file(&bench, "three.txt", 1));
+    let mut context = bench.context();
+    context.marked = three;
+    let mut sink = Recorder::default();
+    let error = run(&command, &context, &bench.env, &mut sink, &Cancel::new()).unwrap_err();
+    assert_eq!(
+        error.sentence(&command.title),
+        "Compare the two marked files needs two items; 3 are selected."
+    );
+}
