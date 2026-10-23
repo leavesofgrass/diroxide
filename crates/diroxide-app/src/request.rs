@@ -22,6 +22,10 @@ use diroxide_core::{
 };
 use diroxide_ops::{Conflict, ItemError, Plan, UndoRecord};
 
+/// The connection question's shapes, for frontends that draw or answer it
+/// (lane A2).
+pub use diroxide_ops::{ConnectionAnswer, ConnectionQuestion, Waiter};
+
 /// One question a job or a listing is waiting on, numbered by the runtime
 /// so the answer finds its way back.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -84,6 +88,16 @@ pub enum Question {
         /// Its size, when known.
         size: Option<u64>,
     },
+    /// A host whose connection did not come back within its budget of
+    /// tries (R25, 2.4): one question per host, asked by the job that
+    /// probes for every job waiting on it; Keep waiting first. The answer
+    /// is [`Reply::Connection`].
+    Connection {
+        /// The job that asks for every job on the host.
+        job: JobId,
+        /// The host and its waiting jobs.
+        question: ConnectionQuestion,
+    },
     /// An archive limit's question ("Expands to 40 GB from 40 KB. Unpack?
     /// y or n"), asked once per kind in a job, starting on No; the answer
     /// is [`Reply::Confirm`].
@@ -99,10 +113,19 @@ impl Question {
     /// The job that asks, when a job does.
     pub fn job(&self) -> Option<JobId> {
         match self {
-            Question::Conflict { job, .. } | Question::Error { job, .. } => Some(*job),
+            Question::Conflict { job, .. }
+            | Question::Error { job, .. }
+            | Question::Connection { job, .. } => Some(*job),
             Question::Secret { job, .. } | Question::Limit { job, .. } => *job,
             Question::OnlineOnly { .. } => None,
         }
+    }
+
+    /// Whether the job that asks gives its queue slot back while it waits
+    /// for the answer (R25, 2.2): every job's question does, except the
+    /// connection question, whose job probes for every job on its host.
+    pub fn gives_slot_back(&self) -> bool {
+        self.job().is_some() && !matches!(self, Question::Connection { .. })
     }
 }
 
@@ -117,6 +140,8 @@ pub enum Reply {
     Secret(Option<Secret>),
     /// Yes or no, to a limit's question.
     Confirm(bool),
+    /// The answer to the connection question.
+    Connection(ConnectionAnswer),
 }
 
 /// An archive job planned and waiting to run: what the pack, unpack and
@@ -256,8 +281,15 @@ pub enum Request {
         /// What the job to undo did.
         record: Box<UndoRecord>,
     },
-    /// Run a plan the user confirmed, exactly as it was shown.
+    /// Run a plan the user confirmed, exactly as it was shown: the queue
+    /// starts it now or when its turn comes, and says which as
+    /// [`AppEvent::Queue`](crate::AppEvent::Queue).
     Run(Box<Plan>),
+    /// One of the Jobs list's actions, or a queue setting (lane A2).
+    Queue(crate::jobs::QueueRequest),
+    /// Stop a listing the app no longer waits for, or one the owner
+    /// stopped: what came is kept (lane A2, R25 commit 77).
+    StopListing(diroxide_core::RequestId),
     /// Answer a question a worker waits on.
     Answer {
         /// The question.

@@ -452,6 +452,50 @@ impl PluginRuntime {
         changed
     }
 
+    /// The enabled plugins' providers that offer places, for the
+    /// go-to-place list's Sites group (lane A2, R25 commit 78).
+    pub(super) fn site_sources(&self) -> Vec<SiteSource> {
+        let mut sources: Vec<SiteSource> = Vec::new();
+        for (id, host) in &self.hosts {
+            let Some(manifest) = host.item.manifest.as_ref() else {
+                continue;
+            };
+            for provider in &manifest.providers {
+                if provider.methods.contains("places") {
+                    sources.push((
+                        Arc::clone(&host.host),
+                        id.clone(),
+                        provider.scheme.clone(),
+                        manifest.name.clone(),
+                    ));
+                }
+            }
+        }
+        sources.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)));
+        sources
+    }
+
+    /// The enabled plugins with hooks, for the engine's hook runner (lane
+    /// A2, R25 commit 81).
+    pub(crate) fn hooked(&self) -> Vec<super::hooks::Hooked> {
+        let mut hooked: Vec<super::hooks::Hooked> = self
+            .hosts
+            .iter()
+            .filter_map(|(id, host)| {
+                let manifest = host.item.manifest.as_ref()?;
+                (!manifest.hooks.is_empty()).then(|| super::hooks::Hooked {
+                    id: id.clone(),
+                    name: manifest.name.clone(),
+                    host: Arc::clone(&host.host),
+                    hooks: manifest.hooks.clone(),
+                    limit: manifest.timeouts.hook.unwrap_or(Duration::from_secs(2)),
+                })
+            })
+            .collect();
+        hooked.sort_by(|a, b| a.id.cmp(&b.id));
+        hooked
+    }
+
     /// The registry with every enabled plugin's providers added to `base`.
     pub(crate) fn registry_with_providers(&self, base: &Registry) -> Registry {
         let mut registry = base.clone();
@@ -969,6 +1013,34 @@ fn run_command(
             done
         }
     }
+}
+
+/// A provider that may offer places: its host, plugin, scheme and the
+/// plugin's name.
+pub(super) type SiteSource = (Arc<Host>, String, String, String);
+
+/// The places the plugins offer (`provider/places`), as rows for the
+/// go-to-place list; asking never signs in, and a plugin that fails or
+/// offers none adds nothing.
+pub(super) fn sites_of(sources: &[SiteSource]) -> Vec<crate::app::SiteRow> {
+    let ctx = diroxide_vfs::OpContext::new();
+    let mut rows = Vec::new();
+    for (host, plugin, scheme, name) in sources {
+        let Some(provider) = PluginProvider::new(host, plugin, scheme) else {
+            continue;
+        };
+        let Ok(places) = provider.places(&ctx) else {
+            continue;
+        };
+        rows.extend(places.rows.into_iter().map(|row| crate::app::SiteRow {
+            name: row.name,
+            place: row.place,
+            state: row.state,
+            detail: row.detail,
+            plugin: name.clone(),
+        }));
+    }
+    rows
 }
 
 /// Forwards a host's events to the app every tenth of a second while it

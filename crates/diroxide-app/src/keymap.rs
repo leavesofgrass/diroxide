@@ -746,6 +746,18 @@ pub fn check_keymap(config: &KeymapConfig, platform: Platform) -> Vec<ConfigProb
 /// startup the app adds these to `diroxide_config::load`'s problems, which
 /// already hold the file's own.
 pub fn app_keymap_problems(config: &KeymapConfig, platform: Platform) -> Vec<ConfigProblem> {
+    app_keymap_problems_with(config, platform, &|_| false)
+}
+
+/// [`app_keymap_problems`], with the commands of the plugins installed
+/// (lane A2): a line for one of them is not an unknown command, since its
+/// plugin is scanned after the keys are read; its key binds when the
+/// plugin is found.
+pub fn app_keymap_problems_with(
+    config: &KeymapConfig,
+    platform: Platform,
+    plugin_command: &dyn Fn(&CommandId) -> bool,
+) -> Vec<ConfigProblem> {
     let file = Paths::KEYMAP;
     let mut problems: Vec<ConfigProblem> = Vec::new();
     let at = |line: usize| {
@@ -756,6 +768,9 @@ pub fn app_keymap_problems(config: &KeymapConfig, platform: Platform) -> Vec<Con
         }
     };
     for line in &config.overrides {
+        if commands::info(&line.command).is_none() && plugin_command(&line.command) {
+            continue;
+        }
         if commands::info(&line.command).is_none() {
             problems.push(ConfigProblem::new(
                 file,

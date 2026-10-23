@@ -17,9 +17,19 @@ mod comparing;
 mod dialogs;
 // The panel filter on the filter language (W3a).
 mod filtering;
+// A place behind a gate, for held jobs and streamed listings (lane A2).
+mod held;
+// Hooks through the plugin host (lane A2).
+mod hooks;
+// The transfer queue and the Jobs list (lane A2).
+mod jobs;
 mod keys;
 mod labels;
 mod palette;
+// The queue's settings, messages and questions (lane A2).
+mod queue;
+// A plugin's keys in keymap.toml and the Keys list (lane A2).
+mod plugin_keys;
 // Plugins and script commands (W4d).
 mod plugins;
 mod preview;
@@ -30,7 +40,11 @@ mod searching;
 // Selection on the filter language (W3a).
 mod selecting;
 mod session;
+// Sites in the go-to-place list and the connect flow (lane A2).
+mod sites;
 mod split_join;
+// Streamed listings reach the panel (lane A2).
+mod streaming;
 mod viewer;
 mod views;
 // Watch this folder (W3t).

@@ -10,6 +10,8 @@
 
 // The alpha.3 screens (W3a).
 mod alpha3;
+// The Jobs list (lane A2).
+mod jobs;
 mod owners_check;
 // The owner's check of alpha.3 (W3a, plan commit 42).
 mod owners_check_alpha3;

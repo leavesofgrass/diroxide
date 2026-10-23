@@ -123,6 +123,11 @@ impl App {
                 text.push_str(&format!(". {detail}"));
             }
         }
+        // The jobs that wait their turn, each in its row's words (R25,
+        // 2.2: Say Status gives all of them).
+        for row in self.waiting_status() {
+            text.push_str(&format!(". {row}"));
+        }
         // Watch this folder (W3t).
         if let Some(watch) = self.watch_status() {
             text.push_str(&format!(". {watch}"));
@@ -947,14 +952,21 @@ impl App {
         effects
     }
 
-    /// Quit: asks only when a job runs or a prompt holds text (the owner's
-    /// answer 74); the question starts on No. With `keep_shell`, the shell
+    /// Quit: asks only when a job runs or waits, or a prompt holds text
+    /// (the owner's answer 74; R25 N7); the question starts on No. With
+    /// `keep_shell`, the shell
     /// that started diroxide stays in its own folder even with
     /// `--cwd-file` (R14's "Quit and keep the shell where it was", named
     /// "Quit, shell stays where it was" to fit a Braille line).
     pub(super) fn ask_quit(&mut self, keep_shell: bool) -> Vec<Effect> {
         self.keep_shell = keep_shell;
-        let jobs = self.jobs.len() as u64;
+        // Running and waiting jobs alike: the queue is not kept across a
+        // restart (R25 N7), so a waiting job would be lost unasked.
+        let jobs = if self.settings.confirm.quit_with_jobs {
+            self.jobs.len() as u64
+        } else {
+            0
+        };
         let typing = self.dialogs.iter().any(|(_, dialog)| match dialog {
             Dialog::Edit { field, .. } => !field.text().is_empty(),
             Dialog::Secret { typed, .. } => !typed.is_empty(),
@@ -966,16 +978,28 @@ impl App {
         if matches!(self.opens.last().map(|o| &o.purpose), Some(Purpose::Quit)) {
             return Vec::new();
         }
-        let why = if jobs > 0 {
-            format!("{} running", count(jobs, "job is", "jobs are"))
-        } else {
-            "a prompt holds text".to_owned()
-        };
+        if jobs > 0 {
+            // "2 jobs are not finished." first, then the question, which
+            // starts on No (R25, 2.2; 24 and 26 cells).
+            let fact = format!("{} not finished.", count(jobs, "job is", "jobs are"));
+            let question = Message::new(
+                "Quit and stop them? No is the default. y or n",
+                diroxide_core::Importance::High,
+                diroxide_core::MessageKind::Question,
+            );
+            let mut effects = vec![self.say(Message::info(fact.clone()))];
+            effects.extend(self.open_dialog(
+                Dialog::Confirm {
+                    question,
+                    listing: vec![fact],
+                    on_yes: Command::new(ids::QUIT),
+                },
+                Purpose::Quit,
+            ));
+            return effects;
+        }
         let question = Message::new(
-            format!(
-                "Quit? {}. No is the default. y or n",
-                super::capitalized(&why)
-            ),
+            "Quit? A prompt holds text. No is the default. y or n",
             diroxide_core::Importance::High,
             diroxide_core::MessageKind::Question,
         );

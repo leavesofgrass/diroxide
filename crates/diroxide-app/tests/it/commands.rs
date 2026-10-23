@@ -477,7 +477,15 @@ fn quitting_while_a_job_waits_asks_first() {
     f.s.key("f5");
     f.s.key("y");
     let said = f.s.key("ctrl+q");
-    assert_eq!(said, ["Quit? 1 job is running. No is the default. y or n"]);
+    // The quit rule of the queue (lane A2): the count first, then the
+    // question, starting on No.
+    assert_eq!(
+        said,
+        [
+            "1 job is not finished.",
+            "Quit and stop them? No is the default. y or n"
+        ]
+    );
     f.s.key("n");
     assert!(!f.s.app.wants_quit());
     f.s.key("escape");
@@ -699,11 +707,15 @@ fn undo_with_nothing_and_the_job_history() {
     f.s.focus("notes.txt");
     f.s.key("f8");
     f.s.key("y");
+    // Job history opens the Jobs list at its Finished group (lane A2);
+    // Enter opens the job's actions, the first of which lists its items.
     let said = f.s.command(ids::JOB_HISTORY);
     assert!(
-        said[0].starts_with("Job history, Move to the trash finished"),
+        said[0].starts_with("Jobs, Done: trash notes.txt"),
         "{said:?}"
     );
+    f.s.key("enter");
+    assert_eq!(f.s.dialog_title().as_deref(), Some("Done: trash notes.txt"));
     f.s.key("enter");
     assert!(
         f.s.dialog_title()

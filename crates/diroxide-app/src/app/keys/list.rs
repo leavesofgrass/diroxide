@@ -50,7 +50,16 @@ impl App {
             ListRow::new(ROW_LETTERS, "Single letters")
                 .with_details([self.settings.value_words("single_letters")]),
         ];
-        (view.title(), view.list_with(query, own))
+        let mut list = view.list_with(query, own);
+        // The plugins' commands, after the built-in ones (lane A2).
+        let plugin_rows = self.plugin_key_rows(query);
+        if !plugin_rows.is_empty() {
+            let mut rows = list.rows().to_vec();
+            rows.extend(plugin_rows);
+            list.set_rows(rows);
+            list.move_focus(diroxide_core::Move::Home);
+        }
+        (view.title(), list)
     }
 
     /// A row's actions, built from the layers.
@@ -149,6 +158,12 @@ impl App {
             Some(ROW_LETTERS) => self.setting_chosen("single_letters"),
             Some(ROW_PRESET) => self.preset_chooser(),
             Some(id) => {
+                if let Some(effects) = CommandId::new(id)
+                    .ok()
+                    .and_then(|id| self.plugin_key_row_entered(&id))
+                {
+                    return effects;
+                }
                 let Some(info) = CommandId::new(id).ok().and_then(|id| commands::info(&id)) else {
                     return Vec::new();
                 };

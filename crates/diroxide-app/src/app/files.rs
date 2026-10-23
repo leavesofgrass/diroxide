@@ -150,6 +150,16 @@ fn short_question(plan: &Plan) -> Message {
     }
 }
 
+/// What a plan is on, when its request was not seen: "12 items to
+/// build", "3 items".
+fn plan_object(plan: &Plan) -> String {
+    let items = count(plan.entries(), "item", "items");
+    match &plan.facts.destination {
+        Some(to) => format!("{items} to {}", place_leaf(to)),
+        None => items,
+    }
+}
+
 /// "name: reason" rows for the job history.
 fn named(places: &[(Place, String)]) -> Vec<String> {
     places
@@ -189,11 +199,17 @@ impl App {
     pub(super) fn plan_job(
         &mut self,
         side: Side,
-        request: JobRequest,
+        mut request: JobRequest,
         note: Option<String>,
         then: Then,
         confirm: bool,
     ) -> Vec<Effect> {
+        // A new job's error policy is the setting's unless its request
+        // named one (R25 N9).
+        if request.errors.is_ask() {
+            request.errors = self.settings.jobs.on_errors.policy();
+        }
+        self.note_job_facts(&request);
         self.flows.insert(
             request.id,
             Flow {
@@ -307,6 +323,16 @@ impl App {
         }
         if let Some(home) = &self.home {
             push(home.to_string(), "home folder".to_owned());
+        }
+        // The Sites group (R25 commit 78): each site its kind first, then
+        // its state word, the plugin that offers it last.
+        for site in &self.sites {
+            let mut kind = format!("site {}, {}", site.name, site.state);
+            if let Some(detail) = &site.detail {
+                kind.push_str(&format!(", {detail}"));
+            }
+            kind.push_str(&format!(", by {}", site.plugin));
+            push(site.place.to_string(), kind);
         }
         for place in &self.places {
             push(place.place.to_string(), place.words.clone());
@@ -687,6 +713,10 @@ impl App {
                         Message::error(format!("{sentence}. {}", error.next_step()))
                     }
                     OpsError::NothingToUndo => Message::info("Nothing to undo"),
+                    // A hook's veto is its own sentence, the plugin last
+                    // (R25 commit 81): "Delete stopped: folder is
+                    // protected. By Folder guard."
+                    OpsError::HookStopped(line) => Message::warning(line.clone()),
                     // These say the whole sentence themselves: "Part 004 is
                     // missing. Nothing was joined."
                     OpsError::CannotJoin(sentence)
@@ -706,6 +736,10 @@ impl App {
         }
         plan.note = flow.note.clone();
         let mut effects = Vec::new();
+        // A hook that did not answer lets the job go on, and says so.
+        for warning in std::mem::take(&mut plan.facts.hook_warnings) {
+            effects.push(self.say(Message::warning(warning)));
+        }
         let mut forced = false;
         let questions = std::mem::take(&mut plan.facts.questions);
         let mut kept = Vec::new();
@@ -943,16 +977,28 @@ impl App {
         self.open_dialog(dialog, Purpose::TypedPlan(plan, typed))
     }
 
-    /// Runs a confirmed plan, exactly as shown.
+    /// Runs a confirmed plan, exactly as shown. The queue starts it now or
+    /// holds it until its turn (R25, 2.2): a job that may wait says its
+    /// start line when the queue lets it start, or "Queued: ..." first.
     pub(super) fn run_plan(&mut self, plan: Plan) -> Vec<Effect> {
         let line = start_line(&plan);
         let now = self.now();
-        self.jobs.begin(plan.job, plan.kind, line.clone(), now);
+        let waits = self.may_wait(&plan);
+        let mut facts = self.facts_for_run(plan.job);
+        if facts.what.is_empty() {
+            facts.what = plan_object(&plan);
+            facts.destination = plan.facts.destination.clone();
+        }
+        self.jobs
+            .submit(plan.job, plan.kind, line.clone(), facts, !waits, now);
         let loud = matches!(
             plan.kind,
             JobKind::Copy | JobKind::Move | JobKind::Trash | JobKind::DeletePermanently
         ) || plan.entries() > 20;
         self.request(Request::Run(Box::new(plan)));
+        if waits {
+            return vec![Effect::Redraw(Redraw::JobsLine)];
+        }
         let message = if loud {
             Message::info(line)
         } else {
@@ -978,19 +1024,59 @@ impl App {
         let Some((line, changed)) = self.jobs.progress(job, progress, now, interval) else {
             return Vec::new();
         };
+        let mut effects = vec![Effect::Redraw(Redraw::JobsLine)];
+        // With several jobs only the front job's progress is said as it
+        // goes; the others speak on a change of state (R25, 2.2).
+        let front = self.jobs.front() == Some(job);
         let message = match progress.state {
-            JobState::Paused | JobState::Stalled | JobState::Verifying if changed => {
-                Message::info(line)
+            // "Copy waits for build: connection lost" (R25's 37 cells).
+            JobState::WaitingForConnection if changed => {
+                let verb = crate::jobs::line_verb(progress.kind);
+                let host = progress
+                    .waits_for
+                    .clone()
+                    .unwrap_or_else(|| "the connection".to_owned());
+                Some(Message::info(format!(
+                    "{verb} waits for {host}: connection lost"
+                )))
             }
-            _ => Message::progress(line),
+            JobState::Paused | JobState::Stalled | JobState::Verifying if changed => {
+                Some(Message::info(line))
+            }
+            _ if changed || front => Some(Message::progress(line)),
+            _ => None,
         };
-        vec![Effect::Redraw(Redraw::JobsLine), Effect::Announce(message)]
+        if let Some(message) = message {
+            effects.push(Effect::Announce(message));
+        }
+        // An open Jobs list follows, at the line's own pace.
+        effects.extend(self.refresh_jobs_list());
+        effects
     }
 
     pub(super) fn job_finished(&mut self, report: JobReport) -> Vec<Effect> {
         let flow = self.flows.remove(&report.job);
         // A plugin's file job: the plugin hears its report (W4d).
         self.plugin_job_ended(flow.as_ref(), Ok(Box::new(report.clone())));
+        // Cancel names the job when other jobs run beside it, or when it
+        // never started (R25, 2.2): "Copy cancelled: report.iso to build,
+        // 0 done."
+        let named_cancel = report.cancelled
+            && (self.jobs.len() > 1 || self.jobs.waits(report.job))
+            && self
+                .jobs
+                .what_of(report.job)
+                .is_some_and(|what| !what.is_empty());
+        let cancel_line = named_cancel.then(|| {
+            format!(
+                "{} cancelled: {}, {} done.",
+                crate::jobs::line_verb(report.kind),
+                self.jobs.what_of(report.job).unwrap_or_default(),
+                report.done.len()
+            )
+        });
+        let never_ran = self.jobs.waits(report.job);
+        let closed = self.forget_job_questions(report.job);
         self.jobs.finished(FinishedJob {
             job: report.job,
             kind: report.kind,
@@ -998,6 +1084,14 @@ impl App {
             failed: named(&report.failed),
             skipped: named(&report.skipped),
             warnings: named(&report.warnings),
+            failed_places: report
+                .failed
+                .iter()
+                .map(|(place, _)| place.clone())
+                .collect(),
+            done: report.done.len() as u64,
+            cancelled: report.cancelled,
+            ..FinishedJob::default()
         });
         // A job that made, moved or trashed nothing (Test archive) leaves
         // the last undo where it was.
@@ -1060,6 +1154,7 @@ impl App {
                 };
                 format!("Undid {noun}: {how}")
             }
+            _ if cancel_line.is_some() => cancel_line.clone().unwrap_or_default(),
             _ if clean && report.kind == JobKind::Trash => catalog::moved_to_trash(done).text,
             _ if self.finish_lines.is_some() => {
                 self.finish_lines.take().unwrap_or_default().join(" ")
@@ -1088,7 +1183,14 @@ impl App {
         } else {
             Message::warning(text)
         };
-        let mut effects = vec![Effect::Redraw(Redraw::JobsLine), self.say(message)];
+        let mut effects = closed;
+        effects.push(Effect::Redraw(Redraw::JobsLine));
+        effects.push(self.say(message));
+        effects.extend(self.refresh_jobs_list());
+        // A job that never started changed nothing: no panel is read again.
+        if never_ran {
+            return effects;
+        }
         let side = flow.as_ref().map_or(self.active, |f| f.side);
         let folder = self.panel(side).place().clone();
         let failed: Vec<String> = report
@@ -1199,6 +1301,7 @@ impl App {
                 )
             }
             Question::Limit { question, .. } => self.ask_limit(ask, &question),
+            Question::Connection { job, question } => self.ask_connection(ask, job, question),
             Question::OnlineOnly { name, size } => {
                 let size = size
                     .map(|s| format!(", {}", diroxide_core::format::human_size(s)))
@@ -1255,9 +1358,11 @@ impl App {
         effects
     }
 
-    /// Escape outside a dialog: stops the job in front.
+    /// Escape outside a dialog: stops the job in front, naming it when
+    /// other jobs run beside it.
     pub(super) fn cancel_front_job(&mut self) -> Vec<Effect> {
-        match self.jobs.newest() {
+        let several = self.jobs.len() > 1;
+        match self.jobs.front() {
             // A plugin command or a download says its own name (W4d).
             Some(job)
                 if let Some(words) = self
@@ -1265,6 +1370,13 @@ impl App {
                     .or_else(|| self.component_cancel_words(job)) =>
             {
                 vec![Effect::CancelJob(job), self.say(Message::info(words))]
+            }
+            Some(job) if several => {
+                let name = self.job_name(job);
+                vec![
+                    Effect::CancelJob(job),
+                    self.say(Message::info(format!("Cancelling: {name}"))),
+                ]
             }
             Some(job) => {
                 let word = self
@@ -1279,6 +1391,11 @@ impl App {
             }
             None => {
                 self.quick = None;
+                // A folder that is still listing stops, and keeps what
+                // came (R25 commit 77).
+                if let Some(effects) = self.stop_listing() {
+                    return effects;
+                }
                 // With no job to cancel, Cancel takes the panel's filter
                 // off (W3a): "Filter off, 120 shown".
                 if self.panel(self.active).filter().is_some() {

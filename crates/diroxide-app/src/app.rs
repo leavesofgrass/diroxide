@@ -30,6 +30,8 @@ mod files;
 mod filtering;
 mod folder_views;
 mod info;
+// The Jobs list, the queue's actions and questions (lane A2).
+mod jobs_ui;
 mod keys;
 mod labeling;
 mod nav;
@@ -135,6 +137,16 @@ pub enum AppEvent {
         /// The entries, or why not.
         result: Result<Vec<Entry>, VfsError>,
     },
+    /// A batch of a listing that comes in batches: its rows, as they
+    /// arrive (lane A2, R25 commit 77).
+    ListBatch {
+        /// The request.
+        request: RequestId,
+        /// The place listed.
+        place: Place,
+        /// The batch's entries.
+        entries: Vec<Entry>,
+    },
     /// A listing is on its way: how many entries so far.
     ListProgress {
         /// The request.
@@ -191,6 +203,9 @@ pub enum AppEvent {
     },
     /// The drives, the root, the home folder and the mounts.
     Places(Vec<LocalPlace>),
+    /// The places the plugins offer, such as saved sites, for the
+    /// go-to-place list's Sites group (lane A2, R25 commit 78).
+    Sites(Vec<SiteRow>),
     /// A program that had the terminal ended.
     ProgramEnded {
         /// What ran, as said: "Shell", "Command", the edited file's name.
@@ -377,6 +392,36 @@ pub enum AppEvent {
     /// Something about optional components: the list, a download's
     /// progress and end, a check, a removal (W4d).
     Component(Box<crate::components::ComponentEvent>),
+    /// What the transfer queue did: a job started, a job waits its turn,
+    /// the queue's order (lane A2).
+    Queue(Box<crate::jobs::QueueNote>),
+    /// A host's connection gate: back, keep waiting, jobs cancelled or
+    /// stopped for good (R25, 2.4).
+    Gate(diroxide_ops::GateEvent),
+    /// What a running job says once beside its progress: a file resumed,
+    /// or one that starts again and why.
+    JobNotice {
+        /// The job.
+        job: JobId,
+        /// The lines, meaning first.
+        lines: Vec<String>,
+    },
+}
+
+/// A place a plugin offers, for the go-to-place list (R25 commit 78):
+/// a saved site, or a host from a configuration file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SiteRow {
+    /// Its spoken name: "build".
+    pub name: String,
+    /// Where Enter goes.
+    pub place: Place,
+    /// Its state in words: "saved", "connected", "from ssh config".
+    pub state: String,
+    /// More words, read after the state.
+    pub detail: Option<String>,
+    /// The plugin that offers it, said last.
+    pub plugin: String,
 }
 
 /// What an open dialog is for: what its answer does. The [`Dialog`] is
@@ -589,6 +634,9 @@ enum Purpose {
     Plugin(Box<plugin_ui::Wants>),
     /// A dialog of the optional components (W4d).
     Component(Box<component_ui::Wants>),
+    /// The Jobs list, a job's actions, and the queue's questions (lane
+    /// A2).
+    Jobs(Box<jobs_ui::Wants>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -740,6 +788,13 @@ pub struct App {
     plugins: plugin_ui::PluginState,
     /// Optional components (W4d).
     components: component_ui::ComponentState,
+    /// The Jobs list and the queue's questions (lane A2).
+    jobs_ui: jobs_ui::JobsState,
+    /// Each panel's streamed listing: when it began, when its count was
+    /// last said, and whether the owner stopped it (lane A2).
+    streams: [Option<nav::StreamNote>; 2],
+    /// The places the plugins offer, for the Sites group (lane A2).
+    sites: Vec<SiteRow>,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1059,6 +1114,9 @@ impl App {
             comparing: comparing::CompareState::default(),
             plugins: plugin_ui::PluginState::default(),
             components: component_ui::ComponentState::default(),
+            jobs_ui: jobs_ui::JobsState::default(),
+            streams: [None, None],
+            sites: Vec::new(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1432,6 +1490,7 @@ impl App {
     pub fn handle(&mut self, event: AppEvent) -> Vec<Effect> {
         let mut effects = self.handle_event(event);
         effects.extend(self.plugin_queue_next());
+        effects.extend(self.jobs_queue_next());
         self.follow_cursor();
         self.mark_requests(effects)
     }
@@ -1455,6 +1514,11 @@ impl App {
                 result,
             } => self.listed(request, &place, result),
             AppEvent::ListProgress { request, so_far } => self.list_progress(request, so_far),
+            AppEvent::ListBatch {
+                request,
+                place,
+                entries,
+            } => self.list_batch(request, &place, entries),
             AppEvent::PlaceFacts {
                 place,
                 capabilities,
@@ -1478,6 +1542,7 @@ impl App {
             }
             AppEvent::NotWatched { side, place } => self.not_watched(side, &place),
             AppEvent::Places(places) => self.places_arrived(places),
+            AppEvent::Sites(sites) => self.sites_arrived(sites),
             AppEvent::ProgramEnded {
                 what,
                 folder,
@@ -1540,6 +1605,9 @@ impl App {
             AppEvent::Problem(message) => vec![self.say(message)],
             AppEvent::Plugin(event) => self.plugin_event(*event),
             AppEvent::Component(event) => self.component_event(*event),
+            AppEvent::Queue(note) => self.queue_note(*note),
+            AppEvent::Gate(event) => self.gate_event(&event),
+            AppEvent::JobNotice { job, lines } => self.job_notice(job, lines),
         }
     }
 
@@ -1548,6 +1616,7 @@ impl App {
     pub fn dispatch(&mut self, command: &Command) -> Vec<Effect> {
         let mut effects = self.dispatch_command(command);
         effects.extend(self.plugin_queue_next());
+        effects.extend(self.jobs_queue_next());
         self.follow_cursor();
         self.mark_requests(effects)
     }
@@ -1604,6 +1673,10 @@ impl App {
         }
         // The optional components and Get example plugins (W4d).
         if let Some(effects) = self.components_dispatch(command) {
+            return effects;
+        }
+        // The Jobs list and the queue (lane A2).
+        if let Some(effects) = self.jobs_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

@@ -40,7 +40,8 @@ use diroxide_core::{
     RequestId, Secret, SecretRequest, Side,
 };
 use diroxide_ops::{
-    Conflict, Engine, EngineOptions, ItemError, JobControl, JobProgress, JobSink, Journal, Plan,
+    Conflict, ConnectionAnswer, ConnectionQuestion, Engine, EngineOptions, ItemError, JobControl,
+    JobNotice, JobProgress, JobSink, Journal, Ledger, Plan,
 };
 use diroxide_vfs::{
     CancelToken, OpContext, ProgressSink, ProgressUpdate, Registry, SecretSource, WatchHandle,
@@ -52,6 +53,10 @@ mod archive_jobs;
 mod components;
 // Plugins and script commands (W4d).
 mod plugins;
+// Hooks through the plugin hosts (lane A2, R25 commit 81).
+mod hooks;
+// The transfer queue (lane A2, R25 commit 79).
+mod queue;
 
 use crate::app::{App, AppEvent};
 use crate::request::{AskId, Question, Reply, Request, Spawn, SpawnKind};
@@ -367,6 +372,29 @@ impl JobSink for ForwardSink {
             _ => ErrorAction::Cancel,
         }
     }
+
+    /// The one question for a lost host (R25, 2.4), through the app; a
+    /// cancel while it waits answers Keep waiting, and the gate then sees
+    /// the job's own cancel.
+    fn connection(&self, question: &ConnectionQuestion) -> ConnectionAnswer {
+        let asked = Question::Connection {
+            job: self.job,
+            question: question.clone(),
+        };
+        let keep = Reply::Connection(ConnectionAnswer::KeepWaiting);
+        match self.shared.ask(asked, &self.cancel, keep) {
+            Reply::Connection(answer) => answer,
+            _ => ConnectionAnswer::KeepWaiting,
+        }
+    }
+
+    /// A line the job says once: a file resumed, or one that could not be.
+    fn notice(&self, notice: &JobNotice) {
+        self.shared.send(AppEvent::JobNotice {
+            job: self.job,
+            lines: notice.lines(),
+        });
+    }
 }
 
 /// Asks the app for a secret on behalf of a listing or a job (ADR-0009).
@@ -445,6 +473,23 @@ pub struct Runtime {
     arrivals: Option<diroxide_ops::tracker::WatchRun>,
     /// The running search and its control (W3a).
     search: Option<(u64, diroxide_search::SearchControl)>,
+    /// The transfer queue: when a confirmed plan starts (lane A2).
+    scheduler: queue::Scheduler,
+    /// The ledger of partial files, kept across engines made again: in
+    /// the state folder once the paths are known (R25, 2.5).
+    ledger: Arc<Ledger>,
+    /// The `[jobs]` settings last applied (lane A2).
+    job_settings: Option<diroxide_config::JobSettings>,
+    /// The hosts each plugin said it lost, for a loss that turns final.
+    lost: HashMap<String, Vec<diroxide_ops::HostKey>>,
+    /// The engine's hook runner, through the plugin hosts (lane A2).
+    hooks: Arc<hooks::AppHooks>,
+    /// The active panel's place, marks and focus after the last batch,
+    /// for the navigation hooks.
+    nav_seen: Option<(Place, usize, Option<String>)>,
+    /// The listings on their way, each with its cancel, so a listing the
+    /// app no longer waits for stops (lane A2, R25 commit 77).
+    listings: Arc<Mutex<HashMap<RequestId, CancelToken>>>,
 }
 
 impl fmt::Debug for Runtime {
@@ -475,20 +520,34 @@ impl Runtime {
                 crate::archives::install(&registry, crate::archives::provider(&settings, None));
             (registry, Some(provider), Some(settings))
         };
+        let shared = Arc::new(Shared {
+            sender: Mutex::new(sender),
+            busy: AtomicUsize::new(0),
+            waker: Mutex::new(None),
+            asks: Mutex::new(HashMap::new()),
+            next_ask: AtomicU64::new(0),
+        });
+        let ledger = Arc::new(Ledger::in_memory());
+        let hooks = Arc::new(hooks::AppHooks::default());
+        let runner: Arc<dyn diroxide_ops::HookRunner> = hooks.clone();
+        let engine = Engine::new(Arc::clone(&registry))
+            .with_ledger(Arc::clone(&ledger))
+            .with_hooks(runner);
+        // A host's gate speaks through the app: back, keep waiting, the
+        // jobs cancelled or stopped (R25, 2.4). The gates outlive every
+        // engine made again, and so does this listener.
+        let speaker = Arc::clone(&shared);
+        engine
+            .gates()
+            .on_event(move |event| speaker.send(AppEvent::Gate(event.clone())));
         Self {
-            engine: Engine::new(Arc::clone(&registry)),
+            engine,
             base: Arc::clone(&registry),
             plugins: plugins::PluginRuntime::default(),
             components: components::ComponentRuntime::default(),
             components_source: String::new(),
             registry,
-            shared: Arc::new(Shared {
-                sender: Mutex::new(sender),
-                busy: AtomicUsize::new(0),
-                waker: Mutex::new(None),
-                asks: Mutex::new(HashMap::new()),
-                next_ask: AtomicU64::new(0),
-            }),
+            shared,
             receiver,
             queue: VecDeque::new(),
             jobs: Arc::new(Mutex::new(HashMap::new())),
@@ -503,6 +562,13 @@ impl Runtime {
             archive_secrets: Arc::new(Mutex::new(HashMap::new())),
             arrivals: None,
             search: None,
+            scheduler: queue::Scheduler::default(),
+            ledger,
+            job_settings: None,
+            lost: HashMap::new(),
+            hooks,
+            nav_seen: None,
+            listings: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -543,13 +609,57 @@ impl Runtime {
     /// providers, with an engine over it (W4d).
     fn rebuild_registry(&mut self) {
         let registry = Arc::new(self.plugins.registry_with_providers(&self.base));
-        let mut engine =
-            Engine::new(Arc::clone(&registry)).with_options(self.engine.options().clone());
+        self.engine = self.engine_over(Arc::clone(&registry));
+        self.registry = registry;
+    }
+
+    /// An engine over a registry that keeps what every engine shares: the
+    /// options, the journal, the connection gates and their waiting jobs,
+    /// the ledger of partial files and the global speed limit (lane A2).
+    fn engine_over(&self, registry: Arc<Registry>) -> Engine {
+        let mut engine = Engine::new(registry)
+            .with_options(self.engine.options().clone())
+            .with_gates(self.engine.gates().clone())
+            .with_ledger(Arc::clone(&self.ledger))
+            .with_speed_limit(self.engine.speed_limiter())
+            .with_hooks(self.hooks.clone());
         if let Some(journal) = self.engine.journal() {
             engine = engine.with_journal(journal.clone());
         }
-        self.engine = engine;
-        self.registry = registry;
+        engine
+    }
+
+    /// The `[jobs]` settings, applied when they change: the queue's
+    /// limits, the global speed limit and its scope, and the retries
+    /// (R25 commit 80).
+    pub fn apply_job_settings(&mut self, settings: &diroxide_config::JobSettings) {
+        if self.job_settings.as_ref() == Some(settings) {
+            return;
+        }
+        self.job_settings = Some(*settings);
+        let limits = diroxide_ops::QueueLimits {
+            per_host: usize::try_from(settings.per_host).unwrap_or(2).max(1),
+            remote: usize::try_from(settings.remote).unwrap_or(4).max(1),
+            ..diroxide_ops::QueueLimits::default()
+        };
+        let granted = self.scheduler.set_limits(limits);
+        self.carry_granted(granted);
+        let limiter = self.engine.speed_limit();
+        let limit = diroxide_ops::SpeedLimit::bytes_per_second(
+            settings.speed_limit_kb.saturating_mul(1000),
+        );
+        if limiter.limit() != limit {
+            limiter.set(limit);
+        }
+        limiter.set_scope(match settings.speed_limit_scope {
+            diroxide_config::SpeedLimitScope::Remote => diroxide_ops::LimitScope::RemoteJobs,
+            diroxide_config::SpeedLimitScope::All => diroxide_ops::LimitScope::AllJobs,
+        });
+        let mut options = self.engine.options().clone();
+        retries_from(&mut options, settings);
+        if &options != self.engine.options() {
+            self.engine = self.engine.clone().with_options(options);
+        }
     }
 
     /// The same runtime with plugins off for the session (`--no-plugins`):
@@ -612,6 +722,21 @@ impl Runtime {
     /// journal is written in the state folder, and the session, the
     /// prompts' histories and changed settings are saved there.
     pub fn with_paths(mut self, paths: Paths) -> Self {
+        // The ledger of partial files lives in the state folder, so the
+        // next start finds what a crash left; one that cannot be read is
+        // said and kept, and this session's stays in memory.
+        match Ledger::open(&paths.state_dir) {
+            Ok(ledger) => {
+                self.ledger = Arc::new(ledger);
+                self.engine = self.engine.with_ledger(Arc::clone(&self.ledger));
+            }
+            Err(error) => self.queue.push_back(AppEvent::Problem(Message::could_not(
+                "read",
+                "the list of partial files",
+                &error.to_string(),
+                "",
+            ))),
+        }
         self.engine = self
             .engine
             .with_journal(Journal::new(paths.state_dir.clone()));
@@ -759,6 +884,9 @@ impl Runtime {
             self.worker(move |shared| list_archive(shared, &registry, &archives, request, place));
             return;
         }
+        let cancel = CancelToken::new();
+        lock(&self.listings).insert(request, cancel.clone());
+        let listings = Arc::clone(&self.listings);
         self.worker(move |shared| {
             let progress = Arc::new(ListingProgress {
                 request,
@@ -770,15 +898,20 @@ impl Runtime {
             });
             let ctx = OpContext::new()
                 .with_progress(progress)
-                .with_secrets(secrets);
+                .with_secrets(secrets)
+                .with_cancel(cancel.clone());
             let result = registry.resolve(&place).and_then(|provider| {
-                let entries = provider.list(&place, &ctx)?;
+                let entries = match provider.as_streaming() {
+                    Some(streaming) => list_streamed(shared, streaming, request, &place, &ctx)?,
+                    None => provider.list(&place, &ctx)?,
+                };
                 shared.send(AppEvent::PlaceFacts {
                     place: place.clone(),
                     capabilities: provider.capabilities(&place),
                 });
                 Ok(entries)
             });
+            lock(&listings).remove(&request);
             shared.send(AppEvent::Listed {
                 request,
                 place,
@@ -852,6 +985,17 @@ impl Runtime {
     }
 
     fn cancel(&mut self, job: JobId) {
+        // A job that waits its turn leaves the queue at once: nothing was
+        // done, and its report says it was cancelled (R25, 2.2).
+        let (waiting, granted) = self.scheduler.cancel(job);
+        if let Some(plan) = waiting {
+            lock(&self.jobs).remove(&job);
+            let mut report = diroxide_ops::JobReport::new(job, plan.kind);
+            report.cancelled = true;
+            self.queue
+                .push_back(AppEvent::JobFinished(Box::new(report)));
+        }
+        self.carry_granted(granted);
         if let Some(running) = lock(&self.jobs).get(&job) {
             running.control.cancel.cancel();
         }
@@ -910,11 +1054,29 @@ impl Runtime {
                 });
             }
             Request::Run(plan) => self.run(*plan),
-            Request::Answer { ask, reply } => self.shared.answer(ask, reply),
+            Request::Answer { ask, reply } => {
+                // A job that asked gave its slot back; its answer waits for
+                // the slot again (R25, 2.2).
+                let job = lock(&self.shared.asks).get(&ask).and_then(|(job, _)| *job);
+                let granted = self.scheduler.answer(job, ask, reply);
+                self.carry_granted(granted);
+            }
+            Request::Queue(request) => self.queue_request(request),
+            Request::StopListing(listing) => {
+                if let Some(cancel) = lock(&self.listings).get(&listing) {
+                    cancel.cancel();
+                }
+            }
             Request::Watch { side, place } => self.watch(side, place),
-            Request::Places => self.worker(|shared| {
-                shared.send(AppEvent::Places(diroxide_vfs::local_places()));
-            }),
+            Request::Places => {
+                let sources = self.plugins.site_sources();
+                self.worker(move |shared| {
+                    shared.send(AppEvent::Places(diroxide_vfs::local_places()));
+                    // The plugins' sites, asked without signing in.
+                    let sites = plugins::sites_of(&sources);
+                    shared.send(AppEvent::Sites(sites));
+                });
+            }
             Request::SaveSession(session) => {
                 if let Some(paths) = &self.paths
                     && let Err(error) = diroxide_config::save_session(paths, &session)
@@ -1465,16 +1627,107 @@ impl Runtime {
         control
     }
 
+    /// A confirmed plan goes to the queue, which starts it now or holds it
+    /// until its turn; its control is noted at once, so Cancel, Pause and
+    /// a speed limit reach a waiting job too.
     fn run(&mut self, plan: Plan) {
+        if diroxide_ops::JobClass::of_plan(&plan) == diroxide_ops::JobClass::Unqueued {
+            self.start_plan(plan);
+            return;
+        }
+        self.register(plan.job);
+        let granted = self.scheduler.submit(plan);
+        self.carry_granted(granted);
+    }
+
+    /// Starts what the queue granted, delivers the answers it let go, and
+    /// tells the app.
+    fn carry_granted(&mut self, granted: queue::Granted) {
+        for note in granted.notes {
+            self.queue.push_back(AppEvent::Queue(Box::new(note)));
+        }
+        for (ask, reply) in granted.answers {
+            self.shared.answer(ask, reply);
+        }
+        for plan in granted.start {
+            self.start_plan(plan);
+        }
+    }
+
+    /// One of the Jobs list's actions, or a queue setting.
+    fn queue_request(&mut self, request: crate::jobs::QueueRequest) {
+        use crate::jobs::QueueRequest as Q;
+        let control = |runtime: &Self, job: JobId| {
+            lock(&runtime.jobs)
+                .get(&job)
+                .map(|running| running.control.clone())
+        };
+        let granted = match request {
+            Q::RunNow(job) => self.scheduler.run_now(job),
+            Q::MoveUp(job) => self.scheduler.shift(job, queue::Shift::Up).1,
+            Q::MoveDown(job) => self.scheduler.shift(job, queue::Shift::Down).1,
+            Q::MoveToFront(job) => self.scheduler.shift(job, queue::Shift::Front).1,
+            Q::MoveToEnd(job) => self.scheduler.shift(job, queue::Shift::End).1,
+            Q::Pause(job) | Q::Resume(job) => {
+                if let Some(control) = control(self, job) {
+                    if matches!(request, Q::Pause(_)) {
+                        control.pause();
+                    } else {
+                        control.resume();
+                    }
+                }
+                queue::Granted::default()
+            }
+            Q::PauseQueue => self.scheduler.set_paused(true),
+            Q::ResumeQueue => self.scheduler.set_paused(false),
+            Q::PauseAll | Q::ResumeAll => {
+                let pause = request == Q::PauseAll;
+                for running in lock(&self.jobs).values() {
+                    if pause {
+                        running.control.pause();
+                    } else {
+                        running.control.resume();
+                    }
+                }
+                self.scheduler.set_paused(pause)
+            }
+            Q::SpeedLimit {
+                job: Some(job),
+                limit,
+            } => {
+                if let Some(control) = control(self, job) {
+                    control.set_speed_limit(limit);
+                }
+                queue::Granted::default()
+            }
+            Q::SpeedLimit { job: None, limit } => {
+                self.engine.speed_limit().set(limit);
+                queue::Granted::default()
+            }
+            Q::LimitScope(scope) => {
+                self.engine.speed_limit().set_scope(scope);
+                queue::Granted::default()
+            }
+            Q::Limits(limits) => self.scheduler.set_limits(limits),
+            Q::ErrorPolicy { job, policy } => {
+                self.scheduler.set_error_policy(job, policy);
+                queue::Granted::default()
+            }
+        };
+        self.carry_granted(granted);
+    }
+
+    /// Runs a plan on a worker now, with the control noted for it.
+    fn start_plan(&mut self, plan: Plan) {
         let engine = self.engine.clone();
-        let control = JobControl::new();
         let jobs = Arc::clone(&self.jobs);
-        lock(&jobs).insert(
-            plan.job,
-            RunningJob {
-                control: control.clone(),
-            },
-        );
+        let control = lock(&jobs)
+            .entry(plan.job)
+            .or_insert_with(|| RunningJob {
+                control: JobControl::new(),
+            })
+            .control
+            .clone();
         self.worker(move |shared| {
             let sink = forward_sink(plan.job, shared, &engine, &control);
             let report = engine.run(&plan, &control, &sink);
@@ -1662,16 +1915,73 @@ impl Runtime {
         }
         let events: Vec<AppEvent> = self.queue.drain(..).collect();
         for event in &events {
-            if let AppEvent::Plugin(plugin) = event
-                && let crate::plugins::PluginEvent::Found(catalog) = plugin.as_ref()
-                && self
-                    .plugins
-                    .adopt(catalog, &self.shared, self.paths.as_ref(), &self.base)
-            {
-                self.rebuild_registry();
+            match event {
+                AppEvent::Plugin(plugin) => {
+                    if let crate::plugins::PluginEvent::Found(catalog) = plugin.as_ref()
+                        && self.plugins.adopt(
+                            catalog,
+                            &self.shared,
+                            self.paths.as_ref(),
+                            &self.base,
+                        )
+                    {
+                        self.rebuild_registry();
+                    }
+                    if let crate::plugins::PluginEvent::Found(_) = plugin.as_ref() {
+                        self.hooks.set(self.plugins.hooked());
+                    }
+                    if let crate::plugins::PluginEvent::Host(host) = plugin.as_ref() {
+                        self.host_event(host);
+                    }
+                }
+                // The queue hears what its jobs do as it passes: a job's
+                // end frees its slots, a question gives them back.
+                AppEvent::JobFinished(report) => {
+                    let granted = self.scheduler.finished(report.job);
+                    self.carry_granted(granted);
+                }
+                AppEvent::Asks { question, .. } => {
+                    if let Some(job) = question.job()
+                        && question.gives_slot_back()
+                    {
+                        let granted = self.scheduler.asking(job);
+                        self.carry_granted(granted);
+                    }
+                }
+                _ => {}
             }
         }
         events
+    }
+
+    /// What a plugin host's event means for the connection gates: a lost
+    /// provider holds its host's jobs waiting (`provider/lost`), and a
+    /// plugin turned off for good stops them with its reason, so a job
+    /// stops only when the loss is final.
+    fn host_event(&mut self, event: &diroxide_plugins::host::HostEvent) {
+        use diroxide_plugins::host::HostEvent;
+        match event {
+            HostEvent::ProviderLost {
+                plugin, authority, ..
+            } => {
+                let place = Place::parse(authority)
+                    .or_else(|_| Place::parse(&format!("{authority}/")))
+                    .ok();
+                if let Some(host) = place.as_ref().and_then(diroxide_ops::HostKey::of) {
+                    self.engine.gates().lost(&host);
+                    let hosts = self.lost.entry(plugin.clone()).or_default();
+                    if !hosts.contains(&host) {
+                        hosts.push(host);
+                    }
+                }
+            }
+            HostEvent::TurnedOff { plugin, message } => {
+                for host in self.lost.remove(plugin).unwrap_or_default() {
+                    self.engine.gates().lost_for_good(&host, &message.text);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Waits up to `timeout` for a result, then takes what is ready.
@@ -1711,6 +2021,7 @@ impl Runtime {
     /// not mark them) after it.
     pub fn carry_out(&mut self, app: &mut App, effects: Vec<Effect>) -> Vec<Effect> {
         self.apply_archive_settings(&app.settings().archives);
+        self.apply_job_settings(&app.settings().jobs);
         self.plugins.set_settings(&app.settings().plugins);
         if self.components_source != app.settings().components_source {
             self.components_source = app.settings().components_source.clone();
@@ -1728,7 +2039,40 @@ impl Runtime {
         for request in app.take_requests() {
             self.request(request);
         }
+        self.observe_navigation(app);
         screen
+    }
+
+    /// Notes where the active panel is, its marks and its focus, and tells
+    /// the navigation hooks what changed, debounced (R25 commit 81): a new
+    /// folder is `enter_folder`, other changes `select`. Nothing is noted
+    /// while no plugin hooks them.
+    fn observe_navigation(&mut self, app: &App) {
+        if !self.hooks.wants_nav() {
+            self.nav_seen = None;
+            return;
+        }
+        let panel = app.active_panel();
+        if panel.is_loading() {
+            return;
+        }
+        let place = panel.place().clone();
+        let count = panel.list().selected_count();
+        let cursor = panel.list().focused().map(|row| row.id.clone());
+        let now = (place.clone(), count, cursor.clone());
+        let event = match &self.nav_seen {
+            Some(seen) if *seen == now => None,
+            Some((seen, ..)) if *seen == place => Some(hooks::NavEvent::Select {
+                place,
+                count: count as u64,
+                cursor,
+            }),
+            _ => Some(hooks::NavEvent::EnterFolder { place }),
+        };
+        self.nav_seen = Some(now);
+        if let Some(event) = event {
+            self.hooks.navigated(event);
+        }
     }
 
     /// Carries out effects, feeds their results back to the app, and
@@ -2091,6 +2435,37 @@ fn list_archive(
     });
 }
 
+/// A listing that comes in batches (R25 commit 77): each batch goes to
+/// the app as it arrives, so the rows appear as the provider sends them;
+/// the whole list ends the listing as any listing does. A stop asked by
+/// the app keeps what came: the panel lists it, and says it stopped.
+fn list_streamed(
+    shared: &Arc<Shared>,
+    streaming: &dyn diroxide_vfs::StreamingList,
+    request: RequestId,
+    place: &Place,
+    ctx: &OpContext,
+) -> Result<Vec<diroxide_core::Entry>, diroxide_vfs::VfsError> {
+    let mut all = Vec::new();
+    let outcome = streaming.list_batches(place, ctx, &mut |batch| {
+        if ctx.cancel.is_cancelled() {
+            return std::ops::ControlFlow::Break(());
+        }
+        all.extend(batch.iter().cloned());
+        shared.send(AppEvent::ListBatch {
+            request,
+            place: place.clone(),
+            entries: batch,
+        });
+        std::ops::ControlFlow::Continue(())
+    });
+    match outcome {
+        Ok(()) => Ok(all),
+        Err(diroxide_vfs::VfsError::Cancelled) if ctx.cancel.is_cancelled() => Ok(all),
+        Err(error) => Err(error),
+    }
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -2133,7 +2508,16 @@ pub fn engine_options(
     let mut options = EngineOptions::default();
     options.replace_keeps_old_in_trash = settings.replace_to_trash;
     options.protected = protected;
+    retries_from(&mut options, &settings.jobs);
     options
+}
+
+/// The silent tries after a lost network, from the `[jobs]` settings: the
+/// count and the first wait; each next wait is three times longer (R25,
+/// 2.3).
+fn retries_from(options: &mut EngineOptions, settings: &diroxide_config::JobSettings) {
+    options.network_retries = u32::try_from(settings.network_retries).unwrap_or(3);
+    options.network_retry_wait = Duration::from_secs(settings.network_retry_seconds.max(1));
 }
 
 #[cfg(test)]

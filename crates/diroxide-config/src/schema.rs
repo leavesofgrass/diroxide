@@ -107,6 +107,9 @@ pub enum SettingGroup {
     Speech,
     /// Confirmations, the trash and safe names.
     Safety,
+    /// The transfer queue: jobs at once, the speed limit, retries and
+    /// errors (alpha 2).
+    Jobs,
     /// Themes and colors.
     Look,
     /// The viewer and the quick view (alpha.2).
@@ -124,11 +127,12 @@ pub enum SettingGroup {
 
 impl SettingGroup {
     /// Every group, in order.
-    pub const ALL: [SettingGroup; 10] = [
+    pub const ALL: [SettingGroup; 11] = [
         SettingGroup::Panels,
         SettingGroup::Keys,
         SettingGroup::Speech,
         SettingGroup::Safety,
+        SettingGroup::Jobs,
         SettingGroup::Look,
         SettingGroup::Viewer,
         SettingGroup::Archives,
@@ -144,6 +148,7 @@ impl SettingGroup {
             SettingGroup::Keys => "Keys",
             SettingGroup::Speech => "Speech and Braille",
             SettingGroup::Safety => "Safety",
+            SettingGroup::Jobs => "Jobs and transfers",
             SettingGroup::Look => "Look",
             SettingGroup::Viewer => "Viewer and quick view",
             SettingGroup::Archives => "Archives and split",
@@ -286,6 +291,17 @@ const LARGE_FILES: &[Choice] = &[
     choice("bytes", "compare them byte by byte"),
 ];
 
+const LIMIT_SCOPES: &[Choice] = &[
+    choice("remote", "jobs on remote servers"),
+    choice("all", "every job"),
+];
+
+const ON_ERRORS: &[Choice] = &[
+    choice("ask", "ask about each error"),
+    choice("continue_and_list", "continue and list errors"),
+    choice("stop_at_first", "stop at the first error"),
+];
+
 const WEEK_STARTS: &[Choice] = &[
     choice("sunday", "Sunday"),
     choice("monday", "Monday"),
@@ -296,7 +312,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 92] = [
+pub const SCHEMA: [SettingInfo; 99] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -548,6 +564,90 @@ pub const SCHEMA: [SettingInfo; 92] = [
         kind: K::Flag,
         default: "true",
         help: "Refuses names that other systems cannot store, such as a colon or a trailing space, when diroxide makes or renames an entry.",
+        arrives: None,
+    },
+    // The transfer queue (lane A2, R25 commit 80).
+    SettingInfo {
+        key: "jobs.per_host",
+        name: "Jobs at once per server",
+        group: G::Jobs,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 8,
+            unit: "jobs",
+        },
+        default: "2",
+        help: "How many jobs run at once on one remote server; more wait their turn. Jobs on this computer always start at once.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "jobs.remote",
+        name: "Remote jobs at once",
+        group: G::Jobs,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 16,
+            unit: "jobs",
+        },
+        default: "4",
+        help: "How many jobs on remote servers run at once in all; more wait their turn.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "jobs.speed_limit_kb",
+        name: "Speed limit",
+        group: G::Jobs,
+        kind: SettingKind::Number {
+            min: 0,
+            max: 10_000_000,
+            unit: "KB a second",
+        },
+        default: "0",
+        help: "The most a job may read and write in a second, in KB. 0 is no limit. The Speed limit command changes it for one job.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "jobs.speed_limit_scope",
+        name: "Speed limit for",
+        group: G::Jobs,
+        kind: SettingKind::Choice(LIMIT_SCOPES),
+        default: "\"remote\"",
+        help: "Which jobs the speed limit slows: those on remote servers, or every job.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "jobs.network_retries",
+        name: "Tries on a lost network",
+        group: G::Jobs,
+        kind: SettingKind::Number {
+            min: 0,
+            max: 10,
+            unit: "tries",
+        },
+        default: "3",
+        help: "How many times a lost network is tried again, without a word, before the job asks. Each wait is three times the one before.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "jobs.network_retry_seconds",
+        name: "First wait before a try",
+        group: G::Jobs,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 600,
+            unit: "seconds",
+        },
+        default: "5",
+        help: "How long the first wait is before a lost network is tried again: 5 seconds gives waits of 5, 15 and 45 seconds.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "jobs.on_errors",
+        name: "On errors",
+        group: G::Jobs,
+        kind: SettingKind::Choice(ON_ERRORS),
+        default: "\"ask\"",
+        help: "What a new job does when an item fails: ask each time, go on and list the failures at the end, or stop at the first.",
         arrives: None,
     },
     SettingInfo {

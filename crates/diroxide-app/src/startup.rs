@@ -140,12 +140,53 @@ pub fn pair_undo_records(records: Vec<UndoRecord>) -> Vec<UndoRecord> {
     log
 }
 
+/// The ids of the plugins installed, by their folders' names, and
+/// `script` when the scripts folder is there, for the keymap's check: a
+/// plugin's command in `keymap.toml` waits for its plugin, which is
+/// scanned after the keys are read (lane A2).
+fn installed_plugins(paths: &Paths) -> Vec<String> {
+    let mut ids = Vec::new();
+    let folders = [
+        paths.plugins_dir(),
+        crate::plugins::catalog::examples_dir(&paths.components_dir()),
+    ];
+    for folder in folders {
+        let Ok(entries) = fs::read_dir(&folder) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if entry.path().is_dir()
+                && let Some(name) = entry.file_name().to_str()
+            {
+                ids.push(if name == "scripts" {
+                    "script".to_owned()
+                } else {
+                    name.to_owned()
+                });
+            }
+        }
+    }
+    ids
+}
+
 /// Reads everything the app starts with: the config's problems with the
 /// keymap's and the menus' and banks' own, the references written beside
 /// the owner's files, the session, the journal and the histories.
 pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     let mut problems = config.problems.clone();
-    problems.extend(keymap::app_keymap_problems(&config.keymap, platform));
+    let installed = installed_plugins(paths);
+    let plugin_command = |id: &CommandId| {
+        crate::plugins::registry::is_plugin_command(id)
+            && id
+                .as_str()
+                .split_once('.')
+                .is_some_and(|(plugin, _)| installed.iter().any(|p| p == plugin))
+    };
+    problems.extend(keymap::app_keymap_problems_with(
+        &config.keymap,
+        platform,
+        &plugin_command,
+    ));
     if let Some(said) = keymap::presets::unknown_preset(&config.settings.preset) {
         problems.push(ConfigProblem::new(Paths::SETTINGS, said));
     }

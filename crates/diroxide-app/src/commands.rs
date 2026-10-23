@@ -176,6 +176,21 @@ pub mod ids {
         UNDO = "edit.undo";
         /// List the jobs that ran.
         JOB_HISTORY = "jobs.history";
+        /// The Jobs list: running, waiting and finished jobs, each with
+        /// its actions (lane A2).
+        JOBS_LIST = "jobs.list";
+        /// Pause the queue: nothing new starts.
+        JOBS_PAUSE_QUEUE = "jobs.pause-queue";
+        /// Let the queue start jobs again.
+        JOBS_RESUME_QUEUE = "jobs.resume-queue";
+        /// Pause the queue and every running job.
+        JOBS_PAUSE_ALL = "jobs.pause-all";
+        /// Let the queue and every paused job go on.
+        JOBS_RESUME_ALL = "jobs.resume-all";
+        /// Set the speed limit of every remote job.
+        JOBS_SPEED_LIMIT = "jobs.speed-limit";
+        /// Run the failed items of the last job again.
+        JOBS_RETRY_FAILED = "jobs.retry-failed";
         /// Open the File menu.
         MENU_FILE = "menu.file";
         /// Open the Edit menu.
@@ -632,7 +647,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 216] = [
+pub static CATALOG: [CommandInfo; 223] = [
     command(
         ids::QUIT,
         "Quit",
@@ -772,7 +787,63 @@ pub static CATALOG: [CommandInfo; 216] = [
     command(
         ids::JOB_HISTORY,
         "Job history",
-        "Lists the jobs that ran, what failed in each, and why.",
+        "Opens the Jobs list at the jobs that ran, with what failed in each and why.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::JOBS_LIST,
+        "Jobs",
+        "Lists the running, waiting and finished jobs, each with its actions.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::JOBS_PAUSE_QUEUE,
+        "Pause the queue",
+        "Starts no new job until the queue goes on; running jobs go on.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::JOBS_RESUME_QUEUE,
+        "Resume the queue",
+        "Lets the queue start waiting jobs again.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::JOBS_PAUSE_ALL,
+        "Pause all jobs",
+        "Pauses every running job and the queue.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::JOBS_RESUME_ALL,
+        "Resume all jobs",
+        "Lets every paused job and the queue go on.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::JOBS_SPEED_LIMIT,
+        "Speed limit",
+        "Sets the speed limit of remote jobs, such as 500 KB a second, or turns it off.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::JOBS_RETRY_FAILED,
+        "Retry the failed items",
+        "Runs the items that failed in the last finished job again, skipping what is already there.",
         Global,
         &[],
         &[],
