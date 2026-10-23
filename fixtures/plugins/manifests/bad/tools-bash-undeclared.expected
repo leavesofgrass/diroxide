@@ -1,0 +1,1 @@
+Error, permissions.tools[0]: bash is an interpreter or a shell, which can run anything. Remove it, or set permissions.declared.programs = "any program".

@@ -1,0 +1,1 @@
+Error, plugin.toml: not valid TOML: unclosed table, expected `]`. Fix the TOML syntax at the place it names.

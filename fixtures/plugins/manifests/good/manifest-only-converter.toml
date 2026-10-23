@@ -1,0 +1,19 @@
+[plugin]
+id = "md-to-docx"
+name = "Markdown to Word"
+version = "0.1.0"
+protocol = 1
+
+[[converter]]
+id = "md_docx"
+name = "Markdown to Word"
+needs = ["pandoc"]
+argv = ["pandoc", "{file}", "-o", "{dest}"]
+
+[converter.from]
+extensions = ["md", "markdown"]
+
+[[converter.to]]
+id = "docx"
+name = "Word document"
+extension = "docx"

@@ -1,0 +1,1 @@
+Error, hook[0].event: "before_everything" is not a known value. Use one of: before_copy, before_move, before_delete, before_rename, before_mkdir, after_copy, after_move, after_delete, after_rename, after_mkdir, enter_folder, select, folder_changed.

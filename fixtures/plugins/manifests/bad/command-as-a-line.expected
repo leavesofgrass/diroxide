@@ -1,0 +1,1 @@
+Error, run.command: is one line of text, which would need a shell. Write it as a list: ["python3", "main.py"].

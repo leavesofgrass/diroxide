@@ -14,7 +14,7 @@ use crate::error::PluginError;
 use crate::manifest::Manifest;
 
 /// A plugin found on disk.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PluginInfo {
     /// Its manifest.
     pub manifest: Manifest,
@@ -101,7 +101,7 @@ impl Host {
             };
             match Manifest::from_toml(&text) {
                 Ok(manifest) => {
-                    let enabled = self.enabled.contains(&manifest.name);
+                    let enabled = self.enabled.contains(&manifest.id);
                     self.plugins.push(PluginInfo {
                         manifest,
                         folder,
@@ -118,7 +118,7 @@ impl Host {
             }
         }
         self.plugins
-            .sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
+            .sort_by(|a, b| a.manifest.id.cmp(&b.manifest.id));
         problems
     }
 
@@ -127,9 +127,9 @@ impl Host {
         &self.plugins
     }
 
-    /// A plugin by name.
-    pub fn plugin(&self, name: &str) -> Option<&PluginInfo> {
-        self.plugins.iter().find(|p| p.manifest.name == name)
+    /// A plugin by id.
+    pub fn plugin(&self, id: &str) -> Option<&PluginInfo> {
+        self.plugins.iter().find(|p| p.manifest.id == id)
     }
 
     /// Calls a method on a plugin, starting it if needed. Phase 0: checks

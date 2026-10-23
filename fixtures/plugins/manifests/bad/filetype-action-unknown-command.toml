@@ -1,0 +1,13 @@
+[plugin]
+id = "line-counter"
+name = "Line counter"
+version = "0.1.0"
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]
+
+[[filetype_action]]
+type = "pdf"
+action = "view"
+command = "nowhere"

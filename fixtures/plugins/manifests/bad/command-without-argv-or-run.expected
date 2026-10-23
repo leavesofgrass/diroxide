@@ -1,0 +1,1 @@
+Error, command[0].argv: is missing, and the plugin has no [run] program. Add argv, the program and its arguments, or a [run] table.

@@ -6,7 +6,34 @@
 //! never a panic.
 
 use crate::framing::{Frame, LineReader, STRAY_PREVIEW_CHARS, classify};
+use crate::manifest::{MAX_NAME_CHARS, Manifest, Os, Severity, is_plain_id};
 use crate::protocol::{Incoming, parse_line, to_line};
+
+/// `manifest_toml`: any text as `plugin.toml`, read for each system. The
+/// properties: a manifest comes back exactly when there is no error; every
+/// problem names its field and ends its fix with a period; an accepted
+/// manifest has a plain id and a name of at most 40 characters.
+pub fn manifest_toml(data: &[u8]) {
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    for os in [Os::Windows, Os::Linux, Os::Macos] {
+        let report = Manifest::check_for(text, os);
+        let errors = report
+            .problems
+            .iter()
+            .any(|p| p.severity == Severity::Error);
+        assert_eq!(report.manifest.is_some(), !errors, "{}", report.text());
+        for problem in &report.problems {
+            assert!(!problem.field.is_empty(), "{problem}");
+            assert!(problem.fix.ends_with('.'), "{problem}");
+        }
+        if let Some(manifest) = &report.manifest {
+            assert!(is_plain_id(&manifest.id), "{}", manifest.id);
+            assert!(manifest.name.chars().count() <= MAX_NAME_CHARS);
+        }
+    }
+}
 
 /// `plugin_framing`: any byte stream through the bounded reader, the
 /// sorting and the message parser. The properties: no line holds more
@@ -128,5 +155,26 @@ mod tests {
             count += 1;
         }
         assert!(count > 0, "no seeds in {}", folder.display());
+    }
+
+    #[test]
+    fn the_manifests_replay_as_manifest_seeds() {
+        let manifests =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/plugins/manifests");
+        let mut count = 0;
+        for group in ["good", "bad"] {
+            for item in fs::read_dir(manifests.join(group)).unwrap() {
+                let path = item.unwrap().path();
+                manifest_toml(&fs::read(&path).unwrap());
+                count += 1;
+            }
+        }
+        assert!(count >= 40);
+        // Text that is not UTF-8, and truncations of a good manifest.
+        manifest_toml(&[0xFF, 0xFE, b'[']);
+        let good = fs::read(manifests.join("good").join("r3-sample.toml")).unwrap();
+        for cut in (0..good.len()).step_by(37) {
+            manifest_toml(&good[..cut]);
+        }
     }
 }

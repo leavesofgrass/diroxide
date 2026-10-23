@@ -1,0 +1,1 @@
+Error, plugin: the [plugin] table is missing. This is the old form: put id, name, version and protocol under [plugin], and the program under [run] command.

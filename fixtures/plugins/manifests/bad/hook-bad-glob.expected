@@ -1,0 +1,1 @@
+Error, hook[0].glob: "[unclosed" is not a glob. Write a glob such as "**/*.pdf", with / between folders.

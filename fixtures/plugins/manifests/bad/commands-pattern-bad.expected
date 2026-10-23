@@ -1,0 +1,2 @@
+Error, permissions.commands[0]: "*" is not a command id pattern. Write an id such as "panel.refresh", with * for one word, as in "panel.*".
+Error, permissions.commands[1]: "Panel Refresh" is not a command id pattern. Write an id such as "panel.refresh", with * for one word, as in "panel.*".

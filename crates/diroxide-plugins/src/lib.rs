@@ -35,7 +35,7 @@ pub mod transport;
 
 pub use error::PluginError;
 pub use host::{Host, HostServices, PanelSnapshot, PluginInfo};
-pub use manifest::{Capability, CommandSpec, HookKind, Manifest};
+pub use manifest::{CommandSpec, Manifest, ManifestReport, Problem, Severity};
 pub use protocol::{ErrorKind, Id, Incoming, Notification, Request, Response, RpcError};
 pub use shapes::{PanelRef, WireContext, WireEntry, WireImportance, WirePlace};
 pub use transport::{MemoryPeer, MemoryTransport, PluginTransport, StdioTransport};

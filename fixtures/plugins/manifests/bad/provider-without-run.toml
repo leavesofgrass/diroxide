@@ -1,0 +1,9 @@
+[plugin]
+id = "mem"
+name = "Memory files"
+version = "0.1.0"
+protocol = 1
+
+[[provider]]
+scheme = "mem"
+name = "Memory files"

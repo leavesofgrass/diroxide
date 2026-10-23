@@ -1,0 +1,1 @@
+Error, setting[0].default: is text, which a bool setting cannot hold. Give a default of the setting's type.

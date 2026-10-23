@@ -1,0 +1,22 @@
+[plugin]
+id = "line-counter"
+name = "Line counter"
+version = "0.1.0"
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]
+
+[[hook]]
+event = "before_delete"
+glob = "**/*.pdf"
+kind = "file"
+on_timeout = "cancel"
+timeout = "1s"
+
+[[hook]]
+event = "after_copy"
+schemes = ["mem"]
+
+[[hook]]
+event = "enter_folder"

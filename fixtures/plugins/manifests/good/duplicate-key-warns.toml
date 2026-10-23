@@ -1,0 +1,18 @@
+[plugin]
+id = "line-counter"
+name = "Line counter"
+version = "0.1.0"
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]
+
+[[command]]
+id = "one"
+name = "First command"
+key = "ctrl+alt+l"
+
+[[command]]
+id = "two"
+name = "Second command"
+key = "ctrl+alt+l"

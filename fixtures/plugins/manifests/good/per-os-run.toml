@@ -1,0 +1,19 @@
+[plugin]
+id = "everything-search"
+name = "Search with Everything"
+version = "0.1.0"
+protocol = 1
+
+[run]
+command = ["python3", "main.py"]
+idle_timeout = "never"
+
+[run.windows]
+command = ["py", "-3", "main.py"]
+concurrency = 2
+
+[run.macos]
+command = ["/usr/bin/python3", "main.py"]
+
+[run.linux]
+env = { LC_ALL = "C.UTF-8" }
