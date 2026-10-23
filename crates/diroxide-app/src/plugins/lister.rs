@@ -37,6 +37,8 @@ pub struct Lister {
     /// The filter text, as typed; rows whose name or columns hold it are
     /// shown.
     pub filter: Option<String>,
+    /// Whether more rows were asked for and have not come yet.
+    pub asking: bool,
 }
 
 /// A row's identity: its `id` extra value, or its name.
@@ -55,7 +57,35 @@ impl Lister {
             view,
             sort: None,
             filter: None,
+            asking: false,
         }
+    }
+
+    /// Whether the plugin has more rows than the lister holds.
+    pub fn has_more(&self) -> bool {
+        self.view
+            .total
+            .is_some_and(|total| total > self.view.rows.len() as u64)
+    }
+
+    /// Takes rows the plugin sent: after the ones held, or in their place
+    /// when `refresh`; a row held already is not added twice. Returns how
+    /// many were added.
+    pub fn take_rows(&mut self, rows: Vec<Entry>, refresh: bool) -> usize {
+        self.asking = false;
+        if refresh {
+            let count = rows.len();
+            self.view.rows = rows;
+            return count;
+        }
+        let held: std::collections::HashSet<String> = self.view.rows.iter().map(row_id).collect();
+        let fresh: Vec<Entry> = rows
+            .into_iter()
+            .filter(|r| !held.contains(&row_id(r)))
+            .collect();
+        let count = fresh.len();
+        self.view.rows.extend(fresh);
+        count
     }
 
     /// The lister's columns.

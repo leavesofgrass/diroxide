@@ -175,6 +175,31 @@ pub enum PluginRequest {
         /// The item's id.
         id: String,
     },
+    /// Asks a plugin for candidates for its prompt as the owner types
+    /// (`completion/query`); answered with [`PluginEvent::Candidates`]. A
+    /// new query cancels the one before it.
+    Complete {
+        /// The question's call.
+        call: CallId,
+        /// The question, whose completer asks the plugin.
+        question: Box<Question>,
+        /// The text typed so far.
+        text: String,
+        /// The cursor's place in it, in characters.
+        cursor: usize,
+    },
+    /// More rows of a plugin's lister (`lister/rows`), or all of them
+    /// again; answered with [`PluginEvent::ListerRows`].
+    ListerRows {
+        /// The plugin's id.
+        plugin: String,
+        /// The lister's id.
+        lister: String,
+        /// How many rows the app holds.
+        offset: u64,
+        /// Whether to send every row again.
+        refresh: bool,
+    },
     /// The owner left a plugin's lister.
     ListerClosed {
         /// The plugin's id.
@@ -259,6 +284,27 @@ pub enum PluginEvent {
     Refresh,
     /// A command ended.
     Finished(Box<Finished>),
+    /// A plugin's candidates for the text typed in its prompt, each the
+    /// text and its kind in a word.
+    Candidates {
+        /// The question's call.
+        call: CallId,
+        /// The text they are for.
+        text: String,
+        /// The candidates.
+        candidates: Vec<(String, String)>,
+    },
+    /// Rows of a plugin's lister.
+    ListerRows {
+        /// The plugin's id.
+        plugin: String,
+        /// The lister's id.
+        lister: String,
+        /// The rows.
+        rows: Vec<Entry>,
+        /// Whether they replace the rows held.
+        refresh: bool,
+    },
     /// An item's log, newest line first.
     Logged {
         /// The item's id.

@@ -116,7 +116,7 @@ fn serve(
                     json!({"jsonrpc": "2.0", "id": id, "result": {
                         "protocol": 1,
                         "plugin": {"name": "Test plugin", "version": "0.1.0"},
-                        "plugin_capabilities": {"commands": commands, "listers": listers}
+                        "plugin_capabilities": {"commands": commands, "listers": listers, "completion": true}
                     }}),
                 );
             }
@@ -178,6 +178,24 @@ fn serve(
                         json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32800, "message": "cancelled"}}),
                     );
                 }
+            }
+            Some("lister/rows") => {
+                write(
+                    &peer,
+                    json!({"jsonrpc": "2.0", "id": id, "result": {"rows": [
+                        {"name": "c.txt", "kind": "item", "extra": {"id": "c.txt", "state": "Deleted", "lines": "7"}}
+                    ]}}),
+                );
+            }
+            Some("completion/query") => {
+                let text = message["params"]["text"].as_str().unwrap_or_default();
+                write(
+                    &peer,
+                    json!({"jsonrpc": "2.0", "id": id, "result": {"candidates": [
+                        {"text": format!("{text}-one"), "kind": "branch"},
+                        {"text": format!("{text}-two"), "kind": "branch"}
+                    ]}}),
+                );
             }
             Some("settings/changed") => {
                 announce(
@@ -761,7 +779,7 @@ fn a_lister_sorts_filters_marks_and_refuses_file_commands() {
     );
     let said = s.run_command(Command::new(id("line-counter.show")));
     assert!(
-        said.contains(&"Changed files (Line counter), 2 rows".to_owned()),
+        said.contains(&"Changed files, 2 rows (Line counter)".to_owned()),
         "{said:?}"
     );
     assert_eq!(
@@ -1127,4 +1145,64 @@ fn empty_report() -> diroxide_plugins::script::runner::RunReport {
         runs: 1,
         stderr: Vec::new(),
     }
+}
+
+#[test]
+fn a_plugins_prompt_completes_as_the_owner_types() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let text = json!({"kind": "text", "title": "Branch",
+        "complete": {"source": "plugin", "prompt_id": "branch"}});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("ask", Act::Call("ui/ask", text))]),
+    );
+    s.run_command(Command::new(id("line-counter.ask")));
+    let said = s.type_text("ma");
+    assert!(said.contains(&"2 candidates".to_owned()), "{said:?}");
+    let Some(Dialog::Edit {
+        candidates: Some(list),
+        ..
+    }) = s.dialog()
+    else {
+        panic!("the candidates under the field");
+    };
+    assert_eq!(list.announce_focus(), "ma-one, branch, 1 of 2");
+    s.key("down");
+    let said = s.key("enter");
+    assert_eq!(said, ["Branch (Line counter): ma-one"]);
+    let said = s.key("enter");
+    assert!(
+        said.contains(&r#"Host said {"text":"ma-one"}. By Line counter."#.to_owned()),
+        "{said:?}"
+    );
+}
+
+#[test]
+fn a_lister_asks_for_more_rows_at_its_end() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "total": 3, "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}},
+        {"name": "a.txt", "kind": "item", "extra": {"id": "a.txt", "state": "Added", "lines": "3"}}
+    ]});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("show", Act::Call("lister/open", open))]),
+    );
+    s.run_command(Command::new(id("line-counter.show")));
+    assert_eq!(rows(&s).len(), 2);
+    let said = s.key("down");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("1 row more (Line counter)")),
+        "{said:?}"
+    );
+    assert_eq!(rows(&s).len(), 3);
+    assert_eq!(rows(&s)[2], "c.txt, state Deleted, lines 7");
+    let said = s.key("ctrl+r");
+    assert!(
+        said.iter().any(|l| l.starts_with("1 row (Line counter)")),
+        "the rows again: {said:?}"
+    );
 }

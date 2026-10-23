@@ -76,6 +76,9 @@ pub(super) struct Running {
     input: Option<String>,
     output: Vec<String>,
     shown_at: Option<Timestamp>,
+    /// Whether the plugin said something of its own while it ran: then
+    /// its end is shown, not said again.
+    announced: bool,
 }
 
 /// What the app keeps for plugins.
@@ -437,6 +440,7 @@ impl App {
                 input: context.input.clone(),
                 output: Vec::new(),
                 shown_at: Some(now),
+                announced: false,
             },
         );
         self.plugins.failure_said.remove(&entry.owner);
@@ -464,7 +468,19 @@ impl App {
                 plugin,
                 request,
             } => self.plugin_call(call, plugin, request),
-            PluginEvent::Said { message, .. } => vec![self.say(message)],
+            PluginEvent::Said { plugin, message } => {
+                for running in self.plugins.running.values_mut() {
+                    if running.plugin == plugin {
+                        running.announced = true;
+                    }
+                }
+                vec![self.say(message)]
+            }
+            PluginEvent::Candidates {
+                call,
+                text,
+                candidates,
+            } => self.plugin_candidates(call, &text, &candidates),
             PluginEvent::Progress { plugin, message } => self.plugin_progress(&plugin, message),
             PluginEvent::Host(event) => self.host_event(event),
             PluginEvent::Output { job, line } => {
@@ -484,6 +500,12 @@ impl App {
             }
             PluginEvent::Finished(finished) => self.plugin_finished(*finished),
             PluginEvent::Logged { id, lines } => self.open_log(&id, &lines),
+            PluginEvent::ListerRows {
+                plugin,
+                lister,
+                rows,
+                refresh,
+            } => self.lister_rows_came(&plugin, &lister, rows, refresh),
             PluginEvent::Note(message) => vec![self.say(message)],
         }
     }
@@ -851,7 +873,16 @@ impl App {
                     _ => Vec::new(),
                 }
             }
-            Wants::Ask { call, question } => self.ask_accepted(call, &question, row, text),
+            Wants::Ask { call, question } => {
+                // Enter in the candidates takes one into the field first.
+                if let (Some((_, Dialog::Edit { in_list: true, .. })), Some(row)) =
+                    (self.dialogs.last(), &row)
+                {
+                    let row = row.clone();
+                    return self.take_candidate(&row);
+                }
+                self.ask_accepted(call, &question, row, text)
+            }
             Wants::Document { call } => {
                 let effects = self.close_top();
                 if let Some(call) = call {
@@ -1070,6 +1101,87 @@ impl App {
         effects
     }
 
+    /// A plugin's candidates for its prompt: the list under the field, when
+    /// the question is still open and its text has not changed since.
+    fn plugin_candidates(
+        &mut self,
+        call: CallId,
+        text: &str,
+        candidates: &[(String, String)],
+    ) -> Vec<Effect> {
+        let current = matches!(
+            self.opens.last().map(|o| &o.purpose),
+            Some(Purpose::Plugin(w)) if matches!(&**w, Wants::Ask { call: c, .. } if *c == call)
+        );
+        let Some((
+            _,
+            Dialog::Edit {
+                field,
+                candidates: list,
+                in_list,
+            },
+        )) = self.dialogs.last_mut()
+        else {
+            return Vec::new();
+        };
+        if !current || field.text() != text {
+            return Vec::new();
+        }
+        if candidates.is_empty() {
+            *list = None;
+            *in_list = false;
+            return vec![Effect::Redraw(Redraw::All)];
+        }
+        let rows = candidates
+            .iter()
+            .map(|(text, kind)| {
+                let row = ListRow::new(text.clone(), text.clone());
+                if kind.is_empty() {
+                    row
+                } else {
+                    row.with_details([kind.clone()])
+                }
+            })
+            .collect();
+        let mut fresh = ListModel::new(field.label().to_owned()).with_rows(rows);
+        fresh.set_help("Up and Down choose, Enter takes it, Escape closes the list.");
+        *list = Some(fresh);
+        let count =
+            diroxide_core::format::count(candidates.len() as u64, "candidate", "candidates");
+        vec![
+            Effect::Redraw(Redraw::All),
+            self.say(Message::status(count)),
+        ]
+    }
+
+    /// The text of a plugin's prompt changed: its plugin completer asks
+    /// for candidates (`completion/query`).
+    pub(super) fn plugin_field_changed(&mut self, text: &str) -> Vec<Effect> {
+        let Some(Purpose::Plugin(wants)) = self.opens.last().map(|o| o.purpose.clone()) else {
+            return Vec::new();
+        };
+        let Wants::Ask { call, question } = *wants else {
+            return Vec::new();
+        };
+        if !matches!(
+            question.completion,
+            Some(diroxide_plugins::ask::Completion::Plugin(_))
+        ) {
+            return Vec::new();
+        }
+        let cursor = match self.dialogs.last() {
+            Some((_, Dialog::Edit { field, .. })) => field.cursor(),
+            _ => return Vec::new(),
+        };
+        self.request(Request::Plugins(Box::new(PluginRequest::Complete {
+            call,
+            question,
+            text: text.to_owned(),
+            cursor,
+        })));
+        Vec::new()
+    }
+
     /// Keys of a plugin's dialogs before the dialog's own: Space marks in
     /// a choose list with several answers and in a lister; a lister's
     /// action keys, sort and filter; a file command on a lister's row is
@@ -1127,6 +1239,30 @@ impl App {
                     return Some(effects);
                 }
                 match action? {
+                    // The end of the rows: more from the plugin, when it
+                    // has more.
+                    Action::Focus(movement) => {
+                        let at_end = match self.dialogs.last_mut() {
+                            Some((_, Dialog::Choose { list, .. })) => {
+                                list.move_focus(movement);
+                                list.focus_index().map(|i| i + 1) == Some(list.len())
+                            }
+                            _ => false,
+                        };
+                        let line = match self.dialogs.last() {
+                            Some((_, dialog)) => dialog.focus_line(),
+                            None => String::new(),
+                        };
+                        let mut effects = vec![
+                            Effect::Redraw(Redraw::All),
+                            Effect::Announce(Message::status(line)),
+                        ];
+                        if at_end && lister.has_more() && !lister.asking {
+                            effects.extend(self.ask_lister_rows(&lister, false));
+                        }
+                        Some(effects)
+                    }
+                    Action::Reload => Some(self.ask_lister_rows(&lister, true)),
                     Action::ToggleSelect => {
                         let state = match self.dialogs.last_mut() {
                             Some((_, Dialog::Choose { list, .. })) => {
@@ -1389,10 +1525,15 @@ impl App {
         let lister = Lister::new(view);
         let list = lister.list(None);
         let count = lister.view.rows.len();
-        let mut line = format!(
-            "{}, {}",
-            lister.title(),
-            diroxide_core::format::count(count as u64, "row", "rows")
+        let suffix = format!(" ({})", lister.view.plugin);
+        let title = lister.title();
+        let bare = title.strip_suffix(&suffix).unwrap_or(&title);
+        let mut line = lines::with_source(
+            &format!(
+                "{bare}, {}",
+                diroxide_core::format::count(count as u64, "row", "rows")
+            ),
+            &lister.view.plugin,
         );
         if let Some(capped) = lister.view.capped_line() {
             line.push_str(". ");
@@ -1437,6 +1578,54 @@ impl App {
             _ => sentence,
         };
         vec![Effect::Redraw(Redraw::All), self.say(Message::info(line))]
+    }
+
+    /// Asks the plugin for more rows, or for all of them again.
+    fn ask_lister_rows(&mut self, lister: &Lister, refresh: bool) -> Vec<Effect> {
+        let offset = if refresh {
+            0
+        } else {
+            lister.view.rows.len() as u64
+        };
+        self.request(Request::Plugins(Box::new(PluginRequest::ListerRows {
+            plugin: lister.view.plugin_id.clone(),
+            lister: lister.view.spec.id.clone(),
+            offset,
+            refresh,
+        })));
+        self.lister_change(|lister| {
+            lister.asking = true;
+            lines::with_source("Asking for more rows", &lister.view.plugin)
+        })
+    }
+
+    /// Rows a plugin sent for its open lister: added after the ones shown,
+    /// or in their place.
+    fn lister_rows_came(
+        &mut self,
+        plugin: &str,
+        lister: &str,
+        rows: Vec<diroxide_core::Entry>,
+        refresh: bool,
+    ) -> Vec<Effect> {
+        let open = self.opens.iter().any(|o| {
+            matches!(&o.purpose, Purpose::Plugin(w) if matches!(&**w, Wants::Lister { lister: l } if l.view.plugin_id == plugin && l.view.spec.id == lister))
+        });
+        if !open {
+            return Vec::new();
+        }
+        self.lister_change(|held| {
+            let added = held.take_rows(rows, refresh);
+            let words = if refresh {
+                diroxide_core::format::count(added as u64, "row", "rows")
+            } else {
+                format!(
+                    "{} more",
+                    diroxide_core::format::count(added as u64, "row", "rows")
+                )
+            };
+            lines::with_source(&words, &held.view.plugin)
+        })
     }
 
     fn lister_rows(&self, lister: &Lister) -> Vec<diroxide_core::Entry> {
@@ -1635,15 +1824,21 @@ impl App {
                     said.push(Message::warning(summary.clone()));
                     said.push(Message::info(lines::next_log(&running.plugin)));
                     failed.push(format!("{bad} failed"));
-                } else if done > 0 {
-                    summary = lines::command_done(
-                        &running.name,
-                        &diroxide_core::format::count(done, "item", "items"),
-                        &running.source,
-                    );
-                    said.push(Message::status(summary.clone()));
                 } else {
-                    said.push(Message::status(summary.clone()));
+                    if done > 0 {
+                        summary = lines::command_done(
+                            &running.name,
+                            &diroxide_core::format::count(done, "item", "items"),
+                            &running.source,
+                        );
+                    }
+                    // Said when the plugin said nothing of its own; shown
+                    // either way.
+                    said.push(if running.announced {
+                        Message::status(summary.clone())
+                    } else {
+                        Message::done(summary.clone())
+                    });
                 }
             }
             Outcome::Process(Err(error)) => {
@@ -1710,7 +1905,15 @@ impl App {
         running: &Running,
         report: RunReport,
     ) -> (Vec<Message>, Vec<Effect>) {
-        let mut said: Vec<Message> = report.said.clone();
+        // A script that said its own words and ended well is not said to
+        // be done again: its verdict is shown only.
+        let quiet = running.announced && report.ending.is_done();
+        let mut said: Vec<Message> = report
+            .said
+            .iter()
+            .cloned()
+            .map(|m| if quiet { Message::status(m.text) } else { m })
+            .collect();
         let failed = !report.ending.is_done() && report.ending != Ending::Cancelled;
         if failed {
             said.push(Message::info(lines::next_log(&running.plugin)));

@@ -568,6 +568,64 @@ impl PluginRuntime {
                     send(shared, PluginEvent::Logged { id, lines });
                 }));
             }
+            PluginRequest::Complete {
+                call,
+                question,
+                text,
+                cursor,
+            } => {
+                worker(Box::new(move |shared| {
+                    let Some(diroxide_plugins::ask::Completion::Plugin(completer)) =
+                        &question.completion
+                    else {
+                        return;
+                    };
+                    // A query the next keystroke cancelled says nothing.
+                    if let Ok(found) = completer.query(&text, cursor) {
+                        let candidates = found.into_iter().map(|c| (c.text, c.kind)).collect();
+                        send(
+                            shared,
+                            PluginEvent::Candidates {
+                                call,
+                                text,
+                                candidates,
+                            },
+                        );
+                    }
+                }));
+            }
+            PluginRequest::ListerRows {
+                plugin,
+                lister,
+                offset,
+                refresh,
+            } => {
+                let Some(host) = self.hosts.get(&plugin).map(|h| Arc::clone(&h.host)) else {
+                    return;
+                };
+                worker(Box::new(move |shared| {
+                    match host.lister_rows(&plugin, &lister, offset, refresh) {
+                        Ok(rows) => send(
+                            shared,
+                            PluginEvent::ListerRows {
+                                plugin,
+                                lister,
+                                rows,
+                                refresh,
+                            },
+                        ),
+                        Err(error) => send(
+                            shared,
+                            PluginEvent::Note(Message::error(
+                                diroxide_plugins::lines::could_not_run(
+                                    "lister rows",
+                                    &error.to_string(),
+                                ),
+                            )),
+                        ),
+                    }
+                }));
+            }
             PluginRequest::ListerClosed { plugin, lister } => {
                 if let Some(host) = self.hosts.get(&plugin) {
                     host.host.lister_closed(&plugin, &lister);

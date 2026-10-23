@@ -930,7 +930,7 @@ impl App {
 
     /// A candidate chosen from a field's list: its text goes into the
     /// field and the list closes.
-    fn take_candidate(&mut self, text: &str) -> Vec<Effect> {
+    pub(super) fn take_candidate(&mut self, text: &str) -> Vec<Effect> {
         let candidate = Candidate::new(text, "");
         if let Some((
             _,
@@ -1234,6 +1234,22 @@ impl App {
                 self.refresh_candidates()
             }
             Some(Purpose::Keys(purpose)) if purpose.is_list() => self.keys_list_typed(),
+            // A plugin's prompt with a plugin completer (W4d).
+            Some(Purpose::Plugin(_)) => {
+                if let Some((
+                    _,
+                    Dialog::Edit {
+                        candidates,
+                        in_list,
+                        ..
+                    },
+                )) = self.dialogs.last_mut()
+                {
+                    *candidates = None;
+                    *in_list = false;
+                }
+                self.plugin_field_changed(&text)
+            }
             Some(Purpose::Organize(wants)) if wants.list_always() => self.refresh_candidates(),
             _ => {
                 if let Some((
