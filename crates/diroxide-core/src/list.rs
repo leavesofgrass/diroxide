@@ -50,9 +50,14 @@ impl ListRow {
     }
 
     /// The row as said, without its position: "report.pdf, selected, PDF,
-    /// 2.1 MB". An unavailable row ends with "unavailable".
+    /// 2.1 MB". An unavailable row says so right after its label, before
+    /// the details, so the meaning lands in the first cells: "Eject,
+    /// unavailable, needs the Volume actions plugin".
     pub fn spoken(&self) -> String {
         let mut parts: Vec<&str> = vec![&self.label];
+        if !self.enabled {
+            parts.push("unavailable");
+        }
         if self.selected {
             parts.push("selected");
         }
@@ -62,9 +67,6 @@ impl ListRow {
                 .map(String::as_str)
                 .filter(|d| !d.is_empty()),
         );
-        if !self.enabled {
-            parts.push("unavailable");
-        }
         parts.join(", ")
     }
 }

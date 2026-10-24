@@ -326,7 +326,7 @@ impl App {
             .map(|offer| {
                 let name = offer.action.name();
                 let mut shown = ListRow::new(name.to_lowercase(), name);
-                // "Eject, needs the Volume actions plugin, unavailable":
+                // "Eject, unavailable, needs the Volume actions plugin":
                 // the reason read right after the action's name.
                 if let Some(why) = offer.why_not {
                     shown.enabled = false;

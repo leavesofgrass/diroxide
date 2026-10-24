@@ -206,13 +206,13 @@ fn eject_without_the_plugin_says_why_and_open_goes_there() {
     let unmount = if cfg!(windows) {
         None
     } else {
-        Some("Unmount, needs the Volume actions plugin, unavailable")
+        Some("Unmount, unavailable, needs the Volume actions plugin")
     };
     if let Some(unmount) = unmount {
         assert!(actions.contains(&unmount.to_owned()), "{actions:#?}");
     }
     assert!(
-        actions.contains(&"Eject, needs the Volume actions plugin, unavailable".to_owned()),
+        actions.contains(&"Eject, unavailable, needs the Volume actions plugin".to_owned()),
         "{actions:#?}"
     );
     assert_eq!(actions.last().map(String::as_str), Some("Hide"));
