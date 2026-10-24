@@ -285,9 +285,11 @@ pub(crate) fn plugins_state(paths: &Paths) -> PathBuf {
 
 fn roots(paths: &Paths) -> Roots {
     let examples = catalog::examples_dir(&paths.components_dir());
+    let components = paths.components_dir();
     Roots {
         plugins: paths.plugins_dir(),
         examples: examples.is_dir().then_some(examples),
+        components: components.is_dir().then_some(components),
         state: plugins_state(paths),
     }
 }

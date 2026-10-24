@@ -288,7 +288,8 @@ impl Catalog {
 }
 
 /// Where plugins are looked for: the owner's plugins folder first, then
-/// the example plugins component's folder, whose items lose to the
+/// the example plugins component's folder, then the plugin components
+/// (one plugin folder each, such as `diro-sftp`), whose items lose to the
 /// owner's own of the same id.
 #[derive(Clone, Debug)]
 pub struct Roots {
@@ -296,6 +297,10 @@ pub struct Roots {
     pub plugins: PathBuf,
     /// The examples' `plugins` folder inside the components folder.
     pub examples: Option<PathBuf>,
+    /// The components folder, whose plugin components are plugin folders
+    /// of their own: the SFTP places plugin unpacks to
+    /// `components/diro-sftp` (lane A3).
+    pub components: Option<PathBuf>,
     /// The plugins' state folder, where the consent record is.
     pub state: PathBuf,
 }
@@ -326,6 +331,18 @@ pub fn scan(roots: &Roots, hash: Hasher, lookup: &Lookup, env: &RunEnv) -> Catal
                 continue;
             }
             found.push((item, true));
+        }
+    }
+    // A plugin component is its own plugin folder: a folder there without
+    // a manifest (the examples pack) is no plugin and is passed over.
+    if let Some(components) = &roots.components {
+        for item in installed::scan(components, lookup.os) {
+            if matches!(item, Installed::Script(_))
+                || found.iter().any(|(f, _)| f.id() == item.id())
+            {
+                continue;
+            }
+            found.push((item, false));
         }
     }
     for (installed, example) in found {
