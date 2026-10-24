@@ -26,11 +26,13 @@ pub fn fake_ssh_in(folder: &Path, config: &Value) -> PathBuf {
     program
 }
 
-/// The lines a fake wrote to its log, each as JSON.
+/// The lines a fake wrote to its log, each as JSON. Tests poll the log
+/// while the fake still writes, so a line not yet complete is left for
+/// the next read instead of failing the parse.
 pub fn log_lines(log: &Path) -> Vec<Value> {
     std::fs::read_to_string(log)
         .unwrap_or_default()
         .lines()
-        .map(|line| serde_json::from_str(line).unwrap())
+        .filter_map(|line| serde_json::from_str(line).ok())
         .collect()
 }
