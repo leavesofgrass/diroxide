@@ -31,8 +31,9 @@ use diroxide_vfs::{
 };
 
 /// How long a place may take to say its free space before it is "not
-/// known".
-pub const SPACE_LIMIT: Duration = Duration::from_secs(3);
+/// known": the Volumes list's limit, so the plan, Say Status and the
+/// list wait alike (two seconds).
+pub const SPACE_LIMIT: Duration = diroxide_vfs::SPACE_LIMIT;
 
 /// How long an answer is kept for the next question about the same
 /// volume.
