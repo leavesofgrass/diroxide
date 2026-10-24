@@ -115,6 +115,8 @@ impl Interrupted {
             JobKind::Split => "a split",
             JobKind::Join => "a join",
             JobKind::Undo => "an undo",
+            JobKind::Restore => "a restore from the trash",
+            JobKind::Purge => "a delete from the trash",
             _ => "a job",
         };
         format!(

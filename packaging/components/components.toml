@@ -14,8 +14,10 @@
 # (place or unpack), folder (the id by default).
 # Per file ([[component.file]]): name, target (a triple, or any), exec,
 # strip, url (only when the file is not a release asset of this project),
-# and pack: a list of { from = "folder", as = "path in the zip",
-# optional = true when the folder may not be there yet }.
+# and pack: a list of parts, each { from = "folder" or one tracked file,
+# as = "path in the zip", optional = true when the folder may not be
+# there yet }, or { asset = "target/program", as = "..." }, a prebuilt
+# file from cargo xtask components --assets FOLDER.
 #
 # A file is published as a release asset under the tag <id>-<version>;
 # the program derives its address from the repository, that tag and the
@@ -42,4 +44,52 @@ target = "any"
 pack = [
   { from = "packaging/components/diro-examples", as = "" },
   { from = "examples/plugins", as = "plugins", optional = true },
+]
+
+# The SFTP places plugin (R25 commit 87; question N13): its program is
+# built by the release workflow for each computer below, from its own
+# workspace in plugins/diro-sftp, and handed to cargo xtask components as
+# --assets FOLDER (FOLDER/<target>/diro-sftp, diro-sftp.exe on Windows).
+# Without the assets the component is left out of the list, so the list
+# committed here stays current; the release regenerates it with them
+# before it builds diro. Another computer hears "No build for this
+# computer." and the cargo install line that builds it there.
+[[component]]
+id = "diro-sftp"
+title = "SFTP places plugin"
+kind = "plugin"
+version = "0.1.0-alpha.1"
+license = "Apache-2.0 OR MIT"
+credit = "The diroxide project"
+features = ["sftp"]
+needs_tools = ["ssh"]
+protocol = 1
+min_diro = "0.1.0-alpha.2"
+action = "unpack"
+
+[[component.file]]
+name = "diro-sftp-0.1.0-alpha.1-x86_64-pc-windows-msvc.zip"
+target = "x86_64-pc-windows-msvc"
+exec = "diro-sftp.exe"
+pack = [
+  { from = "plugins/diro-sftp/plugin.toml", as = "" },
+  { asset = "x86_64-pc-windows-msvc/diro-sftp.exe", as = "" },
+]
+
+[[component.file]]
+name = "diro-sftp-0.1.0-alpha.1-x86_64-unknown-linux-gnu.zip"
+target = "x86_64-unknown-linux-gnu"
+exec = "diro-sftp"
+pack = [
+  { from = "plugins/diro-sftp/plugin.toml", as = "" },
+  { asset = "x86_64-unknown-linux-gnu/diro-sftp", as = "" },
+]
+
+[[component.file]]
+name = "diro-sftp-0.1.0-alpha.1-universal-apple-darwin.zip"
+target = "universal-apple-darwin"
+exec = "diro-sftp"
+pack = [
+  { from = "plugins/diro-sftp/plugin.toml", as = "" },
+  { asset = "universal-apple-darwin/diro-sftp", as = "" },
 ]

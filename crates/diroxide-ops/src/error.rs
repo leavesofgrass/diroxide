@@ -77,6 +77,29 @@ pub enum OpsError {
     /// is, never inside "Could not ...".
     #[error("{0}")]
     HookStopped(String),
+    /// The trash cannot be listed here (macOS), or the engine has no trash
+    /// to list: the trash browser says
+    /// [`TRASH_NOT_LISTED`](diroxide_vfs::TRASH_NOT_LISTED) whole.
+    #[error("the trash cannot be listed on this system")]
+    NoTrashList,
+    /// Empty the trash was asked for, and the trash holds nothing.
+    #[error("the trash is empty")]
+    TrashEmpty,
+}
+
+impl OpsError {
+    /// The error as a sentence of its own, where it reads better that way
+    /// than inside "Could not VERB OBJECT: CAUSE.": "The trash cannot be
+    /// listed on this system."; "The trash is empty."; a provider's own
+    /// ([`VfsError::sentence`]). `None` for the rest.
+    pub fn sentence(&self) -> Option<String> {
+        match self {
+            OpsError::NoTrashList => Some(diroxide_vfs::TRASH_NOT_LISTED.to_owned()),
+            OpsError::TrashEmpty => Some("The trash is empty.".to_owned()),
+            OpsError::Vfs(inner) => inner.sentence(),
+            _ => None,
+        }
+    }
 }
 
 impl Explain for OpsError {
@@ -86,9 +109,11 @@ impl Explain for OpsError {
             OpsError::NothingSelected => "Select something first, or move to an entry.".to_owned(),
             OpsError::NoDestination => "Open the destination in the other panel.".to_owned(),
             OpsError::NoName => "Type a name.".to_owned(),
-            OpsError::NotBuilt(_) | OpsError::NothingToUndo | OpsError::HookStopped(_) => {
-                String::new()
-            }
+            OpsError::NotBuilt(_)
+            | OpsError::NothingToUndo
+            | OpsError::HookStopped(_)
+            | OpsError::NoTrashList
+            | OpsError::TrashEmpty => String::new(),
             OpsError::TrashNotConfirmed(_) => {
                 "Look for it in the trash, and check the drive.".to_owned()
             }
@@ -128,5 +153,14 @@ mod tests {
             OpsError::NothingToUndo.to_string(),
             "there is nothing to undo"
         );
+        assert_eq!(
+            OpsError::NoTrashList.sentence().as_deref(),
+            Some("The trash cannot be listed on this system.")
+        );
+        assert_eq!(
+            OpsError::TrashEmpty.sentence().as_deref(),
+            Some("The trash is empty.")
+        );
+        assert_eq!(OpsError::NothingSelected.sentence(), None);
     }
 }

@@ -19,7 +19,7 @@ use diroxide_core::{
     Clock, ConflictAction, ConflictAnswer, ConflictKind, Entry, ErrorAction, JobId, JobKind,
     JobState, Message, Place,
 };
-use diroxide_vfs::{CancelToken, Registry, VfsError};
+use diroxide_vfs::{CancelToken, Registry, TrashBin, VfsError};
 
 use crate::error::OpsError;
 use crate::gate::{ConnectionAnswer, ConnectionQuestion, Gates};
@@ -436,6 +436,9 @@ impl JobReport {
     /// warning: 3 done."; "Copy finished: 3 done, 1 skipped." A missing
     /// result counts as a failure.
     pub fn summary(&self) -> String {
+        if let Some(line) = crate::trash::summary(self) {
+            return line;
+        }
         let verb = summary_word(self.kind);
         let mut counts = vec![format!("{} done", self.done.len())];
         if !self.skipped.is_empty() {
@@ -514,6 +517,7 @@ pub struct Engine {
     ledger: Arc<Ledger>,
     limiter: Arc<Limiter>,
     hooks: Option<Arc<dyn HookRunner>>,
+    trash: Option<Arc<dyn TrashBin>>,
 }
 
 impl Engine {
@@ -530,7 +534,23 @@ impl Engine {
             ledger: Arc::new(Ledger::in_memory()),
             limiter: Arc::new(Limiter::new()),
             hooks: None,
+            trash: None,
         }
+    }
+
+    /// The same engine listing, restoring and purging through this trash
+    /// (R25 3.3): the local provider's [`diroxide_vfs::SystemTrash`] in the
+    /// app, a test-only bin in tests. Without one, a restore or a purge is
+    /// refused with [`OpsError::NoTrashList`].
+    pub fn with_trash(mut self, bin: Arc<dyn TrashBin>) -> Self {
+        self.trash = Some(bin);
+        self
+    }
+
+    /// The trash the engine lists, restores and purges through, for the
+    /// trash browser's listing; [`OpsError::NoTrashList`] without one.
+    pub fn trash_bin(&self) -> Result<&Arc<dyn TrashBin>, OpsError> {
+        self.trash.as_ref().ok_or(OpsError::NoTrashList)
     }
 
     /// The same engine asking these plugins' hooks (R25 commit 71):

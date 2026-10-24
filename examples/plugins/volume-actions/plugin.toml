@@ -1,0 +1,102 @@
+# Volume actions: an example diroxide plugin of manifest-only commands,
+# in Python with the standard library only. It unmounts, ejects and
+# mounts the volume on a row of the Volumes list with the system's own
+# tool (udisksctl on Linux, diskutil on macOS, the shell's Eject verb
+# through PowerShell on Windows), by an argument list, never a shell, and
+# never with a force option: a busy volume says so and stays mounted.
+# The row's identity (a device node, a mount point or a drive) arrives in
+# the selection file. Each command declares dry_run, so a preview says
+# what it would run and changes nothing.
+#
+# Linux and macOS have Unmount, Eject and Mount; Windows mounts and
+# unmounts removable drives itself, so it has Eject only. "List devices"
+# gives the Volumes list the devices that are not mounted, one JSON line
+# each.
+
+[plugin]
+id = "volume-actions"
+name = "Volume actions"
+version = "0.1.0"
+description = "Unmounts, ejects and mounts volumes with the system's own tools."
+license = "Apache-2.0 OR MIT"
+protocol = 1
+min_host = "0.1.0-alpha.1"
+
+[permissions.declared]
+network = "no network"
+files = "reads only the system's list of mounts"
+programs = "udisksctl and lsblk, diskutil, or PowerShell, whichever this system has"
+
+# ----- Linux and macOS -----
+
+[[command]]
+id = "unmount"
+name = "Unmount"
+description = "Unmounts the volume on this row; a busy volume is never forced."
+selection = "one"
+places = "local"
+os = ["linux", "macos"]
+mode = "run"
+cwd = "script"
+dry_run = "supported"
+timeout = "90s"
+argv = ["python3", "volume_actions.py", "unmount"]
+exit_words = { 1 = "Nothing changed.", 2 = "Nothing changed.", 4 = "Nothing was forced: close the files, then try again.", 5 = "Nothing changed.", 6 = "Nothing changed." }
+
+[[command]]
+id = "eject"
+name = "Eject"
+description = "Unmounts the volume on this row and powers its drive off; never forced."
+selection = "one"
+places = "local"
+os = ["linux", "macos"]
+mode = "run"
+cwd = "script"
+dry_run = "supported"
+timeout = "120s"
+argv = ["python3", "volume_actions.py", "eject"]
+exit_words = { 1 = "Nothing changed.", 2 = "Nothing changed.", 4 = "Nothing was forced: close the files, then try again.", 5 = "Nothing changed.", 6 = "Nothing changed." }
+
+[[command]]
+id = "mount"
+name = "Mount"
+description = "Mounts the device on this row where the system mounts it."
+selection = "one"
+places = "local"
+os = ["linux", "macos"]
+mode = "run"
+cwd = "script"
+dry_run = "supported"
+timeout = "90s"
+argv = ["python3", "volume_actions.py", "mount"]
+exit_words = { 1 = "Nothing changed.", 2 = "Nothing changed.", 5 = "Nothing changed.", 6 = "Nothing changed." }
+
+[[command]]
+id = "devices"
+name = "List devices"
+description = "Lists the volumes and devices this system knows, mounted or not."
+selection = "none"
+places = "local"
+os = ["linux", "macos"]
+mode = "run"
+cwd = "script"
+dry_run = "supported"
+timeout = "30s"
+argv = ["python3", "volume_actions.py", "devices"]
+
+# ----- Windows: the py launcher, so the Store's python stub is never
+# involved -----
+
+[[command]]
+id = "eject-windows"
+name = "Eject"
+description = "Asks Windows to eject the drive on this row; never forced."
+selection = "one"
+places = "local"
+os = ["windows"]
+mode = "run"
+cwd = "script"
+dry_run = "supported"
+timeout = "60s"
+argv = ["py", "-3", "volume_actions.py", "eject"]
+exit_words = { 1 = "Nothing changed.", 2 = "Nothing changed.", 4 = "Nothing was forced: close the files, then try again.", 6 = "Nothing changed." }

@@ -54,6 +54,10 @@ use crate::volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
 use crate::{limits, walk};
 pub use entry::LocalEntryBuilder;
 use entry::{EntryContext, entry_from};
+pub use trashing::{
+    PurgeCheck, SystemTrash, TRASH_BATCH, TRASH_LIST_LIMIT, TRASH_NOT_LISTED, TrashBin, TrashId,
+    TrashedItem, list_all,
+};
 
 /// The places for the go-to-place list: the drives on Windows (from the
 /// drive list and drive types, never touching a drive), the root `/`

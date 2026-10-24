@@ -138,14 +138,34 @@ pub fn ask_first(component: &Component, feature: Option<&str>, target: &str) -> 
 }
 
 /// The lines when a component has no build for this computer: the fact,
-/// then what to do.
+/// then what to do. A helper names the system's packages; a plugin from
+/// this repository's `plugins/` workspaces names the `cargo install`
+/// line that builds it here (R25 N13), its address derived from the
+/// repository so no account is written; anything else, a file.
 pub fn no_build(component: &Component) -> Vec<String> {
-    let next = if component.kind == Kind::Helper {
-        format!("Install {} from your system's packages.", component.title)
-    } else {
-        "Install it from a file, if you have one.".to_owned()
-    };
-    vec![NO_BUILD.to_owned(), next]
+    match component.kind {
+        Kind::Helper => vec![
+            NO_BUILD.to_owned(),
+            format!("Install {} from your system's packages.", component.title),
+        ],
+        Kind::Plugin => vec![
+            NO_BUILD.to_owned(),
+            "Build it from source with cargo:".to_owned(),
+            cargo_install_line(&component.id),
+        ],
+        _ => vec![
+            NO_BUILD.to_owned(),
+            "Install it from a file, if you have one.".to_owned(),
+        ],
+    }
+}
+
+/// The line that builds a plugin of this repository from source:
+/// `cargo install --locked --git REPOSITORY diro-sftp`, the repository's
+/// address from the workspace's metadata.
+pub fn cargo_install_line(crate_name: &str) -> String {
+    let repository = env!("CARGO_PKG_REPOSITORY").trim_end_matches('/');
+    format!("cargo install --locked --git {repository} {crate_name}")
 }
 
 /// "Downloading diro-sftp: 40 percent."
@@ -716,5 +736,28 @@ mod tests {
             no_build(&seven_zip())[1],
             "Install 7-Zip from your system's packages."
         );
+    }
+
+    #[test]
+    fn a_plugin_with_no_build_here_names_the_cargo_install_line() {
+        let pin = FilePin::of_bytes("diro-sftp.zip".to_owned(), b"zip");
+        let mut sftp = Component::new(
+            "diro-sftp".to_owned(),
+            "SFTP places plugin".to_owned(),
+            vec![pin],
+        );
+        sftp.kind = Kind::Plugin;
+        let lines = no_build(&sftp);
+        assert_eq!(lines[0], "No build for this computer.");
+        assert_eq!(lines[1], "Build it from source with cargo:");
+        assert!(
+            lines[2].starts_with("cargo install --locked --git https://"),
+            "{}",
+            lines[2]
+        );
+        assert!(lines[2].ends_with("/diroxide diro-sftp"), "{}", lines[2]);
+        for line in &lines[..2] {
+            assert!(line.chars().count() <= 40, "{line}");
+        }
     }
 }
