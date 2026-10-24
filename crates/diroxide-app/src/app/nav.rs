@@ -233,8 +233,10 @@ impl App {
             }
             self.request(Request::Watch {
                 side,
-                place: Some(place),
+                place: Some(place.clone()),
             });
+            // Its free space, for Say Status; asked off the input thread.
+            self.ask_room(side, place);
             if active && let Some(mut line) = self.archive_landing(side) {
                 // Inside an archive: "Opened course.zip: 10 items, 48 KB."
                 // at its root, "week1, 3 items, in course.zip" below it.
@@ -451,8 +453,9 @@ impl App {
         }
         self.request(Request::Watch {
             side,
-            place: Some(place),
+            place: Some(place.clone()),
         });
+        self.ask_room(side, place);
         let active = side == self.active;
         let mut effects = Vec::new();
         if active || !self.screen_reader {
@@ -600,7 +603,23 @@ impl App {
         effects
     }
 
+    /// Asks a panel's place for its free space, for Say Status; what the
+    /// panel knew of its last place is forgotten.
+    pub(super) fn ask_room(&mut self, side: Side, place: Place) {
+        self.rooms[side.index()] = None;
+        self.request(Request::Room { side, place });
+    }
+
+    /// The free space of a panel's place in words, for Say Status: "412
+    /// GB free of 931 GB", "free space not known", or `None` while it has
+    /// not answered.
+    pub(super) fn room_status(&self, side: Side) -> Option<String> {
+        let (place, space) = self.rooms[side.index()].as_ref()?;
+        (place == self.panel(side).place()).then(|| crate::runtime::room_words(space.as_ref()))
+    }
+
     pub(super) fn swap_panels(&mut self) -> Vec<Effect> {
+        self.rooms.swap(0, 1);
         self.panels.swap(0, 1);
         for side in Side::BOTH {
             self.panel_mut(side).set_side(side);

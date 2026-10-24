@@ -42,6 +42,8 @@ mod selecting;
 mod session;
 // Sites in the go-to-place list and the connect flow (lane A2).
 mod sites;
+// Free space in the plan and in Say Status (lane A3).
+mod room;
 mod split_join;
 // Streamed listings reach the panel (lane A2).
 mod streaming;

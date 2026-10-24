@@ -406,6 +406,25 @@ pub enum AppEvent {
         /// The lines, meaning first.
         lines: Vec<String>,
     },
+    /// A line said before a plan's question, sent just before its
+    /// [`AppEvent::Planned`]: "Free space on build is not known." (lane
+    /// A3, R25 commit 90).
+    PlanNote {
+        /// The job.
+        job: JobId,
+        /// The line, meaning first.
+        line: String,
+    },
+    /// A panel's place said its free space, or did not in time (`None`),
+    /// for Say Status (lane A3, R25 commit 90).
+    Room {
+        /// The panel.
+        side: Side,
+        /// The place asked about.
+        place: Place,
+        /// Its free space and size, when it answered.
+        space: Option<diroxide_vfs::SpaceInfo>,
+    },
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -795,6 +814,9 @@ pub struct App {
     streams: [Option<nav::StreamNote>; 2],
     /// The places the plugins offer, for the Sites group (lane A2).
     sites: Vec<SiteRow>,
+    /// Each panel's place and its free space when it answered, for Say
+    /// Status (lane A3).
+    rooms: [Option<(Place, Option<diroxide_vfs::SpaceInfo>)>; 2],
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1117,6 +1139,7 @@ impl App {
             jobs_ui: jobs_ui::JobsState::default(),
             streams: [None, None],
             sites: Vec::new(),
+            rooms: [None, None],
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1608,6 +1631,19 @@ impl App {
             AppEvent::Queue(note) => self.queue_note(*note),
             AppEvent::Gate(event) => self.gate_event(&event),
             AppEvent::JobNotice { job, lines } => self.job_notice(job, lines),
+            AppEvent::PlanNote { job, line } => {
+                if self.flows.contains_key(&job) {
+                    vec![self.say(Message::info(line))]
+                } else {
+                    Vec::new()
+                }
+            }
+            AppEvent::Room { side, place, space } => {
+                if self.panel(side).place() == &place {
+                    self.rooms[side.index()] = Some((place, space));
+                }
+                Vec::new()
+            }
         }
     }
 

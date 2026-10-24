@@ -57,6 +57,10 @@ mod plugins;
 mod hooks;
 // The transfer queue (lane A2, R25 commit 79).
 mod queue;
+// Free space asked with a short limit (lane A3, R25 commit 90).
+mod space;
+
+pub(crate) use space::{question_lines, room_words};
 
 use crate::app::{App, AppEvent};
 use crate::request::{AskId, Question, Reply, Request, Spawn, SpawnKind};
@@ -490,6 +494,9 @@ pub struct Runtime {
     /// The listings on their way, each with its cancel, so a listing the
     /// app no longer waits for stops (lane A2, R25 commit 77).
     listings: Arc<Mutex<HashMap<RequestId, CancelToken>>>,
+    /// How long a place may take to say its free space (lane A3, R25
+    /// commit 90).
+    space_limit: Duration,
 }
 
 impl fmt::Debug for Runtime {
@@ -530,6 +537,10 @@ impl Runtime {
         let ledger = Arc::new(Ledger::in_memory());
         let hooks = Arc::new(hooks::AppHooks::default());
         let runner: Arc<dyn diroxide_ops::HookRunner> = hooks.clone();
+        // The base stays as given; the registry the engine and the
+        // listings use asks remote free space with a time limit.
+        let base = Arc::clone(&registry);
+        let registry = Arc::new(space::timed(&registry, space::SPACE_LIMIT));
         let engine = Engine::new(Arc::clone(&registry))
             .with_ledger(Arc::clone(&ledger))
             .with_hooks(runner);
@@ -542,7 +553,7 @@ impl Runtime {
             .on_event(move |event| speaker.send(AppEvent::Gate(event.clone())));
         Self {
             engine,
-            base: Arc::clone(&registry),
+            base,
             plugins: plugins::PluginRuntime::default(),
             components: components::ComponentRuntime::default(),
             components_source: String::new(),
@@ -569,7 +580,17 @@ impl Runtime {
             hooks,
             nav_seen: None,
             listings: Arc::new(Mutex::new(HashMap::new())),
+            space_limit: space::SPACE_LIMIT,
         }
+    }
+
+    /// The same runtime with another limit on how long a place may take
+    /// to say its free space before it is "not known" (tests use a short
+    /// one over a slow fake place).
+    pub fn with_space_limit(mut self, limit: Duration) -> Self {
+        self.space_limit = limit;
+        self.rebuild_registry();
+        self
     }
 
     /// The same runtime with an archive provider the caller installed in
@@ -608,7 +629,10 @@ impl Runtime {
     /// Makes the registry again from the base and the enabled plugins'
     /// providers, with an engine over it (W4d).
     fn rebuild_registry(&mut self) {
-        let registry = Arc::new(self.plugins.registry_with_providers(&self.base));
+        let registry = Arc::new(space::timed(
+            &self.plugins.registry_with_providers(&self.base),
+            self.space_limit,
+        ));
         self.engine = self.engine_over(Arc::clone(&registry));
         self.registry = registry;
     }
@@ -1037,9 +1061,18 @@ impl Runtime {
             Request::Plan(job) => {
                 let engine = self.engine.clone();
                 let control = JobControl::new();
+                let registry = Arc::clone(&self.registry);
                 self.worker(move |shared| {
                     let sink = forward_sink(job.id, shared, &engine, &control);
                     let result = engine.plan_with(&job, &control, &sink).map(Box::new);
+                    // A remote destination that cannot say its free space
+                    // is said before the plan's question; the copy goes on
+                    // (R25, 3.4).
+                    if let Ok(plan) = &result
+                        && let Some(line) = space::room_not_known(&registry, &job, plan)
+                    {
+                        shared.send(AppEvent::PlanNote { job: job.id, line });
+                    }
                     shared.send(AppEvent::Planned {
                         job: job.id,
                         result,
@@ -1068,6 +1101,20 @@ impl Runtime {
                 }
             }
             Request::Watch { side, place } => self.watch(side, place),
+            Request::Room { side, place } => {
+                let registry = Arc::clone(&self.registry);
+                let limit = self.space_limit;
+                self.worker(move |shared| {
+                    let space = registry.resolve(&place).ok().and_then(|provider| {
+                        let asked = place.clone();
+                        space::within(limit, &OpContext::new(), move |ctx| {
+                            provider.space(&asked, ctx)
+                        })
+                        .and_then(Result::ok)
+                    });
+                    shared.send(AppEvent::Room { side, place, space });
+                });
+            }
             Request::Places => {
                 let sources = self.plugins.site_sources();
                 self.worker(move |shared| {

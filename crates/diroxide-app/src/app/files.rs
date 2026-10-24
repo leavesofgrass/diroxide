@@ -82,7 +82,9 @@ fn confirmation_lines(plan: &Plan) -> Vec<String> {
         lines.push(unusual);
     }
     for question in &plan.facts.questions {
-        lines.extend(question.lines());
+        // A remote volume is named by its host: "Not enough room on
+        // build:" (R25, 3.4).
+        lines.extend(crate::runtime::question_lines(question));
     }
     for (place, reason) in &plan.facts.left_out {
         lines.push(format!(

@@ -118,6 +118,11 @@ impl App {
         if let Some(filter) = self.filter_title(side) {
             text.push_str(&format!(", {filter}"));
         }
+        // The place's free space, as it answered off the input thread; a
+        // place still asking says nothing (R25, 3.4).
+        if let Some(room) = self.room_status(side) {
+            text.push_str(&format!(", {room}"));
+        }
         for job in self.jobs.ids() {
             if let Some(detail) = self.jobs.detail(job) {
                 text.push_str(&format!(". {detail}"));

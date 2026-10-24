@@ -305,6 +305,15 @@ pub enum Request {
         /// The folder, or `None`.
         place: Option<Place>,
     },
+    /// Ask a panel's place for its free space, off the input thread and
+    /// with a short limit, for Say Status (lane A3, R25 commit 90);
+    /// answered with [`AppEvent::Room`](crate::AppEvent::Room).
+    Room {
+        /// The panel.
+        side: Side,
+        /// The place it shows.
+        place: Place,
+    },
     /// List the drives, the root, the home folder and the mounts, for the
     /// go-to-place list.
     Places,
