@@ -233,12 +233,22 @@ pub fn plugin_to_vfs(error: &PluginError, scheme: &str, operation: &str) -> VfsE
         Some(ErrorKind::RequestCancelled) => VfsError::Cancelled,
         Some(ErrorKind::TimedOut) => VfsError::Io {
             kind: io::ErrorKind::TimedOut,
-            message,
+            message: with_hint(message, hint.as_deref()),
         },
         _ => VfsError::Io {
             kind: io::ErrorKind::Other,
-            message,
+            message: with_hint(message, hint.as_deref()),
         },
+    }
+}
+
+/// The plugin's message with its hint after it, where the vfs error has
+/// room for words (A2's request: the next step is said for every kind,
+/// not only for an untrusted place).
+fn with_hint(message: String, hint: Option<&str>) -> String {
+    match hint.map(str::trim).filter(|h| !h.is_empty()) {
+        Some(hint) if !message.contains(hint) => format!("{message} {hint}"),
+        _ => message,
     }
 }
 

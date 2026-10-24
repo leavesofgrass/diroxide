@@ -72,7 +72,7 @@ impl HookEvent {
             HookEvent::Move => "before_move",
             HookEvent::Delete => "before_delete",
             HookEvent::Rename => "before_rename",
-            HookEvent::MakeFolder => "before_make_folder",
+            HookEvent::MakeFolder => "before_mkdir",
         }
     }
 
@@ -83,7 +83,7 @@ impl HookEvent {
             HookEvent::Move => "after_move",
             HookEvent::Delete => "after_delete",
             HookEvent::Rename => "after_rename",
-            HookEvent::MakeFolder => "after_make_folder",
+            HookEvent::MakeFolder => "after_mkdir",
         }
     }
 
@@ -410,7 +410,7 @@ mod tests {
         assert_eq!(HookEvent::of(JobKind::Duplicate), Some(HookEvent::Copy));
         assert_eq!(HookEvent::of(JobKind::Pack), None);
         assert_eq!(HookEvent::Delete.before(), "before_delete");
-        assert_eq!(HookEvent::MakeFolder.after(), "after_make_folder");
+        assert_eq!(HookEvent::MakeFolder.after(), "after_mkdir");
         let line = silent_line(HookEvent::Copy, false, "Folder guard");
         assert_eq!(line, "Copy goes on: no answer (Folder guard)");
         assert_eq!(

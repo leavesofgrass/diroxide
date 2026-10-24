@@ -1962,16 +1962,28 @@ impl Runtime {
         use diroxide_plugins::host::HostEvent;
         match event {
             HostEvent::ProviderLost {
-                plugin, authority, ..
+                plugin,
+                authority,
+                message,
+                for_good,
             } => {
                 let place = Place::parse(authority)
                     .or_else(|_| Place::parse(&format!("{authority}/")))
                     .ok();
                 if let Some(host) = place.as_ref().and_then(diroxide_ops::HostKey::of) {
-                    self.engine.gates().lost(&host);
-                    let hosts = self.lost.entry(plugin.clone()).or_default();
-                    if !hosts.contains(&host) {
-                        hosts.push(host);
+                    if *for_good {
+                        // The plugin will not reconnect: the waiting jobs
+                        // stop with its reason rather than wait.
+                        self.engine.gates().lost_for_good(&host, &message.text);
+                        if let Some(hosts) = self.lost.get_mut(plugin) {
+                            hosts.retain(|h| h != &host);
+                        }
+                    } else {
+                        self.engine.gates().lost(&host);
+                        let hosts = self.lost.entry(plugin.clone()).or_default();
+                        if !hosts.contains(&host) {
+                            hosts.push(host);
+                        }
                     }
                 }
             }

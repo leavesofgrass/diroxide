@@ -230,6 +230,10 @@ pub enum HostEvent {
         authority: String,
         /// "Phone disconnected (MTP)", the plugin's name last.
         message: Message,
+        /// Whether the loss is final: the plugin sends `final = true` when
+        /// it will not reconnect, and the host's waiting jobs then stop
+        /// with the reason instead of waiting (A2's request).
+        for_good: bool,
     },
 }
 
@@ -407,10 +411,15 @@ impl PluginInbound {
             .map(|r| clean_text(r, MAX_ANNOUNCE_CHARS))
             .filter(|r| !r.is_empty())
             .unwrap_or_else(lines::connection_lost);
+        let for_good = params
+            .get("final")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         self.voice.events_push(HostEvent::ProviderLost {
             plugin: self.voice.plugin.clone(),
             authority,
             message: Message::warning(lines::with_source(&reason, &self.name)),
+            for_good,
         });
     }
 
@@ -1518,6 +1527,7 @@ mod tests {
                 plugin: "line-counter".into(),
                 authority: "memfs://box".into(),
                 message: Message::warning("Box unplugged (Line counter)"),
+                for_good: false,
             }]
         );
         host.shutdown_all(QUIT_BUDGET);
