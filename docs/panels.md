@@ -68,7 +68,21 @@ Ctrl+L or Alt+D opens the path field with the current path in it. Type or paste 
 
 ## Go to a place, and path jump
 
-Ctrl+G opens Go to a place: a prompt with a list under it of your home folder, the drives on Windows or the mounts on Linux and macOS, and the folders you have visited, the ones you use most first. Each candidate says its folder first and what it is after it, such as "home folder" or "visited 12 times". A drive says its type in words ("disk", "removable drive" or "network drive") and its free space. diroxide does not wake an idle drive to read it. Your bookmarks are in the list too, with their kind first, such as "Bookmark, Reports, in work".
+Ctrl+G opens Go to a place: a prompt with a list under it of your home folder, the drives on Windows or the mounts on Linux and macOS, your volumes, your saved sites, the trash, and the folders you have visited, the ones you use most first. Each candidate says its folder first and what it is after it, such as "home folder" or "visited 12 times". A drive says its type in words ("disk", "removable drive" or "network drive"). diroxide does not wake an idle drive to read it. Your bookmarks are in the list too, with their kind first, such as "Bookmark, Reports, in work".
+
+Three kinds of row say their kind first, then the name, then the details:
+
+```text
+Site, build, connected, alice@build.example, by SFTP places
+Volume, Backup, mounted, removable
+Trash, what is in the trash
+```
+
+- A Site is a saved site or a host from your ssh configuration. After the name come its state word (such as "saved", "connected" or "lost"), its details, and the plugin's name last. Enter on a site connects through the plugin and opens its start folder in the active panel. [Remote places over SFTP](remote-places.md) has the rest.
+- A Volume is a drive, a mount or a storage a plugin reaches. After the name come its state ("mounted" or "connected"), its kind, and its free space when it is known. Enter goes to it. The list reads the volumes once a session, quietly, so a local volume has no free space here until you open the Volumes list.
+- The Trash row opens the trash browser.
+
+[Volumes and the trash](volumes-trash.md) describes the Volumes list and the trash browser.
 
 Type a few words to narrow the list. This is path jump. Each word has to appear in the path, in the order you typed them, and the last word has to appear in the last folder's name. Case does not matter. Your home folder is left out of the visited list, because it is one key away. Enter goes to the chosen folder.
 
@@ -152,6 +166,8 @@ When you quit, diroxide remembers each panel's folder, the focused row, the sort
 ## See also
 
 - [Operations and undo](operations.md)
+- [Volumes and the trash](volumes-trash.md)
+- [Remote places over SFTP](remote-places.md)
 - [Search and the filter language](search.md)
 - [Labels and bookmarks](labels-bookmarks.md)
 - [Compare files](compare.md)
