@@ -294,6 +294,7 @@ pub fn short_verb(kind: JobKind) -> &'static str {
         JobKind::SetTimes => "change times",
         JobKind::TestArchive => "test",
         JobKind::PluginCommand => "run",
+        JobKind::Purge => "delete for good",
         JobKind::Unknown => "job",
         other => other.verb(),
     }

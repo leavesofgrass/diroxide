@@ -41,6 +41,8 @@ mod plugin_ui;
 mod preview;
 // Saved searches, the Space list, sizes and newest files (W3a).
 mod search_tools;
+// The trash browser (lane A3).
+mod trash_ui;
 // Search, its dialog and its results (W3a).
 mod searching;
 mod select;
@@ -415,6 +417,10 @@ pub enum AppEvent {
         /// The line, meaning first.
         line: String,
     },
+    /// The system trash was listed for the trash browser, newest first,
+    /// or could not be, in a sentence ("The trash cannot be listed on
+    /// this system.") (lane A3, R25 commit 89).
+    TrashListed(Result<Vec<diroxide_vfs::TrashedItem>, String>),
     /// A panel's place said its free space, or did not in time (`None`),
     /// for Say Status (lane A3, R25 commit 90).
     Room {
@@ -659,6 +665,8 @@ enum Purpose {
     /// The Jobs list, a job's actions, and the queue's questions (lane
     /// A2).
     Jobs(Box<jobs_ui::Wants>),
+    /// The trash browser and its actions (lane A3).
+    Trash(Box<trash_ui::Wants>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -820,6 +828,8 @@ pub struct App {
     /// Each panel's place and its free space when it answered, for Say
     /// Status (lane A3).
     rooms: [Option<(Place, Option<diroxide_vfs::SpaceInfo>)>; 2],
+    /// The trash browser's items (lane A3).
+    trash: trash_ui::TrashState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1143,6 +1153,7 @@ impl App {
             streams: [None, None],
             sites: Vec::new(),
             rooms: [None, None],
+            trash: trash_ui::TrashState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1642,6 +1653,7 @@ impl App {
                     Vec::new()
                 }
             }
+            AppEvent::TrashListed(result) => self.trash_listed(result),
             AppEvent::Room { side, place, space } => {
                 if self.panel(side).place() == &place {
                     self.rooms[side.index()] = Some((place, space));
@@ -1717,6 +1729,10 @@ impl App {
         }
         // The Jobs list and the queue (lane A2).
         if let Some(effects) = self.jobs_dispatch(command) {
+            return effects;
+        }
+        // The trash browser (lane A3).
+        if let Some(effects) = self.trash_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

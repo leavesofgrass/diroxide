@@ -588,6 +588,10 @@ command = "go.history"
 access = "s"
 
 [[menu.item]]
+command = "go.trash"
+access = "c"
+
+[[menu.item]]
 command = "panel.switch"
 access = "w"
 

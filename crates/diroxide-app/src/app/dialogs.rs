@@ -172,6 +172,10 @@ impl App {
         if let Some(effects) = self.components_key(&key) {
             return effects;
         }
+        // Space in the trash browser (lane A3).
+        if let Some(effects) = self.trash_key(&key) {
+            return effects;
+        }
         // The results lister's and the search dialog's own keys (W3a).
         if let Some(effects) = self.results_key(&key) {
             return effects;
@@ -345,6 +349,7 @@ impl App {
             Purpose::Plugin(wants) => effects.extend(self.plugin_escape(*wants)),
             Purpose::Component(wants) => effects.extend(self.component_escape(*wants)),
             Purpose::Jobs(wants) => effects.extend(self.jobs_escape(*wants)),
+            Purpose::Trash(wants) => effects.extend(self.trash_escape(*wants)),
             Purpose::RunPlan(plan) | Purpose::TypedPlan(plan, _) => {
                 let flow = self.flows.remove(&plan.job);
                 self.plugin_job_ended(flow.as_ref(), Err("the owner said no".to_owned()));
@@ -716,6 +721,7 @@ impl App {
             Purpose::Secret { ask } => self.secret_enter(ask),
             Purpose::Plugin(wants) => self.plugin_accept(*wants, row, text),
             Purpose::Jobs(wants) => self.jobs_accept(*wants, row, text),
+            Purpose::Trash(wants) => self.trash_accept(*wants, row),
             Purpose::Component(wants) => self.component_accept(*wants, row, text),
             Purpose::NewPassword { form, first } => {
                 let typed = match self.dialogs.last() {

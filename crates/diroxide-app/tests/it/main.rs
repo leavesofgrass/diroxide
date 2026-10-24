@@ -47,6 +47,8 @@ mod room;
 // The Sites list's commands and dialogs (lane A3).
 mod site_commands;
 mod split_join;
+// The trash browser (lane A3).
+mod trash;
 // Streamed listings reach the panel (lane A2).
 mod streaming;
 mod viewer;

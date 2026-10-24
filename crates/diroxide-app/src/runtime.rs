@@ -497,6 +497,9 @@ pub struct Runtime {
     /// How long a place may take to say its free space (lane A3, R25
     /// commit 90).
     space_limit: Duration,
+    /// The trash the engine lists, restores from and purges: the system's
+    /// in the program, a test-only bin in tests (lane A3, R25 commit 89).
+    trash: Arc<dyn diroxide_vfs::TrashBin>,
 }
 
 impl fmt::Debug for Runtime {
@@ -541,9 +544,11 @@ impl Runtime {
         // listings use asks remote free space with a time limit.
         let base = Arc::clone(&registry);
         let registry = Arc::new(space::timed(&registry, space::SPACE_LIMIT));
+        let trash: Arc<dyn diroxide_vfs::TrashBin> = Arc::new(diroxide_vfs::SystemTrash::new());
         let engine = Engine::new(Arc::clone(&registry))
             .with_ledger(Arc::clone(&ledger))
-            .with_hooks(runner);
+            .with_hooks(runner)
+            .with_trash(Arc::clone(&trash));
         // A host's gate speaks through the app: back, keep waiting, the
         // jobs cancelled or stopped (R25, 2.4). The gates outlive every
         // engine made again, and so does this listener.
@@ -581,7 +586,17 @@ impl Runtime {
             nav_seen: None,
             listings: Arc::new(Mutex::new(HashMap::new())),
             space_limit: space::SPACE_LIMIT,
+            trash,
         }
+    }
+
+    /// The same runtime with another trash for the trash browser and its
+    /// jobs: tests give a test-only bin, so the owner's trash is never
+    /// listed or touched.
+    pub fn with_trash_bin(mut self, trash: Arc<dyn diroxide_vfs::TrashBin>) -> Self {
+        self.trash = trash;
+        self.engine = self.engine.clone().with_trash(Arc::clone(&self.trash));
+        self
     }
 
     /// The same runtime with another limit on how long a place may take
@@ -646,7 +661,8 @@ impl Runtime {
             .with_gates(self.engine.gates().clone())
             .with_ledger(Arc::clone(&self.ledger))
             .with_speed_limit(self.engine.speed_limiter())
-            .with_hooks(self.hooks.clone());
+            .with_hooks(self.hooks.clone())
+            .with_trash(Arc::clone(&self.trash));
         if let Some(journal) = self.engine.journal() {
             engine = engine.with_journal(journal.clone());
         }
@@ -1101,6 +1117,34 @@ impl Runtime {
                 }
             }
             Request::Watch { side, place } => self.watch(side, place),
+            // The trash browser (lane A3, R25 commit 89): its listing and
+            // its plans run off the input thread, through the engine's
+            // trash.
+            Request::ListTrash => {
+                let engine = self.engine.clone();
+                self.worker(move |shared| {
+                    let result = engine.list_trash(&OpContext::new()).map_err(|error| {
+                        error.sentence().unwrap_or_else(|| {
+                            Message::from_error("list", "the trash", &error).text
+                        })
+                    });
+                    shared.send(AppEvent::TrashListed(result));
+                });
+            }
+            Request::PlanTrash { job, kind, items } => {
+                let engine = self.engine.clone();
+                self.worker(move |shared| {
+                    let result = engine.plan_trash_items(job, kind, items).map(Box::new);
+                    shared.send(AppEvent::Planned { job, result });
+                });
+            }
+            Request::PlanEmptyTrash { job } => {
+                let engine = self.engine.clone();
+                self.worker(move |shared| {
+                    let result = engine.plan_empty_trash(job).map(Box::new);
+                    shared.send(AppEvent::Planned { job, result });
+                });
+            }
             Request::Room { side, place } => {
                 let registry = Arc::clone(&self.registry);
                 let limit = self.space_limit;

@@ -56,6 +56,8 @@ fn start_line(plan: &Plan) -> String {
         JobKind::Link => "Link",
         JobKind::SetAttributes => "Change permissions",
         JobKind::SetTimes => "Change times",
+        JobKind::Restore => "Restore",
+        JobKind::Purge => "Delete for good",
         _ => "Job",
     };
     let items = count(plan.entries(), "item", "items");
@@ -728,6 +730,11 @@ impl App {
                     OpsError::Vfs(inner) if inner.sentence().is_some() => {
                         Message::error(inner.sentence().unwrap_or_default())
                     }
+                    // The trash's own sentences (lane A3): "The trash is
+                    // empty."; "The trash cannot be listed on this system."
+                    OpsError::NoTrashList | OpsError::TrashEmpty => {
+                        Message::info(error.sentence().unwrap_or_default())
+                    }
                     _ => Message::from_error(flow.kind.verb(), "", &error),
                 };
                 return vec![Effect::Redraw(Redraw::JobsLine), self.say(message)];
@@ -1079,6 +1086,9 @@ impl App {
         });
         let never_ran = self.jobs.waits(report.job);
         let closed = self.forget_job_questions(report.job);
+        // An open trash browser follows a restore or a delete for good
+        // (lane A3).
+        self.trash_job_ended(report.kind);
         self.jobs.finished(FinishedJob {
             job: report.job,
             kind: report.kind,

@@ -314,6 +314,27 @@ pub enum Request {
         /// The place it shows.
         place: Place,
     },
+    /// List the system trash, newest first, for the trash browser (lane
+    /// A3, R25 commit 89); answered with
+    /// [`AppEvent::TrashListed`](crate::AppEvent::TrashListed).
+    ListTrash,
+    /// Plan a restore or a delete for good of items the trash browser
+    /// listed; answered like [`Request::Plan`].
+    PlanTrash {
+        /// The job.
+        job: JobId,
+        /// [`JobKind::Restore`](diroxide_core::JobKind::Restore) or
+        /// [`JobKind::Purge`](diroxide_core::JobKind::Purge).
+        kind: diroxide_core::JobKind,
+        /// The items, as the trash listed them.
+        items: Vec<diroxide_vfs::TrashedItem>,
+    },
+    /// Plan Empty the trash: everything in it deleted for good, listed
+    /// first; answered like [`Request::Plan`].
+    PlanEmptyTrash {
+        /// The job.
+        job: JobId,
+    },
     /// List the drives, the root, the home folder and the mounts, for the
     /// go-to-place list.
     Places,
