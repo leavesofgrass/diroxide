@@ -13,6 +13,7 @@ dirs.workspace = true
 notify.workspace = true
 reflink-copy.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 trash.workspace = true
 

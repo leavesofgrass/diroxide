@@ -39,7 +39,10 @@ pub use cancel::{
 };
 pub use capabilities::{AccessCapabilities, Can, Capabilities};
 pub use error::{ErrorClass, ErrorScope, VfsError};
-pub use local::{LocalEntryBuilder, LocalProvider};
+pub use local::{
+    LocalEntryBuilder, LocalProvider, PurgeCheck, SystemTrash, TRASH_NOT_LISTED, TrashBin, TrashId,
+    TrashedItem,
+};
 pub use names::{NameIssue, NameRules, check_name, check_name_with, first_refused};
 pub use protected::{Protection, protection};
 pub use provider::{
@@ -55,7 +58,11 @@ pub use sys::KillOnCloseJob;
 #[cfg(windows)]
 pub use sys::{OwnerPipe, PipeStream, plain_pipe_name};
 pub use trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
-pub use volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
+pub use volume::{
+    ActionOffer, DeviceReport, LocalPlace, PlaceRole, RemoteVolume, SPACE_LIMIT, SpaceAnswer,
+    SpaceInfo, SpaceRequest, VolumeAction, VolumeAnswer, VolumeInfo, VolumeKind, VolumeRow,
+    VolumeSource, VolumeSources, VolumeState, VolumeTools, ask_spaces, space_requests, volume_rows,
+};
 pub use walk::{SkipReason, WalkEvent, WalkOptions, WalkSummary, walk};
 
 /// The tops of the local file system: the drives on Windows, `/` elsewhere.

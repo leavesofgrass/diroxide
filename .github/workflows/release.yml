@@ -6,6 +6,16 @@
 # and a provenance attestation. Started by hand with a tag name, or by a
 # pushed version tag; running it again for the same tag replaces the
 # files. Plain logs, no color, so they read well in a screen reader.
+#
+# The optional components come first (plan section 5.14; R25 commit 87):
+# the SFTP plugin is built for each computer from its own workspace, the
+# components job packs it and the example plugins with cargo xtask
+# components --assets, and the list it writes, with every file's size and
+# SHA-256, is the one each diro build embeds. Each component is published
+# under its own tag, <id>-<version> (diro-examples-0.1.0,
+# diro-sftp-0.1.0-alpha.1), where the program looks for it; a file
+# already published there is never replaced by different bytes, since
+# older diro builds pin it: change the component's version instead.
 name: Release
 
 on:
@@ -31,13 +41,131 @@ env:
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  # The SFTP plugin's program for each computer the list names (question
+  # N13): Windows x86_64, Linux x86_64 on Ubuntu 22.04 for an older glibc,
+  # and one universal macOS file. Any other computer hears "No build for
+  # this computer." and the cargo install line.
+  plugins:
+    name: SFTP plugin, ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: Linux x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - name: macOS universal
+            os: macos-latest
+            target: universal-apple-darwin
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Install the pinned toolchain
+        shell: bash
+        run: |
+          rustup toolchain install
+          if [ "${{ matrix.target }}" = universal-apple-darwin ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          fi
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-sftp-${{ matrix.target }}
+          workspaces: plugins/diro-sftp -> target
+      - name: Build diro-sftp with the release profile, from its own workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="plugin-assets/${{ matrix.target }}"
+          mkdir -p "$out"
+          build() {
+            cargo build --release --locked --manifest-path plugins/diro-sftp/Cargo.toml --bin diro-sftp "$@"
+          }
+          case "${{ matrix.target }}" in
+            universal-apple-darwin)
+              build --target aarch64-apple-darwin
+              build --target x86_64-apple-darwin
+              lipo -create -output "$out/diro-sftp" \
+                plugins/diro-sftp/target/aarch64-apple-darwin/release/diro-sftp \
+                plugins/diro-sftp/target/x86_64-apple-darwin/release/diro-sftp
+              codesign --force --sign - "$out/diro-sftp"
+              codesign --verify --verbose=2 "$out/diro-sftp"
+              lipo -info "$out/diro-sftp"
+              ;;
+            x86_64-pc-windows-msvc)
+              build --target x86_64-pc-windows-msvc
+              cp plugins/diro-sftp/target/x86_64-pc-windows-msvc/release/diro-sftp.exe "$out/"
+              ;;
+            *)
+              build --target "${{ matrix.target }}"
+              cp "plugins/diro-sftp/target/${{ matrix.target }}/release/diro-sftp" "$out/"
+              ;;
+          esac
+          ls -lR plugin-assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.target }}
+          path: plugin-assets/
+          if-no-files-found: error
+
+  # The components list and its files: the example plugins packed from the
+  # tag, the plugin programs from the job above, each file's size and
+  # SHA-256 written into the list every diro build below embeds.
+  components:
+    name: Optional components and their list
+    needs: [plugins]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-components
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: plugin-*
+          path: plugin-assets
+          merge-multiple: true
+      - name: Pack the components and write their list
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lR plugin-assets
+          export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target"
+          cargo xtask components --assets plugin-assets
+          grep -c '^\[\[component.file\]\]' crates/diroxide-components/components.toml
+          ls -lR target/components/source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: components-list
+          path: crates/diroxide-components/components.toml
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: components-files
+          path: target/components/source/
+          if-no-files-found: error
+
   windows:
     name: Windows x86_64
+    needs: [components]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
+      - name: Take the components list with the plugin builds' pins
+        uses: actions/download-artifact@v4
+        with:
+          name: components-list
+          path: crates/diroxide-components
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -55,17 +183,23 @@ jobs:
           Get-ChildItem out
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-x86_64
+          name: diro-windows-x86_64
           path: out/*
           if-no-files-found: error
 
   macos:
     name: macOS universal
+    needs: [components]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
+      - name: Take the components list with the plugin builds' pins
+        uses: actions/download-artifact@v4
+        with:
+          name: components-list
+          path: crates/diroxide-components
       - name: Install the pinned toolchain and both targets
         run: |
           rustup toolchain install
@@ -92,18 +226,24 @@ jobs:
           ls -l out
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-universal
+          name: diro-macos-universal
           path: out/*
           if-no-files-found: error
 
   linux:
     name: Linux x86_64 AppImage
     # Ubuntu 22.04, so the program links an older glibc and runs on more systems.
+    needs: [components]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
+      - name: Take the components list with the plugin builds' pins
+        uses: actions/download-artifact@v4
+        with:
+          name: components-list
+          path: crates/diroxide-components
       # The program is the tag's; the packaging is the workflow's own commit,
       # so a tag made before the packaging existed still gets its AppImage.
       - name: Take the packaging from the workflow's own commit
@@ -131,13 +271,13 @@ jobs:
           ls -l out
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-x86_64
+          name: diro-linux-x86_64
           path: out/*
           if-no-files-found: error
 
   release:
     name: Publish the release
-    needs: [windows, macos, linux]
+    needs: [windows, macos, linux, components]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
@@ -145,8 +285,47 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
       - uses: actions/download-artifact@v4
         with:
+          pattern: diro-*
           path: release-assets
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: components-files
+          path: component-assets
+      # Each component under its own tag, <id>-<version>, at this commit,
+      # as the program derives its address. A file already there with
+      # other bytes stops the release: older diro builds pin it.
+      - name: Publish the components under their own tags
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          for folder in component-assets/*/; do
+            release="$(basename "$folder")"
+            echo "Component release $release"
+            if ! gh release view "$release" >/dev/null 2>&1; then
+              gh release create "$release" --prerelease --latest=false --target "$commit" \
+                --title "$release" \
+                --notes "An optional component of diroxide, fetched by diro itself after it asks. Each file's size and SHA-256 are pinned in the program's list." \
+                "$folder"*
+              continue
+            fi
+            for file in "$folder"*; do
+              name="$(basename "$file")"
+              mkdir -p published
+              if gh release download "$release" --pattern "$name" --dir published --clobber 2>/dev/null; then
+                if cmp -s "$file" "published/$name"; then
+                  echo "Same bytes already published: $name"
+                  continue
+                fi
+                echo "Fail: $name differs from the file published under $release. Change the component's version, then release again." >&2
+                exit 1
+              fi
+              gh release upload "$release" "$file"
+            done
+          done
       - name: Checksums and release notes
         shell: bash
         run: |
@@ -184,4 +363,6 @@ jobs:
       - name: Attest the provenance of the files
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: release-assets/*
+          subject-path: |
+            release-assets/*
+            component-assets/*/*

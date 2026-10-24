@@ -45,8 +45,8 @@ use diroxide_vfs::names::unfinished_name;
 use diroxide_vfs::provider::ResumableWrite;
 use diroxide_vfs::{
     AttributeChange, Can, Capabilities, CopyHint, FileWriter, LinkKind, LinkRequest, OpContext,
-    Provider, ReadSeek, SpaceInfo, TrashCheck, TrashGate, VfsError, VolumeInfo, VolumeKind,
-    WriteMode,
+    Provider, PurgeCheck, ReadSeek, SpaceInfo, TrashBin, TrashCheck, TrashGate, TrashId,
+    TrashedItem, VfsError, VolumeInfo, VolumeKind, WriteMode,
 };
 
 /// Delays that make a place slow.
@@ -69,6 +69,8 @@ pub struct Lies {
     pub clone_fails_late: bool,
     /// The trash reports the item in the trash and leaves it where it was.
     pub trash_does_nothing: bool,
+    /// A delete from the trash reports the item gone and keeps it.
+    pub purge_does_nothing: bool,
     /// A kept part file loses its last N bytes to zeros, its length kept,
     /// as a server that crashed before it flushed (spike Q1's case).
     pub kept_tail_zeroed: u64,
@@ -110,8 +112,10 @@ pub enum FakeCall {
     Remove,
     /// `trash`.
     Trash,
-    /// `restore`.
+    /// `restore`, and the trash list's restore of one item.
     Restore,
+    /// The trash list's delete for good of one item.
+    Purge,
     /// `set_attributes`.
     SetAttributes,
     /// `copy_within`, at its source.
@@ -258,10 +262,16 @@ struct Node {
     data: Vec<u8>,
 }
 
+/// One item in the fake trash: its key, its entries, and its number.
+type Trashed = (String, Vec<(String, Node)>, u64);
+
 #[derive(Debug, Default)]
 struct State {
     nodes: BTreeMap<String, Node>,
-    trash: Vec<(String, Vec<(String, Node)>)>,
+    /// What the fake trash holds: each item's key, its entries, and its
+    /// number, which is also when it was trashed (higher is newer).
+    trash: Vec<Trashed>,
+    next_trashed: u64,
     aliases: Vec<(String, String)>,
     fault_uses: HashMap<usize, u32>,
     calls: u32,
@@ -522,7 +532,7 @@ impl FakeProvider {
     /// Whether the fake trash holds an entry from this place.
     pub fn in_trash(&self, place: &Place) -> bool {
         let key = self.node_key(place);
-        self.state().trash.iter().any(|(k, _)| *k == key)
+        self.state().trash.iter().any(|(k, _, _)| *k == key)
     }
 
     /// The bytes of every file in the fake trash, a trashed folder's files
@@ -532,7 +542,7 @@ impl FakeProvider {
         self.state()
             .trash
             .iter()
-            .flat_map(|(_, nodes)| nodes.iter())
+            .flat_map(|(_, nodes, _)| nodes.iter())
             .filter(|(_, node)| node.entry.kind == EntryKind::File)
             .map(|(_, node)| node.data.clone())
             .collect()
@@ -1118,6 +1128,103 @@ impl FileWriter for FakeWriter {
     }
 }
 
+/// The fake trash as a list, for the trash browser's jobs
+/// ([`FakeProvider::trash_list`]): each item's id is its number
+/// ("fake-3"), and its number is when it was trashed. It shares the
+/// fake's entries and trash; never the real trash.
+#[derive(Clone, Debug)]
+pub struct FakeTrash {
+    fake: FakeProvider,
+}
+
+impl FakeProvider {
+    /// The fake's trash as a list, for [`crate::Engine::with_trash`].
+    pub fn trash_list(&self) -> FakeTrash {
+        FakeTrash { fake: self.clone() }
+    }
+}
+
+impl TrashBin for FakeTrash {
+    fn list(
+        &self,
+        ctx: &OpContext,
+        batch: &mut dyn FnMut(Vec<TrashedItem>) -> std::ops::ControlFlow<()>,
+    ) -> Result<(), VfsError> {
+        ctx.check()?;
+        let mut items: Vec<TrashedItem> = self
+            .fake
+            .state()
+            .trash
+            .iter()
+            .filter_map(|(key, nodes, number)| {
+                let root = nodes.iter().find(|(k, _)| k == key)?;
+                let deleted = Timestamp::from_unix(i64::try_from(*number).ok()?, 0);
+                let size = root.1.entry.size;
+                let folder = root.1.entry.kind == EntryKind::Folder;
+                Some(
+                    TrashedItem::new(
+                        TrashId::new(format!("fake-{number}")),
+                        root.1.place.clone(),
+                        Some(deleted),
+                    )
+                    .measured(
+                        if folder { None } else { size },
+                        folder.then(|| nodes.len().saturating_sub(1) as u64),
+                    ),
+                )
+            })
+            .collect();
+        items.sort_by_key(|item| std::cmp::Reverse(item.deleted));
+        for chunk in items.chunks(diroxide_vfs::local::TRASH_BATCH) {
+            if batch(chunk.to_vec()).is_break() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    fn restore(&self, item: &TrashedItem, ctx: &OpContext) -> Result<(), VfsError> {
+        self.fake.enter(FakeCall::Restore, &item.original, ctx)?;
+        let key = self.fake.node_key(&item.original);
+        if self.fake.exists(&item.original) {
+            return Err(VfsError::AlreadyExists);
+        }
+        if !item
+            .original
+            .parent()
+            .is_some_and(|parent| self.fake.exists(&parent))
+        {
+            return Err(VfsError::NotFound);
+        }
+        let id = item.id.as_os_str().to_string_lossy().into_owned();
+        let mut state = self.fake.state();
+        let at = state
+            .trash
+            .iter()
+            .position(|(k, _, number)| *k == key && format!("fake-{number}") == id)
+            .ok_or(VfsError::NotFound)?;
+        let (_, subtree, _) = state.trash.remove(at);
+        state.nodes.extend(subtree);
+        Ok(())
+    }
+
+    fn purge(&self, item: &TrashedItem, ctx: &OpContext) -> Result<PurgeCheck, VfsError> {
+        let switches = self.fake.enter(FakeCall::Purge, &item.original, ctx)?;
+        if switches.lies.purge_does_nothing {
+            return Ok(PurgeCheck::Gone);
+        }
+        let id = item.id.as_os_str().to_string_lossy().into_owned();
+        let mut state = self.fake.state();
+        let at = state
+            .trash
+            .iter()
+            .position(|(_, _, number)| format!("fake-{number}") == id)
+            .ok_or(VfsError::NotFound)?;
+        state.trash.remove(at);
+        Ok(PurgeCheck::Gone)
+    }
+}
+
 impl Provider for FakeProvider {
     fn scheme(&self) -> &str {
         "file"
@@ -1402,7 +1509,9 @@ impl Provider for FakeProvider {
         state.aliases.retain(|(alias, _)| *alias != key);
         let check = switches.trash_check.unwrap_or(TrashCheck::InTrash);
         if check != TrashCheck::GoneNotInTrash {
-            state.trash.push((key, subtree));
+            state.next_trashed += 1;
+            let number = state.next_trashed;
+            state.trash.push((key, subtree, number));
         }
         Ok(check)
     }
@@ -1420,9 +1529,9 @@ impl Provider for FakeProvider {
         let at = state
             .trash
             .iter()
-            .rposition(|(k, _)| *k == key)
+            .rposition(|(k, _, _)| *k == key)
             .ok_or(VfsError::NotFound)?;
-        let (_, subtree) = state.trash.remove(at);
+        let (_, subtree, _) = state.trash.remove(at);
         state.nodes.extend(subtree);
         Ok(())
     }

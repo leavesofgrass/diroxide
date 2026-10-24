@@ -67,6 +67,7 @@ mod links_tests;
 mod split;
 #[cfg(test)]
 mod split_tests;
+mod trash;
 
 /// What one step came to.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -912,7 +913,10 @@ impl<'a> Run<'a> {
                 check.missing.push(item.place);
             }
         }
-        if self.plan.kind != JobKind::Trash && self.plan.kind != JobKind::DeletePermanently {
+        if !matches!(
+            self.plan.kind,
+            JobKind::Trash | JobKind::DeletePermanently | JobKind::Purge
+        ) {
             self.report.reconciliation = Some(check);
         }
     }
@@ -954,6 +958,8 @@ impl<'a> Run<'a> {
             Step::JoinPart { from, to } => self.join_part(from, to),
             Step::Relink { place, request } => self.relink(place, request),
             Step::SetAttributes { place, change } => self.set_attributes(place, change),
+            Step::RestoreItem { item } => self.restore_item(item),
+            Step::Purge { item } => self.purge_item(item),
         }
     }
 
