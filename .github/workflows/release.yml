@@ -295,9 +295,13 @@ jobs:
       # Each component under its own tag, <id>-<version>, at this commit,
       # as the program derives its address. The tag is pushed with git
       # first and the release created on it, the path the main release
-      # takes below: creating the tag through the releases API answered
-      # 403 for the workflow's token on the alpha 2 run. A file already
-      # there with other bytes stops the release: older diro builds pin it.
+      # takes below. GitHub refuses the workflow's token a new tag when
+      # the commit's workflow files differ from the default branch's (the
+      # alpha 2 run: ci.yml had changed on main after the tag; the
+      # releases API answered 403 for the same reason), so the owner may
+      # have to push the component tags from a checkout, and the step
+      # says so in words. A file already there with other bytes stops the
+      # release: older diro builds pin it.
       - name: Publish the components under their own tags
         shell: bash
         env:
@@ -312,7 +316,10 @@ jobs:
             if ! gh release view "$release" >/dev/null 2>&1; then
               if ! git ls-remote --exit-code --tags origin "refs/tags/$release" >/dev/null; then
                 git tag "$release" "$commit"
-                git push origin "refs/tags/$release"
+                if ! git push origin "refs/tags/$release"; then
+                  echo "Fail: the workflow's token could not create the tag $release. Next: from a checkout with your own credentials, run git tag $release $commit, then git push origin refs/tags/$release, then run this workflow again for the same tag; the builds are kept, so rerunning the failed job is enough." >&2
+                  exit 1
+                fi
               fi
               gh release create "$release" --prerelease --latest=false --verify-tag \
                 --title "$release" \
