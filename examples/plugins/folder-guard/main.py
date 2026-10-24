@@ -109,7 +109,7 @@ def handle(message):
             "protocol": PROTOCOL,
             "plugin": {"name": params.get("plugin_id") or "folder-guard",
                        "version": VERSION},
-            "plugin_capabilities": {"commands": []},
+            "plugin_capabilities": {"commands": [], "hooks": ["before_delete", "after_delete"]},
         })
     elif method == "settings/changed":
         settings.update(params.get("settings") or {})

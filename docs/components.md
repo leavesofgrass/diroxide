@@ -18,7 +18,7 @@ diroxide stays small and pure Rust because these are optional. A component comes
 
 Today the list has one component:
 
-- Example plugins (id `diro-examples`): a data pack of the nine example plugins and scripts, about 76 KB, license Apache-2.0 OR MIT. It unpacks into a folder of its own, with one folder or script for each example. Installing it turns nothing on. The pack is not published with a release yet. Until it is, get it from a folder with `--source`, or install it from a file, as below.
+- Example plugins (id `diro-examples`): a data pack of the ten example plugins and scripts, about 76 KB, license Apache-2.0 OR MIT. It unpacks into a folder of its own, with one folder or script for each example. Installing it turns nothing on. The pack is not published with a release yet. Until it is, get it from a folder with `--source`, or install it from a file, as below.
 
 `diro components list` always shows what this build knows. More components arrive with later alphas. The list is part of each build, so a component newer than your diroxide arrives with your next update.
 

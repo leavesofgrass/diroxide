@@ -34,5 +34,5 @@ If a provider cannot resume, its capabilities say so and a cut transfer starts a
 
 ## See also
 
-- The transfer queue guide, `docs/transfer-queue.md`, which lands with lane D2.
+- [The transfer queue](../transfer-queue.md), the guide.
 - [ADR-0004: The job engine](0004-the-job-engine.md) and [ADR-0012: SFTP over the OpenSSH client](0012-sftp-over-the-openssh-client.md).

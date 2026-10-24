@@ -34,6 +34,6 @@ If a machine's ssh cannot be driven this way, the plugin says so in words and th
 
 ## See also
 
-- The remote places guide, `docs/remote-places.md`, which lands with lane D2.
+- [Remote places](../remote-places.md), the guide.
 - [ADR-0011: The keyring and stored secrets](0011-the-keyring-and-stored-secrets.md).
 - [ADR-0006: The plugin protocol](0006-the-plugin-protocol.md) and [ADR-0008: Safety rules](0008-safety-rules.md).
