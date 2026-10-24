@@ -1,0 +1,22 @@
+# nextest's configuration for the workspace. cargo nextest reads it from
+# here on every run, native, in the container and on CI.
+#
+# The heavy group: the preview crate's tests that read five megabytes of
+# Org, lists nested thousands deep on an eight mebibyte stack, a hundred
+# kilobytes of each carta format, and the Markdown property test, which
+# reads 512 random texts on an eight mebibyte stack of its own. Twice on
+# the Windows CI runner (runs 39193307286 and 40061360394, Friday,
+# October 23, 2026) that property test's read thread aborted with
+# STATUS_STACK_OVERFLOW while the five-megabyte tests ran beside it; a
+# probe of 40,000 generated texts on a 192 KiB stack never overflowed, the
+# reader has no recursion of its own, and pulldown-cmark caps the nesting
+# it tracks, so the depth is not the cause: a stack page the runner could
+# not commit under memory pressure raises the same status. These tests
+# run one at a time, never beside each other, so the pressure stays low,
+# wherever the run happens. Every other test keeps nextest's parallelism.
+[test-groups]
+heavy = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'package(diroxide-preview) & (test(five_megabyte) | test(nested_list) | test(three_thousand_deep) | test(hundred_kilobytes) | test(any_text_reads_into_rows))'
+test-group = 'heavy'
