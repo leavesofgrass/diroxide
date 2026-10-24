@@ -1,6 +1,6 @@
 # Operations and undo
 
-This guide covers everything that changes files: copy, move, rename, make folder, duplicate, delete, the file clipboard and undo. For each one it says the question diroxide asks, what you should hear, and how to reverse it. It also covers the prompts you type into, the jobs line and the Say Status key. Packing and unpacking archives, splitting and joining files, links, permissions and times are jobs too and follow the same steps; each has its own guide, and a short entry below says where.
+This guide covers everything that changes files: copy, move, rename, make folder, duplicate, delete, the file clipboard and undo. For each one it says the question diroxide asks, what you should hear, and how to reverse it. It also covers the prompts you type into, the jobs line, the Jobs list and the Say Status key. Packing and unpacking archives, splitting and joining files, links, permissions and times are jobs too and follow the same steps; each has its own guide, and a short entry below says where.
 
 ## How every operation works
 
@@ -9,7 +9,7 @@ Every operation that touches more than one entry, or can take more than a moment
 1. diroxide makes a plan: it counts the entries and the bytes, and lists every path the job will touch. The plan is fixed at the moment you confirm. If the focused row is not part of the action, the plan's first line says so.
 2. It asks. A question names the action, the count and the target first, and ends with the answer: "Copy 3 items to Backup, 312 bytes? No is the default. y or n". Every question starts on No. Press y to go ahead; n or Escape says no. Keys that arrive within a quarter of a second of a dialog opening are ignored, so a stray Enter cannot answer for you (the `dialog_settle_ms` setting changes the time). The settings `confirm.copy`, `confirm.move` and `confirm.trash` turn the question off for those three; deleting for good always asks.
 3. A delete, a move or an overwrite lists every path before it asks. Hidden, control, private-use and direction characters are spelled out as `U+XXXX`, and the count is said in words. The summary line comes first: "Delete 12 items for good, 2.3 GB, 2 read-only". A permanent delete of more than 1,000 entries, or of far more than you selected, asks you to type a number or a name instead of y, and says what to type: "Type ... to go on, or Escape". A home folder, a config or state folder, and a whole drive are never removed without that typed name, and a drive root is refused.
-4. The job runs on its own thread, so you can keep moving around. The jobs line tells you what it is doing.
+4. The job runs on its own thread, so you can keep moving around. The jobs line tells you what it is doing. A job on this computer starts at once. A job that touches a server may wait its turn in the queue first.
 5. It reports, with problems first: "Copy had 8 failures: 290 done, 2 skipped."
 6. Ctrl+Z undoes it, where it can.
 
@@ -33,10 +33,11 @@ Before it starts, diroxide checks what it can: the free space, the largest file 
 How a copy works:
 
 - Each file is written under a temporary name in the target folder and renamed when it is complete, so a cancelled or failed copy leaves no half-written file. The temporary name starts with `.diro-part-`.
+- A copy of 4 MiB or more to or from a place that can resume keeps its part file when the network is lost, and goes on from where it stopped if the source has not changed and the part file checks out. Cancel still removes the part file. [The transfer queue](transfer-queue.md) has the rules and what you hear.
 - The modified time of files and folders is kept (a folder's is set after its contents), and the created time too where the system can set one (Windows and macOS). The accessed time is not kept.
 - A folder is copied as a whole. A copy that is cancelled halfway keeps the files already finished.
 
-How a move works: on one drive a move is a rename. Across drives, diroxide copies, reads the copy back and compares it with the original, and only then removes the original. The jobs line says "Verifying 60 percent" for that second phase. If the check fails, the original stays where it was. A moved file's labels do not follow it, because a label belongs to the file's path; label it again at its new place.
+How a move works: on one drive a move is a rename. Across drives, and to or from a server, diroxide copies, reads the copy back and compares it with the original, and only then removes the original. The jobs line says "Verifying 60 percent" for that second phase. If the check fails, the original stays where it was. A moved file's labels do not follow it, because a label belongs to the file's path; label it again at its new place.
 
 ### When a name is taken
 
@@ -59,21 +60,27 @@ The focus starts on "Skip this one", which changes nothing, and Escape answers i
 
 A failure names the file and the cause, then says what to do: "Could not copy report.pdf: another program is using it. Close it in the other program, then retry." The choices are never more than four: Retry, Skip, Skip all like this, and Cancel the job. The list starts on Skip when retrying cannot help, and on Retry when it can, such as a file in use by another program.
 
-If a network share goes away, diroxide retries three times, five seconds apart, and then asks. If nothing moves for 20 seconds, the jobs line says "Copying stalled at 30 percent". Escape gives up on the job. A folder that could not be emptied is reported once, not once for every parent. These retry and stall values are built in; they are not settings.
+If the network goes away, diroxide tries again without a word, three times, waiting 5 seconds, then 15, then 45, and then asks. The number of tries and the first wait are settings, in the Jobs and transfers group; [the transfer queue](transfer-queue.md) says more, including what a job on a server does when the whole server stops answering, and the error policy that lets an unattended job skip what fails and list it at the end. The tries are counted and reported at the end, not spoken: "done after 2 automatic retries".
+
+If nothing moves for 20 seconds, the jobs line says "Copying stalled at 30 percent". Escape gives up on the job. The stall time is built in; it is not a setting. A folder that could not be emptied is reported once, not once for every parent.
 
 ## The jobs line and progress
 
-The jobs line says "No jobs" when idle. A change of state is announced at once: "Copy started: 3 items to Backup", "Copying paused at 30 percent", "Copying waits for an answer", "Copy finished: 3 done."
+The jobs line says "No jobs" when idle. A change of state is announced at once: "Copy started: 3 items to Backup", "Copying paused at 30 percent", "Copying waits for an answer", "Copy finished: 3 done." A job that waits its turn is "Queued: copy 3 items to build", and one whose server stopped answering is "Copy waits for build: connection lost".
+
+With several jobs, the count comes first and then the front job's sentence: "3 jobs, 1 waiting: Copying 40 percent". Only the front job's progress is said as it goes, and the others speak when their state changes. Ctrl+D says them all.
 
 While a job runs, the line gives the percent first and the estimate after it: "Copying 30 percent, 2 minutes left". The estimate waits until five seconds have passed and five percent is done, and it never says "about". Before a big job starts, diroxide counts first: "Copying: counting, 120 so far". Say Status (Ctrl+D) adds the detail: "12 of 300 items, 1.2 of 4.0 GB, 48 MB a second".
 
 How often the line changes depends on screen-reader mode. In screen-reader mode it changes at once for a change of state, and otherwise at most every ten seconds (the `progress_interval_seconds` setting). Otherwise it changes at most twice a second. A screen reader that speaks new text would speak every change, so the slow rate is what keeps a long copy from talking all the time.
 
-Ctrl+D gives the full sentence whenever you ask. Escape cancels the job in front: "Copying: cancelling", then "Copy cancelled: 2 done." The files already finished stay, and nothing half-written is left. Job history, in the Tools menu (Alt+T, then J) and the palette, lists the jobs that ran; Enter on one lists what failed or was skipped, and why.
+Ctrl+D gives the full sentence whenever you ask. Escape cancels the job in front: "Copying: cancelling", then "Copy cancelled: 2 done." The files already finished stay, and nothing half-written is left. The Jobs list, in the Tools menu (Alt+T, then J) and the palette, lists the running, waiting and finished jobs. Enter on a job offers what fits it, and on a finished one "Show what failed" lists what failed or was skipped, and why. Job history, in the palette, opens the same list on the finished jobs. [The transfer queue](transfer-queue.md) describes the list, the order of the queue, pausing and the speed limit.
 
 The end of a job says the count first, with problems before it: "Copy finished: 3 done, 1 skipped.", "Copy finished with 1 warning: 3 done.", "Copy cancelled: 2 done." The entries that failed stay selected so you can see what to try again.
 
-If diroxide is killed in the middle of a job, a temporary file may be left in the target folder, and the next start says so in words: "Last session ended during a copy: 3 of 5 steps done." Leftover `.diro-part-` files are never deleted automatically; you can delete them yourself like any other file.
+If diroxide is killed in the middle of a job, a temporary file may be left in the target folder, and the next start says so in words: "Last session ended during a copy: 3 of 5 steps done." Leftover `.diro-part-` files are never deleted automatically; you can delete them yourself like any other file. If a lost network cut a copy of 4 MiB or more, the part file is kept on purpose and listed in `partials.json` in the state folder, so a retry can go on from it.
+
+Ctrl+Q asks while a job runs or waits: "2 jobs are not finished." and "Quit and stop them? No is the default. y or n". The queue is not kept across a restart.
 
 ## Rename: F2
 
@@ -120,6 +127,7 @@ On Windows the trash call can remove a file for good and still report success, s
 
 - The trash is used only on a fixed drive inside the computer (the `trash_drives` setting lists the drive kinds; its default is fixed).
 - It is not used on a removable drive such as a USB stick, or on a network drive.
+- A place on a server, such as an SFTP place, has no trash at all. A delete there is permanent, lists every item first and asks, starting on No. [Remote places over SFTP](remote-places.md) says more.
 - It is not used for a path of 260 characters or more, and a folder is refused if any path inside it is that long.
 
 In those cases diroxide does not guess. It says why and offers the listed permanent delete instead, and the question starts on No: "This drive has no trash. Delete 3 items for good? No is the default. y or n". A path that is too long asks "Path is too long for the trash. Delete 1 item for good? No is the default. y or n".
@@ -199,6 +207,9 @@ Every prompt you type into has completion, with the same keys.
 ## See also
 
 - [The panels](panels.md)
+- [The transfer queue](transfer-queue.md)
+- [Remote places over SFTP](remote-places.md)
+- [Hooks](hooks.md)
 - [Archives](archives.md)
 - [Split and join](split-join.md)
 - [Links, permissions and times](links-permissions.md)
