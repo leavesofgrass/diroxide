@@ -92,6 +92,13 @@ Editor. The program Edit opens a file with: a name on the path or a full path, w
 - Holds: text.
 - Default: `""`.
 
+### hidden_volumes
+
+Hidden volumes. Volumes left out of the Volumes list, by device or place, as its Hide action keeps them. Remove one to list it again.
+
+- Holds: a list of names.
+- Default: `[]`.
+
 ## Keys
 
 ### single_letters
