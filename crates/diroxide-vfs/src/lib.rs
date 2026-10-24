@@ -55,7 +55,11 @@ pub use sys::KillOnCloseJob;
 #[cfg(windows)]
 pub use sys::{OwnerPipe, PipeStream, plain_pipe_name};
 pub use trash::{TrashCheck, TrashFacts, TrashGate, TrashRules, trash_gate};
-pub use volume::{LocalPlace, PlaceRole, SpaceInfo, VolumeInfo, VolumeKind};
+pub use volume::{
+    ActionOffer, DeviceReport, LocalPlace, PlaceRole, RemoteVolume, SPACE_LIMIT, SpaceAnswer,
+    SpaceInfo, SpaceRequest, VolumeAction, VolumeAnswer, VolumeInfo, VolumeKind, VolumeRow,
+    VolumeSource, VolumeSources, VolumeState, VolumeTools, ask_spaces, space_requests, volume_rows,
+};
 pub use walk::{SkipReason, WalkEvent, WalkOptions, WalkSummary, walk};
 
 /// The tops of the local file system: the drives on Windows, `/` elsewhere.
