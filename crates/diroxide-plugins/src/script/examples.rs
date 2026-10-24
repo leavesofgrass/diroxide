@@ -452,7 +452,7 @@ fn the_python_examples_pass_their_own_tests() {
         eprintln!("Python 3 was not found; this test is skipped here");
         return;
     };
-    for name in ["line-counter", "changed-files", "memfs"] {
+    for name in ["line-counter", "changed-files", "memfs", "volume-actions"] {
         let folder = examples().join(name);
         let output = Command::new(&python.program)
             .args(python.args.iter().filter(|a| *a != "-P"))
