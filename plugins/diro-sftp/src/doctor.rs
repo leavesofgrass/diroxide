@@ -37,8 +37,12 @@ pub const SELF_TEST_PROMPT: &str = "diroxide doctor: helper self-test";
 /// The answer the self-test expects back: not a secret either.
 pub const SELF_TEST_ANSWER: &str = "diroxide-doctor-ok";
 
-/// How long the helper and `ssh-add` each have.
-pub const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the helper and `ssh-add` each have. Short, and the two run
+/// side by side in [`gather`], so the whole doctor answers well inside
+/// the ten seconds the host's conformance suite waits for a command's
+/// answer: a slow CI runner once pushed the probes past it, one after
+/// another with ten seconds each.
+pub const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// What the agent said, counting keys only.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,6 +53,8 @@ pub enum Agent {
     NoKeys,
     /// Not running, or not reachable.
     NotRunning,
+    /// Asked, and `ssh-add` gave no answer within the probe's time.
+    NoAnswer,
     /// Not asked: no `ssh-add` beside the ssh in use.
     NotChecked,
 }
@@ -121,6 +127,7 @@ pub fn report(facts: &Facts) -> Vec<String> {
         Agent::Keys(n) => format!("Agent: running, {n} keys."),
         Agent::NoKeys => "Agent: running, no keys.".to_owned(),
         Agent::NotRunning => "Agent: not running.".to_owned(),
+        Agent::NoAnswer => "Agent: no answer in time.".to_owned(),
         Agent::NotChecked => "Agent: not checked, no ssh-add.".to_owned(),
     });
     let (hosts, skipped, exists) = facts.config;
@@ -195,6 +202,8 @@ pub fn probe_agent(ssh: &Path) -> Agent {
     let status = child.wait_timeout(PROBE_TIMEOUT).ok().flatten();
     if status.is_none() {
         let _ = child.kill_tree();
+        let _ = reader.map(thread::JoinHandle::join);
+        return Agent::NoAnswer;
     }
     let text = reader.and_then(|r| r.join().ok()).unwrap_or_default();
     agent_from(
@@ -273,9 +282,14 @@ pub fn gather(
         &SearchPlaces::from_env(),
         probe,
     );
-    let agent = ssh
-        .as_ref()
-        .map_or(Agent::NotChecked, |found| probe_agent(&found.path));
+    // The agent probe and the helper's self-test may each wait the
+    // probe's time; they run side by side, so the whole gathering stays
+    // inside the host's wait for a command's answer.
+    let agent_path = ssh.as_ref().ok().map(|found| found.path.clone());
+    let agent_probe =
+        thread::spawn(move || agent_path.map_or(Agent::NotChecked, |path| probe_agent(&path)));
+    let helper_test = self_test(helper, runtime);
+    let agent = agent_probe.join().unwrap_or(Agent::NotChecked);
     let hosts = sites.config_hosts();
     let exists = sites.config_file().is_some_and(|f| f.is_file());
     let sites_facts = match sites.file() {
@@ -289,7 +303,7 @@ pub fn gather(
         sites: sites_facts,
         key_store: sites.keyring().name(),
         endpoint: endpoint_words(runtime),
-        helper: self_test(helper, runtime),
+        helper: helper_test,
     }
 }
 

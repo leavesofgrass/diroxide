@@ -20,8 +20,10 @@ use diroxide_tools::{ProcessSpec, Stream};
 use super::version::SshVersion;
 use crate::lines;
 
-/// How long `ssh -V` may take.
-pub const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+/// How long `ssh -V` may take: it answers at once on any working ssh,
+/// and every candidate on the PATH is probed in turn, so the doctor's
+/// whole run must stay inside the host's wait for a command's answer.
+pub const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Where a candidate came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
