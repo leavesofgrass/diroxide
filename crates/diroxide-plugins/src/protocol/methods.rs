@@ -648,7 +648,7 @@ pub const ALL: [Method; 66] = [
         A::Hooks,
         "a [[hook]] table with a before event",
         "Lets the plugin continue or cancel a job before its confirmation.",
-        LATER,
+        NOW,
     ),
     method(
         HOOK_AFTER,
@@ -657,7 +657,7 @@ pub const ALL: [Method; 66] = [
         A::Hooks,
         "a [[hook]] table with an after event",
         "Says a job ran, a folder was entered, or the selection changed.",
-        LATER,
+        NOW,
     ),
     method(
         LISTER_OPEN,

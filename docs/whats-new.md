@@ -12,9 +12,22 @@ Plugins, script commands and optional components.
 - A plugin cannot pass for diroxide. Everything it says ends with its name, so the meaning stays in the first 40 characters of a Braille line. [Security](security.md) says plainly what a plugin could still do.
 - Optional components. Helper programs, plugins and data packs that diroxide does not ship are fetched only after you say yes, checked by size and SHA-256 before they are used, and removed by a list that shows every file first. [Optional components](components.md) describes it.
 - In the program. The Plugins menu (Alt+P) lists Manage plugins and Get example plugins, then the commands of each plugin you turned on. A command runs as a job that Escape cancels. A plugin's questions and lists open as dialogs of diroxide's own, with its name last. The Tools menu has Manage optional components. [Plugins](plugins.md) walks through each screen.
-- Nine example plugins, small on purpose: two bash scripts, a Python line counter, a search through the system's own index, a diff-tool opener, a changed-files list, a toy file system in memory, a PDF previewer and a Markdown to Word converter. `diro plugin new` starts your own from the same files.
+- Ten example plugins, small on purpose: two bash scripts, a Python line counter, a search through the system's own index, a diff-tool opener, a changed-files list, a toy file system in memory, a PDF previewer, a Markdown to Word converter and a folder guard. `diro plugin new` starts your own from the same files.
 - The command line. `diro plugin` lists, creates, checks, turns on and off, runs, restarts and tests plugins and scripts. `diro components` lists, downloads, verifies, removes and installs components. `diro run` runs one of diroxide's own commands, or an enabled plugin's, without the panels.
 - Privacy. [The privacy page](privacy.md) now says what a plugin can see, and that the one request diroxide makes by itself, the download of a component, asks first and sends only the project's name.
+
+Remote places over SFTP, the transfer queue and hooks.
+
+- Remote places. A folder on another computer opens in a panel like any folder: type `sftp://alice@build.example/srv` in Go to a path, pick a saved site in Go to a place, or open the Sites list. diroxide uses the OpenSSH program on your computer, so your keys, your agent and your known hosts work as they are. [Remote places over SFTP](remote-places.md) is the guide.
+- A new server key asks first, with the fingerprint in groups of four digits that a Braille display reads one row at a time. A changed key is refused with no way to accept it, and the command that forgets the old key is shown and never run.
+- Saved sites keep a name, a user, a start folder and how the password is kept: never (the default), for this session, or in the system keyring after a question that starts on No. No password is ever in a file. A saved password is never given through a jump host.
+- `diro-sftp doctor` is a plain report of which ssh, whether the agent runs and whether the password helper works, with no network.
+- The transfer queue. Jobs on a server wait their turn, two at a time for one server. The Jobs list (Alt+T, then J) shows running, waiting and finished jobs, each row with its state first, and lets you move a job, run it now, pause it, cancel it or set a speed limit for it. [The transfer queue](transfer-queue.md) describes it.
+- A server that stops answering is one question for all the jobs on it, with Keep waiting first. A copy cut by a lost network goes on from where it stopped when the part file checks out.
+- Retries are settings now: three tries, waiting 5, 15 and 45 seconds, and a job can continue and list its errors instead of asking. A Jobs and transfers group in Settings holds seven settings. Quitting asks while a job waits.
+- Hooks. A plugin can be asked before a copy, a move, a delete, a rename or a new folder, and stop it with a reason: "Delete stopped: folder is protected. By Folder guard." [Hooks](hooks.md) has the events and the example.
+- A plugin's commands take keys from `keymap.toml`, and the Keys list shows them.
+- Streamed listings. A big remote folder arrives in batches, says how far it has come, and Escape stops it and keeps what came.
 
 ## Alpha 1
 
@@ -32,6 +45,9 @@ The first alpha is a terminal file manager for local folders and archives, built
 - [Known limits](known-limits.md)
 - [Quick start](quickstart.md)
 - [Plugins](plugins.md)
+- [Remote places over SFTP](remote-places.md)
+- [The transfer queue](transfer-queue.md)
+- [Hooks](hooks.md)
 - [Optional components](components.md)
 - [Privacy](privacy.md)
 - [The documentation index](README.md)

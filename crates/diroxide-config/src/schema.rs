@@ -603,7 +603,7 @@ pub const SCHEMA: [SettingInfo; 100] = [
             unit: "KB a second",
         },
         default: "0",
-        help: "The most a job may read and write in a second, in KB. 0 is no limit. The Speed limit command changes it for one job.",
+        help: "The most the jobs may read and write in a second together, in KB. 0 is no limit. The Speed limit command changes this limit while jobs run; a job's own limit is in its actions.",
         arrives: None,
     },
     SettingInfo {

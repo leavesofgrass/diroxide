@@ -23,7 +23,7 @@ The config folder holds these files:
 
 Later alphas add more files, such as the tools list. They are described when they arrive.
 
-The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. It also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now. A `plugins` folder holds what you turned on (`consent.toml`), a folder for each plugin with its log and its data, and a `runs` folder for the short-lived files of a running script. A `components` folder holds the optional components you installed, one folder each. [Optional components](components.md) describes them.
+The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. It also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now. A `plugins` folder holds what you turned on (`consent.toml`), a folder for each plugin with its log and its data, and a `runs` folder for the short-lived files of a running script. The SFTP places plugin keeps `sites.toml`, the list of your sites, in its folder there. `partials.json` holds the partial files a lost network left, so a copy can go on from them ([the transfer queue](transfer-queue.md) says how). A `components` folder holds the optional components you installed, one folder each. [Optional components](components.md) describes them.
 
 ## How diroxide treats these files
 
@@ -73,7 +73,26 @@ Names are in code type. Defaults are in parentheses.
 - Password echo (`secret_echo`, asterisks) and Passwords shown (`secret_show_toggle`, off): what the masked password prompt shows for each key, which archives use. `silent` shows nothing. A password is never read back, logged or kept after the job.
 - Code colors (`highlighting`): `auto` (default) colors code in the viewer except in screen-reader mode, `on` colors it always, and `off` never does. The code commands that say each word's kind work whichever you choose. [The viewer](viewer.md) describes them.
 
-How long a copy retries a lost network, how long it waits before it says "stalled", and whether it keeps dates or checks a move are built into the job engine. They are not settings.
+How long it waits before it says "stalled" (20 seconds), and whether a copy keeps dates or checks a move, are built into the job engine. They are not settings. The tries on a lost network and the queue are, below.
+
+### Jobs and transfers
+
+The Settings list has a group of seven settings for the queue, retries, the speed limit and errors, each with F1 help. [The transfer queue](transfer-queue.md) explains them in use.
+
+- Jobs at once per server (`jobs.per_host`, 2; 1 to 8): how many jobs run at once on one remote server. More wait their turn. Jobs on this computer always start at once.
+- Remote jobs at once (`jobs.remote`, 4; 1 to 16): how many jobs on remote servers run at once in all.
+- Speed limit (`jobs.speed_limit_kb`, 0; 0 to 10000000): the most a job may read and write in a second, in KB. 0 is off. The Speed limit command in the palette changes it, and the Jobs list sets a limit for one job.
+- Speed limit for (`jobs.speed_limit_scope`, remote): which jobs the limit slows, `remote` or `all`.
+- Tries on a lost network (`jobs.network_retries`, 3; 0 to 10): how many times a lost network is tried again, without a word, before the job asks. 0 is off: the job asks at once.
+- First wait before a try (`jobs.network_retry_seconds`, 5; 1 to 600): how long the first wait is. Each wait is three times the one before, so 5 gives waits of 5, 15 and 45 seconds. No wait is longer than ten minutes.
+- On errors (`jobs.on_errors`, ask): what a new job does when an item fails. `ask` asks each time, `continue_and_list` goes on and lists the failures at the end, and `stop_at_first` stops.
+
+```toml
+[jobs]
+per_host = 2
+network_retries = 3
+on_errors = "continue_and_list"
+```
 
 ### Search, filters, compare and keys
 
@@ -96,7 +115,7 @@ These settings are for the filter language, search, compare and the key presets.
 - Components list (`components_source`, empty): where you keep your own copy of the optional components, a folder or a repository written `owner/name`. Empty means the public list only. It is tried before the public address. Nothing else names it, and the question that asks to download says only "From your own components source." [Optional components](components.md) describes it.
 - First-run list shown (`components_first_run_shown`, off): whether the first-run list of optional components was shown. Ask first-run choices again, in the Tools menu, turns it off.
 
-A plugin's own settings are listed in its manifest. The Settings list has a row, "Plugin settings", that opens them: pick a plugin, then a setting. A change reaches the plugin at once, and the F1 help says what each setting does. The values are kept in `settings.toml` in the plugin's folder of the state folder. [Plugins](plugins.md) has the details.
+The SFTP places plugin's settings (which ssh to use, timeouts, how many requests are in flight) are listed in [remote places](remote-places.md). A plugin's own settings are listed in its manifest. The Settings list has a row, "Plugin settings", that opens them: pick a plugin, then a setting. A change reaches the plugin at once, and the F1 help says what each setting does. The values are kept in `settings.toml` in the plugin's folder of the state folder. [Plugins](plugins.md) has the details.
 
 ### The viewer, the quick view, archives and split sizes
 
@@ -196,6 +215,8 @@ To go back to the defaults, move the config folder aside by renaming it, and sta
 - [Search and the filter language](search.md)
 - [Labels and bookmarks](labels-bookmarks.md)
 - [Plugins](plugins.md)
+- [The transfer queue](transfer-queue.md)
+- [Remote places over SFTP](remote-places.md)
 - [Optional components](components.md)
 - [Privacy](privacy.md)
 - [The documentation index](README.md)

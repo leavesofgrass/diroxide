@@ -196,7 +196,8 @@ fn two_copies_run_on_a_host_the_rest_wait_and_the_list_reorders_and_cancels() {
     let said = command_held(&mut s, ids::JOBS_RESUME_ALL);
     assert!(said.contains(&"All jobs go on.".to_owned()), "{said:?}");
     let effects = Vec::new();
-    let said = crate::held::drive(&mut s, effects, |s, _| s.app.jobs().is_empty());
+    // f1, f2 and f4 copied, f3 cancelled before it began.
+    let said = crate::held::drive(&mut s, effects, |s, _| crate::held::settled_after(s, 4));
     assert!(
         s.app.jobs().is_empty(),
         "{:?} {said:?}",
@@ -240,7 +241,7 @@ fn escape_names_the_job_in_front_when_others_run_beside_it() {
         all(&s)
     );
     held.open();
-    crate::held::drive(&mut s, Vec::new(), |s, _| s.app.jobs().is_empty());
+    crate::held::drive(&mut s, Vec::new(), |s, _| crate::held::settled_after(s, 2));
     assert!(held.fake.exists(&remote("/srv/f1.txt")));
     assert!(!held.fake.exists(&remote("/srv/f2.txt")));
 }

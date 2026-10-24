@@ -109,8 +109,8 @@ Each method says who sends it, whether it is answered, what allows it, and wheth
 
 ### Hooks
 
-- `hook/before`: host to plugin, request. Lets the plugin continue or cancel a job before its confirmation. Allowed by: a [[hook]] table with a before event. State: shape only, served later.
-- `hook/after`: host to plugin, notification. Says a job ran, a folder was entered, or the selection changed. Allowed by: a [[hook]] table with an after event. State: shape only, served later.
+- `hook/before`: host to plugin, request. Lets the plugin continue or cancel a job before its confirmation. Allowed by: a [[hook]] table with a before event. State: served.
+- `hook/after`: host to plugin, notification. Says a job ran, a folder was entered, or the selection changed. Allowed by: a [[hook]] table with an after event. State: served.
 
 ### Listers, columns, descriptions and completion
 

@@ -1,6 +1,6 @@
 # ADR-0011: The keyring and stored secrets
 
-Status: Proposed, Friday, October 23, 2026 (S-C, the sites lane of alpha 2, R25 commit 74), for the orchestrator to accept at commit 83.
+Status: Accepted, Friday, October 23, 2026 (alpha 2, Wave 4: lane S-C's draft, accepted by the orchestrator at the close of stage 2; the owner's answer 83).
 
 ## Context
 

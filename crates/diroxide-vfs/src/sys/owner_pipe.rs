@@ -664,9 +664,7 @@ mod tests {
     /// handle as SDDL: one entry, for this account, and nothing inherited.
     #[test]
     fn the_live_pipe_holds_one_entry_for_this_account() {
-        use windows_sys::Win32::Security::Authorization::{
-            ConvertSecurityDescriptorToStringSecurityDescriptorW, GetSecurityInfo, SE_KERNEL_OBJECT,
-        };
+        use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SE_KERNEL_OBJECT};
         use windows_sys::Win32::Security::{DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION};
         let pipe = OwnerPipe::create(&name("dacl")).unwrap();
         let handle = pipe.waiting.as_ref().unwrap().handle.as_raw_handle();
@@ -688,12 +686,32 @@ mod tests {
         };
         assert_eq!(status, 0);
         let descriptor = LocalBox(descriptor);
+        // Windows renders a well-known account as its alias (the built-in
+        // Administrator is `LA`, which the CI runner is) and the generic
+        // right as the file right, so the live text is compared with the
+        // module's own descriptor rendered the same way, not with a literal.
+        let live = sddl_text(descriptor.0, wanted);
+        let own = Descriptor::owner_only().unwrap();
+        // The kernel maps the generic right the module writes to the file
+        // right on the pipe's handle, so the expected text says FA too.
+        let expected = sddl_text(own.0.0, wanted).replace(";GA;", ";FA;");
+        assert_eq!(live, expected, "{live}");
+        let sid = own_sid().unwrap();
+        assert!(
+            live.contains(&sid) || live.contains("LA"),
+            "the live text names the account: {live}"
+        );
+    }
+
+    /// A security descriptor as SDDL text, through the system's renderer.
+    fn sddl_text(descriptor: PSECURITY_DESCRIPTOR, wanted: u32) -> String {
+        use windows_sys::Win32::Security::Authorization::ConvertSecurityDescriptorToStringSecurityDescriptorW;
         let mut text: *mut u16 = null_mut();
-        // SAFETY: the descriptor is the one just read and lives across the
-        // call, which allocates the text with LocalAlloc.
+        // SAFETY: the descriptor lives across the call, which allocates the
+        // text with LocalAlloc.
         let ok = unsafe {
             ConvertSecurityDescriptorToStringSecurityDescriptorW(
-                descriptor.0,
+                descriptor,
                 SDDL_REVISION_1,
                 wanted,
                 &raw mut text,
@@ -709,9 +727,7 @@ mod tests {
             len += 1;
         }
         // SAFETY: `len` units were just read from the live allocation.
-        let sddl = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(start, len) });
-        let sid = own_sid().unwrap();
-        assert_eq!(sddl, format!("O:{sid}D:P(A;;FA;;;{sid})"), "{sddl}");
+        String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(start, len) })
     }
 
     #[test]

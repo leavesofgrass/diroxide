@@ -254,7 +254,7 @@ Remote jobs at once. How many jobs on remote servers run at once in all; more wa
 
 ### jobs.speed_limit_kb
 
-Speed limit. The most a job may read and write in a second, in KB. 0 is no limit. The Speed limit command changes it for one job.
+Speed limit. The most the jobs may read and write in a second together, in KB. 0 is no limit. The Speed limit command changes this limit while jobs run; a job's own limit is in its actions.
 
 - Holds: a number of KB a second, 0 to 10000000.
 - Default: `0`.
