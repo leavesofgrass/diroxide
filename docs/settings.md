@@ -63,7 +63,8 @@ Names are in code type. Defaults are in parentheses.
 - Sorting: what a new panel sorts by (`sort.key`: name by default, or extension, size, modified, created, accessed, kind, attributes, owner, label or unsorted), the direction (`sort.direction`), where folders go (`sort.folders`: first by default, mixed or last), capitals (`sort.case`: ignore by default, or respect) and numbers in names (`sort.natural`, on, so `file2` comes before `file10`).
 - Columns (`columns`): the details said after each name, in order. The default is type, size and modified.
 - Confirmations (`confirm.copy`, `confirm.move`, `confirm.trash` and `confirm.quit_with_jobs`, all on): whether those four questions are asked. Every question that is asked starts on No, and deleting for good always asks.
-- Trash (`trash`, system) and the drives that use it (`trash_drives`, fixed): on Windows only fixed drives keep trashed files safely. Elsewhere the delete is listed and asks before it deletes for good. Replaced files go to the trash first (`replace_to_trash`, on), so Undo can bring them back.
+- Trash (`trash`, system) and the drives that use it (`trash_drives`, fixed): on Windows only fixed drives keep trashed files safely. Elsewhere the delete is listed and asks before it deletes for good. Replaced files go to the trash first (`replace_to_trash`, on), so Undo can bring them back. The trash browser lists what is in the system's trash; [volumes and the trash](volumes-trash.md) describes it.
+- Hidden volumes (`hidden_volumes`, none; in the Panels group): the volumes the Volumes list leaves out, by device or place, as its Hide action keeps them. Remove an entry to list the volume again.
 - Portable names (`portable_names`, on): refuses names that other systems cannot store, such as a colon or a trailing space, when diroxide makes or renames an entry.
 - Dialog settle time (`dialog_settle_ms`, 250; 0 to 2000): keys that arrive this soon after a dialog opens are ignored.
 - Completion list (`completion_list`): `auto` (default) lists candidates as you type in the graphical interface (GUI) and on request in a terminal, `as_you_type`, or `on_tab`.
@@ -109,11 +110,12 @@ These settings are for the filter language, search, compare and the key presets.
 
 ### Plugins and optional components
 
-[The settings reference](settings-reference.md) lists four settings under Plugins. You turn a plugin on and off in Manage plugins, in the Plugins menu, or with `diro plugin enable` and `diro plugin disable`. The record, with the fingerprints, is kept in `consent.toml` in the state folder. `plugins.enabled` is reserved and does nothing.
+[The settings reference](settings-reference.md) lists five settings under Plugins. You turn a plugin on and off in Manage plugins, in the Plugins menu, or with `diro plugin enable` and `diro plugin disable`. The record, with the fingerprints, is kept in `consent.toml` in the state folder. `plugins.enabled` is reserved and does nothing.
 
 - Plugin time limit (`plugins.timeout_ms`, 10000; 1000 to 600000): how long a plugin may take to answer before it is reported and left.
 - Components list (`components_source`, empty): where you keep your own copy of the optional components, a folder or a repository written `owner/name`. Empty means the public list only. It is tried before the public address. Nothing else names it, and the question that asks to download says only "From your own components source." [Optional components](components.md) describes it.
-- First-run list shown (`components_first_run_shown`, off): whether the first-run list of optional components was shown. Ask first-run choices again, in the Tools menu, turns it off.
+- First-run list shown (`components_first_run_shown`, off): whether the first-run list of optional components was shown. It turns on by itself when the list opens, and the list is not shown again at a first start.
+- Ask about components again (`components_ask_again`, off): on, the first-run list opens once at the next start, with nothing chosen. The setting turns itself off when the list opens. Ask first-run choices again, in the Tools menu (Alt+T, then F), opens the list now. Any opening of the list turns First-run list shown on and this setting off. [Optional components](components.md) describes the list.
 
 The SFTP places plugin's settings (which ssh to use, timeouts, how many requests are in flight) are listed in [remote places](remote-places.md). A plugin's own settings are listed in its manifest. The Settings list has a row, "Plugin settings", that opens them: pick a plugin, then a setting. A change reaches the plugin at once, and the F1 help says what each setting does. The values are kept in `settings.toml` in the plugin's folder of the state folder. [Plugins](plugins.md) has the details.
 
@@ -217,6 +219,7 @@ To go back to the defaults, move the config folder aside by renaming it, and sta
 - [Plugins](plugins.md)
 - [The transfer queue](transfer-queue.md)
 - [Remote places over SFTP](remote-places.md)
+- [Volumes and the trash](volumes-trash.md)
 - [Optional components](components.md)
 - [Privacy](privacy.md)
 - [The documentation index](README.md)

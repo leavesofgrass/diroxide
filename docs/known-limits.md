@@ -1,6 +1,6 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands and optional components arrived with alpha 2. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2. Where a limit has a workaround, the workaround comes first.
 
 ## What is not in alpha 1
 
@@ -12,7 +12,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
 - A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes in a later alpha.
 - Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 1, although copies keep dates.
-- Remote places other than SFTP, and the trash browser, come in a later alpha. SFTP places are in this build; "Remote places over SFTP" below says what they do not do.
+- Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
 - Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands come in a later alpha.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
 - Download files for each platform come in a later alpha, first for Windows x86_64 and Linux x86_64 and then for the other platforms. `cargo install diro` comes with the first beta.
@@ -35,7 +35,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The preview region and the conversions dialog come in a later alpha. Until then `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
 - Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
 - A plugin's columns are declared and not shown in the panels yet.
-- A list a plugin opens always opens over the panels, like search results, whichever panel the plugin names.
+- A list a plugin opens always opens over the panels, like search results, whichever panel the plugin names. A list that opens inside a panel is not built.
 - A plugin's keys are lines in `keymap.toml` and rows in the Keys list, and the Keys list cannot change them yet: Enter on a plugin's row says to edit `keymap.toml`. `diro keys check` does not know plugin commands and calls such a line unknown; the program does not. Manage plugins, on a plugin's Commands and keys row, also says what happened to each proposed key.
 - A script's `dry_run` promise is read and checked, and the program offers no preview with it yet.
 - The `terminal`, `terminal-wait` and `output-column` modes of a script command are not shown by the program yet.
@@ -49,15 +49,15 @@ Each item below is still to come. None of them is dated: a feature that is not i
 
 [Optional components](components.md) describes the feature. These are the limits.
 
-- The list in this build has one component, the example plugins. The pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
+- The list in a build made from source has one component, the example plugins. The release files add the SFTP places plugin, with a program for Windows on x86-64, Linux on x86-64 and macOS. Windows on ARM and Linux on ARM have none yet. The example pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
 - Downloads use a built-in client, then `curl`, then `wget` from your PATH. A build of diroxide made without the built-in client needs `curl` or `wget`, and says "Not downloaded: curl was not found." when it has neither.
 - A private repository as your own source, reached through the GitHub CLI's sign-in, is not built yet. A folder works, and a repository written `owner/name` is read from its public release downloads.
-- Where a helper has no build for your computer, the message says "No build for this computer." and names a generic next step, not your system's own install command.
+- Where a helper has no build for your computer, the message says "No build for this computer." and names a generic next step, not your system's own install command. For the SFTP places plugin it names the `cargo install` line instead, which needs a Rust toolchain, and the program it builds still has to be put where [remote places](remote-places.md) says.
 - The list's `min_diro`, `needs_tools` and `protocol` fields are read and not enforced yet.
 - After Escape, a stalled transfer in the built-in client can take a moment to stop, until the client's own time limits end it. `curl` and `wget` are ended at once.
 - A component that would run an installer is refused: "installers are not supported yet".
 - The downloaded programs are not code-signed, and neither are the builds of diroxide. Windows' SmartScreen and virus scanners may react.
-- The first-run list of components is built and is not shown at the first start yet, because the list holds only the examples. Ask first-run choices again, in the Tools menu, opens it, and it says "No optional components to choose from yet".
+- The first-run list of components opens once, at the first start, and only when the list holds something besides the example plugins: that is, in the release files, where the SFTP places plugin is. A build from source has nothing to offer, so the first start passes without it. The list never covers a dialog that is open at the start; Ask first-run choices again, in the Tools menu, opens it later, and says "No optional components to choose from yet" when there is nothing to choose.
 - A no to a download is not remembered. Get example plugins asks again each time.
 - Installing from a zip file or a folder says "Not downloaded" when it finds none of the files, which is the wrong word for an install.
 
@@ -75,11 +75,11 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A site's `bookmarks` list is read and kept in `sites.toml`. Nothing offers those folders yet.
 - A background connect, such as an automatic reconnect, never uses the keyring.
 - The tests ran against a fake server and against OpenSSH 10.0's server in a Linux container. A server across a network, and the Windows and macOS builds of ssh against a real server, have not been tried by hand. The password prompts were captured from OpenSSH 10.0 on Linux, and the new-key and changed-key texts also from the ssh in Windows. The questions of other versions are expected to read the same.
-- A server that does not report free space is not checked for room before a copy. A copy that does not fit ends with "The server's disk or quota is full."
+- A server that does not report free space, or does not answer within 2 seconds, is not checked for room before a copy. You hear "Free space on build is not known." before the question, and the copy goes on. A copy that does not fit ends with "The server's disk or quota is full."
 - A frozen server takes about a minute to be noticed, because ssh gives up on the fourth missed keepalive. A server that closes the connection is noticed in a fraction of a second.
 - A server-side copy that was cancelled still finishes on the server. The cleanup runs after it.
 - Changing the permissions of a link changes what the link points to.
-- The plugin is built from the source tree. A download for each system comes with a later build.
+- The plugin is a component with a program for Windows on x86-64, Linux on x86-64 and macOS, in the release files. On any other computer, and in a build made from source, it is built from the source tree.
 - A list the plugin opens, the Sites list and the doctor report, comes over the panels, not inside one.
 
 ## The transfer queue
@@ -87,7 +87,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 [The transfer queue](transfer-queue.md) describes the Jobs list. These are the limits.
 
 - The queue is not saved when you quit. Quitting asks first when any job runs or waits.
-- Pause is not offered for a job that is waiting its turn. Cancel it or move it instead.
+- Pause is not offered for a job that is waiting its turn. Cancel it or move it instead. Pausing one waiting job needs a hold in the job engine that is not built.
 - A job's error policy can be changed only while the job waits.
 - Retry the failed items covers copy, move, trash and delete. It runs again the original selections that held failures and skips what is already at the destination.
 - Resume applies to copies of 4 MiB or more. The head and tail check compares the first 64 KiB and the last 1 MiB of the part file, so a bad byte in the middle is not seen by a plain copy. A move reads everything back before it removes the source.
@@ -166,9 +166,27 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Windows: a folder is refused for the trash when any path inside it is 260 characters or longer.
 - Windows: after every trash call diroxide checks that the original is gone and that the trash holds it. If not, it says so loudly: "Deleted but not found in the trash."
 - Windows: a very large item may be bigger than the Recycle Bin's size limit. This case has not been tested yet, because testing it could push your oldest recycled items out of the bin.
-- macOS: diroxide cannot restore items from the trash, so Undo cannot bring back a trashed item there. Restore it from the Trash in the Finder.
+- macOS: diroxide cannot restore items from the trash, so Undo cannot bring back a trashed item there. Restore it from the Trash in the Finder. The trash browser cannot list it either.
 - Linux: the trash follows the freedesktop standard. A drive with no trash of its own may mean copying the item into your home trash first.
 - Permanent delete cannot be undone, and it cannot erase data for good: "Deleted data may stay on the disk. diroxide cannot erase it for good."
+
+## Volumes and the trash browser
+
+[Volumes and the trash](volumes-trash.md) describes both lists. These are the limits.
+
+- Both lists open over the panels, not inside one. A list inside a panel is not built.
+- Neither list has terminal tests yet. Their tests run the program's logic over made-up volumes and a test-only trash, and never drew the screen. No test touches your real trash or your real drives.
+- Unmount, Eject and Mount, done by the Volume actions plugin, were tried only against stand-ins for `udisksctl`, `diskutil` and PowerShell. The words those tools use for a busy volume were written from typical text and not captured, so a real busy volume may say "the system refused" where the plugin means "files are open". Nothing is forced either way.
+- On Windows, Eject was run only as far as PowerShell starting with no console window and saying that it does not list a drive that is not there. Ejecting a real stick, idle and with a file open, has not been tried. The name of the shell's Eject verb has not been tried on Windows in other languages.
+- The Volume actions plugin needs Python 3, and on Windows the `py` launcher. It declares a preview that says what it would run, and the program offers no preview yet.
+- Devices that are not mounted are listed only on Linux and macOS, and only while the Volume actions plugin is turned on.
+- A volume has 2 seconds to say its free space. A network share that answers in 3 seconds still says "free space not known".
+- Hide changes only the Volumes list. Go to a place still lists a hidden drive in its older words. To list a hidden volume again, take its entry out of `hidden_volumes` in `config.toml`; editing that list in the Settings field has not been tried.
+- Go to a place reads the volumes once a session, so a local volume has no free space there until you open the Volumes list, and a stick plugged in later shows in its older words until you do.
+- An unavailable action reads "Eject, needs the Volume actions plugin, unavailable". The word "unavailable" comes after the reason, not right after the name. A change is waiting.
+- Windows: a restore checks that the name is free just before it puts an item back. A file made in that same instant could be replaced. On Linux and the other freedesktop systems that cannot happen.
+- A restore puts an item back only where it came from. A taken name is left out and said, and is never given another name.
+- A trash with tens of thousands of items has not been tried. The listing comes in batches of 500 and gives up after 30 seconds.
 
 ## Long paths
 
@@ -280,6 +298,7 @@ The table of keys each terminal can send is built from a key probe run by hand o
 - The 40-cell lines were written for computer braille, one cell per character, on a HumanWare Mantis Q40. Contracted braille and other displays are untested.
 - The lines of remote places, the Jobs list, the connection question, resume and hooks were written to carry their meaning in the first 40 cells and are checked in tests, not heard. That includes the new server key dialog, the password prompts, the changed-key refusal, the Sites list rows, and "Delete stopped: folder is protected. By Folder guard."
 - The lines of plugins, script commands and optional components (the turn-on question, the jobs line, the failure lines, the ask-first question) were written to carry their meaning in the first 40 cells and are checked in tests, not heard. A plugin's own text is cleaned and given its name last, but its wording is the plugin's, so a plugin's lines may not fit 40 cells.
+- The lines of the Volumes list, the trash browser, free space and the first-run list were written to carry their meaning in the first 40 cells and are checked in tests, not heard. That includes "Mounted: Backup, removable, 412 GB free", "Restore 3 items? No is the default. y or n", "Not enough room on build:" and "Optional components to get now". A volume's name and a plugin's lines may run past 40 cells.
 
 ## Names and wide characters
 
@@ -303,6 +322,7 @@ The table of keys each terminal can send is built from a key probe run by hand o
 - [Hooks](hooks.md)
 - [Remote places over SFTP](remote-places.md)
 - [The transfer queue](transfer-queue.md)
+- [Volumes and the trash](volumes-trash.md)
 - [Writing a plugin](writing-a-plugin.md)
 - [Script commands](script-commands.md)
 - [Optional components](components.md)
