@@ -841,6 +841,34 @@ impl App {
         Vec::new()
     }
 
+    /// The Sites group's rows say their kind first, then the site's name,
+    /// its state word, its details, and the plugin last (R25, 3.6; answer
+    /// 90): "Site, build, connected, ada@build.example, by SFTP places".
+    pub(super) fn site_rows_first(&self, list: &mut diroxide_core::ListModel) {
+        let rows: Vec<diroxide_core::ListRow> = list
+            .rows()
+            .iter()
+            .map(|row| {
+                let site = self.sites.iter().find(|s| s.place.to_string() == row.id);
+                match site {
+                    Some(site) => {
+                        let mut details = vec![site.state.clone()];
+                        details.extend(site.detail.clone());
+                        details.push(format!("by {}", site.plugin));
+                        diroxide_core::ListRow::new(row.id.clone(), format!("Site, {}", site.name))
+                            .with_details(details)
+                    }
+                    None => row.clone(),
+                }
+            })
+            .collect();
+        let focus = list.focused().map(|r| r.id.clone());
+        list.set_rows(rows);
+        if let Some(focus) = focus {
+            list.focus_id(&focus);
+        }
+    }
+
     /// The places the plugins offer arrived: the go-to-place list's Sites
     /// group follows.
     pub(super) fn sites_arrived(&mut self, sites: Vec<super::SiteRow>) -> Vec<Effect> {

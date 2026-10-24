@@ -55,18 +55,18 @@ fn the_go_to_place_list_has_the_plugins_sites_kind_and_state_first() {
     assert!(
         candidates
             .iter()
-            .any(|c| c == "memfs://box/, site box, connected, Memory box, by Line counter"),
+            .any(|c| c == "Site, box, connected, Memory box, by Line counter"),
         "{candidates:#?}"
     );
     assert!(
         candidates
             .iter()
-            .any(|c| c == "memfs://spare/, site spare, saved, by Line counter"),
+            .any(|c| c == "Site, spare, saved, by Line counter"),
         "{candidates:#?}"
     );
     // The rows a plugin may not offer are left out.
-    assert!(!candidates.iter().any(|c| c.contains("site other")));
-    assert!(!candidates.iter().any(|c| c.contains("site drive")));
+    assert!(!candidates.iter().any(|c| c.contains("Site, other")));
+    assert!(!candidates.iter().any(|c| c.contains("Site, drive")));
 }
 
 #[test]

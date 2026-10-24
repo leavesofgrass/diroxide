@@ -1311,9 +1311,10 @@ impl App {
                     .filter(|c| terms_in_order(&text, &c.text) || terms_in_order(&text, &c.kind))
                     .collect();
                 let mut list = candidate_list("Places", &found);
-                // Bookmarks say their kind first (W3l); the other places
-                // their own name first (W3a).
+                // Bookmarks say their kind first (W3l), and sites (lane
+                // A3); the other places their own name first (W3a).
                 self.bookmark_rows_first(&mut list);
+                self.site_rows_first(&mut list);
                 self.place_rows_first(&mut list);
                 list
             }
@@ -1325,6 +1326,7 @@ impl App {
                     .collect();
                 let mut list = candidate_list("Destinations", &found);
                 self.bookmark_rows_first(&mut list);
+                self.site_rows_first(&mut list);
                 self.place_rows_first(&mut list);
                 list
             }
