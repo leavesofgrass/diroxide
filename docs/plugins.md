@@ -1,6 +1,6 @@
 # Plugins
 
-This guide covers plugins: what they are, the three kinds, how you turn one on and what the question says, how to manage them, what you hear when one runs, the keys a plugin's commands get, the ten examples that come with diroxide, and what a plugin can still do after you say yes.
+This guide covers plugins: what they are, the three kinds, how you turn one on and what the question says, how to manage them, what you hear when one runs, the keys a plugin's commands get, the eleven examples that come with diroxide, and what a plugin can still do after you say yes.
 
 If you want to make one, [writing a plugin](writing-a-plugin.md) and [script commands](script-commands.md) are the guides for that. [Optional components](components.md) says how a plugin can come to your computer.
 

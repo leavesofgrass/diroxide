@@ -51,7 +51,7 @@ If you use keys with a passphrase, the ssh agent can hold them unlocked so that 
 
 ### The plugin
 
-In this build the plugin is built from the source tree. It is not offered as a download yet.
+The plugin comes as an optional component for Windows x86_64, Linux x86_64 and macOS (Manage optional components in the Tools menu, or `diro components download diro-sftp`); on any other computer diroxide says "No build for this computer." and names the `cargo install` line that builds it from the source tree. See [Optional components](components.md).
 
 ```bash
 cargo build --release --manifest-path plugins/diro-sftp/Cargo.toml

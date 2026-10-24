@@ -206,6 +206,7 @@ Every prompt you type into has completion, with the same keys.
 
 ## See also
 
+- [Volumes and the trash](volumes-trash.md): the trash browser, with Restore, Delete for good and Empty the trash, and free space in the copy plan.
 - [The panels](panels.md)
 - [The transfer queue](transfer-queue.md)
 - [Remote places over SFTP](remote-places.md)

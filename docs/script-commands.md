@@ -53,7 +53,7 @@ Shows what it runs and asks, as [plugins](plugins.md) describes, starting on No.
 
 ## The first example, line by line
 
-This is `total-size.sh`, one of the ten examples, without its explaining comments. It says how many items are selected and how big they are:
+This is `total-size.sh`, one of the eleven examples, without its explaining comments. It says how many items are selected and how big they are:
 
 ```bash
 #!/usr/bin/env bash

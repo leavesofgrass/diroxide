@@ -83,7 +83,7 @@ To leave a storage a plugin gave you, such as an SFTP site, use that plugin's ow
 Unmount, Eject and Mount are done by the Volume actions plugin, one of the example plugins. Without it, the actions are still listed, but marked unavailable, with the reason. The word "unavailable" comes last:
 
 ```text
-Eject, needs the Volume actions plugin, unavailable
+Eject, unavailable, needs the Volume actions plugin
 ```
 
 Enter on one says why, and then offers the example plugins:

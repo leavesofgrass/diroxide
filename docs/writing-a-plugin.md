@@ -1,6 +1,6 @@
 # Writing a plugin
 
-This guide is for making your own plugin. It covers which kind to write, how `diro plugin new` starts one, the manifest, the protocol in a page, the services diroxide offers a plugin, lists of rows that are not files, places, previewers and converters, the conformance checks, and the ten examples that come with diroxide, one at a time.
+This guide is for making your own plugin. It covers which kind to write, how `diro plugin new` starts one, the manifest, the protocol in a page, the services diroxide offers a plugin, lists of rows that are not files, places, previewers and converters, the conformance checks, and the eleven examples that come with diroxide, one at a time.
 
 If you only want to run plugins, read [plugins](plugins.md). If you want the smallest kind, a single script, read [script commands](script-commands.md) first.
 
@@ -402,7 +402,7 @@ The exit code is 0 when every group that ran passed. A failure names the check, 
 
 A plugin with no code of its own runs the manifest and accessibility groups and skips the rest, which need a process.
 
-## The ten examples
+## The eleven examples
 
 They are in the `examples/plugins` folder of the source, and in the optional component "Example plugins". The skeletons are copied from them. Run `diro plugin check` on any of them to see it pass, and `diro plugin conformance` on any of the folders.
 

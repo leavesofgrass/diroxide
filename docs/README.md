@@ -57,7 +57,7 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Plugins, scripts and optional components
 
-- [Plugins](plugins.md): what a plugin is, the three kinds, turning one on and what the question says, managing them, what you hear when one runs, the keys a plugin's commands get, the ten examples, and `diro plugin`.
+- [Plugins](plugins.md): what a plugin is, the three kinds, turning one on and what the question says, managing them, what you hear when one runs, the keys a plugin's commands get, the eleven examples, and `diro plugin`.
 - [Hooks](hooks.md): a plugin asked before a copy, move, delete, rename or new folder, and told afterward; what a stop says; the Folder guard example.
 - [Script commands](script-commands.md): a command from one file in bash, Python or PowerShell: the header, what the script is given, directives, output modes, exit codes, which program runs it on each system, and `--explain`.
 - [Writing a plugin](writing-a-plugin.md): `diro plugin new`, the manifest, the protocol in a page, the services diroxide offers, lists of rows that are not files, places, previewers and converters, and the conformance checks.
