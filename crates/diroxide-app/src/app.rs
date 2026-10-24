@@ -441,6 +441,9 @@ pub struct SiteRow {
     pub detail: Option<String>,
     /// The plugin that offers it, said last.
     pub plugin: String,
+    /// That plugin's id: Enter on the row runs its `connect` command when
+    /// it has one, so the site's start folders open (lane A3).
+    pub plugin_id: String,
 }
 
 /// What an open dialog is for: what its answer does. The [`Dialog`] is

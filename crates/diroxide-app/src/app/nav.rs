@@ -827,6 +827,20 @@ impl App {
         self.refresh_candidates()
     }
 
+    /// The Sites group follows a change of a site's state (a lost
+    /// connection): the places are asked again while the go-to-place list
+    /// is open (lane A3).
+    pub(super) fn refresh_sites(&mut self) -> Vec<Effect> {
+        if self
+            .opens
+            .iter()
+            .any(|o| matches!(o.purpose, Purpose::Places(_)))
+        {
+            self.request(Request::Places);
+        }
+        Vec::new()
+    }
+
     /// The places the plugins offer arrived: the go-to-place list's Sites
     /// group follows.
     pub(super) fn sites_arrived(&mut self, sites: Vec<super::SiteRow>) -> Vec<Effect> {

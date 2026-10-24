@@ -806,7 +806,12 @@ impl App {
                         self.remember(state::keys::PLACES, &text);
                         self.bookmark_chosen(&place);
                         let mut effects = self.close_top();
-                        effects.extend(self.open(side, place, None));
+                        // A site connects through its plugin, which opens
+                        // its start folders (lane A3).
+                        match self.connect_site(side, &place) {
+                            Some(connect) => effects.extend(connect),
+                            None => effects.extend(self.open(side, place, None)),
+                        }
                         effects
                     }
                     Err(message) => vec![self.say(message)],

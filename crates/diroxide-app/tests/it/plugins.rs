@@ -179,7 +179,9 @@ fn serve(
                     );
                 }
             }
-            Some("lister/rows") => {
+            // Only the changes lister serves more rows; the others answer
+            // "no method", as the SFTP plugin's Sites list does (lane A3).
+            Some("lister/rows") if message["params"]["lister"] == "changes" => {
                 write(
                     &peer,
                     json!({"jsonrpc": "2.0", "id": id, "result": {"rows": [

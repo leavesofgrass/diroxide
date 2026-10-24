@@ -44,6 +44,8 @@ mod session;
 mod sites;
 // Free space in the plan and in Say Status (lane A3).
 mod room;
+// The Sites list's commands and dialogs (lane A3).
+mod site_commands;
 mod split_join;
 // Streamed listings reach the panel (lane A2).
 mod streaming;

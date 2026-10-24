@@ -658,6 +658,13 @@ impl PluginRuntime {
                                 refresh,
                             },
                         ),
+                        // A plugin without `lister/rows` brings its rows up
+                        // to date with its own command (lane A3).
+                        Err(PluginError::Remote { code, .. })
+                            if refresh && code == ErrorKind::MethodNotFound.code() =>
+                        {
+                            send(shared, PluginEvent::ListerNoRows { plugin, lister });
+                        }
                         Err(error) => send(
                             shared,
                             PluginEvent::Note(Message::error(
@@ -1038,6 +1045,7 @@ pub(super) fn sites_of(sources: &[SiteSource]) -> Vec<crate::app::SiteRow> {
             state: row.state,
             detail: row.detail,
             plugin: name.clone(),
+            plugin_id: plugin.clone(),
         }));
     }
     rows

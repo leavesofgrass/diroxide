@@ -39,6 +39,13 @@ pub struct Lister {
     pub filter: Option<String>,
     /// Whether more rows were asked for and have not come yet.
     pub asking: bool,
+    /// The plugin command that opened it, when one did: run again
+    /// quietly, it brings the rows up to date after one of the lister's
+    /// own commands changed them, or after a loss (lane A3).
+    pub opened_by: Option<diroxide_core::CommandId>,
+    /// Whether the rows asked for again come quietly (after one of the
+    /// lister's own commands, or a loss), not said (lane A3).
+    pub quiet_refresh: bool,
 }
 
 /// A row's identity: its `id` extra value, or its name.
@@ -58,6 +65,8 @@ impl Lister {
             sort: None,
             filter: None,
             asking: false,
+            opened_by: None,
+            quiet_refresh: false,
         }
     }
 
