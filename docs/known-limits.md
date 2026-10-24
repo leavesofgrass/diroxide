@@ -12,11 +12,11 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
 - A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes in a later alpha.
 - Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 1, although copies keep dates.
-- SSH and other remote places, and the trash browser, come in a later alpha.
+- Remote places other than SFTP, and the trash browser, come in a later alpha. SFTP places are in this build; "Remote places over SFTP" below says what they do not do.
 - Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands come in a later alpha.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
 - Download files for each platform come in a later alpha, first for Windows x86_64 and Linux x86_64 and then for the other platforms. `cargo install diro` comes with the first beta.
-- Passwords are asked only for archives. The masked password prompt is built, and the other features that need it, such as SSH, arrive in later alphas.
+- Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
 
 ## Plugins and script commands
 
@@ -30,17 +30,17 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A script can start slowly: about a tenth of a second for bash and Python, and a third of a second to over a second and a half for PowerShell 5.1, on the test machine. Plugins stay running between uses for five minutes, so the cost is paid once.
 - PowerShell 7 has not been tried. Windows PowerShell 5.1 has, with the policy override. A `.cmd` or `.bat` script runs on Windows only.
 - On Windows, bash is Git for Windows' bash. The `bash.exe` in the system folder is WSL's launcher, and diroxide refuses it. Without Git for Windows, bash scripts do not run, and diroxide says so.
-- Hooks. A manifest may declare them and `diro plugin check` reads them, but diroxide does not run them yet. Also shape only for now: `column/format`, `column/changed`, `place/describe`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit`. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare them and will be called when the feature that needs them arrives.
-- File transfers through a plugin's place are inline only. Resuming a stopped transfer, and watching a folder through a plugin's place, are shapes without a working end-to-end test.
+- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/format`, `column/changed`, `place/describe`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit`. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare them and will be called when the feature that needs them arrives.
+- Watching a folder through a plugin's place is a shape without a working end-to-end test. SFTP cannot watch a folder, so a remote panel does not refresh by itself; open the folder again to see changes.
 - The preview region and the conversions dialog come in a later alpha. Until then `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
 - Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
 - A plugin's columns are declared and not shown in the panels yet.
 - A list a plugin opens always opens over the panels, like search results, whichever panel the plugin names.
-- The Keys list and `keymap.toml` do not hold a plugin's keys yet. Manage plugins, on a plugin's Commands and keys row, says what happened to each proposed key.
+- A plugin's keys are lines in `keymap.toml` and rows in the Keys list, and the Keys list cannot change them yet: Enter on a plugin's row says to edit `keymap.toml`. `diro keys check` does not know plugin commands and calls such a line unknown; the program does not. Manage plugins, on a plugin's Commands and keys row, also says what happened to each proposed key.
 - A script's `dry_run` promise is read and checked, and the program offers no preview with it yet.
 - The `terminal`, `terminal-wait` and `output-column` modes of a script command are not shown by the program yet.
 - `diro serve` has no `fs/*` or `ui/ask` services for the program that connects to it. It sends `ui/announce` and `panel/changed` events.
-- Queued jobs, a per-host connection gate in the jobs line, and stopping a plugin's job when its place is lost for good come in a later alpha.
+- A plugin cannot yet tell diroxide that a lost connection is final. Only a plugin turned off for good stops the jobs that wait for its place.
 - Scripts in the example pack run from the components folder, where they are pinned and still need your yes. Scripts you write run only from the `plugins/scripts` folder.
 - The conformance checks do not yet try a line over the length limit, or check that a plugin exits when diroxide is gone.
 - The lines a plugin causes were written to carry their meaning in the first 40 cells and are checked in tests. They have not been heard on a screen reader or read on a Braille display yet.
@@ -61,6 +61,42 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A no to a download is not remembered. Get example plugins asks again each time.
 - Installing from a zip file or a folder says "Not downloaded" when it finds none of the files, which is the wrong word for an install.
 
+## Remote places over SFTP
+
+[Remote places over SFTP](remote-places.md) describes what they do. These are the limits.
+
+- Editing a remote file in place is not built. F4, Shell here and Run a command start programs only in folders on this computer. Copy the file down, edit it, and copy it back.
+- Synchronized browsing, and importing sites from PuTTY, WinSCP or FileZilla, are not built.
+- Only SFTP, through the OpenSSH program on your computer. There is no FTP, and no built-in SSH for a computer without OpenSSH.
+- Passwords need OpenSSH 8.4 or newer. With an older ssh the plugin works with keys and the agent only, and says so.
+- If several ssh programs are installed, the newest wins. On a Windows computer with Git installed that is often Git's, not the one in Windows. The `ssh_program` setting chooses.
+- On Windows, ssh's password questions reach the plugin through a named pipe that only your account can open. diroxide reads the pipe's permissions back from the live pipe to check this, and a proof that only the real helper can make stands behind it as a second layer. It has been tried on one Windows build.
+- The tests use a keyring held in memory. The round trip through the real Windows Credential Manager, macOS keychain or Secret Service is a test that runs only when the owner asks, and it has not been run. Windows Credential Manager entries can be read by other programs of the same user, and the store limits the length of a secret.
+- A site's `bookmarks` list is read and kept in `sites.toml`. Nothing offers those folders yet.
+- A background connect, such as an automatic reconnect, never uses the keyring.
+- The tests ran against a fake server and against OpenSSH 10.0's server in a Linux container. A server across a network, and the Windows and macOS builds of ssh against a real server, have not been tried by hand. The password prompts were captured from OpenSSH 10.0 on Linux, and the new-key and changed-key texts also from the ssh in Windows. The questions of other versions are expected to read the same.
+- A server that does not report free space is not checked for room before a copy. A copy that does not fit ends with "The server's disk or quota is full."
+- A frozen server takes about a minute to be noticed, because ssh gives up on the fourth missed keepalive. A server that closes the connection is noticed in a fraction of a second.
+- A server-side copy that was cancelled still finishes on the server. The cleanup runs after it.
+- Changing the permissions of a link changes what the link points to.
+- The plugin is built from the source tree. A download for each system comes with a later build.
+- A list the plugin opens, the Sites list and the doctor report, comes over the panels, not inside one.
+
+## The transfer queue
+
+[The transfer queue](transfer-queue.md) describes the Jobs list. These are the limits.
+
+- The queue is not saved when you quit. Quitting asks first when any job runs or waits.
+- Pause is not offered for a job that is waiting its turn. Cancel it or move it instead.
+- A job's error policy can be changed only while the job waits.
+- Retry the failed items covers copy, move, trash and delete. It runs again the original selections that held failures and skips what is already at the destination.
+- Resume applies to copies of 4 MiB or more. The head and tail check compares the first 64 KiB and the last 1 MiB of the part file, so a bad byte in the middle is not seen by a plain copy. A move reads everything back before it removes the source.
+- Split and join never resume. A network share counts as a local place: it has no gate for a lost connection, only the per-item retries.
+- A copy cut by a lost network keeps its part file for a resume. On a network share, answering Skip can leave a `.diro-part-` file, listed in `partials.json` in the state folder and never deleted unasked.
+- Several connections for one big file are not built. The speed limit applies to remote jobs only, unless the scope setting says all.
+- A `select` hook also fires when the focus moves, after a pause of a third of a second.
+- A crash in the middle of a run is reported at the next start, but the queue is not rebuilt, and a retry goes on from a part file only if the ledger still holds it.
+
 ## Search and the filter language
 
 - Selecting by file contents, and refining search results by file contents, are not built. Each says so in words: "Selecting by contents is not built yet. Filter by contents, then select all." and "Refining by contents is not built yet. Search again with Contains text."
@@ -72,7 +108,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - Pause search is F2 in a list. In another list F2 says "No search is running."
 - Tab in the Go to a place list completes bookmarks only, by name or place. The list under the field still narrows over every place.
 - On Windows a leading dot does not make a file hidden, so "Hidden files skipped." is said there only for files with the hidden attribute.
-- Go to a path on Windows keeps the forward slashes of a place with a scheme, such as `sftp://`. Remote places come in a later alpha.
+- Go to a path on Windows keeps the forward slashes of a place with a scheme, such as `sftp://`.
 - Content search on Windows is bound by the cost of opening each file: reading every file of a 1 GB tree whole takes about 1.5 seconds on the test machine, and a search needs about 2. Memory maps are off.
 - Search over a network has been tested against a fake place that answers in 5 milliseconds, not against a real share. The thread counts and the rates in [the search guide](search.md) come from that fake place.
 - A search that follows links or looks inside archives always uses the slower walk, one folder at a time through the provider.
@@ -120,7 +156,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - On Windows a text paste arrives as typed keys, so during Change key its first character is taken as the key. The questions that follow start on No. The capture says nothing about the terminal on Windows, because whether Windows reports keys exactly is not probed.
 - The Explorer and Finder preset has no Command+D, because on a Mac Command+D is Say status. In the Worker preset Alt+T sorts in a panel, so the Tools menu is F9, then T.
 - In the Explorer and Finder preset, Control with 1 to 7 sets the favorite labels, and macOS may keep those keys for Mission Control. That is checked when the GUI arrives on a Mac. The Labels submenu of the Edit menu is the sure way.
-- A key that a plugin or a script proposes binds only when it is free and has no concern. The Keys list does not show it yet; Manage plugins does.
+- A key that a plugin or a script proposes binds only when it is free and has no concern. The Keys list and Manage plugins both say what happened to it.
 
 ## The trash
 
@@ -242,6 +278,7 @@ The table of keys each terminal can send is built from a key probe run by hand o
 - The side by side layout puts the cursor near column 41 when the right panel is active, so a screen reader may read the left panel's row first. The stacked layout avoids this. Which layout suits you best is still being decided by listening; see [Using diroxide with a screen reader](screen-readers.md).
 - The lines of search, the filter, labels, bookmarks, compare, the Keys list and watching were written to carry their meaning in the first 40 cells and are checked in tests, not heard. Whether the count after the filter pause helps or interrupts, whether a result row's first 26 cells are enough, and whether the status line's "Waiting for ... to settle" is read aloud as dynamic content are for the listening check to decide.
 - The 40-cell lines were written for computer braille, one cell per character, on a HumanWare Mantis Q40. Contracted braille and other displays are untested.
+- The lines of remote places, the Jobs list, the connection question, resume and hooks were written to carry their meaning in the first 40 cells and are checked in tests, not heard. That includes the new server key dialog, the password prompts, the changed-key refusal, the Sites list rows, and "Delete stopped: folder is protected. By Folder guard."
 - The lines of plugins, script commands and optional components (the turn-on question, the jobs line, the failure lines, the ask-first question) were written to carry their meaning in the first 40 cells and are checked in tests, not heard. A plugin's own text is cleaned and given its name last, but its wording is the plugin's, so a plugin's lines may not fit 40 cells.
 
 ## Names and wide characters
@@ -257,12 +294,15 @@ The table of keys each terminal can send is built from a key probe run by hand o
 - Cut, copy and paste of files (Ctrl+X, Ctrl+C, Ctrl+V) work between diroxide's own panels. They do not use the system clipboard, so Explorer and the Finder cannot paste what diroxide copied.
 - Cloud files that are only online are named "online only". diroxide asks before it reads their contents.
 - The terminal frontend has no mouse.
-- How many times a copy retries a lost network, how long before it calls a copy stalled, and whether it keeps dates or checks a move are built into the job engine. They are not settings.
+- How long before a copy is called stalled (20 seconds), and whether it keeps dates or checks a move, are built into the job engine. They are not settings. The number of tries on a lost network and the first wait are settings, in the Jobs and transfers group.
 
 ## See also
 
 - [The accessibility statement](accessibility.md)
 - [Plugins](plugins.md)
+- [Hooks](hooks.md)
+- [Remote places over SFTP](remote-places.md)
+- [The transfer queue](transfer-queue.md)
 - [Writing a plugin](writing-a-plugin.md)
 - [Script commands](script-commands.md)
 - [Optional components](components.md)

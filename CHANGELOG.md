@@ -13,16 +13,49 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 - Consent: nothing is on by default. The turn-on question lists what the plugin runs, what diroxide checks and what the plugin only promises, and starts on No. The record hashes the manifest and the program file, so a change asks again.
 - Every line a plugin causes carries the plugin's name last, so the meaning stays in the first 40 cells and a plugin cannot pass for diroxide. A plugin's text is cleaned and rate-limited.
 - File operations from a plugin run as jobs with the plan, the confirmation, the trash and Undo. The names a plugin can create follow the portable-name rules. Spool paths are confined to a folder diroxide makes. Interpreters and shells cannot be named as tools unless the plugin declares "any program".
-- Nine example plugins under `examples/plugins`, all passing `diro plugin check` and the conformance checks: two bash scripts, a Python line counter, a search through the system's own index, a diff-tool opener, a changed-files list, a toy file system in memory, a PDF previewer and a Markdown to Word converter.
+- Ten example plugins under `examples/plugins`, all passing `diro plugin check` and the conformance checks: two bash scripts, a Python line counter, a search through the system's own index, a diff-tool opener, a changed-files list, a toy file system in memory, a PDF previewer, a Markdown to Word converter and a folder guard that stops deletes in folders you protect.
 - `diro plugin`: list, new, enable, disable, run, restart, log, check, install, preview, convert and conformance. `diro plugin new` writes a skeleton copied from the examples, so they cannot drift. `diro run` runs one of diroxide's own commands, or an enabled plugin's, without the panels.
 - Optional components: helper programs, plugins and data packs fetched only after a yes that starts on No, checked by size and SHA-256 before use, with the list built into each build. A built-in client, then `curl`, then `wget`, with one neutral User-Agent. Resume after Escape. Install from a zip file or a folder with no network. Unpacking with plain names, no links and a size ceiling, and a receipt so Remove takes away exactly what was written. `diro components` (list, download, verify, remove and install) and the `components_source` setting.
 - The first component is the Example plugins pack, `diro-examples`.
 - In the program: the Plugins menu (Alt+P) with Manage plugins and Get example plugins, then each enabled plugin's commands; Manage plugins with each plugin's question, commands and keys, settings and log (the last error first); a plugin's questions, text and lists of rows that are not files as dialogs with the plugin's name last, waiting behind a confirmation; a plugin's command as a job that Escape cancels; the Settings list's Plugin settings row; Manage optional components and Ask first-run choices again in the Tools menu. `diro serve` follows the plugins' session and sends `panel/changed` events.
 - `diro --no-plugins` starts with every plugin off.
 
+### Remote places over SFTP
+
+- The SFTP places plugin (`plugins/diro-sftp`): folders on other computers open in a panel through the OpenSSH program on the computer. `sftp://user@host:port/path` in Go to a path, a Sites group in Go to a place, and a Sites list in the Plugins menu. The plugin makes no network call of its own; the only traffic is ssh's.
+- ssh is found by full path only, never a bare name or the current folder, and the highest version wins, the Windows build on a tie. Below OpenSSH 8.4 the plugin works with keys and the agent only and says so. The `ssh_program` setting chooses another.
+- Passwords, passphrases and the server's questions come through a helper that is the plugin's own program in a second mode. It proves itself to the plugin with a keyed hash over a per-connection token; the endpoint is a socket only the account can reach, or on Windows a named pipe only the account can open.
+- A new server key asks first, starting on No, with the fingerprint in hexadecimal groups of four, four to a row, and the text as ssh printed it. A changed key is refused, with the `ssh-keygen -R` line shown and never run. The plugin never writes the known hosts file.
+- Sites in `sites.toml` with a name, group, host or ssh alias, user, port, key file, start folders and a password mode: never (the default), this session, or the system keyring after a question that starts on No. A file that holds a password is refused whole. A saved password goes to ssh once per connection and only for ssh's own password question for that account; through a jump host or a proxy command nothing is filled in or remembered. Forget password asks first.
+- Our own SFTP codec and request multiplexer, with names as bytes, the OpenSSH extensions where the server offers them (atomic rename, free space, server-side copy), up to 64 requests of 32 KiB in flight, and a fuzz target. Up to two ssh sessions for one server, so a listing never waits behind a long copy.
+- Streamed listings: a big remote folder arrives in batches, the count is said at the progress interval, and Escape stops it and keeps what came.
+- Delete over SFTP is permanent, with the full listing and a question that starts on No. A move to or from a server reads the copy back before the original goes. A server that cannot rename over a file, make links or report free space says so in words, with the cause first.
+- `diro-sftp doctor` and the SFTP doctor command: one plain report, each fact first, with no network.
+- Tested against a fake server and against OpenSSH's own server in a container.
+
+### The transfer queue
+
+- The Jobs list (Alt+T, then J): running, waiting and finished jobs under headings that give their counts, each row with its state first. Move to the front, Move up, Move down, Move to the end, Run now, Pause, Resume, Set a speed limit, an error policy for a waiting job, Cancel, Show what failed, and Retry the failed items. The queue as a whole can be paused.
+- Remote jobs wait their turn: two at once for one server and four in all, by setting. Local jobs start at once. The jobs line puts the count first for several jobs: "3 jobs, 1 waiting: Copying 40 percent".
+- One gate for each server. A server that stops answering is one fact: every job on it says once that it waits, the gate tries after 5, 15 and 45 seconds, and when the waits run out one question opens with Keep waiting first. The question waits behind any open dialog.
+- Retries are settings: the number of tries (3) and the first wait (5 seconds, then three times longer each time, at most ten minutes), counted and reported at the end. An error policy per job: ask (the default), continue and list errors, or stop at the first.
+- Resume. A copy of 4 MiB or more cut by a lost connection keeps its part file, recorded in `partials.json` in the state folder, and goes on from where it stopped when the source is unchanged and the first 64 KiB and last 1 MiB of the part file match. Otherwise it says why and starts again. Cancel removes the part file. A move re-reads the resumed prefix before anything is removed.
+- A speed limit for one job or for every remote job, in plain units such as `500 KB`, honored between chunks so Escape is never held up.
+- Quitting with unfinished jobs asks first: "2 jobs are not finished." and "Quit and stop them? No is the default. y or n".
+- A Jobs and transfers group in Settings with seven settings: `jobs.per_host`, `jobs.remote`, `jobs.speed_limit_kb`, `jobs.speed_limit_scope`, `jobs.network_retries`, `jobs.network_retry_seconds` and `jobs.on_errors`. The retry count and the first wait were built-in values before.
+
+### Hooks
+
+- A plugin can be asked before a copy, a move, a delete, a rename or a new folder (`before_copy`, `before_move`, `before_delete`, `before_rename`, `before_mkdir`) and stop it with a reason, after the plan and before the question. It is told afterward (`after_*`) with the result of each item, and told when you enter a folder (`enter_folder`) or change the selection (`select`), debounced.
+- A stop reads the reason first and the plugin's name last: "Delete stopped: folder is protected. By Folder guard." A hook that does not answer is never a quiet veto: the manifest's `on_timeout` decides, and diroxide says which, "Delete goes on: no answer. By Folder guard." or "Delete stopped: no answer. By Folder guard."
+- A before hook runs on a thread of its own, with a time limit of 2 seconds unless the plugin sets another. A queued job runs its before hooks when it is made.
+- The `folder-guard` example plugin, in Python with the standard library only, shows both kinds of hook.
+- A plugin's commands take their keys from `keymap.toml` by the command's id, and the Keys list has a row for each.
+
 ### The documentation
 
 - New guides: [plugins](docs/plugins.md), [writing a plugin](docs/writing-a-plugin.md), [script commands](docs/script-commands.md) and [optional components](docs/components.md). New pages: [security](docs/security.md) and [what is new](docs/whats-new.md). The [privacy](docs/privacy.md), [known limits](docs/known-limits.md), [settings](docs/settings.md) and [index](docs/README.md) pages say what plugins and components change.
+- New guides: [remote places over SFTP](docs/remote-places.md), [the transfer queue](docs/transfer-queue.md) and [hooks](docs/hooks.md). The [plugins](docs/plugins.md), [operations](docs/operations.md), [customizing keys](docs/customizing-keys.md), [security](docs/security.md), [privacy](docs/privacy.md), [known limits](docs/known-limits.md) and [settings](docs/settings.md) pages say what they change. Retries are settings now, and `operations.md` no longer calls them built in.
 
 ## 0.1.0-alpha.1
 
