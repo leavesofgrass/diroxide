@@ -293,8 +293,11 @@ jobs:
           name: components-files
           path: component-assets
       # Each component under its own tag, <id>-<version>, at this commit,
-      # as the program derives its address. A file already there with
-      # other bytes stops the release: older diro builds pin it.
+      # as the program derives its address. The tag is pushed with git
+      # first and the release created on it, the path the main release
+      # takes below: creating the tag through the releases API answered
+      # 403 for the workflow's token on the alpha 2 run. A file already
+      # there with other bytes stops the release: older diro builds pin it.
       - name: Publish the components under their own tags
         shell: bash
         env:
@@ -302,11 +305,16 @@ jobs:
         run: |
           set -euo pipefail
           commit="$(git rev-parse HEAD)"
+          gh api "repos/$GITHUB_REPOSITORY" --jq '.permissions' || true
           for folder in component-assets/*/; do
             release="$(basename "$folder")"
             echo "Component release $release"
             if ! gh release view "$release" >/dev/null 2>&1; then
-              gh release create "$release" --prerelease --latest=false --target "$commit" \
+              if ! git ls-remote --exit-code --tags origin "refs/tags/$release" >/dev/null; then
+                git tag "$release" "$commit"
+                git push origin "refs/tags/$release"
+              fi
+              gh release create "$release" --prerelease --latest=false --verify-tag \
                 --title "$release" \
                 --notes "An optional component of diroxide, fetched by diro itself after it asks. Each file's size and SHA-256 are pinned in the program's list." \
                 "$folder"*
