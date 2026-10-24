@@ -393,3 +393,39 @@ fn eject_runs_the_plugins_command_with_the_row_and_the_list_follows() {
     // Back in the list, which read the volumes again.
     assert_eq!(s.dialog_title().as_deref(), Some("Volumes, 1 volume"));
 }
+
+#[test]
+fn the_place_list_has_volumes_and_the_trash_each_its_kind_first() {
+    let (w, mut s) = session();
+    s.command(ids::PLACES);
+    let candidates: Vec<String> = match s.dialog() {
+        Some(Dialog::Edit {
+            candidates: Some(list),
+            ..
+        }) => list.rows().iter().map(|r| r.spoken()).collect(),
+        other => panic!("{other:?}"),
+    };
+    // The volumes as the list knows them, no drive asked for its space.
+    assert!(
+        candidates.contains(&"Volume, stick, mounted, removable".to_owned()),
+        "{candidates:#?}"
+    );
+    assert!(
+        candidates
+            .iter()
+            .any(|c| c.starts_with("Volume, Memory box, connected, memfs, ")),
+        "{candidates:#?}"
+    );
+    assert!(
+        candidates.contains(&"Trash, what is in the trash".to_owned()),
+        "{candidates:#?}"
+    );
+    // A volume's row opens its place.
+    s.type_text("stick");
+    s.key("enter");
+    assert!(s.dialog().is_none());
+    assert_eq!(
+        s.app.panel(Side::Left).place(),
+        &place(&w.work.join("stick"))
+    );
+}

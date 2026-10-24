@@ -327,6 +327,9 @@ pub enum Request {
         hidden: Vec<String>,
         /// The List devices command's lines, one JSON object each.
         devices: Vec<String>,
+        /// Whether each volume's label and free space are asked after the
+        /// rows: the Volumes list asks, the go-to-place list does not.
+        spaces: bool,
     },
     /// List the system trash, newest first, for the trash browser (lane
     /// A3, R25 commit 89); answered with

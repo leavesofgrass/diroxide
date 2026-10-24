@@ -812,6 +812,9 @@ impl App {
         // The local places once; the plugins' sites every time, since a
         // site connects and disconnects (R25 commit 78).
         self.request(Request::Places);
+        // The volumes, read once a session for the list (lane A3); the
+        // Volumes list reads them again.
+        self.ask_volumes_for_places();
         // Tab completes a bookmark by its name or its place (W3a); the
         // list under the field narrows over every place as you type.
         let field = EntryField::new("Go to a place", CompletionSource::Bookmarks)
@@ -839,6 +842,49 @@ impl App {
             self.request(Request::Places);
         }
         Vec::new()
+    }
+
+    /// The volumes' and the trash's rows say their kind first (R25 3.6):
+    /// "Volume, Backup, mounted, removable, 412 GB free"; "Trash, what is
+    /// in the trash".
+    pub(super) fn volume_rows_first(&self, list: &mut diroxide_core::ListModel) {
+        let rows: Vec<diroxide_core::ListRow> = list
+            .rows()
+            .iter()
+            .map(|row| {
+                if row.id == TRASH_ROW {
+                    return diroxide_core::ListRow::new(row.id.clone(), "Trash")
+                        .with_details(["what is in the trash".to_owned()]);
+                }
+                let volume = self
+                    .volume_rows()
+                    .iter()
+                    .find(|v| v.place.as_ref().is_some_and(|p| p.to_string() == row.id));
+                match volume {
+                    Some(volume) => diroxide_core::ListRow::new(
+                        row.id.clone(),
+                        format!("Volume, {}", volume.name),
+                    )
+                    .with_details(
+                        [
+                            Some(volume.state.word().to_lowercase()),
+                            Some(volume.kind.clone()),
+                            // Free space only when a volume said it.
+                            (volume.space != diroxide_vfs::SpaceAnswer::Asking)
+                                .then(|| volume.space.words()),
+                        ]
+                        .into_iter()
+                        .flatten(),
+                    ),
+                    None => row.clone(),
+                }
+            })
+            .collect();
+        let focus = list.focused().map(|r| r.id.clone());
+        list.set_rows(rows);
+        if let Some(focus) = focus {
+            list.focus_id(&focus);
+        }
     }
 
     /// The Sites group's rows say their kind first, then the site's name,
@@ -912,6 +958,10 @@ fn history_row(place: &Place, when: &str) -> diroxide_core::ListRow {
     diroxide_core::ListRow::new(place.to_string(), place_leaf(place))
         .with_details([when.to_owned(), parent])
 }
+
+/// The go-to-place list's row that opens the trash browser: an id no
+/// path takes (lane A3).
+pub(super) const TRASH_ROW: &str = "trash:";
 
 /// The release as said on the first run, from the build's version:
 /// "0.1.0-alpha.2" is "alpha 2", "0.1.0-beta.1" is "beta 1", and a

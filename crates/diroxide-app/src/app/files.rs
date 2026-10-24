@@ -328,6 +328,13 @@ impl App {
         if let Some(home) = &self.home {
             push(home.to_string(), "home folder".to_owned());
         }
+        // The volumes the Volumes list read, each with a place (R25 3.6;
+        // lane A3): their rows say "Volume" first.
+        for volume in self.volume_rows() {
+            if let Some(place) = &volume.place {
+                push(place.to_string(), format!("volume {}", volume.words()));
+            }
+        }
         // The Sites group (R25 commit 78): each site its kind first, then
         // its state word, the plugin that offers it last.
         for site in &self.sites {
@@ -340,6 +347,13 @@ impl App {
         }
         for place in &self.places {
             push(place.place.to_string(), place.words.clone());
+        }
+        // The trash browser, from the go-to-place list (lane A3).
+        if !destinations {
+            push(
+                super::nav::TRASH_ROW.to_owned(),
+                "the trash browser".to_owned(),
+            );
         }
         let now = self.now().unix_seconds();
         for visit in self.visits.ranked(now).into_iter().take(50) {

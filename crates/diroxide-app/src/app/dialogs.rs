@@ -816,6 +816,12 @@ impl App {
                 let Some(chosen) = chosen else {
                     return vec![self.say(Message::status("Type a place, or choose one."))];
                 };
+                // The Trash row opens the trash browser (lane A3).
+                if chosen == super::nav::TRASH_ROW {
+                    let mut effects = self.close_top();
+                    effects.extend(self.dispatch(&Command::new(ids::TRASH_BROWSER)));
+                    return effects;
+                }
                 match self.typed_place(side, &chosen) {
                     Ok(place) => {
                         self.remember(state::keys::PLACES, &text);
@@ -1326,6 +1332,7 @@ impl App {
                 // A3); the other places their own name first (W3a).
                 self.bookmark_rows_first(&mut list);
                 self.site_rows_first(&mut list);
+                self.volume_rows_first(&mut list);
                 self.place_rows_first(&mut list);
                 list
             }
@@ -1338,6 +1345,7 @@ impl App {
                 let mut list = candidate_list("Destinations", &found);
                 self.bookmark_rows_first(&mut list);
                 self.site_rows_first(&mut list);
+                self.volume_rows_first(&mut list);
                 self.place_rows_first(&mut list);
                 list
             }

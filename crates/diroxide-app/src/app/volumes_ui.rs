@@ -45,6 +45,8 @@ pub(super) struct VolumesState {
     generation: u64,
     /// Whether the list opens when the rows come.
     opening: bool,
+    /// Whether the go-to-place list asked for the rows this session.
+    asked_for_places: bool,
 }
 
 /// What a dialog of the Volumes list is for.
@@ -96,6 +98,7 @@ impl App {
             generation: self.volumes.generation,
             hidden: self.settings.hidden_volumes.clone(),
             devices,
+            spaces: true,
         });
     }
 
@@ -126,6 +129,30 @@ impl App {
         let id = CommandId::new(format!("{PLUGIN}.{local}")).ok()?;
         let (item, entry) = self.plugins.catalog.any_command(&id)?;
         (matches!(item.state, ItemState::Enabled) && !entry.other_system).then_some(id)
+    }
+
+    /// The rows of the last listing, for the go-to-place list.
+    pub(super) fn volume_rows(&self) -> &[VolumeRow] {
+        &self.volumes.rows
+    }
+
+    /// The go-to-place list reads the volumes once a session, quietly,
+    /// without List devices: its rows come as the list is open.
+    pub(super) fn ask_volumes_for_places(&mut self) {
+        if !self.volumes.rows.is_empty() || self.volumes.asked_for_places {
+            return;
+        }
+        self.volumes.asked_for_places = true;
+        self.volumes.generation += 1;
+        self.volumes.opening = false;
+        // No drive is asked for its label or free space here: the rows
+        // are what the places list already knows, and the plugins'.
+        self.request(Request::Volumes {
+            generation: self.volumes.generation,
+            hidden: self.settings.hidden_volumes.clone(),
+            devices: Vec::new(),
+            spaces: false,
+        });
     }
 
     /// The plugin's List devices command, when it is enabled here.
@@ -199,6 +226,13 @@ impl App {
             return Vec::new();
         }
         self.volumes.rows = rows;
+        // An open go-to-place list shows them.
+        if matches!(
+            self.opens.last().map(|o| &o.purpose),
+            Some(Purpose::Places(_) | Purpose::PickDestination { .. })
+        ) {
+            return self.refresh_candidates();
+        }
         if self.volumes_index().is_some() {
             return self.volumes_shown_again();
         }

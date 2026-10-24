@@ -1137,6 +1137,7 @@ impl Runtime {
                 generation,
                 hidden,
                 devices,
+                spaces,
             } => {
                 let registry = Arc::clone(&self.registry);
                 let sources = self.plugins.site_sources();
@@ -1150,8 +1151,11 @@ impl Runtime {
                         devices,
                     };
                     let rows = diroxide_vfs::volume_rows(&sources, &hidden);
-                    let requests =
-                        diroxide_vfs::space_requests(&rows, |place| registry.resolve(place).ok());
+                    let requests = if spaces {
+                        diroxide_vfs::space_requests(&rows, |place| registry.resolve(place).ok())
+                    } else {
+                        Vec::new()
+                    };
                     shared.send(AppEvent::VolumesListed { generation, rows });
                     diroxide_vfs::ask_spaces(
                         requests,

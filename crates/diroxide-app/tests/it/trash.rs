@@ -326,3 +326,14 @@ fn over_1000_items_the_count_is_typed_to_delete_for_good() {
     s.key("escape");
     assert!(s.dialog().is_none());
 }
+
+#[test]
+fn the_place_lists_trash_row_opens_the_browser() {
+    let (_dir, work, bin, mut s) = session(TestBin::new);
+    bin.trash(&work.join("notes.txt"), 16);
+    s.command(ids::PLACES);
+    s.type_text("trash");
+    let said = s.key("enter");
+    assert!(said.contains(&"Reading the trash".to_owned()), "{said:?}");
+    assert_eq!(s.dialog_title().as_deref(), Some("Trash, 1 item"));
+}
