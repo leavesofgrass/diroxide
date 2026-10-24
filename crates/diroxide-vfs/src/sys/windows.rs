@@ -34,6 +34,7 @@ use windows_sys::Win32::Storage::FileSystem::{
     MOVEFILE_REPLACE_EXISTING, MoveFileExW, OpenFileById, PROGRESS_CANCEL, PROGRESS_CONTINUE,
     SetFileAttributesW,
 };
+use windows_sys::Win32::System::Diagnostics::Debug::{SEM_FAILCRITICALERRORS, SetThreadErrorMode};
 use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
 use windows_sys::Win32::System::JobObjects::{
@@ -663,6 +664,34 @@ fn written_root(path: &Path) -> PathBuf {
         .map_or_else(|| path.to_path_buf(), Path::to_path_buf)
 }
 
+/// While it lives, the system raises no "insert a disk" dialog on this
+/// thread for a drive with no media (an empty card reader): the call fails
+/// with an error instead, which the facts and the free space take as
+/// unknown (V's request). The thread's previous mode comes back on drop.
+struct NoDiskDialogs(u32);
+
+impl NoDiskDialogs {
+    fn new() -> Self {
+        let mut old = 0u32;
+        // SAFETY: the pointer is to a u32 that lives across the call; the
+        // mode is a documented flag for this thread alone.
+        let ok = unsafe { SetThreadErrorMode(SEM_FAILCRITICALERRORS, &raw mut old) };
+        // When the call fails the mode is unchanged, and restoring the old
+        // value would set a mode that was never read: keep the current one.
+        Self(if ok == 0 { u32::MAX } else { old })
+    }
+}
+
+impl Drop for NoDiskDialogs {
+    fn drop(&mut self) {
+        if self.0 != u32::MAX {
+            // SAFETY: restores the mode read in `new`; a null pointer means
+            // the previous mode is not wanted back.
+            unsafe { SetThreadErrorMode(self.0, std::ptr::null_mut()) };
+        }
+    }
+}
+
 /// What `GetVolumeInformationW` says of a volume root: its label, the
 /// longest name, the file system's flags and name.
 fn volume_information(root: &Path) -> Option<(String, u32, u32, String)> {
@@ -695,6 +724,7 @@ fn volume_information(root: &Path) -> Option<(String, u32, u32, String)> {
 /// path itself (so a folder mounted from another drive is judged by that
 /// drive), its drive type, and what the volume says of itself.
 pub(crate) fn volume_facts(path: &Path) -> VolumeFacts {
+    let _quiet = NoDiskDialogs::new();
     let root = volume_root(path).unwrap_or_else(|_| written_root(path));
     let network_path = root.as_os_str().encode_wide().take(2).eq([92, 92]);
     let kind = drive_type(&root);
@@ -715,6 +745,7 @@ pub(crate) fn volume_facts(path: &Path) -> VolumeFacts {
 
 /// The free space the caller may use and the volume's size, in bytes.
 pub(crate) fn space(path: &Path) -> io::Result<(u64, u64)> {
+    let _quiet = NoDiskDialogs::new();
     let root = volume_root(path)?;
     let root = wide(&root);
     let (mut free, mut total, mut total_free) = (0u64, 0u64, 0u64);

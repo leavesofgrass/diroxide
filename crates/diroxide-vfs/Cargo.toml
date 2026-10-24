@@ -23,7 +23,7 @@ trash.workspace = true
 # and Security's Authorization (the SDDL conversions) are the owner-only
 # named pipe of answer 101, S-C's; Threading also gives its events and the
 # process token.
-windows-sys = { workspace = true, features = ["Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Pipes", "Win32_Security_Authorization"] }
+windows-sys = { workspace = true, features = ["Win32_System_Diagnostics_Debug", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Pipes", "Win32_Security_Authorization"] }
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
