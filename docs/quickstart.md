@@ -32,6 +32,8 @@ diro D:\work D:\backup
 
 On the very first start, the status line says "diroxide alpha 1. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", and then "Layout: side by side. Ctrl+P, Layout." The title line says where you are, the folder first: "Documents, left panel, in D:\work". Then comes the first row. You should hear the title and the first row, not the whole screen.
 
+If your build can offer optional components besides the example plugins, a list named "Optional components to get now" opens once at that first start. Nothing is chosen in it. Space marks a row, Enter asks once and starts the downloads you marked, and Escape skips the list: "Nothing downloaded. Tools, Manage optional components has them." A build made from source has nothing to offer, so you may never see it. [Optional components](components.md) describes the list and how to bring it back.
+
 ## Look around
 
 - Up and Down move one row. Home and End go to the first and last row. Page Up and Page Down move a page.
@@ -102,7 +104,7 @@ Press F3 on a file to read it in the viewer. Up and Down move a line, Ctrl+D say
 ## Find any command
 
 - Ctrl+P opens the command palette. Type part of a command's name and press Enter. Each entry says its name first and its key after it.
-- F9 opens the menu bar. Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. The Search menu has no Alt letter, because Alt+S is Select; open it with F9, then R. Every menu item shows its live key. The Plugins menu only says that plugins come in a later alpha.
+- F9 opens the menu bar. Alt plus a menu's first letter opens it directly: File, Edit, View, Go, Select, Tools, Plugins and Help. The Search menu has no Alt letter, because Alt+S is Select; open it with F9, then R. Every menu item shows its live key. The Go menu has Volumes (Alt+G, then V) and Trash (Alt+G, then C). The Plugins menu has Manage plugins and Get example plugins, then the commands of each plugin you turned on.
 - Shift+F1 or the question mark opens help: a list of commands with their keys.
 
 ## Quit
@@ -123,6 +125,7 @@ diro init bash
 
 - [The panels](panels.md): layouts, moving, sorting, filtering and marking.
 - [Operations and undo](operations.md): every operation, its question and how to reverse it.
+- [Volumes and the trash](volumes-trash.md): your drives, ejecting a stick, and getting things back from the trash.
 - [Archives](archives.md), [the viewer](viewer.md) and [the quick view](quick-view.md): opening, packing, reading and previewing.
 - [Search and the filter language](search.md), [labels and bookmarks](labels-bookmarks.md) and [compare files](compare.md): finding, remembering and comparing.
 - [Customizing keys](customizing-keys.md): changing a key, testing what your terminal sends, and key presets.

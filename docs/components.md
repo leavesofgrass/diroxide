@@ -1,6 +1,6 @@
 # Optional components
 
-This guide covers optional components: the plugins, helper programs and data packs that diroxide can use but does not ship inside itself. It covers what a component is, the question diroxide asks before it fetches anything, how every file is checked, `diro components` and the Manage optional components screen, installing from a file with no network, removing, and where the files come from.
+This guide covers optional components: the plugins, helper programs and data packs that diroxide can use but does not ship inside itself. It covers what a component is, the SFTP places plugin and the Volume actions plugin, the question diroxide asks before it fetches anything, how every file is checked, `diro components` and the Manage optional components screen, the list that opens once at the first start, installing from a file with no network, removing, and where the files come from.
 
 The short version: diroxide never fetches a component without your yes, checks every file against a size and a SHA-256 hash before it uses it, and takes away only the files it put there.
 
@@ -16,11 +16,22 @@ Each has an id, a title that says what it is for, a version, a size, a license, 
 
 diroxide stays small and pure Rust because these are optional. A component comes only when you ask for it, and only after the question below.
 
-Today the list has one component:
+The list has two components:
 
-- Example plugins (id `diro-examples`): a data pack of the ten example plugins and scripts, about 76 KB, license Apache-2.0 OR MIT. It unpacks into a folder of its own, with one folder or script for each example. Installing it turns nothing on. The pack is not published with a release yet. Until it is, get it from a folder with `--source`, or install it from a file, as below.
+- Example plugins (id `diro-examples`): a data pack of the eleven example plugins and scripts, about 124 KB, license Apache-2.0 OR MIT. It unpacks into a folder of its own, with one folder or script for each example. Volume actions, which unmounts, ejects and mounts for the Volumes list, is one of them. Installing the pack turns nothing on. The pack is not published with a release yet. Until it is, get it from a folder with `--source`, or install it from a file, as below.
+- SFTP places plugin (id `diro-sftp`, version 0.1.0-alpha.1): the plugin that opens folders on other computers over SSH, license Apache-2.0 OR MIT. It needs the OpenSSH program on your computer; [remote places over SFTP](remote-places.md) says more. It is in the list of the release files, because the release builds the program for each computer below and pins it. A build you made from source does not have it in its list, because there is no program to pin. Build the plugin yourself, as that guide says.
 
-`diro components list` always shows what this build knows. More components arrive with later alphas. The list is part of each build, so a component newer than your diroxide arrives with your next update.
+`diro components list` always shows what this build knows. The list is part of each build, so a component newer than your diroxide arrives with your next update.
+
+### Which computers have a build
+
+The SFTP places plugin has a build for three kinds of computer:
+
+- Windows on x86-64.
+- Linux on x86-64 (glibc).
+- macOS, Apple silicon and Intel, as one universal file.
+
+Windows on ARM and Linux on ARM have none yet. The Example plugins pack is the same everywhere, but its Volume actions plugin needs Python 3 and the system's own tools; [volumes and the trash](volumes-trash.md) lists them.
 
 ## Nothing is fetched without your yes
 
@@ -38,9 +49,11 @@ For a plugin:
 
 ```text
 Opening SFTP places needs a plugin.
-License MIT. From the public manifest.
-Download diro-sftp 0.1.0, 4.2 MB? y or n
+License Apache-2.0 OR MIT. From the public manifest.
+Download diro-sftp 0.1.0-alpha.1, 4.2 MB? y or n
 ```
+
+The sizes in these examples are only examples. The question gives the real size of the file for your computer.
 
 If the component comes from your own source, the license row ends "From your own components source." and the address is never spoken.
 
@@ -49,7 +62,31 @@ If the component comes from your own source, the license row ends "From your own
 - Escape stops the download: "Download stopped; it resumes later." The next try goes on from the bytes already there.
 - When every file has arrived: "Checking the files." Then, for an archive, "Unpacking the files." Then "Ready: diro-sftp 0.1.0." The feature starts without a restart.
 
-When there is no build for your computer, you hear "No build for this computer." and then what to do: "Install 7-Zip from your system's packages." for a helper, or "Install it from a file, if you have one." for the others.
+When there is no build for your computer, you hear "No build for this computer." and then what to do. What it says depends on the kind of component.
+
+For a helper:
+
+```text
+No build for this computer.
+Install 7-Zip from your system's packages.
+```
+
+For a plugin of this project, such as the SFTP places plugin, it names the command that builds it on your computer from the source. You need a Rust toolchain. [Remote places over SFTP](remote-places.md) says where the program goes:
+
+```text
+No build for this computer.
+Build it from source with cargo:
+cargo install --locked --git https://github.com/leavesofgrass/diroxide diro-sftp
+```
+
+For anything else:
+
+```text
+No build for this computer.
+Install it from a file, if you have one.
+```
+
+In the Manage optional components list the row says "no build for this computer" in place of "not installed", and Download is not offered for it. Asking for a download of such a component, with a yes in the first-run list or with `diro components download diro-sftp`, gives these lines and downloads nothing. From a shell they go to standard error, and the exit code is 1.
 
 Before it starts, diroxide checks that there is room for the files and what they unpack to. If there is not: "Not downloaded: needs 300 MB, 120 free." and then "Make room, then try again."
 
@@ -77,7 +114,7 @@ diro components list
 One line a component: the title, the state, the size, the license, what it is, and the id:
 
 ```text
-Example plugins: not installed, 75.8 KB, license Apache-2.0 OR MIT, a data pack, id diro-examples
+Example plugins: not installed, 124 KB, license Apache-2.0 OR MIT, a data pack, id diro-examples
 ```
 
 The state is "installed", "not installed", "partly installed", "damaged" or "no build for this computer". `--json` writes one JSON object a line, with the same facts and the origin, for a script.
@@ -90,14 +127,14 @@ Says what it is, the size and the license, and asks. It starts on No:
 
 ```text
 Example plugins 0.1.0, diro-examples.
-Size 75.8 KB, license Apache-2.0 OR MIT.
+Size 124 KB, license Apache-2.0 OR MIT.
 Download it now? y or n
 ```
 
 Answer n and you hear "Not downloaded." and the exit code is 1. Answer y, or add `--yes` to answer ahead (the question is still printed, and it says "yes, from --yes"), and you hear:
 
 ```text
-Downloading diro-examples, 75.8 KB.
+Downloading diro-examples, 124 KB.
 Checking the files.
 Unpacking the files.
 Ready: diro-examples 0.1.0.
@@ -128,7 +165,7 @@ The state of the component is then "damaged". Remove it and download it again. N
 diro components remove diro-examples
 ```
 
-Lists every path it will remove, one a line, then "Removes 20 files." and the question "Remove Example plugins? y or n". It starts on No. A yes removes those files and nothing else: "Removed: Example plugins." A file you put in the component's folder stays, and the count line says "Yours stay." The list is printed first and the removal works from that list.
+Lists every path it will remove, one a line, then "Removes 28 files." and the question "Remove Example plugins? y or n". It starts on No. A yes removes those files and nothing else: "Removed: Example plugins." A file you put in the component's folder stays, and the count line says "Yours stay." The list is printed first and the removal works from that list.
 
 ```bash
 diro components install diro-examples D:\components\diro-examples-0.1.0
@@ -143,25 +180,48 @@ An unknown id says "Could not find the component nothing. Run diro components li
 In the program, Manage optional components is in the Tools menu (Alt+T, then O) and in the command palette. It opens a list named "Optional components", one row for each component, the title first and the state after it:
 
 ```text
-Example plugins: installed, 75.8 KB, license Apache-2.0 OR MIT
-SFTP places plugin: not installed, 4.2 MB, license MIT
+Example plugins: installed, 124 KB, license Apache-2.0 OR MIT
+SFTP places plugin: not installed, 4.2 MB, license Apache-2.0 OR MIT
 ```
 
-The second row is an example of how a plugin looks once one is in the list.
+The size of the second row is only an example. The row is in the list of the release files; in a build made from source the list holds only the first. On a computer with no build, the second row says "no build for this computer" where it says "not installed" here.
 
 Enter on a row opens a list named for the component, with what can be done now:
 
 - "Download" when it is not installed, or "Download again" when it is partly installed or damaged. It asks the question above.
-- "Verify the files" and "Remove", when something is installed. Verify says "Checking the files." and then "Files check out: Example plugins." or, with a problem, a list that names each file. Remove lists every path it will take away, then "Removes 20 files. Yours stay.", and asks "Remove Example plugins? No is the default. y or n". A no says "Nothing was removed."
+- "Verify the files" and "Remove", when something is installed. Verify says "Checking the files." and then "Files check out: Example plugins." or, with a problem, a list that names each file. Remove lists every path it will take away, then "Removes 28 files. Yours stay.", and asks "Remove Example plugins? No is the default. y or n". A no says "Nothing was removed."
 - "Install from a zip file" and "Install from a folder", always. Each opens a field, "Install Example plugins from a folder", where you type a place on this computer. The install runs as a job, "Installing Example plugins".
 
-In the program, the question puts the first line and the question together, and lists the size and the license under them. The Example plugins question reads "Getting example plugins needs Example plugins 0.1.0. Download it now? No is the default. y or n", and under it "Size 75.8 KB, license Apache-2.0 OR MIT."
+In the program, the question puts the first line and the question together, and lists the size and the license under them. The Example plugins question reads "Getting example plugins needs Example plugins 0.1.0. Download it now? No is the default. y or n", and under it "Size 124 KB, license Apache-2.0 OR MIT."
 
 The Plugins menu has Get example plugins (Alt+P, then G), which asks for the pack with that question. If the pack is already installed, it says "Already installed: Example plugins. Manage plugins lists them." After a yes, you hear "Ready: diro-examples 0.1.0.", and Manage plugins lists the examples, each "not enabled".
 
-The Tools menu has Ask first-run choices again (Alt+T, then F). It opens a list named "Optional components to get now". While the components list holds only the example pack, the list says "No optional components to choose from yet", and Escape says "Nothing downloaded." The list is also built to appear once, at the first start, from the alpha that brings the SFTP plugin as a component. Nothing is chosen in it by default.
-
 A download runs as a job. The jobs line shows its progress in words, a tenth at a time and never more often than the progress interval. Escape stops it: "Download: cancelling", and the next try goes on from the bytes already there.
+
+The Tools menu also has Ask first-run choices again (Alt+T, then F). The next section is about it.
+
+## The first-run list
+
+At the very first start, when diroxide has no session of yours yet, a list named "Optional components to get now" opens once. Nothing is chosen in it. It holds every component except the example plugins pack, so in the release files that is the SFTP places plugin. A build whose list has nothing else to offer does not open it, and the first start goes on without it.
+
+```text
+SFTP places plugin: not installed, 4.2 MB, license Apache-2.0 OR MIT
+```
+
+- Space marks the row you are on, or unmarks it, and moves down. You hear "Marked" or "Unmarked".
+- Enter with nothing marked says "Nothing marked. Space marks one; Escape skips." and the list stays.
+- Enter with some marked asks once for all of them. The question starts on No, and the marked rows are listed under it: "Download 1 component? No is the default. y or n".
+- n says "Not downloaded." and goes back to the list with your marks kept. y starts each download as a job in the jobs line, and the list closes. Each download then goes through the steps above, and a computer with no build hears the "No build for this computer." lines instead.
+- Escape skips the list: "Nothing downloaded. Tools, Manage optional components has them."
+
+Nothing is fetched before a yes. The list is shown once: opening it turns on the setting First-run list shown (`components_first_run_shown`), and it does not come back at the next start.
+
+To see it again:
+
+- The setting Ask about components again (`components_ask_again`, in the Plugins group, off by default). Turn it on, and the list opens once at the next start with nothing chosen. The setting turns itself off when the list opens.
+- Ask first-run choices again, in the Tools menu (Alt+T, then F), opens the list now. When there is nothing to choose from, it says "No optional components to choose from yet", and Escape says "Nothing downloaded. Tools, Manage optional components has them."
+
+The list opens only over an empty screen, so it never covers a dialog that is open at that moment. If that happens, the next start is no longer a first start, and Ask first-run choices again opens the list later. [Settings and where the files live](settings.md) lists both settings.
 
 ## Install from a file
 
@@ -180,6 +240,7 @@ When a component is an archive, diroxide unpacks it itself, with strict rules:
 
 - Under the `components` folder of the state folder, one folder for each component: `components/diro-examples`. With `--portable`, beside the program.
 - During a download there is a staging folder, `diro-examples.partial`, beside the component's folder, with a lock file inside it. A second program that tries to fetch the same component hears "Already downloading: diro-examples." and "Wait for it to finish."
+- A plugin component such as the SFTP places plugin unpacks to its own folder, `components/diro-sftp`, with its `plugin.toml` and its program. The program looks there, and Manage plugins lists the plugin, not enabled. Turning it on is the usual question; downloading it never turns it on.
 - The example pack unpacks to `components/diro-examples/plugins`, with one folder for each plugin and a `scripts` folder for the scripts. In the program, Manage plugins lists them there, each with "example" beside it, and a plugin of your own with the same id wins. From a shell, copy one into your plugins folder to use it:
 
 ```bash
@@ -193,7 +254,7 @@ Run it from that `plugins` folder, or give the full path to the one you want. It
 diroxide tries these addresses for each file, in order:
 
 1. Your own source, if you set one (below).
-2. The file's address in the list, or, when it has none, the project's public releases.
+2. The file's address in the list, or, when it has none, the project's public releases. Each component is published under its own tag there, its id and its version, such as `diro-examples-0.1.0` and `diro-sftp-0.1.0-alpha.1`.
 
 It fetches with a small client built into diroxide. If that client cannot reach the server at all, because there is no answer, no connection or a TLS problem, diroxide tries `curl` and then `wget` from your PATH. A server's answer, such as "not found", is final and is not retried with another program. A build of diroxide made without the built-in client uses `curl` and then `wget` alone. When none of them is there you hear "Not downloaded: curl was not found." and "Install curl, or install from a file."
 
@@ -224,6 +285,8 @@ Whatever the source, a file is accepted only when it matches the pin. A source i
 ## See also
 
 - [Plugins](plugins.md)
+- [Remote places over SFTP](remote-places.md)
+- [Volumes and the trash](volumes-trash.md)
 - [Writing a plugin](writing-a-plugin.md)
 - [Script commands](script-commands.md)
 - [Security](security.md)

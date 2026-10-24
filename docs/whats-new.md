@@ -29,6 +29,17 @@ Remote places over SFTP, the transfer queue and hooks.
 - A plugin's commands take keys from `keymap.toml`, and the Keys list shows them.
 - Streamed listings. A big remote folder arrives in batches, says how far it has come, and Escape stops it and keeps what came.
 
+Volumes, the trash and free space.
+
+- The Volumes list (Alt+G, then V). Every drive, mount, connected storage and device is a row that puts its state first: "Mounted: Backup, removable, 412 GB free", "Not mounted: Backup, removable, 931 GB", "Connected: build, sftp, 1.2 TB free". Free space fills in as each volume answers, and a volume that does not answer in 2 seconds says "free space not known", never zero. [Volumes and the trash](volumes-trash.md) is the guide.
+- Open, Mount, Unmount, Eject and Hide from a row. The Volume actions plugin, an eleventh example plugin, does the mounting and ejecting with the system's own tool, never with a force option. A busy volume stays where it is: "Could not eject Backup: files are open." Windows has Eject only. Without the plugin the actions are listed as unavailable, with the reason, and the example plugins are offered.
+- Hide keeps a volume out of the list, and the Hidden volumes setting says which.
+- The trash browser (Alt+G, then C). What is in the trash, newest first, each row its name first: "report.pdf, deleted Tuesday, D:\work". Space marks. Restore never writes over a name that is taken and says so. Delete for good and Empty the trash list every item first, start on No, and ask you to type the count over 1,000. macOS cannot list its trash and says so.
+- Free space in the plan. A copy to a server with too little room says "Not enough room on build:" and starts on No. A server that cannot say, or is slow, says "Free space on build is not known." and the copy goes on. Say Status (Ctrl+D) ends with the free space of the place you are in.
+- Go to a place has Site, Volume and Trash rows, each with its kind first. Enter on a site connects through the plugin.
+- The SFTP places plugin is a component for Windows on x86-64, Linux on x86-64 and macOS, in the release files. A computer with no build hears "No build for this computer." and the `cargo install` line that builds it. [Optional components](components.md) has the details.
+- The first-run list. At the first start, a list named "Optional components to get now" opens once with nothing chosen, when there is something besides the example plugins to choose. The setting Ask about components again, and Ask first-run choices again in the Tools menu, bring it back.
+
 ## Alpha 1
 
 The first alpha is a terminal file manager for local folders and archives, built to be heard.
@@ -47,6 +58,7 @@ The first alpha is a terminal file manager for local folders and archives, built
 - [Plugins](plugins.md)
 - [Remote places over SFTP](remote-places.md)
 - [The transfer queue](transfer-queue.md)
+- [Volumes and the trash](volumes-trash.md)
 - [Hooks](hooks.md)
 - [Optional components](components.md)
 - [Privacy](privacy.md)

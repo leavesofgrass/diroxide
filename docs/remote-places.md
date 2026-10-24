@@ -153,7 +153,7 @@ A host that starts with a dash, or holds a space or an odd character, is refused
 
 ### Go to a place
 
-A saved site is a row in the list. The address is first, because it is the candidate, and the rest follows: "sftp://alice@build.example/, site build, saved, alice@build.example, by SFTP places". The state is a word, "saved" or "connected" or "lost", and the plugin's name is last.
+A saved site is a row in the list. The row says its kind first, then the site's name, and the rest follows: "Site, build, saved, alice@build.example, by SFTP places". The state is a word, "saved" or "connected" or "lost", and the plugin's name is last. Enter on a site connects through the plugin and opens the site's start folder in the active panel. A site you are connected to also has a row in the Volumes list, "Connected: build, sftp, 1.2 TB free"; [volumes and the trash](volumes-trash.md) describes it.
 
 ### Connecting
 
@@ -422,6 +422,7 @@ The plugin's settings are in the Settings list, on the Plugin settings row, unde
 
 - [The transfer queue](transfer-queue.md)
 - [Plugins](plugins.md)
+- [Volumes and the trash](volumes-trash.md)
 - [Security](security.md)
 - [Privacy](privacy.md)
 - [Operations and undo](operations.md)

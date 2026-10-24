@@ -4,7 +4,7 @@ diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, key
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, remote places and the queue, files and archives, finding things, plugins, hooks, scripts and optional components, keys, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, volumes and the trash, remote places and the queue, files and archives, finding things, plugins, hooks, scripts and optional components, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -31,8 +31,9 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Using the panels
 
-- [The panels](panels.md): the three layouts, what a row says, moving, going to a path or a place, path jump, sorting, filtering and marking rows.
+- [The panels](panels.md): the three layouts, what a row says, moving, going to a path or a place (with its site, volume and trash rows), path jump, sorting, filtering and marking rows.
 - [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo. [The transfer queue](transfer-queue.md) goes further into jobs.
+- [Volumes and the trash](volumes-trash.md): the Volumes list with its state-first rows, free space, Open, Mount, Unmount, Eject and Hide, the Volume actions plugin, the trash browser with Restore, Delete for good and Empty the trash, and free space in the copy plan and in Say Status.
 
 ### Remote places and the queue
 
@@ -60,7 +61,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Hooks](hooks.md): a plugin asked before a copy, move, delete, rename or new folder, and told afterward; what a stop says; the Folder guard example.
 - [Script commands](script-commands.md): a command from one file in bash, Python or PowerShell: the header, what the script is given, directives, output modes, exit codes, which program runs it on each system, and `--explain`.
 - [Writing a plugin](writing-a-plugin.md): `diro plugin new`, the manifest, the protocol in a page, the services diroxide offers, lists of rows that are not files, places, previewers and converters, and the conformance checks.
-- [Optional components](components.md): helper programs, plugins and data packs fetched only after you say yes, checked before use, installed from a file with no network, and removed by a list. Includes `diro components`.
+- [Optional components](components.md): helper programs, plugins and data packs, among them the SFTP places plugin, fetched only after you say yes, checked before use, offered once in a first-run list, installed from a file with no network, and removed by a list. Includes `diro components`.
 - [Security](security.md): what diroxide checks, what it protects, and what a plugin could still do.
 
 ### Keys and settings
@@ -75,7 +76,6 @@ If you are new, begin with the [quick start](quickstart.md).
 These guides are not written yet, because the features they describe are not built. Each arrives with the alpha that ships its feature.
 
 - The GUI.
-- The volumes list, the trash browser and free space in the status.
 - Tools and conversions, previews of more kinds of document, and git.
 - Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, disk images and GitHub.
 
