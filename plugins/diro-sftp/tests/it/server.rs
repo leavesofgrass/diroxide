@@ -1182,11 +1182,9 @@ fn server_nothing_listens_outside_loopback() {
     assert!(!listening.is_empty());
     // 0100007F is 127.0.0.1 in /proc/net/tcp's order.
     assert!(
-        listening.iter().all(|l| l
-            .split_whitespace()
-            .nth(1)
-            .unwrap()
-            .starts_with("0100007F")),
+        listening
+            .iter()
+            .all(|l| l.split_whitespace().nth(1).unwrap().starts_with("0100007F")),
         "{listening:?}"
     );
 }
