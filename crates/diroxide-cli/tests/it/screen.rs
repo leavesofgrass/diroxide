@@ -555,11 +555,13 @@ fn the_lines_of_part_three_read_on_a_40_cell_display() {
     run.settle(&mut s);
     // The first run: the welcome and the layout's key, from the keymap.
     let said: Vec<String> = s.said().iter().map(|m| m.text.clone()).collect();
-    let welcome = said
-        .iter()
-        .find(|l| l.starts_with("diroxide alpha 1."))
-        .unwrap();
-    fact(welcome, "diroxide alpha 1. Shift+F1 for help.");
+    let version = env!("CARGO_PKG_VERSION");
+    let hello = format!(
+        "diroxide alpha {}.",
+        version.rsplit("alpha.").next().unwrap_or(version)
+    );
+    let welcome = said.iter().find(|l| l.starts_with(&hello)).unwrap();
+    fact(welcome, &format!("{hello} Shift+F1 for help."));
     let layout = said.iter().find(|l| l.starts_with("Layout:")).unwrap();
     fact(layout, "Layout: side by side. Ctrl+P, Layout.");
     let screen = s.screen();

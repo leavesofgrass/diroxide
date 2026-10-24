@@ -1,6 +1,6 @@
 # Terminals
 
-In alpha 1 diroxide runs in a terminal. This guide says which terminals to use, what a terminal can and cannot send, the keys Windows Terminal keeps for itself and how to get around them, and what to do when the full screen does not work for you.
+In alpha 2 diroxide runs in a terminal. This guide says which terminals to use, what a terminal can and cannot send, the keys Windows Terminal keeps for itself and how to get around them, and what to do when the full screen does not work for you.
 
 ## Which terminal
 

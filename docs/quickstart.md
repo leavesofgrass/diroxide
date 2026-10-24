@@ -1,6 +1,6 @@
 # Quick start
 
-This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, because alpha 1 has no GUI yet. If you have not built diroxide yet, start with [installing diroxide](install.md).
+This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, because alpha 2 has no GUI yet. If you have not built diroxide yet, start with [installing diroxide](install.md).
 
 ## How keys are written
 
@@ -30,7 +30,7 @@ To open both panels, give two paths. Put quotes around any path with spaces in i
 diro D:\work D:\backup
 ```
 
-On the very first start, the status line says "diroxide alpha 1. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", and then "Layout: side by side. Ctrl+P, Layout." The title line says where you are, the folder first: "Documents, left panel, in D:\work". Then comes the first row. You should hear the title and the first row, not the whole screen.
+On the very first start, the status line says "diroxide alpha 2. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", and then "Layout: side by side. Ctrl+P, Layout." The title line says where you are, the folder first: "Documents, left panel, in D:\work". Then comes the first row. You should hear the title and the first row, not the whole screen.
 
 If your build can offer optional components besides the example plugins, a list named "Optional components to get now" opens once at that first start. Nothing is chosen in it. Space marks a row, Enter asks once and starts the downloads you marked, and Escape skips the list: "Nothing downloaded. Tools, Manage optional components has them." A build made from source has nothing to offer, so you may never see it. [Optional components](components.md) describes the list and how to bring it back.
 

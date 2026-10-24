@@ -79,7 +79,7 @@ diro plugin enable sftp
 The question lists what the plugin does:
 
 ```text
-Enable SFTP places, version 0.1.0-alpha.1?
+Enable SFTP places, version 0.1.0-alpha.2?
 It runs: ./diro-sftp.exe
 diroxide checks: it may change the panels.
 The plugin states, unchecked:
@@ -114,7 +114,7 @@ Sites: none saved.
 Key store: Windows Credential Manager.
 Endpoint: owner-only pipe and proof.
 Helper: works.
-Plugin: SFTP places 0.1.0-alpha.1.
+Plugin: SFTP places 0.1.0-alpha.2.
 ```
 
 In the program, the Plugins menu has SFTP doctor, and it shows the same lines as text. The fact comes first in every line:

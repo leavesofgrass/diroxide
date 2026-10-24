@@ -94,7 +94,7 @@ version = "0.1.0"
 description = "Counts the lines of the selected files and says the total."
 license = "Apache-2.0 OR MIT"
 protocol = 1
-min_host = "0.1.0-alpha.1"
+min_host = "0.1.0-alpha.2"
 
 [run]
 command = ["python3", "main.py"]
@@ -296,7 +296,7 @@ version = "0.1.0"
 description = "Shows the first page of a PDF as text, through pdftotext."
 license = "Apache-2.0 OR MIT"
 protocol = 1
-min_host = "0.1.0-alpha.1"
+min_host = "0.1.0-alpha.2"
 
 [permissions.declared]
 network = "no network"
@@ -331,7 +331,7 @@ version = "0.1.0"
 description = "Converts Markdown files to Word documents, through pandoc."
 license = "Apache-2.0 OR MIT"
 protocol = 1
-min_host = "0.1.0-alpha.1"
+min_host = "0.1.0-alpha.2"
 
 [permissions.declared]
 network = "no network"

@@ -451,7 +451,7 @@ mod tests {
             Ok(0)
         );
         let text = String::from_utf8(out).unwrap();
-        assert!(text.starts_with("diro 0.1.0-alpha.1\n"));
+        assert!(text.starts_with(concat!("diro ", env!("CARGO_PKG_VERSION"), "\n")));
         assert!(text.contains("Apache-2.0 OR MIT"));
     }
 }

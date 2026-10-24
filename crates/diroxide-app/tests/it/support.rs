@@ -502,3 +502,11 @@ pub fn registry_with_trash(bin: &Path) -> (Registry, Arc<TestTrash>) {
     registry.set_local(trash.clone());
     (registry, trash)
 }
+
+/// The start line's first sentence, from the package version: "diroxide
+/// alpha 2." for 0.1.0-alpha.2, so a version bump leaves the tests alone.
+pub fn hello() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    let number = version.rsplit("alpha.").next().unwrap_or(version);
+    format!("diroxide alpha {number}.")
+}

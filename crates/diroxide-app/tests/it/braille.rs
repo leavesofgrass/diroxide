@@ -10,7 +10,7 @@ use diroxide_config::{KeyOverride, KeymapConfig, Paths};
 use diroxide_core::format::{BRAILLE_CELLS, first_cells, within_cells};
 use diroxide_core::{Key, KeyColumn, Layer, SecretKind, SecretRequest};
 
-use crate::support::{Session, Setup, fixture, place, registry_with_trash, temp};
+use crate::support::{Session, Setup, fixture, hello, place, registry_with_trash, temp};
 
 /// Asserts a line says `fact` within its first 40 cells.
 fn fact(line: &str, fact: &str) {
@@ -46,13 +46,11 @@ fn the_ten_minute_check_reads_on_a_40_cell_line() {
     );
     let start: Vec<String> = s.said.iter().map(|m| m.text.clone()).collect();
     // Step one: start.
-    fact(
-        line(&start, "diroxide alpha 1."),
-        "diroxide alpha 1. Shift+F1 for help.",
-    );
+    let hello = hello();
+    fact(line(&start, &hello), &format!("{hello} Shift+F1 for help."));
     assert_eq!(
-        line(&start, "diroxide alpha 1."),
-        "diroxide alpha 1. Shift+F1 for help. Ctrl+Q quits."
+        line(&start, &hello),
+        format!("{hello} Shift+F1 for help. Ctrl+Q quits.")
     );
     fact(
         line(&start, "The key bar"),

@@ -10,7 +10,7 @@ fn the_binary_prints_its_version() {
         .unwrap();
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
-    assert!(text.starts_with("diro 0.1.0-alpha.1"));
+    assert!(text.starts_with(concat!("diro ", env!("CARGO_PKG_VERSION"))));
 }
 
 #[test]

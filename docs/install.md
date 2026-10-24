@@ -13,7 +13,7 @@ Package manager entries, such as winget, Scoop, Homebrew and the AUR, come in a 
 
 ## Download the one file
 
-On the [releases page](https://github.com/leavesofgrass/diroxide/releases), each release lists its files. The file's name carries the version and the platform, such as `diro-0.1.0-alpha.1-windows-x86_64.exe`, `diro-0.1.0-alpha.1-macos-universal` and `diro-0.1.0-alpha.1-linux-x86_64.AppImage`. Download the one for your system, rename it to `diro` (or `diro.exe`) if you like, and put it in a folder on your PATH. Then read [the first run of a downloaded file](#the-first-run-of-a-downloaded-file) below: each platform asks for one step the first time.
+On the [releases page](https://github.com/leavesofgrass/diroxide/releases), each release lists its files. The file's name carries the version and the platform, such as `diro-0.1.0-alpha.2-windows-x86_64.exe`, `diro-0.1.0-alpha.2-macos-universal` and `diro-0.1.0-alpha.2-linux-x86_64.AppImage`. Download the one for your system, rename it to `diro` (or `diro.exe`) if you like, and put it in a folder on your PATH. Then read [the first run of a downloaded file](#the-first-run-of-a-downloaded-file) below: each platform asks for one step the first time.
 
 Build from source when you want the newest commit, or a smaller diro.
 
@@ -49,7 +49,7 @@ Check that it runs:
 diro --version
 ```
 
-The first line is the program's name and version, `diro 0.1.0-alpha.1`. The next lines name the project and its license.
+The first line is the program's name and version, `diro 0.1.0-alpha.2`. The next lines name the project and its license.
 
 ### A smaller diro
 

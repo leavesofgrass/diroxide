@@ -20,7 +20,7 @@ version = "0.1.0"
 description = "Unmounts, ejects and mounts volumes with the system's own tools."
 license = "Apache-2.0 OR MIT"
 protocol = 1
-min_host = "0.1.0-alpha.1"
+min_host = "0.1.0-alpha.2"
 
 [permissions.declared]
 network = "no network"

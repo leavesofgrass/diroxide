@@ -38,7 +38,7 @@ The `quiet_screen` setting goes further and draws as little as possible, for a s
 
 These lines show what diroxide says for each key. The status line says the same words that a menu or the palette shows.
 
-- Starting: on the very first start the status line says "diroxide alpha 1. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", then "Layout: side by side. Ctrl+P, Layout." The alpha number is the build's own. The title line comes first, "dirocheck, left panel, in D:\", and then the first row. You do not hear the whole screen.
+- Starting: on the very first start the status line says "diroxide alpha 2. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", then "Layout: side by side. Ctrl+P, Layout." The alpha number is the build's own. The title line comes first, "dirocheck, left panel, in D:\", and then the first row. You do not hear the whole screen.
 - Down and Up: the cursor moves one row and your screen reader speaks the row: "Photos, folder, modified Tuesday". No message is written for a focus move, and the status line does not change. At the first or last row diroxide says "Top of the list" or "Bottom of the list".
 - Down in the side by side layout with the left panel active: your screen reader's current line is the whole screen line, which also holds the right panel's row, so it may read the left row and then the right. With the right panel active, the cursor sits near column 41 and a 40-cell display shows the left row first. This is why stacked is recommended.
 - Tab: one message and nothing else, "Right panel: dirocheck, 31 items". Chatter on Tab is the first thing to report.

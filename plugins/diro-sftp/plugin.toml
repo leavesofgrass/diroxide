@@ -10,12 +10,12 @@
 [plugin]
 id = "sftp"
 name = "SFTP places"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 description = "Opens sftp places through the OpenSSH client on this computer."
 license = "Apache-2.0 OR MIT"
 homepage = "https://diroxide.app"
 protocol = 1
-min_host = "0.1.0-alpha.1"
+min_host = "0.1.0-alpha.2"
 
 [run]
 command = ["./diro-sftp"]

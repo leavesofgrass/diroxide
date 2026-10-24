@@ -2,7 +2,7 @@
 
 This page says in plain words what each alpha added. [The changelog](../CHANGELOG.md) has the full list, by area, and [known limits](known-limits.md) says what is still missing.
 
-## Since alpha 1, not released yet
+## Alpha 2
 
 Plugins, script commands and optional components.
 

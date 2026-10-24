@@ -7,7 +7,7 @@
 use diroxide_config::Paths;
 use diroxide_core::Side;
 
-use crate::support::{Session, fixture, place, registry_with_trash, settings, temp};
+use crate::support::{Session, fixture, hello, place, registry_with_trash, settings, temp};
 
 #[test]
 fn a_whole_session_and_the_cursor_restored_after_a_restart() {
@@ -23,11 +23,7 @@ fn a_whole_session_and_the_cursor_restored_after_a_restart() {
         Some(&paths),
         settings(),
     );
-    assert!(
-        s.said[0].text.starts_with("diroxide alpha 1."),
-        "{:?}",
-        s.said
-    );
+    assert!(s.said[0].text.starts_with(&hello()), "{:?}", s.said);
     assert_eq!(
         s.names(Side::Left),
         [
@@ -161,12 +157,7 @@ fn a_whole_session_and_the_cursor_restored_after_a_restart() {
         settings(),
     );
     assert_eq!(again.focused(), "budget.xlsx");
-    assert!(
-        !again
-            .said
-            .iter()
-            .any(|m| m.text.starts_with("diroxide alpha 1."))
-    );
+    assert!(!again.said.iter().any(|m| m.text.starts_with(&hello())));
     assert!(
         !again.app.undo_log().is_empty(),
         "the journal gives undo after a restart"

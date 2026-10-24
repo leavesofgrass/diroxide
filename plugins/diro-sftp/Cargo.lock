@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "diro-sftp"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "apple-native-keyring-store",
  "diroxide-config",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-config"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "diroxide-core",
  "diroxide-theme",
@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-core"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "regex",
  "serde",
@@ -507,7 +507,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-ops"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "crc32fast",
  "diroxide-core",
@@ -520,7 +520,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-plugins"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "diroxide-config",
  "diroxide-core",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-theme"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "serde",
  "thiserror",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-tools"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "diroxide-config",
  "diroxide-core",
@@ -556,7 +556,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-vfs"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "diroxide-core",
  "dirs",

@@ -6,7 +6,7 @@ members = ["crates/*", "xtask"]
 exclude = ["plugins"]
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 homepage = "https://diroxide.app"
@@ -30,27 +30,27 @@ publish = false
 # step, Friday, October 16, 2026).
 [workspace.dependencies]
 # The workspace's own crates.
-diroxide-core = { path = "crates/diroxide-core", version = "0.1.0-alpha.1" }
-diroxide-vfs = { path = "crates/diroxide-vfs", version = "0.1.0-alpha.1" }
-diroxide-archive = { path = "crates/diroxide-archive", version = "0.1.0-alpha.1" }
-diroxide-ops = { path = "crates/diroxide-ops", version = "0.1.0-alpha.1" }
-diroxide-search = { path = "crates/diroxide-search", version = "0.1.0-alpha.1" }
-diroxide-diff = { path = "crates/diroxide-diff", version = "0.1.0-alpha.1" }
-diroxide-filetype = { path = "crates/diroxide-filetype", version = "0.1.0-alpha.1" }
-diroxide-config = { path = "crates/diroxide-config", version = "0.1.0-alpha.1" }
-diroxide-plugins = { path = "crates/diroxide-plugins", version = "0.1.0-alpha.1" }
-diroxide-tools = { path = "crates/diroxide-tools", version = "0.1.0-alpha.1" }
+diroxide-core = { path = "crates/diroxide-core", version = "0.1.0-alpha.2" }
+diroxide-vfs = { path = "crates/diroxide-vfs", version = "0.1.0-alpha.2" }
+diroxide-archive = { path = "crates/diroxide-archive", version = "0.1.0-alpha.2" }
+diroxide-ops = { path = "crates/diroxide-ops", version = "0.1.0-alpha.2" }
+diroxide-search = { path = "crates/diroxide-search", version = "0.1.0-alpha.2" }
+diroxide-diff = { path = "crates/diroxide-diff", version = "0.1.0-alpha.2" }
+diroxide-filetype = { path = "crates/diroxide-filetype", version = "0.1.0-alpha.2" }
+diroxide-config = { path = "crates/diroxide-config", version = "0.1.0-alpha.2" }
+diroxide-plugins = { path = "crates/diroxide-plugins", version = "0.1.0-alpha.2" }
+diroxide-tools = { path = "crates/diroxide-tools", version = "0.1.0-alpha.2" }
 # Without its default syntax set, which each member that wants it turns on
 # through its own `syntax-set` feature: the app, the CLI, and `diro`, whose
 # default has it (W2d's request 2, P2b), so a slim `diro` can leave it out.
-diroxide-preview = { path = "crates/diroxide-preview", version = "0.1.0-alpha.1", default-features = false }
-diroxide-theme = { path = "crates/diroxide-theme", version = "0.1.0-alpha.1" }
-diroxide-app = { path = "crates/diroxide-app", version = "0.1.0-alpha.1" }
-diroxide-tui = { path = "crates/diroxide-tui", version = "0.1.0-alpha.1" }
-diroxide-gui = { path = "crates/diroxide-gui", version = "0.1.0-alpha.1" }
-diroxide-cli = { path = "crates/diroxide-cli", version = "0.1.0-alpha.1" }
+diroxide-preview = { path = "crates/diroxide-preview", version = "0.1.0-alpha.2", default-features = false }
+diroxide-theme = { path = "crates/diroxide-theme", version = "0.1.0-alpha.2" }
+diroxide-app = { path = "crates/diroxide-app", version = "0.1.0-alpha.2" }
+diroxide-tui = { path = "crates/diroxide-tui", version = "0.1.0-alpha.2" }
+diroxide-gui = { path = "crates/diroxide-gui", version = "0.1.0-alpha.2" }
+diroxide-cli = { path = "crates/diroxide-cli", version = "0.1.0-alpha.2" }
 # Optional components: pins, the embedded list, the downloader (W4c).
-diroxide-components = { path = "crates/diroxide-components", version = "0.1.0-alpha.1" }
+diroxide-components = { path = "crates/diroxide-components", version = "0.1.0-alpha.2" }
 
 # Used by the contract (Phase 0 and the Wave 1 amendments).
 anyhow = "1.0.100"

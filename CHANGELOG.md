@@ -2,7 +2,9 @@
 
 Notable changes to diroxide, newest first. Agents write under a scratch heading with their id; the orchestrator regroups the entries by area before each alpha. Versions follow the alpha series in the plan; nothing is released until the owner says so.
 
-## Unreleased
+## 0.1.0-alpha.2
+
+Alpha 2 adds plugins in any language, script commands, optional components, SFTP places over the machine's OpenSSH client, a transfer queue with retries, resume and a speed limit, hooks, the Volumes list and the trash browser. It is the planned alpha.4 and alpha.5 as one. This entry was written on Friday, October 23, 2026.
 
 - The planned graphical interface is the GUI in every guide, message and keymap table, no longer the window. The keymap file's `[window.*]` tables are `[gui.*]`; the Keys list says "in the GUI".
 
