@@ -59,6 +59,7 @@ pub mod split;
 mod testing;
 // The arrival tracker (W3t, plan commit 33).
 pub mod tracker;
+pub mod trash;
 pub mod undo;
 mod walk;
 
@@ -69,7 +70,8 @@ pub use engine::{
 };
 pub use error::OpsError;
 pub use fake::{
-    CallFault, FakeCall, FakeProvider, FakeSwitches, Fault, Latency, Lies, LinkDrop, SlowPlace,
+    CallFault, FakeCall, FakeProvider, FakeSwitches, FakeTrash, Fault, Latency, Lies, LinkDrop,
+    SlowPlace,
 };
 pub use gate::{ConnectionAnswer, ConnectionQuestion, GateEvent, Gates, Waiter};
 pub use hooks::{

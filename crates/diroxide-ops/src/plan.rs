@@ -16,7 +16,7 @@ use diroxide_core::names::spell_out;
 use diroxide_core::{
     Attributes, ConflictPolicy, Entry, EntryKind, JobId, JobKind, JobOrigin, Message, Place,
 };
-use diroxide_vfs::{AttributeChange, LinkRequest, TrashGate};
+use diroxide_vfs::{AttributeChange, LinkRequest, TrashGate, TrashedItem};
 
 use crate::access::AttributeFacts;
 use crate::join::JoinFacts;
@@ -140,6 +140,18 @@ pub enum Step {
         /// The new link's kind and target.
         request: LinkRequest,
     },
+    /// Put one item from the trash back where it was, never over a name
+    /// that is taken (the trash browser's Restore).
+    RestoreItem {
+        /// The item, as the trash listed it.
+        item: TrashedItem,
+    },
+    /// Delete one item in the trash for good (Delete for good, Empty the
+    /// trash).
+    Purge {
+        /// The item, as the trash listed it.
+        item: TrashedItem,
+    },
 }
 
 impl Step {
@@ -160,6 +172,7 @@ impl Step {
             | Step::SetAttributes { place, .. } => place,
             Step::SplitPart { from, .. } | Step::JoinPart { from, .. } => from,
             Step::WriteChecksum { of, .. } => of,
+            Step::RestoreItem { item } | Step::Purge { item } => &item.original,
         }
     }
 
@@ -179,7 +192,11 @@ impl Step {
             Step::SetAttributes { place, .. } => Some(place),
             Step::SplitPart { to, .. } | Step::JoinPart { to, .. } => Some(to),
             Step::WriteChecksum { place, .. } => Some(place),
-            Step::Trash { .. } | Step::Remove { .. } | Step::RemoveEmptyFolder { .. } => None,
+            Step::RestoreItem { item } => Some(&item.original),
+            Step::Trash { .. }
+            | Step::Remove { .. }
+            | Step::RemoveEmptyFolder { .. }
+            | Step::Purge { .. } => None,
         }
     }
 
@@ -193,6 +210,7 @@ impl Step {
                 | Step::Remove { .. }
                 | Step::RemoveEmptyFolder { .. }
                 | Step::Relink { .. }
+                | Step::Purge { .. }
         )
     }
 
@@ -242,6 +260,12 @@ impl Step {
                 spell(place),
                 spell_out(&request.target)
             ),
+            Step::RestoreItem { item } => {
+                format!("restore {} from the trash", spell(&item.original))
+            }
+            Step::Purge { item } => {
+                format!("delete {} from the trash for good", spell(&item.original))
+            }
         }
     }
 }
@@ -491,6 +515,9 @@ pub struct PlanFacts {
     /// that did not answer in time, each line ending with the plugin's
     /// name (R25 commit 71). Said before the confirmation.
     pub hook_warnings: Vec<String>,
+    /// A delete from the trash that takes every item in it: Empty the
+    /// trash, said so in its summary and its question.
+    pub emptying: bool,
 }
 
 impl PlanFacts {
@@ -649,6 +676,9 @@ impl Plan {
                 count(self.steps.len() as u64, "link", "links")
             ),
             JobKind::Undo => format!("Undo {}", count(self.steps.len() as u64, "step", "steps")),
+            JobKind::Restore => format!("Restore {items} from the trash"),
+            JobKind::Purge if self.facts.emptying => format!("Empty the trash, {items}"),
+            JobKind::Purge => format!("Delete {items} from the trash for good"),
             JobKind::SetAttributes => format!("Change permissions of {items}"),
             JobKind::SetTimes => format!("Change the times of {items}"),
             JobKind::Join => match &self.facts.join {
@@ -739,14 +769,30 @@ impl Plan {
         }
         match self.kind {
             JobKind::DeletePermanently => catalog::delete_for_good(items),
+            JobKind::Purge if self.facts.emptying => Message::question(&format!(
+                "Empty the trash: delete {} for good",
+                count(items, "item", "items")
+            )),
+            JobKind::Purge => catalog::delete_for_good(items),
+            // "Restore 3 items? No is the default. y or n": the point is
+            // whole in the first 16 cells.
+            JobKind::Restore => Message::new(
+                format!(
+                    "Restore {}? No is the default. y or n",
+                    count(items, "item", "items")
+                ),
+                diroxide_core::Importance::High,
+                diroxide_core::MessageKind::Question,
+            ),
             _ => Message::question(&self.summary()),
         }
     }
 
     /// The line under a confirmation: the honest sentence for a permanent
-    /// delete, else nothing.
+    /// delete, a delete from the trash among them, else nothing.
     pub fn caution(&self) -> Option<&'static str> {
-        (self.kind == JobKind::DeletePermanently).then_some(catalog::PERMANENT_DELETE_NOTE)
+        matches!(self.kind, JobKind::DeletePermanently | JobKind::Purge)
+            .then_some(catalog::PERMANENT_DELETE_NOTE)
     }
 
     /// One step in words, with what the plan knows about its entry: ",

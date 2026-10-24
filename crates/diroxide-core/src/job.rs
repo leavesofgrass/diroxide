@@ -67,6 +67,12 @@ pub enum JobKind {
     PluginCommand,
     /// Undo the last job.
     Undo,
+    /// Put items from the trash back where they were, never over a name
+    /// that is taken (the trash browser's Restore; R25 3.3).
+    Restore,
+    /// Delete items in the trash for good, after listing every one (the
+    /// trash browser's Delete for good and Empty the trash).
+    Purge,
     /// A kind this version does not know. Never planned.
     #[serde(other)]
     Unknown,
@@ -97,6 +103,8 @@ impl JobKind {
         JobKind::Download,
         JobKind::PluginCommand,
         JobKind::Undo,
+        JobKind::Restore,
+        JobKind::Purge,
         JobKind::Unknown,
     ];
 
@@ -124,6 +132,8 @@ impl JobKind {
             JobKind::Download => "download",
             JobKind::PluginCommand => "run",
             JobKind::Undo => "undo",
+            JobKind::Restore => "restore",
+            JobKind::Purge => "delete",
             JobKind::Unknown => "run an unknown job on",
         }
     }
@@ -152,6 +162,8 @@ impl JobKind {
             JobKind::Download => "Downloading",
             JobKind::PluginCommand => "Running",
             JobKind::Undo => "Undoing",
+            JobKind::Restore => "Restoring",
+            JobKind::Purge => "Deleting for good",
             JobKind::Unknown => "Working",
         }
     }
@@ -702,13 +714,15 @@ mod tests {
             JobKind::Download => 17,
             JobKind::PluginCommand => 18,
             JobKind::Undo => 19,
-            JobKind::Unknown => 20,
+            JobKind::Restore => 20,
+            JobKind::Purge => 21,
+            JobKind::Unknown => 22,
         }
     }
 
     #[test]
     fn every_kind_has_its_words() {
-        assert_eq!(JobKind::ALL.len(), 21);
+        assert_eq!(JobKind::ALL.len(), 23);
         let mut words = std::collections::HashSet::new();
         for (at, kind) in JobKind::ALL.iter().enumerate() {
             assert_eq!(position(*kind), at, "{kind:?}");
@@ -737,6 +751,8 @@ mod tests {
         assert_eq!(JobKind::Join.progress_word(), "Joining");
         assert_eq!(JobKind::TestArchive.progress_word(), "Testing");
         assert_eq!(JobKind::TestArchive.verb(), "test");
+        assert_eq!(JobKind::Restore.progress_word(), "Restoring");
+        assert_eq!(serde_json::to_string(&JobKind::Purge).unwrap(), "\"purge\"");
         assert_eq!(
             serde_json::to_string(&JobKind::TestArchive).unwrap(),
             "\"test-archive\""

@@ -919,6 +919,8 @@ impl Engine {
             JobKind::SetAttributes | JobKind::SetTimes => return self.plan_attributes(request),
             JobKind::Link if request.link_edit().retarget => return self.plan_relink(request),
             JobKind::Undo => return Err(OpsError::NothingToUndo),
+            // The trash browser's jobs (R25 3.3): crate::trash.
+            JobKind::Restore | JobKind::Purge => return self.plan_trash_request(request),
             JobKind::Copy
             | JobKind::Move
             | JobKind::Duplicate
