@@ -208,15 +208,18 @@ impl StreamingList for Held {
 }
 
 /// Carries out effects and feeds the runtime's events back to the app
-/// until `done` holds and the runtime has been quiet a moment, or ten
-/// seconds pass; returns what was said. Unlike `Session::run`, it does
-/// not wait for jobs held at a gate.
+/// until `done` holds and the runtime has been quiet a moment, or a
+/// minute passes; returns what was said. Unlike `Session::run`, it does
+/// not wait for jobs held at a gate. The bound is generous on purpose:
+/// under load (builders compiling beside the full check) a job's worker
+/// can take seconds to start, and a test waits for the state it needs,
+/// never for a count of keys; a `done` that holds returns at once.
 pub fn drive(
     s: &mut Session,
     effects: Vec<Effect>,
     done: impl Fn(&Session, &[String]) -> bool,
 ) -> Vec<String> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     let mut said = Vec::new();
     let mut pending = effects;
     let mut quiet = Instant::now();
@@ -275,4 +278,20 @@ pub fn command_held(s: &mut Session, id: diroxide_core::CommandId) -> Vec<String
 /// Whether anything said starts with `start`.
 pub fn said_start(said: &[String], start: &str) -> bool {
     said.iter().any(|line| line.starts_with(start))
+}
+
+/// How many copies have finished, done, failed or cancelled: a test waits
+/// for the count it needs after a job ends, not for a number of keys.
+pub fn copies_ended(s: &Session) -> usize {
+    s.app
+        .jobs()
+        .history()
+        .iter()
+        .filter(|job| job.kind == diroxide_core::JobKind::Copy)
+        .count()
+}
+
+/// No job runs or waits, and at least `count` copies have finished.
+pub fn settled_after(s: &Session, count: usize) -> bool {
+    s.app.jobs().is_empty() && copies_ended(s) >= count
 }

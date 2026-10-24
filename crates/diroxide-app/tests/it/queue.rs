@@ -13,7 +13,7 @@ use diroxide_core::{JobId, JobKind, Place};
 use diroxide_ops::{ConnectionAnswer, ConnectionQuestion, FakeProvider, Waiter};
 use diroxide_vfs::Registry;
 
-use crate::held::{Held, command_held, drive, key_held, key_until, said_start};
+use crate::held::{Held, command_held, drive, key_held, key_until, said_start, settled_after};
 use crate::support::{Session, settings};
 
 fn local(path: &str) -> Place {
@@ -118,7 +118,7 @@ fn the_queue_settings_are_listed_with_their_help_and_apply_at_once() {
         "500 KB a second"
     );
     held.open();
-    drive(&mut s, Vec::new(), |s, _| s.app.jobs().is_empty());
+    drive(&mut s, Vec::new(), |s, _| settled_after(s, 2));
     assert!(s.app.jobs().is_empty(), "{}", s.app.jobs().line());
 }
 
@@ -135,7 +135,7 @@ fn quit_with_unfinished_jobs_says_how_many_and_asks_on_no() {
     let said = key_held(&mut s, "n");
     assert!(!s.app.wants_quit(), "{said:?}");
     held.open();
-    drive(&mut s, Vec::new(), |s, _| s.app.jobs().is_empty());
+    drive(&mut s, Vec::new(), |s, _| settled_after(s, 3));
     key_held(&mut s, "ctrl+q");
     assert!(s.app.wants_quit());
 }
@@ -214,7 +214,7 @@ fn a_lost_host_asks_once_and_goes_on_when_it_is_back() {
     held.fake
         .bring_back(&Place::parse("sftp://build/").unwrap());
     key_held(&mut s, "down");
-    key_until(&mut s, "enter", |s, _| s.app.jobs().is_empty());
+    key_until(&mut s, "enter", |s, _| settled_after(s, 1));
     let said = all(&s);
     assert!(
         said.contains(&"build is back. Copy goes on.".to_owned()),
@@ -222,6 +222,17 @@ fn a_lost_host_asks_once_and_goes_on_when_it_is_back() {
     );
     assert!(said_start(&said, "Copy finished: 1 done."), "{said:?}");
     assert!(held.fake.exists(&local("/b/r1.bin")));
+}
+
+/// No job runs or waits, and the jobs that ran hold a copy that failed:
+/// what Retry the failed items needs.
+fn failed_copy_ended(s: &Session) -> bool {
+    s.app.jobs().is_empty()
+        && s.app
+            .jobs()
+            .history()
+            .iter()
+            .any(|job| job.kind == JobKind::Copy && !job.failed.is_empty())
 }
 
 #[test]
@@ -242,13 +253,23 @@ fn retry_the_failed_items_makes_a_new_job_that_skips_what_is_there() {
     key_until(&mut s, "f5", |s, _| {
         matches!(s.dialog(), Some(Dialog::Confirm { .. }))
     });
+    // The copy asks about the failed item, or (with no one to ask) ends
+    // with it failed; either way the test waits for that state, not for a
+    // count of keys.
     key_until(&mut s, "y", |s, _| {
-        matches!(s.dialog(), Some(Dialog::Question { .. })) || s.app.jobs().is_empty()
+        matches!(s.dialog(), Some(Dialog::Question { .. })) || failed_copy_ended(s)
     });
     if matches!(s.dialog(), Some(Dialog::Question { .. })) {
         // The error's question: Skip.
-        key_until(&mut s, "escape", |s, _| s.app.jobs().is_empty());
+        key_until(&mut s, "escape", |s, _| failed_copy_ended(s));
     }
+    drive(&mut s, Vec::new(), |s, _| failed_copy_ended(s));
+    assert!(
+        failed_copy_ended(&s),
+        "the copy has not ended with its failure: {} {:?}",
+        s.app.jobs().line(),
+        s.app.jobs().history()
+    );
     held.fake.switches_mut().call_faults.clear();
     let said = command_held(&mut s, ids::JOBS_RETRY_FAILED);
     assert!(
@@ -261,7 +282,7 @@ fn retry_the_failed_items_makes_a_new_job_that_skips_what_is_there() {
         }
         other => panic!("{other:?}"),
     }
-    key_until(&mut s, "y", |s, _| s.app.jobs().is_empty());
+    key_until(&mut s, "y", |s, _| settled_after(s, 2));
     assert!(held.fake.exists(&remote("/srv/f2.txt")));
     let said = all(&s);
     assert!(said_start(&said, "Copy finished: 1 done"), "{said:?}");
