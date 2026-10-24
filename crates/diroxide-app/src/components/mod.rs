@@ -14,9 +14,12 @@
 //! - **Get example plugins**, in the Plugins menu: the examples pack's
 //!   question, its download, then the plugins found again, so Manage
 //!   plugins lists the examples, each not enabled.
-//! - **The first-run list** is built ([`first_run`]) with its shown flag
-//!   off until stage 3 of alpha 2 (answer 93): a first start is not
-//!   interrupted for a small example pack.
+//! - **The first-run list** ([`first_run`]) opens once at a first start
+//!   from stage 3 of alpha 2 (answer 93), nothing chosen, when it holds
+//!   something besides the small example pack; Space marks, Enter asks
+//!   once and downloads the marked ones, Escape skips. The "Ask about
+//!   components again" setting opens it at the next start, and the Tools
+//!   menu's "Ask first-run choices again" opens it now.
 
 use std::path::PathBuf;
 
@@ -24,10 +27,10 @@ use diroxide_components::messages::{self, AskFirst};
 use diroxide_components::{Component, Kind, Manifest, Status};
 use diroxide_core::{JobId, ListModel, ListRow};
 
-/// Whether the first-run components list is shown at a first start. Off
-/// until stage 3 of alpha 2, when the SFTP plugin is a component worth a
-/// question (answer 93); the list itself is built and tested now.
-pub const FIRST_RUN_SHOWN: bool = false;
+/// Whether the first-run components list is shown at a first start: on
+/// from stage 3 of alpha 2, when the SFTP plugin is a component worth a
+/// question (answer 93).
+pub const FIRST_RUN_SHOWN: bool = true;
 
 /// One component as the screens show it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -167,8 +170,8 @@ pub fn first_run(listing: &Listing) -> ListModel {
     list
 }
 
-/// Whether the first-run list is shown at this start: never before stage
-/// 3 ([`FIRST_RUN_SHOWN`]), and then once, when it holds something.
+/// Whether the first-run list is shown at this start: once, when it
+/// holds something ([`FIRST_RUN_SHOWN`] is the stage switch).
 pub fn show_first_run(listing: &Listing, shown_before: bool) -> bool {
     FIRST_RUN_SHOWN && !shown_before && !listing.first_run.is_empty()
 }
@@ -310,18 +313,28 @@ mod tests {
     }
 
     #[test]
-    fn the_first_run_list_is_built_and_not_shown_before_stage_three() {
+    fn the_first_run_list_is_shown_once_when_it_holds_something() {
         let dir = tempfile::tempdir().unwrap();
-        let listing = listing(&Manifest::embedded(), dir.path(), "any");
-        assert!(listing.first_run.is_empty(), "the examples are not offered");
+        let mut listing = listing(&Manifest::embedded(), dir.path(), "any");
+        // Only the examples pack, as before the SFTP plugin joined the
+        // list: nothing to ask.
+        listing.rows.retain(|r| r.id == "diro-examples");
+        assert!(
+            !listing.first_run.iter().any(|id| id == "diro-examples"),
+            "the examples are not offered"
+        );
+        listing.first_run.clear();
         assert_eq!(
             first_run(&listing).announce_focus(),
             "No optional components to choose from yet"
         );
-        assert!(!show_first_run(&listing, false));
+        assert!(!show_first_run(&listing, false), "nothing to ask");
         let mut more = listing.clone();
         more.first_run.push("diro-examples".into());
-        assert!(!show_first_run(&more, false), "the flag is off");
-        assert_eq!(first_run(&more).len(), 1);
+        assert!(show_first_run(&more, false));
+        assert!(!show_first_run(&more, true), "once");
+        let list = first_run(&more);
+        assert_eq!(list.len(), 1);
+        assert!(list.selected_ids().is_empty(), "nothing chosen");
     }
 }

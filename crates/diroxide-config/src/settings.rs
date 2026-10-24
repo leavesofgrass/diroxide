@@ -599,6 +599,9 @@ pub struct Settings {
     pub replace_to_trash: bool,
     /// Refuse names other systems cannot store.
     pub portable_names: bool,
+    /// The volumes the Volumes list leaves out, by device or place, as
+    /// its Hide action keeps them (R25 3.1; lane A3).
+    pub hidden_volumes: Vec<String>,
     /// The transfer queue (alpha 2).
     pub jobs: JobSettings,
     /// The theme's name.
@@ -648,6 +651,10 @@ pub struct Settings {
     /// Whether the first-run list of optional components was shown (built
     /// in alpha 2's first stage, shown from its third; answer 93).
     pub components_first_run_shown: bool,
+    /// Open the first-run list of optional components once more at the
+    /// next start, nothing chosen; it turns itself off when the list
+    /// opens (answer 93; lane A3).
+    pub components_ask_again: bool,
     /// The plugins section.
     pub plugins: PluginSettings,
     /// Keys this version does not know, kept as they were.
@@ -678,6 +685,7 @@ impl Default for Settings {
             trash_drives: vec!["fixed".to_owned()],
             replace_to_trash: true,
             portable_names: true,
+            hidden_volumes: Vec::new(),
             jobs: JobSettings::default(),
             theme: diroxide_theme::DEFAULT_THEME.to_owned(),
             follow_system_appearance: false,
@@ -701,6 +709,7 @@ impl Default for Settings {
             compare: CompareSettings::default(),
             components_source: String::new(),
             components_first_run_shown: false,
+            components_ask_again: false,
             plugins: PluginSettings::default(),
             unknown: BTreeMap::new(),
         }

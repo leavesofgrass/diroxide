@@ -92,6 +92,13 @@ Editor. The program Edit opens a file with: a name on the path or a full path, w
 - Holds: text.
 - Default: `""`.
 
+### hidden_volumes
+
+Hidden volumes. Volumes left out of the Volumes list, by device or place, as its Hide action keeps them. Remove one to list it again.
+
+- Holds: a list of names.
+- Default: `[]`.
+
 ## Keys
 
 ### single_letters
@@ -791,7 +798,14 @@ Components list. Where the list of optional components is read from. Empty means
 
 ### components_first_run_shown
 
-First-run list shown. Whether the first-run list of optional components was shown. Ask first-run choices again turns it off.
+First-run list shown. Whether the first-run list of optional components was shown. It is turned on when the list opens.
+
+- Holds: true or false.
+- Default: `false`.
+
+### components_ask_again
+
+Ask about components again. On: the list of optional components opens once at the next start, nothing chosen.
 
 - Holds: true or false.
 - Default: `false`.

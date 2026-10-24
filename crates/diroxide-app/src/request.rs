@@ -305,6 +305,53 @@ pub enum Request {
         /// The folder, or `None`.
         place: Option<Place>,
     },
+    /// Ask a panel's place for its free space, off the input thread and
+    /// with a short limit, for Say Status (lane A3, R25 commit 90);
+    /// answered with [`AppEvent::Room`](crate::AppEvent::Room).
+    Room {
+        /// The panel.
+        side: Side,
+        /// The place it shows.
+        place: Place,
+    },
+    /// The Volumes list's rows (lane A3, R25 commit 88): the local
+    /// drives and mounts, the plugins' storages and these device lines of
+    /// the Volume actions plugin, the hidden ones left out; answered with
+    /// [`AppEvent::VolumesListed`](crate::AppEvent::VolumesListed), then a
+    /// [`AppEvent::VolumeAnswered`](crate::AppEvent::VolumeAnswered) for
+    /// each row's free space as it comes.
+    Volumes {
+        /// The listing, so answers for an older one are dropped.
+        generation: u64,
+        /// The keys the Hide action keeps.
+        hidden: Vec<String>,
+        /// The List devices command's lines, one JSON object each.
+        devices: Vec<String>,
+        /// Whether each volume's label and free space are asked after the
+        /// rows: the Volumes list asks, the go-to-place list does not.
+        spaces: bool,
+    },
+    /// List the system trash, newest first, for the trash browser (lane
+    /// A3, R25 commit 89); answered with
+    /// [`AppEvent::TrashListed`](crate::AppEvent::TrashListed).
+    ListTrash,
+    /// Plan a restore or a delete for good of items the trash browser
+    /// listed; answered like [`Request::Plan`].
+    PlanTrash {
+        /// The job.
+        job: JobId,
+        /// [`JobKind::Restore`](diroxide_core::JobKind::Restore) or
+        /// [`JobKind::Purge`](diroxide_core::JobKind::Purge).
+        kind: diroxide_core::JobKind,
+        /// The items, as the trash listed them.
+        items: Vec<diroxide_vfs::TrashedItem>,
+    },
+    /// Plan Empty the trash: everything in it deleted for good, listed
+    /// first; answered like [`Request::Plan`].
+    PlanEmptyTrash {
+        /// The job.
+        job: JobId,
+    },
     /// List the drives, the root, the home folder and the mounts, for the
     /// go-to-place list.
     Places,

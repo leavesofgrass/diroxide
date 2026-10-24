@@ -312,7 +312,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 99] = [
+pub const SCHEMA: [SettingInfo; 101] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -537,6 +537,15 @@ pub const SCHEMA: [SettingInfo; 99] = [
         kind: K::Text,
         default: "\"system\"",
         help: "Where Delete sends things: system for the system's trash, or a folder you name, for tests and portable use.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "hidden_volumes",
+        name: "Hidden volumes",
+        group: G::Panels,
+        kind: K::Names,
+        default: "[]",
+        help: "Volumes left out of the Volumes list, by device or place, as its Hide action keeps them. Remove one to list it again.",
         arrives: None,
     },
     SettingInfo {
@@ -1374,7 +1383,16 @@ pub const SCHEMA: [SettingInfo; 99] = [
         group: G::Plugins,
         kind: K::Flag,
         default: "false",
-        help: "Whether the first-run list of optional components was shown. Ask first-run choices again turns it off.",
+        help: "Whether the first-run list of optional components was shown. It is turned on when the list opens.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "components_ask_again",
+        name: "Ask about components again",
+        group: G::Plugins,
+        kind: K::Flag,
+        default: "false",
+        help: "On: the list of optional components opens once at the next start, nothing chosen.",
         arrives: None,
     },
 ];

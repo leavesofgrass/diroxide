@@ -285,9 +285,11 @@ pub(crate) fn plugins_state(paths: &Paths) -> PathBuf {
 
 fn roots(paths: &Paths) -> Roots {
     let examples = catalog::examples_dir(&paths.components_dir());
+    let components = paths.components_dir();
     Roots {
         plugins: paths.plugins_dir(),
         examples: examples.is_dir().then_some(examples),
+        components: components.is_dir().then_some(components),
         state: plugins_state(paths),
     }
 }
@@ -658,6 +660,13 @@ impl PluginRuntime {
                                 refresh,
                             },
                         ),
+                        // A plugin without `lister/rows` brings its rows up
+                        // to date with its own command (lane A3).
+                        Err(PluginError::Remote { code, .. })
+                            if refresh && code == ErrorKind::MethodNotFound.code() =>
+                        {
+                            send(shared, PluginEvent::ListerNoRows { plugin, lister });
+                        }
                         Err(error) => send(
                             shared,
                             PluginEvent::Note(Message::error(
@@ -1038,9 +1047,40 @@ pub(super) fn sites_of(sources: &[SiteSource]) -> Vec<crate::app::SiteRow> {
             state: row.state,
             detail: row.detail,
             plugin: name.clone(),
+            plugin_id: plugin.clone(),
         }));
     }
     rows
+}
+
+/// The storages of the plugins' connected places (`provider/volumes`),
+/// for the Volumes list: one row a storage; asking never signs in, and a
+/// place not connected is not asked (lane A3, R25 commit 88).
+pub(super) fn remote_volumes(sources: &[SiteSource]) -> Vec<diroxide_vfs::RemoteVolume> {
+    let ctx = diroxide_vfs::OpContext::new();
+    let mut volumes = Vec::new();
+    for (host, plugin, scheme, _) in sources {
+        let Some(provider) = PluginProvider::new(host, plugin, scheme) else {
+            continue;
+        };
+        let Ok(places) = provider.places(&ctx) else {
+            continue;
+        };
+        for place in places.rows.iter().filter(|row| row.state == "connected") {
+            let Ok(rows) = provider.volumes(&place.place, &ctx) else {
+                continue;
+            };
+            volumes.extend(rows.into_iter().map(|row| diroxide_vfs::RemoteVolume {
+                name: row.name,
+                scheme: scheme.clone(),
+                place: row.place,
+                free: row.free,
+                total: row.total,
+                removable: row.removable,
+            }));
+        }
+    }
+    volumes
 }
 
 /// Forwards a host's events to the app every tenth of a second while it

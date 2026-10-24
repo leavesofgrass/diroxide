@@ -164,6 +164,9 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Next theme. Switches to the next theme and says its contrast. (app.next-theme)
 - Config problems. Lists what could not be read from the config files, and why. (app.problems)
 - Job history. Opens the Jobs list at the jobs that ran, with what failed in each and why. (jobs.history)
+- Volumes. Lists the drives, mounts, connected storages and devices, each its state first: Open, Mount, Unmount, Eject, Hide. (go.volumes)
+- Trash. Lists what is in the trash, newest first: Restore, Delete for good, Empty the trash. (go.trash)
+- Empty the trash. Deletes everything in the trash for good, after listing it; the question starts on No. (trash.empty)
 - Jobs. Lists the running, waiting and finished jobs, each with its actions. (jobs.list)
 - Pause the queue. Starts no new job until the queue goes on; running jobs go on. (jobs.pause-queue)
 - Resume the queue. Lets the queue start waiting jobs again. (jobs.resume-queue)
@@ -250,7 +253,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
 - Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
 - Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
-- Ask first-run choices again. Offers the first-run list of optional components again at the next start. (components.first-run)
+- Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
 
 ## In the GUI
 
@@ -417,6 +420,9 @@ The GUI arrives in a later alpha; these are its keys. On macOS the GUI uses Comm
 - Next theme. Switches to the next theme and says its contrast. (app.next-theme)
 - Config problems. Lists what could not be read from the config files, and why. (app.problems)
 - Job history. Opens the Jobs list at the jobs that ran, with what failed in each and why. (jobs.history)
+- Volumes. Lists the drives, mounts, connected storages and devices, each its state first: Open, Mount, Unmount, Eject, Hide. (go.volumes)
+- Trash. Lists what is in the trash, newest first: Restore, Delete for good, Empty the trash. (go.trash)
+- Empty the trash. Deletes everything in the trash for good, after listing it; the question starts on No. (trash.empty)
 - Jobs. Lists the running, waiting and finished jobs, each with its actions. (jobs.list)
 - Pause the queue. Starts no new job until the queue goes on; running jobs go on. (jobs.pause-queue)
 - Resume the queue. Lets the queue start waiting jobs again. (jobs.resume-queue)
@@ -498,7 +504,7 @@ The GUI arrives in a later alpha; these are its keys. On macOS the GUI uses Comm
 - Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
 - Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
 - Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
-- Ask first-run choices again. Offers the first-run list of optional components again at the next start. (components.first-run)
+- Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
 
 ## Keys a terminal may keep
 

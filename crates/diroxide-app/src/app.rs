@@ -41,6 +41,8 @@ mod plugin_ui;
 mod preview;
 // Saved searches, the Space list, sizes and newest files (W3a).
 mod search_tools;
+// The trash browser (lane A3).
+mod trash_ui;
 // Search, its dialog and its results (W3a).
 mod searching;
 mod select;
@@ -48,6 +50,8 @@ mod select;
 mod selecting;
 mod split_join;
 mod viewing;
+// The Volumes list (lane A3).
+mod volumes_ui;
 // Watch this folder (W3t).
 mod watching;
 
@@ -406,6 +410,46 @@ pub enum AppEvent {
         /// The lines, meaning first.
         lines: Vec<String>,
     },
+    /// A line said before a plan's question, sent just before its
+    /// [`AppEvent::Planned`]: "Free space on build is not known." (lane
+    /// A3, R25 commit 90).
+    PlanNote {
+        /// The job.
+        job: JobId,
+        /// The line, meaning first.
+        line: String,
+    },
+    /// The Volumes list's rows, in order (lane A3, R25 commit 88).
+    VolumesListed {
+        /// The listing they answer.
+        generation: u64,
+        /// The rows, each its state first.
+        rows: Vec<diroxide_vfs::VolumeRow>,
+    },
+    /// One volume's free space and label, as it answered within the
+    /// limit or did not (lane A3).
+    VolumeAnswered {
+        /// The listing it answers.
+        generation: u64,
+        /// The row's index in that listing.
+        index: usize,
+        /// The answer.
+        answer: diroxide_vfs::VolumeAnswer,
+    },
+    /// The system trash was listed for the trash browser, newest first,
+    /// or could not be, in a sentence ("The trash cannot be listed on
+    /// this system.") (lane A3, R25 commit 89).
+    TrashListed(Result<Vec<diroxide_vfs::TrashedItem>, String>),
+    /// A panel's place said its free space, or did not in time (`None`),
+    /// for Say Status (lane A3, R25 commit 90).
+    Room {
+        /// The panel.
+        side: Side,
+        /// The place asked about.
+        place: Place,
+        /// Its free space and size, when it answered.
+        space: Option<diroxide_vfs::SpaceInfo>,
+    },
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -422,6 +466,9 @@ pub struct SiteRow {
     pub detail: Option<String>,
     /// The plugin that offers it, said last.
     pub plugin: String,
+    /// That plugin's id: Enter on the row runs its `connect` command when
+    /// it has one, so the site's start folders open (lane A3).
+    pub plugin_id: String,
 }
 
 /// What an open dialog is for: what its answer does. The [`Dialog`] is
@@ -637,6 +684,10 @@ enum Purpose {
     /// The Jobs list, a job's actions, and the queue's questions (lane
     /// A2).
     Jobs(Box<jobs_ui::Wants>),
+    /// The trash browser and its actions (lane A3).
+    Trash(Box<trash_ui::Wants>),
+    /// The Volumes list and a row's actions (lane A3).
+    Volumes(Box<volumes_ui::Wants>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -795,6 +846,13 @@ pub struct App {
     streams: [Option<nav::StreamNote>; 2],
     /// The places the plugins offer, for the Sites group (lane A2).
     sites: Vec<SiteRow>,
+    /// Each panel's place and its free space when it answered, for Say
+    /// Status (lane A3).
+    rooms: [Option<(Place, Option<diroxide_vfs::SpaceInfo>)>; 2],
+    /// The trash browser's items (lane A3).
+    trash: trash_ui::TrashState,
+    /// The Volumes list's rows (lane A3).
+    volumes: volumes_ui::VolumesState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1117,6 +1175,9 @@ impl App {
             jobs_ui: jobs_ui::JobsState::default(),
             streams: [None, None],
             sites: Vec::new(),
+            rooms: [None, None],
+            trash: trash_ui::TrashState::default(),
+            volumes: volumes_ui::VolumesState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1132,6 +1193,7 @@ impl App {
         let mut effects = self.startup_lines();
         self.sweep_at_start();
         self.plugins_start();
+        self.components_start();
         for side in Side::BOTH {
             let place = self.panel(side).place().clone();
             let focus = self.restored_focus(side);
@@ -1608,6 +1670,26 @@ impl App {
             AppEvent::Queue(note) => self.queue_note(*note),
             AppEvent::Gate(event) => self.gate_event(&event),
             AppEvent::JobNotice { job, lines } => self.job_notice(job, lines),
+            AppEvent::PlanNote { job, line } => {
+                if self.flows.contains_key(&job) {
+                    vec![self.say(Message::info(line))]
+                } else {
+                    Vec::new()
+                }
+            }
+            AppEvent::TrashListed(result) => self.trash_listed(result),
+            AppEvent::VolumesListed { generation, rows } => self.volumes_listed(generation, rows),
+            AppEvent::VolumeAnswered {
+                generation,
+                index,
+                answer,
+            } => self.volume_answered(generation, index, answer),
+            AppEvent::Room { side, place, space } => {
+                if self.panel(side).place() == &place {
+                    self.rooms[side.index()] = Some((place, space));
+                }
+                Vec::new()
+            }
         }
     }
 
@@ -1677,6 +1759,14 @@ impl App {
         }
         // The Jobs list and the queue (lane A2).
         if let Some(effects) = self.jobs_dispatch(command) {
+            return effects;
+        }
+        // The trash browser (lane A3).
+        if let Some(effects) = self.trash_dispatch(command) {
+            return effects;
+        }
+        // The Volumes list (lane A3).
+        if let Some(effects) = self.volumes_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

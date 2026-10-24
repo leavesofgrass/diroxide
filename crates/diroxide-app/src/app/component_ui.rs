@@ -1,8 +1,10 @@
 //! Optional components in the app (W4d, R22 commit 41): Manage optional
 //! components, the ask-first question, a download as a job in the jobs
 //! line, Verify, Remove with its listing first, Install from a zip file or
-//! a folder, Get example plugins, and the first-run list (built, shown
-//! from stage 3).
+//! a folder, Get example plugins, and the first-run list (shown from
+//! stage 3 of alpha 2, lane A3: once at a first start, nothing chosen;
+//! Space marks, Enter asks once and downloads the marked ones, Escape
+//! skips).
 //!
 //! Nothing is fetched before a yes: the question names what needs the
 //! component, its size and its license, and starts on No; the runtime
@@ -15,7 +17,9 @@ use std::collections::HashMap;
 
 use diroxide_components::Status;
 use diroxide_components::messages::{self, AskFirst};
-use diroxide_core::{Command, Effect, JobId, JobKind, ListModel, ListRow, Message, Place, Redraw};
+use diroxide_core::{
+    Command, Effect, JobId, JobKind, Key, Layer, ListModel, ListRow, Message, Place, Redraw,
+};
 
 use super::{App, Purpose};
 use crate::commands::ids;
@@ -23,6 +27,7 @@ use crate::components::{self as model, ComponentEvent, ComponentRequest, Listing
 use crate::dialog::{Dialog, with_default_no};
 use crate::entry::{CompletionSource, EntryField};
 use crate::jobs::FinishedJob;
+use crate::keymap::Lookup;
 use crate::plugins::PluginRequest;
 use crate::request::Request;
 
@@ -35,6 +40,9 @@ enum Next {
     Examples,
     /// Show the first-run list.
     FirstRun,
+    /// Show the first-run list at the start, once, when it holds
+    /// something and nothing else is open.
+    AtStart,
 }
 
 /// What the app keeps for components.
@@ -65,6 +73,8 @@ pub(super) enum Wants {
     Read,
     /// The first-run list.
     FirstRun,
+    /// The question before the marked first-run choices download.
+    FirstRunGet { ids: Vec<String> },
 }
 
 impl App {
@@ -87,16 +97,60 @@ impl App {
         let line = match next {
             Next::Manage => "Reading the optional components",
             Next::Examples => "Looking for the example plugins",
-            Next::FirstRun => {
-                self.settings.components_first_run_shown = false;
-                self.request(Request::SaveSetting {
-                    key: "components_first_run_shown".to_owned(),
-                    value: Some(toml::Value::Boolean(false)),
-                });
-                "Reading the first-run choices"
-            }
+            Next::FirstRun | Next::AtStart => "Reading the first-run choices",
         };
         Some(vec![self.say(Message::status(line))])
+    }
+
+    /// At the start: the first-run list is asked for once, at a first
+    /// start (answer 93), or when the "Ask about components again" setting
+    /// is on; it opens when it arrives, if it holds something.
+    pub(super) fn components_start(&mut self) {
+        let first = self.first_run && !self.settings.components_first_run_shown;
+        if first || self.settings.components_ask_again {
+            self.components.next = Some(Next::AtStart);
+            self.request(Request::Components(Box::new(ComponentRequest::List)));
+        }
+    }
+
+    /// The first-run list opened: it is not shown again by itself, and
+    /// the ask-again setting turns off.
+    fn first_run_shown(&mut self) {
+        let changes = [
+            (
+                "components_first_run_shown",
+                !self.settings.components_first_run_shown,
+                true,
+            ),
+            (
+                "components_ask_again",
+                self.settings.components_ask_again,
+                false,
+            ),
+        ];
+        self.settings.components_first_run_shown = true;
+        self.settings.components_ask_again = false;
+        for (key, changed, value) in changes {
+            if changed {
+                self.request(Request::SaveSetting {
+                    key: key.to_owned(),
+                    value: Some(toml::Value::Boolean(value)),
+                });
+            }
+        }
+    }
+
+    /// Opens the first-run list, nothing chosen.
+    fn open_first_run(&mut self, listing: &Listing) -> Vec<Effect> {
+        self.first_run_shown();
+        let list = model::first_run(listing);
+        self.open_dialog(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::ACCEPT),
+            },
+            Purpose::Component(Box::new(Wants::FirstRun)),
+        )
     }
 
     /// An event of the runtime's about components.
@@ -196,18 +250,85 @@ impl App {
                 ));
             }
             Some(Next::Examples) => effects.extend(self.ask_examples(&listing)),
-            Some(Next::FirstRun) => {
-                let list = model::first_run(&listing);
-                effects.extend(self.open_dialog(
-                    Dialog::Choose {
-                        list,
-                        on_enter: Command::new(ids::ACCEPT),
-                    },
-                    Purpose::Component(Box::new(Wants::FirstRun)),
-                ));
+            Some(Next::FirstRun) => effects.extend(self.open_first_run(&listing)),
+            // At the start only over an empty screen, and only when there
+            // is something to choose; otherwise it waits for a later start.
+            Some(Next::AtStart)
+                if self.dialogs.is_empty() && model::show_first_run(&listing, false) =>
+            {
+                effects.extend(self.open_first_run(&listing));
             }
+            Some(Next::AtStart) => {}
         }
         effects
+    }
+
+    /// Space in the first-run list marks or unmarks the focused component
+    /// and moves on.
+    pub(super) fn components_key(&mut self, key: &Key) -> Option<Vec<Effect>> {
+        let Some(Purpose::Component(wants)) = self.opens.last().map(|o| &o.purpose) else {
+            return None;
+        };
+        if !matches!(**wants, Wants::FirstRun) {
+            return None;
+        }
+        let layers = [Layer::Panel, Layer::List, Layer::Global];
+        let toggles = matches!(
+            self.keymap.lookup(&layers, key),
+            Lookup::Command(id) if id == ids::SELECT_TOGGLE
+        );
+        if !toggles {
+            return None;
+        }
+        let state = match self.dialogs.last_mut() {
+            Some((_, Dialog::Choose { list, .. })) => {
+                let state = list.toggle_selected();
+                list.move_focus(diroxide_core::Move::Down);
+                state
+            }
+            _ => None,
+        };
+        let word = match state {
+            Some(true) => "Marked",
+            Some(false) => "Unmarked",
+            None => return Some(Vec::new()),
+        };
+        Some(vec![
+            Effect::Redraw(Redraw::All),
+            self.say(Message::status(word)),
+        ])
+    }
+
+    /// Enter in the first-run list: the marked components, after one
+    /// question that starts on No; nothing marked is said, and the list
+    /// stays.
+    fn first_run_get(&mut self) -> Vec<Effect> {
+        let ids: Vec<String> = match self.dialogs.last() {
+            Some((_, Dialog::Choose { list, .. })) => {
+                list.selected_ids().into_iter().map(str::to_owned).collect()
+            }
+            _ => Vec::new(),
+        };
+        if ids.is_empty() {
+            return vec![self.say(Message::status(
+                "Nothing marked. Space marks one; Escape skips.",
+            ))];
+        }
+        let listing: Vec<String> = ids
+            .iter()
+            .filter_map(|id| self.component_row(id))
+            .map(|row| row.line)
+            .collect();
+        let what = diroxide_core::format::count(ids.len() as u64, "component", "components");
+        let question = with_default_no(Message::question(&format!("Download {what}")));
+        self.open_dialog(
+            Dialog::Confirm {
+                question,
+                listing,
+                on_yes: Command::new(ids::YES),
+            },
+            Purpose::Component(Box::new(Wants::FirstRunGet { ids })),
+        )
     }
 
     /// Get example plugins: already here, no build, or the question.
@@ -426,8 +547,9 @@ impl App {
                 effects.extend(self.component_job(&id, Some(local)));
                 effects
             }
-            Wants::Read | Wants::FirstRun => Vec::new(),
-            Wants::AskFirst { .. } | Wants::Remove { .. } => Vec::new(),
+            Wants::FirstRun => self.first_run_get(),
+            Wants::Read => Vec::new(),
+            Wants::AskFirst { .. } | Wants::Remove { .. } | Wants::FirstRunGet { .. } => Vec::new(),
         }
     }
 
@@ -445,6 +567,15 @@ impl App {
                 })));
                 Vec::new()
             }
+            // The marked first-run choices, each a download in the jobs
+            // line; the list closes.
+            Wants::FirstRunGet { ids } => {
+                let mut effects = self.close_all();
+                for id in ids {
+                    effects.extend(self.component_job(&id, None));
+                }
+                effects
+            }
             _ => Vec::new(),
         }
     }
@@ -454,7 +585,11 @@ impl App {
         match wants {
             Wants::AskFirst { .. } => vec![self.say(Message::info(messages::NOT_DOWNLOADED))],
             Wants::Remove { .. } => vec![self.say(Message::info("Nothing was removed."))],
-            Wants::FirstRun => vec![self.say(Message::info("Nothing downloaded."))],
+            Wants::FirstRun => vec![self.say(Message::info(
+                "Nothing downloaded. Tools, Manage optional components has them.",
+            ))],
+            // No to the question: back in the list, the marks kept.
+            Wants::FirstRunGet { .. } => vec![self.say(Message::info("Not downloaded."))],
             _ => Vec::new(),
         }
     }

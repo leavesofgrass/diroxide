@@ -233,8 +233,10 @@ impl App {
             }
             self.request(Request::Watch {
                 side,
-                place: Some(place),
+                place: Some(place.clone()),
             });
+            // Its free space, for Say Status; asked off the input thread.
+            self.ask_room(side, place);
             if active && let Some(mut line) = self.archive_landing(side) {
                 // Inside an archive: "Opened course.zip: 10 items, 48 KB."
                 // at its root, "week1, 3 items, in course.zip" below it.
@@ -451,8 +453,9 @@ impl App {
         }
         self.request(Request::Watch {
             side,
-            place: Some(place),
+            place: Some(place.clone()),
         });
+        self.ask_room(side, place);
         let active = side == self.active;
         let mut effects = Vec::new();
         if active || !self.screen_reader {
@@ -600,7 +603,23 @@ impl App {
         effects
     }
 
+    /// Asks a panel's place for its free space, for Say Status; what the
+    /// panel knew of its last place is forgotten.
+    pub(super) fn ask_room(&mut self, side: Side, place: Place) {
+        self.rooms[side.index()] = None;
+        self.request(Request::Room { side, place });
+    }
+
+    /// The free space of a panel's place in words, for Say Status: "412
+    /// GB free of 931 GB", "free space not known", or `None` while it has
+    /// not answered.
+    pub(super) fn room_status(&self, side: Side) -> Option<String> {
+        let (place, space) = self.rooms[side.index()].as_ref()?;
+        (place == self.panel(side).place()).then(|| crate::runtime::room_words(space.as_ref()))
+    }
+
     pub(super) fn swap_panels(&mut self) -> Vec<Effect> {
+        self.rooms.swap(0, 1);
         self.panels.swap(0, 1);
         for side in Side::BOTH {
             self.panel_mut(side).set_side(side);
@@ -793,6 +812,9 @@ impl App {
         // The local places once; the plugins' sites every time, since a
         // site connects and disconnects (R25 commit 78).
         self.request(Request::Places);
+        // The volumes, read once a session for the list (lane A3); the
+        // Volumes list reads them again.
+        self.ask_volumes_for_places();
         // Tab completes a bookmark by its name or its place (W3a); the
         // list under the field narrows over every place as you type.
         let field = EntryField::new("Go to a place", CompletionSource::Bookmarks)
@@ -806,6 +828,91 @@ impl App {
     pub(super) fn places_arrived(&mut self, places: Vec<LocalPlace>) -> Vec<Effect> {
         self.places = places;
         self.refresh_candidates()
+    }
+
+    /// The Sites group follows a change of a site's state (a lost
+    /// connection): the places are asked again while the go-to-place list
+    /// is open (lane A3).
+    pub(super) fn refresh_sites(&mut self) -> Vec<Effect> {
+        if self
+            .opens
+            .iter()
+            .any(|o| matches!(o.purpose, Purpose::Places(_)))
+        {
+            self.request(Request::Places);
+        }
+        Vec::new()
+    }
+
+    /// The volumes' and the trash's rows say their kind first (R25 3.6):
+    /// "Volume, Backup, mounted, removable, 412 GB free"; "Trash, what is
+    /// in the trash".
+    pub(super) fn volume_rows_first(&self, list: &mut diroxide_core::ListModel) {
+        let rows: Vec<diroxide_core::ListRow> = list
+            .rows()
+            .iter()
+            .map(|row| {
+                if row.id == TRASH_ROW {
+                    return diroxide_core::ListRow::new(row.id.clone(), "Trash")
+                        .with_details(["what is in the trash".to_owned()]);
+                }
+                let volume = self
+                    .volume_rows()
+                    .iter()
+                    .find(|v| v.place.as_ref().is_some_and(|p| p.to_string() == row.id));
+                match volume {
+                    Some(volume) => diroxide_core::ListRow::new(
+                        row.id.clone(),
+                        format!("Volume, {}", volume.name),
+                    )
+                    .with_details(
+                        [
+                            Some(volume.state.word().to_lowercase()),
+                            Some(volume.kind.clone()),
+                            // Free space only when a volume said it.
+                            (volume.space != diroxide_vfs::SpaceAnswer::Asking)
+                                .then(|| volume.space.words()),
+                        ]
+                        .into_iter()
+                        .flatten(),
+                    ),
+                    None => row.clone(),
+                }
+            })
+            .collect();
+        let focus = list.focused().map(|r| r.id.clone());
+        list.set_rows(rows);
+        if let Some(focus) = focus {
+            list.focus_id(&focus);
+        }
+    }
+
+    /// The Sites group's rows say their kind first, then the site's name,
+    /// its state word, its details, and the plugin last (R25, 3.6; answer
+    /// 90): "Site, build, connected, ada@build.example, by SFTP places".
+    pub(super) fn site_rows_first(&self, list: &mut diroxide_core::ListModel) {
+        let rows: Vec<diroxide_core::ListRow> = list
+            .rows()
+            .iter()
+            .map(|row| {
+                let site = self.sites.iter().find(|s| s.place.to_string() == row.id);
+                match site {
+                    Some(site) => {
+                        let mut details = vec![site.state.clone()];
+                        details.extend(site.detail.clone());
+                        details.push(format!("by {}", site.plugin));
+                        diroxide_core::ListRow::new(row.id.clone(), format!("Site, {}", site.name))
+                            .with_details(details)
+                    }
+                    None => row.clone(),
+                }
+            })
+            .collect();
+        let focus = list.focused().map(|r| r.id.clone());
+        list.set_rows(rows);
+        if let Some(focus) = focus {
+            list.focus_id(&focus);
+        }
     }
 
     /// The places the plugins offer arrived: the go-to-place list's Sites
@@ -851,6 +958,10 @@ fn history_row(place: &Place, when: &str) -> diroxide_core::ListRow {
     diroxide_core::ListRow::new(place.to_string(), place_leaf(place))
         .with_details([when.to_owned(), parent])
 }
+
+/// The go-to-place list's row that opens the trash browser: an id no
+/// path takes (lane A3).
+pub(super) const TRASH_ROW: &str = "trash:";
 
 /// The release as said on the first run, from the build's version:
 /// "0.1.0-alpha.2" is "alpha 2", "0.1.0-beta.1" is "beta 1", and a

@@ -305,6 +305,15 @@ pub enum PluginEvent {
         /// Whether they replace the rows held.
         refresh: bool,
     },
+    /// A plugin does not serve `lister/rows`: its lister's rows are
+    /// brought up to date by running its opening command again (lane A3;
+    /// the SFTP plugin's Sites list).
+    ListerNoRows {
+        /// The plugin's id.
+        plugin: String,
+        /// The lister's id.
+        lister: String,
+    },
     /// An item's log, newest line first.
     Logged {
         /// The item's id.

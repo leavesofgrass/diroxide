@@ -213,10 +213,13 @@ pub struct Session {
 }
 
 /// Settings for tests: no settle time, so a key answers at once, unless a
-/// test sets one.
+/// test sets one; the first-run components list taken as shown, so a
+/// fresh state folder is not a first start's list unless a test asks
+/// (lane A3).
 pub fn settings() -> Settings {
     Settings {
         dialog_settle_ms: 0,
+        components_first_run_shown: true,
         ..Settings::default()
     }
 }

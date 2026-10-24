@@ -42,11 +42,19 @@ mod selecting;
 mod session;
 // Sites in the go-to-place list and the connect flow (lane A2).
 mod sites;
+// Free space in the plan and in Say Status (lane A3).
+mod room;
+// The Sites list's commands and dialogs (lane A3).
+mod site_commands;
 mod split_join;
+// The trash browser (lane A3).
+mod trash;
 // Streamed listings reach the panel (lane A2).
 mod streaming;
 mod viewer;
 mod views;
+// The Volumes list (lane A3).
+mod volumes;
 // Watch this folder (W3t).
 mod watching;
 

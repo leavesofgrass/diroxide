@@ -534,6 +534,19 @@ pub mod ids {
         COMPONENTS_FIRST_RUN = "components.first-run";
     }
 
+    // The places of alpha 2's third stage (lane A3, R25 commits 88 and
+    // 89).
+    ids! {
+        /// The trash browser: what is in the system trash, with Restore,
+        /// Delete for good and Empty the trash.
+        TRASH_BROWSER = "go.trash";
+        /// Empty the trash: every item deleted for good, listed first.
+        TRASH_EMPTY = "trash.empty";
+        /// The Volumes list: drives, mounts, connected storages and
+        /// devices, each its state first, with their actions.
+        VOLUMES = "go.volumes";
+    }
+
     // The arrival tracker's command (W3t, plan commit 34).
     ids! {
         /// Watch the active panel's folder and say each file that settles
@@ -647,7 +660,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 223] = [
+pub static CATALOG: [CommandInfo; 226] = [
     command(
         ids::QUIT,
         "Quit",
@@ -788,6 +801,30 @@ pub static CATALOG: [CommandInfo; 223] = [
         ids::JOB_HISTORY,
         "Job history",
         "Opens the Jobs list at the jobs that ran, with what failed in each and why.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VOLUMES,
+        "Volumes",
+        "Lists the drives, mounts, connected storages and devices, each its state first: Open, Mount, Unmount, Eject, Hide.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TRASH_BROWSER,
+        "Trash",
+        "Lists what is in the trash, newest first: Restore, Delete for good, Empty the trash.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TRASH_EMPTY,
+        "Empty the trash",
+        "Deletes everything in the trash for good, after listing it; the question starts on No.",
         Global,
         &[],
         &[],
@@ -2405,7 +2442,7 @@ pub static CATALOG: [CommandInfo; 223] = [
     command(
         ids::COMPONENTS_FIRST_RUN,
         "Ask first-run choices again",
-        "Offers the first-run list of optional components again at the next start.",
+        "Opens the first-run list of optional components now, nothing chosen.",
         Global,
         &[],
         &[],

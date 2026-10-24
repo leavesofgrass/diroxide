@@ -25,7 +25,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use diroxide_core::{
     ArgValue, Command, CommandId, Effect, EntryKind, JobId, JobKind, Key, Layer, ListModel,
-    ListRow, Message, Place, Redraw, Side, Timestamp,
+    ListRow, Message, MessageKind, Place, Redraw, Side, Timestamp,
 };
 use diroxide_plugins::ask::{Answer as PluginAnswer, Question, QuestionKind, TextDocument};
 use diroxide_plugins::host::HostEvent;
@@ -79,6 +79,28 @@ pub(super) struct Running {
     /// Whether the plugin said something of its own while it ran: then
     /// its end is shown, not said again.
     announced: bool,
+    /// A lister's rows brought up to date: neither its start nor its end
+    /// is said, and it leaves no row in the Jobs list; a failure is still
+    /// said (lane A3).
+    refresh: Refresh,
+    /// The plugin and lister it was run from, so the lister's rows are
+    /// brought up to date when it ends (lane A3).
+    from_lister: Option<(String, String)>,
+}
+
+/// Whether a plugin command runs to bring a lister's rows up to date
+/// (lane A3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Refresh {
+    /// A command the owner ran.
+    No,
+    /// After one of the lister's own commands, or a loss: nothing said.
+    Silent,
+    /// The owner's reload: only the new count is said.
+    Said,
+    /// The Volume actions plugin's List devices, for the Volumes list:
+    /// its output is the devices, and nothing else is said but a failure.
+    Devices,
 }
 
 /// What the app keeps for plugins.
@@ -380,6 +402,27 @@ impl App {
         )
     }
 
+    /// Enter on a Sites row of the go-to-place list (lane A3): the site's
+    /// plugin connects through its own `connect` command, with the site's
+    /// place as the active place, so its questions, its refusals and its
+    /// start folders are the plugin's own ("Connecting to build.", then
+    /// the remote folder in this panel and the site's local folder in the
+    /// other). `None` when the place is not a site, or its plugin has no
+    /// `connect` command: the place then simply opens.
+    pub(super) fn connect_site(&mut self, side: Side, place: &Place) -> Option<Vec<Effect>> {
+        let site = self.sites.iter().find(|s| &s.place == place)?.clone();
+        let id = CommandId::new(format!("{}.connect", site.plugin_id)).ok()?;
+        self.plugins.catalog.any_command(&id)?;
+        let context = catalog::context_of(
+            place,
+            self.panel(side.other()).place(),
+            Some((place.clone(), EntryKind::Folder)),
+            None,
+            Vec::new(),
+        );
+        Some(self.run_plugin_command(&id, context, None, false))
+    }
+
     /// The plugin commands and the screens of this module; `None` for
     /// commands that are not theirs.
     pub(super) fn plugins_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
@@ -453,7 +496,7 @@ impl App {
                     question: Message::new(
                         line,
                         diroxide_core::Importance::High,
-                        diroxide_core::MessageKind::Question,
+                        MessageKind::Question,
                     ),
                     listing: Vec::new(),
                     on_yes: Command::new(ids::YES),
@@ -501,6 +544,19 @@ impl App {
         lister: Option<(String, Vec<diroxide_core::Entry>)>,
         once: bool,
     ) -> Vec<Effect> {
+        self.start_plugin_run_with(entry, context, lister, once, Refresh::No)
+    }
+
+    /// Starts a plugin command as a job, said, or quietly to bring a
+    /// lister's rows up to date.
+    fn start_plugin_run_with(
+        &mut self,
+        entry: &CommandEntry,
+        context: RunContext,
+        lister: Option<(String, Vec<diroxide_core::Entry>)>,
+        once: bool,
+        refresh: Refresh,
+    ) -> Vec<Effect> {
         let job = self.next_job_id();
         let line = lines::progress_started(&entry.name, &entry.source);
         let now = self.now();
@@ -510,6 +566,9 @@ impl App {
             Runs::Script(script) => Some(script.recipe.mode),
             Runs::Process => None,
         };
+        let from_lister = lister
+            .as_ref()
+            .map(|(id, _)| (entry.owner.clone(), id.clone()));
         self.plugins.running.insert(
             job,
             Running {
@@ -523,6 +582,8 @@ impl App {
                 output: Vec::new(),
                 shown_at: Some(now),
                 announced: false,
+                refresh,
+                from_lister,
             },
         );
         self.plugins.failure_said.remove(&entry.owner);
@@ -535,6 +596,9 @@ impl App {
                 once,
             },
         )))));
+        if refresh != Refresh::No {
+            return vec![Effect::Redraw(Redraw::JobsLine)];
+        }
         vec![
             Effect::Redraw(Redraw::JobsLine),
             self.say(Message::status(line)),
@@ -588,6 +652,7 @@ impl App {
                 rows,
                 refresh,
             } => self.lister_rows_came(&plugin, &lister, rows, refresh),
+            PluginEvent::ListerNoRows { plugin, lister } => self.lister_no_rows(&plugin, &lister),
             PluginEvent::Note(message) => vec![self.say(message)],
         }
     }
@@ -732,7 +797,7 @@ impl App {
             Message::new(
                 format!("{first} Enable it again? No is the default. y or n"),
                 diroxide_core::Importance::High,
-                diroxide_core::MessageKind::Question,
+                MessageKind::Question,
             )
         } else {
             with_default_no(Message::question(first))
@@ -1375,7 +1440,11 @@ impl App {
                         }
                         Some(effects)
                     }
-                    Action::Reload => Some(self.ask_lister_rows(&lister, true)),
+                    Action::Reload => Some(self.refresh_lister(
+                        &lister.view.plugin_id,
+                        &lister.view.spec.id,
+                        true,
+                    )),
                     Action::ToggleSelect => {
                         let state = match self.dialogs.last_mut() {
                             Some((_, Dialog::Choose { list, .. })) => {
@@ -1499,13 +1568,27 @@ impl App {
                 Vec::new()
             }
             Call::SetPanel(change) => {
-                let effects = self.apply_panel_change(&change);
+                // A plugin that opens a place in the active panel from its
+                // own lister (Connect's start folder) is done with the
+                // lister: it closes, so the owner lands in the folder.
+                let mut effects = Vec::new();
+                if change.place.is_some()
+                    && side_of(self.active, change.panel) == self.active
+                    && self.top_lister_of(&plugin)
+                {
+                    effects.extend(self.close_top());
+                }
+                effects.extend(self.apply_panel_change(&change));
                 self.reply(call, Reply::Done(Ok(Value::Null)));
                 effects
             }
             Call::RunJob(job) => self.plugin_job(call, *job),
             Call::OpenLister(view) => {
-                let effects = self.open_lister(*view);
+                let opener = self
+                    .running_of(&plugin)
+                    .and_then(|job| self.plugins.running.get(&job))
+                    .map(|running| (running.command.clone(), running.refresh));
+                let effects = self.open_lister(*view, opener);
                 self.reply(call, Reply::Done(Ok(Value::Null)));
                 effects
             }
@@ -1634,8 +1717,63 @@ impl App {
 
     // ---- Listers ----
 
-    fn open_lister(&mut self, view: ListerView) -> Vec<Effect> {
-        let lister = Lister::new(view);
+    /// Whether the dialog on top is a lister of this plugin.
+    fn top_lister_of(&self, plugin: &str) -> bool {
+        matches!(
+            self.opens.last().map(|o| &o.purpose),
+            Some(Purpose::Plugin(w)) if matches!(&**w, Wants::Lister { lister } if lister.view.plugin_id == plugin)
+        )
+    }
+
+    /// Where the open lister of a plugin is, by its id, in the dialogs.
+    fn lister_index(&self, plugin: &str, lister: &str) -> Option<usize> {
+        self.opens.iter().rposition(|o| {
+            matches!(&o.purpose, Purpose::Plugin(w) if matches!(&**w, Wants::Lister { lister: l } if l.view.plugin_id == plugin && l.view.spec.id == lister))
+        })
+    }
+
+    /// A plugin opened a lister: a new dialog, or, when the same lister is
+    /// open, its rows brought up to date in place with the focus and the
+    /// marks kept by row id. `opener` is the command that opened it, and
+    /// whether that run brings the rows up to date.
+    fn open_lister(
+        &mut self,
+        view: ListerView,
+        opener: Option<(CommandId, Refresh)>,
+    ) -> Vec<Effect> {
+        let silent = opener
+            .as_ref()
+            .is_some_and(|(_, refresh)| *refresh == Refresh::Silent);
+        let opened_by = opener.map(|(command, _)| command);
+        if let Some(index) = self.lister_index(&view.plugin_id, &view.spec.id) {
+            let count = view.rows.len() as u64;
+            let Purpose::Plugin(wants) = &mut self.opens[index].purpose else {
+                return Vec::new();
+            };
+            let Wants::Lister { lister } = &mut **wants else {
+                return Vec::new();
+            };
+            lister.view = view;
+            lister.asking = false;
+            if opened_by.is_some() {
+                lister.opened_by = opened_by;
+            }
+            let lister = lister.clone();
+            if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.get_mut(index) {
+                let fresh = lister.list(Some(list));
+                *list = fresh;
+            }
+            if silent {
+                return vec![Effect::Redraw(Redraw::All)];
+            }
+            let line = lines::with_source(
+                &diroxide_core::format::count(count, "row", "rows"),
+                &lister.view.plugin,
+            );
+            return vec![Effect::Redraw(Redraw::All), self.say(Message::info(line))];
+        }
+        let mut lister = Lister::new(view);
+        lister.opened_by = opened_by;
         let list = lister.list(None);
         let count = lister.view.rows.len();
         let suffix = format!(" ({})", lister.view.plugin);
@@ -1721,11 +1859,24 @@ impl App {
         rows: Vec<diroxide_core::Entry>,
         refresh: bool,
     ) -> Vec<Effect> {
-        let open = self.opens.iter().any(|o| {
-            matches!(&o.purpose, Purpose::Plugin(w) if matches!(&**w, Wants::Lister { lister: l } if l.view.plugin_id == plugin && l.view.spec.id == lister))
-        });
-        if !open {
+        let Some(index) = self.lister_index(plugin, lister) else {
             return Vec::new();
+        };
+        // A refresh after one of the lister's own commands says nothing:
+        // the rows change in place, the focus and the marks kept.
+        if let Purpose::Plugin(wants) = &mut self.opens[index].purpose
+            && let Wants::Lister { lister: held } = &mut **wants
+            && refresh
+            && held.quiet_refresh
+        {
+            held.quiet_refresh = false;
+            held.take_rows(rows, true);
+            let held = (**held).clone();
+            if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.get_mut(index) {
+                let fresh = held.list(Some(list));
+                *list = fresh;
+            }
+            return vec![Effect::Redraw(Redraw::All)];
         }
         self.lister_change(|held| {
             let added = held.take_rows(rows, refresh);
@@ -1756,12 +1907,16 @@ impl App {
                 &lister.view.plugin,
             )))];
         };
-        self.lister_command(lister, &local)
+        self.lister_command(lister, &local, true)
     }
 
-    fn lister_command(&mut self, lister: &Lister, local: &str) -> Vec<Effect> {
+    /// Runs one of a lister's commands with its chosen rows; `needs_row`
+    /// is false for an action that takes no selection (New site in an
+    /// empty Sites list), which runs with the focused row when there is
+    /// one, and without one otherwise.
+    fn lister_command(&mut self, lister: &Lister, local: &str, needs_row: bool) -> Vec<Effect> {
         let rows = self.lister_rows(lister);
-        if rows.is_empty() {
+        if rows.is_empty() && needs_row {
             return vec![self.say(Message::status("No row is chosen"))];
         }
         let Ok(id) = CommandId::new(format!("{}.{local}", lister.view.plugin_id)) else {
@@ -1786,13 +1941,111 @@ impl App {
     }
 
     fn lister_action_key(&mut self, lister: &Lister, key: &Key) -> Option<Vec<Effect>> {
-        let local = lister.view.spec.actions.iter().find_map(|action| {
+        let (local, selection) = lister.view.spec.actions.iter().find_map(|action| {
             Key::parse(&action.key)
                 .ok()
                 .filter(|k| k == key)
-                .map(|_| action.command.clone())
+                .map(|_| (action.command.clone(), action.selection))
         })?;
-        Some(self.lister_command(lister, &local))
+        let needs_row = selection != diroxide_plugins::manifest::Selection::None;
+        Some(self.lister_command(lister, &local, needs_row))
+    }
+
+    /// Brings an open lister's rows up to date, asking its plugin for all
+    /// of them again (`lister/rows`); a plugin without that method has its
+    /// lister's opening command run again quietly instead
+    /// (`lister_no_rows`). `said` says the new count, for the
+    /// owner's reload; otherwise nothing is said. Nothing when the lister
+    /// is not open.
+    fn refresh_lister(&mut self, plugin: &str, lister: &str, said: bool) -> Vec<Effect> {
+        let Some(index) = self.lister_index(plugin, lister) else {
+            return Vec::new();
+        };
+        let Purpose::Plugin(wants) = &mut self.opens[index].purpose else {
+            return Vec::new();
+        };
+        let Wants::Lister { lister: held } = &mut **wants else {
+            return Vec::new();
+        };
+        held.quiet_refresh = !said;
+        let held = (**held).clone();
+        if said {
+            return self.ask_lister_rows(&held, true);
+        }
+        self.request(Request::Plugins(Box::new(PluginRequest::ListerRows {
+            plugin: plugin.to_owned(),
+            lister: lister.to_owned(),
+            offset: 0,
+            refresh: true,
+        })));
+        Vec::new()
+    }
+
+    /// The plugin has no `lister/rows`: its lister's opening command runs
+    /// again quietly, and its new rows replace the old in place, the focus
+    /// and the marks kept (the SFTP plugin's Sites list, after New site or
+    /// a lost connection).
+    fn lister_no_rows(&mut self, plugin: &str, lister: &str) -> Vec<Effect> {
+        let Some(index) = self.lister_index(plugin, lister) else {
+            return Vec::new();
+        };
+        let held = match &self.opens[index].purpose {
+            Purpose::Plugin(w) => match &**w {
+                Wants::Lister { lister } => (**lister).clone(),
+                _ => return Vec::new(),
+            },
+            _ => return Vec::new(),
+        };
+        // One refresh at a time: a run of the opener still going will
+        // bring the rows.
+        let opener_running = held.opened_by.as_ref().is_some_and(|command| {
+            self.plugins
+                .running
+                .values()
+                .any(|r| r.refresh != Refresh::No && &r.command == command)
+        });
+        if opener_running {
+            return Vec::new();
+        }
+        let entry = held
+            .opened_by
+            .as_ref()
+            .and_then(|command| self.plugins.catalog.any_command(command))
+            .map(|(_, entry)| entry.clone());
+        let Some(entry) = entry else {
+            let line = lines::with_source("These rows cannot be asked again", &held.view.plugin);
+            return vec![self.say(Message::info(line))];
+        };
+        let context = self.plugin_context();
+        let refresh = if held.quiet_refresh {
+            Refresh::Silent
+        } else {
+            Refresh::Said
+        };
+        self.start_plugin_run_with(&entry, context, None, false, refresh)
+    }
+
+    /// Brings every open lister of a plugin up to date (a lost
+    /// connection turns a site's row to "lost").
+    fn refresh_listers_of(&mut self, plugin: &str) -> Vec<Effect> {
+        let open: Vec<String> = self
+            .opens
+            .iter()
+            .filter_map(|o| match &o.purpose {
+                Purpose::Plugin(w) => match &**w {
+                    Wants::Lister { lister } if lister.view.plugin_id == plugin => {
+                        Some(lister.view.spec.id.clone())
+                    }
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        let mut effects = Vec::new();
+        for lister in open {
+            effects.extend(self.refresh_lister(plugin, &lister, false));
+        }
+        effects
     }
 
     // ---- Jobs and their ends ----
@@ -1882,8 +2135,17 @@ impl App {
             HostEvent::Said { message, .. } => vec![self.say(message)],
             HostEvent::IdleStopped { .. } => Vec::new(),
             // A lost device or session is said; a job on it ends by its
-            // own errors when the loss is final, never by this (R25).
-            HostEvent::ProviderLost { message, .. } => vec![self.say(message)],
+            // own errors when the loss is final, never by this (R25). The
+            // plugin's open listers and the Sites group follow, so a
+            // site's row says "lost" (lane A3).
+            HostEvent::ProviderLost {
+                plugin, message, ..
+            } => {
+                let mut effects = vec![self.say(message)];
+                effects.extend(self.refresh_listers_of(&plugin));
+                effects.extend(self.refresh_sites());
+                effects
+            }
         }
     }
 
@@ -1894,6 +2156,9 @@ impl App {
             return Vec::new();
         };
         let job = finished.job;
+        if running.refresh == Refresh::Devices {
+            return self.devices_finished(job, &running, finished);
+        }
         let mut said: Vec<Message> = Vec::new();
         let mut effects = vec![Effect::Redraw(Redraw::JobsLine)];
         let mut summary = lines::progress_done(&running.name, &running.source);
@@ -2016,6 +2281,15 @@ impl App {
                 effects.extend(extra);
             }
         }
+        // A lister's rows brought up to date say only a failure, and leave
+        // no row in the Jobs list when all went well.
+        if running.refresh != Refresh::No {
+            said.retain(|m| matches!(m.kind, MessageKind::Error | MessageKind::Warning));
+            if said.is_empty() {
+                self.jobs.finish(job);
+                return effects;
+            }
+        }
         self.jobs.finished(FinishedJob {
             job,
             kind: JobKind::PluginCommand,
@@ -2026,7 +2300,66 @@ impl App {
         for message in said {
             effects.push(self.say(message));
         }
+        // One of a lister's own commands ended (New site, Delete, Forget
+        // password): its rows are brought up to date, quietly.
+        if let Some((plugin, lister)) = &running.from_lister {
+            effects.extend(self.refresh_lister(plugin, lister, false));
+        }
+        // A volume action ended: an open Volumes list follows (lane A3).
+        effects.extend(self.volume_command_ended(&running.command));
         effects
+    }
+
+    /// Starts the Volume actions plugin's List devices for the Volumes
+    /// list, quietly; `None` when it cannot run here (no local place to
+    /// give it).
+    pub(super) fn start_devices_run(&mut self, id: &CommandId) -> Option<Vec<Effect>> {
+        let entry = self.plugins.catalog.any_command(id)?.1.clone();
+        let here = self.local_context_place()?;
+        let context = catalog::context_of(&here, &here, None, None, Vec::new());
+        Some(self.start_plugin_run_with(&entry, context, None, false, Refresh::Devices))
+    }
+
+    /// List devices ended: its output lines go to the Volumes list; a
+    /// failure is said, the plugin last, and the list comes without the
+    /// devices that are not mounted.
+    fn devices_finished(
+        &mut self,
+        job: JobId,
+        running: &Running,
+        finished: Finished,
+    ) -> Vec<Effect> {
+        self.jobs.finish(job);
+        let mut lines = running.output.clone();
+        let worked = match &finished.outcome {
+            Outcome::Script(report) => {
+                lines.extend(report.output.iter().cloned());
+                report.ending.is_done()
+            }
+            Outcome::Process(Ok(_)) => true,
+            _ => false,
+        };
+        let mut effects = vec![Effect::Redraw(Redraw::JobsLine)];
+        if !worked {
+            lines.clear();
+            let line = format!(
+                "Devices not listed: only mounted volumes are shown. By {}.",
+                running.source
+            );
+            effects.push(self.say(Message::warning(line)));
+        }
+        self.volume_devices_came(lines);
+        effects
+    }
+
+    /// Runs one of the Volume actions plugin's commands with its checks
+    /// and its consent, as any plugin command runs.
+    pub(super) fn run_volume_command(
+        &mut self,
+        id: &CommandId,
+        context: RunContext,
+    ) -> Vec<Effect> {
+        self.run_plugin_command(id, context, None, false)
     }
 
     /// A script's end: its verdict lines, its deferred moves applied, its

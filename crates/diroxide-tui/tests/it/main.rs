@@ -15,6 +15,8 @@ mod jobs;
 mod owners_check;
 // The owner's check of alpha.3 (W3a, plan commit 42).
 mod owners_check_alpha3;
+// Alpha 2's stage 3 screens (lane A3).
+mod stage3;
 // A plugin's dialogs (W4d).
 mod plugins;
 mod support;

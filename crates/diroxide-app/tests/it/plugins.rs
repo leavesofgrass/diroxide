@@ -179,7 +179,9 @@ fn serve(
                     );
                 }
             }
-            Some("lister/rows") => {
+            // Only the changes lister serves more rows; the others answer
+            // "no method", as the SFTP plugin's Sites list does (lane A3).
+            Some("lister/rows") if message["params"]["lister"] == "changes" => {
                 write(
                     &peer,
                     json!({"jsonrpc": "2.0", "id": id, "result": {"rows": [
@@ -1355,4 +1357,25 @@ fn an_enabled_plugins_provider_serves_a_panel() {
         "{said:?}"
     );
     assert_eq!(fs::read(w.work.join("a.txt")).unwrap(), b"alpha");
+}
+
+#[test]
+fn a_plugin_component_is_found_in_its_own_folder() {
+    // The SFTP places plugin unpacks to components/diro-sftp, a plugin
+    // folder of its own; a component folder with no manifest (the
+    // examples pack) is passed over (lane A3).
+    let dir = temp();
+    let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+    let folder = paths.components_dir().join("line-counter");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join(Manifest::FILE), MANIFEST).unwrap();
+    fs::create_dir_all(paths.components_dir().join("diro-examples")).unwrap();
+    let w = World {
+        work: fixture(dir.path()),
+        _dir: dir,
+        paths,
+    };
+    let mut s = session(&w, TestLauncher::with(&[]));
+    s.command(ids::PLUGINS);
+    assert_eq!(rows(&s), ["Line counter: not enabled, plugin 0.1.0"]);
 }

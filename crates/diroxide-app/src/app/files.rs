@@ -56,6 +56,8 @@ fn start_line(plan: &Plan) -> String {
         JobKind::Link => "Link",
         JobKind::SetAttributes => "Change permissions",
         JobKind::SetTimes => "Change times",
+        JobKind::Restore => "Restore",
+        JobKind::Purge => "Delete for good",
         _ => "Job",
     };
     let items = count(plan.entries(), "item", "items");
@@ -82,7 +84,9 @@ fn confirmation_lines(plan: &Plan) -> Vec<String> {
         lines.push(unusual);
     }
     for question in &plan.facts.questions {
-        lines.extend(question.lines());
+        // A remote volume is named by its host: "Not enough room on
+        // build:" (R25, 3.4).
+        lines.extend(crate::runtime::question_lines(question));
     }
     for (place, reason) in &plan.facts.left_out {
         lines.push(format!(
@@ -324,6 +328,13 @@ impl App {
         if let Some(home) = &self.home {
             push(home.to_string(), "home folder".to_owned());
         }
+        // The volumes the Volumes list read, each with a place (R25 3.6;
+        // lane A3): their rows say "Volume" first.
+        for volume in self.volume_rows() {
+            if let Some(place) = &volume.place {
+                push(place.to_string(), format!("volume {}", volume.words()));
+            }
+        }
         // The Sites group (R25 commit 78): each site its kind first, then
         // its state word, the plugin that offers it last.
         for site in &self.sites {
@@ -336,6 +347,13 @@ impl App {
         }
         for place in &self.places {
             push(place.place.to_string(), place.words.clone());
+        }
+        // The trash browser, from the go-to-place list (lane A3).
+        if !destinations {
+            push(
+                super::nav::TRASH_ROW.to_owned(),
+                "the trash browser".to_owned(),
+            );
         }
         let now = self.now().unix_seconds();
         for visit in self.visits.ranked(now).into_iter().take(50) {
@@ -726,6 +744,11 @@ impl App {
                     OpsError::Vfs(inner) if inner.sentence().is_some() => {
                         Message::error(inner.sentence().unwrap_or_default())
                     }
+                    // The trash's own sentences (lane A3): "The trash is
+                    // empty."; "The trash cannot be listed on this system."
+                    OpsError::NoTrashList | OpsError::TrashEmpty => {
+                        Message::info(error.sentence().unwrap_or_default())
+                    }
                     _ => Message::from_error(flow.kind.verb(), "", &error),
                 };
                 return vec![Effect::Redraw(Redraw::JobsLine), self.say(message)];
@@ -1077,6 +1100,9 @@ impl App {
         });
         let never_ran = self.jobs.waits(report.job);
         let closed = self.forget_job_questions(report.job);
+        // An open trash browser follows a restore or a delete for good
+        // (lane A3).
+        self.trash_job_ended(report.kind);
         self.jobs.finished(FinishedJob {
             job: report.job,
             kind: report.kind,

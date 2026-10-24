@@ -168,6 +168,18 @@ impl App {
         if let Some(effects) = self.jobs_key(&key) {
             return effects;
         }
+        // Space in the first-run components list (lane A3).
+        if let Some(effects) = self.components_key(&key) {
+            return effects;
+        }
+        // Space in the trash browser (lane A3).
+        if let Some(effects) = self.trash_key(&key) {
+            return effects;
+        }
+        // The reload key in the Volumes list (lane A3).
+        if let Some(effects) = self.volumes_key(&key) {
+            return effects;
+        }
         // The results lister's and the search dialog's own keys (W3a).
         if let Some(effects) = self.results_key(&key) {
             return effects;
@@ -341,6 +353,7 @@ impl App {
             Purpose::Plugin(wants) => effects.extend(self.plugin_escape(*wants)),
             Purpose::Component(wants) => effects.extend(self.component_escape(*wants)),
             Purpose::Jobs(wants) => effects.extend(self.jobs_escape(*wants)),
+            Purpose::Trash(wants) => effects.extend(self.trash_escape(*wants)),
             Purpose::RunPlan(plan) | Purpose::TypedPlan(plan, _) => {
                 let flow = self.flows.remove(&plan.job);
                 self.plugin_job_ended(flow.as_ref(), Err("the owner said no".to_owned()));
@@ -712,6 +725,8 @@ impl App {
             Purpose::Secret { ask } => self.secret_enter(ask),
             Purpose::Plugin(wants) => self.plugin_accept(*wants, row, text),
             Purpose::Jobs(wants) => self.jobs_accept(*wants, row, text),
+            Purpose::Trash(wants) => self.trash_accept(*wants, row),
+            Purpose::Volumes(wants) => self.volumes_accept(*wants, row),
             Purpose::Component(wants) => self.component_accept(*wants, row, text),
             Purpose::NewPassword { form, first } => {
                 let typed = match self.dialogs.last() {
@@ -801,12 +816,23 @@ impl App {
                 let Some(chosen) = chosen else {
                     return vec![self.say(Message::status("Type a place, or choose one."))];
                 };
+                // The Trash row opens the trash browser (lane A3).
+                if chosen == super::nav::TRASH_ROW {
+                    let mut effects = self.close_top();
+                    effects.extend(self.dispatch(&Command::new(ids::TRASH_BROWSER)));
+                    return effects;
+                }
                 match self.typed_place(side, &chosen) {
                     Ok(place) => {
                         self.remember(state::keys::PLACES, &text);
                         self.bookmark_chosen(&place);
                         let mut effects = self.close_top();
-                        effects.extend(self.open(side, place, None));
+                        // A site connects through its plugin, which opens
+                        // its start folders (lane A3).
+                        match self.connect_site(side, &place) {
+                            Some(connect) => effects.extend(connect),
+                            None => effects.extend(self.open(side, place, None)),
+                        }
                         effects
                     }
                     Err(message) => vec![self.say(message)],
@@ -1302,9 +1328,11 @@ impl App {
                     .filter(|c| terms_in_order(&text, &c.text) || terms_in_order(&text, &c.kind))
                     .collect();
                 let mut list = candidate_list("Places", &found);
-                // Bookmarks say their kind first (W3l); the other places
-                // their own name first (W3a).
+                // Bookmarks say their kind first (W3l), and sites (lane
+                // A3); the other places their own name first (W3a).
                 self.bookmark_rows_first(&mut list);
+                self.site_rows_first(&mut list);
+                self.volume_rows_first(&mut list);
                 self.place_rows_first(&mut list);
                 list
             }
@@ -1316,6 +1344,8 @@ impl App {
                     .collect();
                 let mut list = candidate_list("Destinations", &found);
                 self.bookmark_rows_first(&mut list);
+                self.site_rows_first(&mut list);
+                self.volume_rows_first(&mut list);
                 self.place_rows_first(&mut list);
                 list
             }
