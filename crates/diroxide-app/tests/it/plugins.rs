@@ -987,6 +987,7 @@ fn a_provider_loss_is_said_and_a_plugins_words_stay_its_own() {
         plugin: "line-counter".into(),
         authority: "memfs://box".into(),
         message: diroxide_core::Message::warning("Box unplugged (Line counter)"),
+        for_good: false,
     };
     let effects = s
         .app
