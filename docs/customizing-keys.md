@@ -34,6 +34,15 @@ The list's own rows come first: Choose a preset, Reset all keys and Single lette
 - "Compare files, no key". A command can be reached from the palette and the menus without a key.
 - When the terminal and the GUI differ: "Sort by size, Ctrl+F9 in a terminal, Ctrl+F6 in the GUI". With no terminal key: "Settings, no key in a terminal, Ctrl+Comma in the GUI".
 
+The commands of plugins you turned on come after the built-in ones, one row each, with the plugin's name last. The row says how the command got its key:
+
+- "Count lines, Ctrl+Alt+K, set in keymap.toml, by Line counter". A line of your own in `keymap.toml` gave it the key.
+- "Count lines, Ctrl+Alt+L, proposed, by Line counter". The plugin proposed the key, and it was free.
+- "Count lines, no key, Ctrl+Alt+L not bound: it already runs Copy, by Line counter". The proposed key was taken, and the row says why.
+- "Count lines, no key, not proposed, by Line counter". The plugin asked for no key.
+
+Enter on a plugin's row says where to change its key: in `keymap.toml`, under the command's id, such as `line-counter.count_lines`. The Keys list does not change a plugin's key itself yet. [Plugins](plugins.md) shows the lines to write. Typing a plugin's name, or part of a command's name, narrows the list to its rows.
+
 Typing narrows the list. A word matches command names. Text that reads as a key, such as `ctrl+f5`, matches the commands that have that key. The words "unbound", "changed", "preset" and "conflicts" show those rows. The first row and the count are said: "Copy path, no key. 4 matches". Nothing matching says "No command matches".
 
 Enter on a row opens its actions: Change key (press the new key), Change the GUI key (type its name), Add a second key, Remove a key, Reset this key (back to the preset) and Test keys. Remove a key, on a command with two keys, asks which.
@@ -128,6 +137,8 @@ You can still edit `keymap.toml` by hand. It is in the config folder ([Settings 
 
 Command ids such as `file.copy` are in parentheses in [every key](keyboard.md).
 
+A plugin's command goes in the same file by its own id, the plugin's id and the command's id with a dot between, such as `line-counter.count_lines`. Use the `global` table. [Plugins](plugins.md) has an example. The program reads such a line when the plugin is turned on, and it does not call the line an unknown command. `diro keys check` does not know plugin commands, so it does call it unknown.
+
 ## diro keys
 
 None of these opens the program.
@@ -169,6 +180,7 @@ The palette lists the command you used last first when the field is empty. After
 ## See also
 
 - [Every key](keyboard.md)
+- [Plugins](plugins.md)
 - [Terminals](terminals.md)
 - [Settings and where the files live](settings.md)
 - [The panels](panels.md)

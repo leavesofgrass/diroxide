@@ -69,6 +69,84 @@ Only your choice to turn it on, the pins on downloaded plugins, and, later, a sa
 
 While it runs, this plugin can do anything you can do.
 
+## Remote places over SSH
+
+[Remote places over SFTP](remote-places.md) is the guide to the SFTP places plugin. This is its security side, in plain words. The plugin is a plugin like any other: it runs with your rights, and the limits below are what it does on its own account. They are tested, and they are not a sandbox.
+
+### What the plugin trusts
+
+- The `ssh` program it finds by full path. It never starts a bare name, and never a program in the current folder.
+- The files `ssh` uses: your ssh configuration and the files it includes, your known hosts file, your key files and your agent. If those are hostile, the computer already is.
+- Its own folder in the state folder, where `sites.toml` lives, because only you can write there.
+- The system key store, to keep a secret and give it back to the same account.
+
+It does not trust any text from the server: prompts, banners, error text, file names and link targets. It does not trust the host in an address you type or paste, other accounts on this computer, or the network.
+
+### What the plugin never does
+
+- It never writes your known hosts file. Only ssh does, after your yes.
+- It never accepts a changed server key. There is no way to do it from diroxide, even if you ask in a dialog.
+- It never accepts a new server key without your typed yes, unless your own ssh configuration tells ssh to accept new keys by itself. That is your setting, and ssh then never asks.
+- It never puts a password on a command line, in an address, in a file, or in an environment variable meant for ssh. A password goes from your dialog to the plugin, from the plugin to the helper, and from the helper to ssh, and nowhere else.
+- It never logs a password. A test scans everything the plugin writes for the secrets the tests use.
+- It never starts ssh through a shell or as one command string. It uses an argument list, and the host comes after `--`, so a host cannot be read as an option.
+- It makes no network call of its own. Its only traffic is ssh's.
+- It asks ssh for no terminal, no remote command, no port forwarding, no agent forwarding and no X11 forwarding.
+
+### How the password helper proves itself
+
+ssh asks for a password, a passphrase or a host key decision by starting a helper program. The helper is the plugin's own program, started in a second mode. The danger is a program that poses as the helper, or as ssh, to ask the plugin for a password, or one that grabs the helper's place to hear it.
+
+- For each connection the plugin makes a random token and a private endpoint. On Linux and macOS the endpoint is a socket that only your account can reach. On Windows it is a named pipe that only your account can open, that refuses other computers, and that is made as the first of its name so no other program can take its place.
+- The token never crosses the endpoint. The helper proves it knows the token by sending a keyed hash over the token, a random number from each side and the prompt. The plugin checks the proof, and the helper checks the plugin's proof in turn. Three wrong proofs close the endpoint.
+- This stops other accounts, helper calls that are left over, and any program that does not know the token. It does not stop another program running as you: that program could read the plugin's memory or its environment anyway, as a plugin you turned on could.
+- The helper writes nothing to its standard error, which ssh may show.
+- The plugin decides what each question is. ssh's own password question, a key's passphrase, a host key question and everything else are told apart. A server's own question is shown under the plugin's title, with the server's words cleaned, cut to 300 characters and put last, so a server cannot pass for diroxide.
+
+Doctor's "Endpoint:" line says which kind of endpoint is in use, and "Helper: works." says the whole road works, with a test question and no network.
+
+### A changed server key is refused
+
+If the key a server shows is not the one your known hosts file holds, ssh refuses before it signs in, and the plugin says so and stops. You hear that the host key changed, that the server may be fake or rebuilt, that you should ask its owner first, and that diroxide never edits known_hosts. The last line is the `ssh-keygen -R` command that forgets the old key. diroxide shows it and never runs it.
+
+If your own ssh configuration turns host key checking off, the plugin asks ssh to ask instead. A changed key must never pass quietly.
+
+### Saved passwords and the jump-host rule
+
+- No password is ever in a file the plugin writes. A sites file in which a table holds a password, a passphrase or a token is refused whole.
+- The keyring is opt-in for each site, and never the default. The question comes only after a successful sign-in, and starts on No.
+- A saved password is given to ssh at most once for each connection, and only for ssh's own password question for the account and host of that connection. If ssh asks again, the password was refused, and it is forgotten.
+- Through a jump host or a proxy command, nothing is filled in and nothing is remembered. A host on the road could word its question like ssh's own, and it must not learn the password of the server behind it. From OpenSSH 8.4, ssh also puts the account in front of every keyboard-interactive question, so such a question cannot pass for a password prompt.
+- Key passphrases are never saved.
+- Windows Credential Manager entries can be read by other programs that run as you, and they are limited in size. [Privacy](privacy.md) says where each mode keeps a password.
+
+### Hostile names and text
+
+- A host, an alias or a user name that starts with a dash, or holds a space, a control character or an odd symbol, is refused before ssh starts. Ports are numbers.
+- A name from the server that holds a slash or a NUL, or is `.` or `..`, is dropped and counted: "2 names skipped: unsafe." A name that is not valid UTF-8 is kept as the server sent it.
+- The SFTP codec checks every length before it makes room, and it has a fuzz target that tries bad packets.
+- ssh's error text is cleaned and cut before it is shown. Patterns in it decide which sentence you hear; the server's words are never the sentence, and come last after "ssh said:".
+- `Match exec` and `ProxyCommand` in your ssh configuration run your own programs. They are your choice, not diroxide's.
+
+### What a job does over SFTP
+
+- Delete is permanent. SFTP has no trash, so the delete lists every item first, deepest first, and asks, starting on No.
+- A move to or from a server reads the copy back and compares it before the original goes, as it does between drives. Nothing is destroyed until the replacement is verified.
+- A copy is written under a temporary name and renamed when complete. A cancelled copy removes its part file.
+- Resume is strict. A part file is used only when the source's size and time are what they were, the part file is not longer than the source, and its first 64 KiB and last 1 MiB equal the same parts of the source. Anything else starts again and says why. A move that resumed reads the source's first part again before it removes anything.
+- A lost connection is one question for all the jobs on that server, not one for each, and "Keep waiting" is the first answer. [The transfer queue](transfer-queue.md) has the rest.
+
+## Hooks
+
+A hook lets a plugin you turned on be asked before a copy, a move, a delete, a rename or a new folder, and be told afterward. [Hooks](hooks.md) is the guide.
+
+- A before hook can only stop a job. It cannot change the plan, the destination or the items.
+- A stop is said with the reason first and the plugin's name last: "Delete stopped: folder is protected. By Folder guard." It is never wrapped in a sentence of diroxide's own, such as "Could not delete".
+- A hook that does not answer is never a quiet veto and never a quiet pass. The manifest says whether silence lets the job go on or stops it, and diroxide says which happened.
+- A before hook runs on a thread of its own, with a time limit, so a slow hook cannot freeze the panels.
+- A plugin with a hook is told the paths of the jobs it hooks, and the folder you enter and the selection, for navigation hooks. [Privacy](privacy.md) says so.
+- A hook is not a lock. A plugin that is turned on can do anything you can do, and an example such as Folder guard protects you from your own slips, not from a program that means harm.
+
 ## Optional components
 
 - Integrity is the pins: size and SHA-256 from the list that is part of each build. The transport is for privacy and does not vouch for a file. A file that does not match is refused and removed, whoever served it.
@@ -80,7 +158,7 @@ While it runs, this plugin can do anything you can do.
 
 ## How to stay safe
 
-- Turn on only plugins you wrote, read or trust. The nine examples are small on purpose, so you can read them.
+- Turn on only plugins you wrote, read or trust. The examples are small on purpose, so you can read them.
 - Read the question. The last two groups of rows tell you what the plugin asks for and what it promises. A plugin that asks to read and change files and says "no network" is a different bargain from one that says nothing.
 - Say no when a plugin asks again after you did not change it. "Changed since you enabled it" means its manifest or its program is different from what you read.
 - Run an unfamiliar plugin once with `diro plugin run` before you turn it on, and read its log.
@@ -95,6 +173,9 @@ If you find a way for a plugin to get past a limit on this page, such as an anno
 - [Writing a plugin](writing-a-plugin.md)
 - [Script commands](script-commands.md)
 - [Optional components](components.md)
+- [Remote places over SFTP](remote-places.md)
+- [Hooks](hooks.md)
+- [The transfer queue](transfer-queue.md)
 - [Privacy](privacy.md)
 - [Known limits](known-limits.md)
 - [The plugin protocol decision](adr/0006-the-plugin-protocol.md)

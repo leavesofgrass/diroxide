@@ -4,7 +4,7 @@ diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, key
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, files and archives, finding things, plugins, scripts and optional components, keys, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, remote places and the queue, files and archives, finding things, plugins, hooks, scripts and optional components, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -14,8 +14,8 @@ If you are new, begin with the [quick start](quickstart.md).
 
 - [Quick start](quickstart.md): from a built program to copying, renaming and deleting a file, in ten minutes.
 - [Known limits](known-limits.md): what does not work yet, and what has not been tested.
-- [Privacy](privacy.md): what stays on your computer, what plugins can see, and the one time diroxide uses the network, which is a download that asks first.
-- [Security](security.md): what a plugin, a script and a downloaded component can and cannot do, and what diroxide checks.
+- [Privacy](privacy.md): what stays on your computer, what plugins can see, where the secrets of remote places live, and when diroxide uses the network: a download that asks first, and the servers you open.
+- [Security](security.md): what a plugin, a script and a downloaded component can and cannot do, what the SFTP places plugin trusts and never does, and what diroxide checks.
 - [Accessibility statement](accessibility.md): what diroxide promises, how it is checked, and what has and has not been heard.
 - [What is new](whats-new.md): what each alpha added, in plain words. [The changelog](../CHANGELOG.md) has the full list.
 
@@ -32,7 +32,12 @@ If you are new, begin with the [quick start](quickstart.md).
 ### Using the panels
 
 - [The panels](panels.md): the three layouts, what a row says, moving, going to a path or a place, path jump, sorting, filtering and marking rows.
-- [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo.
+- [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo. [The transfer queue](transfer-queue.md) goes further into jobs.
+
+### Remote places and the queue
+
+- [Remote places over SFTP](remote-places.md): what you need, `diro-sftp doctor`, opening a place, the new server key and password questions, a changed key, saved sites, the three ways to keep a password, working in a remote folder, and what goes wrong.
+- [The transfer queue](transfer-queue.md): the Jobs list, waiting your turn, a server that stops answering, retries and the error policy, resume, the speed limit, and quitting with jobs unfinished.
 
 ### Archives, files and previews
 
@@ -51,7 +56,8 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Plugins, scripts and optional components
 
-- [Plugins](plugins.md): what a plugin is, the three kinds, turning one on and what the question says, managing them, what you hear when one runs, the nine examples, and `diro plugin`.
+- [Plugins](plugins.md): what a plugin is, the three kinds, turning one on and what the question says, managing them, what you hear when one runs, the keys a plugin's commands get, the ten examples, and `diro plugin`.
+- [Hooks](hooks.md): a plugin asked before a copy, move, delete, rename or new folder, and told afterward; what a stop says; the Folder guard example.
 - [Script commands](script-commands.md): a command from one file in bash, Python or PowerShell: the header, what the script is given, directives, output modes, exit codes, which program runs it on each system, and `--explain`.
 - [Writing a plugin](writing-a-plugin.md): `diro plugin new`, the manifest, the protocol in a page, the services diroxide offers, lists of rows that are not files, places, previewers and converters, and the conformance checks.
 - [Optional components](components.md): helper programs, plugins and data packs fetched only after you say yes, checked before use, installed from a file with no network, and removed by a list. Includes `diro components`.
@@ -66,10 +72,10 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Coming in later alphas
 
-These guides are not written yet, because the features they describe are not in alpha 1. Each arrives with the alpha that ships its feature.
+These guides are not written yet, because the features they describe are not built. Each arrives with the alpha that ships its feature.
 
-- SSH and remote places.
 - The GUI.
+- The volumes list, the trash browser and free space in the status.
 - Tools and conversions, previews of more kinds of document, and git.
 - Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, disk images and GitHub.
 

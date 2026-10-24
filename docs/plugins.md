@@ -1,6 +1,6 @@
 # Plugins
 
-This guide covers plugins: what they are, the three kinds, how you turn one on and what the question says, how to manage them, what you hear when one runs, the nine examples that come with diroxide, and what a plugin can still do after you say yes.
+This guide covers plugins: what they are, the three kinds, how you turn one on and what the question says, how to manage them, what you hear when one runs, the keys a plugin's commands get, the ten examples that come with diroxide, and what a plugin can still do after you say yes.
 
 If you want to make one, [writing a plugin](writing-a-plugin.md) and [script commands](script-commands.md) are the guides for that. [Optional components](components.md) says how a plugin can come to your computer.
 
@@ -25,9 +25,9 @@ A plugin adds something diroxide does not do by itself. It can add a command, a 
 
 - Commands. They show in the Plugins menu and the command palette, and `menus.toml` and `banks.toml` may name them. A command that cannot run now is shown disabled with its reason, for example "Search with Everything, disabled" and "Needs es, not found."
 - Lists of rows that are not files, such as the changed files of a git folder. A row says its meaning first. Enter runs the plugin's own command for the row. A file command on such a row, for example F5, says "This row is not a file."
-- Places. A plugin can serve a file system at a name of its own, such as `memfs:/` in the toy example. Copy, view, rename and delete then work there as in any place, with the same plan, the same confirmation and the same Undo as anywhere else.
+- Places. A plugin can serve a file system at a name of its own, such as `memfs:/` in the toy example, or `sftp://` for the SFTP places plugin. Copy, view, rename and delete then work there as in any place, with the same plan and the same confirmation as anywhere else. [Remote places over SFTP](remote-places.md) is the plugin that reaches other computers.
 - Previewers and converters. Today you run them from a shell with `diro plugin preview` and `diro plugin convert`. The preview region and the conversions dialog come with a later alpha.
-- Hooks. A manifest may declare them and `diro plugin check` reads them, but diroxide does not run them yet.
+- Hooks. A plugin can be asked before a copy, a move, a delete, a rename or a new folder, and stop it with a reason. It can be told afterward, and told when you enter a folder. [Hooks](hooks.md) has the events, the lines you hear and the Folder guard example.
 
 ## Where plugins live
 
@@ -235,6 +235,57 @@ A plugin can open a list of rows that are not files, such as the changed files o
 
 Today a list always opens over the panels, whichever panel the plugin names.
 
+### The Sites list
+
+The SFTP places plugin opens a list of this kind: your saved sites and the hosts from your ssh configuration. It is in the Plugins menu as SFTP sites once the plugin is turned on. Its title gives the counts first, "Sites, 3 saved, 5 from ssh config", and each row starts with the name and the state: "build, saved, alice@build.example" and "nas, from ssh config". Escape closes it.
+
+Enter connects to the site. The plugin's other action keys act on the row you are on:
+
+- Alt+N: new site. On a host from your ssh configuration it saves that host.
+- Alt+E: edit the site.
+- Alt+D: delete the site. The question starts on No.
+- Alt+X: disconnect.
+- Alt+C: cancel the connection, even in the middle of a transfer.
+- Alt+F: forget the site's saved password.
+
+These keys work while the list is open. [Remote places over SFTP](remote-places.md) says what each one does.
+
+### Keys for a plugin's commands
+
+A plugin's command has an id: its plugin's id, a dot, and its own id, such as `line-counter.count_lines` or `sftp.new_site`. A manifest may propose a key for a command. The proposal binds only when the key is free and has no concern. Otherwise the command has no key, and Manage plugins, on the plugin's Commands and keys row, says why.
+
+You decide the keys, not the plugin. A line in `keymap.toml` for a plugin's command wins over the proposal. Plugin commands go in the global layer, in the terminal's table and in the GUI's:
+
+```toml
+[terminal.global]
+"line-counter.count_lines" = "ctrl+alt+k"
+
+[gui.global]
+"line-counter.count_lines" = "ctrl+alt+k"
+```
+
+- The word `none` unbinds the command.
+- A line for a plugin that is not turned on is not an error. It waits in the file and binds when the plugin is found.
+- If another command already holds the key, the line takes it, as any line of the file does.
+- `diro keys check` does not know plugin commands. It says "Unknown command" for such a line. The program does not.
+
+The Keys list has a row for each command of each plugin that is turned on. The command's name comes first, then its keys, then how it got them, and the plugin's name last:
+
+```text
+Count lines, Ctrl+Alt+K, set in keymap.toml, by Line counter
+Count lines, Ctrl+Alt+L, proposed, by Line counter
+Count lines, no key, Ctrl+Alt+L not bound: it already runs Copy, by Line counter
+Count lines, no key, not proposed, by Line counter
+```
+
+Enter on such a row says how to change its key:
+
+```text
+Count lines: change its key in keymap.toml under "line-counter.count_lines". By Line counter.
+```
+
+The Keys list cannot change a plugin's key itself yet. [Customizing keys](customizing-keys.md) describes the list.
+
 ### Settings
 
 The Settings list has a row, "Plugin settings", with the words "each plugin's own, under its name". Enter on it lists the plugins that have settings: "Line counter, not enabled, 1 setting". Enter on one opens "Settings of Line counter", one row for each setting: "Skip blank, off". Enter flips a switch, or opens the choices, or opens a field to type in. The help key (F1) says what the setting does, what it holds and its default. A change reaches the plugin at once and is said: "Skip blank: on (Line counter)". The same list opens from Manage plugins, on a plugin's Settings row.
@@ -283,7 +334,7 @@ A missing program, a wrong number of marked items and a name that a script canno
 
 ## The example plugins
 
-Nine examples come with diroxide, in the `examples/plugins` folder of the source and in the optional component "Example plugins" (id `diro-examples`). Each is small on purpose, and [writing a plugin](writing-a-plugin.md) takes them one at a time.
+Ten examples come with diroxide, in the `examples/plugins` folder of the source and in the optional component "Example plugins" (id `diro-examples`). Each is small on purpose, and [writing a plugin](writing-a-plugin.md) takes them one at a time.
 
 - Total size of selection: a bash script. Says how many items are selected and how big they are.
 - Select empty folders: a bash script. Marks the empty folders of the active panel.
@@ -294,6 +345,7 @@ Nine examples come with diroxide, in the `examples/plugins` folder of the source
 - Memory files (toy): a Python plugin. A file system that lives in memory until diroxide quits.
 - PDF first page, as text: a previewer with no code. Needs `pdftotext`.
 - Markdown to Word: a converter with no code. Needs `pandoc`.
+- Folder guard: a Python plugin with two hooks. Stops a delete inside the folders you protect, and logs every delete. [Hooks](hooks.md) walks through it.
 
 To get them, ask for the component. It names the size and license and asks first:
 
@@ -320,6 +372,8 @@ diroxide limits what a plugin may ask of it, and checks those limits. It cannot 
 
 - [Writing a plugin](writing-a-plugin.md)
 - [Script commands](script-commands.md)
+- [Hooks](hooks.md)
+- [Remote places over SFTP](remote-places.md)
 - [Optional components](components.md)
 - [Security](security.md)
 - [Privacy](privacy.md)
