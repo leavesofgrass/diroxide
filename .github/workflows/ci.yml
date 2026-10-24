@@ -51,6 +51,15 @@ jobs:
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --all-features
+      # The SFTP plugin from its own workspace, on the Windows and macOS legs
+      # (the Linux leg runs it in the container below, against OpenSSH):
+      # the release builds it for each computer, and no other job compiles
+      # it there. --locked, as the release does.
+      - name: SFTP plugin, clippy and tests from its own workspace
+        if: runner.os != 'Linux'
+        run: |
+          cargo clippy --manifest-path plugins/diro-sftp/Cargo.toml --all-targets --all-features --locked -- -D warnings
+          cargo nextest run --manifest-path plugins/diro-sftp/Cargo.toml --all-features --locked
       # The SFTP plugin against a real OpenSSH server (answer 99), on the
       # Linux leg only: in the development image, which holds Debian's
       # openssh-server. The tests start and stop their own sshd on a
