@@ -314,6 +314,20 @@ pub enum Request {
         /// The place it shows.
         place: Place,
     },
+    /// The Volumes list's rows (lane A3, R25 commit 88): the local
+    /// drives and mounts, the plugins' storages and these device lines of
+    /// the Volume actions plugin, the hidden ones left out; answered with
+    /// [`AppEvent::VolumesListed`](crate::AppEvent::VolumesListed), then a
+    /// [`AppEvent::VolumeAnswered`](crate::AppEvent::VolumeAnswered) for
+    /// each row's free space as it comes.
+    Volumes {
+        /// The listing, so answers for an older one are dropped.
+        generation: u64,
+        /// The keys the Hide action keeps.
+        hidden: Vec<String>,
+        /// The List devices command's lines, one JSON object each.
+        devices: Vec<String>,
+    },
     /// List the system trash, newest first, for the trash browser (lane
     /// A3, R25 commit 89); answered with
     /// [`AppEvent::TrashListed`](crate::AppEvent::TrashListed).

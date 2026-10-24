@@ -98,6 +98,9 @@ enum Refresh {
     Silent,
     /// The owner's reload: only the new count is said.
     Said,
+    /// The Volume actions plugin's List devices, for the Volumes list:
+    /// its output is the devices, and nothing else is said but a failure.
+    Devices,
 }
 
 /// What the app keeps for plugins.
@@ -2153,6 +2156,9 @@ impl App {
             return Vec::new();
         };
         let job = finished.job;
+        if running.refresh == Refresh::Devices {
+            return self.devices_finished(job, &running, finished);
+        }
         let mut said: Vec<Message> = Vec::new();
         let mut effects = vec![Effect::Redraw(Redraw::JobsLine)];
         let mut summary = lines::progress_done(&running.name, &running.source);
@@ -2299,7 +2305,61 @@ impl App {
         if let Some((plugin, lister)) = &running.from_lister {
             effects.extend(self.refresh_lister(plugin, lister, false));
         }
+        // A volume action ended: an open Volumes list follows (lane A3).
+        effects.extend(self.volume_command_ended(&running.command));
         effects
+    }
+
+    /// Starts the Volume actions plugin's List devices for the Volumes
+    /// list, quietly; `None` when it cannot run here (no local place to
+    /// give it).
+    pub(super) fn start_devices_run(&mut self, id: &CommandId) -> Option<Vec<Effect>> {
+        let entry = self.plugins.catalog.any_command(id)?.1.clone();
+        let here = self.local_context_place()?;
+        let context = catalog::context_of(&here, &here, None, None, Vec::new());
+        Some(self.start_plugin_run_with(&entry, context, None, false, Refresh::Devices))
+    }
+
+    /// List devices ended: its output lines go to the Volumes list; a
+    /// failure is said, the plugin last, and the list comes without the
+    /// devices that are not mounted.
+    fn devices_finished(
+        &mut self,
+        job: JobId,
+        running: &Running,
+        finished: Finished,
+    ) -> Vec<Effect> {
+        self.jobs.finish(job);
+        let mut lines = running.output.clone();
+        let worked = match &finished.outcome {
+            Outcome::Script(report) => {
+                lines.extend(report.output.iter().cloned());
+                report.ending.is_done()
+            }
+            Outcome::Process(Ok(_)) => true,
+            _ => false,
+        };
+        let mut effects = vec![Effect::Redraw(Redraw::JobsLine)];
+        if !worked {
+            lines.clear();
+            let line = format!(
+                "Devices not listed: only mounted volumes are shown. By {}.",
+                running.source
+            );
+            effects.push(self.say(Message::warning(line)));
+        }
+        self.volume_devices_came(lines);
+        effects
+    }
+
+    /// Runs one of the Volume actions plugin's commands with its checks
+    /// and its consent, as any plugin command runs.
+    pub(super) fn run_volume_command(
+        &mut self,
+        id: &CommandId,
+        context: RunContext,
+    ) -> Vec<Effect> {
+        self.run_plugin_command(id, context, None, false)
     }
 
     /// A script's end: its verdict lines, its deferred moves applied, its

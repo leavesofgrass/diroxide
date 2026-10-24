@@ -1053,6 +1053,36 @@ pub(super) fn sites_of(sources: &[SiteSource]) -> Vec<crate::app::SiteRow> {
     rows
 }
 
+/// The storages of the plugins' connected places (`provider/volumes`),
+/// for the Volumes list: one row a storage; asking never signs in, and a
+/// place not connected is not asked (lane A3, R25 commit 88).
+pub(super) fn remote_volumes(sources: &[SiteSource]) -> Vec<diroxide_vfs::RemoteVolume> {
+    let ctx = diroxide_vfs::OpContext::new();
+    let mut volumes = Vec::new();
+    for (host, plugin, scheme, _) in sources {
+        let Some(provider) = PluginProvider::new(host, plugin, scheme) else {
+            continue;
+        };
+        let Ok(places) = provider.places(&ctx) else {
+            continue;
+        };
+        for place in places.rows.iter().filter(|row| row.state == "connected") {
+            let Ok(rows) = provider.volumes(&place.place, &ctx) else {
+                continue;
+            };
+            volumes.extend(rows.into_iter().map(|row| diroxide_vfs::RemoteVolume {
+                name: row.name,
+                scheme: scheme.clone(),
+                place: row.place,
+                free: row.free,
+                total: row.total,
+                removable: row.removable,
+            }));
+        }
+    }
+    volumes
+}
+
 /// Forwards a host's events to the app every tenth of a second while it
 /// lives.
 fn pump(host: &Arc<Host>, shared: &Arc<Shared>) -> std::io::Result<JoinHandle<()>> {

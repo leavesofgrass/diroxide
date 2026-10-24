@@ -176,6 +176,10 @@ impl App {
         if let Some(effects) = self.trash_key(&key) {
             return effects;
         }
+        // The reload key in the Volumes list (lane A3).
+        if let Some(effects) = self.volumes_key(&key) {
+            return effects;
+        }
         // The results lister's and the search dialog's own keys (W3a).
         if let Some(effects) = self.results_key(&key) {
             return effects;
@@ -722,6 +726,7 @@ impl App {
             Purpose::Plugin(wants) => self.plugin_accept(*wants, row, text),
             Purpose::Jobs(wants) => self.jobs_accept(*wants, row, text),
             Purpose::Trash(wants) => self.trash_accept(*wants, row),
+            Purpose::Volumes(wants) => self.volumes_accept(*wants, row),
             Purpose::Component(wants) => self.component_accept(*wants, row, text),
             Purpose::NewPassword { form, first } => {
                 let typed = match self.dialogs.last() {

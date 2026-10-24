@@ -53,6 +53,8 @@ mod trash;
 mod streaming;
 mod viewer;
 mod views;
+// The Volumes list (lane A3).
+mod volumes;
 // Watch this folder (W3t).
 mod watching;
 

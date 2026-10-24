@@ -50,6 +50,8 @@ mod select;
 mod selecting;
 mod split_join;
 mod viewing;
+// The Volumes list (lane A3).
+mod volumes_ui;
 // Watch this folder (W3t).
 mod watching;
 
@@ -417,6 +419,23 @@ pub enum AppEvent {
         /// The line, meaning first.
         line: String,
     },
+    /// The Volumes list's rows, in order (lane A3, R25 commit 88).
+    VolumesListed {
+        /// The listing they answer.
+        generation: u64,
+        /// The rows, each its state first.
+        rows: Vec<diroxide_vfs::VolumeRow>,
+    },
+    /// One volume's free space and label, as it answered within the
+    /// limit or did not (lane A3).
+    VolumeAnswered {
+        /// The listing it answers.
+        generation: u64,
+        /// The row's index in that listing.
+        index: usize,
+        /// The answer.
+        answer: diroxide_vfs::VolumeAnswer,
+    },
     /// The system trash was listed for the trash browser, newest first,
     /// or could not be, in a sentence ("The trash cannot be listed on
     /// this system.") (lane A3, R25 commit 89).
@@ -667,6 +686,8 @@ enum Purpose {
     Jobs(Box<jobs_ui::Wants>),
     /// The trash browser and its actions (lane A3).
     Trash(Box<trash_ui::Wants>),
+    /// The Volumes list and a row's actions (lane A3).
+    Volumes(Box<volumes_ui::Wants>),
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -830,6 +851,8 @@ pub struct App {
     rooms: [Option<(Place, Option<diroxide_vfs::SpaceInfo>)>; 2],
     /// The trash browser's items (lane A3).
     trash: trash_ui::TrashState,
+    /// The Volumes list's rows (lane A3).
+    volumes: volumes_ui::VolumesState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1154,6 +1177,7 @@ impl App {
             sites: Vec::new(),
             rooms: [None, None],
             trash: trash_ui::TrashState::default(),
+            volumes: volumes_ui::VolumesState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1654,6 +1678,12 @@ impl App {
                 }
             }
             AppEvent::TrashListed(result) => self.trash_listed(result),
+            AppEvent::VolumesListed { generation, rows } => self.volumes_listed(generation, rows),
+            AppEvent::VolumeAnswered {
+                generation,
+                index,
+                answer,
+            } => self.volume_answered(generation, index, answer),
             AppEvent::Room { side, place, space } => {
                 if self.panel(side).place() == &place {
                     self.rooms[side.index()] = Some((place, space));
@@ -1733,6 +1763,10 @@ impl App {
         }
         // The trash browser (lane A3).
         if let Some(effects) = self.trash_dispatch(command) {
+            return effects;
+        }
+        // The Volumes list (lane A3).
+        if let Some(effects) = self.volumes_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

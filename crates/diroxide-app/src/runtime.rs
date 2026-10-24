@@ -500,6 +500,10 @@ pub struct Runtime {
     /// The trash the engine lists, restores from and purges: the system's
     /// in the program, a test-only bin in tests (lane A3, R25 commit 89).
     trash: Arc<dyn diroxide_vfs::TrashBin>,
+    /// The local volumes the Volumes list shows instead of this
+    /// computer's, for tests that never list the owner's drives (lane
+    /// A3).
+    local_volumes: Option<Vec<diroxide_vfs::LocalPlace>>,
 }
 
 impl fmt::Debug for Runtime {
@@ -587,7 +591,16 @@ impl Runtime {
             listings: Arc::new(Mutex::new(HashMap::new())),
             space_limit: space::SPACE_LIMIT,
             trash,
+            local_volumes: None,
         }
+    }
+
+    /// The same runtime listing these local volumes in the Volumes list
+    /// instead of this computer's drives and mounts: tests give places in
+    /// their own folder, so the owner's drives are never asked.
+    pub fn with_local_volumes(mut self, places: Vec<diroxide_vfs::LocalPlace>) -> Self {
+        self.local_volumes = Some(places);
+        self
     }
 
     /// The same runtime with another trash for the trash browser and its
@@ -1117,6 +1130,42 @@ impl Runtime {
                 }
             }
             Request::Watch { side, place } => self.watch(side, place),
+            // The Volumes list (lane A3, R25 commit 88): the rows from
+            // their three sources, then each row's free space as it
+            // answers, within the limit, off the input thread.
+            Request::Volumes {
+                generation,
+                hidden,
+                devices,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                let sources = self.plugins.site_sources();
+                let local = self.local_volumes.clone();
+                self.worker(move |shared| {
+                    let (devices, _) =
+                        diroxide_vfs::DeviceReport::parse_lines(devices.iter().map(String::as_str));
+                    let sources = diroxide_vfs::VolumeSources {
+                        local: local.unwrap_or_else(diroxide_vfs::local_places),
+                        remote: plugins::remote_volumes(&sources),
+                        devices,
+                    };
+                    let rows = diroxide_vfs::volume_rows(&sources, &hidden);
+                    let requests =
+                        diroxide_vfs::space_requests(&rows, |place| registry.resolve(place).ok());
+                    shared.send(AppEvent::VolumesListed { generation, rows });
+                    diroxide_vfs::ask_spaces(
+                        requests,
+                        diroxide_vfs::SPACE_LIMIT,
+                        &mut |index, answer| {
+                            shared.send(AppEvent::VolumeAnswered {
+                                generation,
+                                index,
+                                answer,
+                            });
+                        },
+                    );
+                });
+            }
             // The trash browser (lane A3, R25 commit 89): its listing and
             // its plans run off the input thread, through the engine's
             // trash.

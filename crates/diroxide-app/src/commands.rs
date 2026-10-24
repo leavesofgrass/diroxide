@@ -542,6 +542,9 @@ pub mod ids {
         TRASH_BROWSER = "go.trash";
         /// Empty the trash: every item deleted for good, listed first.
         TRASH_EMPTY = "trash.empty";
+        /// The Volumes list: drives, mounts, connected storages and
+        /// devices, each its state first, with their actions.
+        VOLUMES = "go.volumes";
     }
 
     // The arrival tracker's command (W3t, plan commit 34).
@@ -657,7 +660,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 225] = [
+pub static CATALOG: [CommandInfo; 226] = [
     command(
         ids::QUIT,
         "Quit",
@@ -798,6 +801,14 @@ pub static CATALOG: [CommandInfo; 225] = [
         ids::JOB_HISTORY,
         "Job history",
         "Opens the Jobs list at the jobs that ran, with what failed in each and why.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VOLUMES,
+        "Volumes",
+        "Lists the drives, mounts, connected storages and devices, each its state first: Open, Mount, Unmount, Eject, Hide.",
         Global,
         &[],
         &[],
