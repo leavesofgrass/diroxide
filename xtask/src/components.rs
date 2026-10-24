@@ -198,6 +198,9 @@ fn inner_name(into: &str, rel: &str) -> String {
     }
 }
 
+/// One member of a pack: its path in the zip and its bytes.
+type Member = (String, Vec<u8>);
+
 /// The members of one file's pack, read from the repository and the
 /// assets folder; `None` when an asset it needs is not given, so the file
 /// is left out (with a line in `notes`).
@@ -207,7 +210,7 @@ fn pack_members(
     id: &str,
     file: &FileDefinition,
     notes: &mut Vec<String>,
-) -> Result<Option<Vec<(String, Vec<u8>)>>> {
+) -> Result<Option<Vec<Member>>> {
     let mut members = Vec::new();
     for part in &file.pack {
         match (&part.from, &part.asset) {

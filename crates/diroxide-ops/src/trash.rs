@@ -5,7 +5,7 @@
 //! and asks for the typed count over 1,000 items, as every permanent
 //! delete does.
 //!
-//! The engine reaches the trash through its [`TrashBin`]
+//! The engine reaches the trash through its [`TrashBin`](diroxide_vfs::TrashBin)
 //! ([`Engine::with_trash`]): the local provider's system trash in the app,
 //! a test-only bin in the tests. A plan holds the items as the trash
 //! listed them, so a run acts on exactly the rows the owner chose, even

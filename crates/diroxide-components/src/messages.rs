@@ -161,8 +161,8 @@ pub fn no_build(component: &Component) -> Vec<String> {
 }
 
 /// The line that builds a plugin of this repository from source:
-/// "cargo install --locked --git https://github.com/OWNER/diroxide
-/// diro-sftp", the address from the workspace's metadata.
+/// `cargo install --locked --git REPOSITORY diro-sftp`, the repository's
+/// address from the workspace's metadata.
 pub fn cargo_install_line(crate_name: &str) -> String {
     let repository = env!("CARGO_PKG_REPOSITORY").trim_end_matches('/');
     format!("cargo install --locked --git {repository} {crate_name}")
