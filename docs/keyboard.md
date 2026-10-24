@@ -250,7 +250,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
 - Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
 - Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
-- Ask first-run choices again. Offers the first-run list of optional components again at the next start. (components.first-run)
+- Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
 
 ## In the GUI
 
@@ -498,7 +498,7 @@ The GUI arrives in a later alpha; these are its keys. On macOS the GUI uses Comm
 - Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
 - Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
 - Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
-- Ask first-run choices again. Offers the first-run list of optional components again at the next start. (components.first-run)
+- Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
 
 ## Keys a terminal may keep
 

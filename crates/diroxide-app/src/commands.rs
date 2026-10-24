@@ -2405,7 +2405,7 @@ pub static CATALOG: [CommandInfo; 223] = [
     command(
         ids::COMPONENTS_FIRST_RUN,
         "Ask first-run choices again",
-        "Offers the first-run list of optional components again at the next start.",
+        "Opens the first-run list of optional components now, nothing chosen.",
         Global,
         &[],
         &[],

@@ -1158,6 +1158,7 @@ impl App {
         let mut effects = self.startup_lines();
         self.sweep_at_start();
         self.plugins_start();
+        self.components_start();
         for side in Side::BOTH {
             let place = self.panel(side).place().clone();
             let focus = self.restored_focus(side);

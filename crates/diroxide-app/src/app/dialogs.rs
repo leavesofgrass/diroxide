@@ -168,6 +168,10 @@ impl App {
         if let Some(effects) = self.jobs_key(&key) {
             return effects;
         }
+        // Space in the first-run components list (lane A3).
+        if let Some(effects) = self.components_key(&key) {
+            return effects;
+        }
         // The results lister's and the search dialog's own keys (W3a).
         if let Some(effects) = self.results_key(&key) {
             return effects;

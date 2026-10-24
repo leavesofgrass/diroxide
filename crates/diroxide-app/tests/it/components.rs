@@ -1,8 +1,9 @@
 //! Optional components in the app (W4d, R22 commit 41): Manage optional
 //! components, the ask-first question starting on No, a download as a job
 //! from a folder source (never the network), Verify, Remove with its
-//! listing, Get example plugins, and the first-run list built and not
-//! shown.
+//! listing, Get example plugins, and the first-run list: shown once at a
+//! first start with nothing chosen, Space marks, Enter asks once and
+//! downloads, and the ask-again setting (lane A3, R25 commit 92).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -66,6 +67,14 @@ fn world() -> World {
 fn session(w: &World, fetcher: Option<Arc<FakeFetcher>>) -> Session {
     let mut settings = settings();
     settings.components_source = w.source.to_string_lossy().into_owned();
+    session_with(w, settings, fetcher)
+}
+
+fn session_with(
+    w: &World,
+    settings: diroxide_config::Settings,
+    fetcher: Option<Arc<FakeFetcher>>,
+) -> Session {
     let here = place(&w.work);
     Session::open(
         here.clone(),
@@ -216,12 +225,35 @@ fn get_example_plugins_asks_first_and_fetches_nothing_before_a_yes() {
     assert!(s.dialog().is_none());
 }
 
+/// Settings of a first start: the first-run list not shown yet.
+fn first_start(w: &World) -> diroxide_config::Settings {
+    let mut settings = settings();
+    settings.components_source = w.source.to_string_lossy().into_owned();
+    settings.components_first_run_shown = false;
+    settings
+}
+
+/// The settings saved in the test's `config.toml`, as the next start
+/// reads them.
+fn saved(w: &World) -> diroxide_config::Settings {
+    let mut settings = diroxide_config::load(&w.paths).settings;
+    settings.dialog_settle_ms = 0;
+    settings
+}
+
+fn marked(s: &Session) -> Vec<String> {
+    match s.dialog() {
+        Some(Dialog::Choose { list, .. }) => {
+            list.selected_ids().into_iter().map(str::to_owned).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 #[test]
-fn the_first_run_list_is_built_and_not_shown_until_stage_three() {
+fn a_first_start_shows_the_list_once_with_nothing_chosen() {
     let w = world();
-    let mut s = session(&w, None);
-    assert!(s.dialog().is_none(), "a first start is not interrupted");
-    s.command(ids::COMPONENTS_FIRST_RUN);
+    let mut s = session_with(&w, first_start(&w), None);
     assert_eq!(
         s.dialog_title().as_deref(),
         Some("Optional components to get now")
@@ -235,5 +267,84 @@ fn the_first_run_list_is_built_and_not_shown_until_stage_three() {
         !rows(&s).iter().any(|r| r.starts_with("Example plugins")),
         "the examples pack is not offered"
     );
-    assert!(!s.app.settings().components_first_run_shown);
+    assert!(marked(&s).is_empty(), "nothing chosen");
+    assert!(s.app.settings().components_first_run_shown);
+    assert!(
+        saved(&w).components_first_run_shown,
+        "kept for the next start"
+    );
+    assert_eq!(
+        s.key("escape"),
+        ["Nothing downloaded. Tools, Manage optional components has them."]
+    );
+    // The next start: it does not come back.
+    let s = session_with(&w, saved(&w), None);
+    assert!(s.dialog().is_none(), "{:?}", s.dialog_title());
+}
+
+#[test]
+fn space_marks_and_enter_downloads_the_marked_after_one_question() {
+    let w = world();
+    let mut s = session_with(&w, first_start(&w), None);
+    // Nothing marked: said, and the list stays.
+    assert_eq!(
+        s.key("enter"),
+        ["Nothing marked. Space marks one; Escape skips."]
+    );
+    focus_row(&mut s, "Test pack");
+    assert_eq!(s.key("space"), ["Marked"]);
+    assert_eq!(marked(&s), ["test-pack"]);
+    let said = s.key("enter");
+    assert_eq!(
+        said,
+        ["Download 1 component? No is the default. y or n"],
+        "one question, on No"
+    );
+    let Some(Dialog::Confirm { listing, .. }) = s.dialog() else {
+        panic!("{:?}", s.dialog());
+    };
+    assert_eq!(listing, &["Test pack: not installed, 3 bytes, license MIT"]);
+    // No goes back to the list, the mark kept.
+    assert_eq!(s.key("n"), ["Not downloaded."]);
+    assert_eq!(marked(&s), ["test-pack"]);
+    s.key("enter");
+    let said = s.key("y");
+    assert!(
+        said.contains(&"Ready: test-pack 0.1.0.".to_owned()),
+        "{said:?}"
+    );
+    assert!(s.dialog().is_none());
+}
+
+#[test]
+fn the_ask_again_setting_opens_the_list_at_the_next_start_once() {
+    let w = world();
+    let mut settings = first_start(&w);
+    settings.components_first_run_shown = true;
+    settings.components_ask_again = true;
+    let s = session_with(&w, settings, None);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Optional components to get now")
+    );
+    assert!(
+        !s.app.settings().components_ask_again,
+        "it turns itself off"
+    );
+    assert!(!saved(&w).components_ask_again);
+    let s = session_with(&w, saved(&w), None);
+    assert!(s.dialog().is_none());
+}
+
+#[test]
+fn ask_first_run_choices_again_opens_the_list_now() {
+    let w = world();
+    let mut s = session(&w, None);
+    assert!(s.dialog().is_none(), "shown before: not at this start");
+    s.command(ids::COMPONENTS_FIRST_RUN);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Optional components to get now")
+    );
+    assert!(marked(&s).is_empty());
 }

@@ -791,7 +791,14 @@ Components list. Where the list of optional components is read from. Empty means
 
 ### components_first_run_shown
 
-First-run list shown. Whether the first-run list of optional components was shown. Ask first-run choices again turns it off.
+First-run list shown. Whether the first-run list of optional components was shown. It is turned on when the list opens.
+
+- Holds: true or false.
+- Default: `false`.
+
+### components_ask_again
+
+Ask about components again. On: the list of optional components opens once at the next start, nothing chosen.
 
 - Holds: true or false.
 - Default: `false`.
