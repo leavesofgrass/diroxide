@@ -599,6 +599,9 @@ pub struct Settings {
     pub replace_to_trash: bool,
     /// Refuse names other systems cannot store.
     pub portable_names: bool,
+    /// The volumes the Volumes list leaves out, by device or place, as
+    /// its Hide action keeps them (R25 3.1; lane A3).
+    pub hidden_volumes: Vec<String>,
     /// The transfer queue (alpha 2).
     pub jobs: JobSettings,
     /// The theme's name.
@@ -682,6 +685,7 @@ impl Default for Settings {
             trash_drives: vec!["fixed".to_owned()],
             replace_to_trash: true,
             portable_names: true,
+            hidden_volumes: Vec::new(),
             jobs: JobSettings::default(),
             theme: diroxide_theme::DEFAULT_THEME.to_owned(),
             follow_system_appearance: false,

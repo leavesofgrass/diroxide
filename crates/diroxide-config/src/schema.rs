@@ -312,7 +312,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 100] = [
+pub const SCHEMA: [SettingInfo; 101] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -537,6 +537,15 @@ pub const SCHEMA: [SettingInfo; 100] = [
         kind: K::Text,
         default: "\"system\"",
         help: "Where Delete sends things: system for the system's trash, or a folder you name, for tests and portable use.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "hidden_volumes",
+        name: "Hidden volumes",
+        group: G::Panels,
+        kind: K::Names,
+        default: "[]",
+        help: "Volumes left out of the Volumes list, by device or place, as its Hide action keeps them. Remove one to list it again.",
         arrives: None,
     },
     SettingInfo {
