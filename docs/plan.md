@@ -442,13 +442,13 @@ Each alpha has a goal, contents, what the owner checks, and exit criteria. "Read
 
 **The first three alphas ship as one** (the owner, Saturday, October 17, 2026, answer 50): the contents of the planned alpha.1, alpha.2 and alpha.3, built in Waves 1 to 3, are the tag `0.1.0-alpha.1`. The headings below keep their planned names, and each later planned alpha takes the next tag when its wave lands: the planned alpha.4 ships as `0.1.0-alpha.2`, alpha.5 as alpha.3, alpha.6 as alpha.4, alpha.7 as alpha.5, alpha.8 as alpha.6, alpha.9 as alpha.7. The guides never number a future feature: they say "a later alpha".
 
-**The planned alpha.4 and alpha.5 ship as one too** (the owner, Thursday, October 22, 2026, answer 79): the tag `0.1.0-alpha.2` holds the plugin protocol, script commands, the components downloader, SFTP and the places, built in one wave of three stages with a readiness check after each. The GUI then takes `0.1.0-alpha.3`, and each later planned alpha the next tag in turn. The headings below keep their planned names.
+**The planned alpha.4 and alpha.5 ship as one too** (the owner, Thursday, October 22, 2026, answer 79): the tag `0.1.0-alpha.2` holds the plugin protocol, script commands, the components downloader, SFTP and the places, built in one wave of three stages with a readiness check after each. **As built** (Friday, October 23, 2026): all 94 commits of R25's order merged in one day across fourteen lanes, with the SFTP plugin driving the machine's OpenSSH client (answer 78) and the queue as the jobs list (ADR-0013); what moved to later alphas is listed in `history/alpha2-readiness.md` in the planning repository (listers inside a panel, Pause for waiting jobs, the queue across restarts). The GUI then takes `0.1.0-alpha.3`, and each later planned alpha the next tag in turn. The headings below keep their planned names.
 
 - alpha.1: two panels (as below, unchanged).
 - alpha.2: archives, the viewer, and the document quick view for Markdown, plain text and code.
 - alpha.3: search, filters, labels, bookmarks and saved searches.
-- alpha.4: the plugin protocol, script commands and the Lua tier.
-- alpha.5: SSH and remote places.
+- alpha.4: the plugin protocol, script commands and the optional components (built as alpha 2's first stage, Friday, October 23, 2026; the Lua tier sits with alpha.8).
+- alpha.5: SSH and remote places, the transfer queue, volumes and the trash (built as alpha 2's later stages, the same day).
 - alpha.6: the GUI.
 - alpha.7: tools, previews and conversions, and the document quick view for DOCX, PDF, HTML, EPUB, spreadsheets and images described in words.
 - alpha.8: tabs, flat view, collections, compare and synchronize, duplicates, batch rename and volumes.
