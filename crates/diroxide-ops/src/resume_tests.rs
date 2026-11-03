@@ -2,7 +2,8 @@
 //! fake clock, downloads and uploads: a cut copy goes on at its offset and
 //! equals its source; the source changed, a part file longer than the
 //! source and a corrupted tail start again and say why; Cancel removes the
-//! part file; a lost job keeps it for a later one; two jobs with one
+//! part file, while waiting or in the middle of a stream; a lost job, and
+//! one quit interrupts (lane A4), keeps it for a later one; two jobs with one
 //! target never share a part file; a resumed move reads the prefix again
 //! before the read-back. The cases of spike Q1 that the engine can show
 //! without a server are here too.
@@ -353,6 +354,122 @@ fn cancel_removes_the_part_file() {
     assert!(report.cancelled);
     assert!(fake.unfinished().is_empty(), "{:?}", fake.unfinished());
     assert!(engine.ledger().lines().is_empty());
+}
+
+/// A sink that stops its job once `CUT` bytes are written, by an
+/// interrupt (quit's stop) or a cancel, and records its notices.
+struct CutAt {
+    control: JobControl,
+    interrupt: bool,
+    done: Mutex<bool>,
+    notices: Mutex<Vec<JobNotice>>,
+}
+
+impl CutAt {
+    fn new(control: &JobControl, interrupt: bool) -> Self {
+        Self {
+            control: control.clone(),
+            interrupt,
+            done: Mutex::new(false),
+            notices: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl JobSink for CutAt {
+    fn progress(&self, progress: &JobProgress) {
+        let mut done = self.done.lock().unwrap();
+        if !*done && progress.state == JobState::Running && progress.bytes_done >= CUT {
+            *done = true;
+            if self.interrupt {
+                self.control.interrupt();
+            } else {
+                self.control.cancel.cancel();
+            }
+        }
+    }
+
+    fn conflict(&self, _conflict: &Conflict) -> ConflictAnswer {
+        ConflictAnswer::skip()
+    }
+
+    fn error(&self, _error: &ItemError) -> ErrorAction {
+        ErrorAction::Skip
+    }
+
+    fn notice(&self, notice: &JobNotice) {
+        self.notices.lock().unwrap().push(notice.clone());
+    }
+}
+
+/// Lane A4: the stop quit uses keeps the part file and its ledger line,
+/// as a lost connection does, so a later job (Retry) goes on at the
+/// offset; the report still says the job was cancelled.
+#[test]
+fn an_interrupt_keeps_the_part_file_and_a_later_job_resumes_at_its_offset() {
+    for (name, request) in [
+        ("download", download(1)),
+        (
+            "upload",
+            JobRequest::new(JobId::new(1), JobKind::Copy, vec![p("/a/up.bin")])
+                .to(remote("/inbox")),
+        ),
+    ] {
+        let (fake, engine) = world();
+        let control = JobControl::new();
+        let sink = CutAt::new(&control, true);
+        let plan = engine.plan(&request).unwrap();
+        let report = engine.run(&plan, &control, &sink);
+        assert!(report.cancelled, "{name}: {}", report.summary());
+        assert!(control.is_interrupted());
+        let kept = part(&fake).unwrap_or_else(|| panic!("{name}: the part file is kept"));
+        assert_eq!(fake.contents(&kept).unwrap().len() as u64, CUT, "{name}");
+        let leftovers = engine.ledger().leftovers();
+        assert_eq!(leftovers.len(), 1, "{name}: its ledger line stays");
+        assert_eq!(leftovers[0].unfinished, kept);
+        assert_eq!(leftovers[0].bytes, CUT, "{name}: the bytes are noted");
+
+        // Retry is a new job on the same file: it goes on at the offset.
+        let mut again = request.clone();
+        again.id = JobId::new(2);
+        let later = CutAt::new(&JobControl::new(), true);
+        *later.done.lock().unwrap() = true;
+        let plan = engine.plan(&again).unwrap();
+        let report = engine.run(&plan, &JobControl::new(), &later);
+        assert_eq!(report.done.len(), 1, "{name}: {}", report.summary());
+        assert!(
+            matches!(
+                later.notices.lock().unwrap()[..],
+                [JobNotice::Resuming { at: CUT, .. }]
+            ),
+            "{name}: {:?}",
+            later.notices.lock().unwrap()
+        );
+        let (source, target) = match name {
+            "download" => (remote("/srv/big.bin"), p("/b/big.bin")),
+            _ => (p("/a/up.bin"), remote("/inbox/up.bin")),
+        };
+        assert_eq!(fake.contents(&target), fake.contents(&source), "{name}");
+        assert!(fake.unfinished().is_empty(), "{name}");
+        assert!(engine.ledger().lines().is_empty(), "{name}");
+    }
+}
+
+/// Cancel in the middle of a stream, not only while waiting for the
+/// connection, removes the part file and its line: only quit keeps them.
+#[test]
+fn cancel_in_the_middle_of_a_stream_removes_the_part_file() {
+    let (fake, engine) = world();
+    let control = JobControl::new();
+    let sink = CutAt::new(&control, false);
+    let plan = engine.plan(&download(1)).unwrap();
+    let report = engine.run(&plan, &control, &sink);
+    assert!(report.cancelled);
+    assert!(control.cancel.is_cancelled());
+    assert!(!control.is_interrupted(), "a cancel is not an interrupt");
+    assert!(fake.unfinished().is_empty(), "{:?}", fake.unfinished());
+    assert!(engine.ledger().lines().is_empty());
+    assert!(!fake.exists(&p("/b/big.bin")));
 }
 
 /// A job that ends on a lost connection keeps its part file, listed; a

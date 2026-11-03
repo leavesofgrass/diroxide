@@ -249,6 +249,134 @@ fn a_quit_keeps_the_queue_and_the_next_start_lists_it_interrupted() {
     );
 }
 
+const MIB: u64 = 1024 * 1024;
+
+/// Five mebibytes that differ from place to place, so a window check off
+/// by a byte never matches by chance.
+fn big() -> Vec<u8> {
+    let mut state: u32 = 2_654_435_761;
+    (0..5 * MIB)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            (state >> 24) as u8
+        })
+        .collect()
+}
+
+/// A session over a fake whose places keep part files, with this state
+/// folder. The fake is the test's, so a second start finds what the first
+/// left on it, as a disk would.
+fn resumable_world(fake: &FakeProvider, paths: &Paths) -> (Held, Session) {
+    let held = Held::new(fake.clone());
+    let mut registry = Registry::new();
+    registry.set_local(Arc::new(held.clone()));
+    registry.register("sftp", Arc::new(held.clone()));
+    let session = Session::start(
+        local("/a"),
+        remote("/srv"),
+        registry,
+        Some(paths),
+        settings(),
+    );
+    (held, session)
+}
+
+/// The fake with a big file here and a folder on `build`, both places
+/// resumable.
+fn resumable_fake() -> FakeProvider {
+    let fake = FakeProvider::new();
+    fake.switches_mut().resume = true;
+    fake.add_file(&local("/a/big.bin"), &big());
+    fake.add_folder(&remote("/srv"));
+    fake
+}
+
+/// Copies big.bin to `build` and holds it at two mebibytes.
+fn copy_held_at_two(held: &Held, s: &mut Session) {
+    held.hold_reads_at(2 * MIB);
+    copy(s, "big.bin");
+    drive(s, Vec::new(), |_, _| held.reached());
+    assert!(held.reached(), "the copy is held in the middle of its file");
+}
+
+/// Lane A4: quit stops a running copy the way a lost connection does,
+/// keeping its part file and its ledger line, so Retry at the next start
+/// goes on at the offset; the quit's question keeps its words.
+#[test]
+fn a_copy_cut_by_a_quit_resumes_at_its_offset_on_retry() {
+    let (_dir, paths) = folders();
+    let fake = resumable_fake();
+    let target = remote("/srv/big.bin");
+    {
+        let (held, mut s) = resumable_world(&fake, &paths);
+        copy_held_at_two(&held, &mut s);
+        let said = key_held(&mut s, "ctrl+q");
+        assert_eq!(said[0], "1 job is not finished.");
+        assert!(
+            said.contains(&"Quit and stop them? No is the default. y or n".to_owned()),
+            "{said:?}"
+        );
+        key_held(&mut s, "y");
+        assert!(s.app.wants_quit());
+        drive(&mut s, Vec::new(), |s, _| s.app.jobs().is_empty());
+    }
+    // The part file stays at the offset, and its ledger line with it.
+    let parts = fake.unfinished();
+    assert_eq!(parts.len(), 1, "{parts:?}");
+    let part = Place::parse(&parts[0]).unwrap();
+    assert_eq!(fake.contents(&part).unwrap().len() as u64, 2 * MIB);
+    let ledger = fs::read_to_string(paths.state_dir.join("partials.json")).unwrap();
+    assert!(
+        ledger.contains(&format!("\"bytes\": {}", 2 * MIB)),
+        "{ledger}"
+    );
+    assert!(!fake.exists(&target));
+
+    // The next start lists it; Retry goes on where the quit cut it.
+    let (_held, mut s) = resumable_world(&fake, &paths);
+    command_held(&mut s, ids::JOBS_LIST);
+    focus_row(&mut s, "Interrupted: copy big.bin");
+    key_held(&mut s, "enter");
+    assert_eq!(rows(&s), ["Retry", "Forget"]);
+    key_until(&mut s, "enter", |s, _| {
+        matches!(s.dialog(), Some(Dialog::Confirm { .. }))
+    });
+    let said = key_until(&mut s, "y", |s, _| settled_after(s, 1));
+    let resuming = "Resuming big.bin at 2.1 MB of 5.2 MB";
+    assert!(said.contains(&resuming.to_owned()), "{said:?}");
+    assert!(within_cells(resuming, "Resuming big.bin"));
+    assert_eq!(
+        fake.contents(&target).unwrap(),
+        big(),
+        "equal to its source"
+    );
+    assert!(
+        fake.unfinished().is_empty(),
+        "the part file became the file"
+    );
+    let ledger = fs::read_to_string(paths.state_dir.join("partials.json")).unwrap();
+    assert!(!ledger.contains("big.bin"), "its line is gone: {ledger}");
+}
+
+/// Cancel, unlike quit, removes the part file and its ledger line: the
+/// copy cannot be resumed, and nothing of it is left.
+#[test]
+fn cancel_still_removes_the_part_file() {
+    let (_dir, paths) = folders();
+    let fake = resumable_fake();
+    let (held, mut s) = resumable_world(&fake, &paths);
+    copy_held_at_two(&held, &mut s);
+    assert_eq!(fake.unfinished().len(), 1, "the kept write is under way");
+    let said = key_until(&mut s, "escape", |s, _| settled_after(s, 1));
+    assert!(said_start(&said, "Copying: cancelling"), "{said:?}");
+    assert!(fake.unfinished().is_empty(), "{:?}", fake.unfinished());
+    let ledger = fs::read_to_string(paths.state_dir.join("partials.json")).unwrap_or_default();
+    assert!(!ledger.contains("big.bin"), "{ledger}");
+    assert!(!fake.exists(&remote("/srv/big.bin")));
+}
+
 /// A queue a crash left: the last write was a change, not a quit.
 #[test]
 fn after_a_crash_the_sentence_says_the_session_ended_and_a_second_window_keeps_out() {

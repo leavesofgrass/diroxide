@@ -481,6 +481,10 @@ pub struct Runtime {
     search: Option<(u64, diroxide_search::SearchControl)>,
     /// The transfer queue: when a confirmed plan starts (lane A2).
     scheduler: queue::Scheduler,
+    /// A quit is under way: its stops interrupt running jobs, keeping
+    /// their part files for a resume on Retry, rather than cancel them
+    /// (lane A4).
+    quitting: bool,
     /// The ledger of partial files, kept across engines made again: in
     /// the state folder once the paths are known (R25, 2.5).
     ledger: Arc<Ledger>,
@@ -585,6 +589,7 @@ impl Runtime {
             arrivals: None,
             search: None,
             scheduler: queue::Scheduler::default(),
+            quitting: false,
             ledger,
             job_settings: None,
             lost: HashMap::new(),
@@ -1066,7 +1071,13 @@ impl Runtime {
         }
         self.carry_granted(granted);
         if let Some(running) = lock(&self.jobs).get(&job) {
-            running.control.cancel.cancel();
+            // Quit's stop keeps a copy's part file and its ledger line, the
+            // way a lost connection does; Cancel removes them.
+            if self.quitting {
+                running.control.interrupt();
+            } else {
+                running.control.cancel.cancel();
+            }
         }
         self.plugins.cancel(job);
         self.components.cancel(job);
@@ -2218,9 +2229,12 @@ impl Runtime {
             self.components_source = app.settings().components_source.clone();
         }
         // A batch that quits carries the cancels of its stop: the saved
-        // queue is written as it stands first, and kept so (lane Q2).
+        // queue is written as it stands first, and kept so (lane Q2), and
+        // each running job is interrupted, keeping its part files, so a
+        // copy cut by the quit resumes at its offset on Retry (lane A4).
         if effects.contains(&Effect::Quit) {
             self.scheduler.freeze_for_quit();
+            self.quitting = true;
         }
         let mut screen = Vec::new();
         for effect in effects {

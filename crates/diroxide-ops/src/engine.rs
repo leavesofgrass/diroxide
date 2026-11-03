@@ -279,14 +279,24 @@ pub trait JobSink: Send + Sync {
     }
 }
 
-/// Cancels or pauses a running job, and sets its own speed limit. Cloning
-/// shares the control.
+/// Cancels, interrupts or pauses a running job, and sets its own speed
+/// limit. Cloning shares the control.
+///
+/// Two stops: Cancel ([`JobControl::cancel`]) removes the part file a
+/// kept write left and its ledger line, so nothing of the copy stays;
+/// [`JobControl::interrupt`] stops the job the way a lost connection
+/// does, keeping both, so a later job on the same file goes on at its
+/// offset when the ledger's fingerprint and window check agree
+/// (ADR-0013). Quit is the one caller of the second.
 #[derive(Clone, Debug, Default)]
 pub struct JobControl {
     /// Cancels the job between steps, and inside providers through the
     /// token.
     pub cancel: CancelToken,
     paused: Arc<AtomicBool>,
+    /// Set by [`JobControl::interrupt`] before the token: the stop keeps
+    /// part files.
+    keeps_parts: Arc<AtomicBool>,
     speed: Arc<Limiter>,
 }
 
@@ -294,6 +304,29 @@ impl JobControl {
     /// A control that is neither cancelled nor paused.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Stops the job between chunks the way a lost connection does: a
+    /// copy's part file and its ledger line stay, so a later job (Retry
+    /// of the saved queue's interrupted job) resumes it at its offset.
+    /// The report says the job was cancelled. Quit uses it; Cancel goes
+    /// through [`JobControl::cancel`], which removes the part file.
+    pub fn interrupt(&self) {
+        self.keeps_parts.store(true, Ordering::Relaxed);
+        // The fence orders the flag before the token's store: a run that
+        // sees the token cancelled and then fences sees the flag too.
+        std::sync::atomic::fence(Ordering::Release);
+        self.cancel.cancel();
+    }
+
+    /// Whether the job was stopped by [`JobControl::interrupt`], so its
+    /// part files stay.
+    pub fn is_interrupted(&self) -> bool {
+        if !self.cancel.is_cancelled() {
+            return false;
+        }
+        std::sync::atomic::fence(Ordering::Acquire);
+        self.keeps_parts.load(Ordering::Relaxed)
     }
 
     /// Pauses the job after its current chunk.

@@ -966,8 +966,10 @@ impl App {
     pub(super) fn ask_quit(&mut self, keep_shell: bool) -> Vec<Effect> {
         self.keep_shell = keep_shell;
         // Running and waiting jobs alike: the queue is saved across a restart
-        // since alpha 3 (Q2), but a quit stops a running job the way Cancel
-        // does, so a copy cut by it starts over on Retry; the question stays.
+        // since alpha 3 (Q2), and a quit interrupts a running job the way a
+        // lost connection does (A4), so a copy cut by it resumes at its
+        // offset on Retry where the place keeps part files; the jobs still
+        // stop, so the question and its words stay.
         let jobs = if self.settings.confirm.quit_with_jobs {
             self.jobs.len() as u64
         } else {
@@ -1019,9 +1021,10 @@ impl App {
         )
     }
 
-    /// Quits: running jobs are cancelled, the session and the path jump
-    /// store are saved, and the shell's folder is noted for `--cwd-file`
-    /// unless the shell keeps its own.
+    /// Quits: running jobs are stopped (the runtime interrupts them,
+    /// keeping a copy's part file for a resume on Retry, lane A4), the
+    /// session and the path jump store are saved, and the shell's folder
+    /// is noted for `--cwd-file` unless the shell keeps its own.
     pub(super) fn quit_now(&mut self) -> Vec<Effect> {
         let mut effects: Vec<Effect> = self.jobs.ids().into_iter().map(Effect::CancelJob).collect();
         self.quit = true;
