@@ -1,5 +1,6 @@
-//! The window's look in the app (lane A6, G3's contract requests 1 and
-//! 2): full screen and focus mode as commands.
+//! The window's look in the app (lane A6, G3's contract requests 1, 2
+//! and 3): full screen and focus mode as commands, and a theme said
+//! with its contrast verdict however it is set.
 //!
 //! - Full screen (`view.full-screen`, F11 in the GUI column) is the
 //!   window's. The app keeps whether the window should fill the screen
@@ -12,11 +13,14 @@
 //!   off and writes it, as the Settings list does, and says "Focus mode
 //!   on: the bars fade after three seconds." or "Focus mode off." The
 //!   same words follow the setting set through the Settings list.
+//! - A theme set through the Settings list is said as Next theme says it,
+//!   its contrast verdict after its name: "Theme Galaxy Light, meets AA".
 
 use diroxide_core::{Command, Effect, KeyColumn, Message, Redraw};
 
 use super::App;
 use crate::commands::ids;
+use crate::settings;
 
 /// Said when full screen comes on in the window.
 pub const FULL_SCREEN_ON: &str = "Full screen on.";
@@ -61,6 +65,13 @@ impl App {
         self.look.full_screen = on;
     }
 
+    /// The chosen theme and its contrast verdict with the owner's colors,
+    /// as Next theme and the Settings list say it: "Theme Galaxy, meets
+    /// AA".
+    pub fn theme_line(&self) -> String {
+        settings::theme_line(&self.settings, None)
+    }
+
     /// Runs Full screen and Focus mode; `None` when the command is
     /// another's.
     pub(super) fn look_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
@@ -100,10 +111,11 @@ impl App {
     }
 
     /// What a changed setting of the look says in place of the plain
-    /// "Focus mode: on": focus mode with what it does. `None` for the
-    /// other settings.
+    /// "Theme: nord" or "Focus mode: on": the theme with its verdict, and
+    /// focus mode with what it does. `None` for the other settings.
     pub(super) fn look_setting_line(&self, key: &str) -> Option<String> {
         match key {
+            "theme" => Some(self.theme_line()),
             "focus_mode" => Some(
                 match (self.settings.focus_mode, self.keymap.column()) {
                     (false, _) => FOCUS_MODE_OFF,

@@ -1,8 +1,9 @@
-//! The window's look in the app (lane A6, G3's contract requests 1 and
-//! 2): Full screen and Focus mode as commands with their words in both
-//! columns. Every line is checked for its meaning inside the first 40
-//! cells. Nothing touches the owner's folders; the config and state
-//! folders are the test's.
+//! The window's look in the app (lane A6, G3's contract requests 1, 2
+//! and 3): Full screen and Focus mode as commands with their words in
+//! both columns, and a theme set through the Settings list said with its
+//! contrast verdict as Next theme says it. Every line is checked for its
+//! meaning inside the first 40 cells. Nothing touches the owner's
+//! folders; the config and state folders are the test's.
 
 use std::fs;
 
@@ -153,4 +154,27 @@ fn focus_mode_from_a_terminal_is_kept_for_the_window() {
     assert!(s.app.settings().focus_mode);
     assert!(config_text(&paths).contains("focus_mode = true"));
     assert_eq!(s.command(ids::FOCUS_MODE), [FOCUS_MODE_OFF]);
+}
+
+#[test]
+fn a_theme_set_through_settings_says_its_verdict_as_next_theme_does() {
+    let (_dir, _paths, mut s) = open(KeyColumn::Terminal);
+    enter_setting(&mut s, "theme");
+    let at = rows(&s).iter().position(|r| r == "nord").unwrap();
+    assert!(s.app.focus_dialog_row(at));
+    let said = s.key("enter");
+    // Nord is one of the themes below AA, and says so.
+    assert_eq!(said, ["Theme Nord, below AA: 1 check falls short"]);
+    assert!(within_cells(&said[0], "Theme Nord, below AA"));
+    assert!(!said.iter().any(|l| l.starts_with("Theme: ")), "{said:?}");
+    s.key("escape");
+    // Back to default: the same words for the default theme.
+    enter_setting(&mut s, "theme");
+    s.key("end");
+    assert_eq!(s.key("enter"), ["Theme Galaxy, meets AA"]);
+    s.key("escape");
+    // Next theme says the same line, once.
+    let said = s.command(ids::NEXT_THEME);
+    assert_eq!(said, ["Theme Galaxy Light, meets AA"]);
+    assert!(within_cells(&said[0], "Theme Galaxy Light, meets AA"));
 }
