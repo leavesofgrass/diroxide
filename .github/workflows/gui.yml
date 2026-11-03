@@ -167,6 +167,41 @@ jobs:
           grep -q 'left panel' gui-out.txt
           echo "Pass: no display is said, and the terminal opens."
 
+  # The Linux AppImage under Xvfb, in the GUI image stage (R27's commit
+  # 34): the release's packaging around a debug build of diro, packed with
+  # the pinned AppImage tools, then started in the container with its
+  # extract-and-run option (there is no FUSE there). packaging/appimage/
+  # check.sh says Pass or Fail for the layout (AppRun a link to the
+  # program, so the D-Bus session, the AT-SPI bus and the speech socket
+  # stay reachable from inside the image; both menu entries; every icon
+  # size), the GUI drawn on the virtual display (--log names the road),
+  # and the AT-SPI check against the program inside the image.
+  appimage-linux:
+    name: The AppImage starts under Xvfb
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p diro
+      - name: Pack the AppImage
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends desktop-file-utils file
+          sh packaging/appimage/fetch-tools.sh "$RUNNER_TEMP/appimage"
+          sh packaging/appimage/build.sh target/debug/diro check out "$RUNNER_TEMP/appimage"
+      - name: The AppImage in the GUI image stage, under Xvfb
+        run: |
+          set -euo pipefail
+          docker build --file docker/Dockerfile --target gui --tag diroxide-gui .
+          docker run --rm --user root --volume "$PWD:/work" --workdir /work \
+            --env CARGO_TERM_COLOR=never \
+            diroxide-gui bash packaging/appimage/check.sh out/diro-check-linux-x86_64.AppImage \
+            | tee appimage-check.md
+          cat appimage-check.md >> "$GITHUB_STEP_SUMMARY"
+
   # What a screen reader gets on Windows, through UI Automation (R27's
   # commit 15): tools/a11y/uia-report.ps1 opens the window off screen and
   # never activated, writes every element's type, name and patterns, the

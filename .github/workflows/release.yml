@@ -171,8 +171,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-windows-x86_64
-      - name: Build diro with the dist profile
-        run: cargo build --profile dist -p diro
+      # diro's default features, every one: the GUI (the default frontend
+      # on a desktop from alpha 3), the terminal, the viewer's syntax set
+      # and the components fetcher. crates/diro/build.rs links the icon
+      # into diro.exe (assets/logo/icons/diroxide.res).
+      - name: Build diro with the dist profile and its default features
+        run: cargo build --profile dist --locked -p diro
       - name: The one file
         shell: pwsh
         run: |
@@ -207,10 +211,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-macos-universal
+      # diro's default features, every one, the GUI among them.
       - name: Build diro with the dist profile for both architectures
         run: |
-          cargo build --profile dist -p diro --target aarch64-apple-darwin
-          cargo build --profile dist -p diro --target x86_64-apple-darwin
+          cargo build --profile dist --locked -p diro --target aarch64-apple-darwin
+          cargo build --profile dist --locked -p diro --target x86_64-apple-darwin
       - name: The one file, a universal binary signed ad hoc
         shell: bash
         run: |
@@ -257,8 +262,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-linux-x86_64
-      - name: Build diro with the dist profile
-        run: cargo build --profile dist -p diro
+      # diro's default features, every one, the GUI among them; the
+      # runner has no display, so --gui says so rather than that the GUI
+      # was left out of the build.
+      - name: Build diro with the dist profile and its default features
+        run: cargo build --profile dist --locked -p diro
+      - name: The GUI is in the build
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -u DISPLAY -u WAYLAND_DISPLAY target/dist/diro --gui --portable . > "$RUNNER_TEMP/gui-out.txt"
+          said="$(head -n 1 "$RUNNER_TEMP/gui-out.txt")"
+          echo "diro --gui with no display: $said"
+          case "$said" in
+            "There is no display for the GUI"*) echo "Pass: the GUI is built in." ;;
+            *) echo "Fail: this diro was built without the GUI." >&2; exit 1 ;;
+          esac
       - name: The one file, an AppImage
         shell: bash
         run: |
