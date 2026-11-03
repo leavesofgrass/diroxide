@@ -591,7 +591,7 @@ Four Opus briefs run two at a time, one Sonnet writer, about three weeks.
 
 Two GUI lanes in sequence, one packaging agent beside them, about four weeks.
 
-- **W4a (the GUI's foundation):** the vendored stack brought in; the GUI, the two panels as accessible grids with named columns, row and cell nodes, selection and focus; the live region; native menus from the menu model; the palette; the accessibility tree test harness and the UI Automation report. Owns `diroxide-gui`, `third_party/`.
+- **W4a (the GUI's foundation):** the vendored stack brought in; the GUI, each panel one accessible list box whose options are the rows (position and real size set, marked rows selected, the focused row the active descendant; ADR-0007), with a grid only if AccessKit's adapters gain the Grid and Table patterns; the live region; native menus from the menu model; the palette; the accessibility tree test harness and the UI Automation report. Owns `diroxide-gui`, `third_party/`.
 - **W4b (the GUI's dialogs and jobs):** after 4a: dialogs under the dialogs contract, jobs and progress, settings, the viewer, themes with the contrast check in words, the theme-following title bar and menus. Owns `diroxide-gui` after 4a hands back.
 - **W4c (the icon files and packaging):** the mark chosen in Wave S rasterized by `xtask icons` into the platform icon files, then `dist`, the Windows zip, the macOS tarball, the Linux AppImage and tarball, the release workflow with SHA256SUMS, the clean-install smoke test. Owns `xtask/src/{icons,dist}.rs`, `assets/`, `.github/workflows/release.yml` (the one exception to the `.github` rule, by brief).
 - **W4d (docs, Sonnet):** the GUI guide, install, themes, the GUI in pictures with alt text.

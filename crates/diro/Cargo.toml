@@ -12,7 +12,15 @@ name = "diro"
 path = "src/main.rs"
 
 [features]
-default = ["fetch", "syntax-set"]
+default = ["fetch", "syntax-set", "gui", "tui"]
+# The GUI's window: Masonry, Vello, wgpu and AccessKit, vendored under
+# third_party/ (docs/dev/vendoring.md). Every frontend is in the one
+# program; `diro` chooses the GUI or the terminal at each start (the GUI
+# alpha's contract step). `--no-default-features --features tui` builds
+# the terminal alone, without Vello and wgpu.
+gui = ["diroxide-cli/gui"]
+# The terminal frontend, always built; a marker that names it.
+tui = ["diroxide-cli/tui"]
 # The viewer's syntax set: syntect with bat's grammars, about 3 MB of the
 # binary (W2d's request 2, P2b). `--no-default-features` leaves it out with
 # the downloader's client; add `--features fetch` to keep that one.

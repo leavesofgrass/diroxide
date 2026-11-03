@@ -106,6 +106,52 @@ pub enum Highlighting {
     Off,
 }
 
+/// Where `diro` opens its panels (the GUI alpha): `--gui` and `--tui`
+/// choose for one start, and win over this.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Frontend {
+    /// The GUI where there is a display and no remote session, else the
+    /// terminal.
+    #[default]
+    Auto,
+    /// The GUI, whenever it can start.
+    Gui,
+    /// The terminal.
+    Terminal,
+}
+
+/// The graphics API the GUI draws with (the GUI alpha).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Graphics {
+    /// The graphics driver's own choice.
+    #[default]
+    Auto,
+    /// Vulkan.
+    Vulkan,
+    /// Direct3D 12, on Windows.
+    Dx12,
+    /// Metal, on macOS.
+    Metal,
+    /// OpenGL.
+    Gl,
+    /// Drawn on the processor, with no graphics card.
+    Software,
+}
+
+/// How the GUI shows its menus (the GUI alpha).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Menus {
+    /// The system's menu bar on Windows and macOS; a list in the window
+    /// elsewhere.
+    #[default]
+    Native,
+    /// A list in the window, on every system.
+    List,
+}
+
 /// Whether case matters in filters and searches (alpha.3).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -624,6 +670,12 @@ pub struct Settings {
     pub auto_hide_menu: bool,
     /// Fade the GUI's bars while the mouse rests (alpha.6).
     pub focus_mode: bool,
+    /// Where `diro` opens its panels: the GUI or the terminal.
+    pub frontend: Frontend,
+    /// The graphics API the GUI draws with.
+    pub graphics: Graphics,
+    /// The GUI's menus: the system's menu bar, or a list in the window.
+    pub menus: Menus,
     /// The viewer (alpha.2).
     pub viewer: ViewerSettings,
     /// The quick view (alpha.2).
@@ -697,6 +749,9 @@ impl Default for Settings {
             thumbnails: false,
             auto_hide_menu: true,
             focus_mode: false,
+            frontend: Frontend::Auto,
+            graphics: Graphics::Auto,
+            menus: Menus::Native,
             viewer: ViewerSettings::default(),
             quick_view: QuickViewSettings::default(),
             archives: ArchiveSettings::default(),

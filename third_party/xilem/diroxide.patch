@@ -1,0 +1,64 @@
+diff --git a/masonry_testing/Cargo.toml b/masonry_testing/Cargo.toml
+index 618be75..8d6910f 100644
+--- a/masonry_testing/Cargo.toml
++++ b/masonry_testing/Cargo.toml
+@@ -22,7 +22,6 @@ accesskit_consumer.workspace = true
+ image = { workspace = true, features = ["png"] }
+ imaging_vello_cpu = { workspace = true }
+ masonry_core.workspace = true
+-oxipng = { version = "9.1.5", default-features = false }
+ tracing = { workspace = true, features = ["default"] }
+ 
+ [dev-dependencies]
+diff --git a/masonry_testing/src/harness.rs b/masonry_testing/src/harness.rs
+index 81412c6..5f9b458 100644
+--- a/masonry_testing/src/harness.rs
++++ b/masonry_testing/src/harness.rs
+@@ -30,7 +30,6 @@ use image::{DynamicImage, ImageFormat, ImageReader, Rgba, RgbaImage};
+ use imaging_vello_cpu::VelloCpuRenderer;
+ use masonry_core::imaging::record::{Scene, replay_transformed};
+ use masonry_core::imaging::{ImageRenderer as _, Painter};
+-use oxipng::{Options, optimize_from_memory};
+ use tracing::debug;
+ 
+ use masonry_core::accesskit::{
+@@ -202,7 +201,8 @@ pub struct TestHarnessParams {
+     ///
+     /// You can use [`TestHarnessParams::KIBIBYTE`] to help set this.
+     /// Keeping screenshot files small avoids clones of this repository taking too long.
+-    /// Masonry testing uses [oxipng] to optimise the size of screenshots.
++    /// Screenshots are written as the `image` crate encodes them (diroxide's
++    /// copy has no `oxipng`, so no C library is compiled).
+     pub max_screenshot_size: u32,
+ }
+ 
+@@ -1125,13 +1125,9 @@ impl<W: Widget> TestHarness<W> {
+             let mut buffer = Cursor::new(Vec::new());
+             image.write_to(&mut buffer, ImageFormat::Png).unwrap();
+ 
+-            let image_data = buffer.into_inner();
+-            // Whenever we save a file, we optimise it.
+-            // This avoids cases where people copy the `new` file to the reference path, thus avoiding optimisation
+-            // (We could skip this for diff images, but that is so far off the hot path that it's not
+-            // worth a different code path for it.)
+-            let data =
+-                optimize_from_memory(image_data.as_slice(), &Options::from_preset(5)).unwrap();
++            // diroxide: written as encoded, not optimised with oxipng, whose
++            // libdeflate back end compiles C (diroxide.patch).
++            let data = buffer.into_inner();
+             let saved_len = data.len();
+             std::fs::write(path, data).unwrap();
+             if let Some(max_size) = max_size
+diff --git a/masonry_testing/src/lib.rs b/masonry_testing/src/lib.rs
+index b390228..151a86f 100644
+--- a/masonry_testing/src/lib.rs
++++ b/masonry_testing/src/lib.rs
+@@ -35,7 +35,7 @@
+ //!
+ //! Masonry Testing will update the reference file when the `MASONRY_TEST_BLESS` environment variable has a value of `1`.
+ //! This can be used if the file doesn't exist, or there's an expected difference.
+-//! The screenshots are losslessly compressed (using [Oxipng][oxipng]) and limited to a small maximum file size (this
++//! The screenshots are limited to a small maximum file size (this
+ //! limit has an escape hatch).
+ //! This ensures that the screenshots are small enough to embed in a git repository with limited risk
+ //! of clone times growing unreasonably.

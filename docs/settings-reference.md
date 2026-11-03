@@ -377,6 +377,39 @@ Focus mode. In the GUI, fades the bars when the mouse rests, so the panels have 
 - Default: `false`.
 - Comes with a later alpha.
 
+### frontend
+
+Opens in. Where diro opens its panels. Auto opens the GUI on a desktop and the terminal over SSH, on a console or when output is piped. diro --gui and diro --tui choose for one start.
+
+- Holds: one of auto, gui or terminal.
+- Default: `"auto"`.
+- `auto`: the GUI on a desktop, else the terminal.
+- `gui`: the GUI.
+- `terminal`: the terminal.
+
+### graphics
+
+GUI graphics. The graphics API the GUI draws with. Auto lets the graphics driver choose; software, drawing on the processor, comes later in this alpha. diro --graphics NAME chooses for one start.
+
+- Holds: one of auto, vulkan, dx12, metal, gl or software.
+- Default: `"auto"`.
+- `auto`: the graphics driver's choice.
+- `vulkan`: Vulkan.
+- `dx12`: Direct3D 12, on Windows.
+- `metal`: Metal, on macOS.
+- `gl`: OpenGL.
+- `software`: the processor, with no graphics card.
+
+### menus
+
+GUI menus. Native shows the GUI's menus in the system's menu bar on Windows and macOS, and as a list in the window elsewhere. List uses the list everywhere.
+
+- Holds: one of native or list.
+- Default: `"native"`.
+- `native`: the system's menu bar.
+- `list`: a list in the window.
+- Comes with a later alpha.
+
 ## Viewer and quick view
 
 ### viewer.wrap

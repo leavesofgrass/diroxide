@@ -12,8 +12,15 @@
 //! `fetch` feature of `diro` (the owner's exception of Sunday, October 11,
 //! 2026, answer 40); and `cc` as the build dependency of `psm` and of
 //! `stacker`, reached only through `carta`, the converter of answer 27
-//! (alpha.2's contract step, Friday, October 16, 2026). Anything else
-//! fails, with the chain that brought it in.
+//! (alpha.2's contract step, Friday, October 16, 2026); and, under the
+//! GUI's window runner (the GUI alpha's contract step, Monday, November 2,
+//! 2026), `cc` as the build dependency of `wayland-backend`, which compiles
+//! its two C files only with its `log` feature, never turned on here (the
+//! window loads libwayland at run time), and of `android-activity`, which
+//! compiles C only for Android's GameActivity, a system diroxide does not
+//! build for. Anything else fails, with the chain that brought it in.
+//! Crates under `third_party/` are path dependencies, so the inverted tree
+//! prints them with their folder and they are checked as members are.
 //!
 //! The check reads `cargo tree` inverted on each tool, over every feature,
 //! every target and the normal, build and dev edges, so a test dependency
@@ -43,7 +50,7 @@ pub struct Allow {
 
 /// The allow list, the inventory: each entry with its reason, and nothing
 /// else.
-pub const ALLOWED: [Allow; 3] = [
+pub const ALLOWED: [Allow; 6] = [
     Allow {
         tool: "cc",
         user: "ring",
@@ -64,6 +71,29 @@ pub const ALLOWED: [Allow; 3] = [
         through: &["carta"],
         reason: "stacker compiles one small C file for the same stack switch, for carta \
                  (answers 27 and 46)",
+    },
+    Allow {
+        tool: "cc",
+        user: "wayland-backend",
+        through: &["winit"],
+        reason: "a build dependency only: wayland-backend compiles its log shims with its \
+                 `log` feature, which nothing turns on; the window's Wayland support loads \
+                 libwayland at run time (the GUI alpha's contract step)",
+    },
+    Allow {
+        tool: "cc",
+        user: "wayland-backend",
+        through: &["smithay-clipboard", "copypasta", "masonry_winit"],
+        reason: "the same build-only wayland-backend, reached through the window runner's \
+                 clipboard on Wayland (the GUI alpha's contract step)",
+    },
+    Allow {
+        tool: "cc",
+        user: "android-activity",
+        through: &["winit"],
+        reason: "Android only: android-activity compiles C for GameActivity alone, and \
+                 diroxide builds no Android program; winit names it for every target \
+                 (the GUI alpha's contract step)",
     },
 ];
 
@@ -171,7 +201,7 @@ pub fn check(root: &Path) -> Result<bool> {
     }
     if problems.is_empty() {
         println!(
-            "native: Pass. No C build in the main workspace but the inventory's: ring, for the fetch feature; psm and stacker, for carta."
+            "native: Pass. No C build in the main workspace but the inventory's: ring, for the fetch feature; psm and stacker, for carta; wayland-backend and android-activity, build-only under the window."
         );
         Ok(true)
     } else {
@@ -237,7 +267,7 @@ mod tests {
 
     #[test]
     fn the_inventory_lists_each_entry_with_its_reason() {
-        assert_eq!(ALLOWED.len(), 3);
+        assert_eq!(ALLOWED.len(), 6);
         for allow in &ALLOWED {
             assert!(NATIVE_TOOLS.contains(&allow.tool), "{allow:?}");
             assert!(
@@ -260,6 +290,31 @@ mod tests {
             1stacker v0.1.25\n\
             2rustc-demangle v0.1.0\n\
             3diroxide-app v0.1.0-alpha.1 (D:\\w\\crates\\diroxide-app)\n";
+        assert_eq!(problems_in_tree("cc", elsewhere).len(), 1);
+    }
+
+    #[test]
+    fn the_window_runners_build_only_c_is_allowed_and_nowhere_else() {
+        let tree = "0cc v1.8.0\n\
+            1android-activity v0.6.1\n\
+            2winit v0.30.13\n\
+            3accesskit_winit v0.34.1\n\
+            4diroxide-gui v0.1.0-alpha.2 (D:\\w\\crates\\diroxide-gui)\n\
+            4masonry_winit v0.4.0 (D:\\w\\third_party\\xilem\\masonry_winit)\n\
+            1wayland-backend v0.3.17\n\
+            2calloop-wayland-source v0.4.1\n\
+            3smithay-client-toolkit v0.20.0\n\
+            4smithay-clipboard v0.7.3\n\
+            5copypasta v0.10.2\n\
+            6masonry_winit v0.4.0 (D:\\w\\third_party\\xilem\\masonry_winit)\n\
+            7diroxide-gui v0.1.0-alpha.2 (D:\\w\\crates\\diroxide-gui)\n\
+            2wayland-client v0.31.15\n\
+            3winit v0.30.13 (*)\n";
+        assert_eq!(problems_in_tree("cc", tree), Vec::<String>::new());
+        let elsewhere = "0cc v1.8.0\n\
+            1wayland-backend v0.3.17\n\
+            2wayland-server v0.31.0\n\
+            3diroxide-app v0.1.0-alpha.2 (D:\\w\\crates\\diroxide-app)\n";
         assert_eq!(problems_in_tree("cc", elsewhere).len(), 1);
     }
 

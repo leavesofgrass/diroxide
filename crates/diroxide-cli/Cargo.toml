@@ -25,6 +25,9 @@ diroxide-core.workspace = true
 # diro diff (W3d): compare two files in words.
 diroxide-diff.workspace = true
 diroxide-filetype.workspace = true
+# The GUI frontend: its window behind the `gui` feature below; without it,
+# `diro --gui` says the GUI was left out of this build.
+diroxide-gui.workspace = true
 diroxide-ops.workspace = true
 diroxide-plugins.workspace = true
 diroxide-search.workspace = true
@@ -50,6 +53,12 @@ syntax-set = ["diroxide-app/syntax-set"]
 # The components downloader's built-in HTTPS client (answer 40), forwarded
 # to the components crate; `diro` turns it on by default.
 fetch = ["diroxide-components/fetch"]
+# The GUI's window (Masonry, Vello, wgpu and AccessKit), forwarded to the
+# GUI crate; `diro` turns it on by default (the GUI alpha's contract step).
+gui = ["diroxide-gui/gui"]
+# The terminal frontend, always built: a marker, so a build can name what
+# it holds (`--no-default-features --features tui`).
+tui = []
 
 [lints]
 workspace = true

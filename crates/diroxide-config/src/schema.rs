@@ -291,6 +291,26 @@ const LARGE_FILES: &[Choice] = &[
     choice("bytes", "compare them byte by byte"),
 ];
 
+const FRONTENDS: &[Choice] = &[
+    choice("auto", "the GUI on a desktop, else the terminal"),
+    choice("gui", "the GUI"),
+    choice("terminal", "the terminal"),
+];
+
+const GRAPHICS_APIS: &[Choice] = &[
+    choice("auto", "the graphics driver's choice"),
+    choice("vulkan", "Vulkan"),
+    choice("dx12", "Direct3D 12, on Windows"),
+    choice("metal", "Metal, on macOS"),
+    choice("gl", "OpenGL"),
+    choice("software", "the processor, with no graphics card"),
+];
+
+const MENU_KINDS: &[Choice] = &[
+    choice("native", "the system's menu bar"),
+    choice("list", "a list in the window"),
+];
+
 const LIMIT_SCOPES: &[Choice] = &[
     choice("remote", "jobs on remote servers"),
     choice("all", "every job"),
@@ -312,7 +332,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 101] = [
+pub const SCHEMA: [SettingInfo; 104] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -747,6 +767,35 @@ pub const SCHEMA: [SettingInfo; 101] = [
         kind: K::Flag,
         default: "false",
         help: "In the GUI, fades the bars when the mouse rests, so the panels have the room. Visual only; nothing is announced.",
+        arrives: Some("alpha.6"),
+    },
+    // The GUI's start (the GUI alpha's contract step, Monday, November 2,
+    // 2026; R27's contract request C4).
+    SettingInfo {
+        key: "frontend",
+        name: "Opens in",
+        group: G::Look,
+        kind: SettingKind::Choice(FRONTENDS),
+        default: "\"auto\"",
+        help: "Where diro opens its panels. Auto opens the GUI on a desktop and the terminal over SSH, on a console or when output is piped. diro --gui and diro --tui choose for one start.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "graphics",
+        name: "GUI graphics",
+        group: G::Look,
+        kind: SettingKind::Choice(GRAPHICS_APIS),
+        default: "\"auto\"",
+        help: "The graphics API the GUI draws with. Auto lets the graphics driver choose; software, drawing on the processor, comes later in this alpha. diro --graphics NAME chooses for one start.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "menus",
+        name: "GUI menus",
+        group: G::Look,
+        kind: SettingKind::Choice(MENU_KINDS),
+        default: "\"native\"",
+        help: "Native shows the GUI's menus in the system's menu bar on Windows and macOS, and as a list in the window elsewhere. List uses the list everywhere.",
         arrives: Some("alpha.6"),
     },
     // The viewer (alpha.2, W2d; research/alpha2-plan.md part three and

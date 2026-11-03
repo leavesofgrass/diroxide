@@ -9,15 +9,21 @@
 //! the current folder in the left panel and restores the right one (the
 //! owner's answer 74); `diro PATH` and `diro LEFT RIGHT` open those.
 //!
-//! `--tui` and `--gui` are accepted (the GUI comes with alpha.6, so
-//! `--gui` says so and opens the terminal); `--inline` draws below the
-//! prompt instead of on the alternate screen; `--cwd-file FILE` writes the
-//! active panel's last local folder at quit for the shell wrapper of
-//! `diro init`; `--theme NAME` sets the theme for this session.
+//! Which frontend opens is [`choose_frontend`]'s decision table: the flag,
+//! then the `frontend` setting, then the automatic choice (the GUI on a
+//! desktop, the terminal over SSH, on a console or with a pipe). A GUI
+//! that cannot start says one sentence and the terminal opens instead.
+//! `--graphics NAME` chooses the GUI's graphics API for one start, and
+//! `--background` opens the GUI off screen, never in front, for automated
+//! checks. `--inline` draws below the prompt instead of on the alternate
+//! screen; `--cwd-file FILE` writes the active panel's last local folder at
+//! quit for the shell wrapper of `diro init`; `--theme NAME` sets the theme
+//! for this session.
 //!
-//! On a terminal the full screen runs until the app quits; when standard
+//! In the terminal, the full screen runs until the app quits; when standard
 //! input or output is not a terminal (a pipe, a file), one screen is
-//! printed as plain lines instead.
+//! printed as plain lines instead. Subcommands (`diro ls`, `diro serve`
+//! and the rest) never come here, so they never open the GUI.
 
 use std::env;
 use std::io::{IsTerminal, Write};
@@ -25,9 +31,10 @@ use std::path::Path;
 
 use diroxide_app::keymap::Platform;
 use diroxide_app::{App, AppOptions, Runtime};
-use diroxide_config::Paths;
+use diroxide_config::{Frontend as FrontendSetting, Graphics, Paths};
 use diroxide_core::{Message, Place, PlaceKind};
 use diroxide_filetype::TypeRegistry;
+use diroxide_gui::{GraphicsApi, GuiOptions};
 use diroxide_tui::{Files, Tui, TuiOptions};
 
 /// The terminal's log in the state folder: what it found at start.
@@ -46,8 +53,13 @@ pub struct OpenOptions {
     pub no_plugins: bool,
     /// The terminal, even where a display is there.
     pub tui: bool,
-    /// The GUI (it comes with alpha.6).
+    /// The GUI, even where the terminal would open.
     pub gui: bool,
+    /// The GUI off screen, never activated, with no taskbar button: for
+    /// automated checks, which must not take the focus.
+    pub background: bool,
+    /// The GUI's graphics API for this start, over the `graphics` setting.
+    pub graphics: Option<GraphicsApi>,
     /// The inline viewport instead of the alternate screen (W1d-2).
     pub inline: bool,
     /// Where to write the folder the shell moves to at quit.
@@ -88,6 +100,136 @@ pub fn display_present() -> bool {
     ["WAYLAND_DISPLAY", "DISPLAY"]
         .iter()
         .any(|name| env::var_os(name).is_some_and(|v| !v.is_empty()))
+}
+
+/// Whether this is a remote session over SSH, where a window would open on
+/// the far machine's desktop, not the user's: `SSH_CONNECTION` or
+/// `SSH_TTY` is set.
+pub fn remote_session() -> bool {
+    ["SSH_CONNECTION", "SSH_TTY"]
+        .iter()
+        .any(|name| env::var_os(name).is_some_and(|v| !v.is_empty()))
+}
+
+/// The frontend that opens the panels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Frontend {
+    /// The GUI's window.
+    Gui,
+    /// The terminal: the full screen, or plain lines on a pipe.
+    Terminal,
+}
+
+/// What [`choose_frontend`] decides from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrontendInputs {
+    /// `--gui`.
+    pub gui_flag: bool,
+    /// `--tui`.
+    pub tui_flag: bool,
+    /// The `frontend` setting.
+    pub setting: FrontendSetting,
+    /// A remote session over SSH ([`remote_session`]).
+    pub remote: bool,
+    /// A display for a window ([`display_present`]).
+    pub display: bool,
+    /// Standard input and output are both a terminal (not a pipe or a
+    /// file).
+    pub interactive: bool,
+    /// This `diro` has the GUI (its `gui` feature).
+    pub gui_built: bool,
+}
+
+/// The frontend chosen, and the sentence said first when the choice is not
+/// the one asked for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FrontendChoice {
+    /// The frontend.
+    pub frontend: Frontend,
+    /// Said before the terminal opens, when the GUI was asked for and
+    /// cannot open.
+    pub notice: Option<String>,
+}
+
+/// The sentence when the GUI was asked for and this build has none.
+pub const NOT_BUILT_NOTICE: &str =
+    "This diro was built without the GUI; the terminal opens instead.";
+
+/// The sentence when the GUI was asked for and there is no display.
+pub const NO_DISPLAY_NOTICE: &str =
+    "There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead.";
+
+/// Which frontend opens, in this order (the GUI alpha's contract step):
+///
+/// 1. `--tui` opens the terminal, whatever else is asked.
+/// 2. `--gui` opens the GUI; where this build has no GUI or there is no
+///    display, the terminal opens after a sentence that says why.
+/// 3. The `frontend` setting: `gui` as `--gui`; `terminal` opens the
+///    terminal.
+/// 4. `auto`, the default: the terminal over SSH (`SSH_CONNECTION` or
+///    `SSH_TTY`), with no display (Linux and the other Unix systems need
+///    `WAYLAND_DISPLAY` or `DISPLAY`; Windows and macOS always have one),
+///    when standard input or output is a pipe or a file, and in a build
+///    without the GUI; the GUI everywhere else.
+///
+/// Subcommands never come here. A GUI that starts and then fails says one
+/// sentence and opens the terminal ([`run`]).
+pub fn choose_frontend(inputs: &FrontendInputs) -> FrontendChoice {
+    let terminal = |notice: Option<&str>| FrontendChoice {
+        frontend: Frontend::Terminal,
+        notice: notice.map(str::to_owned),
+    };
+    if inputs.tui_flag {
+        return terminal(None);
+    }
+    let gui_asked = inputs.gui_flag || inputs.setting == FrontendSetting::Gui;
+    if gui_asked {
+        if !inputs.gui_built {
+            return terminal(Some(NOT_BUILT_NOTICE));
+        }
+        if !inputs.display {
+            return terminal(Some(NO_DISPLAY_NOTICE));
+        }
+        return FrontendChoice {
+            frontend: Frontend::Gui,
+            notice: None,
+        };
+    }
+    let automatic = inputs.setting == FrontendSetting::Auto
+        && !inputs.remote
+        && inputs.display
+        && inputs.interactive
+        && inputs.gui_built;
+    if automatic {
+        FrontendChoice {
+            frontend: Frontend::Gui,
+            notice: None,
+        }
+    } else {
+        terminal(None)
+    }
+}
+
+/// The GUI's graphics API: `--graphics` first, then the `graphics`
+/// setting.
+pub fn graphics_api(flag: Option<GraphicsApi>, setting: Graphics) -> GraphicsApi {
+    flag.unwrap_or(match setting {
+        Graphics::Auto => GraphicsApi::Auto,
+        Graphics::Vulkan => GraphicsApi::Vulkan,
+        Graphics::Dx12 => GraphicsApi::Dx12,
+        Graphics::Metal => GraphicsApi::Metal,
+        Graphics::Gl => GraphicsApi::Gl,
+        Graphics::Software => GraphicsApi::Software,
+    })
+}
+
+/// The sentence said when the GUI started and could not open: the cause
+/// first, that the terminal opens instead, then what to try.
+pub fn gui_failed_sentence(error: &diroxide_gui::GuiError) -> String {
+    use diroxide_core::Explain;
+    let cause = error.to_string();
+    let next = error.next_step();
+    format!("Could not open the GUI: {cause}; the terminal opens instead. {next}")
 }
 
 /// The folder a shell can move to for a place: the place itself when it
@@ -138,29 +280,103 @@ pub fn write_cwd_file(file: &Path, folder: Option<&Place>) -> Result<Option<Stri
     Ok(why)
 }
 
-/// Opens the panels with the platform's config and state folders: the
-/// full screen on a terminal, one screen of plain lines otherwise.
+/// Opens the panels with the platform's config and state folders, in the
+/// frontend [`choose_frontend`] picks: the GUI's window, or the full screen
+/// on a terminal, one screen of plain lines otherwise.
 pub fn run(options: &OpenOptions, out: &mut dyn Write) -> Result<i32, CliError> {
     let here = current_place()?;
     let paths = paths(options.portable);
+    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    let settings = paths.as_ref().map(start_settings).unwrap_or_default();
+    let choice = choose_frontend(&FrontendInputs {
+        gui_flag: options.gui,
+        tui_flag: options.tui,
+        setting: settings.frontend,
+        remote: remote_session(),
+        display: display_present(),
+        interactive,
+        gui_built: diroxide_gui::built(),
+    });
+    let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
+    if let Some(notice) = &choice.notice {
+        writeln!(out, "{notice}").map_err(write_failed)?;
+    }
+    if choice.frontend == Frontend::Gui {
+        let gui = GuiOptions {
+            background: options.background,
+            graphics: graphics_api(options.graphics, settings.graphics),
+            ..GuiOptions::default()
+        };
+        return run_gui(options, paths.as_ref(), &here, gui, out);
+    }
+    open_terminal(options, paths.as_ref(), &here, out)
+}
+
+/// The settings the start chooses by (`frontend`, `graphics`), read
+/// quietly: a file that is missing or not TOML gives the defaults here,
+/// and [`build`] reads it again, says its problems once and backs a broken
+/// file up.
+fn start_settings(paths: &Paths) -> diroxide_config::Settings {
+    std::fs::read_to_string(paths.config_file(Paths::SETTINGS))
+        .ok()
+        .and_then(|text| diroxide_config::Settings::from_toml(&text).ok())
+        .unwrap_or_default()
+}
+
+/// The terminal: the full screen when standard input and output are a
+/// terminal, one screen of plain lines otherwise.
+fn open_terminal(
+    options: &OpenOptions,
+    paths: Option<&Paths>,
+    here: &Place,
+    out: &mut dyn Write,
+) -> Result<i32, CliError> {
     if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
-        run_terminal(options, paths.as_ref(), &here, out)
+        run_terminal(options, paths, here, out)
     } else {
-        run_with(options, paths.as_ref(), &here, out)
+        run_with(options, paths, here, out)
     }
 }
 
-/// Says what the options cannot do before the screen opens: the GUI
-/// comes with alpha.6; an unknown theme gives the default.
+/// Opens the GUI's window with these folders until the app quits, then
+/// writes the `--cwd-file`. On Windows a console that only this start
+/// opened (a double-click) is let go first, so it closes. A GUI that cannot
+/// start says one sentence, and the terminal opens instead, on a new
+/// console if the first was let go.
+pub fn run_gui(
+    options: &OpenOptions,
+    paths: Option<&Paths>,
+    here: &Place,
+    gui: GuiOptions,
+    out: &mut dyn Write,
+) -> Result<i32, CliError> {
+    // Before the app and its runtime exist, so no other thread runs yet.
+    diroxide_gui::prepare(&gui);
+    let released = diroxide_gui::console::release_for_window();
+    let (app, runtime) = match build(options, paths, here) {
+        Ok(built) => built,
+        Err(error) => {
+            // The reason must reach a console (a shortcut that names a
+            // folder that is gone).
+            diroxide_gui::console::regain_for_terminal(released);
+            return Err(error);
+        }
+    };
+    match diroxide_gui::run(app, runtime, gui) {
+        Ok(app) => finish(&app, options, out),
+        Err(error) => {
+            diroxide_gui::console::regain_for_terminal(released);
+            let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
+            writeln!(out, "{}", gui_failed_sentence(&error)).map_err(write_failed)?;
+            open_terminal(options, paths, here, out)
+        }
+    }
+}
+
+/// Says what the options cannot do before the screen opens: an unknown
+/// theme gives the default.
 fn notices(options: &OpenOptions, out: &mut dyn Write) -> Result<(), CliError> {
     let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
-    if options.gui {
-        writeln!(
-            out,
-            "The GUI comes with a later alpha; the terminal opens instead."
-        )
-        .map_err(write_failed)?;
-    }
     if let Some(theme) = &options.theme
         && !diroxide_app::settings::theme_names().contains(theme)
     {
@@ -356,7 +572,6 @@ mod tests {
         assert_eq!(app.panel(diroxide_core::Side::Right).place(), &src);
         let options = OpenOptions {
             places: vec![".".to_owned(), "src".to_owned()],
-            gui: true,
             theme: Some("no-such".to_owned()),
             ..OpenOptions::default()
         };
@@ -364,11 +579,181 @@ mod tests {
         run_with(&options, Some(&paths), &here, &mut out).unwrap();
         let text = String::from_utf8(out).unwrap();
         let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], "Unknown theme: no-such. Galaxy is in use.");
+    }
+
+    /// The inputs of a desktop start with nothing asked: Windows or macOS,
+    /// or Linux with a display, from a shell or a double-click.
+    fn desktop() -> FrontendInputs {
+        FrontendInputs {
+            gui_flag: false,
+            tui_flag: false,
+            setting: FrontendSetting::Auto,
+            remote: false,
+            display: true,
+            interactive: true,
+            gui_built: true,
+        }
+    }
+
+    /// The decision table of [`choose_frontend`], row by row: the flag,
+    /// then the setting, then the automatic choice.
+    #[test]
+    fn the_frontend_is_the_flag_then_the_setting_then_automatic() {
+        use Frontend::{Gui, Terminal};
+        let base = desktop();
+        let rows: Vec<(&str, FrontendInputs, Frontend, Option<&str>)> = vec![
+            ("a desktop opens the GUI", base, Gui, None),
+            (
+                "--tui wins over --gui and the setting",
+                FrontendInputs {
+                    tui_flag: true,
+                    gui_flag: true,
+                    setting: FrontendSetting::Gui,
+                    ..base
+                },
+                Terminal,
+                None,
+            ),
+            (
+                "--gui opens it over SSH and with a pipe",
+                FrontendInputs {
+                    gui_flag: true,
+                    remote: true,
+                    interactive: false,
+                    setting: FrontendSetting::Terminal,
+                    ..base
+                },
+                Gui,
+                None,
+            ),
+            (
+                "--gui with no display says why",
+                FrontendInputs {
+                    gui_flag: true,
+                    display: false,
+                    ..base
+                },
+                Terminal,
+                Some(NO_DISPLAY_NOTICE),
+            ),
+            (
+                "--gui in a build without it says why",
+                FrontendInputs {
+                    gui_flag: true,
+                    gui_built: false,
+                    ..base
+                },
+                Terminal,
+                Some(NOT_BUILT_NOTICE),
+            ),
+            (
+                "the setting terminal",
+                FrontendInputs {
+                    setting: FrontendSetting::Terminal,
+                    ..base
+                },
+                Terminal,
+                None,
+            ),
+            (
+                "the setting gui opens it with a pipe",
+                FrontendInputs {
+                    setting: FrontendSetting::Gui,
+                    interactive: false,
+                    ..base
+                },
+                Gui,
+                None,
+            ),
+            (
+                "the setting gui with no display says why",
+                FrontendInputs {
+                    setting: FrontendSetting::Gui,
+                    display: false,
+                    ..base
+                },
+                Terminal,
+                Some(NO_DISPLAY_NOTICE),
+            ),
+            (
+                "automatic over SSH",
+                FrontendInputs {
+                    remote: true,
+                    ..base
+                },
+                Terminal,
+                None,
+            ),
+            (
+                "automatic with no display (a container, a console)",
+                FrontendInputs {
+                    display: false,
+                    ..base
+                },
+                Terminal,
+                None,
+            ),
+            (
+                "automatic with a pipe or a file",
+                FrontendInputs {
+                    interactive: false,
+                    ..base
+                },
+                Terminal,
+                None,
+            ),
+            (
+                "automatic in a build without the GUI, silently",
+                FrontendInputs {
+                    gui_built: false,
+                    ..base
+                },
+                Terminal,
+                None,
+            ),
+        ];
+        for (row, inputs, frontend, notice) in rows {
+            let choice = choose_frontend(&inputs);
+            assert_eq!(choice.frontend, frontend, "{row}");
+            assert_eq!(choice.notice.as_deref(), notice, "{row}");
+        }
+        // Each sentence carries its meaning first, within a Braille line.
+        for notice in [NOT_BUILT_NOTICE, NO_DISPLAY_NOTICE] {
+            assert!(notice.chars().take(40).collect::<String>().contains("GUI"));
+        }
+        // Wired to the real environment: whatever it holds, a choice is made.
+        let _ = choose_frontend(&FrontendInputs {
+            remote: remote_session(),
+            display: display_present(),
+            gui_built: diroxide_gui::built(),
+            ..base
+        });
+    }
+
+    #[test]
+    fn graphics_come_from_the_flag_then_the_setting() {
+        assert_eq!(graphics_api(None, Graphics::Auto), GraphicsApi::Auto);
+        assert_eq!(graphics_api(None, Graphics::Dx12), GraphicsApi::Dx12);
         assert_eq!(
-            lines[0],
-            "The GUI comes with a later alpha; the terminal opens instead."
+            graphics_api(None, Graphics::Software),
+            GraphicsApi::Software
         );
-        assert_eq!(lines[1], "Unknown theme: no-such. Galaxy is in use.");
+        assert_eq!(
+            graphics_api(Some(GraphicsApi::Vulkan), Graphics::Dx12),
+            GraphicsApi::Vulkan
+        );
+    }
+
+    #[test]
+    fn a_gui_that_cannot_start_says_so_and_what_to_try() {
+        let said = gui_failed_sentence(&diroxide_gui::GuiError::Graphics(
+            "no compatible WGPU device found".to_owned(),
+        ));
+        assert_eq!(
+            said,
+            "Could not open the GUI: the window could not start its graphics (no compatible WGPU device found); the terminal opens instead. Try another graphics API with diro --graphics, such as dx12, vulkan or gl. The terminal, diro --tui, needs none."
+        );
     }
 
     #[test]

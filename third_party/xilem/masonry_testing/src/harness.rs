@@ -30,7 +30,6 @@ use image::{DynamicImage, ImageFormat, ImageReader, Rgba, RgbaImage};
 use imaging_vello_cpu::VelloCpuRenderer;
 use masonry_core::imaging::record::{Scene, replay_transformed};
 use masonry_core::imaging::{ImageRenderer as _, Painter};
-use oxipng::{Options, optimize_from_memory};
 use tracing::debug;
 
 use masonry_core::accesskit::{
@@ -202,7 +201,8 @@ pub struct TestHarnessParams {
     ///
     /// You can use [`TestHarnessParams::KIBIBYTE`] to help set this.
     /// Keeping screenshot files small avoids clones of this repository taking too long.
-    /// Masonry testing uses [oxipng] to optimise the size of screenshots.
+    /// Screenshots are written as the `image` crate encodes them (diroxide's
+    /// copy has no `oxipng`, so no C library is compiled).
     pub max_screenshot_size: u32,
 }
 
@@ -1125,13 +1125,9 @@ impl<W: Widget> TestHarness<W> {
             let mut buffer = Cursor::new(Vec::new());
             image.write_to(&mut buffer, ImageFormat::Png).unwrap();
 
-            let image_data = buffer.into_inner();
-            // Whenever we save a file, we optimise it.
-            // This avoids cases where people copy the `new` file to the reference path, thus avoiding optimisation
-            // (We could skip this for diff images, but that is so far off the hot path that it's not
-            // worth a different code path for it.)
-            let data =
-                optimize_from_memory(image_data.as_slice(), &Options::from_preset(5)).unwrap();
+            // diroxide: written as encoded, not optimised with oxipng, whose
+            // libdeflate back end compiles C (diroxide.patch).
+            let data = buffer.into_inner();
             let saved_len = data.len();
             std::fs::write(path, data).unwrap();
             if let Some(max_size) = max_size
