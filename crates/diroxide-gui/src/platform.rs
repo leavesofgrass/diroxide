@@ -10,6 +10,8 @@
 //!   terminal when the window cannot start, and the times that measure how
 //!   long a console stood before it was let go. Adapted from textweaver's
 //!   `crates/textweaver-xilem/src/console.rs`, the owner's own project.
+//! - On Windows, the message box that says why the window could not
+//!   start when its console was let go (textweaver's `src/safety.rs`).
 //!
 //! Elsewhere the console calls do nothing: a program started from a
 //! terminal on Linux or macOS writes to it, and one started from the
@@ -106,6 +108,26 @@ pub(crate) mod win {
             }
         }
         true
+    }
+
+    /// A message box with an OK button and the error icon, owned by no
+    /// window, which waits for the person to close it.
+    pub(crate) fn message_box(title: &str, text: &str) {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            MB_ICONERROR, MB_OK, MB_SETFOREGROUND, MessageBoxW,
+        };
+        let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
+        let (title, text) = (wide(title), wide(text));
+        // SAFETY: both buffers are ours, end with a zero and outlive the
+        // call, which only reads them; no owner window is passed.
+        unsafe {
+            let _ = MessageBoxW(
+                std::ptr::null_mut(),
+                text.as_ptr(),
+                title.as_ptr(),
+                MB_OK | MB_ICONERROR | MB_SETFOREGROUND,
+            );
+        }
     }
 
     /// Milliseconds since this process was created, from the system's

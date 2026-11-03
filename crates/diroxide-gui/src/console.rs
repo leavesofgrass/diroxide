@@ -79,6 +79,21 @@ pub fn release_for_window() -> Released {
     released
 }
 
+/// Says why the window could not start in a message box, when the
+/// console was let go ([`release_for_window`]): started from a shortcut
+/// or Explorer, the sentence `diro` prints would otherwise go to a
+/// console the person never saw (the terminal's full screen covers it,
+/// or the console closes with the program). The box waits for Enter or
+/// Escape and names the program in its title. Nothing happens when the
+/// console was kept (a shell shows the sentence) or elsewhere than
+/// Windows. Adapted from textweaver's `crates/textweaver-xilem/src/safety.rs`
+/// (the owner's own project).
+pub fn tell_start_error(released: Released, sentence: &str) {
+    if released.freed {
+        imp::message_box("diroxide could not open its window", sentence);
+    }
+}
+
 /// After [`release_for_window`] let go of the console and the window could
 /// not start: a new console, so `diro` can say why and open the terminal
 /// in it. True when there is a console to use.
@@ -121,6 +136,10 @@ mod imp {
         }
     }
 
+    pub(super) fn message_box(title: &str, text: &str) {
+        win::message_box(title, text);
+    }
+
     pub(super) fn regain_for_terminal() -> bool {
         if !FREED.swap(false, Ordering::AcqRel) {
             return true;
@@ -144,6 +163,8 @@ mod imp {
     pub(super) fn release_for_window() -> Released {
         Released::default()
     }
+
+    pub(super) fn message_box(_title: &str, _text: &str) {}
 
     pub(super) fn regain_for_terminal() -> bool {
         true

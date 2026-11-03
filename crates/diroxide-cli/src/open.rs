@@ -364,8 +364,10 @@ pub fn run_gui(
     let (app, runtime) = match build_for(options, paths, here, registry, KeyColumn::Gui) {
         Ok(built) => built,
         Err(error) => {
-            // The reason must reach a console (a shortcut that names a
-            // folder that is gone).
+            // The reason must reach the person: a message box when the
+            // console was let go (a shortcut that names a folder that is
+            // gone), and a console for the error line.
+            diroxide_gui::console::tell_start_error(released, &error.to_string());
             diroxide_gui::console::regain_for_terminal(released);
             return Err(error);
         }
@@ -373,9 +375,13 @@ pub fn run_gui(
     match diroxide_gui::run(app, runtime, gui) {
         Ok(app) => finish(&app, options, out),
         Err(error) => {
+            let sentence = gui_failed_sentence(&error);
+            // Started from a shortcut, the console is gone: a message box
+            // says why before the terminal opens on a new one.
+            diroxide_gui::console::tell_start_error(released, &sentence);
             diroxide_gui::console::regain_for_terminal(released);
             let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
-            writeln!(out, "{}", gui_failed_sentence(&error)).map_err(write_failed)?;
+            writeln!(out, "{sentence}").map_err(write_failed)?;
             open_terminal(options, paths, here, out)
         }
     }
