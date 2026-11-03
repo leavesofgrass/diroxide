@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use diroxide_archive::fuzzing;
 
 use crate::build;
+use crate::fuzz_finds;
 use crate::hostile;
 
 /// The seeds folder in the repository.
@@ -70,6 +71,25 @@ fn generated() -> Vec<(&'static str, String, Vec<u8>)> {
     let mut xz_tar = vec![1u8];
     xz_tar.extend_from_slice(&build::xz(&course, 1));
     seeds.push(("archive_stream", "xz-tar.bin".to_owned(), xz_tar));
+    // The fuzz finds of Tuesday, November 3, 2026 (fuzz_finds.rs).
+    let mut xz_count = vec![1u8];
+    xz_count.extend_from_slice(&fuzz_finds::XZ_INDEX_COUNT);
+    seeds.push(("archive_stream", "xz-index-count.bin".to_owned(), xz_count));
+    seeds.push((
+        "archive_xz",
+        "index-count.xz".to_owned(),
+        fuzz_finds::XZ_INDEX_COUNT.to_vec(),
+    ));
+    seeds.push((
+        "archive_xz",
+        "index-count-whole.xz".to_owned(),
+        fuzz_finds::xz_index_count_whole(),
+    ));
+    seeds.push((
+        "archive_7z",
+        "stream-counts.7z".to_owned(),
+        fuzz_finds::SEVENZ_COUNTS.to_vec(),
+    ));
     let mut joined = build::xz(b"first ", 0);
     joined.extend_from_slice(&[0; 4]);
     joined.extend_from_slice(&build::xz(b"second", 0));
