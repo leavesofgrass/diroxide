@@ -293,3 +293,34 @@ fn the_first_run_components_list_opens_once() {
     let second = first_start(dir.path(), true);
     assert!(second.dialog_name().is_none(), "{:?}", second.dialog_name());
 }
+
+#[test]
+fn a_changed_host_key_is_refused_with_the_line_to_forget_it_shown() {
+    let (_dir, mut rig) = window();
+    let before = rig.f.app().panel(Side::Left).place().clone();
+    let place = Place::parse("sftp://build.example/").unwrap();
+    let _ = rig.f.app_mut().open_place(Side::Left, place.clone());
+    // The listing is answered here as the SFTP plugin's provider answers
+    // a key ssh refused: never by the network.
+    let _ = rig.f.app_mut().take_requests();
+    let request = rig.f.app().panel(Side::Left).loading_request().unwrap();
+    let from = rig.spoken().len();
+    send(
+        &mut rig,
+        AppEvent::Listed {
+            request,
+            place,
+            result: Err(diroxide_vfs::VfsError::Unsafe {
+                why: "Host key changed. Not connected. To forget the old key, run: ssh-keygen -R build.example".to_owned(),
+            }),
+        },
+    );
+    let spoken = rig.spoken()[from..].join(" ");
+    eprintln!("heard: {spoken}");
+    assert!(spoken.contains("Host key changed"), "{spoken}");
+    assert!(spoken.contains("ssh-keygen -R build.example"), "{spoken}");
+    // Refused: no question to trust it, and the panel stays where it was.
+    assert!(rig.dialog_name().is_none(), "{:?}", rig.dialog_name());
+    assert_eq!(rig.f.app().panel(Side::Left).place(), &before);
+    assert!(rig.focus_node().1.starts_with("notes.txt"));
+}
