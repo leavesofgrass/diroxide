@@ -685,10 +685,17 @@ impl App {
             key: key.to_owned(),
             value: value.clone(),
         });
-        let words = self.settings.value_words(key);
-        let message = match value {
-            Some(_) => crate::messages::setting_changed(info.name, &words),
-            None => crate::messages::setting_reset(info.name, &words),
+        // The look's settings say what they do (lane A6): focus mode with
+        // what it does in the window.
+        let message = match self.look_setting_line(key) {
+            Some(line) => Message::info(line),
+            None => {
+                let words = self.settings.value_words(key);
+                match value {
+                    Some(_) => crate::messages::setting_changed(info.name, &words),
+                    None => crate::messages::setting_reset(info.name, &words),
+                }
+            }
         };
         let mut effects = vec![Effect::Redraw(Redraw::All), self.say(message)];
         if let Some(Purpose::Settings) = self.opens.last().map(|o| &o.purpose) {

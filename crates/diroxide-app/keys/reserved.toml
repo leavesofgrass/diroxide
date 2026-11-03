@@ -41,9 +41,5 @@ name = "Folder tree"
 alpha = "alpha.8"
 column = "gui"
 
-[[key]]
-keys = ["f11"]
-command = "view.full-screen"
-name = "Full screen"
-alpha = "alpha.6"
-column = "gui"
+# F11 was kept here for Full screen until the command came (lane A6): the
+# GUI column binds it to view.full-screen now.

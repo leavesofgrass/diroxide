@@ -34,6 +34,8 @@ mod info;
 mod jobs_ui;
 mod keys;
 mod labeling;
+// Full screen and focus mode (lane A6).
+pub mod look;
 mod nav;
 mod organize;
 // A plugin's list inside a panel, over its place (lane L).
@@ -956,6 +958,8 @@ pub struct App {
     trash: trash_ui::TrashState,
     /// The Volumes list's rows (lane A3).
     volumes: volumes_ui::VolumesState,
+    /// Full screen (lane A6).
+    look: look::LookState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1281,6 +1285,7 @@ impl App {
             rooms: [None, None],
             trash: trash_ui::TrashState::default(),
             volumes: volumes_ui::VolumesState::default(),
+            look: look::LookState::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1868,6 +1873,11 @@ impl App {
         if self.dialogs.is_empty()
             && let Some(effects) = self.preview_dispatch(action, &command.id)
         {
+            return effects;
+        }
+        // Full screen and focus mode, everywhere: the viewer, the quick
+        // view and a plugin's list keep them (lane A6).
+        if let Some(effects) = self.look_dispatch(command) {
             return effects;
         }
         // A plugin list in the panel takes its own commands, and refuses

@@ -628,7 +628,9 @@ mod tests {
         assert_eq!(table_problems(), &[] as &[String]);
         assert!(terminal_table().len() >= 30);
         assert!(screen_reader_table().len() >= 10);
-        assert!(reserved_table().len() >= 6);
+        // Five: F11 left the table when Full screen came (lane A6).
+        assert!(reserved_table().len() >= 5);
+        assert!(reserved_entry(&key("f11"), KeyColumn::Gui).is_none());
     }
 
     #[test]
