@@ -4,7 +4,7 @@ diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, key
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, moving around, operations, volumes and the trash, remote places and the queue, files and archives, finding things, plugins, hooks, scripts and optional components, keys, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files and archives, finding things, plugins, hooks, scripts and optional components, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -24,8 +24,9 @@ If you are new, begin with the [quick start](quickstart.md).
 ### Getting started
 
 - [Quick start](quickstart.md): starting, moving, marking, copying, renaming, deleting, undoing and quitting, and a first look at search, labels, compare, archives and the viewer.
-- [Installing diroxide](install.md): building from source today (a Rust toolchain and a C compiler), the one file per platform that comes in a later alpha, and `cargo install diro` with the first beta.
-- [Using diroxide with a screen reader](screen-readers.md): how diroxide talks to NVDA, JAWS, Orca and VoiceOver, what you should hear, the settings to check, and the Braille display.
+- [Installing diroxide](install.md): building from source (a Rust toolchain and a C compiler), the one file per platform, what the window needs and costs to build, a smaller or terminal-only build, and `cargo install diro` with the first beta.
+- [The GUI](gui.md): the window version of diroxide: opening it with `diro --gui`, the window in reading order, its keys and menus, what it says and when, its dialogs as they are now, and what it does not do yet.
+- [Using diroxide with a screen reader](screen-readers.md): how diroxide talks to NVDA, JAWS, Orca and VoiceOver, what you should hear in the terminal and in the window, the settings to check, plugin lists, and the Braille display.
 - [Terminals](terminals.md): which terminal to use, the keys terminals keep, Windows Terminal's own keys and how to give them back, the key test, and `diro --inline`, `diro ls` and `diro search` for when the full screen fails.
 - [Troubleshooting](troubleshooting.md): common problems, and how to report a bug.
 
@@ -75,7 +76,6 @@ If you are new, begin with the [quick start](quickstart.md).
 
 These guides are not written yet, because the features they describe are not built. Each arrives with the alpha that ships its feature.
 
-- The GUI.
 - Tools and conversions, previews of more kinds of document, and git.
 - Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, disk images and GitHub.
 

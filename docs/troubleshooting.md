@@ -148,9 +148,26 @@ It asks only when a job is running or a prompt still holds text you typed: "Quit
 
 diroxide never throws a file away. It reports the problem at start in words, uses the defaults for that file, and keeps the old one with `.bad` added to its name. Config problems, in the Help menu (Alt+H, then C) and the palette, lists every problem with its file. [Settings](settings.md) has the details.
 
-## `diro --gui` opens the terminal
+## `diro` opens the terminal, or `diro --gui` will not open the window
 
-That is true until the GUI arrives, in a later alpha. `diro --gui` says that the GUI comes later and opens the terminal instead. Use the terminal for now.
+`diro` chooses between the window and the terminal at each start, in this order: `--tui` opens the terminal; `--gui` opens the window; then the `frontend` setting ("Opens in" in Settings); then automatic. [The GUI](gui.md#opening-the-gui) has the whole table. What to check:
+
+- `diro` by itself opens the terminal. Today automatic opens the terminal every time, whatever your display. Type `diro --gui`, or set `frontend` to `gui`, to get the window.
+- `--tui` beats everything, so a shell alias or a shortcut that adds it keeps the terminal. A `frontend` of `terminal` is beaten by `--gui`.
+- "There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead." On Linux, `diro` found neither variable, as in a text console, an SSH session or a container. Start `diro --gui` from a terminal on the desktop, or use the terminal. Windows and macOS always count as having a display.
+- "This diro was built without the GUI; the terminal opens instead." This `diro` was built with `--no-default-features`. Build with the default features, or download a release file. [Installing diroxide](install.md#a-smaller-diro) says which features leave the window out.
+- "Could not open the GUI: the window could not start its graphics (...); the terminal opens instead." The words in brackets are the graphics driver's own. Follow the sentence: try `diro --graphics dx12`, `vulkan` or `gl`, whichever your system has, and update the graphics driver. The `graphics` setting ("GUI graphics") keeps a choice. The terminal needs no graphics driver.
+- "Could not open the GUI: drawing on the processor comes later in this alpha; the terminal opens instead." The `graphics` setting, or `--graphics`, is `software`, which is not built yet. Set it to `auto`.
+- "the graphics API glide is not known; use auto, vulkan, dx12, metal, gl or software" is a usage mistake in the name after `--graphics`. `diro` exits with 2 and opens nothing.
+- Started from a shortcut or Explorer on Windows, there may be no console to show the sentence. A message box titled "diroxide could not open its window" says it instead, and waits for Enter or Escape. Then the terminal opens in a new console.
+
+A few things about the window itself:
+
+- Alt does nothing, or the menu bar does not show. On Windows the bar shows for Alt pressed alone, with no other key between, and for F9, F10 and Alt with a menu's letter. On Linux and macOS there is no system menu bar yet: F9 opens the menus as a list. With `menus` set to `list`, the list is used everywhere.
+- A key never arrives. Alt+F4, Alt+Space, Alt+Tab, Ctrl+Escape and Ctrl+Alt+Delete belong to the system, Insert to your screen reader, and chords of the Windows key are dropped. [The GUI](gui.md#keys-that-cannot-arrive) lists them. The palette and the menus reach every command.
+- A name shows empty boxes or blanks for some characters. On Linux without Fontconfig only the two bundled fonts draw, and characters they lack are missing glyphs. The name your screen reader reads is complete. [Installing diroxide](install.md#what-the-gui-needs) says more.
+- The viewer (F3) and the quick view (Shift+F3) show nothing in the window. Their keys reach the program, but the window does not draw the viewer's text or the quick view's preview yet. Use the terminal, `diro --tui`, for them. [Known limits](known-limits.md#the-gui) lists what else the window does not do yet.
+- Your screen reader is quiet at the top or bottom of a list, or while a copy runs. The window announces normal and high messages only. "Top of the list" and a job's progress are low, and are shown in the status bar without being said. Ctrl+D says where a job is.
 
 ## A filter says "Filter problem"
 
@@ -228,6 +245,7 @@ If a key is involved, add what `diro keys test` said. If an accessibility proble
 
 ## See also
 
+- [The GUI](gui.md)
 - [Terminals](terminals.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Archives](archives.md)
