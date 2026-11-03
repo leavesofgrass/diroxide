@@ -213,14 +213,33 @@ pub fn parse_time(text: &str) -> Option<Timestamp> {
     Some(Timestamp::from_unix(base.unix_seconds(), nanos))
 }
 
+/// A plugin list shown in a panel over its place (lane L): rows that are
+/// not files, which a plugin opened with `lister/open`. The panel's place
+/// stays the folder beneath it; this says that a list covers it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireList {
+    /// The id of the plugin that opened it.
+    pub plugin: String,
+    /// The lister's id, as its manifest's `[[lister]]` table names it.
+    pub id: String,
+    /// The list's title, the plugin's name last.
+    pub title: String,
+    /// How many rows it holds.
+    pub rows: u64,
+}
+
 /// A panel as the context names it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PanelRef {
-    /// The panel's place.
+    /// The panel's place: the folder beneath a plugin list, when one is
+    /// shown.
     pub place: WirePlace,
     /// The provider serving it: `local`, `archive`, `sftp`, or a plugin's
     /// scheme.
     pub provider: String,
+    /// The plugin list shown over the place, or null (lane L).
+    #[serde(default)]
+    pub list: Option<WireList>,
 }
 
 impl PanelRef {
@@ -234,7 +253,14 @@ impl PanelRef {
         Self {
             place: place.into(),
             provider,
+            list: None,
         }
+    }
+
+    /// The same reference with the plugin list shown over its place.
+    pub fn with_list(mut self, list: Option<WireList>) -> Self {
+        self.list = list;
+        self
     }
 }
 
@@ -501,13 +527,18 @@ mod tests {
         assert_eq!(json["protocol"], 1);
         assert_eq!(
             json["active"],
-            json!({"place": "/home/ada/docs", "provider": "local"})
+            json!({"place": "/home/ada/docs", "provider": "local", "list": null})
         );
         assert_eq!(json["selection_count"], 1);
         assert_eq!(json["selection_from_cursor"], true);
         assert_eq!(json["selection_truncated"], false);
         let back: WireContext = serde_json::from_value(json).unwrap();
         assert_eq!(back, context);
+        // A panel written before plugin lists reads with no list.
+        let older: PanelRef =
+            serde_json::from_value(json!({"place": "/home/ada/docs", "provider": "local"}))
+                .unwrap();
+        assert_eq!(older.list, None);
         let remote = PanelRef::for_place(&p("sftp://example.org/x"));
         assert_eq!(remote.provider, "sftp");
     }

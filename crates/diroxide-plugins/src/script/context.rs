@@ -33,7 +33,7 @@ use crate::protocol::PROTOCOL;
 use crate::script::command::ScriptCommand;
 use crate::script::interpreter::forward_slashes;
 use crate::script::recipe::{ListForm, RunMode, StdinForm};
-use crate::shapes::{PanelRef, WireContext, WireEntry};
+use crate::shapes::{PanelRef, WireContext, WireEntry, WireList};
 
 /// The words of the refusal when a command does not use the cursor's
 /// row (R22 section 2.6).
@@ -78,10 +78,16 @@ impl Picked {
 /// The panels and the selection when a command runs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunContext {
-    /// The active panel's place.
+    /// The active panel's place: the folder beneath a plugin list, when
+    /// one is shown.
     pub active: Place,
     /// The other panel's place, the destination by the orthodox rule.
     pub other: Place,
+    /// The plugin list shown over the active panel's place (lane L): then
+    /// the cursor and the marked entries are its rows, of kind item.
+    pub list: Option<WireList>,
+    /// The plugin list shown over the other panel's place.
+    pub other_list: Option<WireList>,
     /// The entry under the active panel's cursor.
     pub cursor: Option<Picked>,
     /// The entry under the other panel's cursor.
@@ -106,6 +112,8 @@ impl RunContext {
         Self {
             active,
             other,
+            list: None,
+            other_list: None,
             cursor: None,
             other_cursor: None,
             marked: Vec::new(),
@@ -571,8 +579,8 @@ pub fn context_json(
     };
     let mut wire_context = WireContext::new(
         &id,
-        PanelRef::for_place(&context.active),
-        PanelRef::for_place(&context.other),
+        PanelRef::for_place(&context.active).with_list(context.list.clone()),
+        PanelRef::for_place(&context.other).with_list(context.other_list.clone()),
     );
     wire_context.locale = context.locale.clone();
     if let Some(input) = &context.input {
@@ -947,6 +955,31 @@ mod tests {
         let spec = process_spec(Path::new("bash"), &[], &prepared, &terminal);
         assert_eq!(spec.tied(), diroxide_tools::process::Tie::Terminal);
         prepared.folder.remove().unwrap();
+    }
+
+    #[test]
+    fn the_context_says_a_plugin_list_over_the_folder_beneath() {
+        let command = command("# diro: selection = \"none\"\n");
+        let mut context = context();
+        let selection = effective(&command, &context).unwrap();
+        let plain: serde_json::Value =
+            serde_json::from_str(&context_json(&command, &context, &selection)).unwrap();
+        assert!(plain["active"]["list"].is_null(), "{plain}");
+        context.list = Some(WireList {
+            plugin: "changed-files".into(),
+            id: "changes".into(),
+            title: "Changed files (Changed files)".into(),
+            rows: 3,
+        });
+        let listed: serde_json::Value =
+            serde_json::from_str(&context_json(&command, &context, &selection)).unwrap();
+        assert!(
+            listed["active"]["place"].as_str().unwrap().ends_with("ada"),
+            "the folder beneath: {listed}"
+        );
+        assert_eq!(listed["active"]["list"]["id"], "changes");
+        assert_eq!(listed["active"]["list"]["rows"], 3);
+        assert!(listed["other"]["list"].is_null());
     }
 
     #[test]

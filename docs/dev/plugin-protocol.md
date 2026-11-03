@@ -114,9 +114,9 @@ Each method says who sends it, whether it is answered, what allows it, and wheth
 
 ### Listers, columns, descriptions and completion
 
-- `lister/open`: plugin to host, request. Shows rows that are not files in a panel. Allowed by: a [[lister]] table. State: served.
+- `lister/open`: plugin to host, request. Shows rows that are not files in a panel, over its place, which returns when the list is left. Allowed by: a [[lister]] table. State: served.
 - `lister/rows`: host to plugin, request. Asks for more rows of a lister, or a refresh. Allowed by: a [[lister]] table. State: served.
-- `lister/closed`: host to plugin, notification. Says the owner left a lister. Allowed by: a [[lister]] table. State: served.
+- `lister/closed`: host to plugin, notification. Says a lister's list left its panel: the owner left it, or a place replaced it. Allowed by: a [[lister]] table. State: served.
 - `column/format`: host to plugin, request. Asks for a batch of a column's values, at most 500 places. Allowed by: a [[column]] table. State: shape only, served later.
 - `column/changed`: plugin to host, notification. Says some of a column's values are stale. Allowed by: a [[column]] table. State: shape only, served later.
 - `place/describe`: host to plugin, request. Asks for a short description of a place for the title line. Allowed by: a [[place_info]] table. State: shape only, served later.
@@ -129,9 +129,9 @@ Each method says who sends it, whether it is answered, what allows it, and wheth
 - `ui/form`: plugin to host, request. Asks several labeled fields in one accessible dialog. Allowed by: always. State: shape only, served later.
 - `ui/show_text`: plugin to host, request. Shows a text document in the viewer. Allowed by: always. State: served.
 - `ui/show_diff`: plugin to host, request. Compares two texts in the diff view. Allowed by: always. State: shape only, served later.
-- `panel/get`: plugin to host, request. Reads a panel's place, cursor, selection, sort and filter. Allowed by: permissions.panel = read. State: served.
-- `panel/set`: plugin to host, request. Changes a panel's place, cursor or marks, as ordinary commands. Allowed by: permissions.panel = write. State: served.
-- `panel/changed`: host to plugin, notification. Tells a serve client that a panel's place, cursor or selection changed. Allowed by: a serve client. State: served.
+- `panel/get`: plugin to host, request. Reads a panel's place, cursor, selection, sort and filter, and its plugin list or null. Allowed by: permissions.panel = read. State: served.
+- `panel/set`: plugin to host, request. Changes a panel's place, cursor or marks, as ordinary commands; a place closes a plugin list. Allowed by: permissions.panel = write. State: served.
+- `panel/changed`: host to plugin, notification. Tells a serve client that a panel's place, cursor, selection or plugin list changed. Allowed by: a serve client. State: served.
 - `command/execute`: plugin to host, request. Runs a diroxide command by id. Allowed by: permissions.commands. State: served.
 - `fs/list`: plugin to host, request. Lists a folder through the providers. Allowed by: permissions.fs = read. State: served.
 - `fs/stat`: plugin to host, request. Gives one entry's details through the providers. Allowed by: permissions.fs = read. State: served.

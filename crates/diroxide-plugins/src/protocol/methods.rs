@@ -114,11 +114,12 @@ pub const HOOK_AFTER: &str = "hook/after";
 
 // Listers, columns, place descriptions and completion.
 
-/// Plugin to host, request: show a list of rows that are not files.
+/// Plugin to host, request: show a list of rows that are not files in a
+/// panel, over its place.
 pub const LISTER_OPEN: &str = "lister/open";
 /// Host to plugin, request: more rows of a lister, or a refresh.
 pub const LISTER_ROWS: &str = "lister/rows";
-/// Host to plugin, notification: the owner left a lister.
+/// Host to plugin, notification: a lister's list left its panel.
 pub const LISTER_CLOSED: &str = "lister/closed";
 /// Host to plugin, request: a batch of a column's values.
 pub const COLUMN_FORMAT: &str = "column/format";
@@ -144,12 +145,13 @@ pub const UI_FORM: &str = "ui/form";
 pub const UI_SHOW_TEXT: &str = "ui/show_text";
 /// Plugin to host, request: compare two texts in the diff view.
 pub const UI_SHOW_DIFF: &str = "ui/show_diff";
-/// Plugin to host, request: read a panel's place, selection and cursor.
+/// Plugin to host, request: read a panel's place, selection and cursor,
+/// and the plugin list shown over the place.
 pub const PANEL_GET: &str = "panel/get";
 /// Plugin to host, request: change a panel.
 pub const PANEL_SET: &str = "panel/set";
-/// Host to a serve client, notification: a panel's place, cursor or
-/// selection changed (W4d's request; `diro serve` sends it).
+/// Host to a serve client, notification: a panel's place, cursor,
+/// selection or plugin list changed (W4d's request; `diro serve` sends it).
 pub const PANEL_CHANGED: &str = "panel/changed";
 /// Plugin to host, request: run a diroxide command by id.
 pub const COMMAND_EXECUTE: &str = "command/execute";
@@ -665,7 +667,7 @@ pub const ALL: [Method; 66] = [
         R,
         A::Lists,
         "a [[lister]] table",
-        "Shows rows that are not files in a panel.",
+        "Shows rows that are not files in a panel, over its place, which returns when the list is left.",
         NOW,
     ),
     method(
@@ -683,7 +685,7 @@ pub const ALL: [Method; 66] = [
         N,
         A::Lists,
         "a [[lister]] table",
-        "Says the owner left a lister.",
+        "Says a lister's list left its panel: the owner left it, or a place replaced it.",
         NOW,
     ),
     method(
@@ -773,7 +775,7 @@ pub const ALL: [Method; 66] = [
         R,
         A::Services,
         "permissions.panel = read",
-        "Reads a panel's place, cursor, selection, sort and filter.",
+        "Reads a panel's place, cursor, selection, sort and filter, and its plugin list or null.",
         NOW,
     ),
     method(
@@ -782,7 +784,7 @@ pub const ALL: [Method; 66] = [
         R,
         A::Services,
         "permissions.panel = write",
-        "Changes a panel's place, cursor or marks, as ordinary commands.",
+        "Changes a panel's place, cursor or marks, as ordinary commands; a place closes a plugin list.",
         NOW,
     ),
     method(
@@ -791,7 +793,7 @@ pub const ALL: [Method; 66] = [
         N,
         A::Services,
         "a serve client",
-        "Tells a serve client that a panel's place, cursor or selection changed.",
+        "Tells a serve client that a panel's place, cursor, selection or plugin list changed.",
         NOW,
     ),
     method(

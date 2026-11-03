@@ -1646,6 +1646,7 @@ impl App {
             selection: panel.selected_entries().into_iter().cloned().collect(),
             sort: Some(panel.sort().describe()),
             filter: panel.filter().map(|f| f.text().to_owned()),
+            list: None,
         }
     }
 
