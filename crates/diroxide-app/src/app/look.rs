@@ -1,6 +1,6 @@
-//! The window's look in the app (lane A6, G3's contract requests 1, 2
-//! and 3): full screen and focus mode as commands, and a theme said
-//! with its contrast verdict however it is set.
+//! The window's look in the app (lane A6, G3's contract requests 1, 2, 3
+//! and 5): full screen and focus mode as commands, a theme said with its
+//! contrast verdict however it is set, and the owner's theme files.
 //!
 //! - Full screen (`view.full-screen`, F11 in the GUI column) is the
 //!   window's. The app keeps whether the window should fill the screen
@@ -15,8 +15,15 @@
 //!   same words follow the setting set through the Settings list.
 //! - A theme set through the Settings list is said as Next theme says it,
 //!   its contrast verdict after its name: "Theme Galaxy Light, meets AA".
+//! - The themes are the built-in set and the owner's theme files in the
+//!   config's themes folder, read at start ([`crate::startup::load`]):
+//!   the Settings list, its theme chooser, Next theme and the verdict all
+//!   find them by name, and [`App::themes`] hands them to a frontend.
+
+use std::path::{Path, PathBuf};
 
 use diroxide_core::{Command, Effect, KeyColumn, Message, Redraw};
+use diroxide_theme::{Registry, Theme};
 
 use super::App;
 use crate::commands::ids;
@@ -43,10 +50,35 @@ pub const FOCUS_MODE_ON_IN_TERMINAL: &str =
 /// Said when focus mode goes off.
 pub const FOCUS_MODE_OFF: &str = "Focus mode off.";
 
-/// The look's state: whether the window should fill the screen.
-#[derive(Clone, Debug, Default)]
+/// The look's state: whether the window should fill the screen, and the
+/// themes the app finds by name.
+#[derive(Clone, Debug)]
 pub(super) struct LookState {
     full_screen: bool,
+    themes: Registry,
+    themes_dir: Option<PathBuf>,
+}
+
+impl Default for LookState {
+    fn default() -> Self {
+        Self::new(&[], None)
+    }
+}
+
+impl LookState {
+    /// The built-in themes with the owner's added after them (a theme
+    /// with a built-in's name takes its place), and their folder.
+    pub(super) fn new(user_themes: &[Theme], themes_dir: Option<PathBuf>) -> Self {
+        let mut themes = Registry::builtin();
+        for theme in user_themes {
+            themes.add(theme.clone());
+        }
+        Self {
+            full_screen: false,
+            themes,
+            themes_dir,
+        }
+    }
 }
 
 impl App {
@@ -65,11 +97,29 @@ impl App {
         self.look.full_screen = on;
     }
 
+    /// The themes the app finds by name: the built-in set, then the
+    /// owner's theme files from the config's themes folder. A frontend
+    /// draws the theme setting's name from these.
+    pub fn themes(&self) -> &Registry {
+        &self.look.themes
+    }
+
+    /// The config's themes folder the owner's themes were read from, or
+    /// `None` when the app was built without reading the disk.
+    pub fn themes_dir(&self) -> Option<&Path> {
+        self.look.themes_dir.as_deref()
+    }
+
     /// The chosen theme and its contrast verdict with the owner's colors,
     /// as Next theme and the Settings list say it: "Theme Galaxy, meets
-    /// AA".
+    /// AA". The owner's theme files are found by name.
     pub fn theme_line(&self) -> String {
-        settings::theme_line(&self.settings, None)
+        settings::theme_line_in(&self.settings, &self.look.themes)
+    }
+
+    /// The theme names in cycle order, the owner's among them.
+    pub(super) fn theme_names(&self) -> Vec<String> {
+        settings::theme_names_in(&self.look.themes)
     }
 
     /// Runs Full screen and Focus mode; `None` when the command is

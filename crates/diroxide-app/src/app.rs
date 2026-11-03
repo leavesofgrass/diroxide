@@ -34,7 +34,7 @@ mod info;
 mod jobs_ui;
 mod keys;
 mod labeling;
-// Full screen and focus mode (lane A6).
+// Full screen, focus mode and the themes (lane A6).
 pub mod look;
 mod nav;
 mod organize;
@@ -958,7 +958,7 @@ pub struct App {
     trash: trash_ui::TrashState,
     /// The Volumes list's rows (lane A3).
     volumes: volumes_ui::VolumesState,
-    /// Full screen (lane A6).
+    /// Full screen and the themes found by name (lane A6).
     look: look::LookState,
 }
 
@@ -1285,7 +1285,7 @@ impl App {
             rooms: [None, None],
             trash: trash_ui::TrashState::default(),
             volumes: volumes_ui::VolumesState::default(),
-            look: look::LookState::default(),
+            look: look::LookState::new(&startup.user_themes, startup.themes_dir.clone()),
         };
         app.apply_session();
         for side in Side::BOTH {

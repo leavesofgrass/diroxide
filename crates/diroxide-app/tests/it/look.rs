@@ -1,8 +1,9 @@
-//! The window's look in the app (lane A6, G3's contract requests 1, 2
-//! and 3): Full screen and Focus mode as commands with their words in
-//! both columns, and a theme set through the Settings list said with its
-//! contrast verdict as Next theme says it. Every line is checked for its
-//! meaning inside the first 40 cells. Nothing touches the owner's
+//! The window's look in the app (lane A6, G3's contract requests 1, 2, 3
+//! and 5): Full screen and Focus mode as commands with their words in
+//! both columns, a theme set through the Settings list said with its
+//! contrast verdict as Next theme says it, and a theme file in the test's
+//! own config folder found by name and said. Every line is checked for
+//! its meaning inside the first 40 cells. Nothing touches the owner's
 //! folders; the config and state folders are the test's.
 
 use std::fs;
@@ -177,4 +178,50 @@ fn a_theme_set_through_settings_says_its_verdict_as_next_theme_does() {
     let said = s.command(ids::NEXT_THEME);
     assert_eq!(said, ["Theme Galaxy Light, meets AA"]);
     assert!(within_cells(&said[0], "Theme Galaxy Light, meets AA"));
+}
+
+#[test]
+fn a_theme_file_in_the_config_folder_is_found_and_said() {
+    let dir = temp();
+    let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+    fs::create_dir_all(paths.themes_dir()).unwrap();
+    fs::write(
+        paths.themes_dir().join("harbor.toml"),
+        "[theme]\nname = \"harbor\"\ndisplay_name = \"Harbor\"\ninherits = \"galaxy\"\n",
+    )
+    .unwrap();
+    let mut s = open_on(&dir, &paths, KeyColumn::Gui);
+    assert!(s.app.themes().get("harbor").is_some());
+    assert_eq!(s.app.themes_dir(), Some(paths.themes_dir().as_path()));
+    // The theme chooser lists it after the built-in themes, before Back
+    // to default; Enter sets it and says it with its verdict.
+    enter_setting(&mut s, "theme");
+    let chooser = rows(&s);
+    assert_eq!(
+        chooser[chooser.len() - 2..],
+        ["harbor".to_owned(), "\u{1}default".to_owned()]
+    );
+    s.key("end");
+    s.key("up");
+    let said = s.key("enter");
+    assert_eq!(said, ["Theme Harbor, meets AA"]);
+    assert!(within_cells(&said[0], "Theme Harbor"));
+    assert_eq!(s.app.settings().theme, "harbor");
+    assert_eq!(s.app.theme_line(), "Theme Harbor, meets AA");
+    assert!(config_text(&paths).contains("theme = \"harbor\""));
+    // The Settings list's row says the verdict of the owner's theme.
+    let line = s.dialog().unwrap().focus_line();
+    assert!(line.starts_with("Theme, harbor, meets AA"), "{line}");
+    s.key("escape");
+    // Next theme goes round from it to the first built-in theme, and
+    // reaches it again after the last.
+    assert_eq!(s.command(ids::NEXT_THEME), ["Theme Galaxy, meets AA"]);
+    let names = diroxide_app::settings::theme_names();
+    let last = names.last().unwrap().clone();
+    enter_setting(&mut s, "theme");
+    let at = rows(&s).iter().position(|r| *r == last).unwrap();
+    assert!(s.app.focus_dialog_row(at));
+    s.key("enter");
+    s.key("escape");
+    assert_eq!(s.command(ids::NEXT_THEME), ["Theme Harbor, meets AA"]);
 }

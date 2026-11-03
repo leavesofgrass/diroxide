@@ -513,7 +513,7 @@ impl App {
     }
 
     pub(super) fn open_settings(&mut self) -> Vec<Effect> {
-        let list = settings::settings_list(&self.settings);
+        let list = settings::settings_list_in(&self.settings, self.themes());
         self.open_dialog(
             Dialog::Choose {
                 list,
@@ -577,7 +577,9 @@ impl App {
             }
             SettingKind::SplitPresets => self.split_presets_list(),
             SettingKind::Theme => {
-                let mut rows: Vec<ListRow> = settings::theme_names()
+                // The built-in themes, then the owner's theme files.
+                let mut rows: Vec<ListRow> = self
+                    .theme_names()
                     .into_iter()
                     .map(|name| ListRow::new(name.clone(), name))
                     .collect();
@@ -700,7 +702,7 @@ impl App {
         };
         let mut effects = vec![Effect::Redraw(Redraw::All), self.say(message)];
         if let Some(Purpose::Settings) = self.opens.last().map(|o| &o.purpose) {
-            let list = settings::settings_list(&self.settings);
+            let list = settings::settings_list_in(&self.settings, self.themes());
             if let Some(Dialog::Choose { list: shown, .. }) =
                 self.dialogs.last_mut().map(|(_, d)| d)
             {
@@ -740,12 +742,12 @@ impl App {
         self.apply_setting("layout", Some(toml::Value::String(next.to_owned())))
     }
 
-    /// Next theme: the next of the built-in themes, its contrast said. The
-    /// setting's own line is the theme's with its verdict (see
-    /// `look_setting_line`), so Next theme and the Settings list say the
-    /// same words.
+    /// Next theme: the next of the themes, the built-in ones and then the
+    /// owner's theme files, its contrast said. The setting's own line is
+    /// the theme's with its verdict (see `look_setting_line`), so Next
+    /// theme and the Settings list say the same words.
     pub(super) fn next_theme(&mut self) -> Vec<Effect> {
-        let names = settings::theme_names();
+        let names = self.theme_names();
         let at = names.iter().position(|n| *n == self.settings.theme);
         let next = names
             .get(at.map_or(0, |i| (i + 1) % names.len().max(1)))
