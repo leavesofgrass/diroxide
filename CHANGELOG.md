@@ -4,6 +4,15 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased
 
+### Lane A6: the app's third set of contract items
+
+Written on Tuesday, November 3, 2026.
+
+- Full screen is a command now, `view.full-screen`, in the View menu and the palette, with F11 in the GUI's keys. With the GUI's keys it says "Full screen on." and "Full screen off."; in a terminal it changes nothing and says "Full screen is the window's; the terminal program may have its own." F11 has left the keyboard page's list of keys kept for later alphas. Until the GUI's next pass wires the command, the window still turns full screen on and off with F11 itself, saying nothing.
+- Focus mode is a command now, `view.focus-mode`, in the View menu and the palette. It turns the `focus_mode` setting on and off and writes it, and says "Focus mode on: the bars fade after three seconds." or "Focus mode off."; from a terminal, "Focus mode on, for the window; the terminal keeps its bars." The Settings list's switch says the same words.
+- A theme set through the Settings list is said with its contrast verdict, the same line Next theme says, in place of "Theme: nord": "Theme Nord, below AA: 1 check falls short". Back to default says the default theme's line.
+- The owner's theme files in the config folder's `themes` folder are found by name beside the built-in themes: the theme chooser lists them after the built-in ones, Next theme goes through them, and the verdict, in the Settings list's row and when one is set, is the file's own: "Theme Harbor, meets AA". The terminal already drew them. For the GUI, the app now hands over the themes it read and their folder, for its next pass to draw from.
+
 ### Lane A5: the app's second set of contract items
 
 Written on Tuesday, November 3, 2026.
