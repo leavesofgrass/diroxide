@@ -334,7 +334,7 @@ This section is for the window, `diro --gui`. [The GUI](gui.md) says how to open
 
 ### What you should hear in the window
 
-These lines come from the program's scripted walk of the window, which is the owner's ten-minute check done by a test. The walk's folder is called work and has a Backup folder beside it. Where a line is cut at 40 characters, the cut is where a 40-cell display cuts it.
+These lines come from the program's scripted walk of the window, which is the owner's ten-minute check done by a test. The walk's folder is called work and has a Backup folder in it. Where a line is cut at 40 characters, the cut is where a 40-cell display cuts it.
 
 - The window's title is the place first, "work - diroxide". The title line is "work, left panel, in " and the parent. The focus is on the first row of the left panel: "Backup, folder, modified today", and then the time.
 - Tab: "Right panel: Backup, 1 item". The focus is on that panel's first row: "report.pdf, PDF, 3 bytes, modified today". Tab again: "Left panel: work, 8 items".
@@ -354,7 +354,7 @@ The window's parts have names in the tree: "Left panel, work", "Sort the left pa
 - A running job's progress. The jobs line shows it and does not speak it. Ctrl+D says where the job is. A progress element that speaks at the progress interval comes in a later step.
 - A dialog's name may be said twice when it opens, once by the program's announcement and once by the dialog.
 - A confirmation is a list of two answers, "No, the default" and "Yes". Real buttons come in a later step.
-- The viewer and the quick view are not drawn in the window yet. Their keys reach the program, and the window shows nothing for them.
+- The viewer and the quick view are not drawn in the window yet. Their keys reach the program, but the window does not draw the viewer's text or the quick view's preview.
 - A plugin list's rows do not take a click yet. Use the keys.
 - The helper window of the toolkit, class "Winit Thread Event Target", has no name and can show in a window list as a pane with no name.
 
@@ -376,7 +376,7 @@ The first five things to try, in order:
 
 Then the rest of the walk:
 
-6. Press Space on three files. You hear "Selected report.pdf. 1 selected." each time, and after the third, "3 selected." Is "selected" heard once after a marked row's name, or twice?
+6. Press Space on three files. You hear "Selected report.pdf. 1 selected." for the first, and after the third, "3 selected." Is "selected" heard once after a marked row's name, or twice?
 7. Press Ctrl+D. You hear the count and the size of the selection, then the folder.
 8. Press F5. A dialog opens, named for the copy with its size. Where is the focus? It should be on "No, the default". Is the dialog's name said once or twice? Press y. If a name is taken, a list of choices opens next, as in the terminal.
 9. Press F2 on a file and type a few characters. Does your screen reader read each character as the caret moves? Press Escape to leave without renaming.

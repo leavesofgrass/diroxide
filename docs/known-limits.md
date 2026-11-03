@@ -6,7 +6,7 @@ This page says what diroxide does not do yet, where it is limited on purpose or 
 
 Each item below is still to come. None of them is dated: a feature that is not in alpha 2 arrives in a later alpha.
 
-- Much of the graphical interface (GUI). The window opens with `diro --gui`, and it shows the panels, takes every key and says what happens. `diro` by itself still opens the terminal, and the window leaves out the viewer, the quick view, dialogs with buttons, themes, drawing without a graphics driver, icons and input methods. [The GUI](#the-gui) below lists what it does not do yet.
+- Parts of the graphical interface (GUI). The window opens with `diro --gui`, and it shows the panels, takes every key and says what happens. `diro` by itself still opens the terminal, and the window leaves out the viewer, the quick view, dialogs with buttons, themes, drawing without a graphics driver, icons and input methods. [The GUI](#the-gui) below lists what it does not do yet.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
@@ -312,7 +312,7 @@ What is said:
 Dialogs and parts that are not built:
 
 - A confirmation is a list of two answers, "No, the default" and "Yes", not two buttons. A password field has no Show button. The lists in a dialog take no clicks.
-- The viewer and the quick view are not drawn in the window. Their keys reach the program, and the window shows nothing for them. Use the terminal.
+- The viewer and the quick view are not drawn in the window. Their keys reach the program, but the window does not draw the viewer's text or the quick view's preview. Use the terminal.
 - A field opens no input method session, so typing Chinese, Japanese or Korean through an input method is not supported. Text the program copies, such as a file's path, is kept inside the program and is not put on the system clipboard.
 - The colors are one fixed set. Themes are not built, and the `theme` setting does nothing in the window. There is no setting for the text size or the font, and no icons.
 - Capturing a GUI key from a real key press in the Keys list is not built for the window. Type the key's name, as [customizing keys](customizing-keys.md) says.

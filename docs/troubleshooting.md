@@ -166,7 +166,7 @@ A few things about the window itself:
 - Alt does nothing, or the menu bar does not show. On Windows the bar shows for Alt pressed alone, with no other key between, and for F9, F10 and Alt with a menu's letter. On Linux and macOS there is no system menu bar yet: F9 opens the menus as a list. With `menus` set to `list`, the list is used everywhere.
 - A key never arrives. Alt+F4, Alt+Space, Alt+Tab, Ctrl+Escape and Ctrl+Alt+Delete belong to the system, Insert to your screen reader, and chords of the Windows key are dropped. [The GUI](gui.md#keys-that-cannot-arrive) lists them. The palette and the menus reach every command.
 - A name shows empty boxes or blanks for some characters. On Linux without Fontconfig only the two bundled fonts draw, and characters they lack are missing glyphs. The name your screen reader reads is complete. [Installing diroxide](install.md#what-the-gui-needs) says more.
-- The window says nothing for the viewer or the quick view. They are not drawn in the window yet. Use the terminal, `diro --tui`, for them. [Known limits](known-limits.md#the-gui) lists what else the window does not do yet.
+- The viewer (F3) and the quick view (Shift+F3) show nothing in the window. Their keys reach the program, but the window does not draw the viewer's text or the quick view's preview yet. Use the terminal, `diro --tui`, for them. [Known limits](known-limits.md#the-gui) lists what else the window does not do yet.
 - Your screen reader is quiet at the top or bottom of a list, or while a copy runs. The window announces normal and high messages only. "Top of the list" and a job's progress are low, and are shown in the status bar without being said. Ctrl+D says where a job is.
 
 ## A filter says "Filter problem"
