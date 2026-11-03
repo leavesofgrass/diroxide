@@ -17,6 +17,8 @@ Status update, Saturday, October 17, 2026 (the pre-W3a contract step, P3b, from 
 
 diroxide has three frontends: the terminal, the GUI, and a headless server. A feature should exist once, in the core, and every frontend should read the same words for it. The input thread must never block, and tests must drive the app without a terminal or the GUI.
 
+Status update, Monday, November 2, 2026 (Wave 6, lane L, plugin lists inside a panel): a plugin's lister opens as a **plugin list**, a per-panel overlay over the panel the plugin names, not a dialog over both panels and not a Place. `Panel::list()` stays the folder's own rows; frontends draw `Panel::shown_list()`, which is the plugin list while one is up and the folder's rows otherwise, with the list's title in the header. The folder beneath is untouched, quiet while the list is up, and never saved in the session or the history. The panel's keys act on the list's rows, Enter runs the lister's activate command as a job, every file command refuses with "This row is not a file.", and Left, Backspace, Alt+Up and Escape leave it (Back and Forward only leave it on the first press); leaving sends `lister/closed` and says "Plugin list closed (NAME)", then the folder's landing line. A plugin's `panel/set` with a place closes the list without a word. The GUI draws `shown_list()` the same way (lane G1).
+
 ## Decision
 
 - `diroxide_app::App` holds all state: both panels, the active side, the keymap, settings, dialogs, jobs, the undo log and the status line. `App::handle(AppEvent)` and `App::dispatch(Command)` change it and return `Effect`s; the app never does I/O.
