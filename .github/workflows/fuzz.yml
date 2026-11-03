@@ -1,0 +1,332 @@
+# The nightly fuzz run (plan section 6; docs/dev/fuzzing.md). Every
+# cargo-fuzz target of fuzz/Cargo.toml and the SFTP plugin's sftp_packet
+# is built once, on Linux with the nightly toolchain, AddressSanitizer and
+# debug assertions, then each runs ten minutes in its own job, starting
+# from its corpus of earlier nights (cached by target) and its seeds under
+# fixtures/. A crash, timeout, leak or running out of memory fails that
+# target's job and uploads, as the artifact fuzz-crash-TARGET, the input
+# that caused it, the run's log and the reproduce line in words. The last
+# job writes the run's summary: one plain line per target, the meaning
+# first. Nightly and by hand, never on push; by day, ci.yml only checks
+# that every target compiles. Plain logs, no color, so they read well in a
+# screen reader.
+name: Fuzz
+
+on:
+  schedule:
+    # 09:17 UTC every night, off the hour as GitHub asks of schedules.
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to run each target (600 is ten minutes; 10 to 3600)
+        default: "600"
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: never
+  # cargo-fuzz pinned; the nightly toolchain floats, so each night has the
+  # newest sanitizers. A nightly that breaks the build can be pinned in
+  # the build job as nightly-YYYY-MM-DD until it is fixed.
+  CARGO_FUZZ_VERSION: 0.13.2
+
+jobs:
+  build:
+    name: Build the fuzz targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Both fuzz workspaces build into one folder, so the programs are
+      # found in one place.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/fuzz-target
+    outputs:
+      matrix: ${{ steps.gather.outputs.matrix }}
+      rustc: ${{ steps.gather.outputs.rustc }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the nightly toolchain (this workflow only)
+        run: rustup toolchain install nightly --profile minimal
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz@${{ env.CARGO_FUZZ_VERSION }}
+      # The fuzz workspaces keep no lock of their own (each folder's
+      # .gitignore): starting from the main workspace's lock and the
+      # plugin's fuzzes the versions that ship, with only libfuzzer-sys
+      # and arbitrary added.
+      - name: Start from the workspace locks
+        run: |
+          cp Cargo.lock fuzz/Cargo.lock
+          cp plugins/diro-sftp/Cargo.lock plugins/diro-sftp/fuzz/Cargo.lock
+      # --target: the cargo-fuzz that install-action fetches is a musl
+      # build and defaults to its own triple, which AddressSanitizer cannot
+      # link (textweaver's nightly found this). --debug-assertions is
+      # cargo-fuzz's default, written out so it stays: debug assertions
+      # and overflow checks on, so arithmetic overflow is a crash the
+      # fuzzer can find.
+      - name: Build every target with AddressSanitizer and debug assertions
+        run: |
+          rustc +nightly --version
+          cargo +nightly fuzz build --fuzz-dir fuzz --target x86_64-unknown-linux-gnu --debug-assertions
+          cargo +nightly fuzz build --fuzz-dir plugins/diro-sftp/fuzz --target x86_64-unknown-linux-gnu --debug-assertions
+      # The targets are read from the two manifests, so a target added to
+      # either is fuzzed the next night with no change here.
+      - name: Gather the programs and the list of targets
+        id: gather
+        run: |
+          set -euo pipefail
+          mkdir -p fuzz-bin
+          list="$RUNNER_TEMP/targets.tsv"
+          : > "$list"
+          for folder in fuzz plugins/diro-sftp/fuzz; do
+            targets=$(cargo +nightly fuzz list --fuzz-dir "$folder")
+            for target in $targets; do
+              cp "$CARGO_TARGET_DIR/x86_64-unknown-linux-gnu/release/$target" fuzz-bin/
+              printf '%s\t%s\n' "$target" "$folder" >> "$list"
+            done
+          done
+          count=$(wc -l < "$list")
+          if [ "$count" -eq 0 ]; then
+            echo "Fail: no fuzz targets were found in the two manifests."
+            exit 1
+          fi
+          matrix=$(jq -Rnc '{include: [inputs | split("\t") | {target: .[0], folder: .[1]}]}' < "$list")
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "rustc=$(rustc +nightly --version)" >> "$GITHUB_OUTPUT"
+          echo "Built: $count targets."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-targets
+          path: fuzz-bin/
+          if-no-files-found: error
+          retention-days: 1
+
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    needs: build
+    runs-on: ubuntu-latest
+    # The run is at most an hour (the dispatch limit); this is a backstop.
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
+    steps:
+      # Only the seeds are needed from the repository.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: fixtures
+      - uses: actions/download-artifact@v4
+        with:
+          name: fuzz-targets
+          path: fuzz-bin
+      - name: Restore the corpus of earlier nights
+        uses: actions/cache/restore@v4
+        with:
+          path: corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - name: Fuzz ${{ matrix.target }}
+        id: run
+        env:
+          TARGET: ${{ matrix.target }}
+          FOLDER: ${{ matrix.folder }}
+          FUZZ_SECONDS: ${{ inputs.seconds || '600' }}
+          # A panic's own backtrace, named from the line tables.
+          RUST_BACKTRACE: "1"
+        run: |
+          set -euo pipefail
+          # Names in a memory error's stack trace: the image's
+          # llvm-symbolizer, which may have only a versioned name.
+          if ! command -v llvm-symbolizer > /dev/null; then
+            symbolizer=$( (ls /usr/bin/llvm-symbolizer-* 2> /dev/null || true) | sort -V | tail -n 1)
+            if [ -n "$symbolizer" ]; then
+              export ASAN_SYMBOLIZER_PATH="$symbolizer"
+            fi
+          fi
+          case "$FUZZ_SECONDS" in
+            ''|*[!0-9]*)
+              echo "Fail: the run length must be whole seconds, not $FUZZ_SECONDS."
+              exit 1 ;;
+          esac
+          if [ "$FUZZ_SECONDS" -lt 10 ] || [ "$FUZZ_SECONDS" -gt 3600 ]; then
+            echo "Fail: the run length must be 10 to 3,600 seconds, not $FUZZ_SECONDS."
+            exit 1
+          fi
+          if [ "$FUZZ_SECONDS" -eq 60 ]; then
+            length="1 minute"
+          elif [ $((FUZZ_SECONDS % 60)) -eq 0 ]; then
+            length="$((FUZZ_SECONDS / 60)) minutes"
+          else
+            length="$FUZZ_SECONDS seconds"
+          fi
+          # Seeds: real inputs, read and never written. A folder named for
+          # the target under a seeds folder in fixtures/ is found by
+          # itself; four targets read fixture folders of their own.
+          case "$TARGET" in
+            manifest_toml) seeds=fixtures/plugins/manifests ;;
+            script_header) seeds=fixtures/scripts/headers ;;
+            component_manifest) seeds=fixtures/components/manifests ;;
+            highlight_hang) seeds=fixtures/viewer/code ;;
+            *) seeds=$(find fixtures -type d -path "*/seeds/$TARGET" -print -quit) ;;
+          esac
+          # The limits each target's own comment asks for.
+          timeout=30
+          max_len=""
+          case "$TARGET" in
+            archive_zip|archive_7z|archive_roundtrip) max_len=-max_len=1048576 ;;
+            archive_stream|archive_xz) max_len=-max_len=262144 ;;
+            highlight_hang) timeout=2 ;;
+          esac
+          program="fuzz-bin/$TARGET"
+          mkdir -p "corpus/$TARGET" report
+          if [ ! -f "$program" ]; then
+            line="Fail: $TARGET, its program was not in the build"
+            echo "$line" | tee "line-$TARGET.txt"
+            exit 1
+          fi
+          chmod +x "$program"
+          echo "Fuzzing $TARGET for $length, seeds: ${seeds:-none}."
+          # New finds go into the first folder, the corpus; the seeds
+          # folder is only read. $seeds and $max_len are empty or one word.
+          set +e
+          # shellcheck disable=SC2086
+          "$program" "corpus/$TARGET" $seeds $max_len -timeout="$timeout" \
+            -rss_limit_mb=2048 -max_total_time="$FUZZ_SECONDS" \
+            -print_final_stats=1 -artifact_prefix=report/ > report/fuzz.log 2>&1
+          status=$?
+          set -e
+          runs=$(sed -n 's/^stat::number_of_executed_units: *\([0-9][0-9]*\).*/\1/p' report/fuzz.log | tail -n 1)
+          if [ -z "$runs" ]; then
+            runs=$(sed -n 's/^Done \([0-9][0-9]*\) runs.*/\1/p' report/fuzz.log | tail -n 1)
+          fi
+          runs=$(printf '%s' "${runs:-0}" | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')
+          input=$(find report -maxdepth 1 -type f \( -name 'crash-*' -o -name 'timeout-*' \
+            -o -name 'leak-*' -o -name 'oom-*' \) -print -quit)
+          kind=""
+          case "$(basename "${input:-none}")" in
+            crash-*) kind="crash" ;;
+            timeout-*) kind="timeout" ;;
+            leak-*) kind="leak" ;;
+            oom-*) kind="out of memory" ;;
+          esac
+          if [ "$status" -eq 0 ] && [ -z "$input" ]; then
+            line="Pass: $TARGET, $length, $runs runs"
+          elif [ -n "$input" ]; then
+            line="Fail: $TARGET, $kind, input uploaded, after $runs runs"
+          else
+            line="Fail: $TARGET, stopped with exit code $status, no input saved"
+          fi
+          echo "$line" > "line-$TARGET.txt"
+          echo "$line"
+          if [ "$status" -eq 0 ] && [ -z "$input" ]; then
+            grep '^stat::' report/fuzz.log || true
+            exit 0
+          fi
+          if [ -n "$input" ]; then
+            name=$(basename "$input")
+            {
+              echo "$line."
+              echo "The input that caused it is the file $name in this artifact."
+              echo "The run's log is fuzz.log; the stack trace is near its end."
+              echo "To reproduce, save $name in the folder $FOLDER/artifacts/$TARGET, which git ignores, and run from the repository root:"
+              echo "cargo +nightly fuzz run --fuzz-dir $FOLDER $TARGET $FOLDER/artifacts/$TARGET/$name"
+              if [ "$FOLDER" = fuzz ]; then
+                echo "On Windows, add --no-include-main-msvc after the word run."
+              fi
+              echo "Then fix the bug, and keep the input as a seed or a test in the crate it came from (docs/dev/fuzzing.md)."
+            } > report/README.txt
+            cat report/README.txt
+          fi
+          echo "The last 80 lines of the run's log follow."
+          tail -n 80 report/fuzz.log
+          exit 1
+      # Saved after a failure too: the corpus holds what the night found
+      # before it stopped.
+      - name: Save the corpus for the next night
+        if: always() && (steps.run.outcome == 'success' || steps.run.outcome == 'failure')
+        uses: actions/cache/save@v4
+        with:
+          path: corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Upload the input, the log and the reproduce line
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: report/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Keep this target's summary line
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-line-${{ matrix.target }}
+          path: line-${{ matrix.target }}.txt
+          if-no-files-found: ignore
+          retention-days: 1
+
+  summary:
+    name: Summary, one line per target
+    needs: [build, fuzz]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: fuzz-line-*
+          path: lines
+          merge-multiple: true
+      - name: Write the summary
+        env:
+          BUILD: ${{ needs.build.result }}
+          MATRIX: ${{ needs.build.outputs.matrix }}
+          RUSTC: ${{ needs.build.outputs.rustc }}
+        run: |
+          set -uo pipefail
+          passed="$RUNNER_TEMP/passed.txt"
+          failed="$RUNNER_TEMP/failed.txt"
+          : > "$passed"
+          : > "$failed"
+          {
+            echo "## Fuzz results"
+            echo
+            if [ "$BUILD" != success ] || [ -z "$MATRIX" ]; then
+              echo "Fail: the fuzz targets did not build."
+              echo
+              echo "No target ran. The log of the job named Build the fuzz targets says why."
+            else
+              total=0
+              bad=0
+              for target in $(printf '%s' "$MATRIX" | jq -r '.include[].target' | sort); do
+                total=$((total + 1))
+                if [ -s "lines/line-$target.txt" ]; then
+                  line=$(head -n 1 "lines/line-$target.txt")
+                else
+                  line="Fail: $target, no result, its job was cancelled or ran out of time"
+                fi
+                case "$line" in
+                  Pass:*) echo "- $line" >> "$passed" ;;
+                  *) bad=$((bad + 1)); echo "- $line" >> "$failed" ;;
+                esac
+              done
+              if [ "$bad" -eq 0 ]; then
+                echo "Pass: all $total targets, nothing found."
+              else
+                echo "Fail: $bad of $total targets; $((total - bad)) passed."
+                echo
+                echo "Each failed target's input, log and reproduce line are in its artifact, named fuzz-crash- and the target."
+              fi
+              echo
+              cat "$failed" "$passed"
+              echo
+              echo "Built with $RUSTC and cargo-fuzz $CARGO_FUZZ_VERSION."
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
