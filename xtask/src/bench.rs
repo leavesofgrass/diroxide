@@ -30,6 +30,14 @@
 //! own pack runner, and each timed run opens a new provider, so no run
 //! reads another's cached index.
 //!
+//! `--gui` adds the GUI's budgets (`budgets.rs`, R27's commit 35): the
+//! binary's size, the time from the start to the window's first frame and
+//! the working set then, and with `--cold-build` a cold release build;
+//! `--only gui` measures them alone. They are said and recorded beside
+//! the scenarios, and compared with the baseline in words, never gated.
+//! Each start is one real window, off screen and never activated
+//! (`--background`).
+//!
 //! The budgets are for an optimized build: `cargo run --release -p xtask
 //! -- bench`. The medians go to `target/bench/result.json` and are said
 //! in words.
@@ -65,6 +73,7 @@ use diroxide_search::{FnSink, Scope, SearchControl, SearchHit, SearchQuery, quot
 use diroxide_vfs::{OpContext, Provider, Registry};
 use serde::{Deserialize, Serialize};
 
+use crate::budgets::{self, Budget};
 use crate::sample;
 
 /// One size of the bench, from `bench/params.toml`.
@@ -177,6 +186,9 @@ pub struct Run {
     pub optimized: bool,
     /// The scenarios.
     pub scenarios: Vec<Outcome>,
+    /// The GUI's budgets, when `--gui` measured them (`budgets.rs`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gui: Vec<Budget>,
 }
 
 /// Whether this bench was built with optimizations.
@@ -202,6 +214,11 @@ pub struct Options {
     pub save_baseline: bool,
     /// Fail when a median leaves the band.
     pub gate: bool,
+    /// Measure the GUI's budgets too (`--gui`, or `--only gui` for them
+    /// alone).
+    pub gui: bool,
+    /// Add the cold release build to the GUI's budgets.
+    pub cold_build: bool,
 }
 
 /// The scenario ids, in the order they run.
@@ -229,7 +246,7 @@ const ARCHIVE_LISTINGS: [(&str, &str, &str); 3] = [
     ("archive-7z", "list.7z", "7z"),
 ];
 
-const USAGE: &str = "Usage: cargo xtask bench [--quick] [--only ID] [--save-baseline] [--gate]";
+const USAGE: &str = "Usage: cargo xtask bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate]";
 
 /// Reads the arguments after `bench`.
 pub fn parse(args: &[&str]) -> Result<Options> {
@@ -240,13 +257,23 @@ pub fn parse(args: &[&str]) -> Result<Options> {
             "--quick" => options.quick = true,
             "--save-baseline" => options.save_baseline = true,
             "--gate" => options.gate = true,
+            "--gui" => options.gui = true,
+            "--cold-build" => {
+                options.gui = true;
+                options.cold_build = true;
+            }
             "--only" => {
                 let Some(id) = rest.next() else {
-                    bail!("--only needs a scenario: {}. {USAGE}", SCENARIOS.join(", "));
-                };
-                if !SCENARIOS.contains(id) {
                     bail!(
-                        "{id} is not a scenario; the scenarios are {}",
+                        "--only needs a scenario: {}, or gui. {USAGE}",
+                        SCENARIOS.join(", ")
+                    );
+                };
+                if *id == "gui" {
+                    options.gui = true;
+                } else if !SCENARIOS.contains(id) {
+                    bail!(
+                        "{id} is not a scenario; the scenarios are {}, and gui for the GUI's budgets",
                         SCENARIOS.join(", ")
                     );
                 }
@@ -1132,6 +1159,11 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
         work: work.path(),
         only: options.only.as_deref(),
     })?;
+    let budgets = if options.gui {
+        budgets::measure(root, work.path(), params.runs, options.cold_build)?
+    } else {
+        Vec::new()
+    };
     println!("bench: removing the trees.");
     work.close().with_context(|| {
         format!(
@@ -1167,12 +1199,21 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
             println!("{line}");
         }
     }
+    for budget in &budgets {
+        let base = base_run
+            .as_ref()
+            .and_then(|run| run.gui.iter().find(|b| b.id == budget.id));
+        for line in budgets::describe(budget, base) {
+            println!("{line}");
+        }
+    }
     let result = Run {
         platform: platform.clone(),
         recorded_utc: today_utc(),
         quick: options.quick,
         optimized: OPTIMIZED,
         scenarios: outcomes,
+        gui: budgets,
     };
     let result_file = bench_folder.join("result.json");
     fs::write(
@@ -1255,6 +1296,11 @@ mod tests {
         assert!(options.quick && options.gate);
         assert_eq!(options.only.as_deref(), Some("copy"));
         assert!(parse(&["--only", "dance"]).is_err());
+        let gui = parse(&["--only", "gui"]).unwrap();
+        assert!(gui.gui && !gui.cold_build);
+        assert_eq!(gui.only.as_deref(), Some("gui"));
+        let cold = parse(&["--cold-build"]).unwrap();
+        assert!(cold.gui && cold.cold_build && cold.only.is_none());
         assert!(parse(&["--quick", "--save-baseline"]).is_err());
         assert!(parse(&["--fast"]).is_err());
     }

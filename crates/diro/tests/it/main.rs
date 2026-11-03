@@ -1,5 +1,7 @@
 //! Integration tests of the diro binary.
 
+mod icon;
+
 use std::process::Command;
 
 #[test]

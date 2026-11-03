@@ -1,7 +1,8 @@
 //! Focus mode and full screen (R27's commit 28): after three seconds of
 //! rest the bars around the body fade under a veil, and any key brings
-//! them back; F11 turns full screen on and off. Nothing is said by
-//! either, and the tree is the same before and after the fade, the
+//! them back; F11 runs the app's Full screen (view.full-screen, lane
+//! A6), which says "Full screen on." and "Full screen off.". The fade
+//! says nothing, and the tree is the same before and after it, the
 //! viewer's included. Drawn with Vello's CPU renderer in the harness.
 
 #![allow(clippy::unwrap_used)]
@@ -91,27 +92,44 @@ fn without_focus_mode_the_bars_stay() {
     assert!(!rig.f.veiled());
 }
 
+/// The last thing the app said, as text.
+fn last_said(rig: &Rig) -> Option<String> {
+    rig.said().last().map(|m| m.text.clone())
+}
+
 #[test]
-fn f11_is_full_screen_said_by_nothing_and_fading_there_too() {
+fn f11_runs_full_screen_and_the_bars_fade_there_too() {
     let (_dir, mut rig) = window(false);
-    let tree = rig.walk();
-    let spoken = rig.spoken();
     rig.press("f11");
+    assert!(rig.f.app().full_screen(), "the app's command ran");
     assert!(rig.f.full_screen());
     assert_eq!(rig.f.take_full_screen(), Some(true));
     assert_eq!(rig.f.take_full_screen(), None);
-    assert_eq!(rig.spoken(), spoken, "nothing is said");
-    assert_eq!(rig.walk(), tree);
-    // Full screen fades the bars as focus mode does.
+    assert_eq!(last_said(&rig).as_deref(), Some("Full screen on."));
+    // Full screen fades the bars as focus mode does, saying nothing, the
+    // tree unchanged.
+    let tree = rig.walk();
+    let said = rig.said().len();
     rest(&mut rig, FADE_AFTER);
     assert!(rig.f.veiled());
     assert_eq!(rig.walk(), tree);
-    // F11 again: back, the bars too, and still nothing said.
+    assert_eq!(rig.said().len(), said, "the fade says nothing");
+    // F11 again: back, the bars too.
     rig.press("f11");
     assert!(!rig.f.full_screen());
     assert_eq!(rig.f.take_full_screen(), Some(false));
     assert!(!rig.f.veiled());
-    assert_eq!(rig.spoken(), spoken);
+    assert_eq!(last_said(&rig).as_deref(), Some("Full screen off."));
+    // The View menu and the palette run the same command.
+    rig.run("view.full-screen");
+    assert!(rig.f.full_screen());
+    assert_eq!(rig.f.take_full_screen(), Some(true));
+    // A window that runs in the background stays as it is, and the app
+    // starts the next Full screen from off.
+    rig.f.refuse_full_screen();
+    assert!(!rig.f.full_screen() && !rig.f.app().full_screen());
+    rig.press("f11");
+    assert_eq!(rig.f.take_full_screen(), Some(true));
 }
 
 #[test]

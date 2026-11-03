@@ -65,13 +65,50 @@ pub const FIRST_SIZE: (f64, f64) = (960.0, 640.0);
 /// Where a `--background` window opens: far off every screen.
 pub const OFF_SCREEN: (i32, i32) = (-30_000, -30_000);
 
-/// The window's attributes: its title, its first size, and for
+/// The id of the icon group linked into `diro.exe` on Windows with the
+/// Microsoft toolchain (`crates/diro/build.rs`; the resource file is
+/// written by `cargo xtask icons`, whose `RESOURCE_ICON` is the same
+/// number).
+pub const ICON_RESOURCE: u16 = 1;
+
+/// The side of the window's own icon, in pixels.
+pub const ICON_SIDE: u32 = 64;
+
+/// The mark at [`ICON_SIDE`] pixels as straight RGBA, from
+/// `cargo xtask icons` (`assets/logo/icons/diroxide-64.rgba`).
+const ICON_RGBA: &[u8] = include_bytes!("../../../assets/logo/icons/diroxide-64.rgba");
+
+/// The window's icon, the diroxide mark, or `None` if it cannot be made:
+/// on Windows the group linked into the program, so the title bar and the
+/// taskbar each get a sharp size; elsewhere, or without the resource (a
+/// GNU build, the tests), the 64-pixel mark. macOS draws no window icon,
+/// and Wayland takes the desktop file's. Adapted from textweaver's
+/// `crates/textweaver-xilem/src/icon.rs` (the owner's own project).
+pub fn window_icon() -> Option<masonry_winit::winit::window::Icon> {
+    #[cfg(windows)]
+    {
+        use masonry_winit::winit::platform::windows::IconExtWindows;
+        if let Ok(icon) = masonry_winit::winit::window::Icon::from_resource(ICON_RESOURCE, None) {
+            return Some(icon);
+        }
+    }
+    masonry_winit::winit::window::Icon::from_rgba(ICON_RGBA.to_vec(), ICON_SIDE, ICON_SIDE).ok()
+}
+
+/// The window's attributes: its title, its first size, its icon, and for
 /// `--background` off screen, never activated and (on Windows) with no
 /// taskbar button.
 pub fn attributes(title: &str, background: bool) -> masonry_winit::winit::window::WindowAttributes {
     let mut attributes = WinitWindow::default_attributes()
         .with_title(title)
-        .with_inner_size(LogicalSize::new(FIRST_SIZE.0, FIRST_SIZE.1));
+        .with_inner_size(LogicalSize::new(FIRST_SIZE.0, FIRST_SIZE.1))
+        .with_window_icon(window_icon());
+    // The taskbar's button takes the large icon; the title bar the small.
+    #[cfg(windows)]
+    {
+        use masonry_winit::winit::platform::windows::WindowAttributesExtWindows;
+        attributes = attributes.with_taskbar_icon(window_icon());
+    }
     if background {
         attributes = attributes
             .with_active(false)
@@ -453,15 +490,17 @@ impl Gui {
                 );
             }
         }
-        // F11: full screen on or off, never for a window that runs in the
-        // background for a check.
-        if let Some(on) = frontend.take_full_screen()
-            && !self.background
-        {
-            use masonry_winit::winit::window::Fullscreen;
-            ctx.window(self.window)
-                .handle()
-                .set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
+        // Full screen on or off (the app's view.full-screen, F11), never
+        // for a window that runs in the background for a check.
+        if let Some(on) = frontend.take_full_screen() {
+            if self.background {
+                frontend.refuse_full_screen();
+            } else {
+                use masonry_winit::winit::window::Fullscreen;
+                ctx.window(self.window)
+                    .handle()
+                    .set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
+            }
         }
         let title = frontend.window_title();
         if title != self.title {
@@ -735,6 +774,19 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The icon compiled in is the mark at 64 pixels: a transparent
+    /// corner, the cabinet solid; the window gets an icon on every system
+    /// (in the tests, with no resource linked, the compiled-in one).
+    #[test]
+    fn the_window_icon_is_the_mark() {
+        let side = ICON_SIDE as usize;
+        assert_eq!(ICON_RGBA.len(), side * side * 4);
+        assert_eq!(ICON_RGBA[3], 0, "the corner is transparent");
+        let cabinet = ((side * 3 / 4) * side + side / 2) * 4;
+        assert_eq!(ICON_RGBA[cabinet + 3], 255, "the cabinet is solid");
+        assert!(window_icon().is_some());
+    }
 
     #[test]
     fn the_graphics_failure_is_said_and_other_panics_are_internal() {

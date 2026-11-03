@@ -162,11 +162,12 @@ pub const NOT_BUILT_NOTICE: &str =
 pub const NO_DISPLAY_NOTICE: &str =
     "There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead.";
 
-/// Whether a desktop opens the GUI with no flag and no setting. False until
-/// the GUI alpha's last lane flips it (R27's commit 34): until then the
-/// window shows two lines, and the terminal stays what `diro` opens. The
-/// decision table below already knows the rest, so the flip is this line.
-pub const GUI_BY_DEFAULT: bool = false;
+/// Whether a desktop opens the GUI with no flag and no setting: true from
+/// the GUI alpha's last lane (R27's commit 34, Tuesday, November 3, 2026).
+/// `diro` from a shell on a desktop, or a double-click on Windows, opens
+/// the window; the decision table below keeps the terminal over SSH, with
+/// no display, with a pipe or a file, and in a build without the GUI.
+pub const GUI_BY_DEFAULT: bool = true;
 
 /// Which frontend opens, in this order (the GUI alpha's contract step):
 ///
@@ -641,12 +642,7 @@ mod tests {
         use Frontend::{Gui, Terminal};
         let base = desktop();
         let rows: Vec<(&str, FrontendInputs, Frontend, Option<&str>)> = vec![
-            (
-                "a desktop opens the GUI once the GUI alpha flips the default",
-                base,
-                if GUI_BY_DEFAULT { Gui } else { Terminal },
-                None,
-            ),
+            ("a desktop opens the GUI", base, Gui, None),
             (
                 "--tui wins over --gui and the setting",
                 FrontendInputs {
@@ -772,6 +768,32 @@ mod tests {
             gui_built: diroxide_gui::built(),
             ..base
         });
+    }
+
+    /// The flip (R27's commit 34): with nothing asked, a desktop opens the
+    /// GUI, from a shell or a double-click, and the setting `auto` says
+    /// so; `diro --tui` and the setting `terminal` still open the
+    /// terminal, with no sentence before it.
+    #[test]
+    fn a_desktop_opens_the_gui_by_default() {
+        let choice = choose_frontend(&desktop());
+        assert_eq!(choice.frontend, Frontend::Gui);
+        assert_eq!(choice.notice, None);
+        assert_eq!(FrontendSetting::default(), FrontendSetting::Auto);
+        for terminal in [
+            FrontendInputs {
+                tui_flag: true,
+                ..desktop()
+            },
+            FrontendInputs {
+                setting: FrontendSetting::Terminal,
+                ..desktop()
+            },
+        ] {
+            let choice = choose_frontend(&terminal);
+            assert_eq!(choice.frontend, Frontend::Terminal);
+            assert_eq!(choice.notice, None);
+        }
     }
 
     #[test]

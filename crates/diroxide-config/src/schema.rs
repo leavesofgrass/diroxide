@@ -307,7 +307,7 @@ const GRAPHICS_APIS: &[Choice] = &[
 ];
 
 const MENU_KINDS: &[Choice] = &[
-    choice("native", "the system's menu bar"),
+    choice("native", "the system's menu bar on Windows"),
     choice("list", "a list in the window"),
 ];
 
@@ -777,7 +777,7 @@ pub const SCHEMA: [SettingInfo; 104] = [
         group: G::Look,
         kind: SettingKind::Choice(FRONTENDS),
         default: "\"auto\"",
-        help: "Where diro opens its panels. Auto opens the GUI on a desktop and the terminal over SSH, on a console or when output is piped. diro --gui and diro --tui choose for one start.",
+        help: "Where diro opens its panels. Auto opens the GUI on a desktop, and the terminal over SSH, where there is no display, or when input or output is a pipe or a file. diro --gui and diro --tui choose for one start.",
         arrives: None,
     },
     SettingInfo {
@@ -795,7 +795,7 @@ pub const SCHEMA: [SettingInfo; 104] = [
         group: G::Look,
         kind: SettingKind::Choice(MENU_KINDS),
         default: "\"native\"",
-        help: "Native shows the GUI's menus in the system's menu bar on Windows and macOS, and as a list in the window elsewhere. List uses the list everywhere.",
+        help: "Native shows the GUI's menus in the system's menu bar on Windows, and as a list in the window on Linux and macOS. List uses the list everywhere.",
         arrives: None,
     },
     // The viewer (alpha.2, W2d; research/alpha2-plan.md part three and

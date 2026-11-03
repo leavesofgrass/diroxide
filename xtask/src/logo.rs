@@ -3,9 +3,11 @@
 //!
 //! The lockup puts the mark centered above the wordmark in one
 //! self-contained SVG, composed from the two approved files so that neither
-//! is edited by hand twice. The renders are PNGs at the sizes a README, a
-//! web page and an app icon need, drawn with resvg (pure Rust) and the
-//! system's fonts for the tagline. Nothing here touches the network.
+//! is edited by hand twice. The renders are PNGs at the sizes a README and
+//! a web page need, drawn with resvg (pure Rust) and the system's fonts for
+//! the tagline. The mark's own sizes and the icon files belong to
+//! `cargo xtask icons` (`icons.rs`), which this task runs too, so one
+//! command still renders everything. Nothing here touches the network.
 
 use std::fs;
 use std::path::Path;
@@ -34,9 +36,6 @@ const TAG_DARK_RULE: &str = ".tag { fill: #7ea6cc; }";
 /// Where the check renders for the orchestrator's eyes go (build output,
 /// never committed): the lockup over a dark page and over a light one.
 const CHECK_DIR: &str = "target/logo-check";
-/// The sizes at which the mark alone is rendered, in pixels.
-const MARK_SIZES: [u32; 6] = [16, 32, 64, 128, 256, 512];
-
 /// The mark's side in lockup units; the wordmark is 500 wide.
 const MARK_SIDE: u32 = 160;
 /// The lockup's width in units.
@@ -76,11 +75,8 @@ pub fn run(root: &Path) -> Result<bool> {
         render(&lockup_dark, width, &png_dir.join(&dark), &options, None)?;
         println!("logo: wrote {PNG_DIR}/{dark}");
     }
-    for size in MARK_SIZES {
-        let name = format!("diroxide-mark-{size}.png");
-        render(&mark, size, &png_dir.join(&name), &options, None)?;
-        println!("logo: wrote {PNG_DIR}/{name}");
-    }
+    // The mark at every size, and the icon files drawn from it.
+    crate::icons::write(root)?;
 
     let check_dir = root.join(CHECK_DIR);
     fs::create_dir_all(&check_dir).with_context(|| format!("creating {CHECK_DIR}"))?;

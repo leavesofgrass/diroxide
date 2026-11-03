@@ -133,7 +133,7 @@ pub fn generate() -> String {
     page.push_str("\n## In a terminal\n");
     column_section(&mut page, KeyColumn::Terminal);
     page.push_str("\n## In the GUI\n\n");
-    page.push_str("The GUI arrives in a later alpha; these are its keys. On macOS the GUI uses Command where this list says Ctrl, and leaves Ctrl+F3 to Ctrl+F7 and Ctrl+Space to the system; the Sort list, the View menu and the palette sort there.\n");
+    page.push_str("These are the GUI's keys. On macOS the GUI uses Command where this list says Ctrl, and leaves Ctrl+F3 to Ctrl+F7 and Ctrl+Space to the system; the Sort list, the View menu and the palette sort there.\n");
     column_section(&mut page, KeyColumn::Gui);
 
     let menus = Menus::builtin();

@@ -378,7 +378,7 @@ Focus mode. In the GUI, fades the bars when the mouse rests, so the panels have 
 
 ### frontend
 
-Opens in. Where diro opens its panels. Auto opens the GUI on a desktop and the terminal over SSH, on a console or when output is piped. diro --gui and diro --tui choose for one start.
+Opens in. Where diro opens its panels. Auto opens the GUI on a desktop, and the terminal over SSH, where there is no display, or when input or output is a pipe or a file. diro --gui and diro --tui choose for one start.
 
 - Holds: one of auto, gui or terminal.
 - Default: `"auto"`.
@@ -401,11 +401,11 @@ GUI graphics. The graphics API the GUI draws with. Auto lets the graphics driver
 
 ### menus
 
-GUI menus. Native shows the GUI's menus in the system's menu bar on Windows and macOS, and as a list in the window elsewhere. List uses the list everywhere.
+GUI menus. Native shows the GUI's menus in the system's menu bar on Windows, and as a list in the window on Linux and macOS. List uses the list everywhere.
 
 - Holds: one of native or list.
 - Default: `"native"`.
-- `native`: the system's menu bar.
+- `native`: the system's menu bar on Windows.
 - `list`: a list in the window.
 
 ## Viewer and quick view
