@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # The AT-SPI check for diroxide's window on Linux, with no display of its
 # own and no screen reader: Xvfb, a private D-Bus session, the AT-SPI bus,
-# and Mesa's software Vulkan (lavapipe) for the renderer. It opens diro
-# --gui on a sample folder and runs atspi-dump.py against it; the report is
-# Markdown on standard output.
+# and Mesa's software Vulkan (lavapipe), which is a software adapter, so
+# the window draws on the processor through softbuffer on X11 (R27's
+# commit 31). It opens diro --gui on a sample folder and runs
+# atspi-dump.py against it; the report is Markdown on standard output,
+# with the drawing road from diro's --log.
 #
 # Needs the GUI image stage (docker/Dockerfile, target gui; the owner's
 # answer 107):
@@ -55,13 +57,17 @@ run() {
   # Its own state and config folders, never the user's.
   export XDG_CONFIG_HOME="$work/config" XDG_STATE_HOME="$work/state" HOME="$work/home"
   mkdir -p "$HOME"
-  "$exe" --gui "$work/sample" "$work/sample/Backup" >"$work/diro.log" 2>&1 &
+  "$exe" --gui --log "$work/gui.log" "$work/sample" "$work/sample/Backup" >"$work/diro.log" 2>&1 &
   local gui=$!
   local status=0
   python3 "$here/atspi-dump.py" --pid "$gui" --seconds "$seconds" || status=$?
   # The check's own window: ended once the report is written.
   kill "$gui" 2>/dev/null || true
   wait "$gui" 2>/dev/null || true
+  echo
+  echo "## The drawing road (--log)"
+  echo
+  sed 's/^/- /' "$work/gui.log" 2>/dev/null || echo "- (no log)"
   echo
   echo "## diro's output"
   echo
