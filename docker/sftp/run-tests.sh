@@ -14,7 +14,18 @@
 #
 # Extra arguments go to cargo nextest. DIRO_SFTP_CAPTURE=1 also writes
 # ssh's real standard-error texts and prompts into fixtures/sftp/.
+#
+# The server tests are slow tests (docs/dev/building.md, "Slow tests"):
+# they run only with DIRO_SLOW=1, which this script sets unless it is
+# already set. With DIRO_SLOW=0 each one passes at once, skipped.
 set -euo pipefail
+
+export DIRO_SLOW="${DIRO_SLOW:-1}"
+if [ "$DIRO_SLOW" = 1 ]; then
+    echo "run-tests.sh: slow tests run, DIRO_SLOW is 1."
+else
+    echo "run-tests.sh: slow tests skipped, DIRO_SLOW is not 1: each server test passes at once."
+fi
 
 if [ "$(id -u)" != 0 ]; then
     echo "run-tests.sh: start it as root in the container (docker compose run --user root)." >&2
@@ -43,5 +54,6 @@ runuser -u "$user" -m -- env \
     HOME="/home/$user" USER="$user" LOGNAME="$user" \
     DIRO_SFTP_TEST_PASSWORD_FILE="$password_file" \
     DIRO_SFTP_CAPTURE="${DIRO_SFTP_CAPTURE:-}" \
+    DIRO_SLOW="$DIRO_SLOW" \
     cargo nextest run --manifest-path plugins/diro-sftp/Cargo.toml --all-features \
         --run-ignored only -E 'test(/^server::/)' --no-fail-fast "$@"

@@ -10,11 +10,26 @@
   started in. Set CARGO_TARGET_DIR first when several builders share the
   machine.
 
+  The full check runs the slow tests: it sets DIRO_SLOW to 1 for its own
+  run unless it is already set (docs/dev/building.md, "Slow tests").
+  DIRO_SLOW=0 runs the same check without them, as a builder's quick run
+  does.
+
 .EXAMPLE
   .\scripts\dev-check.ps1
 #>
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+$previousSlow = $env:DIRO_SLOW
+if ([string]::IsNullOrEmpty($env:DIRO_SLOW)) {
+    $env:DIRO_SLOW = '1'
+}
+if ($env:DIRO_SLOW -eq '1') {
+    Write-Output 'Slow tests: run, DIRO_SLOW is 1.'
+}
+else {
+    Write-Output 'Slow tests: skipped, DIRO_SLOW is not 1.'
+}
 
 function Invoke-Step {
     param([string] $Name, [scriptblock] $Command)
@@ -51,5 +66,6 @@ try {
     Write-Output 'Pass: every check.'
 }
 finally {
+    $env:DIRO_SLOW = $previousSlow
     Pop-Location
 }

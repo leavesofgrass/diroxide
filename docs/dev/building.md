@@ -50,7 +50,54 @@ cargo xtask deps --check
 cargo xtask keyboard --check
 ```
 
-`scripts/dev-check.sh` and `scripts/dev-check.ps1` run all of them in order and stop at the first failure.
+`scripts/dev-check.sh` and `scripts/dev-check.ps1` run all of them in order and stop at the first failure. They run the slow tests too (see the next section).
+
+## Slow tests
+
+A few tests take ten seconds or more in the full run, natively or in the container. They run only when `DIRO_SLOW` is `1`. CI's jobs, `scripts/dev-check.sh`, `scripts/dev-check.ps1` and `docker/sftp/run-tests.sh` set it, so CI and the full check run every test. A builder's quick run leaves it unset and skips only these: on the owner's machine that halves the workspace's test run, from 78 seconds to 40.
+
+A skipped slow test passes at once, and nextest shows its one line as the test ends:
+
+```text
+skipped: slow, set DIRO_SLOW=1
+```
+
+nextest counts such a test as passed, not as skipped, since a Rust test cannot skip itself as it runs; the line is what says it. To count them in a run's output, search it for "skipped: slow".
+
+To run the slow tests in a quick run:
+
+```bash
+DIRO_SLOW=1 cargo nextest run --workspace --all-features
+```
+
+To run the full check without them:
+
+```bash
+DIRO_SLOW=0 scripts/dev-check.sh
+```
+
+The slow tests, with their times in two full runs on the owner's Windows machine on Tuesday, November 3, 2026, and in the container on Friday, October 23, 2026:
+
+- xtask's demo set test, which builds `diro` and writes the whole demo set: 35 and 103 seconds; 28 to 96 seconds in the container.
+- xtask's quick run of every bench scenario: 10 and 29 seconds.
+- The archive crate's listing spike, the provider listing the root and a deep folder: 17 and 19 seconds; 26 seconds in the container.
+- The plugin crate's Python examples passing their own tests: 16 and 17 seconds.
+- The plugin crate's total-size script reporting progress on a long list: 13 and 14 seconds.
+- The plugin crate's Python skeletons passing their own tests and the conformance suite: 11 and 12 seconds.
+- The preview crate's five-megabyte Org read for the record: 3 seconds natively, 30 seconds to 4 minutes in the container.
+- The SFTP plugin's 13 server tests against the container's OpenSSH, which `docker/sftp/run-tests.sh` runs.
+
+Two tests came close and run always: the GUI's check that every dialog purpose opens with a name and a focus (10.3 and 9.5 seconds) and the job engine's ten thousand parts (9.6 seconds in both). The preview crate's other five-megabyte test, the Org file cut off after two seconds, is bounded by that deadline and runs always.
+
+A new slow test starts with its crate's gate, and is named in the slow override of `.config/nextest.toml` so its line shows:
+
+```rust
+if crate::slow_test_skipped() {
+    return;
+}
+```
+
+xtask's `slow` tests fail when a gated test is not named in the override, when a name there calls no gate, or when a crate's copy of the gate reads the variable another way or says another line.
 
 cargo-nextest is pre-approved; install it into the D: cargo home when it is missing:
 

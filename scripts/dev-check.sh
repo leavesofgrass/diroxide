@@ -7,11 +7,22 @@
 #   scripts/dev-check.sh
 #
 # Set CARGO_TARGET_DIR first when several builders share the machine.
+#
+# The full check runs the slow tests: it sets DIRO_SLOW=1 unless it is
+# already set (docs/dev/building.md, "Slow tests"). DIRO_SLOW=0 runs the
+# same check without them, as a builder's quick run does.
 
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
+
+export DIRO_SLOW="${DIRO_SLOW:-1}"
+if [ "$DIRO_SLOW" = 1 ]; then
+    printf 'Slow tests: run, DIRO_SLOW is 1.\n'
+else
+    printf 'Slow tests: skipped, DIRO_SLOW is not 1.\n'
+fi
 
 step() {
     local name="$1"

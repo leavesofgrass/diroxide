@@ -861,6 +861,9 @@ mod tests {
 
     #[test]
     fn the_demo_set_holds_every_file_part_six_names() {
+        if crate::slow::slow_test_skipped() {
+            return;
+        }
         let root = crate::bench::workspace_root().unwrap();
         let diro = diro_binary(&root).unwrap();
         let dir = tempfile::tempdir().unwrap();

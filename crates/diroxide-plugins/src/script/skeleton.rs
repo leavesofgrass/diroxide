@@ -526,6 +526,9 @@ mod tests {
 
     #[test]
     fn the_python_skeletons_pass_their_own_tests_and_the_conformance_suite() {
+        if crate::slow_test_skipped() {
+            return;
+        }
         let Ok(python) = Lookup::system().python(&[]) else {
             eprintln!("Python 3 was not found; this test is skipped here");
             return;

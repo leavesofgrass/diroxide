@@ -14,6 +14,17 @@ use diroxide_filetype::TypeRegistry;
 use diroxide_preview::{LatestOnly, PreviewKind, PreviewRequest, Previews};
 use diroxide_vfs::{OpContext, Registry};
 
+/// The slow tests' gate (`docs/dev/building.md`, "Slow tests"): a slow
+/// test runs only when `DIRO_SLOW` is `1`, as CI and the full check set
+/// it. Otherwise it says so in a line nextest shows and passes at once.
+pub fn slow_test_skipped() -> bool {
+    if std::env::var_os("DIRO_SLOW").is_some_and(|v| v == "1") {
+        return false;
+    }
+    println!("skipped: slow, set DIRO_SLOW=1");
+    true
+}
+
 #[test]
 fn a_manifest_previews_as_text_with_its_type() {
     let place = Place::parse(env!("CARGO_MANIFEST_DIR"))

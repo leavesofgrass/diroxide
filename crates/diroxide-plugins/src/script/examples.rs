@@ -239,6 +239,9 @@ fn total_size_reads_odd_names_whole_and_counts_what_it_cannot_read() {
 
 #[test]
 fn total_size_reports_progress_on_a_long_list() {
+    if crate::slow_test_skipped() {
+        return;
+    }
     let Some(bench) = Bench::new() else { return };
     let command = script("total-size.sh");
     let count = if cfg!(windows) { 120 } else { 3000 };
@@ -448,6 +451,9 @@ fn a_stray_print_is_tolerated_and_said_once() {
 
 #[test]
 fn the_python_examples_pass_their_own_tests() {
+    if crate::slow_test_skipped() {
+        return;
+    }
     let Ok(python) = Lookup::system().python(&[]) else {
         eprintln!("Python 3 was not found; this test is skipped here");
         return;

@@ -41,6 +41,17 @@ use diroxide_archive::{ArchiveFormat, ArchiveProvider, Limits};
 use diroxide_core::Place;
 use diroxide_vfs::{OpContext, Registry, VfsError};
 
+/// The slow tests' gate (`docs/dev/building.md`, "Slow tests"): a slow
+/// test runs only when `DIRO_SLOW` is `1`, as CI and the full check set
+/// it. Otherwise it says so in a line nextest shows and passes at once.
+pub fn slow_test_skipped() -> bool {
+    if std::env::var_os("DIRO_SLOW").is_some_and(|v| v == "1") {
+        return false;
+    }
+    println!("skipped: slow, set DIRO_SLOW=1");
+    true
+}
+
 #[test]
 fn the_provider_registers_and_a_missing_archive_is_not_found() {
     let provider = Arc::new(ArchiveProvider::new(Limits::default()));

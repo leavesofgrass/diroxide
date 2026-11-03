@@ -1364,6 +1364,9 @@ mod tests {
 
     #[test]
     fn a_quick_run_of_every_scenario_works_and_cleans_up() {
+        if crate::slow::slow_test_skipped() {
+            return;
+        }
         let params = Params::read(&root()).unwrap();
         let work = tempfile::tempdir().unwrap();
         let outcomes = run_scenarios(&Setting {

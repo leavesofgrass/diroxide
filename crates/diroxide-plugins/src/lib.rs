@@ -95,3 +95,15 @@ pub use panels::{PanelChange, PanelChoice, PanelSnapshot};
 pub use protocol::{ErrorKind, Id, Incoming, Notification, Request, Response, RpcError};
 pub use shapes::{PanelRef, WireContext, WireEntry, WireImportance, WirePlace};
 pub use transport::{MemoryPeer, MemoryTransport, PluginTransport, StdioTransport};
+
+/// The slow tests' gate (`docs/dev/building.md`, "Slow tests"): a slow
+/// test runs only when `DIRO_SLOW` is `1`, as CI and the full check set
+/// it. Otherwise it says so in a line nextest shows and passes at once.
+#[cfg(test)]
+pub(crate) fn slow_test_skipped() -> bool {
+    if std::env::var_os("DIRO_SLOW").is_some_and(|v| v == "1") {
+        return false;
+    }
+    println!("skipped: slow, set DIRO_SLOW=1");
+    true
+}
