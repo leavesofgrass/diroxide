@@ -59,8 +59,11 @@ fn the_window_tree_holds_the_title_and_status_lines_in_words() {
         labels[0].starts_with("diroxide-gui, left panel, in "),
         "{labels:?}"
     );
-    assert!(labels[1].starts_with("diroxide-gui, "), "{labels:?}");
-    assert!(labels[1].contains(" items"), "{labels:?}");
+    // The status line as the app says it: the folder and its counts, or a
+    // message that stands (a folder the system cannot watch, in a
+    // container).
+    assert_eq!(labels[1], app.status_line(), "{labels:?}");
+    assert!(!labels[1].is_empty());
     assert_eq!(
         diroxide_gui::window_title(&app, "diroxide"),
         "diroxide-gui - diroxide"
