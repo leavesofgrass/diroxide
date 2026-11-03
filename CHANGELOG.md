@@ -4,6 +4,12 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased
 
+### The orchestrator: the Markdown reader's link loop
+
+Written on Tuesday, November 3, 2026.
+
+- A Markdown document with a link right after a heading inside a list item (`- #` on one line, `[x](y)` indented on the next) no longer ends the program. The document builder looped without end when a link began while no row was open, so the quick view's read of such a file ran until its thread's stack overflowed, which aborts the whole program. CI met it three times as a random text in the Markdown property test since October 23, 2026, and memory pressure was blamed; a probe over 200,000 generated texts found one in about 42,000, and 11 bytes of it were enough. The link now waits for its row, and a test reads five such texts.
+
 ### Lane A6: the app's third set of contract items
 
 Written on Tuesday, November 3, 2026.

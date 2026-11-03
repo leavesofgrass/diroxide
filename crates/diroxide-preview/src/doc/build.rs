@@ -548,7 +548,14 @@ impl DocBuilder {
     }
 
     fn finish_row(&mut self) {
-        self.end_link();
+        // The open link ends with its row. With no row open there is
+        // nothing to end it in, so it waits for the row to come. Ending
+        // it here looped without end: a link with no text writes its
+        // target as text, text with no row open starts a paragraph, and
+        // starting a paragraph finishes the row first.
+        if self.open.is_some() {
+            self.end_link();
+        }
         if self.table.is_some()
             && matches!(
                 self.open.as_ref().map(|o| &o.kind),
