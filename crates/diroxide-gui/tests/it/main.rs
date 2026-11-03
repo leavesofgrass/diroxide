@@ -4,6 +4,8 @@
 
 mod contract;
 #[cfg(feature = "gui")]
+mod live_region;
+#[cfg(feature = "gui")]
 mod loop_keys;
 #[cfg(feature = "gui")]
 mod panel_list;

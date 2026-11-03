@@ -249,8 +249,12 @@ impl Frontend {
             .with(panels, 1.0)
             .with_fixed(NewWidget::new(status_bar));
         self.shown.lines = lines;
+        // The start's lines, said before the window existed, wait in the
+        // live region for a screen reader to ask for the tree.
+        let held = std::mem::take(&mut self.to_say);
         let announcer =
-            NewWidget::new(Announcer::new(std::rc::Rc::clone(&full_passes))).with_tag(ANNOUNCER);
+            NewWidget::new(Announcer::new(std::rc::Rc::clone(&full_passes)).with_pending(held))
+                .with_tag(ANNOUNCER);
         NewWidget::new(Root::new(NewWidget::new(column), announcer, full_passes)).with_tag(ROOT)
     }
 

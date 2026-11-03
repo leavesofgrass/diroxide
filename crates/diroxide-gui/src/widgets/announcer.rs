@@ -75,6 +75,21 @@ impl Announcer {
         }
     }
 
+    /// The same announcer holding `messages` from the start (the app's
+    /// start lines, said before the window existed): they wait for a
+    /// screen reader to ask for the tree, then are said once.
+    pub fn with_pending(mut self, messages: impl IntoIterator<Item = Message>) -> Self {
+        for message in messages {
+            if let Some(live) = live_for(message.importance) {
+                self.pending.push_back((message.text, live));
+            }
+        }
+        while self.pending.len() > HOLD {
+            self.pending.pop_front();
+        }
+        self
+    }
+
     /// Queues the messages that are said (Normal and High) for the next
     /// accessibility pass; Low ones are skipped.
     pub fn say(this: &mut WidgetMut<'_, Self>, messages: impl IntoIterator<Item = Message>) {
@@ -181,13 +196,13 @@ impl Widget for Announcer {
                 }
             }
         }
+        // Every new message goes into this update, however many came
+        // since the last one (a start says four lines in one frame), so
+        // each is announced; only the last few stay for the next update.
         while let Some((text, live)) = self.pending.pop_front() {
             self.shown
                 .push_back((AccessCtx::next_node_id(), text, live));
             self.announced += 1;
-            while self.shown.len() > KEEP {
-                self.shown.pop_front();
-            }
         }
         for (id, text, live) in &self.shown {
             // A label's name is its value in AccessKit.
@@ -197,6 +212,9 @@ impl Widget for Announcer {
             ctx.tree_update().nodes.push((*id, message));
         }
         node.set_children(self.shown.iter().map(|(id, _, _)| *id).collect::<Vec<_>>());
+        while self.shown.len() > KEEP {
+            self.shown.pop_front();
+        }
     }
 
     fn children_ids(&self) -> ChildrenIds {
