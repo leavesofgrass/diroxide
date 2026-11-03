@@ -1,0 +1,125 @@
+// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+use std::marker::PhantomData;
+
+use masonry::core::{ArcStr, MutateCtx};
+use masonry::imaging::record::Scene;
+use masonry::kurbo::Size;
+use masonry::widgets::{self, CanvasSizeChanged};
+
+use crate::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use crate::{Pod, ViewCtx};
+
+/// Access an `imaging` recording [`Scene`] within a canvas that fills its parent.
+///
+/// # Example
+///
+/// ```
+/// # use xilem_masonry as xilem;
+/// use xilem::{view::canvas, masonry::{palette, kurbo::{Rect, Size}, imaging::{Painter, record::Scene}}};
+/// # use xilem::WidgetView;
+///
+/// # fn fill_canvas<State: 'static>() -> impl WidgetView<State> {
+/// let my_canvas = canvas(|_state: &mut State, _ctx, scene: &mut Scene, size: Size| {
+///     let mut painter = Painter::new(scene);
+///     // Drawing a simple rectangle that fills the canvas.
+///     painter
+///         .fill(Rect::new(0.0, 0.0, size.width, size.height), palette::css::AQUA)
+///         .draw();
+/// });
+/// # my_canvas
+/// # }
+/// ```
+pub fn canvas<State, F>(draw: F) -> Canvas<State, F>
+where
+    State: 'static,
+    F: Fn(&mut State, &mut MutateCtx<'_>, &mut Scene, Size) + Send + Sync + 'static,
+{
+    Canvas {
+        draw,
+        alt_text: Option::default(),
+        phantom: PhantomData,
+    }
+}
+
+/// The [`View`] created by [`canvas`].
+#[must_use = "View values do nothing unless provided to Xilem."]
+pub struct Canvas<State, F> {
+    draw: F,
+    alt_text: Option<ArcStr>,
+    phantom: PhantomData<fn() -> State>,
+}
+
+impl<State, F> Canvas<State, F> {
+    /// Sets alt text for the contents of the canvas.
+    ///
+    /// Users are strongly encouraged to provide alt text for accessibility tools
+    /// to use.
+    pub fn alt_text(mut self, alt_text: impl Into<ArcStr>) -> Self {
+        self.alt_text = Some(alt_text.into());
+        self
+    }
+}
+
+impl<State, F> ViewMarker for Canvas<State, F> {}
+
+impl<State, Action, F> View<State, Action, ViewCtx> for Canvas<State, F>
+where
+    State: 'static,
+    F: Fn(&mut State, &mut MutateCtx<'_>, &mut Scene, Size) + Send + Sync + 'static,
+{
+    type Element = Pod<widgets::Canvas>;
+    type ViewState = ();
+
+    fn build(&self, ctx: &mut ViewCtx, _: &mut State) -> (Self::Element, Self::ViewState) {
+        (
+            ctx.with_action_widget(|ctx| {
+                let widget = match &self.alt_text {
+                    Some(alt_text) => widgets::Canvas::default().with_alt_text(alt_text.clone()),
+                    None => widgets::Canvas::default(),
+                };
+                ctx.create_pod(widget)
+            }),
+            (),
+        )
+    }
+
+    fn rebuild(
+        &self,
+        prev: &Self,
+        (): &mut Self::ViewState,
+        _ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+        state: &mut State,
+    ) {
+        widgets::Canvas::update_scene(&mut element, |ctx, scene, size| {
+            (self.draw)(state, ctx, scene, size);
+        });
+        if self.alt_text != prev.alt_text {
+            widgets::Canvas::set_alt_text(&mut element, self.alt_text.clone());
+        }
+    }
+
+    fn teardown(&self, (): &mut Self::ViewState, _: &mut ViewCtx, _: Mut<'_, Self::Element>) {}
+
+    fn message(
+        &self,
+        (): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        _element: Mut<'_, Self::Element>,
+        _app_state: &mut State,
+    ) -> MessageResult<Action> {
+        debug_assert!(
+            message.remaining_path().is_empty(),
+            "id path should be empty in Canvas::message"
+        );
+        match message.take_message::<CanvasSizeChanged>() {
+            Some(_) => MessageResult::RequestRebuild,
+            None => {
+                tracing::error!("Wrong message type in Canvas::message, got {message:?}.");
+                MessageResult::Stale
+            }
+        }
+    }
+}

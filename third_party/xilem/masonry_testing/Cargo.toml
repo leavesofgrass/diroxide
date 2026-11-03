@@ -1,0 +1,34 @@
+[package]
+name = "masonry_testing"
+version.workspace = true # We mimic Xilem's version
+description = "Helper tools for writing unit tests for Masonry."
+keywords = ["gui", "ui", "toolkit"]
+categories = ["gui", "internationalization", "accessibility"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+# There are no platform specific docs.
+default-target = "x86_64-unknown-linux-gnu"
+targets = []
+
+[features]
+
+[dependencies]
+accesskit_consumer.workspace = true
+image = { workspace = true, features = ["png"] }
+imaging_vello_cpu = { workspace = true }
+masonry_core.workspace = true
+oxipng = { version = "9.1.5", default-features = false }
+tracing = { workspace = true, features = ["default"] }
+
+[dev-dependencies]
+
+# Make wgpu use tracing for its spans.
+profiling = { version = "1.0.17", features = ["profile-with-tracing"] }
+
+[lints]
+workspace = true

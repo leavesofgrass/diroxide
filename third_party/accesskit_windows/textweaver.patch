@@ -1,0 +1,28 @@
+diff --git a/src/node.rs b/src/node.rs
+index f414f77..58e1480 100644
+--- a/src/node.rs
++++ b/src/node.rs
+@@ -424,6 +424,15 @@ impl NodeWrapper<'_> {
+         self.node.language().map(LocaleName)
+     }
+ 
++    // textweaver: the keyboard shortcut as UI Automation's AcceleratorKey,
++    // which NVDA and JAWS read when they report shortcut keys.
++    fn accelerator_key(&mut self) -> Option<StrWrapper<'_>> {
++        self.node
++            .data()
++            .keyboard_shortcut()
++            .map(|s| StrWrapper::new(s, self.string_buffer))
++    }
++
+     fn placeholder(&mut self) -> Option<StrWrapper<'_>> {
+         self.node
+             .placeholder()
+@@ -1311,6 +1320,7 @@ properties! {
+     (UIA_FullDescriptionPropertyId, description),
+     (UIA_CulturePropertyId, culture),
+     (UIA_HelpTextPropertyId, placeholder),
++    (UIA_AcceleratorKeyPropertyId, accelerator_key),
+     (UIA_IsContentElementPropertyId, is_content_element),
+     (UIA_IsControlElementPropertyId, is_content_element),
+     (UIA_IsEnabledPropertyId, is_enabled),

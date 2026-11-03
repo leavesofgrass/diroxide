@@ -850,6 +850,8 @@ Given on Saturday, October 10, 2026, after the Wave 0 research:
 104. **No listening findings to fold in** (the same minute): alpha 2's three listening scripts have no findings yet; the GUI work starts now, and findings go into the wave as they come.
 105. **One wave, one readiness page** (the same minute): the GUI's lanes run in order with the owner's ten minutes once at the end, not a readiness check after each stage.
 106. **Software drawing where there is no graphics driver** (the same minute): on a machine with no usable GPU the GUI falls back to drawing on the CPU where the vendored stack allows it; R26 checks what textweaver does and what the stack offers.
+107. **The Linux accessibility tools go into the development image, in a separate stage** (Monday, November 2, 2026, recorded at 09:06 PM, interactively, after R27's plan): xvfb, dbus, at-spi2-core, Mesa's software Vulkan (lavapipe), python3-pyatspi and accessibility-cli built from a pinned commit, as textweaver's image has them, used only by the GUI checks; added to the owner's pre-approved tools with the date.
+108. **One check at the end, no early listening after the first GUI lane** (the same minute): R27's optional five minutes on the panel and the live region is declined; the owner's twenty minutes come once, after the whole wave, as answer 105 says.
 
 Questions 4 to 14 are open and take their defaults until the owner says otherwise.
 

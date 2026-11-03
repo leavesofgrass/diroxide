@@ -1,0 +1,211 @@
+// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+use masonry::core::{ArcStr, StyleProperty};
+use masonry::parley::style::FontWeight;
+use masonry::parley::{FontFamily, FontFamilyName, GenericFamily, LineHeight};
+use masonry::widgets;
+
+use crate::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use crate::{Pod, TextAlign, ViewCtx};
+
+/// A non-interactive text element.
+/// # Example
+///
+/// ```
+/// # use xilem_masonry as xilem;
+/// use xilem::masonry::palette;
+/// use xilem::view::label;
+/// use xilem::style::Style as _;
+/// use xilem::masonry::parley::Alignment as TextAlign;
+/// use xilem::masonry::parley::style::FontWeight;
+/// use xilem::masonry::parley::fontique;
+/// # use xilem::WidgetView;
+///
+/// # fn view() -> impl WidgetView<()> {
+/// label("Text example.")
+///     .text_alignment(TextAlign::Center)
+///     .text_size(24.0)
+///     .letter_spacing(-0.3)
+///     .weight(FontWeight::BOLD)
+///     .font(fontique::GenericFamily::Serif)
+///     .color(palette::css::RED)
+/// # }
+/// ```
+pub fn label(label: impl Into<ArcStr>) -> Label {
+    Label {
+        label: label.into(),
+        text_alignment: TextAlign::default(),
+        text_size: masonry::theme::TEXT_SIZE_NORMAL,
+        weight: FontWeight::NORMAL,
+        enable_hinting: true,
+        line_height: LineHeight::default(),
+        font: FontFamily::Single(FontFamilyName::Generic(GenericFamily::SystemUi)),
+        letter_spacing: 0.0,
+        word_spacing: 0.0,
+    }
+}
+
+/// The [`View`] created by [`label`] from a text which `impl Into<`[`ArcStr`]`>`.
+///
+/// See `label` documentation for more context.
+#[must_use = "View values do nothing unless provided to Xilem."]
+pub struct Label {
+    label: ArcStr,
+    text_alignment: TextAlign,
+    text_size: f32,
+    weight: FontWeight,
+    enable_hinting: bool,
+    line_height: LineHeight,
+    font: FontFamily<'static>,
+    letter_spacing: f32,
+    word_spacing: f32,
+    // TODO: add more attributes of `masonry::widgets::Label`
+}
+
+impl Label {
+    /// Sets text alignment: `Start`, `Middle`, `End` or `Justified`.
+    pub fn text_alignment(mut self, text_alignment: TextAlign) -> Self {
+        self.text_alignment = text_alignment;
+        self
+    }
+
+    /// Sets text size.
+    #[doc(alias = "font_size")]
+    pub fn text_size(mut self, text_size: f32) -> Self {
+        self.text_size = text_size;
+        self
+    }
+
+    /// Sets font weight.
+    pub fn weight(mut self, weight: FontWeight) -> Self {
+        self.weight = weight;
+        self
+    }
+
+    /// Sets whether [hinting](https://en.wikipedia.org/wiki/Font_hinting) will be used for this label.
+    pub fn enable_hinting(mut self, enable_hinting: bool) -> Self {
+        self.enable_hinting = enable_hinting;
+        self
+    }
+
+    /// Sets line height.
+    pub fn line_height(mut self, line_height: LineHeight) -> Self {
+        self.line_height = line_height;
+        self
+    }
+
+    /// Sets font tracking width.
+    #[doc(alias = "tracking")]
+    pub fn letter_spacing(mut self, letter_spacing: f32) -> Self {
+        self.letter_spacing = letter_spacing;
+        self
+    }
+
+    /// Sets word spacing width.
+    pub fn word_spacing(mut self, word_spacing: f32) -> Self {
+        self.word_spacing = word_spacing;
+        self
+    }
+
+    /// Set the [font family](FontFamily) this label will use.
+    ///
+    /// A font family allows for providing fallbacks. If there is no matching font
+    /// for a character, a system font will be used (if the system fonts are enabled).
+    pub fn font(mut self, font: impl Into<FontFamily<'static>>) -> Self {
+        self.font = font.into();
+        self
+    }
+}
+
+impl<T> From<T> for Label
+where
+    T: Into<ArcStr>,
+{
+    fn from(text: T) -> Self {
+        label(text)
+    }
+}
+
+impl ViewMarker for Label {}
+impl<State: 'static, Action> View<State, Action, ViewCtx> for Label {
+    type Element = Pod<widgets::Label>;
+    type ViewState = ();
+
+    fn build(&self, ctx: &mut ViewCtx, _: &mut State) -> (Self::Element, Self::ViewState) {
+        let pod = ctx.create_pod(
+            widgets::Label::new(self.label.clone())
+                .with_text_alignment(self.text_alignment)
+                .with_style(StyleProperty::FontSize(self.text_size))
+                .with_style(StyleProperty::FontWeight(self.weight))
+                .with_style(StyleProperty::LineHeight(self.line_height))
+                .with_style(StyleProperty::FontFamily(self.font.clone()))
+                .with_style(StyleProperty::WordSpacing(self.word_spacing))
+                .with_style(StyleProperty::LetterSpacing(self.letter_spacing))
+                .with_hint(self.enable_hinting),
+        );
+        (pod, ())
+    }
+
+    fn rebuild(
+        &self,
+        prev: &Self,
+        (): &mut Self::ViewState,
+        _ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+        _: &mut State,
+    ) {
+        if prev.label != self.label {
+            widgets::Label::set_text(&mut element, self.label.clone());
+        }
+        if prev.text_alignment != self.text_alignment {
+            widgets::Label::set_text_alignment(&mut element, self.text_alignment);
+        }
+        if prev.text_size != self.text_size {
+            widgets::Label::insert_style(&mut element, StyleProperty::FontSize(self.text_size));
+        }
+        if prev.weight != self.weight {
+            widgets::Label::insert_style(&mut element, StyleProperty::FontWeight(self.weight));
+        }
+        if prev.line_height != self.line_height {
+            widgets::Label::insert_style(&mut element, StyleProperty::LineHeight(self.line_height));
+        }
+        if prev.letter_spacing != self.letter_spacing {
+            widgets::Label::insert_style(
+                &mut element,
+                StyleProperty::LetterSpacing(self.letter_spacing),
+            );
+        }
+        if prev.word_spacing != self.word_spacing {
+            widgets::Label::insert_style(
+                &mut element,
+                StyleProperty::WordSpacing(self.word_spacing),
+            );
+        }
+        if prev.font != self.font {
+            widgets::Label::insert_style(
+                &mut element,
+                StyleProperty::FontFamily(self.font.clone()),
+            );
+        }
+        if prev.enable_hinting != self.enable_hinting {
+            widgets::Label::set_hint(&mut element, self.enable_hinting);
+        }
+    }
+
+    fn teardown(&self, (): &mut Self::ViewState, _: &mut ViewCtx, _: Mut<'_, Self::Element>) {}
+
+    fn message(
+        &self,
+        (): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        _element: Mut<'_, Self::Element>,
+        _app_state: &mut State,
+    ) -> MessageResult<Action> {
+        tracing::error!(
+            ?message,
+            "Message arrived in Label::message, but Label doesn't consume any messages, this is a bug"
+        );
+        MessageResult::Stale
+    }
+}

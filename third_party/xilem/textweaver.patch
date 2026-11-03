@@ -1,0 +1,1535 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,3 +1,7 @@
++# Vendored from https://github.com/linebender/xilem at revision
++# 271a27a6d4a930f7878d404f9014e3c50a3a9b88 (Monday, September 14, 2026), trimmed
++# to the crates textweaver-xilem uses, with textweaver's patch applied: see
++# TEXTWEAVER.md and textweaver.patch (ADR-0027).
+ [workspace]
+ resolver = "2"
+ members = [
+@@ -9,21 +13,7 @@
+     "masonry_imaging",
+     "masonry_testing",
+     "masonry_winit",
+-
+-    "xilem_web",
+-    "xilem_web/web_examples/counter",
+-    "xilem_web/web_examples/counter_custom_element",
+-    "xilem_web/web_examples/elm",
+-    "xilem_web/web_examples/fetch",
+-    "xilem_web/web_examples/todomvc",
+-    "xilem_web/web_examples/mathml_svg",
+-    "xilem_web/web_examples/raw_dom_access",
+-    "xilem_web/web_examples/spawn_tasks",
+-    "xilem_web/web_examples/svgtoy",
+-    "xilem_web/web_examples/svgdraw",
+-    "xilem_web/web_examples/open_and_save_file",
+     "tree_arena",
+-    "placehero",
+     "include_doc_path",
+ ]
+ 
+@@ -82,13 +72,13 @@
+ usvg = "0.47.0"
+ web-time = "1.1.0"
+ bitflags = "2.11.0"
+-accesskit = "0.24.0"
+-accesskit_winit = { version = "0.32.2", default-features = false, features = [
++accesskit = "0.25.1"
++accesskit_winit = { version = "0.34.1", default-features = false, features = [
+     "accesskit_unix",
+     "tokio",
+     "rwh_06",
+ ] }
+-accesskit_consumer = "0.35.0"
++accesskit_consumer = "0.39.1"
+ time = "0.3.47"
+ reqwest = { version = "0.12.28", default-features = false, features = [
+     # We use rustls as Android doesn't ship with openssl
+@@ -161,3 +151,6 @@
+ debug = 0 # Don't compile debug info to reduce compilation artifact size for cache benefits.
+ [profile.ci.package."*"]
+ debug-assertions = true # Keep always on for dependencies for cache reuse.
++
++[patch.crates-io]
++parley = { path = "parley" }
+--- a/masonry_core/src/passes/accessibility.rs
++++ b/masonry_core/src/passes/accessibility.rs
+@@ -1,7 +1,7 @@
+ // Copyright 2024 the Xilem Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-use accesskit::{Node, NodeId, Role, Tree, TreeId, TreeUpdate};
++use accesskit::{Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
+ use kurbo::Rect;
+ use tracing::{info_span, trace};
+ use tree_arena::ArenaMut;
+@@ -153,7 +153,7 @@
+     let mut tree_update = TreeUpdate {
+         tree_id: TreeId::ROOT,
+         nodes: vec![],
+-        tree: Some(Tree {
++        tree: Some(TreeInfo {
+             root: root.global_state.window_node_id,
+             toolkit_name: Some("Masonry".to_string()),
+             toolkit_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+@@ -180,6 +180,9 @@
+     // (should go hand in hand with introducing support for modal windows?)
+     let mut window_node = Node::new(Role::Window);
+     window_node.set_children(vec![root.root_id().into()]);
++    if let Some(label) = &root.global_state.window_label {
++        window_node.set_label(label.as_str());
++    }
+     tree_update
+         .nodes
+         .push((root.global_state.window_node_id, window_node));
+--- a/masonry_testing/src/harness.rs
++++ b/masonry_testing/src/harness.rs
+@@ -33,7 +33,9 @@
+ use oxipng::{Options, optimize_from_memory};
+ use tracing::debug;
+ 
+-use masonry_core::accesskit::{Action, ActionRequest, Node, Role, Tree, TreeId, TreeUpdate};
++use masonry_core::accesskit::{
++    Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate,
++};
+ use masonry_core::anymore::AnyDebug;
+ use masonry_core::app::{
+     RenderRoot, RenderRootOptions, RenderRootSignal, VisualLayerKind, VisualLayerPlan,
+@@ -151,6 +153,8 @@
+     mouse_state: PointerState,
+     window_size: PhysicalSize<u32>,
+     root_padding: u32,
++    /// The scale factor the scene is drawn at (textweaver patch).
++    scale_factor: f64,
+     background_color: Color,
+     panic_on_rewrite_saturation: bool,
+     max_screenshot_size: u32,
+@@ -379,7 +383,7 @@
+         let dummy_tree_update = TreeUpdate {
+             tree_id: TreeId::ROOT,
+             nodes: vec![(0.into(), Node::new(Role::Window))],
+-            tree: Some(Tree {
++            tree: Some(TreeInfo {
+                 root: 0.into(),
+                 toolkit_name: None,
+                 toolkit_version: None,
+@@ -406,6 +410,7 @@
+             window_size,
+             background_color: params.background_color,
+             root_padding: params.root_padding,
++            scale_factor: params.scale_factor,
+             panic_on_rewrite_saturation: params.panic_on_rewrite_saturation,
+             max_screenshot_size: params.max_screenshot_size,
+             action_queue: VecDeque::new(),
+@@ -549,8 +554,11 @@
+             let mut painter = Painter::new(&mut full_scene);
+             painter.fill_rect(Rect::new(0.0, 0.0, width, height), self.background_color);
+ 
++            // textweaver patch: widgets lay out in logical pixels, so the
++            // scene is scaled to the physical window, as masonry_winit does.
+             let padding_transform =
+-                Affine::translate((f64::from(self.root_padding), f64::from(self.root_padding)));
++                Affine::translate((f64::from(self.root_padding), f64::from(self.root_padding)))
++                    * Affine::scale(self.scale_factor);
+ 
+             for layer in &visual_layers.layers {
+                 if let VisualLayerKind::Scene(scene) = &layer.kind {
+@@ -582,26 +590,27 @@
+         (visual_layers, tree_update)
+     }
+ 
++    /// Registers the fonts in `data` (textweaver patch: screenshots and
++    /// layout tests with an app's own fonts rather than only Roboto).
++    pub fn register_fonts(&mut self, data: Blob<u8>) {
++        let _ = self.render_root.register_fonts(data);
++        // Registering fonts invalidates layout; run the passes now.
++        self.animate_ms(0);
++    }
++
+     /// Returns a reference to the current state of the accessibility tree.
+     pub fn access_tree(&self) -> &accesskit_consumer::Tree {
+         &self.access_tree
+     }
+ 
+     /// Returns a reference to the current value of a node of the accessibility tree.
+-    pub fn access_node(&self, id: WidgetId) -> Option<accesskit_consumer::Node<'_>> {
+-        let mut node_id = self.access_tree.state().root_id();
+-        #[expect(
+-            unsafe_code,
+-            reason = "No public API exists for modifying/creating a accesskit_consumer::NodeId"
+-        )]
+-        // SAFETY: This hack isn't safe as there is no memory layout guarantee.
+-        //         Remove when a public API becomes available.
+-        //         https://github.com/AccessKit/accesskit/issues/701
+-        unsafe {
+-            let p = &mut node_id as *mut accesskit_consumer::NodeId as *mut u64;
+-            core::ptr::write_unaligned(p, id.to_raw());
+-        }
+-        self.access_tree.state().node_by_id(node_id)
++    pub fn access_node(&self, id: WidgetId) -> Option<accesskit_consumer::NodeRef<'_>> {
++        // accesskit_consumer 0.37 added a public lookup by tree-local id
++        // (AccessKit PR #707), which replaces the old unsafe NodeId hack
++        // (https://github.com/AccessKit/accesskit/issues/701).
++        self.access_tree
++            .state()
++            .node_by_tree_local_id(NodeId(id.to_raw()), TreeId::ROOT)
+     }
+ 
+     // --- MARK: EVENT HELPERS
+@@ -1205,21 +1214,21 @@
+ struct NoOpTreeChangeHandler;
+ 
+ impl accesskit_consumer::TreeChangeHandler for NoOpTreeChangeHandler {
+-    fn node_added(&mut self, _node: &accesskit_consumer::Node<'_>) {}
++    fn node_added(&mut self, _node: &accesskit_consumer::NodeRef<'_>) {}
+ 
+     fn node_updated(
+         &mut self,
+-        _old_node: &accesskit_consumer::Node<'_>,
+-        _new_node: &accesskit_consumer::Node<'_>,
++        _old_node: &accesskit_consumer::NodeRef<'_>,
++        _new_node: &accesskit_consumer::NodeRef<'_>,
+     ) {
+     }
+ 
+     fn focus_moved(
+         &mut self,
+-        _old_node: Option<&accesskit_consumer::Node<'_>>,
+-        _new_node: Option<&accesskit_consumer::Node<'_>>,
++        _old_node: Option<&accesskit_consumer::NodeRef<'_>>,
++        _new_node: Option<&accesskit_consumer::NodeRef<'_>>,
+     ) {
+     }
+ 
+-    fn node_removed(&mut self, _node: &accesskit_consumer::Node<'_>) {}
++    fn node_removed(&mut self, _node: &accesskit_consumer::NodeRef<'_>) {}
+ }
+--- a/xilem/Cargo.toml
++++ b/xilem/Cargo.toml
+@@ -1,4 +1,7 @@
+ [package]
++autoexamples = false
++autotests = false
++autobenches = false
+ name = "xilem"
+ version.workspace = true
+ description = "A next-generation cross-platform Rust UI framework."
+@@ -24,13 +27,6 @@
+ 
+ # This makes the examples discoverable to (e.g.) Android GPU inspector without needing to provide the full name manually.
+ # Do not use when releasing a production app.
+-[package.metadata.android.application]
+-debuggable = true
+-
+-[[package.metadata.android.uses_permission]]
+-# Needed for http_cats
+-name = "android.permission.INTERNET"
+-
+ [features]
+ default = ["masonry/default", "masonry_winit/default", "imaging_vello"]
+ imaging_vello = [
+@@ -74,90 +70,3 @@
+ 
+ [lints]
+ workspace = true
+-
+-[[example]]
+-name = "mason"
+-# This actually enables scraping for all examples, not just this one.
+-# However it is possible to set doc-scrape-examples to false for other specific examples.
+-doc-scrape-examples = true
+-
+-[[example]]
+-name = "calc"
+-
+-[[example]]
+-name = "stopwatch"
+-
+-[[example]]
+-name = "to_do_mvc"
+-
+-[[example]]
+-name = "variable_clock"
+-
+-[[example]]
+-name = "emoji_picker"
+-# Need to disable emoji_picker scarping, it crashes Rust 1.94.0-nightly (b54051b15 2025-12-30)
+-# When running the following command:
+-# cargo +nightly doc -p xilem --no-deps -Zunstable-options -Zrustdoc-scrape-examples
+-# Rust compiler panics:
+-# assertion failed: bpos.to_u32() >= mbc.pos.to_u32() + mbc.bytes as u32
+-doc-scrape-examples = false
+-
+-[[example]]
+-name = "http_cats"
+-
+-# Also add to ANDROID_TARGETS in .github/ci.yml if adding a new Android example
+-# and update the list in xilem/examples/android/README.md.
+-# A custom example target which uses the same `mason.rs` file but for android
+-[[example]]
+-name = "mason_android"
+-path = "examples/android/mason_android.rs"
+-# cdylib is required for cargo-apk
+-crate-type = ["cdylib"]
+-
+-[[example]]
+-name = "calc_android"
+-path = "examples/android/calc_android.rs"
+-# cdylib is required for cargo-apk
+-crate-type = ["cdylib"]
+-
+-[[example]]
+-name = "stopwatch_android"
+-path = "examples/android/stopwatch_android.rs"
+-# cdylib is required for cargo-apk
+-crate-type = ["cdylib"]
+-
+-[[example]]
+-name = "to_do_mvc_android"
+-path = "examples/android/to_do_mvc_android.rs"
+-# cdylib is required for cargo-apk
+-crate-type = ["cdylib"]
+-
+-[[example]]
+-name = "variable_clock_android"
+-path = "examples/android/variable_clock_android.rs"
+-# cdylib is required for cargo-apk
+-crate-type = ["cdylib"]
+-
+-[[example]]
+-name = "emoji_picker_android"
+-path = "examples/android/emoji_picker_android.rs"
+-# cdylib is required for cargo-apk
+-crate-type = ["cdylib"]
+-doc-scrape-examples = false # Mirrors non-android disable
+-
+-[[example]]
+-name = "http_cats_android"
+-path = "examples/android/http_cats_android.rs"
+-# cdylib is required for cargo-apk
+-crate-type = ["cdylib"]
+-
+-[[example]]
+-name = "canvas"
+-
+-[[test]]
+-name = "long_elem_seq"
+-path = "stress_tests/long_elem_seq.rs"
+-
+-[[test]]
+-name = "property_stack"
+-path = "stress_tests/property_stack.rs"
+--- a/masonry/Cargo.toml
++++ b/masonry/Cargo.toml
+@@ -1,4 +1,7 @@
+ [package]
++autoexamples = false
++autotests = false
++autobenches = false
+ name = "masonry"
+ version.workspace = true # We mimic Xilem's version
+ description = "Traits and types of the Masonry toolkit."
+@@ -48,16 +51,3 @@
+ 
+ [lints]
+ workspace = true
+-
+-[[bench]]
+-name = "widget_list"
+-# We use divan's harness instead of the default one.
+-harness = false
+-# Ensures the benchmark is ran included when running bare `cargo test`.
+-test = true
+-
+-[[example]]
+-name = "calc_masonry"
+-# This actually enables scraping for all examples, not just this one.
+-# However it is possible to set doc-scrape-examples to false for other specific examples.
+-doc-scrape-examples = true
+--- a/xilem_core/Cargo.toml
++++ b/xilem_core/Cargo.toml
+@@ -1,4 +1,7 @@
+ [package]
++autoexamples = false
++autotests = false
++autobenches = false
+ name = "xilem_core"
+ version.workspace = true # We mimic Xilem's version
+ description = "Common core of the Xilem Rust UI framework."
+@@ -37,9 +40,3 @@
+ 
+ [lints]
+ workspace = true
+-
+-[[example]]
+-name = "user_interface"
+-# This actually enables scraping for all examples, not just this one.
+-# However it is possible to set doc-scrape-examples to false for other specific examples.
+-doc-scrape-examples = true
+--- a/masonry/src/widgets/text_area.rs
++++ b/masonry/src/widgets/text_area.rs
+@@ -49,6 +49,9 @@
+     editor: PlainEditor<BrushIndex>,
+     /// Placeholder text exposed to accessibility APIs by an editable text area.
+     placeholder: ArcStr,
++    /// The accessible name (textweaver patch: a field needs a name that is
++    /// not its placeholder, such as the prompt it answers).
++    accessible_label: ArcStr,
+     /// The generation of `editor` which we have rendered.
+     ///
+     /// TODO: Split into rendered and layout generation. This will make the `edited` mechanism in [`on_text_event`](Widget::on_text_event).
+@@ -120,6 +123,7 @@
+         Self {
+             editor,
+             placeholder: "".into(),
++            accessible_label: "".into(),
+             rendered_generation: Generation::default(),
+             word_wrap: true,
+             last_max_advance: None,
+@@ -129,6 +133,12 @@
+             anim_prev_interval: 0,
+             anim_elapsed: 0,
+         }
++    }
++
++    /// Sets the accessible name screen readers announce for the area.
++    pub fn with_accessible_label(mut self, label: impl Into<ArcStr>) -> Self {
++        self.accessible_label = label.into();
++        self
+     }
+ 
+     /// Sets a style property for the new text area.
+@@ -322,6 +332,12 @@
+ 
+         this.ctx.request_layout();
+         old
++    }
++
++    /// Changes the accessible name.
++    pub fn set_accessible_label(this: &mut WidgetMut<'_, Self>, label: impl Into<ArcStr>) {
++        this.widget.accessible_label = label.into();
++        this.ctx.request_accessibility_update();
+     }
+ 
+     /// Sets the text displayed in this widget.
+@@ -1072,6 +1088,9 @@
+         }
+         if !self.placeholder.is_empty() {
+             node.set_placeholder(self.placeholder.to_string());
++        }
++        if !self.accessible_label.is_empty() {
++            node.set_label(self.accessible_label.to_string());
+         }
+ 
+         let cache = ctx.property_cache();
+--- a/masonry_winit/src/event_loop_runner.rs
++++ b/masonry_winit/src/event_loop_runner.rs
+@@ -1007,6 +1007,11 @@
+         }
+ 
+         self.handle_signals(event_loop, app_driver);
++        // textweaver patch: an app may exit from an async action (a timer
++        // or a background thread), not only from a window event.
++        if self.exit {
++            event_loop.exit();
++        }
+     }
+ 
+     // --- MARK: EMPTY WINIT HANDLERS
+--- a/masonry_core/src/app/render_root.rs
++++ b/masonry_core/src/app/render_root.rs
+@@ -173,6 +173,9 @@
+ 
+     /// Whether to paint widget's bounding boxes and other visual helpers.
+     pub(crate) debug_paint: bool,
++    /// The window's accessible name (textweaver patch): AT-SPI and macOS
++    /// read it from the root node, not from the platform window.
++    pub(crate) window_label: Option<String>,
+ }
+ 
+ pub(crate) struct MutateCallback {
+@@ -377,6 +380,7 @@
+                 access_tree_active: false,
+                 scale_factor,
+                 debug_paint,
++                window_label: None,
+             },
+             property_arena: PropertyArena::new(default_properties),
+             widget_arena: WidgetArena {
+@@ -607,6 +611,18 @@
+         ret
+     }
+ 
++    /// Sets the accessible name of the window node (textweaver patch).
++    /// Screen readers on Linux and macOS read the window's title from it;
++    /// on Windows the platform window's title is used as well.
++    pub fn set_window_label(&mut self, label: impl Into<String>) {
++        let label = label.into();
++        if self.global_state.window_label.as_deref() != Some(label.as_str()) {
++            self.global_state.window_label = Some(label);
++            self.global_state
++                .emit_signal(RenderRootSignal::RequestRedraw);
++        }
++    }
++
+     /// Redraws the window.
+     ///
+     /// Returns the current visual-layer plan and, if accessibility is active, a tree update.
+--- a/parley/Cargo.toml
++++ b/parley/Cargo.toml
+@@ -63,7 +63,7 @@
+ path = "src/lib.rs"
+ 
+ [dependencies.accesskit]
+-version = "0.24.0"
++version = "0.25.1"
+ optional = true
+ 
+ [dependencies.core_maths]
+--- a/parley/src/bidi.rs
++++ b/parley/src/bidi.rs
+@@ -893,6 +893,9 @@
+     }
+ }
+ 
++// textweaver: newer icu_properties deprecates `to_icu4c_value`; the value
++// is still correct, and this vendored copy is built with `-D warnings`.
++#[allow(deprecated)]
+ const fn mask(t: BidiClass) -> u32 {
+     1 << (t.to_icu4c_value() as u32)
+ }
+diff --git a/masonry/src/tests/event.rs b/masonry/src/tests/event.rs
+index 5bc3acf..04cdfdd 100644
+--- a/masonry/src/tests/event.rs
++++ b/masonry/src/tests/event.rs
+@@ -633,7 +633,8 @@ fn access_event_bubbling() {
+             record,
+             Record::AccessEvent(AccessEvent {
+                 action: accesskit::Action::Click,
+-                data: None
++                data: None,
++                node: None,
+             })
+         )
+     }
+diff --git a/masonry/src/widgets/text_area.rs b/masonry/src/widgets/text_area.rs
+index 2f7d161..181e384 100644
+--- a/masonry/src/widgets/text_area.rs
++++ b/masonry/src/widgets/text_area.rs
+@@ -645,6 +645,13 @@ impl<const EDITABLE: bool> Widget for TextArea<EDITABLE> {
+                             drv.move_right();
+                         }
+                     }
++                    // A one-line field leaves Up and Down to its parent (a
++                    // prompt's history, for instance). (textweaver)
++                    Key::Named(NamedKey::ArrowUp | NamedKey::ArrowDown)
++                        if !shift && self.insert_newline == InsertNewline::Never =>
++                    {
++                        return;
++                    }
+                     Key::Named(NamedKey::ArrowUp) => {
+                         let mut drv = self.editor.driver(fctx, lctx);
+                         if shift {
+diff --git a/masonry_core/src/app/render_root.rs b/masonry_core/src/app/render_root.rs
+index d00638e..8134dd6 100644
+--- a/masonry_core/src/app/render_root.rs
++++ b/masonry_core/src/app/render_root.rs
+@@ -115,6 +115,11 @@ pub(crate) struct RenderRootState {
+     /// in its border-box coordinate space.
+     pub(crate) scroll_request_targets: Vec<(WidgetId, Rect)>,
+ 
++    /// The widget that added each node that is not a widget's own node
++    /// (text runs, list options), so actions sent to those nodes reach it.
++    /// (textweaver)
++    pub(crate) access_node_owners: HashMap<NodeId, WidgetId>,
++
+     /// List of ancestors of the currently hovered widget.
+     pub(crate) hovered_path: Vec<WidgetId>,
+ 
+@@ -352,6 +357,7 @@ impl RenderRoot {
+                 focus_fallback: None,
+                 window_focused: true,
+                 scroll_request_targets: Vec::new(),
++                access_node_owners: HashMap::new(),
+                 hovered_path: Vec::new(),
+                 active_path: Vec::new(),
+                 pointer_capture_target: None,
+@@ -588,12 +594,36 @@ impl RenderRoot {
+             warn!("Received ActionRequest with id 0. This shouldn't be possible.");
+             return;
+         };
++        // An action sent to a node a widget added itself (a text run, a
++        // list option) goes to that widget, with the node named, instead of
++        // to a widget that does not exist. (textweaver)
++        let mut target = WidgetId(id);
++        let mut node = None;
++        if !self.has_widget(target) {
++            match self
++                .global_state
++                .access_node_owners
++                .get(&event.target_node)
++                .copied()
++                .filter(|owner| self.has_widget(*owner))
++            {
++                Some(owner) => {
++                    target = owner;
++                    node = Some(event.target_node);
++                }
++                None => {
++                    warn!("Received ActionRequest for an unknown node {id}.");
++                    return;
++                }
++            }
++        }
+         let event = AccessEvent {
+             action: event.action,
+             data: event.data,
++            node,
+         };
+ 
+-        run_on_access_event_pass(self, &event, WidgetId(id));
++        run_on_access_event_pass(self, &event, target);
+         self.run_rewrite_passes();
+     }
+ 
+diff --git a/masonry_core/src/core/events.rs b/masonry_core/src/core/events.rs
+index f2359b1..39705a8 100644
+--- a/masonry_core/src/core/events.rs
++++ b/masonry_core/src/core/events.rs
+@@ -53,6 +53,10 @@ pub struct AccessEvent {
+     pub action: accesskit::Action,
+     /// Additional data associated with the action.
+     pub data: Option<accesskit::ActionData>,
++    /// The node the action was sent to, when it is not the widget's own
++    /// node but one the widget added to the tree itself (a text run, a list
++    /// option). The event goes to the widget that added it. (textweaver)
++    pub node: Option<accesskit::NodeId>,
+ }
+ 
+ /// The light/dark mode of the window.
+diff --git a/masonry_core/src/passes/accessibility.rs b/masonry_core/src/passes/accessibility.rs
+index 62f6d42..d93a365 100644
+--- a/masonry_core/src/passes/accessibility.rs
++++ b/masonry_core/src/passes/accessibility.rs
+@@ -50,6 +50,9 @@ fn build_accessibility_tree(
+             tree_update,
+         };
+         let mut node = build_access_node(widget, &mut ctx, scale_factor);
++        // Nodes the widget adds itself are recorded as its own, so actions
++        // sent to them reach it (textweaver).
++        let added_from = ctx.tree_update.nodes.len();
+         let props = PropertiesRef {
+             local: properties,
+             default_map: default_properties.for_widget(widget.type_id()),
+@@ -57,6 +60,10 @@ fn build_accessibility_tree(
+             class_set,
+         };
+         widget.accessibility(&mut ctx, &props, &mut node);
++        let owner = ctx.widget_state.id;
++        for (added, _) in &ctx.tree_update.nodes[added_from..] {
++            ctx.global_state.access_node_owners.insert(*added, owner);
++        }
+ 
+         let id: NodeId = ctx.widget_state.id.into();
+         if ctx.global_state.trace.access {
+diff --git a/masonry/src/widgets/label.rs b/masonry/src/widgets/label.rs
+index 584f31d..27a99aa 100644
+--- a/masonry/src/widgets/label.rs
++++ b/masonry/src/widgets/label.rs
+@@ -110,11 +110,11 @@ impl TextLayout {
+         }
+         self.alignment = alignment;
+         self.alignment_width = alignment_width;
+-        self.layout.align(
+-            Some(self.alignment_width),
+-            self.alignment,
+-            TextAlignOptions::default(),
+-        );
++        // textweaver (Parley 0.9 and later): `Layout::align` no longer takes
++        // a width; lines align within the `max_advance` given to
++        // `break_all_lines` (or the layout's own width without one).
++        self.layout
++            .align(self.alignment, TextAlignOptions::default());
+     }
+ 
+     /// Returns `true` if this layout would be the result for `max_advance`.
+diff --git a/parley/src/bidi.rs b/parley/src/bidi.rs
+index 1229a32..369abd0 100644
+--- a/parley/src/bidi.rs
++++ b/parley/src/bidi.rs
+@@ -889,6 +889,10 @@ impl BracketStack {
+     }
+ }
+ 
++#[allow(
++    deprecated,
++    reason = "textweaver: icu_properties 2.3 deprecated to_icu4c_value; CI builds with -D warnings"
++)]
+ const fn mask(t: BidiClass) -> u32 {
+     1 << (t.to_icu4c_value() as u32)
+ }
+diff --git a/masonry_core/src/core/contexts.rs b/masonry_core/src/core/contexts.rs
+index 5fe87d8..0c1ca0d 100644
+--- a/masonry_core/src/core/contexts.rs
++++ b/masonry_core/src/core/contexts.rs
+@@ -1624,6 +1624,9 @@ impl_context_method!(
+                 }
+ 
+                 global_state.scene_cache.remove(&state.id);
++                // textweaver: a removed widget's tag is free again, so a new
++                // widget can take it (a second dialog with the same tags).
++                global_state.widget_tags.retain(|_, id| *id != state.id);
+ 
+                 if let Some(layers) = global_state.attached_layers.remove(&state.id) {
+                     for (_, layer_id) in layers {
+diff --git a/masonry_core/src/app/mod.rs b/masonry_core/src/app/mod.rs
+index 0bb460e..2e56399 100644
+--- a/masonry_core/src/app/mod.rs
++++ b/masonry_core/src/app/mod.rs
+@@ -10,8 +10,8 @@ mod visual_layers;
+ 
+ pub use render_root::{RenderRoot, RenderRootOptions, RenderRootSignal, WindowSizePolicy};
+ pub use tracing_backend::{
+-    TracingSubscriberHasBeenSetError, default_tracing_subscriber, try_init_test_tracing,
+-    try_init_tracing,
++    DENSE_LOG_DIR_VAR, TracingSubscriberHasBeenSetError, default_tracing_subscriber,
++    try_init_test_tracing, try_init_tracing,
+ };
+ pub use visual_layers::{VisualLayer, VisualLayerKind, VisualLayerPlan};
+ 
+diff --git a/masonry_core/src/app/tracing_backend.rs b/masonry_core/src/app/tracing_backend.rs
+index 510ef18..d9a428c 100644
+--- a/masonry_core/src/app/tracing_backend.rs
++++ b/masonry_core/src/app/tracing_backend.rs
+@@ -4,7 +4,9 @@
+ //! Configures a suitable default [`tracing`] implementation for a Masonry application.
+ //!
+ //! This uses a custom log format specialised for GUI applications,
+-//! and will write all logs to a temporary file in debug mode.
++//! and, in debug mode, will write all logs to a file in the folder named by
++//! the `MASONRY_DENSE_LOG_DIR` environment variable (a textweaver patch:
++//! with the variable unset, no file is written).
+ //! This also uses a default filter, which can be overwritten using `RUST_LOG`.
+ //! This will include all [`DEBUG`](tracing::Level::DEBUG) messages in debug mode,
+ //! and all [`INFO`](tracing::Level::INFO) level messages in release mode.
+@@ -30,6 +32,24 @@ use tracing_subscriber::filter::LevelFilter;
+ use tracing_subscriber::fmt::time::UtcTime;
+ use tracing_subscriber::prelude::*;
+ 
++/// The environment variable naming the folder for the full ("dense") log
++/// of a debug build (a textweaver patch). Unset or empty, no file is
++/// written.
++pub const DENSE_LOG_DIR_VAR: &str = "MASONRY_DENSE_LOG_DIR";
++
++#[cfg(not(target_arch = "wasm32"))]
++/// The folder [`DENSE_LOG_DIR_VAR`] names, if it is set and not empty.
++fn dense_log_dir() -> Option<std::path::PathBuf> {
++    dense_log_dir_from(std::env::var_os(DENSE_LOG_DIR_VAR))
++}
++
++#[cfg(not(target_arch = "wasm32"))]
++fn dense_log_dir_from(value: Option<std::ffi::OsString>) -> Option<std::path::PathBuf> {
++    value
++        .filter(|v| !v.is_empty())
++        .map(std::path::PathBuf::from)
++}
++
+ #[cfg(not(target_arch = "wasm32"))]
+ /// Get the tracing subscriber we wish to set-up for a non-web platform with the given `default_level`.
+ ///
+@@ -64,19 +84,40 @@ fn default_tracing_subscriber_native(
+         .with_filter(env_filter);
+ 
+     // We skip the layer which stores to a file in `--release` mode for performance.
+-    let log_file_layer = if cfg!(debug_assertions) {
+-        // TODO - Replace with a more targeted subscriber.
+-        // See https://github.com/linebender/xilem/issues/1556
+-
+-        let id = std::time::SystemTime::now()
+-            .duration_since(UNIX_EPOCH)
+-            .unwrap()
+-            .as_millis();
+-        let tmp_path = std::env::temp_dir().join(format!("masonry-{id:016}-dense.log"));
++    // textweaver patch: and in debug builds too, unless `MASONRY_DENSE_LOG_DIR`
++    // names the folder to write it in. Upstream wrote it to the system's
++    // temporary folder on every start and every test program, which filled
++    // the system drive; now it goes only where it is asked for.
++    let dense_log = if cfg!(debug_assertions) {
++        dense_log_dir().and_then(|dir| {
++            // TODO - Replace with a more targeted subscriber.
++            // See https://github.com/linebender/xilem/issues/1556
++            let id = std::time::SystemTime::now()
++                .duration_since(UNIX_EPOCH)
++                .map_or(0, |d| d.as_millis());
++            let path = dir.join(format!("masonry-{id:016}-dense.log"));
++            match File::create(&path) {
++                Ok(file) => Some((path, file)),
++                Err(e) => {
++                    #[allow(clippy::print_stderr, reason = "Tracing is not set up yet")]
++                    {
++                        eprintln!(
++                            "Cannot write the full Masonry log to {}: {e}",
++                            path.display()
++                        );
++                    }
++                    None
++                }
++            }
++        })
++    } else {
++        None
++    };
++    let log_file_layer = if let Some((tmp_path, file)) = dense_log {
+         // If modifying, also update the module level docs
+         let log_file_layer = tracing_subscriber::fmt::layer()
+             .with_timer(timer)
+-            .with_writer(File::create(&tmp_path).unwrap())
++            .with_writer(file)
+             // TODO - For some reason, `.with_ansi(false)` still leaves some italics in the output.
+             .with_ansi(false);
+         // Note that this layer does not use the provided filter, and instead logs all events.
+@@ -230,4 +271,16 @@ mod tests {
+         let second_result = try_init_test_tracing();
+         assert!(second_result.is_err());
+     }
++
++    #[cfg(not(target_arch = "wasm32"))]
++    #[test]
++    fn dense_log_only_where_asked() {
++        // textweaver patch: no folder, no file (never the temporary folder).
++        assert_eq!(dense_log_dir_from(None), None);
++        assert_eq!(dense_log_dir_from(Some("".into())), None);
++        assert_eq!(
++            dense_log_dir_from(Some("logs".into())),
++            Some(std::path::PathBuf::from("logs"))
++        );
++    }
+ }
+diff --git a/parley/src/layout/data.rs b/parley/src/layout/data.rs
+index 19ba8e61..797f2f5f 100644
+--- a/parley/src/layout/data.rs
++++ b/parley/src/layout/data.rs
+@@ -28,8 +28,12 @@ pub(crate) struct ClusterData {
+     /// otherwise, it's an offset into the glyph array with the base
+     /// taken from the owning run.
+     pub(crate) glyph_offset: u32,
+-    /// Offset into the text for this cluster
+-    pub(crate) text_offset: u16,
++    /// Offset into the text for this cluster, from its run's start. A
++    /// `u32`, not a `u16`: one run (text in one style, script, and font)
++    /// can be longer than 65,535 bytes, a very long line, and a wrapped
++    /// offset put clusters, line ranges, and cursors at the wrong text
++    /// (textweaver's change; see `TEXTWEAVER.md`).
++    pub(crate) text_offset: u32,
+     /// Advance width for this cluster
+     pub(crate) advance: f32,
+ }
+@@ -956,7 +960,7 @@ fn push_cluster(
+         glyph_len: final_glyph_len,
+         text_len: cluster_start_char.1.len_utf8() as u8,
+         glyph_offset: final_glyph_offset,
+-        text_offset: cluster_start_char.0 as u16,
++        text_offset: cluster_start_char.0 as u32,
+         advance: final_advance,
+     });
+ }
+diff --git a/masonry_winit/src/event_loop_runner.rs b/masonry_winit/src/event_loop_runner.rs
+index 534f484c..f8a7281b 100644
+--- a/masonry_winit/src/event_loop_runner.rs
++++ b/masonry_winit/src/event_loop_runner.rs
+@@ -669,6 +669,13 @@ impl MasonryState {
+         }
+ 
+         let (visual_layers, tree_update) = window.render_root.redraw();
++        // textweaver: the tree update goes to AccessKit before the frame is
++        // rendered, presented and waited for, so the caret move a screen
++        // reader and a Braille display follow does not wait for the GPU.
++        // The tree is complete here; only the update's timing changes.
++        if let Some(tree_update) = tree_update {
++            window.accesskit_adapter.update_if_active(|| tree_update);
++        }
+         let overlays: Vec<_> = visual_layers
+             .overlay_layers()
+             .map(|layer| {
+@@ -699,9 +706,6 @@ impl MasonryState {
+         Self::render(surface, window, frame, &self.render_cx, &mut self.renderer);
+         #[cfg(feature = "tracy")]
+         drop(self.frame.take());
+-        if let Some(tree_update) = tree_update {
+-            window.accesskit_adapter.update_if_active(|| tree_update);
+-        }
+     }
+ 
+     // --- MARK: RENDER
+diff --git a/masonry/src/widgets/text_area.rs b/masonry/src/widgets/text_area.rs
+index 181e384b..7ee91b09 100644
+--- a/masonry/src/widgets/text_area.rs
++++ b/masonry/src/widgets/text_area.rs
+@@ -25,6 +25,29 @@ use crate::util::bounding_box_to_rect;
+ use crate::util::debug_panic;
+ use crate::{TextAlign, theme};
+ 
++use std::sync::atomic::{AtomicU64, Ordering};
++
++/// The cursor's full blink cycle for every text area, in milliseconds;
++/// zero keeps it steady (textweaver).
++static CARET_BLINK_MS: AtomicU64 = AtomicU64::new(1000);
++
++/// Sets the cursor's full blink cycle for every text area (shown for the
++/// first half, hidden for the second), or `None` for a steady cursor, so
++/// an app can follow the system's setting (textweaver).
++pub fn set_caret_blink_period(period: Option<std::time::Duration>) {
++    let ms = period.map_or(0, |p| u64::try_from(p.as_millis()).unwrap_or(u64::MAX));
++    CARET_BLINK_MS.store(ms, Ordering::Relaxed);
++}
++
++/// The cursor's full blink cycle for every text area, or `None` when it
++/// is steady (textweaver).
++pub fn caret_blink_period() -> Option<std::time::Duration> {
++    match CARET_BLINK_MS.load(Ordering::Relaxed) {
++        0 => None,
++        ms => Some(std::time::Duration::from_millis(ms)),
++    }
++}
++
+ /// `TextArea` implements the core of interactive text.
+ ///
+ /// It is used to implement [`TextInput`](super::TextInput) and [`Prose`](super::Prose).
+@@ -456,10 +479,18 @@ impl<const EDITABLE: bool> Widget for TextArea<EDITABLE> {
+         _props: &mut PropertiesMut<'_>,
+         interval: u64,
+     ) {
+-        /// The time for a complete blink cycle, in milliseconds.
+-        /// For the first half (i.e. currently 0.5s) the cursor is shown, and for the second half,
+-        /// it is hidden.
+-        const CURSOR_BLINK_TIME: u64 = 1000;
++        // The time for a complete blink cycle, in milliseconds (textweaver:
++        // set by the app, from the system's setting). For the first half
++        // the cursor is shown, and for the second half, it is hidden. Zero
++        // keeps the cursor steady.
++        let cursor_blink_time = CARET_BLINK_MS.load(Ordering::Relaxed);
++        if cursor_blink_time == 0 {
++            if !self.anim_cursor_visible {
++                self.anim_cursor_visible = true;
++                ctx.request_paint_only();
++            }
++            return;
++        }
+ 
+         /// The timeout, in milliseconds, after which the cursor will stop blinking (i.e. stay
+         /// solid).
+@@ -474,18 +505,18 @@ impl<const EDITABLE: bool> Widget for TextArea<EDITABLE> {
+                 self.anim_prev_interval += interval_ms;
+                 self.anim_elapsed += interval_ms;
+ 
+-                if self.anim_prev_interval >= CURSOR_BLINK_TIME {
+-                    self.anim_prev_interval = self.anim_prev_interval.rem_euclid(CURSOR_BLINK_TIME);
++                if self.anim_prev_interval >= cursor_blink_time {
++                    self.anim_prev_interval = self.anim_prev_interval.rem_euclid(cursor_blink_time);
+                 }
+ 
+                 // TODO: request timer here
+                 ctx.request_anim_frame();
+ 
+                 // Request paint only if changed.
+-                if self.anim_prev_interval < CURSOR_BLINK_TIME / 2 && !self.anim_cursor_visible {
++                if self.anim_prev_interval < cursor_blink_time / 2 && !self.anim_cursor_visible {
+                     self.anim_cursor_visible = true;
+                     ctx.request_paint_only();
+-                } else if self.anim_prev_interval >= CURSOR_BLINK_TIME / 2
++                } else if self.anim_prev_interval >= cursor_blink_time / 2
+                     && self.anim_cursor_visible
+                 {
+                     self.anim_cursor_visible = false;
+diff --git a/masonry_winit/src/event_loop_runner.rs b/masonry_winit/src/event_loop_runner.rs
+index f8a7281b..3464dda6 100644
+--- a/masonry_winit/src/event_loop_runner.rs
++++ b/masonry_winit/src/event_loop_runner.rs
+@@ -1216,5 +1216,10 @@ fn create_surface(
+         size.height,
+         wgpu::PresentMode::AutoVsync,
+     ))
+-    .unwrap()
++    .unwrap_or_else(|e| panic!("{GRAPHICS_FAILURE}: {e}"))
+ }
++
++/// The start of the panic message when a window's drawing surface cannot
++/// be created (no graphics adapter, or none that can draw to the window),
++/// so an app's panic hook can say so in words (textweaver).
++pub const GRAPHICS_FAILURE: &str = "the window could not start its graphics";
+diff --git a/masonry_winit/src/lib.rs b/masonry_winit/src/lib.rs
+index 03919a89..9324bbbc 100644
+--- a/masonry_winit/src/lib.rs
++++ b/masonry_winit/src/lib.rs
+@@ -99,9 +99,10 @@ pub use winit;
+ pub mod app {
+     pub use super::app_driver::{AppDriver, DriverCtx, WgpuContext, WgpuLimits, WindowId};
+     pub use super::event_loop_runner::{
+-        EventLoop, EventLoopBuilder, EventLoopProxy, MasonryState, MasonryUserEvent, NewWindow,
+-        Window, run, run_with,
++        EventLoop, EventLoopBuilder, EventLoopProxy, GRAPHICS_FAILURE, MasonryState,
++        MasonryUserEvent, NewWindow, Window, run, run_with,
+     };
++    pub use super::vello_util::{GraphicsAdapter, graphics_adapter};
+ 
+     pub(crate) use super::convert_winit_event::{
+         masonry_resize_direction_to_winit, winit_ime_to_masonry,
+diff --git a/masonry_winit/src/vello_util.rs b/masonry_winit/src/vello_util.rs
+index c23527e7..b8bec91d 100644
+--- a/masonry_winit/src/vello_util.rs
++++ b/masonry_winit/src/vello_util.rs
+@@ -15,6 +15,53 @@ use wgpu::{
+ 
+ use crate::app_driver::WgpuLimits;
+ 
++/// The graphics adapter a window first drew with (textweaver).
++static FIRST_ADAPTER: std::sync::OnceLock<wgpu::AdapterInfo> = std::sync::OnceLock::new();
++
++/// The graphics adapter the first window's device was created on, once
++/// one has been (textweaver): its name, driver, graphics API, and kind, so
++/// an app can log it and flag a software renderer.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct GraphicsAdapter {
++    /// The adapter's name, as the driver gives it.
++    pub name: String,
++    /// The driver's name and version, when the driver gives them.
++    pub driver: String,
++    /// The graphics API: Vulkan, Dx12, Metal, or Gl.
++    pub backend: String,
++    /// The kind of device: discrete, integrated, virtual, CPU, or other.
++    pub kind: String,
++    /// True when the adapter draws on the CPU (a software renderer such
++    /// as WARP or llvmpipe), which is much slower.
++    pub software: bool,
++}
++
++/// The adapter the first window draws with, or `None` before a window's
++/// surface exists (textweaver).
++pub fn graphics_adapter() -> Option<GraphicsAdapter> {
++    let info = FIRST_ADAPTER.get()?;
++    let kind = match info.device_type {
++        wgpu::DeviceType::DiscreteGpu => "discrete",
++        wgpu::DeviceType::IntegratedGpu => "integrated",
++        wgpu::DeviceType::VirtualGpu => "virtual",
++        wgpu::DeviceType::Cpu => "CPU",
++        wgpu::DeviceType::Other => "other",
++    };
++    let driver = [info.driver.as_str(), info.driver_info.as_str()]
++        .iter()
++        .filter(|s| !s.is_empty())
++        .copied()
++        .collect::<Vec<_>>()
++        .join(" ");
++    Some(GraphicsAdapter {
++        name: info.name.clone(),
++        driver,
++        backend: format!("{:?}", info.backend),
++        kind: kind.to_owned(),
++        software: info.device_type == wgpu::DeviceType::Cpu,
++    })
++}
++
+ #[derive(Debug)]
+ pub(crate) enum RenderSurfaceError {
+     CreateSurface(wgpu::CreateSurfaceError),
+@@ -299,6 +346,7 @@ impl RenderContext {
+             wgpu::util::initialize_adapter_from_env_or_default(&self.instance, compatible_surface)
+                 .await
+                 .ok()?;
++        let _ = FIRST_ADAPTER.set(adapter.get_info());
+         let supported_features = adapter.features();
+         let required_limits = match &self.requested_limits {
+             WgpuLimits::Default => wgpu::Limits::default(),
+diff --git a/third_party/xilem/masonry_winit/src/event_loop_runner.rs b/third_party/xilem/masonry_winit/src/event_loop_runner.rs
+index 3464dda6..2fb54f68 100644
+--- a/third_party/xilem/masonry_winit/src/event_loop_runner.rs
++++ b/third_party/xilem/masonry_winit/src/event_loop_runner.rs
+@@ -220,6 +220,10 @@ pub struct MasonryState {
+ 
+     surfaces: HashMap<HandleId, RenderSurface<'static>>,
+     windows: HashMap<HandleId, Window>,
++    /// The windows created with `with_transparent(true)` (textweaver):
++    /// only these get a surface that composites with alpha; every other
++    /// window's surface is opaque. winit cannot be asked afterwards.
++    transparent_windows: HashSet<HandleId>,
+     /// On Metal, we need to track the state of resize requests to avoid jitter.
+     #[cfg(target_os = "macos")]
+     resized_window: Option<HandleId>,
+@@ -424,6 +428,7 @@ impl MasonryState {
+             window_id_to_handle_id: HashMap::new(),
+             windows: HashMap::new(),
+             surfaces: HashMap::new(),
++            transparent_windows: HashSet::new(),
+             #[cfg(target_os = "macos")]
+             resized_window: None,
+ 
+@@ -544,6 +549,7 @@ impl MasonryState {
+         }
+ 
+         let visible = new_window.attributes.visible;
++        let transparent = new_window.attributes.transparent;
+         // We always create the window as invisible so that we can
+         // render the first frame before showing it to avoid flashing.
+         let handle = event_loop
+@@ -561,6 +567,9 @@ impl MasonryState {
+ 
+         let handle_id = handle.id();
+         let scale_factor = handle.scale_factor();
++        if transparent {
++            self.transparent_windows.insert(handle_id);
++        }
+ 
+         // https://github.com/rust-windowing/winit/issues/2308
+         #[cfg(target_os = "ios")]
+@@ -592,6 +601,7 @@ impl MasonryState {
+             .remove(&window_id)
+             .unwrap_or_else(|| panic!("could not find window for id {window_id:?}"));
+         self.surfaces.remove(&window_id);
++        self.transparent_windows.remove(&window_id);
+         let window = self.windows.remove(&window_id).unwrap();
+ 
+         // HACK: When we exit, on some systems (known to happen with Wayland on KDE),
+@@ -627,7 +637,13 @@ impl MasonryState {
+             surface
+         } else {
+             let devices_before = self.render_cx.devices.len();
+-            let surface = create_surface(&mut self.render_cx, window.handle.clone(), size);
++            let transparent = self.transparent_windows.contains(&handle_id);
++            let surface = create_surface(
++                &mut self.render_cx,
++                window.handle.clone(),
++                size,
++                transparent,
++            );
+             let dev_id = surface.dev_id;
+             self.surfaces.insert(handle_id, surface);
+             let surface = self.surfaces.get_mut(&handle_id).unwrap();
+@@ -1205,6 +1221,7 @@ fn create_surface(
+     render_cx: &mut RenderContext,
+     handle: Arc<WindowHandle>,
+     size: PhysicalSize<u32>,
++    transparent: bool,
+ ) -> RenderSurface<'static> {
+     assert!(
+         size.width != 0 && size.height != 0,
+@@ -1215,6 +1232,7 @@ fn create_surface(
+         size.width,
+         size.height,
+         wgpu::PresentMode::AutoVsync,
++        transparent,
+     ))
+     .unwrap_or_else(|e| panic!("{GRAPHICS_FAILURE}: {e}"))
+ }
+diff --git a/third_party/xilem/masonry_winit/src/vello_util.rs b/third_party/xilem/masonry_winit/src/vello_util.rs
+index b8bec91d..253cd18d 100644
+--- a/third_party/xilem/masonry_winit/src/vello_util.rs
++++ b/third_party/xilem/masonry_winit/src/vello_util.rs
+@@ -18,6 +18,10 @@ use crate::app_driver::WgpuLimits;
+ /// The graphics adapter a window first drew with (textweaver).
+ static FIRST_ADAPTER: std::sync::OnceLock<wgpu::AdapterInfo> = std::sync::OnceLock::new();
+ 
++/// How the first window's surface composites with what is behind it
++/// (textweaver).
++static FIRST_ALPHA_MODE: std::sync::OnceLock<CompositeAlphaMode> = std::sync::OnceLock::new();
++
+ /// The graphics adapter the first window's device was created on, once
+ /// one has been (textweaver): its name, driver, graphics API, and kind, so
+ /// an app can log it and flag a software renderer.
+@@ -34,6 +38,11 @@ pub struct GraphicsAdapter {
+     /// True when the adapter draws on the CPU (a software renderer such
+     /// as WARP or llvmpipe), which is much slower.
+     pub software: bool,
++    /// How the first window's surface composites with what is behind it:
++    /// "opaque" for an ordinary window, or "premultiplied",
++    /// "postmultiplied", "inherit", or "auto"; empty before a surface
++    /// exists.
++    pub alpha_mode: String,
+ }
+ 
+ /// The adapter the first window draws with, or `None` before a window's
+@@ -59,6 +68,19 @@ pub fn graphics_adapter() -> Option<GraphicsAdapter> {
+         backend: format!("{:?}", info.backend),
+         kind: kind.to_owned(),
+         software: info.device_type == wgpu::DeviceType::Cpu,
++        alpha_mode: FIRST_ALPHA_MODE
++            .get()
++            .map(|m| {
++                match m {
++                    CompositeAlphaMode::Auto => "auto",
++                    CompositeAlphaMode::Opaque => "opaque",
++                    CompositeAlphaMode::PreMultiplied => "premultiplied",
++                    CompositeAlphaMode::PostMultiplied => "postmultiplied",
++                    CompositeAlphaMode::Inherit => "inherit",
++                }
++                .to_owned()
++            })
++            .unwrap_or_default(),
+     })
+ }
+ 
+@@ -158,6 +180,7 @@ impl RenderContext {
+         width: u32,
+         height: u32,
+         present_mode: PresentMode,
++        transparent: bool,
+     ) -> Result<RenderSurface<'w>, RenderSurfaceError> {
+         self.create_render_surface(
+             self.instance
+@@ -166,17 +189,22 @@ impl RenderContext {
+             width,
+             height,
+             present_mode,
++            transparent,
+         )
+         .await
+     }
+ 
+     /// Creates a new render surface for the specified window and dimensions.
++    ///
++    /// `transparent` is whether the window was created transparent
++    /// (textweaver): only then is an alpha-compositing mode chosen.
+     pub(crate) async fn create_render_surface<'w>(
+         &mut self,
+         surface: Surface<'w>,
+         width: u32,
+         height: u32,
+         present_mode: PresentMode,
++        transparent: bool,
+     ) -> Result<RenderSurface<'w>, RenderSurfaceError> {
+         let dev_id = self
+             .device(Some(&surface))
+@@ -199,10 +227,32 @@ impl RenderContext {
+                 operation: wgpu::BlendOperation::Add,
+             },
+         };
+-        // TODO: check if the window is transparent then set alpha_mode accordingly
+-        // also, Opaque mode may help in saving power.
+-        // blocked on winit not exposing a way to check for transparency
+-        let (alpha_mode, blitter) = if capabilities
++        // textweaver: an opaque window gets an opaque surface. Before, the
++        // first alpha mode the surface offered was taken whatever the
++        // window, and some drivers (Vulkan on NVIDIA under Windows) offer
++        // pre- or post-multiplied alpha for an ordinary window and then
++        // composite the whole window with per-pixel alpha. GDI draws the
++        // native menu bar with alpha 0, so the menu bar became see-through.
++        // Opaque is also what saves power.
++        let opaque = !transparent
++            && capabilities
++                .alpha_modes
++                .contains(&CompositeAlphaMode::Opaque);
++        let opaque_blitter = || {
++            if cfg!(windows) && device_handle.adapter.get_info().name.contains("AMD") {
++                tracing::info!(
++                    "on Windows with AMD GPUs use premultiplied blitting even on opaque surface"
++                );
++                TextureBlitterBuilder::new(&device_handle.device, format)
++                    .blend_state(PREMUL_BLEND_STATE)
++                    .build()
++            } else {
++                TextureBlitter::new(&device_handle.device, format)
++            }
++        };
++        let (alpha_mode, blitter) = if opaque {
++            (CompositeAlphaMode::Opaque, opaque_blitter())
++        } else if capabilities
+             .alpha_modes
+             .contains(&CompositeAlphaMode::PostMultiplied)
+         {
+@@ -223,19 +273,9 @@ impl RenderContext {
+         } else {
+             // TODO: check if the only available mode is Inherit then log info that postmultipled blit is being used
+             // TODO: check if non-opaque base color is used on unsupported device then warn
+-            let texture_blitter =
+-                if cfg!(windows) && device_handle.adapter.get_info().name.contains("AMD") {
+-                    tracing::info!(
+-                        "on Windows with AMD GPUs use premultiplied blitting even on opaque surface"
+-                    );
+-                    TextureBlitterBuilder::new(&device_handle.device, format)
+-                        .blend_state(PREMUL_BLEND_STATE)
+-                        .build()
+-                } else {
+-                    TextureBlitter::new(&device_handle.device, format)
+-                };
+-            (CompositeAlphaMode::Auto, texture_blitter)
++            (CompositeAlphaMode::Auto, opaque_blitter())
+         };
++        let _ = FIRST_ALPHA_MODE.set(alpha_mode);
+ 
+         let config = SurfaceConfiguration {
+             usage: TextureUsages::RENDER_ATTACHMENT,
+diff --git a/third_party/xilem/masonry_core/src/app/mod.rs b/third_party/xilem/masonry_core/src/app/mod.rs
+index 2e563992..02e31e78 100644
+--- a/third_party/xilem/masonry_core/src/app/mod.rs
++++ b/third_party/xilem/masonry_core/src/app/mod.rs
+@@ -10,8 +10,9 @@ mod visual_layers;
+ 
+ pub use render_root::{RenderRoot, RenderRootOptions, RenderRootSignal, WindowSizePolicy};
+ pub use tracing_backend::{
+-    DENSE_LOG_DIR_VAR, TracingSubscriberHasBeenSetError, default_tracing_subscriber,
+-    try_init_test_tracing, try_init_tracing,
++    DENSE_LOG_DIR_VAR, SpanTimeReport, TracingSubscriberHasBeenSetError,
++    default_tracing_subscriber, try_init_test_tracing, try_init_tracing,
++    try_init_tracing_with_span_times,
+ };
+ pub use visual_layers::{VisualLayer, VisualLayerKind, VisualLayerPlan};
+ 
+diff --git a/third_party/xilem/masonry_core/src/app/tracing_backend.rs b/third_party/xilem/masonry_core/src/app/tracing_backend.rs
+index d9a428c3..1bd51430 100644
+--- a/third_party/xilem/masonry_core/src/app/tracing_backend.rs
++++ b/third_party/xilem/masonry_core/src/app/tracing_backend.rs
+@@ -56,6 +56,7 @@ fn dense_log_dir_from(value: Option<std::ffi::OsString>) -> Option<std::path::Pa
+ /// Returns the subscriber, and the error in case of a (recoverable) error.
+ fn default_tracing_subscriber_native(
+     default_level: LevelFilter,
++    span_times: Option<SpanTimes>,
+ ) -> (impl Subscriber, Option<Box<dyn Error>>) {
+     // Use EnvFilter to allow the user to override the log level without recompiling.
+     let env_filter_builder = EnvFilter::builder()
+@@ -141,9 +142,19 @@ fn default_tracing_subscriber_native(
+     #[cfg(target_os = "android")]
+     let android_trace_layer = tracing_android_trace::AndroidTraceLayer::new();
+ 
++    // textweaver patch: the span timer, filtered to its one span name, so
++    // it turns on no other span or event.
++    let span_times_layer = span_times.map(|t| {
++        let name = t.name;
++        t.with_filter(tracing_subscriber::filter::filter_fn(move |m| {
++            m.is_span() && m.name() == name
++        }))
++    });
++
+     let registry = tracing_subscriber::registry()
+         .with(console_layer)
+-        .with(log_file_layer);
++        .with(log_file_layer)
++        .with(span_times_layer);
+ 
+     #[cfg(target_os = "android")]
+     let registry = registry.with(android_trace_layer);
+@@ -186,7 +197,7 @@ pub fn default_tracing_subscriber(
+ ) -> (impl Subscriber, Option<Box<dyn Error>>) {
+     #[cfg(not(target_arch = "wasm32"))]
+     {
+-        default_tracing_subscriber_native(max_level)
++        default_tracing_subscriber_native(max_level, None)
+     }
+ 
+     #[cfg(target_arch = "wasm32")]
+@@ -239,6 +250,24 @@ pub fn try_init_test_tracing() -> Result<(), TracingSubscriberHasBeenSetError> {
+ 
+ /// Initialise tracing with a default subscriber for an end-user application.
+ pub fn try_init_tracing() -> Result<(), TracingSubscriberHasBeenSetError> {
++    init_app_tracing(None)
++}
++
++/// Called with how long a span lasted, from its creation to its close.
++pub type SpanTimeReport = Box<dyn Fn(std::time::Duration) + Send + Sync>;
++
++/// Like [`try_init_tracing`], and `report` is also called with the length
++/// of every span named `name` when it closes (a textweaver patch: the
++/// frame times its `--log` reports, from `masonry_winit`'s `redraw` span).
++/// On the web, `report` is never called.
++pub fn try_init_tracing_with_span_times(
++    name: &'static str,
++    report: SpanTimeReport,
++) -> Result<(), TracingSubscriberHasBeenSetError> {
++    init_app_tracing(Some(SpanTimes { name, report }))
++}
++
++fn init_app_tracing(span_times: Option<SpanTimes>) -> Result<(), TracingSubscriberHasBeenSetError> {
+     // Default level is DEBUG in --dev, INFO in --release, unless a level is passed.
+     // DEBUG should print a few logs per low-density event.
+     // INFO should only print logs for noteworthy things.
+@@ -250,7 +279,13 @@ pub fn try_init_tracing() -> Result<(), TracingSubscriberHasBeenSetError> {
+ 
+     verify_subscriber_has_not_been_set()?;
+ 
+-    let (subscriber, err) = default_tracing_subscriber(default_level);
++    #[cfg(not(target_arch = "wasm32"))]
++    let (subscriber, err) = default_tracing_subscriber_native(default_level, span_times);
++    #[cfg(target_arch = "wasm32")]
++    let (subscriber, err) = {
++        drop(span_times);
++        default_tracing_subscriber(default_level)
++    };
+ 
+     // We may ignore potential errors here because we already checked that no subscriber has been set.
+     let _ = tracing::subscriber::set_global_default(subscriber);
+@@ -261,6 +296,42 @@ pub fn try_init_tracing() -> Result<(), TracingSubscriberHasBeenSetError> {
+     Ok(())
+ }
+ 
++/// The layer that times the spans with one name (a textweaver patch).
++struct SpanTimes {
++    name: &'static str,
++    report: SpanTimeReport,
++}
++
++/// When a timed span was created, kept in its extensions.
++struct SpanStarted(std::time::Instant);
++
++impl<S> tracing_subscriber::Layer<S> for SpanTimes
++where
++    S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
++{
++    fn on_new_span(
++        &self,
++        attrs: &tracing::span::Attributes<'_>,
++        id: &tracing::span::Id,
++        ctx: tracing_subscriber::layer::Context<'_, S>,
++    ) {
++        if attrs.metadata().name() == self.name
++            && let Some(span) = ctx.span(id)
++        {
++            span.extensions_mut()
++                .insert(SpanStarted(std::time::Instant::now()));
++        }
++    }
++
++    fn on_close(&self, id: tracing::span::Id, ctx: tracing_subscriber::layer::Context<'_, S>) {
++        if let Some(span) = ctx.span(&id)
++            && let Some(started) = span.extensions().get::<SpanStarted>()
++        {
++            (self.report)(started.0.elapsed());
++        }
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -272,6 +343,29 @@ mod tests {
+         assert!(second_result.is_err());
+     }
+ 
++    #[cfg(not(target_arch = "wasm32"))]
++    #[test]
++    fn span_times_report_only_their_span() {
++        // textweaver patch: the frame times under `--log`.
++        use std::sync::{Arc, Mutex};
++        let seen = Arc::new(Mutex::new(Vec::new()));
++        let into = Arc::clone(&seen);
++        let layer = SpanTimes {
++            name: "timed",
++            report: Box::new(move |d| into.lock().unwrap().push(d)),
++        };
++        let subscriber = tracing_subscriber::registry().with(layer);
++        tracing::subscriber::with_default(subscriber, || {
++            let a = tracing::info_span!("timed");
++            std::thread::sleep(std::time::Duration::from_millis(2));
++            drop(a);
++            drop(tracing::info_span!("other"));
++        });
++        let seen = seen.lock().unwrap();
++        assert_eq!(seen.len(), 1);
++        assert!(seen[0] >= std::time::Duration::from_millis(2));
++    }
++
+     #[cfg(not(target_arch = "wasm32"))]
+     #[test]
+     fn dense_log_only_where_asked() {
+diff --git a/third_party/xilem/masonry_winit/src/event_loop_runner.rs b/third_party/xilem/masonry_winit/src/event_loop_runner.rs
+index 2fb54f68..21b80cf0 100644
+--- a/third_party/xilem/masonry_winit/src/event_loop_runner.rs
++++ b/third_party/xilem/masonry_winit/src/event_loop_runner.rs
+@@ -876,9 +876,14 @@ impl MasonryState {
+                     } else {
+                         k.modifiers.ctrl()
+                     };
++                    // textweaver patch: only the plain paste chord (Ctrl+V,
++                    // Cmd+V) reads the clipboard; with Shift or Alt it is a
++                    // key the app binds (paste as plain text, a command).
+                     if let Key::Character(c) = &k.key
+                         && c.as_str().eq_ignore_ascii_case("v")
+                         && action_mod
++                        && !k.modifiers.shift()
++                        && !k.modifiers.alt()
+                         && k.state == KeyState::Down
+                     {
+                         match self.clipboard_cx.get_contents() {
+diff --git a/third_party/xilem/masonry/src/widgets/text_area.rs b/third_party/xilem/masonry/src/widgets/text_area.rs
+index 7ee91b09..b1534206 100644
+--- a/third_party/xilem/masonry/src/widgets/text_area.rs
++++ b/third_party/xilem/masonry/src/widgets/text_area.rs
+@@ -109,6 +109,14 @@ pub struct TextArea<const USER_EDITABLE: bool> {
+ 
+     /// Time elapsed (ms) to calculate the timeout of the cursor's blink animation.
+     anim_elapsed: u64,
++
++    /// textweaver patch: the area holds a password, shown masked by its
++    /// owner, so it is a password field to accessibility APIs.
++    password: bool,
++    /// textweaver patch: the selection, as a byte range, just before the
++    /// latest text event, so an owner that masks the text can tell what an
++    /// edit replaced ([`selection_before_edit`](Self::selection_before_edit)).
++    selection_before_event: std::ops::Range<usize>,
+ }
+ 
+ // --- MARK: BUILDERS
+@@ -155,6 +163,8 @@ impl<const EDITABLE: bool> TextArea<EDITABLE> {
+             anim_cursor_visible: true,
+             anim_prev_interval: 0,
+             anim_elapsed: 0,
++            password: false,
++            selection_before_event: 0..0,
+         }
+     }
+ 
+@@ -277,6 +287,21 @@ impl<const EDITABLE: bool> TextArea<EDITABLE> {
+         self.editor.text()
+     }
+ 
++    /// The selection, as a byte range of the text (the caret when it is
++    /// empty).
++    pub fn selection_byte_range(&self) -> std::ops::Range<usize> {
++        self.editor.raw_selection().text_range()
++    }
++
++    /// The selection, as a byte range, just before the latest text event
++    /// (a key, a paste, an input method's text): with
++    /// [`selection_byte_range`](Self::selection_byte_range) after it, what
++    /// an edit replaced, for an owner that masks the text (textweaver
++    /// patch).
++    pub fn selection_before_edit(&self) -> std::ops::Range<usize> {
++        self.selection_before_event.clone()
++    }
++
+     /// Check if this text area holds nothing, including IME preedit content.
+     pub fn is_empty(&self) -> bool {
+         self.editor.raw_text().is_empty()
+@@ -363,6 +388,15 @@ impl<const EDITABLE: bool> TextArea<EDITABLE> {
+         this.ctx.request_accessibility_update();
+     }
+ 
++    /// Marks the area as holding a password (textweaver patch): an
++    /// editable area is then a password field to accessibility APIs, so
++    /// a screen reader does not echo what is typed. Its owner masks the
++    /// text it shows.
++    pub fn set_password(this: &mut WidgetMut<'_, Self>, password: bool) {
++        this.widget.password = password;
++        this.ctx.request_accessibility_update();
++    }
++
+     /// Sets the text displayed in this widget.
+     ///
+     /// This is likely to be disruptive if the user is focused on this widget,
+@@ -598,6 +632,7 @@ impl<const EDITABLE: bool> Widget for TextArea<EDITABLE> {
+         self.anim_prev_interval = 0;
+         self.anim_elapsed = 0;
+         ctx.request_anim_frame();
++        self.selection_before_event = self.editor.raw_selection().text_range();
+ 
+         match event {
+             TextEvent::Keyboard(key_event) => {
+@@ -1105,6 +1140,9 @@ impl<const EDITABLE: bool> Widget for TextArea<EDITABLE> {
+     }
+ 
+     fn accessibility_role(&self) -> Role {
++        if EDITABLE && self.password {
++            return Role::PasswordInput;
++        }
+         if EDITABLE {
+             match self.insert_newline {
+                 InsertNewline::OnShiftEnter | InsertNewline::OnEnter => Role::MultilineTextInput,

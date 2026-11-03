@@ -1,0 +1,167 @@
+// Copyright 2025 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! Traits used to set custom styles on views.
+
+use masonry::core::UsesProperty;
+use masonry::layout::{Dim, Length};
+use masonry::peniko::Color;
+pub use masonry::properties::types::{Gradient, GradientShape};
+pub use masonry::properties::{
+    Background, BorderColor, BorderWidth, BoxShadow, CornerRadius, Padding,
+};
+use masonry::properties::{ContentColor, Dimensions, Gap, LineBreaking};
+
+use crate::WidgetView;
+use crate::view::Prop;
+
+/// Trait implemented by most widget views that lets you style their properties.
+///
+/// Which methods you can use will depend whether the underlying widget implements [`UsesProperty`].
+pub trait Style<State: 'static, Action: 'static>: WidgetView<State, Action> + Sized {
+    /// Sets the element's dimensions.
+    ///
+    /// If you only want to set one dimension, then you can use [`width`] or [`height`].
+    ///
+    /// [`width`]: Style::width
+    /// [`height`]: Style::height
+    fn dims(self, dims: impl Into<Dimensions>) -> Prop<Dimensions, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<Dimensions>,
+    {
+        self.prop(dims.into())
+    }
+
+    /// Sets the element's width.
+    ///
+    /// This will reset the element's height to [`Dim::Auto`].
+    fn width(self, dim: impl Into<Dim>) -> Prop<Dimensions, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<Dimensions>,
+    {
+        self.prop(Dimensions::AUTO.with_width(dim.into()))
+    }
+
+    /// Sets the element's height.
+    ///
+    /// This will reset the element's width to [`Dim::Auto`].
+    fn height(self, dim: impl Into<Dim>) -> Prop<Dimensions, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<Dimensions>,
+    {
+        self.prop(Dimensions::AUTO.with_height(dim.into()))
+    }
+
+    /// Sets the element's content color.
+    ///
+    /// "Content color" usually means text or text decorations.
+    fn color(self, color: Color) -> Prop<ContentColor, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<ContentColor>,
+    {
+        self.prop(ContentColor { color })
+    }
+
+    /// Sets the element's background to a color/gradient.
+    fn background(self, background: impl Into<Background>) -> Prop<Background, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<Background>,
+    {
+        self.prop(background.into())
+    }
+
+    /// Sets the element's background to a color.
+    fn background_color(self, color: Color) -> Prop<Background, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<Background>,
+    {
+        self.prop(Background::Color(color))
+    }
+
+    /// Sets the element's background to a gradient.
+    fn background_gradient(self, gradient: Gradient) -> Prop<Background, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<Background>,
+    {
+        self.prop(Background::Gradient(gradient))
+    }
+
+    /// Sets the element's border color and width.
+    fn border(
+        self,
+        color: Color,
+        width: Length,
+    ) -> Prop<BorderWidth, Prop<BorderColor, Self, State, Action>, State, Action>
+    where
+        Self::Widget: UsesProperty<BorderColor> + UsesProperty<BorderWidth>,
+    {
+        self.prop(BorderColor { color }).prop(BorderWidth { width })
+    }
+
+    /// Sets the element's border color.
+    fn border_color(self, color: Color) -> Prop<BorderColor, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<BorderColor>,
+    {
+        self.prop(BorderColor { color })
+    }
+
+    /// Sets the element's border width.
+    fn border_width(self, width: Length) -> Prop<BorderWidth, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<BorderWidth>,
+    {
+        self.prop(BorderWidth { width })
+    }
+
+    /// Sets the element's box shadow.
+    fn box_shadow(self, box_shadow: BoxShadow) -> Prop<BoxShadow, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<BoxShadow>,
+    {
+        self.prop(box_shadow)
+    }
+
+    /// Sets the element's corner radius.
+    fn corner_radius(self, radius: Length) -> Prop<CornerRadius, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<CornerRadius>,
+    {
+        self.prop(CornerRadius { radius })
+    }
+
+    /// Sets the element's padding.
+    fn padding(self, padding: impl Into<Padding>) -> Prop<Padding, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<Padding>,
+    {
+        self.prop(padding.into())
+    }
+
+    /// Sets the gap between the element's consecutive children.
+    fn gap(self, gap: impl Into<Gap>) -> Prop<Gap, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<Gap>,
+    {
+        self.prop(gap.into())
+    }
+
+    /// Sets how line breaks will be handled when text overflows the available space.
+    fn line_break_mode(
+        self,
+        line_break_mode: LineBreaking,
+    ) -> Prop<LineBreaking, Self, State, Action>
+    where
+        Self::Widget: UsesProperty<LineBreaking>,
+    {
+        self.prop(line_break_mode)
+    }
+}
+
+impl<State, Action, V> Style<State, Action> for V
+where
+    State: 'static,
+    Action: 'static,
+    V: WidgetView<State, Action> + Sized,
+{
+}
