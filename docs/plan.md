@@ -444,6 +444,8 @@ Each alpha has a goal, contents, what the owner checks, and exit criteria. "Read
 
 **The planned alpha.4 and alpha.5 ship as one too** (the owner, Thursday, October 22, 2026, answer 79): the tag `0.1.0-alpha.2` holds the plugin protocol, script commands, the components downloader, SFTP and the places, built in one wave of three stages with a readiness check after each. **As built** (Friday, October 23, 2026): all 94 commits of R25's order merged in one day across fourteen lanes, with the SFTP plugin driving the machine's OpenSSH client (answer 78) and the queue as the jobs list (ADR-0013); what moved to later alphas is listed in `history/alpha2-readiness.md` in the planning repository (listers inside a panel, Pause for waiting jobs, the queue across restarts). The GUI then takes `0.1.0-alpha.3`, and each later planned alpha the next tag in turn. The headings below keep their planned names.
 
+**The GUI is `0.1.0-alpha.3`, one wave, with alpha 2's follow-ups beside it** (the owner, Monday, November 2, 2026, answers 103 to 106): the planned alpha.6 as the next tag, built in one wave with one readiness page, one GUI lane at a time and one side lane beside it for the follow-ups left from alpha 2 (plugin lists inside a panel, Pause and the queue across restarts, the nightly fuzz workflow, the bench baseline); a machine with no usable graphics driver falls back to software drawing. Briefed from R26 (the stack and textweaver's GUI) and R27 (the commit order) in the task log.
+
 - alpha.1: two panels (as below, unchanged).
 - alpha.2: archives, the viewer, and the document quick view for Markdown, plain text and code.
 - alpha.3: search, filters, labels, bookmarks and saved searches.
@@ -562,6 +564,8 @@ One wave per alpha, Wave N for alpha.N of section 8, each briefed from the featu
 **Superseded on Sunday, October 11, 2026.** The per-alpha plans of the third research round (`research/alpha1-plan.md` to `research/alpha4-plan.md`, with `research/file-management-lessons.md`) are the seeds of the Wave 1 amendments and of the Wave 2, 3 and 4 briefs, each with a numbered commit order, the briefs' ownership, the spikes and the owner's check; the wave numbers follow the alphas (Wave N builds alpha.N). The drafts below are the first plan's and are kept for history; where they disagree with section 8 or the per-alpha plans, those win.
 
 **Wave 4 and Wave 5 are one wave** (the owner, Thursday, October 22, 2026, answers 78 to 81): the combined alpha 2, three stages with a readiness check after each, briefed from R22's plan and the reports R24 and R25 of the task log. The Wave 4 and Wave 5 headings below are the first plan's drafts.
+
+**Wave 6 builds the GUI as `0.1.0-alpha.3`** (the owner, Monday, November 2, 2026, answers 103 to 105): one wave with one readiness page, one GUI lane at a time and one side lane beside it for alpha 2's follow-ups, briefed from R26 and R27 of the task log. The Wave 4 heading below is the first plan's draft of the same work.
 
 ### Wave 2 draft: archives, search and the viewer (first plan; now alpha.2 and alpha.3)
 
@@ -842,6 +846,10 @@ Given on Saturday, October 10, 2026, after the Wave 0 research:
 59. **The Claude tooling is not in the repository:** the guard hook, its tests and the safe-remove script stay on disk under `.claude`, ignored, with their master copies in the owner's wiki.
 60. **The owner's other site is named without its domain** in this plan (a callsign under the privacy rule); the website sections say "the owner's personal site".
 61. **Pushes land as the commits land** (Saturday, October 17, 2026, 10:32 PM): `main` on GitHub stays current with `main` here, every checked commit going up when it lands; tags only on the owner's go; never a force push.
+103. **The GUI, with alpha 2's follow-ups beside it** (Monday, November 2, 2026, recorded at 08:40 PM, interactively): the next tag `0.1.0-alpha.3` is the planned alpha.6, the GUI, with one side lane at a time for the follow-ups left from alpha 2 (plugin lists inside a panel, Pause for waiting jobs and the queue across restarts, the nightly fuzz workflow, the bench baseline); two builders at most, as the pace rule says.
+104. **No listening findings to fold in** (the same minute): alpha 2's three listening scripts have no findings yet; the GUI work starts now, and findings go into the wave as they come.
+105. **One wave, one readiness page** (the same minute): the GUI's lanes run in order with the owner's ten minutes once at the end, not a readiness check after each stage.
+106. **Software drawing where there is no graphics driver** (the same minute): on a machine with no usable GPU the GUI falls back to drawing on the CPU where the vendored stack allows it; R26 checks what textweaver does and what the stack offers.
 
 Questions 4 to 14 are open and take their defaults until the owner says otherwise.
 
