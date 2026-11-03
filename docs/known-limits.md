@@ -322,7 +322,7 @@ Dialogs, the viewer and the clipboard:
 
 Colors and bars:
 
-- The window draws the 24 built-in themes. Your own theme files are not read, and the terminal does read them.
+- The window draws the 24 built-in themes. It does not read your own theme files, and for a name it does not know it draws Galaxy and says nothing about it. The program finds your theme files by name, so Settings lists them, Next theme steps through them and the verdict is said, and the terminal draws them. `diro --theme NAME` says "Unknown theme: NAME. Galaxy is in use." before the terminal opens even when NAME is a theme file of yours, and the terminal then draws it.
 - Ten themes are below AA. The window draws the parts that fall short in the text color, and says how many. [Themes and colors](themes.md) names the ten. No italic face is built in, so a part that a theme draws in italics, such as the archive and hidden rows, may draw upright. Their words say what they are.
 - The system's light or dark setting is read once, when the window starts. Windows' High Contrast is read at every step.
 - Full screen and focus mode are commands, in the View menu and the palette, and F11 is Full screen's key. The panels' sort buttons and the native menu bar are not under focus mode's veil. A window opened with `--background` never goes full screen. In a terminal, Full screen changes nothing and says so, because full screen there is the terminal program's. The Settings list and the reference still mark focus mode as coming with a later alpha, though it works.

@@ -413,7 +413,7 @@ These are not in the window yet. None of them is dated: each is to come in a lat
 
 - An icon on macOS. The mark's smallest sizes, 16 to 24 pixels, have not been looked at by a sighted person.
 - A native menu bar on macOS. Its menus are the list.
-- Your own theme files. The window draws the 24 built-in themes. The terminal also reads the theme files in your `themes` folder.
+- Your own theme files in the window. It draws the 24 built-in themes, and Galaxy for a name it does not know, without saying that the name is unknown. The program finds the theme files in your `themes` folder by name, so Settings lists them, Next theme steps through them, the verdict is said, and the terminal draws them. [Themes and colors](themes.md#your-own-themes) has the details.
 - A setting for the text size or the font.
 - Mouse support in the viewer.
 - Thumbnails, which the settings list as coming later.

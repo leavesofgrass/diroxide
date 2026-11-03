@@ -1,6 +1,6 @@
 # Themes and colors
 
-This guide covers the 24 themes that come with diroxide, how to choose one, what the words "meets AA" and "below AA" mean, the ten themes that fall short and what the window does for them, your own colors in the `[colors]` table, Windows' High Contrast, and following the system's light or dark setting. The terminal and the window draw the same themes. Where they differ, this guide says so.
+This guide covers the 24 themes that come with diroxide, how to choose one, what the words "meets AA" and "below AA" mean, the ten themes that fall short and what the window does for them, your own colors in the `[colors]` table, your own theme files, Windows' High Contrast, and following the system's light or dark setting. The terminal and the window draw the same 24 themes. Where they differ, such as for your own theme files, this guide says so.
 
 What this guide quotes is what the program says, taken from the program's code and tests. Nobody has listened to the lines that announce a theme on a screen reader or a Braille display yet. If your experience differs, that is a finding.
 
@@ -8,9 +8,9 @@ Color never carries meaning alone, in any theme. A row says "folder", "link", "b
 
 ## Choosing a theme
 
-- Settings (Alt+T, then S, or Ctrl+Comma in the window) has a row, Theme (`theme`), whose values are the 24 themes. The change is saved at once.
-- `diro --theme NAME` chooses one for one session. NAME is the name in code type below, such as `galaxy-light`. An unknown name gives Galaxy. The terminal also says "Unknown theme: NAME. Galaxy is in use." before it opens.
-- Next theme, in the View menu (Alt+V, then T) and the palette, steps to the next theme in the order below.
+- Settings (Alt+T, then S, or Ctrl+Comma in the window) has a row, Theme (`theme`), whose values are the 24 themes, then any theme files of your own, then "Back to default". The change is saved at once, and the program says the theme's contrast verdict.
+- `diro --theme NAME` chooses one for one session. NAME is the name in code type below, such as `galaxy-light`. An unknown name gives Galaxy. The terminal also says "Unknown theme: NAME. Galaxy is in use." before it opens. The window says nothing for an unknown name and draws Galaxy.
+- Next theme, in the View menu (Alt+V, then T) and the palette, steps to the next theme in the order below, through your own theme files after the 24, and back to the first.
 - The default is `galaxy`.
 
 ## What is said when you choose one
@@ -18,14 +18,15 @@ Color never carries meaning alone, in any theme. A row says "folder", "link", "b
 The program measures every theme for contrast and says the result in words, theme first:
 
 ```text
-Theme Galaxy Light, meets AA.
-Theme One Light, below AA: 8 checks fall short.
+Theme Galaxy Light, meets AA
+Theme Nord, below AA: 1 check falls short
+Theme One Light, below AA: 8 checks fall short
 ```
 
 - The text of a theme must reach 4.5 to 1 against its background. That is level AA. A part such as the focus ring must reach 3 to 1.
 - The two high-contrast themes, High Contrast and Contrast, are held to level AAA, which is 7 to 1. For them the words are "meets AAA".
 - A check is one pair of colors measured against its floor. "Below AA: 8 checks fall short" counts the pairs that miss.
-- In the window the line is said once, when you change the theme. Starting with a theme says nothing about it. When you choose a theme in Settings, the verdict takes the place of the plain "Theme: nord" line, so you do not hear both. After Next theme, the verdict is said once.
+- The line is said once, when you change the theme, in the terminal and in the window. Starting with a theme says nothing about it. When you choose a theme in the Settings list, the verdict takes the place of the plain "Theme: nord" line, so you do not hear both, and Next theme says the same line. Choosing Back to default says the default's: "Theme Galaxy, meets AA".
 - A theme that is below AA is followed in the window by how many parts of the screen use the text color instead of their own: "In the window, 19 roles use the text color." With one part it says "1 role uses".
 
 ## The 24 themes
@@ -122,7 +123,13 @@ The setting `follow_system_appearance` ("Follow the system", off by default) let
 
 ## Your own themes
 
-A theme of your own is a TOML file in the `themes` folder of the config folder. The terminal lists it after the built-in themes. The window draws the 24 built-in themes only, and does not read the `themes` folder yet. [Settings and where the files live](settings.md#themes-and-colors) has the rest. The built-in theme files in the source, in `crates/diroxide-theme/themes`, are models to copy: copy one into your folder under a new name and change its `theme.name`.
+A theme of your own is a TOML file in the `themes` folder of the config folder. The program reads that folder when it starts and finds each theme by the `name` in the file's `[theme]` table. A theme of yours is listed in the Settings theme chooser after the 24 built-in themes, before Back to default, and Next theme steps through it after the last built-in theme and goes back to the first. Choosing it says its contrast verdict like any other: "Theme Harbor, meets AA". A file that cannot be read is left out, and the start says so once, in a line that begins, for a file named `broken.toml`, "Theme file broken.toml was not loaded".
+
+The terminal draws your themes. The window does not read the `themes` folder in this alpha, so it draws only the 24 built-in themes. For a name it does not know, which includes your themes, it draws Galaxy and does not say that the name is unknown. Use the terminal, `diro --tui`, for your own themes for now.
+
+One more known limit: `diro --theme harbor` says "Unknown theme: harbor. Galaxy is in use." before the terminal opens, even when `harbor.toml` is in your `themes` folder, because that sentence knows only the built-in names. The terminal then draws your theme. Choosing the theme in Settings does not say it.
+
+[Settings and where the files live](settings.md#themes-and-colors) has the rest. The built-in theme files in the source, in `crates/diroxide-theme/themes`, are models to copy: copy one into your folder under a new name and change its `theme.name`.
 
 ## In a terminal
 
