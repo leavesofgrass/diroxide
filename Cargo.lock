@@ -7681,6 +7681,7 @@ dependencies = [
  "resvg",
  "serde",
  "serde_json",
+ "sysinfo",
  "tempfile",
  "toml",
  "zip",

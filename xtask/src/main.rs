@@ -38,6 +38,7 @@ mod docs_check;
 mod icons;
 mod keyboard;
 mod logo;
+mod machine;
 mod native;
 mod plugin_doc;
 mod regen;

@@ -9,7 +9,7 @@
 //! - `stat`: read each of those entries' details by its place.
 //! - `list-stat`: list the folder, then read each entry's details, as a
 //!   panel that fills its columns late does (R23).
-//! - `copy`: copy a 1 GB file through the job engine, planned and run.
+//! - `copy`: copy a 10 GB file through the job engine, planned and run.
 //! - `copy-system`: the same file with the system's own copy call, for
 //!   reference.
 //! - `slow-place`: copy from W1b's slow place on the fake provider, every
@@ -74,6 +74,7 @@ use diroxide_vfs::{OpContext, Provider, Registry};
 use serde::{Deserialize, Serialize};
 
 use crate::budgets::{self, Budget};
+use crate::machine::{self, Machine, Versions};
 use crate::sample;
 
 /// One size of the bench, from `bench/params.toml`.
@@ -178,6 +179,18 @@ pub struct Run {
     pub platform: String,
     /// The day of the run, from the clock, in UTC.
     pub recorded_utc: String,
+    /// The day and time the run started, from the clock, in UTC:
+    /// "2026-11-03 17:42 UTC" (absent in runs before it was kept).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub started_utc: String,
+    /// The machine the run was on, in words (absent in runs before it was
+    /// kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<Machine>,
+    /// The versions of what was measured (absent in runs before they were
+    /// kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub versions: Option<Versions>,
     /// Whether the sizes were the quick ones.
     pub quick: bool,
     /// Whether the bench was built with optimizations (`--release`); the
@@ -336,6 +349,15 @@ pub fn time_words(ms: f64) -> String {
 fn today_utc() -> String {
     let c = Timestamp::from_system_time(SystemTime::now()).to_civil(UtcOffset::UTC);
     format!("{:04}-{:02}-{:02}", c.year, c.month, c.day)
+}
+
+/// The day and minute from the clock, in UTC: "2026-11-03 17:42 UTC".
+fn now_utc() -> String {
+    let c = Timestamp::from_system_time(SystemTime::now()).to_civil(UtcOffset::UTC);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02} UTC",
+        c.year, c.month, c.day, c.hour, c.minute
+    )
 }
 
 /// A duration in milliseconds, to a tenth: finer than that is noise, and
@@ -1114,9 +1136,15 @@ pub fn describe(
     let mut lines = vec![first, second];
     let mut inside = true;
     if let Some(base) = baseline {
-        let (words, within) = against_baseline(outcome.median_ms, base.median_ms, tolerance);
-        lines.push(words);
-        inside = within;
+        // The label holds the sizes, so a baseline of other sizes is not
+        // compared: a 10 GB copy against a 1 GB one says nothing.
+        if base.label == outcome.label {
+            let (words, within) = against_baseline(outcome.median_ms, base.median_ms, tolerance);
+            lines.push(words);
+            inside = within;
+        } else {
+            lines.push(format!("Baseline not compared: it was for {}.", base.label));
+        }
     }
     (lines, inside)
 }
@@ -1148,6 +1176,12 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
         params.runs,
         work.path().display()
     );
+    let started_utc = now_utc();
+    let machine = machine::this_machine(&bench_folder);
+    let versions = machine::these_versions(root);
+    println!("bench: started {started_utc}.");
+    println!("bench: machine {}", machine::machine_words(&machine));
+    println!("bench: built {}", machine::versions_words(&versions));
     if !OPTIMIZED {
         println!(
             "bench: this build has no optimizations; the budgets are for cargo run --release -p xtask -- bench."
@@ -1210,6 +1244,9 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
     let result = Run {
         platform: platform.clone(),
         recorded_utc: today_utc(),
+        started_utc,
+        machine: Some(machine),
+        versions: Some(versions),
         quick: options.quick,
         optimized: OPTIMIZED,
         scenarios: outcomes,
@@ -1266,7 +1303,7 @@ mod tests {
         let params = Params::read(&root()).unwrap();
         assert_eq!(params.runs, 3);
         assert_eq!(params.full.list_entries, 100_000);
-        assert_eq!(params.full.copy_bytes, 1_000_000_000);
+        assert_eq!(params.full.copy_bytes, 10_000_000_000);
         assert_eq!(params.budgets_ms.list_windows, 800);
         assert_eq!(params.budgets_ms.list_other, 300);
         assert_eq!(params.full.archive_entries, 100_000);
@@ -1360,6 +1397,57 @@ mod tests {
             &lines[0],
             "List 100,000 entries: 412 ms"
         ));
+    }
+
+    #[test]
+    fn a_baseline_of_other_sizes_is_not_compared() {
+        let now = outcome(
+            "copy",
+            "Copy 10.0 GB through the engine".to_owned(),
+            vec![7000.0],
+            None,
+            String::new(),
+        );
+        let old = outcome(
+            "copy",
+            "Copy 1.0 GB through the engine".to_owned(),
+            vec![700.0],
+            None,
+            String::new(),
+        );
+        let (lines, inside) = describe(&now, Some(&old), 20);
+        assert!(inside, "not compared, so not outside the band");
+        assert_eq!(
+            lines[2],
+            "Baseline not compared: it was for Copy 1.0 GB through the engine."
+        );
+    }
+
+    #[test]
+    fn a_run_keeps_its_machine_and_versions_and_an_old_one_still_reads() {
+        let root = root();
+        let text = fs::read_to_string(root.join("bench").join("baseline.json")).unwrap();
+        let baseline: Baseline = serde_json::from_str(&text).unwrap();
+        assert!(baseline.platforms.contains_key("windows"));
+        let old =
+            r#"{"platform":"linux","recorded_utc":"2026-10-16","quick":false,"scenarios":[]}"#;
+        let run: Run = serde_json::from_str(old).unwrap();
+        assert!(run.machine.is_none() && run.versions.is_none() && run.started_utc.is_empty());
+        let run = Run {
+            started_utc: "2026-11-03 17:42 UTC".to_owned(),
+            machine: Some(Machine {
+                processor: "A processor".to_owned(),
+                ..Machine::default()
+            }),
+            versions: Some(Versions {
+                diroxide: "0.1.0-alpha.2".to_owned(),
+                ..Versions::default()
+            }),
+            ..run
+        };
+        let back: Run = serde_json::from_str(&serde_json::to_string(&run).unwrap()).unwrap();
+        assert_eq!(back, run);
+        assert!(now_utc().ends_with(" UTC") && now_utc().len() == "2026-11-03 17:42 UTC".len());
     }
 
     #[test]
