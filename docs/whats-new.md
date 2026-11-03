@@ -12,11 +12,32 @@ The GUI, a window version of diroxide.
 - Each panel is one list, and each row is an option that a screen reader reads name first, with "selected" as a state and the position as a property. The focused row is what a screen reader follows. The title line, the two panels' sort buttons, the status bar with its two lines and the key bar are named parts of the window.
 - Messages go to a live region by importance. Normal is said politely, high is said at once, and low is only shown. The program's start-up lines are held until a screen reader asks for the window, then said once.
 - On Windows the menus are the system's menu bar. It stays hidden until Alt pressed alone, F9, F10 or Alt with a menu's letter shows it. On Linux and macOS the menus are lists in the window.
-- New settings: Opens in (`frontend`), GUI graphics (`graphics`) and GUI menus (`menus`). Hide the menu bar (`auto_hide_menu`), which did nothing before, now works on Windows. New options: `diro --graphics NAME` and `diro --background`. With no display, or no graphics driver, the window says one sentence and the terminal opens.
+- New settings: Opens in (`frontend`), GUI graphics (`graphics`) and GUI menus (`menus`). Hide the menu bar (`auto_hide_menu`), which did nothing before, now works on Windows. New options: `diro --graphics NAME`, `diro --background` and `diro --log FILE`. With no display, or when every way of drawing fails, the window says one sentence and the terminal opens.
 - The key bar and each panel's sort buttons are buttons with names and keyboard shortcuts. A click focuses a row, and a double click opens it.
 - The fonts are inside the program: Atkinson Hyperlegible Next and Atkinson Hyperlegible Mono. [Installing diroxide](install.md#what-the-gui-needs) says what the window needs and what it costs to build.
 - Reports read the window's accessibility tree through UI Automation on Windows and AT-SPI on Linux, with no screen reader. Nobody has listened to the window yet.
-- Not in the window yet: dialogs with buttons, the viewer and the quick view, themes, drawing on the processor, icons, input methods, and a native menu bar on macOS.
+- Not in the window yet: icons, your own theme files, and a native menu bar on macOS.
+
+The window's dialogs, viewer and quick view.
+
+- A confirmation is two real buttons, No first, with the focus on No, and a list to read of what it touches: "Listing, 3 lines". A question is named by its first line, and a long message is a list read line by line: "Message, 11 lines". A password has a check box, "Show the password" (Alt+S). A dialog's name is said once. Every dialog the program can open, 77 of them, is drawn and tested. [The GUI](gui.md#the-dialogs) has the shapes.
+- Fields with completion are combo boxes, a paste types its first line, and every field except a password field takes an input method's text. Copied text, such as a file's path, goes to the system clipboard.
+- The viewer (F3) takes the panels' place as one list of the rows on screen, in text or hex, and a file of 100,000 lines is a screen of nodes. The quick view (Shift+F3) is the other panel's list, "Right panel, Preview, notes.md".
+- A running job shows a progress indicator, "Job progress", that moves with the jobs line and is not spoken by the program. Escape stops the job in front. The Jobs list works in the window, with Pause, Held rows, and Retry and Forget on the Interrupted group.
+- Change key in the Keys list takes a real key press, such as Ctrl+Shift+K, and saves it to `keymap.toml`.
+- Shell here, Run a command and F4 start the system's terminal or the editor in a window of their own, and the window goes on: "Started a shell in work", "Started the editor on notes.txt". There is no "exit the shell" line in the window.
+- The toolkit's helper window on Windows is named "diroxide background helper".
+
+Themes, drawing without a graphics card, and focus mode.
+
+- The window draws all 24 themes, your `[colors]`, and Windows' High Contrast, and it can follow the system's light or dark setting. A theme chosen is said once with its contrast verdict: "Theme Galaxy Light, meets AA." Ten themes fall short of AA. The window draws the parts that fall short in the text color and says how many. `diro --theme NAME` works in the window. [Themes and colors](themes.md) is the new guide.
+- A graphics card is no longer needed. With none, or only a software adapter, the window draws on the processor itself, and `--graphics software` asks for that. The window says once, "Drawing on the processor: no graphics adapter was found." `diro --log FILE` records the road taken. [The GUI](gui.md#how-the-window-draws) has the order.
+- Focus mode (a setting) and full screen (F11) fade the title line, the status bar and the key bar after three seconds of rest. Any key brings them back. Nothing is said.
+
+A quit keeps a copy's part file.
+
+- A quit now stops a running copy the way a lost connection does. A copy of 4 MiB or more on this computer's disks keeps its part file, and Retry on its Interrupted row at the next start goes on from it: "Resuming big.bin at 2.1 MB of 5.2 MB". Cancel still removes the part file. [The transfer queue](transfer-queue.md#the-queue-at-the-next-start) has the details.
+- The program now has a state word for a held job, so a lone held job says what it holds: "Moving to the trash is held in line". The first start in the window says "The key bar names the keys."
 
 Plugin lists inside a panel.
 
@@ -85,6 +106,7 @@ The first alpha is a terminal file manager for local folders and archives, built
 
 - [Known limits](known-limits.md)
 - [The GUI](gui.md)
+- [Themes and colors](themes.md)
 - [Quick start](quickstart.md)
 - [Plugins](plugins.md)
 - [Remote places over SFTP](remote-places.md)
