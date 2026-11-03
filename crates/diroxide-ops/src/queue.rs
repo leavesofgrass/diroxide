@@ -478,11 +478,12 @@ impl Queue {
     }
 
     /// The state the jobs list shows for a job: waiting its turn (also
-    /// after an answer, until its slot is free, and while held: core has
-    /// no word for a hold yet, so [`Queue::is_held`] says it), running, or
-    /// waiting for an answer; `None` when the queue does not hold it.
+    /// after an answer, until its slot is free), held in line by Pause,
+    /// running, or waiting for an answer; `None` when the queue does not
+    /// hold it.
     pub fn state(&self, job: JobId) -> Option<JobState> {
         self.index(job).map(|at| match self.items[at].slot {
+            Slot::Waiting if self.items[at].held => JobState::Held,
             Slot::Waiting | Slot::Returning => JobState::Queued,
             Slot::Running => JobState::Running,
             Slot::Asking => JobState::WaitingForAnswer,
@@ -931,7 +932,12 @@ mod tests {
         assert_eq!(queue.hold(id(3)), Some(Vec::new()), "the host is full");
         assert!(queue.is_held(id(3)));
         assert_eq!(queue.held(), [id(3)]);
-        assert_eq!(queue.state(id(3)), Some(JobState::Queued));
+        assert_eq!(queue.state(id(3)), Some(JobState::Held));
+        assert!(
+            queue
+                .jobs()
+                .contains(&(id(3), JobKind::Copy, JobState::Held))
+        );
         // Counted among the waiting, in the place it keeps.
         assert_eq!(queue.waiting(), [id(3), id(4), id(5)]);
         assert_eq!(queue.position(id(3)), Some((1, 3)));
@@ -940,6 +946,7 @@ mod tests {
         assert_eq!(queue.position(id(3)), Some((1, 2)), "its place is kept");
         assert_eq!(queue.release(id(3)), Some(Vec::new()), "the host is full");
         assert!(!queue.is_held(id(3)));
+        assert_eq!(queue.state(id(3)), Some(JobState::Queued), "back in line");
         // Released, it goes before the job that came after it.
         assert_eq!(started(&queue.finished(id(2))), [3]);
         assert_eq!(queue.waiting(), [id(5)]);
@@ -1111,6 +1118,7 @@ mod tests {
                 let (mut components, mut components_forced) = (0, 0);
                 for (job, (seen, class)) in &self.seen {
                     let expected = match seen {
+                        Seen::Waiting if self.held.contains(job) => JobState::Held,
                         Seen::Waiting | Seen::Returning => JobState::Queued,
                         Seen::Running => JobState::Running,
                         Seen::Asking => JobState::WaitingForAnswer,

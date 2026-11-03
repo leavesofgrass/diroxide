@@ -1328,9 +1328,12 @@ impl<'a> Run<'a> {
                 match streamed {
                     Ok(done) => done,
                     // Cancel removes the part file; a lost connection
-                    // that ended the item keeps it for a later resume.
+                    // that ended the item, or an interrupt (quit), keeps
+                    // it for a later resume.
                     Err(Stop::Cancelled) => {
-                        self.drop_part(&*destination, from, target);
+                        if !self.control.is_interrupted() {
+                            self.drop_part(&*destination, from, target);
+                        }
                         return Err(Outcome::Cancelled);
                     }
                     Err(stop) => return Err(stop.into()),
@@ -1622,9 +1625,10 @@ impl<'a> Run<'a> {
     }
 
     /// A stream that stopped: the writer goes, the progress steps back,
-    /// and a part file stays for a resume when the connection was lost
-    /// (its bytes noted in the ledger), or is removed otherwise. Returns
-    /// the error.
+    /// and a part file stays for a resume when the connection was lost or
+    /// the job was interrupted ([`JobControl::interrupt`], at quit), its
+    /// bytes noted in the ledger, or is removed otherwise. Returns the
+    /// error.
     fn give_up(
         &mut self,
         kept: &Kept<'_>,
@@ -1636,7 +1640,7 @@ impl<'a> Run<'a> {
         self.rewind(written);
         if let Some((resumable, part)) = kept {
             let ledger = self.engine.ledger();
-            let noted = if resume::keeps_part(&error) {
+            let noted = if resume::keeps_part(&error) || self.control.is_interrupted() {
                 ledger.update(part, self.plan.job, written)
             } else {
                 let _ = resumable.discard(part, &OpContext::new());

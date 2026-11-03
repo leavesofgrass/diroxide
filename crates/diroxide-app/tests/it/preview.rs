@@ -135,6 +135,7 @@ fn a_panel_key_in_the_preview_says_how_to_leave_and_the_region_keys_need_it_on()
         "{}",
         s.app.key_bar()
     );
+    assert_eq!(s.shown_bank(), "Preview");
     assert_eq!(s.app.title_line(), "Preview, links.md");
     // Shift+F3 in the region turns it off and the focus is the panel's.
     assert_eq!(s.key("shift+f3"), ["Quick view off"]);

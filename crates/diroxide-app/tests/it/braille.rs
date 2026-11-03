@@ -52,9 +52,9 @@ fn the_ten_minute_check_reads_on_a_40_cell_line() {
         line(&start, &hello),
         format!("{hello} Shift+F1 for help. Ctrl+Q quits.")
     );
-    fact(
+    assert_eq!(
         line(&start, "The key bar"),
-        "The key bar on the last line names",
+        "The key bar on the last line names the keys."
     );
     fact(
         line(&start, "Layout:"),
@@ -323,4 +323,37 @@ fn the_secret_prompt_reads_on_a_40_cell_line() {
     fact(&said[0], "Waiting for the password for");
     fact(&said[1], "Password for quarter");
     fact(&said[1], ".zip (hidden):");
+}
+
+/// Lane A4: the first start's key bar line fits the frontend. The
+/// terminal draws the key bar on its last line and says so; the GUI's
+/// key bar is a toolbar, so its line says only what the bar does.
+#[test]
+fn the_first_starts_key_bar_line_fits_the_frontend() {
+    for (column, words) in [
+        (
+            KeyColumn::Terminal,
+            "The key bar on the last line names the keys.",
+        ),
+        (KeyColumn::Gui, "The key bar names the keys."),
+    ] {
+        let dir = temp();
+        let work = fixture(dir.path());
+        let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+        let s = Session::open_with_keymap(
+            place(&work),
+            place(&work),
+            diroxide_vfs::Registry::with_local(),
+            Setup {
+                paths: Some(paths),
+                ..Setup::default()
+            },
+            Keymap::defaults_for(column),
+        );
+        let start: Vec<String> = s.said.iter().map(|m| m.text.clone()).collect();
+        assert_eq!(line(&start, "The key bar"), words, "{column:?}");
+        fact(words, "The key bar");
+    }
+    // The GUI's line fits a Braille line whole.
+    assert!("The key bar names the keys.".chars().count() <= BRAILLE_CELLS);
 }

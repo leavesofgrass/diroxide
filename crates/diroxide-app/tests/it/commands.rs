@@ -606,13 +606,17 @@ fn details_context_menu_help_and_the_key_bar() {
         f.s.app.key_bar_within(40),
         "F2 Rename  F3 View  F4 Edit  F5 Copy"
     );
+    // The bank the GUI's toolbar takes is the one the key bar draws (A4).
+    assert_eq!(f.s.shown_bank(), "Function keys");
     assert_eq!(
         f.s.command(ids::SWITCH_BANK),
         ["Only one bank: Function keys."]
     );
     let said = f.s.key("f3");
     assert!(said[0].starts_with("report.pdf, in "), "{said:?}");
+    assert_eq!(f.s.shown_bank(), "Viewer");
     assert_eq!(f.s.key("escape"), ["Viewer closed: report.pdf"]);
+    assert_eq!(f.s.shown_bank(), "Function keys");
     // Manage plugins (W4d): the list opens, its empty line meaning first.
     assert_eq!(
         f.s.command(ids::PLUGINS),
@@ -760,4 +764,15 @@ fn the_palette_says_each_commands_key_beside_its_name() {
         Some("Switch bank, View menu. 1 match")
     );
     f.s.key("escape");
+}
+
+/// Lane A4 (G0's request 1): the GUI reads its own three settings through
+/// the app, as the terminal reads its own, without the config crate.
+#[test]
+fn the_guis_settings_are_read_through_the_app() {
+    use diroxide_app::config::{Frontend, Graphics, Menus, Settings};
+    let settings = Settings::default();
+    assert_eq!(settings.frontend, Frontend::Auto);
+    assert_eq!(settings.graphics, Graphics::Auto);
+    assert_eq!(settings.menus, Menus::Native);
 }

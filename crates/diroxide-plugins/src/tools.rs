@@ -210,7 +210,7 @@ fn pump(
         };
         let chunk = &buffer[..n];
         let allowed = budget
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
                 Some(left.saturating_sub(n as u64))
             })
             .unwrap_or(0)

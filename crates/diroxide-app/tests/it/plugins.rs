@@ -1584,3 +1584,81 @@ fn a_plugin_component_is_found_in_its_own_folder() {
     s.command(ids::PLUGINS);
     assert_eq!(rows(&s), ["Line counter: not enabled, plugin 0.1.0"]);
 }
+
+/// Lane A4 (G1's request 1): a click or a screen reader's Focus on a
+/// plugin list's row goes through `App::focus_shown_row`, which moves the
+/// list's focus, as the panel shows it; the folder beneath keeps its own,
+/// and `App::focus_name` stays the folder's, as `panel/set` needs.
+#[test]
+fn focus_shown_row_moves_a_plugin_lists_focus_and_keeps_the_folders() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}},
+        {"name": "a.txt", "kind": "item", "extra": {"id": "a.txt", "state": "Added", "lines": "3"}}
+    ]});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("show", Act::Call("lister/open", open))]),
+    );
+    let folder_focus = s.focused();
+    assert_ne!(folder_focus, "notes.txt");
+    s.run_command(Command::new(id("line-counter.show")));
+    let shown = |s: &Session| {
+        s.app
+            .active_panel()
+            .shown_list()
+            .focused()
+            .map(|row| row.id.clone())
+    };
+    assert_eq!(shown(&s).as_deref(), Some("b.txt"));
+    assert!(s.app.focus_shown_row(Side::Left, "a.txt"));
+    assert_eq!(shown(&s).as_deref(), Some("a.txt"));
+    // The next key moves on from there, and says the row it reached.
+    let said = s.key("up");
+    assert_eq!(said, ["b.txt, state Modified, lines 12, 1 of 2"]);
+    assert!(s.app.focus_shown_row(Side::Left, "a.txt"));
+    assert_eq!(s.key("down"), ["Bottom of the list"]);
+    // A row the list does not hold moves nothing.
+    assert!(!s.app.focus_shown_row(Side::Left, "notes.txt"));
+    assert_eq!(shown(&s).as_deref(), Some("a.txt"));
+    assert_eq!(s.focused(), folder_focus, "the folder's focus is its own");
+    // focus_name is the folder's, beneath the list, as panel/set needs.
+    assert!(s.app.focus_name(Side::Left, "notes.txt"));
+    assert_eq!(s.focused(), "notes.txt");
+    assert_eq!(shown(&s).as_deref(), Some("a.txt"), "the list's stays");
+    // With the list closed, a shown row is the folder's again.
+    s.key("escape");
+    assert!(s.app.active_panel().plugin_list().is_none());
+    assert!(s.app.focus_shown_row(Side::Left, &folder_focus));
+    assert_eq!(s.focused(), folder_focus);
+}
+
+/// Lane A4 (G1's request 2): `App::menu_list` gives a menu's rows as the
+/// terminal's list menus show them, the enabled plugins' commands among
+/// them, so the GUI's native menus can list them too.
+#[test]
+fn menu_list_holds_the_plugins_commands_the_list_menu_shows() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let mut s = session(&w, TestLauncher::with(&[]));
+    let menu = s.app.menu_list(diroxide_app::Menu::Plugins.id()).unwrap();
+    let spoken: Vec<String> = menu.rows().iter().map(|row| row.spoken()).collect();
+    assert_eq!(spoken[0], "Manage plugins");
+    assert!(
+        spoken.contains(&"Count lines, Ctrl+Alt+L".to_owned()),
+        "{spoken:?}"
+    );
+    assert!(
+        menu.rows().iter().any(|row| row.id == "line-counter.count"),
+        "the row's id is the plugin's command"
+    );
+    // The same rows the list menu shows, in the same order.
+    s.command(ids::MENU_PLUGINS);
+    assert_eq!(rows(&s), spoken);
+    s.key("escape");
+    // A built-in menu has its own rows; no menu has a made-up id.
+    let file = s.app.menu_list(diroxide_app::Menu::File.id()).unwrap();
+    assert!(!file.is_empty());
+    assert!(s.app.menu_list("no-such-menu").is_none());
+}

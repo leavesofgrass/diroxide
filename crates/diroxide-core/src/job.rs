@@ -304,6 +304,11 @@ pub enum JobState {
     /// running jobs per host, four remote jobs in all, one component
     /// download at a time).
     Queued,
+    /// Waiting its turn, held in its place by the user's Pause: the queue
+    /// passes over it, so it holds back no later job, until Resume lets
+    /// it go in the same place (ADR-0013, alpha 3). It counts among the
+    /// waiting jobs.
+    Held,
     /// Walking the sources to count entries and bytes.
     #[default]
     Counting,
@@ -329,6 +334,7 @@ impl JobState {
     /// Every state, in the order a job meets them; the word tests walk it.
     pub const ALL: &'static [JobState] = &[
         JobState::Queued,
+        JobState::Held,
         JobState::Counting,
         JobState::Running,
         JobState::Paused,
@@ -340,11 +346,13 @@ impl JobState {
     ];
 
     /// The state in words, for the jobs line: "counting", "paused",
-    /// "waiting for an answer", "waiting its turn", "waiting for the
-    /// connection". Each fits 40 cells after a job's longest word.
+    /// "waiting for an answer", "waiting its turn", "held in line",
+    /// "waiting for the connection". Each fits 40 cells after a job's
+    /// longest word.
     pub const fn word(self) -> &'static str {
         match self {
             JobState::Queued => "waiting its turn",
+            JobState::Held => "held in line",
             JobState::Counting => "counting",
             JobState::Running => "running",
             JobState::Paused => "paused",
@@ -357,13 +365,13 @@ impl JobState {
     }
 
     /// Whether the job holds no slot of the queue in this state: it waits
-    /// its turn, waits for an answer, or has finished. A job that waits for
-    /// an answer releases its slot, so one forgotten question cannot hold
-    /// the queue (R25, 2.2).
+    /// its turn, held or not, waits for an answer, or has finished. A job
+    /// that waits for an answer releases its slot, so one forgotten
+    /// question cannot hold the queue (R25, 2.2).
     pub const fn holds_no_slot(self) -> bool {
         matches!(
             self,
-            JobState::Queued | JobState::WaitingForAnswer | JobState::Finished
+            JobState::Queued | JobState::Held | JobState::WaitingForAnswer | JobState::Finished
         )
     }
 }
@@ -786,10 +794,12 @@ mod tests {
 
     /// The queue's vocabulary (R25 commit 65): every state has its word,
     /// each fits 40 cells after the longest progress word, and the states
-    /// that hold no slot are the waiting and finished ones.
+    /// that hold no slot are the waiting and finished ones. A hold (lane
+    /// A4, alpha 3) is "held in line", second, after waiting its turn.
     #[test]
     fn every_state_has_a_word_that_fits_40_cells() {
-        assert_eq!(JobState::ALL.len(), 9);
+        assert_eq!(JobState::ALL.len(), 10);
+        assert_eq!(JobState::ALL[1], JobState::Held);
         let mut words = std::collections::HashSet::new();
         for state in JobState::ALL {
             let word = state.word();
@@ -805,6 +815,9 @@ mod tests {
             assert_eq!(serde_json::from_str::<JobState>(&json).unwrap(), *state);
         }
         assert_eq!(JobState::Queued.word(), "waiting its turn");
+        assert_eq!(JobState::Held.word(), "held in line");
+        assert_eq!(serde_json::to_string(&JobState::Held).unwrap(), "\"held\"");
+        assert!(JobState::Held.holds_no_slot());
         assert_eq!(
             JobState::WaitingForConnection.word(),
             "waiting for the connection"
