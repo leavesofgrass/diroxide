@@ -6,34 +6,30 @@
 //! cannot open are listed apart, each with the reason; the two lists
 //! together are held against the enum's variants as the source declares
 //! them, so a purpose added later fails here until it is opened or said.
+//! Each opened dialog's purpose is checked by the app's own test hook
+//! (lane A5's `App::dialog_purpose`), not only its title. The trash
+//! browser, a junction offered for a refused link and an item that cannot
+//! be read are made with the file system crate's doubles
+//! (`tests/it/doubles.rs`), so they open on every system.
 
 #![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use diroxide_app::config::Paths;
 use diroxide_app::{Answer, AppEvent, AppOptions, AskId, Question};
 use diroxide_core::{SecretKind, SecretRequest, Side};
 use masonry::accesskit::Role;
 
+use crate::doubles::{Doubles, OneItemBin};
 use crate::rig::{HostOf, Rig, app_with, name_of};
 
-/// The purposes no test can open, each with the reason, in words.
-const UNREACHABLE: &[(&str, &str)] = &[
-    (
-        "JobItems",
-        "it opens from a finished job's row in the Jobs list, a scenario the next GUI lane adds (lane A5 removed JobHistory, whose dialog the Jobs list had replaced)",
-    ),
-    (
-        "JunctionInstead",
-        "it needs a link the system refuses for want of a privilege, which needs a provider double from diroxide-vfs, not a dependency of the GUI crate",
-    ),
-    (
-        "Trash",
-        "the trash browser would list the owner's real trash; a test trash needs diroxide-vfs, not a dependency of the GUI crate",
-    ),
-];
+/// The purposes no test can open, each with the reason, in words: none
+/// since the file system crate's doubles (lane A5 removed JobHistory,
+/// whose dialog the Jobs list had replaced).
+const UNREACHABLE: &[(&str, &str)] = &[];
 
 /// The variants of `Purpose` as `app.rs` declares them.
 fn purpose_variants() -> BTreeSet<String> {
@@ -159,6 +155,24 @@ fn window(root: &Path, change: impl FnOnce(&mut AppOptions)) -> Rig {
     let (app, runtime) = app_with(&work, &work.join("Backup"), change);
     let paths = Paths::new(root.join("config"), root.join("state"));
     let runtime = runtime.with_paths(paths).with_components_offline();
+    Rig::new(app, runtime)
+}
+
+/// The same window over the file system crate's doubles: the local disk
+/// with `doubles`' refusals, and the trash `bin` in place of the
+/// owner's.
+fn window_over(root: &Path, doubles: Doubles, bin: Option<OneItemBin>) -> Rig {
+    let work = world(root);
+    let (app, _) = app_with(&work, &work.join("Backup"), |_| {});
+    let mut registry = diroxide_vfs::Registry::new();
+    registry.set_local(Arc::new(doubles));
+    let paths = Paths::new(root.join("config"), root.join("state"));
+    let mut runtime = diroxide_app::Runtime::new(Arc::new(registry))
+        .with_paths(paths)
+        .with_components_offline();
+    if let Some(bin) = bin {
+        runtime = runtime.with_trash_bin(Arc::new(bin));
+    }
     Rig::new(app, runtime)
 }
 
@@ -299,6 +313,11 @@ fn scenarios() -> Vec<(&'static str, &'static str, Open)> {
             Some(rig)
         }),
         ("ItemError", "Could not", |root| item_error(root)),
+        ("JunctionInstead", "Make a junction instead", |root| {
+            junction(root)
+        }),
+        ("Trash", "Trash", |root| trash(root)),
+        ("JobItems", "Copy finished", |root| job_items(root)),
         ("Secret", "Password for course.zip", |root| {
             let mut rig = window(root, |_| {});
             ask(
@@ -739,33 +758,65 @@ fn saved_search(rig: &mut Rig) {
     wait(rig);
 }
 
-/// An item that cannot be read during a copy: on Windows a file held
-/// open with no sharing; on Unix a file with no read permission (not
-/// possible as root, which reads it anyway).
+/// An item that cannot be read during a copy, on every system: the
+/// provider double refuses notes.txt's reading, as a file another program
+/// holds (root reads any file on Unix, so permissions cannot make it).
 fn item_error(root: &Path) -> Option<Rig> {
-    let mut rig = window(root, |_| {});
     let file = root.join("work").join("notes.txt");
-    #[cfg(windows)]
-    let _held = {
-        use std::os::windows::fs::OpenOptionsExt;
-        std::fs::OpenOptions::new()
-            .read(true)
-            .share_mode(0)
-            .open(&file)
-            .unwrap()
+    let doubles = Doubles {
+        unreadable: Some(file),
+        ..Doubles::default()
     };
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).unwrap();
-        if std::fs::read(&file).is_ok() {
-            return None;
-        }
-    }
+    let mut rig = window_over(root, doubles, None);
     focus(&mut rig, "notes.txt");
     rig.run("file.copy");
     rig.press("y");
     wait(&mut rig);
+    Some(rig)
+}
+
+/// A folder link the system refuses for the privilege (Windows without
+/// Developer Mode, made by the provider double on every system): a
+/// junction is offered instead.
+fn junction(root: &Path) -> Option<Rig> {
+    let doubles = Doubles {
+        refuse_links: true,
+        ..Doubles::default()
+    };
+    let mut rig = window_over(root, doubles, None);
+    focus(&mut rig, "Photos");
+    rig.run("file.link");
+    answer(&mut rig, "go");
+    wait(&mut rig);
+    rig.press("y");
+    rig.settle_until(|rig| {
+        rig.dialog_name()
+            .is_some_and(|name| name.starts_with("Make a junction instead"))
+    });
+    Some(rig)
+}
+
+/// The trash browser over a trash of one item, never the owner's.
+fn trash(root: &Path) -> Option<Rig> {
+    let gone =
+        diroxide_core::Place::parse(root.join("work").join("old.txt").to_str().unwrap()).unwrap();
+    let mut rig = window_over(root, Doubles::default(), Some(OneItemBin::holding(gone)));
+    rig.run("go.trash");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("Trash"));
+    Some(rig)
+}
+
+/// A finished job's Show what failed (lane A5): a copy, then the job
+/// history, the job's actions, and the first of them.
+fn job_items(root: &Path) -> Option<Rig> {
+    let mut rig = window(root, |_| {});
+    focus(&mut rig, "notes.txt");
+    rig.run("file.copy");
+    rig.press("y");
+    rig.settle_until(|rig| rig.f.app().jobs().front().is_none());
+    rig.run("jobs.history");
+    rig.press("enter");
+    choose(&mut rig, "Show what failed");
     Some(rig)
 }
 
@@ -921,7 +972,11 @@ fn every_dialog_purpose_opens_with_a_name_and_a_focus() {
             not_here.push(purpose);
             continue;
         };
+        let shown = rig.f.app().dialog_purpose();
         match checked(&rig) {
+            Ok(_) if shown != Some(purpose) => {
+                failures.push(format!("{purpose}: the app's purpose is {shown:?}"))
+            }
             Ok((name, role, control)) if name.starts_with(title) => {
                 opened.push(format!("{purpose}: {name} | {role:?} {control}"));
             }

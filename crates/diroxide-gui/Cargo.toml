@@ -61,6 +61,10 @@ windows-sys = { workspace = true, features = ["Win32_Graphics_Gdi", "Win32_Syste
 
 [dev-dependencies]
 accesskit_consumer.workspace = true
+# Test doubles for the every-purpose test: a provider that refuses a link
+# for the privilege or a file's reading, and a trash of one item (lane
+# A5's xtask deps allowance: the GUI's dev-dependencies alone).
+diroxide-vfs.workspace = true
 masonry_testing.workspace = true
 serde.workspace = true
 tempfile.workspace = true

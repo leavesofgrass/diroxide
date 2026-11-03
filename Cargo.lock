@@ -1654,6 +1654,7 @@ dependencies = [
  "diroxide-app",
  "diroxide-core",
  "diroxide-theme",
+ "diroxide-vfs",
  "fontique",
  "masonry",
  "masonry_testing",

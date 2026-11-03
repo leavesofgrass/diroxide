@@ -14,6 +14,8 @@ mod contract;
 #[cfg(feature = "gui")]
 mod dialogs;
 #[cfg(feature = "gui")]
+mod doubles;
+#[cfg(feature = "gui")]
 mod drawing;
 #[cfg(feature = "gui")]
 mod every_purpose;
