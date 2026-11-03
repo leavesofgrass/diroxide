@@ -66,9 +66,14 @@ fn megabytes(bytes: u64) -> f64 {
     (bytes as f64 / 100_000.0).round() / 10.0
 }
 
-/// A measure in words: a time, or a size in megabytes.
+/// A measure in words: a time (minutes and seconds from a minute on,
+/// as a cold build takes), or a size in megabytes.
 pub fn value_words(value: f64, unit: &str) -> String {
     match unit {
+        "ms" if value >= 60_000.0 => {
+            let seconds = (value / 1000.0).round() as u64;
+            format!("{} min {} s", seconds / 60, seconds % 60)
+        }
         "ms" => time_words(value),
         _ => format!("{value:.1} {unit}"),
     }
@@ -396,6 +401,7 @@ mod tests {
         assert_eq!(megabytes(38_249_984), 38.2);
         assert_eq!(value_words(38.2, "MB"), "38.2 MB");
         assert_eq!(value_words(412.0, "ms"), "412 ms");
+        assert_eq!(value_words(305_800.0, "ms"), "5 min 6 s");
     }
 
     #[test]

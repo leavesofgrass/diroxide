@@ -138,13 +138,12 @@ The GUI workflow (`.github/workflows/gui.yml`) packs a real AppImage and runs th
 
 `cargo run --release -p xtask -- bench --gui` records, beside the bench's scenarios and never gated: the size of the `diro` it built, the time from the start of `diro --gui --background` to the window's first frame (the `--log` line "graphics: drawing with"), and the peak working set a second after it; `--cold-build` adds a cold release build of `diro` into `target/bench/cold-build`, a folder that must not exist yet and is left for `.claude/tools/safe-remove.ps1`. Each start is one window, off screen and never activated.
 
-The first numbers, on the owner's Windows 11 machine with a graphics card (an NVIDIA GeForce RTX 3060), on Tuesday, November 3, 2026, with the machine shared by two other lanes' builds, so a quiet run will be faster; the bench lane records the baseline:
+The first numbers, on the owner's Windows 11 machine with a graphics card (an NVIDIA GeForce RTX 3060), on Tuesday, November 3, 2026, from `bench --only gui --cold-build`; the bench lane records the baseline on a quiet machine:
 
-- A cold build of `diro` (`cargo build -p diro`, an empty target folder, no compiler cache): 7 minutes 40 seconds for the debug profile, and 7 minutes 52 seconds for the release profile.
-- The `dist` build after the release one: 12 minutes 54 seconds.
+- The cold release build of `diro`: 5 minutes 6 seconds. Earlier the same morning, with two other lanes building beside it, a cold debug build (`cargo build -p diro`, an empty target folder, no compiler cache) took 7 minutes 40 seconds and a cold release build 7 minutes 52 seconds; the `dist` build after the release one took 12 minutes 54 seconds.
 - The binary: 60.8 MB in the debug profile, 44.1 MB in the release profile, and 39.5 MB in the `dist` profile, which the release files use.
-- From the start to the first frame: 1.88 seconds, the median of three starts (2.53, 1.88 and 1.53 seconds), drawn on the graphics card by the release build.
-- The working set at the first frame: 189.7 MB, the median of the same three starts.
+- From the start to the first frame: 1.20 seconds, the median of three starts (1.67, 1.20 and 1.16 seconds), drawn on the graphics card by the release build.
+- The working set at the first frame: 189.0 MB, the median of the same three starts.
 
 ## Phase 0 measurements
 
