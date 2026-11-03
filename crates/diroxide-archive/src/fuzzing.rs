@@ -123,19 +123,26 @@ pub fn tar(data: &[u8]) {
 
 /// `archive_stream`: the first byte picks the wrapper around a tar (even
 /// for gzip, odd for xz), the rest is the stream, decoded
-/// under the strict limits' output cap, as a tar or as one member.
+/// under the strict limits' output cap, as a tar or as one member. An xz
+/// stream is taken as the provider takes one: only after its checks at
+/// open pass, and through the stream path's guard of its indexes.
 pub fn stream(data: &[u8]) {
     let Some((&pick, rest)) = data.split_first() else {
         return;
     };
+    let source = crate::source::Source::from_bytes(rest.to_vec());
     let wrapper = if pick % 2 == 0 {
         crate::read_tar::Wrapper::Gzip
     } else {
+        let limits = Limits::strict();
+        let allow = crate::guard::Allowances::all();
+        if crate::read_xz::check(&source, "fuzz.tar.xz", &limits, allow).is_err() {
+            return;
+        }
         crate::read_tar::Wrapper::Xz {
-            mem_limit_kb: crate::read_xz::mem_limit_kb(&Limits::strict()),
+            mem_limit_kb: crate::read_xz::mem_limit_kb(&limits),
         }
     };
-    let source = crate::source::Source::from_bytes(rest.to_vec());
     if crate::read_tar::holds_tar(&source, wrapper) {
         walk_tar(source, wrapper);
     } else {
@@ -182,29 +189,34 @@ fn walk_tar(source: crate::source::Source, wrapper: crate::read_tar::Wrapper) {
     }
 }
 
-/// `archive_xz`: an xz stream decoded with the strict limits' memory cap,
-/// with and without several streams, under an output cap; its index
-/// walked for the size, and its end and first dictionary checked. Nothing
-/// may panic, hang or allocate past the cap.
+/// `archive_xz`: an xz file taken as the provider takes one, under the
+/// strict limits with every question answered yes: its checks at open
+/// (the first dictionary, its end, the walk of its streams and blocks),
+/// its size from the indexes, and the stream path's guard of its
+/// indexes; then, when the checks pass, the decode through that guarded
+/// path with the memory cap, under an output cap. Nothing may panic, hang
+/// or allocate past the cap. `lzma-rust2` is not handed bytes the
+/// provider refuses: its 0.21 reserves room for an index's records from
+/// the count before it reads one (a 25-byte find asked for 506 GB), which
+/// the checks keep from it.
 pub fn xz(data: &[u8]) {
     let limits = Limits::strict();
     let source = crate::source::Source::from_bytes(data.to_vec());
-    let _ = crate::read_xz::check(
-        &source,
-        "fuzz.xz",
-        &limits,
-        crate::guard::Allowances::default(),
-    );
+    let checked =
+        crate::read_xz::check(&source, "fuzz.xz", &limits, crate::guard::Allowances::all());
     let _ = crate::read_xz::uncompressed_size(&source, &limits);
-    let cap = limits.max_member_size;
-    for multiple in [true, false] {
-        let reader = lzma_rust2::XzReader::new_mem_limit(
-            data,
-            multiple,
-            crate::read_xz::mem_limit_kb(&limits),
-        );
-        let _ = std::io::copy(&mut std::io::Read::take(reader, cap), &mut std::io::sink());
+    let mem_limit_kb = crate::read_xz::mem_limit_kb(&limits);
+    let _ = crate::read_xz::check_indexes(&source, mem_limit_kb);
+    if checked.is_err() {
+        return;
     }
+    let single =
+        crate::read_tar::SingleBackend::new(source, crate::read_tar::Wrapper::Xz { mem_limit_kb });
+    let cap = limits.max_member_size;
+    let _ = std::io::copy(
+        &mut std::io::Read::take(single.read(), cap),
+        &mut std::io::sink(),
+    );
 }
 
 /// The size an xz file's indexes give, for the tests: `None` when they
