@@ -502,7 +502,14 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     let pending = Arc::new(AtomicBool::new(false));
     let wake = waker(proxy.clone(), window_id, Arc::clone(&pending));
     runtime.set_waker(Arc::clone(&wake));
+    // Programs start in windows of their own and are not waited for
+    // (decision 8): the shell in the system's terminal, the editor
+    // directly.
+    let launcher = crate::spawn::WindowLauncher::new();
+    let starts = launcher.started();
+    let runtime = runtime.with_launcher(Arc::new(launcher));
     let mut frontend = Frontend::new(app, runtime, options.title.clone());
+    frontend.set_starts(starts);
     frontend.start();
     let title = frontend.window_title();
     let window = NewWindow::new_with_id(

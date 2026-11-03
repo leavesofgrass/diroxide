@@ -53,6 +53,7 @@ pub mod keys;
 pub mod menus;
 pub mod model;
 mod platform;
+pub mod spawn;
 #[cfg(feature = "gui")]
 pub mod widgets;
 #[cfg(feature = "gui")]

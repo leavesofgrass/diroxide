@@ -16,6 +16,8 @@ mod goldens;
 #[cfg(feature = "gui")]
 mod gui_keys;
 #[cfg(feature = "gui")]
+mod handover;
+#[cfg(feature = "gui")]
 mod jobs;
 #[cfg(feature = "gui")]
 mod keybar_mouse;

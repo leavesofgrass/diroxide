@@ -21,6 +21,10 @@
 //!   cause in words when another program holds it.
 //! - On Windows, winit's helper window named ([`helper`]), so a screen
 //!   reader never meets a nameless pane on the desktop.
+//! - On Windows, a program started in a console of its own
+//!   ([`win::start_in_new_console`]) for the window's Shell here and Run
+//!   command (`crate::spawn`), with its command line quoted as Windows
+//!   programs split it.
 //!
 //! Elsewhere the console calls do nothing: a program started from a
 //! terminal on Linux or macOS writes to it, and one started from the
@@ -137,6 +141,121 @@ pub(crate) mod win {
                 MB_OK | MB_ICONERROR | MB_SETFOREGROUND,
             );
         }
+    }
+
+    /// A program's command line as Windows programs split it back into
+    /// arguments (the C runtime's rules): an argument with a space, a tab
+    /// or a quote is quoted, its quotes escaped and the backslashes before
+    /// a quote doubled.
+    pub(crate) fn command_line(program: &std::ffi::OsStr, args: &[std::ffi::OsString]) -> Vec<u16> {
+        use std::os::windows::ffi::OsStrExt;
+        let mut line: Vec<u16> = Vec::new();
+        for (i, arg) in std::iter::once(program)
+            .chain(args.iter().map(std::ffi::OsString::as_os_str))
+            .enumerate()
+        {
+            if i > 0 {
+                line.push(u16::from(b' '));
+            }
+            let units: Vec<u16> = arg.encode_wide().collect();
+            let plain = !units.is_empty()
+                && !units.iter().any(|&c| {
+                    c == u16::from(b' ') || c == u16::from(b'\t') || c == u16::from(b'"')
+                });
+            if plain {
+                line.extend(units);
+                continue;
+            }
+            line.push(u16::from(b'"'));
+            let mut backslashes = 0usize;
+            for c in units {
+                if c == u16::from(b'\\') {
+                    backslashes += 1;
+                    continue;
+                }
+                let repeat = if c == u16::from(b'"') {
+                    backslashes * 2 + 1
+                } else {
+                    backslashes
+                };
+                line.extend(std::iter::repeat_n(u16::from(b'\\'), repeat));
+                line.push(c);
+                backslashes = 0;
+            }
+            line.extend(std::iter::repeat_n(u16::from(b'\\'), backslashes * 2));
+            line.push(u16::from(b'"'));
+        }
+        line
+    }
+
+    /// Starts a program in a console window of its own, which owns its
+    /// input and output (the window's handles are not passed on, as the
+    /// standard library would), with this process's environment and
+    /// `env` over it, in `folder`; not waited for.
+    pub(crate) fn start_in_new_console(
+        program: &std::ffi::OsStr,
+        args: &[std::ffi::OsString],
+        folder: &std::path::Path,
+        env: &[(String, std::ffi::OsString)],
+    ) -> Result<(), String> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            CREATE_NEW_CONSOLE, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, PROCESS_INFORMATION,
+            STARTUPINFOW,
+        };
+        let mut line = command_line(program, args);
+        line.push(0);
+        let mut vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
+            .filter(|(name, _)| !env.iter().any(|(n, _)| name.eq_ignore_ascii_case(n)))
+            .collect();
+        vars.extend(
+            env.iter()
+                .map(|(name, value)| (std::ffi::OsString::from(name), value.clone())),
+        );
+        let mut block: Vec<u16> = Vec::new();
+        for (name, value) in &vars {
+            block.extend(name.encode_wide());
+            block.push(u16::from(b'='));
+            block.extend(value.encode_wide());
+            block.push(0);
+        }
+        block.push(0);
+        let folder: Vec<u16> = folder.as_os_str().encode_wide().chain(Some(0)).collect();
+        let startup = STARTUPINFOW {
+            cb: size_of::<STARTUPINFOW>() as u32,
+            ..Default::default()
+        };
+        let mut info = PROCESS_INFORMATION::default();
+        // SAFETY: every buffer is ours, ends as CreateProcessW requires
+        // (the command line and folder with a zero, the environment block
+        // with two) and outlives the call; the command line is writable as
+        // the call may change it; no handles are inherited and the
+        // startup information names none; the two handles returned are
+        // closed here, which leaves the program running.
+        let ok = unsafe {
+            CreateProcessW(
+                std::ptr::null(),
+                line.as_mut_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                CREATE_NEW_CONSOLE | CREATE_UNICODE_ENVIRONMENT,
+                block.as_ptr().cast(),
+                folder.as_ptr(),
+                &startup,
+                &mut info,
+            ) != 0
+        };
+        if !ok {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+        // SAFETY: the handles are the ones CreateProcessW just gave us.
+        unsafe {
+            let _ = CloseHandle(info.hThread);
+            let _ = CloseHandle(info.hProcess);
+        }
+        Ok(())
     }
 
     /// Milliseconds since this process was created, from the system's

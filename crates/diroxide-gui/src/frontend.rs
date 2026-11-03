@@ -210,6 +210,10 @@ pub struct Frontend {
     quick_tick_at: Option<Instant>,
     viewer_tick_at: Option<Instant>,
     hold_retry_at: Option<Instant>,
+    /// What the window's launcher started and the frontend has not said
+    /// yet ([`crate::spawn`]).
+    starts:
+        Option<std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<crate::spawn::Started>>>>,
     /// The viewer's columns and rows, as its list box last told them.
     viewer_size: (usize, usize),
     /// Each running job's latest percent, from its progress.
@@ -275,6 +279,7 @@ impl Frontend {
             quick_tick_at: None,
             viewer_tick_at: None,
             hold_retry_at: None,
+            starts: None,
             viewer_size: (80, 20),
             percents: HashMap::new(),
             progress_shown: Vec::new(),
@@ -322,6 +327,15 @@ impl Frontend {
     /// left out where the dialog says it by itself.
     pub fn spoken(&self) -> &[Message] {
         &self.spoken
+    }
+
+    /// Tells the driver what the window's launcher starts, so a program
+    /// that opened in a window of its own is said as opened.
+    pub fn set_starts(
+        &mut self,
+        starts: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<crate::spawn::Started>>>,
+    ) {
+        self.starts = Some(starts);
     }
 
     /// The window's own focus in the open dialog.
@@ -1000,6 +1014,31 @@ impl Frontend {
     /// One result to the app; a job's progress is noted first, for the
     /// progress indicator.
     fn handle_event(&mut self, event: AppEvent) {
+        // A program the window started is running in its own window, not
+        // ended: said as opened, in place of the app's "Back in diroxide"
+        // (the panels are read again when the watcher sees a change).
+        if let AppEvent::ProgramEnded {
+            what,
+            folder,
+            result: Ok(None),
+        } = &event
+            && let Some(started) = self.starts.as_ref().and_then(|starts| {
+                starts
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .pop_front()
+            })
+        {
+            let place = diroxide_app::panel::place_leaf(folder);
+            let message = Message::info(started.words(what, &place));
+            self.said.push(message.clone());
+            self.to_say.push(Said {
+                message,
+                start: false,
+                opening: false,
+            });
+            return;
+        }
         if let AppEvent::JobProgress { job, progress } = &event {
             self.percents.insert(*job, progress.percent());
             self.progress_reports.push(progress.percent());
