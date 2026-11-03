@@ -37,7 +37,7 @@ use masonry_winit::app::{
 };
 use masonry_winit::winit::window::Window as WinitWindow;
 
-use crate::{GuiError, GuiOptions, console, window_title};
+use crate::{GuiError, GuiOptions, window_title};
 
 /// The title line's text: the active place first ("Documents, left panel,
 /// in D:\work"), the whole line, never cut.
@@ -304,6 +304,27 @@ fn quiet_traces() {
     }
 }
 
+/// The panic hook while the window runs: the window runner's graphics
+/// failure is said by `diro` in one sentence after the window is gone, so
+/// the default report of it (a thread, a source line, a note about
+/// backtraces) would only stand in front of that sentence in the
+/// terminal. Every other panic keeps the default report. Returns what
+/// puts the previous hook back.
+fn hush_graphics_failure() -> impl FnOnce() {
+    type Hook = dyn Fn(&std::panic::PanicHookInfo<'_>) + Send + Sync;
+    let previous: Arc<Hook> = Arc::from(std::panic::take_hook());
+    let report = Arc::clone(&previous);
+    std::panic::set_hook(Box::new(move |info| {
+        if !info.to_string().contains(GRAPHICS_FAILURE) {
+            report(info);
+        }
+    }));
+    move || {
+        let _ = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| previous(info)));
+    }
+}
+
 /// Runs the window until the app quits; see [`crate::run`].
 pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, GuiError> {
     quiet_traces();
@@ -341,7 +362,10 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
         wake,
         slot: Rc::clone(&slot),
     };
-    let released = console::release_for_window();
+    // The console a double-click opened was let go by diro before the app
+    // was built (`crate::console::release_for_window`), and is given back by it
+    // if this returns an error.
+    let restore_hook = hush_graphics_failure();
     let ran = catch_unwind(AssertUnwindSafe(|| {
         masonry_winit::app::run_with(
             event_loop,
@@ -350,15 +374,12 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
             masonry::theme::default_property_set(),
         )
     }));
-    let outcome = match ran {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(e)) => Err(GuiError::EventLoop(e.to_string())),
-        Err(payload) => Err(error_for_panic(&panic_text(payload.as_ref()))),
-    };
-    if outcome.is_err() {
-        console::regain_for_terminal(released);
+    restore_hook();
+    match ran {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => return Err(GuiError::EventLoop(e.to_string())),
+        Err(payload) => return Err(error_for_panic(&panic_text(payload.as_ref()))),
     }
-    outcome?;
     slot.borrow_mut()
         .take()
         .ok_or_else(|| GuiError::Stopped("the app was not handed back".to_owned()))
