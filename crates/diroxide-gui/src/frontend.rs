@@ -808,7 +808,7 @@ impl Frontend {
                 .id
                 .parse::<usize>()
                 .ok()
-                .and_then(|i| model::shown_bank(&self.app)?.buttons.into_iter().nth(i))
+                .and_then(|i| self.app.shown_bank()?.buttons.into_iter().nth(i))
                 .map(|button| button.commands)
                 .unwrap_or_default();
             for command in commands {
@@ -862,11 +862,8 @@ impl Frontend {
                     let effects = self.app.dispatch(&Command::new(ids::SWITCH_PANEL));
                     self.carry(effects);
                 }
-                // A plugin list's rows are moved by keys only for now
-                // (`App::focus_name` moves the folder's focus).
-                if self.app.panel(side).plugin_list().is_none() {
-                    self.app.focus_name(side, &id);
-                }
+                // The folder's row, or a plugin list's while one is up.
+                self.app.focus_shown_row(side, &id);
                 self.after(now);
                 self.refresh(host);
             }
@@ -874,9 +871,7 @@ impl Frontend {
                 if self.app.dialog().is_some() {
                     return;
                 }
-                if self.app.panel(side).plugin_list().is_none() {
-                    self.app.focus_name(side, &id);
-                }
+                self.app.focus_shown_row(side, &id);
                 self.command(host, Command::new(ids::ENTER), now);
             }
         }

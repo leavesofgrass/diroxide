@@ -773,25 +773,6 @@ impl ButtonView {
     }
 }
 
-/// The bank the key bar shows: the viewer's, the quick view's, the
-/// search results', the comparison's, or the active bank, as
-/// [`App::key_bar`] chooses (a contract request asks the app for it, so
-/// the choice is made in one place; a test holds the two together).
-pub fn shown_bank(app: &App) -> Option<diroxide_app::menu::Bank> {
-    use diroxide_app::menu;
-    if app.viewer().is_some() {
-        Some(menu::viewer_bank())
-    } else if app.in_preview() {
-        Some(menu::preview_bank())
-    } else if app.results_shown() {
-        Some(menu::results_bank())
-    } else if app.compare_shown() {
-        Some(menu::compare_bank())
-    } else {
-        app.active_bank().cloned()
-    }
-}
-
 /// The key bar's name, as a toolbar.
 pub const KEY_BAR_NAME: &str = "Key bar";
 
@@ -803,7 +784,7 @@ pub fn key_bar_buttons(app: &App) -> Vec<ButtonView> {
     if !app.settings().key_bar {
         return Vec::new();
     }
-    let Some(bank) = shown_bank(app) else {
+    let Some(bank) = app.shown_bank() else {
         return Vec::new();
     };
     bank.buttons
