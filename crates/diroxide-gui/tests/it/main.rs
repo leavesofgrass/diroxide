@@ -5,6 +5,8 @@
 #[cfg(feature = "gui")]
 mod choose;
 #[cfg(feature = "gui")]
+mod completion;
+#[cfg(feature = "gui")]
 mod confirm;
 mod contract;
 #[cfg(feature = "gui")]

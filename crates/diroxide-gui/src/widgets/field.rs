@@ -14,7 +14,12 @@
 //! candidates are listed, and naming the list it controls. A password
 //! field gets only the mask the app draws (one asterisk a character, or
 //! nothing): the secret never reaches the field, the drawing or the
-//! tree.
+//! tree, unless the owner turns the dialog's Show toggle on.
+//!
+//! Every field but a password's opens an input method session when it
+//! takes the focus, its candidate window at the caret; what the input
+//! method commits, and a paste, reach the app as typed text through the
+//! window's root.
 
 use masonry::accesskit::{Node, NodeId, Rect as NodeRect, Role, TextPosition, TextSelection};
 use masonry::core::{
@@ -77,12 +82,17 @@ pub struct Field {
     text: Option<Layout<BrushIndex>>,
     before_caret: Option<Layout<BrushIndex>>,
     width: f64,
+    /// Whether the field opens an input method session when it takes the
+    /// focus: every field but a password's (Masonry reads it once, when
+    /// the widget is made).
+    input_method: bool,
 }
 
 impl Field {
     /// A field showing `view`; `list` is the candidates list's node.
     pub fn new(view: FieldView, list: Option<NodeId>) -> Self {
         Self {
+            input_method: !view.secret,
             view,
             list,
             run: None,
@@ -135,6 +145,13 @@ impl Widget for Field {
         true
     }
 
+    fn accepts_text_input(&self) -> bool {
+        // An input method composes text for the field (Chinese, Japanese,
+        // Korean, dictation); what it commits reaches the app as typed
+        // text through the window's root. A password field opens none.
+        self.input_method
+    }
+
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
@@ -180,6 +197,13 @@ impl Widget for Field {
             let before: String = text.chars().take(self.view.cursor).collect();
             self.before_caret = Some(paint::line_layout(ctx, &before, paint::TEXT_SIZE, false));
         }
+        // The input method's candidate window goes at the caret.
+        let x = PAD
+            + self
+                .before_caret
+                .as_ref()
+                .map_or(0.0, |l| f64::from(l.width()));
+        ctx.set_ime_area(Rect::new(x, 0.0, x + 2.0, size.height));
         ctx.set_clip_path(size.to_rect());
     }
 

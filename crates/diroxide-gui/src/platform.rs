@@ -17,6 +17,8 @@
 //!   menu loop entered as Windows' own menu keys would, and the window's
 //!   procedure subclassed to hear which item was chosen and when the menu
 //!   closed.
+//! - On Windows, text put on the clipboard ([`clipboard`]), with the
+//!   cause in words when another program holds it.
 //!
 //! Elsewhere the console calls do nothing: a program started from a
 //! terminal on Linux or macOS writes to it, and one started from the
@@ -164,6 +166,84 @@ pub(crate) mod win {
         let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
         // FILETIME counts 100-nanosecond intervals.
         ticks(now).checked_sub(ticks(created)).map(|d| d / 10_000)
+    }
+}
+
+#[cfg(all(windows, feature = "gui"))]
+pub(crate) mod clipboard {
+    //! Text put on the Windows clipboard, written here rather than through
+    //! the window runner's clipboard, which ends the window when the
+    //! clipboard cannot be opened (another program holding it for a
+    //! moment); here that is a sentence and the window goes on. Each call
+    //! is a plain Win32 call; the memory block is ours until the
+    //! clipboard takes it.
+
+    use windows_sys::Win32::Foundation::GlobalFree;
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+    };
+    use windows_sys::Win32::System::Memory::{
+        GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock,
+    };
+
+    /// The clipboard's format for UTF-16 text.
+    const CF_UNICODETEXT: u32 = 13;
+
+    /// Puts `text` on the clipboard as Unicode text; the cause in words
+    /// when it could not.
+    pub(crate) fn set_text(text: &str) -> Result<(), String> {
+        let wide: Vec<u16> = text.encode_utf16().chain(Some(0)).collect();
+        let bytes = wide.len() * 2;
+        // Another program may hold the clipboard for a moment, so opening
+        // it is tried a few times.
+        let mut opened = false;
+        for _ in 0..10 {
+            // SAFETY: opens the clipboard with no owner window; closed
+            // below on every path.
+            if unsafe { OpenClipboard(std::ptr::null_mut()) } != 0 {
+                opened = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !opened {
+            return Err("another program is using it".to_owned());
+        }
+        // SAFETY: the clipboard is open (and closed at the end); the block
+        // is allocated with the size of `wide`, locked while `wide` is
+        // copied into it, unlocked, and handed to the clipboard, which
+        // owns it from then on; it is freed here only when the clipboard
+        // did not take it.
+        let result = unsafe {
+            if EmptyClipboard() == 0 {
+                Err("it could not be emptied".to_owned())
+            } else {
+                let block = GlobalAlloc(GMEM_MOVEABLE, bytes);
+                if block.is_null() {
+                    Err("there was no memory for the text".to_owned())
+                } else {
+                    let to = GlobalLock(block).cast::<u16>();
+                    if to.is_null() {
+                        let _ = GlobalFree(block);
+                        Err("there was no memory for the text".to_owned())
+                    } else {
+                        std::ptr::copy_nonoverlapping(wide.as_ptr(), to, wide.len());
+                        let _ = GlobalUnlock(block);
+                        if SetClipboardData(CF_UNICODETEXT, block).is_null() {
+                            let _ = GlobalFree(block);
+                            Err("it did not take the text".to_owned())
+                        } else {
+                            Ok(())
+                        }
+                    }
+                }
+            }
+        };
+        // SAFETY: closes the clipboard this function opened.
+        unsafe {
+            let _ = CloseClipboard();
+        }
+        result
     }
 }
 

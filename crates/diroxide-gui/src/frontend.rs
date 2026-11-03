@@ -107,6 +107,13 @@ pub trait Host {
     /// Names the window's accessibility node (AT-SPI and macOS read the
     /// window's title from it).
     fn set_window_label(&mut self, label: &str);
+    /// Puts text on the system clipboard, or says why not in words. By
+    /// default through Masonry's clipboard signal (the window runner's
+    /// clipboard; the tests' harness keeps the text).
+    fn set_clipboard(&mut self, text: String) -> Result<(), String> {
+        self.edit(ROOT, |mut root| root.ctx.set_clipboard(text));
+        Ok(())
+    }
 }
 
 impl Host for RenderRoot {
@@ -132,6 +139,13 @@ impl Host for RenderRoot {
 
     fn set_window_label(&mut self, label: &str) {
         RenderRoot::set_window_label(self, label);
+    }
+
+    #[cfg(windows)]
+    fn set_clipboard(&mut self, text: String) -> Result<(), String> {
+        // Written directly: the window runner's clipboard would end the
+        // window when another program holds the clipboard.
+        crate::platform::clipboard::set_text(&text)
     }
 }
 
@@ -167,9 +181,11 @@ pub struct Frontend {
     /// The window's own focus in the open dialog: a confirmation's
     /// buttons and listing, a text's lines, a secret's toggle.
     local: model::LocalFocus,
-    /// Text the app put on the clipboard (the platform clipboard is G2's
-    /// commit 25; until then the texts are kept here).
+    /// Every text the app put on the clipboard, in order (the tests read
+    /// it).
     clipboard: Vec<String>,
+    /// Text for the system clipboard, put there on the next refresh.
+    to_copy: Vec<String>,
     quit: bool,
     key_test_since: Option<Instant>,
     app_tick_at: Option<Instant>,
@@ -224,6 +240,7 @@ impl Frontend {
             spoken: Vec::new(),
             local: model::LocalFocus::default(),
             clipboard: Vec::new(),
+            to_copy: Vec::new(),
             quit: false,
             key_test_since: None,
             app_tick_at: None,
@@ -1005,7 +1022,10 @@ impl Frontend {
                     });
                 }
                 Effect::Quit => self.quit = true,
-                Effect::SetClipboardText(text) => self.clipboard.push(text),
+                Effect::SetClipboardText(text) => {
+                    self.clipboard.push(text.clone());
+                    self.to_copy.push(text);
+                }
                 _ => {}
             }
         }
@@ -1088,6 +1108,24 @@ impl Frontend {
                 let buttons = sorting.clone();
                 host.edit(sort_tag(side), |mut row| {
                     ButtonRow::set_buttons(&mut row, buttons)
+                });
+            }
+        }
+        // Copied text to the system clipboard; a clipboard another program
+        // holds is said, after the app's own line.
+        for text in std::mem::take(&mut self.to_copy) {
+            if let Err(cause) = host.set_clipboard(text) {
+                let message = Message::could_not(
+                    "copy",
+                    "to the clipboard",
+                    &cause,
+                    "Try again in a moment.",
+                );
+                self.said.push(message.clone());
+                self.to_say.push(Said {
+                    message,
+                    start: false,
+                    opening: false,
                 });
             }
         }
