@@ -370,11 +370,10 @@ Hide the menu bar. In the GUI on Windows, keeps the menu bar hidden until the Me
 
 ### focus_mode
 
-Focus mode. In the GUI, fades the bars when the mouse rests, so the panels have the room. Visual only; nothing is announced.
+Focus mode. In the GUI, fades the title line, the status bar and the key bar after three seconds with no key or mouse move, so the panels have the room; any key or mouse move brings them back. Turning it on or off is said; the fading is not.
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with a later alpha.
 
 ### frontend
 

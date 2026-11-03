@@ -144,8 +144,8 @@ pub enum Graphics {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Menus {
-    /// The system's menu bar on Windows and macOS; a list in the window
-    /// elsewhere.
+    /// The system's menu bar on Windows; a list in the window elsewhere
+    /// (macOS waits for an AppKit binding).
     #[default]
     Native,
     /// A list in the window, on every system.

@@ -766,8 +766,8 @@ pub const SCHEMA: [SettingInfo; 104] = [
         group: G::Look,
         kind: K::Flag,
         default: "false",
-        help: "In the GUI, fades the bars when the mouse rests, so the panels have the room. Visual only; nothing is announced.",
-        arrives: Some("alpha.6"),
+        help: "In the GUI, fades the title line, the status bar and the key bar after three seconds with no key or mouse move, so the panels have the room; any key or mouse move brings them back. Turning it on or off is said; the fading is not.",
+        arrives: None,
     },
     // The GUI's start (the GUI alpha's contract step, Monday, November 2,
     // 2026; R27's contract request C4).

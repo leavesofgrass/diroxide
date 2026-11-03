@@ -393,15 +393,34 @@ pub fn run_gui(
 }
 
 /// Says what the options cannot do before the screen opens: an unknown
-/// theme gives the default.
-fn notices(options: &OpenOptions, out: &mut dyn Write) -> Result<(), CliError> {
+/// theme gives the default. A theme is known when it is built in or a
+/// file of its name loads from the config's themes folder, as the app
+/// reads them at start.
+fn notices(
+    options: &OpenOptions,
+    paths: Option<&Paths>,
+    out: &mut dyn Write,
+) -> Result<(), CliError> {
     let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
     if let Some(theme) = &options.theme
-        && !diroxide_app::settings::theme_names().contains(theme)
+        && !theme_is_known(theme, paths)
     {
         writeln!(out, "Unknown theme: {theme}. Galaxy is in use.").map_err(write_failed)?;
     }
     Ok(())
+}
+
+/// Whether a theme is built in or one of the owner's theme files.
+fn theme_is_known(name: &str, paths: Option<&Paths>) -> bool {
+    diroxide_app::settings::theme_names()
+        .iter()
+        .any(|n| *n == name)
+        || paths.is_some_and(|paths| {
+            diroxide_config::theme::registry(&paths.themes_dir(), Paths::SETTINGS)
+                .0
+                .get(name)
+                .is_some()
+        })
 }
 
 /// The terminal's options for an app as built.
@@ -421,7 +440,7 @@ pub fn run_terminal(
     here: &Place,
     out: &mut dyn Write,
 ) -> Result<i32, CliError> {
-    notices(options, out)?;
+    notices(options, paths, out)?;
     out.flush().map_err(|e| CliError::Failed(e.to_string()))?;
     let (mut app, mut runtime) = build(options, paths, here)?;
     let files = Files {
@@ -563,7 +582,7 @@ pub fn run_with(
     here: &Place,
     out: &mut dyn Write,
 ) -> Result<i32, CliError> {
-    notices(options, out)?;
+    notices(options, paths, out)?;
     let (mut app, mut runtime) = build(options, paths, here)?;
     Tui::new(tui_options(&app, options))
         .run(&mut app, &mut runtime, out)
@@ -619,6 +638,24 @@ mod tests {
         let text = String::from_utf8(out).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines[0], "Unknown theme: no-such. Galaxy is in use.");
+        // A theme file of the name in the config's themes folder is known.
+        std::fs::create_dir_all(paths.themes_dir()).unwrap();
+        std::fs::write(
+            paths.themes_dir().join("harbor.toml"),
+            "[theme]\nname = \"harbor\"\ninherits = \"galaxy\"\n",
+        )
+        .unwrap();
+        let options = OpenOptions {
+            theme: Some("harbor".to_owned()),
+            ..options
+        };
+        let mut out = Vec::new();
+        run_with(&options, Some(&paths), &here, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            !text.contains("Unknown theme"),
+            "a theme file is known: {text:?}"
+        );
     }
 
     /// The inputs of a desktop start with nothing asked: Windows or macOS,
