@@ -25,7 +25,7 @@ Theme One Light, below AA: 8 checks fall short.
 - The text of a theme must reach 4.5 to 1 against its background. That is level AA. A part such as the focus ring must reach 3 to 1.
 - The two high-contrast themes, High Contrast and Contrast, are held to level AAA, which is 7 to 1. For them the words are "meets AAA".
 - A check is one pair of colors measured against its floor. "Below AA: 8 checks fall short" counts the pairs that miss.
-- In the window the line is said once. When you choose a theme in Settings, the verdict takes the place of the plain "Theme: nord" line, so you do not hear both. After Next theme, the verdict is said once.
+- In the window the line is said once, when you change the theme. Starting with a theme says nothing about it. When you choose a theme in Settings, the verdict takes the place of the plain "Theme: nord" line, so you do not hear both. After Next theme, the verdict is said once.
 - A theme that is below AA is followed in the window by how many parts of the screen use the text color instead of their own: "In the window, 19 roles use the text color." With one part it says "1 role uses".
 
 ## The 24 themes
@@ -105,7 +105,7 @@ Windows' High Contrast, which its settings call Contrast themes, is the person's
 - The focused row, marked rows, search matches, the active title line and a dialog's default button use the system's highlight colors.
 - Links use the system's link color. The key bar and dialogs use the button colors. Hidden and unavailable entries use the system's gray text color.
 - Every other part is plain text, and keeps its bold, underline or italic.
-- The window reads the setting at every step, so turning High Contrast on or off applies at once. It says "System high contrast colors in use." when the system's colors take over. When High Contrast is turned off, your theme comes back.
+- The window reads the setting at every step, so turning High Contrast on or off applies at once. When the system's colors take over while the window is open, it says "System high contrast colors in use." At the start it says nothing about the colors. When High Contrast is turned off, your theme comes back.
 - The window honors the system's colors as they are, even where one pair is a little under 7 to 1. Windows' Desert is one: its highlight is 6.9 to 1.
 
 On Linux and macOS the system's high contrast setting is read once, when the window starts. It chooses the High Contrast theme, unless you have chosen another theme in that session.

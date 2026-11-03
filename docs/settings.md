@@ -71,7 +71,7 @@ Names are in code type. Defaults are in parentheses.
 - Cursor fallback (`cursor_fallback`, off): parks the cursor on the status line instead of the row, for a screen reader that follows it better there.
 - Compact (`compact`, off): hides the key bar and the title line in a terminal, and keeps the status and jobs lines.
 - Editor (`editor`, empty): the program F4 starts, a name on the path or a full path with no arguments. If it is empty, diroxide tries VISUAL, then EDITOR, then the system's text editor.
-- Password echo (`secret_echo`, asterisks) and Passwords shown (`secret_show_toggle`, off): what the masked password prompt shows for each key, which archives use. `silent` shows nothing. A password is never read back, logged or kept after the job.
+- Password echo (`secret_echo`, asterisks) and Passwords shown (`secret_show_toggle`, off): what the masked password prompt shows for each key, which archives use. `silent` shows nothing. A password is never read back, logged or kept after the job. In the window, Passwords shown sets whether the "Show the password" check box starts on.
 - Code colors (`highlighting`): `auto` (default) colors code in the viewer except in screen-reader mode, `on` colors it always, and `off` never does. The code commands that say each word's kind work whichever you choose. [The viewer](viewer.md) describes them.
 
 How long it waits before it says "stalled" (20 seconds), and whether a copy keeps dates or checks a move, are built into the job engine. They are not settings. The tries on a lost network and the queue are, below.
