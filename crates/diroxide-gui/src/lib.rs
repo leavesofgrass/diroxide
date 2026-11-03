@@ -38,6 +38,28 @@
 //! - [`menus`]: the app's menu model as a native Windows menu bar, hidden
 //!   until a menu key shows it; elsewhere the app's list menus.
 //!
+//! The dialogs lane (G2) put the app's dialogs and the rest of its screens
+//! in the window:
+//!
+//! - every dialog shape in the modal host: a confirmation as two real
+//!   buttons, No focused, with its listing and count; a question named by
+//!   its first line with the rest as its description; lists with letters,
+//!   help and clicks; a text to read line by line; a secret with its Show
+//!   toggle; fields with completion as combo boxes, an input method
+//!   session for every field but a password's, and paste. The window
+//!   moves its own focus where the app models none
+//!   ([`model::LocalFocus`]), and a dialog is said once: by itself as the
+//!   focus moves into it, not again by the live region.
+//! - `widgets`: buttons and toggles that take the focus (`push`), the job
+//!   in front's progress (`progress`), the viewer's list of the rows on
+//!   screen (`viewer`) in the panels' place (`screen`), and the quick
+//!   view's region in the other panel.
+//! - copied text on the system clipboard, and [`spawn`]: the shell, a
+//!   command line and the editor started in windows of their own, never
+//!   waited for (decision 8).
+//! - winit's helper window named, so a screen reader never meets a
+//!   nameless pane.
+//!
 //! On Windows `diro` stays a console program, so a shell waits for it and
 //! the terminal frontend keeps its console; [`console`] lets go of a
 //! console that only the window's start opened (a double-click in
