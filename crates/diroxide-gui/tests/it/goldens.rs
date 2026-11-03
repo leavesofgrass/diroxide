@@ -32,10 +32,12 @@ pub fn dump(rig: &Rig, dir: &Path) -> String {
     let path = dir.display().to_string();
     let leaf = dir.file_name().unwrap().to_string_lossy().into_owned();
     let parent = dir.parent().unwrap().display().to_string();
+    // The folder's separator differs by system too: written as a slash.
     let clean = |text: String| {
         text.replace(&path, "<dir>")
             .replace(&parent, "<tmp>")
             .replace(&leaf, "<dir>")
+            .replace(std::path::MAIN_SEPARATOR, "/")
     };
     let mut lines = Vec::new();
     let mut stack = vec![(state.root(), 0usize)];
@@ -135,6 +137,19 @@ fn spike_s2_a_forty_row_panel_dumps_to_its_golden() {
     let text = dump(&rig, dir.path());
     assert!(text.contains("ListBoxOption \"file-000004.txt"), "{text}");
     check("forty-rows", &text);
+}
+
+#[test]
+fn a_confirmation_dumps_to_its_golden() {
+    let dir = fixture(&["notes.txt"], &["Backup"]);
+    let (app, runtime) = app_on(dir.path(), &dir.path().join("Backup"));
+    let mut rig = Rig::new(app, runtime);
+    assert!(rig.f.app_mut().focus_name(Side::Left, "notes.txt"));
+    rig.refresh();
+    rig.press("f5");
+    let text = dump(&rig, dir.path());
+    assert!(text.contains("Button \"No\" FOCUS"), "{text}");
+    check("copy-confirmation", &text);
 }
 
 #[test]

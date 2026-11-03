@@ -155,7 +155,7 @@ fn the_owners_ten_minutes_in_the_window() {
     heard
         .lines
         .push(first_cells(&question, BRAILLE_CELLS).to_owned());
-    heard.focus(&rig, "No, the default");
+    heard.focus(&rig, "No");
     rig.press("y");
     at = heard.said(&rig, at, "Copy finished: 3 done");
     assert!(dialog(&rig).is_none());

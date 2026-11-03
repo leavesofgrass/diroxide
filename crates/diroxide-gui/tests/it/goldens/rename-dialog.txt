@@ -3,7 +3,6 @@ Window "synthetic - diroxide"
     GenericContainer ""
       GenericContainer ""
         Label "<dir>, no items, in <tmp>" live=polite
-        Label "Rename file-000001.txt to: file-000001.txt" live=polite
       Dialog "Rename file-000001.txt to"
         GenericContainer ""
         TextInput "Rename file-000001.txt to" value="file-000001.txt" caret=11 FOCUS

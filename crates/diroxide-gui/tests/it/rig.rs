@@ -15,7 +15,7 @@ use diroxide_core::{Key, Message, Place, Side};
 use diroxide_gui::frontend::{self, Frontend, Host};
 use diroxide_gui::keys;
 use diroxide_gui::widgets::root::Root;
-use masonry::accesskit::{Live, Role};
+use masonry::accesskit::{Action, ActionRequest, Live, NodeId, Role, TreeId};
 use masonry::core::{FromDynWidget, TextEvent, Widget, WidgetId, WidgetMut, WidgetTag};
 use masonry_testing::TestHarness;
 
@@ -221,6 +221,190 @@ impl Rig {
         self.f.said()
     }
 
+    /// What the live region announced since the start, in order: what a
+    /// screen reader was told, beside what the focus says.
+    pub fn spoken(&self) -> Vec<String> {
+        self.f.spoken().iter().map(|m| m.text.clone()).collect()
+    }
+
+    /// Puts the app's state on the widgets after a test changed it
+    /// directly (a focus by name), and draws the tree again.
+    pub fn refresh(&mut self) {
+        self.f.refresh(&mut HostOf(&mut self.h));
+        self.redraw();
+    }
+
+    /// The open dialog's name in the tree, if a dialog is shown.
+    pub fn dialog_name(&self) -> Option<String> {
+        self.walk()
+            .into_iter()
+            .find(|(role, _)| *role == Role::Dialog)
+            .map(|(_, name)| name)
+    }
+
+    /// The focused node's role, name, and keyboard shortcut (what a
+    /// screen reader says after the name when asked for keys).
+    pub fn focus_key(&self) -> (Role, String, Option<String>) {
+        let state = self.h.access_tree().state();
+        let focused = state.focus_in_tree();
+        let node = focused.active_descendant().unwrap_or(focused);
+        let key = node.data().keyboard_shortcut().map(str::to_owned);
+        (node.role(), name_of(&node), key)
+    }
+
+    /// The open dialog's description (read after its name), if any.
+    pub fn dialog_description(&self) -> Option<String> {
+        let state = self.h.access_tree().state();
+        let mut stack = vec![state.root()];
+        while let Some(node) = stack.pop() {
+            if node.role() == Role::Dialog {
+                return node.data().description().map(str::to_owned);
+            }
+            stack.extend(node.children());
+        }
+        None
+    }
+
+    /// The list box that holds the focused option, by name, with its
+    /// real size.
+    pub fn focus_list(&self) -> Option<(String, usize)> {
+        let state = self.h.access_tree().state();
+        let focused = state.focus_in_tree();
+        let list = if focused.role() == Role::ListBox {
+            focused
+        } else {
+            focused.parent()?
+        };
+        Some((name_of(&list), list.size_of_set().unwrap_or(0)))
+    }
+
+    /// The open dialog's nodes, depth first, each with its role and name.
+    pub fn dialog_walk(&self) -> Vec<(Role, String)> {
+        let state = self.h.access_tree().state();
+        let mut stack = vec![state.root()];
+        let mut dialog = None;
+        while let Some(node) = stack.pop() {
+            if node.role() == Role::Dialog {
+                dialog = Some(node);
+                break;
+            }
+            stack.extend(node.children());
+        }
+        let mut found = Vec::new();
+        let mut stack: Vec<_> = dialog.into_iter().collect();
+        while let Some(node) = stack.pop() {
+            found.push((node.role(), name_of(&node)));
+            let mut children: Vec<_> = node.children().collect();
+            children.reverse();
+            stack.extend(children);
+        }
+        found
+    }
+
+    /// The names of the dialog's buttons and toggles, in order.
+    pub fn dialog_buttons(&self) -> Vec<(Role, String)> {
+        self.dialog_walk()
+            .into_iter()
+            .filter(|(role, _)| matches!(role, Role::Button | Role::CheckBox))
+            .collect()
+    }
+
+    /// The node with `role` whose name starts with `name`, inside the open
+    /// dialog when one is shown (the window behind it is hidden), else
+    /// anywhere.
+    pub fn find(&self, role: Role, name: &str) -> Option<NodeId> {
+        let state = self.h.access_tree().state();
+        let mut stack = vec![state.root()];
+        let mut found = None;
+        while let Some(node) = stack.pop() {
+            if node.is_hidden() {
+                continue;
+            }
+            if node.role() == role && name_of(&node).starts_with(name) {
+                found = Some(node.locate().0);
+                break;
+            }
+            let mut children: Vec<_> = node.children().collect();
+            children.reverse();
+            stack.extend(children);
+        }
+        found
+    }
+
+    /// A screen reader's action on the node with `role` and a name that
+    /// starts with `name` (Click, Focus).
+    pub fn act(&mut self, action: Action, role: Role, name: &str) {
+        let node = self
+            .find(role, name)
+            .unwrap_or_else(|| panic!("no {role:?} named {name:?} in {:?}", self.walk()));
+        self.h.process_access_event(ActionRequest {
+            action,
+            target_tree: TreeId::ROOT,
+            target_node: node,
+            data: None,
+        });
+        self.settle();
+    }
+
+    /// A mouse click (`count` 2 for a double click) on the middle of the
+    /// node with `role` and a name that starts with `name`.
+    pub fn click(&mut self, role: Role, name: &str, count: u8) {
+        let at = {
+            let state = self.h.access_tree().state();
+            let mut stack = vec![state.root()];
+            let mut at = None;
+            while let Some(node) = stack.pop() {
+                if node.role() == role && name_of(&node).starts_with(name) && !node.is_hidden() {
+                    at = node.bounding_box().map(|b| {
+                        masonry::kurbo::Point::new((b.x0 + b.x1) / 2.0, (b.y0 + b.y1) / 2.0)
+                    });
+                }
+                if !node.is_hidden() {
+                    stack.extend(node.children());
+                }
+            }
+            at.unwrap_or_else(|| panic!("no {role:?} named {name:?} with bounds"))
+        };
+        self.press_at(masonry::kurbo::Point::new(at.x, at.y), count);
+    }
+
+    /// A mouse press and release at a window point.
+    pub fn press_at(&mut self, at: masonry::kurbo::Point, count: u8) {
+        use masonry::core::{PointerButton, PointerButtonEvent, PointerEvent, PointerState};
+        use masonry::dpi::PhysicalPosition;
+        self.h.mouse_move(at);
+        let state = PointerState {
+            position: PhysicalPosition::new(at.x, at.y),
+            count,
+            ..PointerState::default()
+        };
+        let _ = self
+            .h
+            .process_pointer_event(PointerEvent::Down(PointerButtonEvent {
+                pointer: masonry_testing::PRIMARY_MOUSE,
+                button: Some(PointerButton::Primary),
+                state: state.clone(),
+            }));
+        let _ = self
+            .h
+            .process_pointer_event(PointerEvent::Up(PointerButtonEvent {
+                pointer: masonry_testing::PRIMARY_MOUSE,
+                button: Some(PointerButton::Primary),
+                state,
+            }));
+        self.settle();
+    }
+
+    /// Presses a key as a held key's repeat: the window drops it unless a
+    /// repeat means something there (the arrows, typing in a field).
+    pub fn press_repeat(&mut self, key: &str) {
+        let key = Key::parse(key).unwrap_or_else(|e| panic!("{key}: {e}"));
+        let mut event = keys::press(&key, Platform::current());
+        event.repeat = true;
+        let _ = self.h.process_text_event(TextEvent::Keyboard(event));
+        self.settle();
+    }
+
     /// The active panel's side.
     pub fn active(&self) -> Side {
         self.f.app().active_side()
@@ -247,6 +431,12 @@ pub fn name_of(node: &accesskit_consumer::NodeRef<'_>) -> String {
 /// state folder, the local disk, and no settle time on a dialog (the
 /// scripted keys come faster than a held key could).
 pub fn app_on(left: &Path, right: &Path) -> (App, Runtime) {
+    app_with(left, right, |_| {})
+}
+
+/// The same app, with `change` made to its options first (a clock, a
+/// settle time, a state folder).
+pub fn app_with(left: &Path, right: &Path, change: impl FnOnce(&mut AppOptions)) -> (App, Runtime) {
     let left = Place::parse(left.to_str().unwrap()).unwrap();
     let right = Place::parse(right.to_str().unwrap()).unwrap();
     let mut options = AppOptions::new(left, right);
@@ -255,6 +445,7 @@ pub fn app_on(left: &Path, right: &Path) -> (App, Runtime) {
     // the window.
     options.keymap = diroxide_app::Keymap::defaults_for(diroxide_core::KeyColumn::Gui)
         .for_platform(Platform::current());
+    change(&mut options);
     let app = App::new(options);
     (app, Runtime::with_local())
 }

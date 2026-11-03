@@ -7,9 +7,9 @@
 //! filled bar in the active panel and an outline in the other, and the
 //! focused panel has a ring.
 
-use masonry::core::{BrushIndex, LayoutCtx, StyleProperty};
-use masonry::parley::Layout;
+use masonry::core::{BrushIndex, LayoutCtx, MeasureCtx, StyleProperty};
 use masonry::parley::style::{FontFamily, FontWeight, LineHeight};
+use masonry::parley::{FontContext, Layout, LayoutContext};
 use masonry::peniko::Color;
 
 /// The interface font: Atkinson Hyperlegible Next (compiled in), then
@@ -47,6 +47,28 @@ pub fn line_layout(
     bold: bool,
 ) -> Layout<BrushIndex> {
     let (fcx, lcx) = ctx.text_contexts();
+    layout_with(fcx, lcx, text, size, bold)
+}
+
+/// The same as [`line_layout`] while measuring, so a widget can size
+/// itself to its text.
+pub fn measured_layout(
+    ctx: &mut MeasureCtx<'_>,
+    text: &str,
+    size: f32,
+    bold: bool,
+) -> Layout<BrushIndex> {
+    let (fcx, lcx) = ctx.text_contexts();
+    layout_with(fcx, lcx, text, size, bold)
+}
+
+fn layout_with(
+    fcx: &mut FontContext,
+    lcx: &mut LayoutContext<BrushIndex>,
+    text: &str,
+    size: f32,
+    bold: bool,
+) -> Layout<BrushIndex> {
     let mut builder = lcx.ranged_builder(fcx, text, 1.0, true);
     builder.push_default(StyleProperty::FontFamily(FontFamily::Source(
         FONT_STACK.into(),

@@ -1,0 +1,13 @@
+Window "<dir> - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        Label "<dir>, 2 items, in <tmp>" live=polite
+      Dialog "Copy 1 item to Backup, 8 bytes? No is the default. y or n"
+        GenericContainer ""
+        ListBox "Listing, 3 lines"
+          ListBoxOption "Copy 1 item to <dir>/Backup, 8 bytes" 1 of 3
+          ListBoxOption "In <dir>, 1 item" 2 of 3
+          ListBoxOption "copy <dir>/notes.txt to <dir>/Backup/notes.txt" 3 of 3
+        Button "No" FOCUS
+        Button "Yes"

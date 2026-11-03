@@ -5,6 +5,11 @@
 //! active descendant, the clip flag cleared, a window of rows as nodes.
 //! The keys are the app's, through the window's root.
 //!
+//! A click on a row, or a screen reader's Focus or Click on an option,
+//! tells the driver the row ([`ChoiceAction::Row`]), which moves the
+//! list's focus there (the app's, or the window's own for a text to read);
+//! a double click chooses the row, as Enter does.
+//!
 //! Adapted from textweaver's `crates/textweaver-xilem/src/dialog.rs`,
 //! `ChoiceList` (the owner's own project).
 
@@ -12,8 +17,9 @@ use std::collections::HashMap;
 
 use masonry::accesskit::{Action, Node, NodeId, Rect as NodeRect, Role};
 use masonry::core::{
-    AccessCtx, BrushIndex, ChildrenIds, LayoutCtx, MeasureCtx, NoAction, PaintCtx, PropertiesMut,
-    PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget, WidgetMut, render_text,
+    AccessCtx, AccessEvent, BrushIndex, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, PaintCtx,
+    PointerButtonEvent, PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, Update, UpdateCtx,
+    Widget, WidgetMut, render_text,
 };
 use masonry::imaging::Painter;
 use masonry::kurbo::{Affine, Axis, Rect, Size, Stroke, Vec2};
@@ -27,6 +33,23 @@ const ROW_HEIGHT: f64 = 28.0;
 const PAD: f64 = 8.0;
 /// The most rows a dialog's list asks room for.
 const MAX_ROWS: usize = 12;
+
+/// What a dialog's list tells the driver.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChoiceAction {
+    /// The list took the keyboard focus another way than the driver's (a
+    /// click, a screen reader's Focus): the dialog's focus follows.
+    Focused,
+    /// A click or a screen reader's action on the row at this index,
+    /// counted from the list's start; `open` for a double click, which
+    /// chooses it.
+    Row {
+        /// The row.
+        index: usize,
+        /// Whether to choose it, as Enter does.
+        open: bool,
+    },
+}
 
 /// A dialog's list box.
 pub struct ChoiceBox {
@@ -78,10 +101,30 @@ impl ChoiceBox {
             .entry(row.to_owned())
             .or_insert_with(AccessCtx::next_node_id)
     }
+
+    /// The row drawn at `y`, from the list's start.
+    fn row_at(&self, y: f64) -> Option<usize> {
+        if y < 0.0 {
+            return None;
+        }
+        let index = self.top + (y / ROW_HEIGHT) as usize;
+        (index < self.view.total).then_some(index)
+    }
+
+    /// The row whose option node is `node`, from the list's start.
+    fn row_of_node(&self, node: NodeId) -> Option<usize> {
+        let id = self
+            .ids
+            .iter()
+            .find(|(_, n)| **n == node)
+            .map(|(id, _)| id.as_str())?;
+        let offset = self.view.rows.iter().position(|row| row.id == id)?;
+        Some(self.view.first + offset)
+    }
 }
 
 impl Widget for ChoiceBox {
-    type Action = NoAction;
+    type Action = ChoiceAction;
 
     fn accepts_focus(&self) -> bool {
         true
@@ -92,8 +135,47 @@ impl Widget for ChoiceBox {
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
         if let Update::FocusChanged(focused) = event {
             self.focused = *focused;
+            if *focused {
+                ctx.submit_action::<ChoiceAction>(ChoiceAction::Focused);
+            }
             ctx.request_render();
         }
+    }
+
+    fn on_pointer_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &PointerEvent,
+    ) {
+        if let PointerEvent::Down(PointerButtonEvent { state, .. }) = event {
+            ctx.request_focus();
+            let local = ctx.local_position(state.position);
+            if let Some(index) = self.row_at(local.y) {
+                let open = state.count >= 2 && self.view.focus == Some(index);
+                ctx.submit_action::<ChoiceAction>(ChoiceAction::Row { index, open });
+            }
+            ctx.set_handled();
+        }
+    }
+
+    fn on_access_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &AccessEvent,
+    ) {
+        if !matches!(
+            event.action,
+            Action::Focus | Action::Click | Action::ScrollIntoView
+        ) {
+            return;
+        }
+        ctx.request_focus();
+        if let Some(index) = event.node.and_then(|node| self.row_of_node(node)) {
+            ctx.submit_action::<ChoiceAction>(ChoiceAction::Row { index, open: false });
+        }
+        ctx.set_handled();
     }
 
     fn measure(
@@ -212,6 +294,7 @@ impl Widget for ChoiceBox {
             }
             option.set_position_in_set(index);
             option.add_action(Action::Focus);
+            option.add_action(Action::Click);
             option.add_action(Action::ScrollIntoView);
             let y = (index as f64 - self.top as f64) * ROW_HEIGHT;
             option.set_bounds(NodeRect::new(0.0, y, self.width, y + ROW_HEIGHT));

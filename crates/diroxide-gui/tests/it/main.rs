@@ -2,6 +2,8 @@
 //! program links Masonry, Vello and wgpu again, so new tests are modules of
 //! this one, as in textweaver's `tests/it`).
 
+#[cfg(feature = "gui")]
+mod confirm;
 mod contract;
 #[cfg(feature = "gui")]
 mod dialogs;

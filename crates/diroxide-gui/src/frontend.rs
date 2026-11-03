@@ -34,8 +34,10 @@ use masonry::widgets::{Flex, Label};
 use crate::model::{self, Lines, PanelView};
 use crate::widgets::announcer::Announcer;
 use crate::widgets::buttons::{ButtonPressed, ButtonRow};
+use crate::widgets::choice::ChoiceAction;
 use crate::widgets::panel::{PanelAction, PanelBox};
 use crate::widgets::panels::Panels;
+use crate::widgets::push::PushAction;
 use crate::widgets::root::{Region, Root, RootAction};
 
 /// The title line's text: the active place first.
@@ -156,9 +158,15 @@ pub struct Frontend {
     top: [usize; 2],
     shown: Shown,
     /// Messages for the live region, said on the next refresh.
-    to_say: Vec<(Message, bool)>,
+    to_say: Vec<Said>,
     /// Every message the app announced, in order (the tests read it).
     said: Vec<Message>,
+    /// Every announcement the live region made, in order: what a screen
+    /// reader was told (the tests read it).
+    spoken: Vec<Message>,
+    /// The window's own focus in the open dialog: a confirmation's
+    /// buttons and listing, a text's lines, a secret's toggle.
+    local: model::LocalFocus,
     /// Text the app put on the clipboard (the platform clipboard is G2's
     /// commit 25; until then the texts are kept here).
     clipboard: Vec<String>,
@@ -173,6 +181,18 @@ pub struct Frontend {
     menu_bar: bool,
     /// What the menu keys asked of the native bar, for the window.
     menu_requests: Vec<MenuEnter>,
+}
+
+/// A message waiting for the live region.
+#[derive(Clone, Debug)]
+struct Said {
+    message: Message,
+    /// A job's start line, dropped when a later line comes in the same
+    /// step.
+    start: bool,
+    /// The line the app said as it opened a dialog: left unsaid when the
+    /// dialog says the same by itself as the focus moves into it.
+    opening: bool,
 }
 
 /// How a key enters the native menu bar.
@@ -201,6 +221,8 @@ impl Frontend {
             shown: Shown::default(),
             to_say: Vec::new(),
             said: Vec::new(),
+            spoken: Vec::new(),
+            local: model::LocalFocus::default(),
             clipboard: Vec::new(),
             quit: false,
             key_test_since: None,
@@ -244,6 +266,18 @@ impl Frontend {
     /// Everything the app announced so far, in order.
     pub fn said(&self) -> &[Message] {
         &self.said
+    }
+
+    /// Everything the live region announced so far, in order: the app's
+    /// lines of each step joined, Low lines and a dialog's opening line
+    /// left out where the dialog says it by itself.
+    pub fn spoken(&self) -> &[Message] {
+        &self.spoken
+    }
+
+    /// The window's own focus in the open dialog.
+    pub fn local_focus(&self) -> model::LocalFocus {
+        self.local
     }
 
     /// The texts the app put on the clipboard.
@@ -307,7 +341,7 @@ impl Frontend {
         // The start's lines, said before the window existed, wait in the
         // live region for a screen reader to ask for the tree, as one
         // announcement in their order.
-        let held = model::join_messages(&std::mem::take(&mut self.to_say));
+        let held = self.take_to_say(None);
         let announcer =
             NewWidget::new(Announcer::new(std::rc::Rc::clone(&full_passes)).with_pending(held))
                 .with_tag(ANNOUNCER);
@@ -354,10 +388,132 @@ impl Frontend {
             self.menu_requests.push(enter);
             return;
         }
+        if !self.app.key_test_active() && self.local_key(&key) {
+            // The window moved its own focus in the dialog, or answered
+            // for the focused button.
+            self.after(now);
+            self.refresh(host);
+            return;
+        }
         let effects = self.app.handle(AppEvent::Key(key));
         self.carry(effects);
         self.after(now);
         self.refresh(host);
+    }
+
+    /// The window's own focus, started again when the top dialog is
+    /// another one.
+    fn sync_local(&mut self) {
+        match self.app.dialog() {
+            Some((id, dialog)) if self.local.dialog != Some(id) => {
+                self.local = model::LocalFocus::start(id, dialog);
+            }
+            Some(_) => {}
+            None => self.local = model::LocalFocus::default(),
+        }
+    }
+
+    /// A key the window handles in a dialog by itself, since the app does
+    /// not model what it moves: Tab and the arrows between a
+    /// confirmation's buttons and listing, the arrows through a text's
+    /// lines or the listing, and Enter or Space on a button, which
+    /// answers as that button's key does (the app's settle time still
+    /// holds for Yes). True when the key was the window's.
+    fn local_key(&mut self, key: &Key) -> bool {
+        self.sync_local();
+        let Some(view) = model::dialog_view_at(&self.app, &self.local) else {
+            return false;
+        };
+        let shift_only = key.mods == Modifiers::SHIFT;
+        let plain = key.mods.is_empty();
+        if key.code == KeyCode::Tab && (plain || shift_only) {
+            let order = view.tab_order();
+            if order.len() < 2 {
+                return false;
+            }
+            let at = order.iter().position(|f| *f == view.focus).unwrap_or(0);
+            let next = if shift_only {
+                (at + order.len() - 1) % order.len()
+            } else {
+                (at + 1) % order.len()
+            };
+            self.local.on = order[next];
+            return true;
+        }
+        if !plain {
+            return false;
+        }
+        match view.focus {
+            model::DialogFocus::No | model::DialogFocus::Yes => match key.code {
+                KeyCode::Left | KeyCode::Up => {
+                    self.local.on = model::DialogFocus::No;
+                    true
+                }
+                KeyCode::Right | KeyCode::Down => {
+                    self.local.on = model::DialogFocus::Yes;
+                    true
+                }
+                KeyCode::Enter | KeyCode::Char(' ') => {
+                    self.press(view.focus);
+                    true
+                }
+                _ => false,
+            },
+            model::DialogFocus::Show => match key.code {
+                KeyCode::Char(' ') => {
+                    self.press(model::DialogFocus::Show);
+                    true
+                }
+                // Anything typed goes to the field, with the focus.
+                _ => {
+                    if key.typed_char().is_some()
+                        || matches!(key.code, KeyCode::Backspace | KeyCode::Delete)
+                    {
+                        self.local.on = model::DialogFocus::Control;
+                    }
+                    false
+                }
+            },
+            model::DialogFocus::Listing | model::DialogFocus::Control if view.local_list => {
+                let total = match &view.control {
+                    model::ControlView::List(list) => list.total,
+                    model::ControlView::Confirm(confirm) => {
+                        confirm.listing.as_ref().map_or(0, |l| l.total)
+                    }
+                    model::ControlView::Field(_) => 0,
+                };
+                let page = model::DIALOG_PAGE.saturating_sub(1).max(1);
+                let last = total.saturating_sub(1);
+                let line = self.local.line.min(last);
+                let to = match key.code {
+                    KeyCode::Up => line.saturating_sub(1),
+                    KeyCode::Down => (line + 1).min(last),
+                    KeyCode::PageUp => line.saturating_sub(page),
+                    KeyCode::PageDown => (line + page).min(last),
+                    KeyCode::Home => 0,
+                    KeyCode::End => last,
+                    _ => return false,
+                };
+                self.local.line = to;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Presses a dialog's button: No and Yes answer as their keys do
+    /// (through the app's commands, so Yes waits out the settle time);
+    /// Show turns the secret's toggle as its key does.
+    fn press(&mut self, button: model::DialogFocus) {
+        let effects = match button {
+            model::DialogFocus::No => self.app.handle(AppEvent::Command(Command::new(ids::NO))),
+            model::DialogFocus::Yes => self.app.handle(AppEvent::Command(Command::new(ids::YES))),
+            model::DialogFocus::Show => self
+                .app
+                .handle(AppEvent::Key(Key::new(KeyCode::Char('s'), Modifiers::ALT))),
+            model::DialogFocus::Control | model::DialogFocus::Listing => Vec::new(),
+        };
+        self.carry(effects);
     }
 
     /// Tells the driver whether the window has a native menu bar now, so
@@ -483,8 +639,144 @@ impl Frontend {
             }
             Err(other) => other,
         };
+        let action = match action.downcast::<PushAction>() {
+            Ok(push) => {
+                self.push_action(host, *push, now);
+                return;
+            }
+            Err(other) => other,
+        };
+        let action = match action.downcast::<ChoiceAction>() {
+            Ok(choice) => {
+                self.choice_action(host, *choice, now);
+                return;
+            }
+            Err(other) => other,
+        };
         if let Ok(pressed) = action.downcast::<ButtonPressed>() {
             self.button(host, *pressed, now);
+        }
+    }
+
+    /// A dialog's button was pressed (a click, a screen reader's Click),
+    /// or took the focus another way: the window's focus follows it.
+    fn push_action(&mut self, host: &mut impl Host, action: PushAction, now: Instant) {
+        self.sync_local();
+        if self.app.dialog().is_none() {
+            return;
+        }
+        match action {
+            PushAction::Focused(id) => {
+                if self.local.on != id {
+                    self.local.on = id;
+                    self.refresh(host);
+                }
+            }
+            PushAction::Pressed(id) => {
+                self.local.on = id;
+                self.press(id);
+                self.after(now);
+                self.refresh(host);
+            }
+        }
+    }
+
+    /// A dialog's list took the focus, or a row was clicked: the focus
+    /// moves there (the app's list focus, or the window's own line), and
+    /// a double click chooses the row as Enter does.
+    fn choice_action(&mut self, host: &mut impl Host, action: ChoiceAction, now: Instant) {
+        self.sync_local();
+        let Some(view) = model::dialog_view_at(&self.app, &self.local) else {
+            return;
+        };
+        let list_focus = match &view.control {
+            model::ControlView::Confirm(_) => model::DialogFocus::Listing,
+            _ => model::DialogFocus::Control,
+        };
+        match action {
+            ChoiceAction::Focused => {
+                if self.local.on != list_focus {
+                    self.local.on = list_focus;
+                    self.refresh(host);
+                }
+            }
+            ChoiceAction::Row { index, open } => {
+                self.local.on = list_focus;
+                if view.local_list {
+                    self.local.line = index;
+                } else {
+                    self.move_app_list(index);
+                }
+                if open {
+                    let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Enter)));
+                    self.carry(effects);
+                }
+                self.after(now);
+                self.refresh(host);
+            }
+        }
+    }
+
+    /// Moves the app's focus in the open dialog's list to the row at
+    /// `index`, through the list's own moves (the app has no command to
+    /// focus a row by its place; a contract request asks for one): into
+    /// a field's candidates first, then Home or End, whichever is nearer,
+    /// and Down or Up the rest of the way. The moves are Low lines,
+    /// shown only.
+    fn move_app_list(&mut self, index: usize) {
+        let focus_and_total = |app: &App| -> Option<(Option<usize>, usize, bool)> {
+            match app.dialog()?.1 {
+                Dialog::Choose { list, .. } => Some((list.focus_index(), list.len(), true)),
+                Dialog::Question { choices, .. } => {
+                    Some((choices.focus_index(), choices.len(), true))
+                }
+                Dialog::Edit {
+                    candidates: Some(list),
+                    in_list,
+                    ..
+                } => Some((list.focus_index(), list.len(), *in_list)),
+                _ => None,
+            }
+        };
+        let Some((_, total, in_list)) = focus_and_total(&self.app) else {
+            return;
+        };
+        if total == 0 {
+            return;
+        }
+        let index = index.min(total - 1);
+        if !in_list {
+            // Down from a field enters its candidates at their focus.
+            let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Down)));
+            self.carry(effects);
+        }
+        let Some((Some(at), _, _)) = focus_and_total(&self.app) else {
+            return;
+        };
+        if at == index {
+            return;
+        }
+        let (start, from) = if index < at.abs_diff(index) {
+            (Some(ids::LIST_HOME), 0)
+        } else if total - 1 - index < at.abs_diff(index) {
+            (Some(ids::LIST_END), total - 1)
+        } else {
+            (None, at)
+        };
+        if let Some(start) = start {
+            let effects = self.app.handle(AppEvent::Command(Command::new(start)));
+            self.carry(effects);
+        }
+        let step = if index > from {
+            ids::LIST_DOWN
+        } else {
+            ids::LIST_UP
+        };
+        for _ in 0..from.abs_diff(index) {
+            let effects = self
+                .app
+                .handle(AppEvent::Command(Command::new(step.clone())));
+            self.carry(effects);
         }
     }
 
@@ -695,14 +987,22 @@ impl Frontend {
     /// Carries out effects: the runtime's I/O, then the screen's.
     fn carry(&mut self, effects: Vec<Effect>) {
         let screen = self.runtime.carry_out(&mut self.app, effects);
+        // The app says a dialog's name as it opens it, in the effect after
+        // the opening.
+        let mut opened = false;
         for effect in screen {
             match effect {
+                Effect::OpenDialog(_) => opened = true,
                 Effect::Announce(message) => {
                     self.said.push(message.clone());
                     // A job's start line is the jobs line's too; a later
                     // line in the same step goes before it.
                     let start = message.text == self.app.jobs().line();
-                    self.to_say.push((message, start));
+                    self.to_say.push(Said {
+                        message,
+                        start,
+                        opening: std::mem::take(&mut opened),
+                    });
                 }
                 Effect::Quit => self.quit = true,
                 Effect::SetClipboardText(text) => self.clipboard.push(text),
@@ -715,6 +1015,25 @@ impl Frontend {
         if self.app.wants_quit() {
             self.quit = true;
         }
+    }
+
+    /// The waiting lines as the one announcement the live region makes
+    /// ([`model::join_messages`]), kept in [`Self::spoken`]. With a dialog
+    /// shown for the first time (`fresh`), the line the app said as it
+    /// opened it is left out when the dialog says the same by itself (its
+    /// name, then its focused control, as the focus moves into it), so
+    /// the screen reader hears it once: the settled double.
+    fn take_to_say(&mut self, fresh: Option<&model::DialogView>) -> Vec<Message> {
+        let lines: Vec<(Message, bool)> = std::mem::take(&mut self.to_say)
+            .into_iter()
+            .filter(|said| {
+                !(said.opening && fresh.is_some_and(|view| view.says(&said.message.text)))
+            })
+            .map(|said| (said.message, said.start))
+            .collect();
+        let joined = model::join_messages(&lines);
+        self.spoken.extend(joined.iter().cloned());
+        joined
     }
 
     /// Puts the app's state on the widgets where it changed, then the
@@ -774,7 +1093,25 @@ impl Frontend {
         }
         // The modal host: the top dialog, changed in place while it is the
         // same dialog in the same shape, built again otherwise.
-        let dialog = model::dialog_view(&self.app);
+        self.sync_local();
+        let dialog = model::dialog_view_at(&self.app, &self.local);
+        if let Some(view) = &dialog {
+            // The window's focus as the view settled it (a listing that
+            // is not there falls back to No).
+            self.local.on = view.focus;
+        }
+        // A dialog shown now that was not before says its name and its
+        // focused control as the focus moves into it.
+        let fresh: Option<model::DialogView> = dialog
+            .as_ref()
+            .filter(|view| {
+                self.shown
+                    .dialog
+                    .as_ref()
+                    .is_none_or(|shown| shown.id != view.id)
+            })
+            .cloned();
+        let say = self.take_to_say(fresh.as_ref());
         if dialog != self.shown.dialog {
             self.shown.dialog = dialog.clone();
             host.edit(ROOT, |mut root| Root::set_dialog(&mut root, dialog));
@@ -783,7 +1120,6 @@ impl Frontend {
         // their order, as the terminal's status line joins them; a screen
         // reader is not handed a burst of live nodes in an order of the
         // adapter's choosing.
-        let say = model::join_messages(&std::mem::take(&mut self.to_say));
         let holding = host.edit(ANNOUNCER, |mut a| {
             if !say.is_empty() {
                 Announcer::say(&mut a, say);
