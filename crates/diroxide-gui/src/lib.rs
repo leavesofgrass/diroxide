@@ -21,6 +21,23 @@
 //! says the GUI was left out of this build. [`panel_grid`] stays as the
 //! data both a list box and a grid are built from.
 //!
+//! The foundation lane (G1) put the app in the window:
+//!
+//! - `keys`: the window's key events as the keymap's keys (the GUI
+//!   column), with AltGr, the keypad, repeats and macOS's Option.
+//! - `frontend`: the loop one step at a time over any host of widgets
+//!   (the real window, or the tests' harness): keys to the app, effects
+//!   to the runtime, the app's timers, and a refresh that edits only what
+//!   changed and keeps the keyboard focus where the app has it.
+//! - [`model`]: what the window shows, as plain data: each panel's list
+//!   box with its window of rows, the three lines, the open dialog, the
+//!   key bar, and one announcement for each step's lines.
+//! - `widgets`: the panels' list boxes, the live region, the modal host
+//!   with its app-driven text field and lists, the key bar and the sort
+//!   buttons, the root that takes every key.
+//! - [`menus`]: the app's menu model as a native Windows menu bar, hidden
+//!   until a menu key shows it; elsewhere the app's list menus.
+//!
 //! On Windows `diro` stays a console program, so a shell waits for it and
 //! the terminal frontend keeps its console; [`console`] lets go of a
 //! console that only the window's start opened (a double-click in
