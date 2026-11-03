@@ -67,6 +67,7 @@ fn the_verdict_comes_first_then_one_row_a_change() {
     );
     let title = f.s.dialog_title().unwrap();
     assert!(title.chars().count() <= 40, "{title}");
+    assert_eq!(f.s.shown_bank(), "Compare", "the key bar's bank (A4)");
     let list = rows(&f.s);
     assert!(!list.is_empty());
     for row in &list {

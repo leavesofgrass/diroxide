@@ -1297,21 +1297,28 @@ impl App {
     /// terminal draws it on its last line in every mode (answer 49); see
     /// [`App::key_bar_within`] for a line of fixed width.
     pub fn key_bar(&self) -> String {
-        if self.viewing.is_some() {
-            return crate::menu::viewer_bank().key_bar(&self.keymap);
-        }
-        if self.in_preview() {
-            return crate::menu::preview_bank().key_bar(&self.keymap);
-        }
-        if self.results_shown() {
-            return crate::menu::results_bank().key_bar(&self.keymap);
-        }
-        if self.compare_shown() {
-            return crate::menu::compare_bank().key_bar(&self.keymap);
-        }
-        self.active_bank()
+        self.shown_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
+    }
+
+    /// The bank the key bar shows now, chosen in this one place for the
+    /// terminal's line, Say Key Bar and the GUI's toolbar (lane A4): the
+    /// viewer's while a file is viewed, the quick view's while it has the
+    /// focus, the search results', the comparison's, else the active bank
+    /// (Switch bank). `None` with no bank at all.
+    pub fn shown_bank(&self) -> Option<Bank> {
+        if self.viewing.is_some() {
+            Some(crate::menu::viewer_bank())
+        } else if self.in_preview() {
+            Some(crate::menu::preview_bank())
+        } else if self.results_shown() {
+            Some(crate::menu::results_bank())
+        } else if self.compare_shown() {
+            Some(crate::menu::compare_bank())
+        } else {
+            self.active_bank().cloned()
+        }
     }
 
     /// The key bar cut to `cells`, whole pairs only, the first first; the
@@ -1321,19 +1328,7 @@ impl App {
         if !self.settings.key_bar {
             return String::new();
         }
-        if self.viewing.is_some() {
-            return crate::menu::viewer_bank().key_bar_within(&self.keymap, cells);
-        }
-        if self.in_preview() {
-            return crate::menu::preview_bank().key_bar_within(&self.keymap, cells);
-        }
-        if self.results_shown() {
-            return crate::menu::results_bank().key_bar_within(&self.keymap, cells);
-        }
-        if self.compare_shown() {
-            return crate::menu::compare_bank().key_bar_within(&self.keymap, cells);
-        }
-        self.active_bank()
+        self.shown_bank()
             .map(|bank| bank.key_bar_within(&self.keymap, cells))
             .unwrap_or_default()
     }

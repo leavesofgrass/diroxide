@@ -606,13 +606,17 @@ fn details_context_menu_help_and_the_key_bar() {
         f.s.app.key_bar_within(40),
         "F2 Rename  F3 View  F4 Edit  F5 Copy"
     );
+    // The bank the GUI's toolbar takes is the one the key bar draws (A4).
+    assert_eq!(f.s.shown_bank(), "Function keys");
     assert_eq!(
         f.s.command(ids::SWITCH_BANK),
         ["Only one bank: Function keys."]
     );
     let said = f.s.key("f3");
     assert!(said[0].starts_with("report.pdf, in "), "{said:?}");
+    assert_eq!(f.s.shown_bank(), "Viewer");
     assert_eq!(f.s.key("escape"), ["Viewer closed: report.pdf"]);
+    assert_eq!(f.s.shown_bank(), "Function keys");
     // Manage plugins (W4d): the list opens, its empty line meaning first.
     assert_eq!(
         f.s.command(ids::PLUGINS),
