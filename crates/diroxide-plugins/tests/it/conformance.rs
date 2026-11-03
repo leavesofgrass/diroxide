@@ -4,8 +4,9 @@
 //! Python is on this computer). The report's text is golden.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
-use diroxide_plugins::conformance::{Group, Verdict, run, run_cli};
+use diroxide_plugins::conformance::{Group, Verdict, run, run_cli, run_with};
 
 const EXE: &str = env!("CARGO_BIN_EXE_diroxide-fake-plugin");
 
@@ -64,7 +65,7 @@ fn a_broken_plugin_fails_and_names_the_check() {
 #[test]
 fn a_silent_plugin_fails_at_the_start() {
     let root = tempfile::tempdir().unwrap();
-    let report = run(&fake(root.path(), "silent", ""));
+    let report = run_with(&fake(root.path(), "silent", ""), Duration::ZERO);
     assert_eq!(
         report.verdict(Group::Lifecycle),
         Some(&Verdict::Fail(vec![

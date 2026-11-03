@@ -14,9 +14,21 @@
 # not commit under memory pressure raises the same status. These tests
 # run one at a time, never beside each other, so the pressure stays low,
 # wherever the run happens. Every other test keeps nextest's parallelism.
+#
+# The conformance group: the host's conformance suite run against the
+# example plugins and the fake plugin, each run starting and stopping the
+# plugin's process many times over, with Python among them. On the
+# Windows CI runner (Monday, November 2, 2026) a Python plugin's start
+# outran the manifest's ten-second startup timeout while other tests ran
+# beside it. These runs go one at a time too.
 [test-groups]
 heavy = { max-threads = 1 }
+conformance = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'package(diroxide-preview) & (test(five_megabyte) | test(nested_list) | test(three_thousand_deep) | test(hundred_kilobytes) | test(any_text_reads_into_rows))'
 test-group = 'heavy'
+
+[[profile.default.overrides]]
+filter = 'test(conformance)'
+test-group = 'conformance'

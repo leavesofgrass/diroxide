@@ -50,6 +50,13 @@ use crate::transport::PluginTransport;
 /// How long the suite waits for an answer.
 pub const ANSWER_WAIT: Duration = Duration::from_secs(10);
 
+/// The least the suite allows a plugin to start, whatever its manifest's
+/// `startup_timeout` says: the machine running the suite may be busy (a
+/// CI runner starting a Python plugin beside other tests once took longer
+/// than the default's ten seconds), and the suite checks the plugin, not
+/// the machine. The host itself keeps the manifest's timeout.
+pub const STARTUP_FLOOR: Duration = Duration::from_secs(30);
+
 /// How long it listens for what must not come (an answer to a
 /// notification).
 pub const QUIET_WAIT: Duration = Duration::from_millis(300);
@@ -446,6 +453,13 @@ fn context(manifest: &Manifest, command: &str, folder: &Place, selection: Vec<Wi
 
 /// Runs the suite on the plugin in `folder`.
 pub fn run(folder: &Path) -> Report {
+    run_with(folder, STARTUP_FLOOR)
+}
+
+/// The suite with its own least startup allowance: the suite's tests of a
+/// plugin that never answers pass zero, so the manifest's timeout alone
+/// counts; `run` passes [`STARTUP_FLOOR`].
+pub fn run_with(folder: &Path, startup_floor: Duration) -> Report {
     let label = folder
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -509,7 +523,7 @@ pub fn run(folder: &Path) -> Report {
         folder: folder.to_path_buf(),
         enabled: true,
     };
-    let groups = drive(&info, scratch.path());
+    let groups = drive(&info, scratch.path(), startup_floor);
     report.groups.extend(groups);
     report
 }
@@ -562,9 +576,14 @@ fn params(value: Value) -> Params {
 }
 
 /// Plays every group against fresh processes of the plugin.
-fn drive(info: &PluginInfo, state: &Path) -> Vec<(Group, Verdict)> {
+fn drive(info: &PluginInfo, state: &Path, startup_floor: Duration) -> Vec<(Group, Verdict)> {
     let manifest = &info.manifest;
-    let startup = manifest.run.clone().unwrap_or_default().startup_timeout;
+    let startup = manifest
+        .run
+        .clone()
+        .unwrap_or_default()
+        .startup_timeout
+        .max(startup_floor);
     let mut out = Vec::new();
     let transport = match start(info, state) {
         Ok(transport) => transport,
