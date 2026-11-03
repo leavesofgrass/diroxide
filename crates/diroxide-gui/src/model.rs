@@ -773,6 +773,149 @@ impl ButtonView {
     }
 }
 
+/// The theme role a token class is drawn with (the theme's token roles,
+/// ADR-0007's status update of October 17), or `None` for plain text. As
+/// the terminal maps them (`crates/diroxide-tui/src/viewer.rs`,
+/// `class_role`).
+pub fn class_role(
+    class: diroxide_app::viewer::TokenClass,
+) -> Option<diroxide_app::settings::PanelRole> {
+    use diroxide_app::settings::PanelRole as R;
+    use diroxide_app::viewer::TokenClass as C;
+    Some(match class {
+        C::Plain => return None,
+        C::Keyword => R::TokenKeyword,
+        C::String => R::TokenString,
+        C::Comment => R::TokenComment,
+        C::Number => R::TokenNumber,
+        C::Constant => R::TokenConstant,
+        C::FunctionName => R::TokenFunction,
+        C::TypeName => R::TokenType,
+        C::Variable => R::TokenVariable,
+        C::Operator => R::TokenOperator,
+        C::Punctuation => R::TokenPunctuation,
+        C::Heading => R::TokenHeading,
+        C::Link => R::TokenLink,
+        C::Emphasis => R::TokenEmphasis,
+        C::Code => R::TokenCode,
+        C::Tag => R::TokenTag,
+        C::Attribute => R::TokenAttribute,
+        C::Problem => R::TokenProblem,
+        _ => return None,
+    })
+}
+
+/// One row of the viewer, as an option of its list box.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewerRowView {
+    /// The row's place, kept while it stays drawn: "LINE:PART".
+    pub id: String,
+    /// The text as drawn: the line number when they are on, or
+    /// "continued: " on a continued part, then the text.
+    pub text: String,
+    /// The option's name: the text with hidden characters spelled out.
+    pub name: String,
+    /// The line, from 0.
+    pub line: u64,
+    /// The token runs, byte ranges of `text` with the theme role each is
+    /// drawn with (none when highlighting is off).
+    pub runs: Vec<(usize, usize, diroxide_app::settings::PanelRole)>,
+    /// The search's matches in `text`, drawn marked.
+    pub matches: Vec<(usize, usize)>,
+}
+
+/// The viewer as its list box shows it: the rows on screen, which is all
+/// a 100,000-line file gives the tree.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewerView {
+    /// The list box's name: "Viewer, report.txt" (", hex" in hex mode).
+    pub name: String,
+    /// Changes when another file or mode is shown, so the rows' node ids
+    /// start again.
+    pub generation: u64,
+    /// The rows on screen.
+    pub rows: Vec<ViewerRowView>,
+    /// The cursor's row in `rows`.
+    pub focus: Option<usize>,
+    /// The file's lines, as far as they are counted (the list's size).
+    pub lines: u64,
+}
+
+/// Whether the viewer draws token classes: the `highlighting` setting,
+/// automatic meaning colored except in screen-reader mode, as in the
+/// terminal (a screen reader hears classes through Say Token Kind and
+/// Say Line by Kind).
+pub fn colors_code(app: &App) -> bool {
+    use diroxide_app::viewer::HighlightSetting;
+    match app.settings().highlighting {
+        HighlightSetting::On => true,
+        HighlightSetting::Off => false,
+        HighlightSetting::Auto => !app.screen_reader(),
+    }
+}
+
+/// The viewer's rows for a list `columns` wide and `rows` high, after
+/// telling the viewer that size; `None` when no viewer is open.
+pub fn viewer_view(app: &mut App, columns: usize, rows: usize) -> Option<ViewerView> {
+    use diroxide_app::viewer::ViewerMode;
+    let colored = colors_code(app);
+    let viewer = app.viewer_mut()?;
+    viewer.set_size(columns.max(1), rows.max(1));
+    let hex = viewer.mode() == ViewerMode::Hex;
+    let name = if hex {
+        format!("Viewer, {}, hex", display_name(viewer.name()))
+    } else {
+        format!("Viewer, {}", display_name(viewer.name()))
+    };
+    let mut hasher = DefaultHasher::new();
+    viewer.place().to_string().hash(&mut hasher);
+    hex.hash(&mut hasher);
+    let generation = hasher.finish();
+    let shown = viewer.rows();
+    let mut out = Vec::with_capacity(shown.len());
+    let mut focus = None;
+    for (i, row) in shown.iter().enumerate() {
+        if row.focused {
+            focus = Some(i);
+        }
+        let runs = if colored && !hex {
+            viewer
+                .row_runs(row)
+                .iter()
+                .filter_map(|run| {
+                    class_role(run.class).map(|role| (run.start as usize, run.end as usize, role))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let matches = viewer
+            .match_ranges(&row.text)
+            .into_iter()
+            .map(|m| (m.start, m.end))
+            .collect();
+        out.push(ViewerRowView {
+            id: format!("{}:{}", row.pos.line, row.pos.part),
+            text: row.text.clone(),
+            name: display_name(&row.text).into_owned(),
+            line: row.pos.line,
+            runs,
+            matches,
+        });
+    }
+    let lines = viewer
+        .line_count()
+        .unwrap_or_else(|| viewer.lines_known())
+        .max(1);
+    Some(ViewerView {
+        name,
+        generation,
+        rows: out,
+        focus,
+        lines,
+    })
+}
+
 /// The key bar's name, as a toolbar.
 pub const KEY_BAR_NAME: &str = "Key bar";
 

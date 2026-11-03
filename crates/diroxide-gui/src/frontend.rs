@@ -41,6 +41,8 @@ use crate::widgets::panels::Panels;
 use crate::widgets::progress::JobProgressBar;
 use crate::widgets::push::PushAction;
 use crate::widgets::root::{Region, Root, RootAction};
+use crate::widgets::screen::Screen;
+use crate::widgets::viewer::{ViewerAction, ViewerBox};
 
 /// The title line's text: the active place first.
 pub const TITLE_LINE: WidgetTag<Label> = WidgetTag::named("diroxide-title-line");
@@ -59,6 +61,10 @@ pub const RIGHT_PANEL: WidgetTag<PanelBox> = WidgetTag::named("diroxide-right-pa
 pub const ANNOUNCER: WidgetTag<Announcer> = WidgetTag::named("diroxide-announcer");
 /// The root.
 pub const ROOT: WidgetTag<Root> = WidgetTag::named("diroxide-root");
+/// The panels, or the viewer in their place.
+pub const SCREEN: WidgetTag<Screen> = WidgetTag::named("diroxide-screen");
+/// The viewer's list box.
+pub const VIEWER: WidgetTag<ViewerBox> = WidgetTag::named("diroxide-viewer");
 /// The progress of the job in front.
 pub const JOB_PROGRESS: WidgetTag<JobProgressBar> = WidgetTag::named("diroxide-job-progress");
 
@@ -159,6 +165,12 @@ struct Shown {
     lines: Lines,
     panels: [Option<PanelView>; 2],
     arranged: Option<(diroxide_app::config::Layout, Side)>,
+    /// Whether the viewer is shown in the panels' place.
+    viewing: bool,
+    /// The viewer's rows as shown.
+    viewer: Option<model::ViewerView>,
+    /// The theme and the owner's colors the viewer draws with.
+    theme: Option<(String, std::collections::BTreeMap<String, String>)>,
     dialog: Option<model::DialogView>,
     key_bar: Vec<model::ButtonView>,
     sorting: Vec<model::ButtonView>,
@@ -198,6 +210,8 @@ pub struct Frontend {
     quick_tick_at: Option<Instant>,
     viewer_tick_at: Option<Instant>,
     hold_retry_at: Option<Instant>,
+    /// The viewer's columns and rows, as its list box last told them.
+    viewer_size: (usize, usize),
     /// Each running job's latest percent, from its progress.
     percents: HashMap<JobId, u64>,
     /// Every value the progress indicator was given, in order (the tests
@@ -261,6 +275,7 @@ impl Frontend {
             quick_tick_at: None,
             viewer_tick_at: None,
             hold_retry_at: None,
+            viewer_size: (80, 20),
             percents: HashMap::new(),
             progress_shown: Vec::new(),
             progress_reports: Vec::new(),
@@ -369,9 +384,19 @@ impl Frontend {
         let keys = model::key_bar_buttons(&self.app);
         self.shown.key_bar = keys.clone();
         let key_bar = NewWidget::new(ButtonRow::new(model::KEY_BAR_NAME, keys)).with_tag(KEY_BAR);
+        // The viewer takes the panels' place while a file is viewed.
+        let viewer = NewWidget::new(ViewerBox::new(model::ViewerView {
+            name: "Viewer".to_owned(),
+            generation: 0,
+            rows: Vec::new(),
+            focus: None,
+            lines: 0,
+        }))
+        .with_tag(VIEWER);
+        let screen = NewWidget::new(Screen::new(panels, viewer)).with_tag(SCREEN);
         let column = Flex::column()
             .with_fixed(NewWidget::new(Label::new(lines.title.clone())).with_tag(TITLE_LINE))
-            .with(panels, 1.0)
+            .with(screen, 1.0)
             .with_fixed(NewWidget::new(status_bar))
             .with_fixed(key_bar);
         self.shown.lines = lines;
@@ -679,6 +704,17 @@ impl Frontend {
         let action = match action.downcast::<PushAction>() {
             Ok(push) => {
                 self.push_action(host, *push, now);
+                return;
+            }
+            Err(other) => other,
+        };
+        let action = match action.downcast::<ViewerAction>() {
+            Ok(viewer) => {
+                let ViewerAction::Size(columns, rows) = *viewer;
+                if self.viewer_size != (columns, rows) {
+                    self.viewer_size = (columns, rows);
+                    self.refresh(host);
+                }
                 return;
             }
             Err(other) => other,
@@ -1168,6 +1204,35 @@ impl Frontend {
                 host.edit(panel_tag(side), |mut p| PanelBox::set_view(&mut p, view));
             }
         }
+        // The viewer in the panels' place while a file is viewed: the rows
+        // on screen for the size its list box told, drawn with the theme.
+        let viewing = self.app.viewer().is_some();
+        if viewing != self.shown.viewing {
+            self.shown.viewing = viewing;
+            host.edit(SCREEN, |mut s| Screen::set_viewing(&mut s, viewing));
+        }
+        if viewing {
+            let theme = (
+                self.app.settings().theme.clone(),
+                self.app.settings().colors.clone(),
+            );
+            if self.shown.theme.as_ref() != Some(&theme) {
+                self.shown.theme = Some(theme.clone());
+                host.edit(VIEWER, |mut v| {
+                    ViewerBox::set_theme(&mut v, theme.0, theme.1)
+                });
+            }
+            let (columns, rows) = self.viewer_size;
+            let view = model::viewer_view(&mut self.app, columns, rows);
+            if view.is_some() && view != self.shown.viewer {
+                self.shown.viewer = view.clone();
+                if let Some(view) = view {
+                    host.edit(VIEWER, |mut v| ViewerBox::set_view(&mut v, view));
+                }
+            }
+        } else {
+            self.shown.viewer = None;
+        }
         // The key bar (another bank, a rebound key) and the sort buttons'
         // keys.
         let keys = model::key_bar_buttons(&self.app);
@@ -1253,6 +1318,9 @@ impl Frontend {
             && let Some(id) = host.edit(ROOT, |mut root| Root::dialog_focus(&mut root))
         {
             return Some(id);
+        }
+        if self.shown.viewing {
+            return host.id_of(VIEWER);
         }
         host.id_of(panel_tag(self.app.active_side()))
     }

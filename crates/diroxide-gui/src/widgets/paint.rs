@@ -84,6 +84,95 @@ fn layout_with(
     layout
 }
 
+/// A run of a line drawn its own way: a byte range of the text, the brush
+/// (an index into the colors given when drawing), bold, underlined.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Run {
+    /// The first byte.
+    pub start: usize,
+    /// The byte after the run.
+    pub end: usize,
+    /// The brush's index.
+    pub brush: usize,
+    /// Bold.
+    pub bold: bool,
+    /// Underlined.
+    pub underline: bool,
+}
+
+/// The text layout of a line with runs drawn their own way, in the
+/// interface font, unbroken; brush 0 is the line's own color.
+pub fn runs_layout(
+    ctx: &mut LayoutCtx<'_>,
+    text: &str,
+    size: f32,
+    runs: &[Run],
+) -> Layout<BrushIndex> {
+    let (fcx, lcx) = ctx.text_contexts();
+    let mut builder = lcx.ranged_builder(fcx, text, 1.0, true);
+    builder.push_default(StyleProperty::FontFamily(FontFamily::Source(
+        FONT_STACK.into(),
+    )));
+    builder.push_default(StyleProperty::FontSize(size));
+    builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(1.3)));
+    builder.push_default(StyleProperty::Brush(BrushIndex(0)));
+    for run in runs {
+        let (start, end) = (run.start.min(text.len()), run.end.min(text.len()));
+        if start >= end || !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+            continue;
+        }
+        builder.push(StyleProperty::Brush(BrushIndex(run.brush)), start..end);
+        if run.bold {
+            builder.push(StyleProperty::FontWeight(FontWeight::BOLD), start..end);
+        }
+        if run.underline {
+            builder.push(StyleProperty::Underline(true), start..end);
+        }
+    }
+    let mut layout = builder.build(text);
+    layout.break_all_lines(None);
+    layout
+}
+
+/// How a token class's run is drawn in the viewer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TokenLook {
+    /// The text color.
+    pub color: Color,
+    /// Bold (keywords and headings by nature).
+    pub bold: bool,
+    /// Underlined (links by nature; a reversed problem too, since the
+    /// window draws no reverse).
+    pub underline: bool,
+}
+
+/// The look of a token role in the theme `theme` with the owner's
+/// `[colors]`: the role's color when it keeps 4.5 to 1 against the
+/// window's page (the window keeps its own page until the themes arrive,
+/// G3's commit 27), else the page's text color; and the role's
+/// attributes, so a class shows by its shape too, never by color alone.
+pub fn token_look(
+    theme: &diroxide_theme::Theme,
+    colors: &std::collections::BTreeMap<String, String>,
+    role: diroxide_theme::PanelRole,
+) -> TokenLook {
+    let style = diroxide_theme::role_style(theme, role);
+    let rgb = colors
+        .get(role.key())
+        .and_then(|c| diroxide_theme::Rgb::parse(c).ok())
+        .unwrap_or(style.foreground);
+    let color = Color::from_rgb8(rgb.r, rgb.g, rgb.b);
+    TokenLook {
+        color: if contrast(color, PAGE) >= 4.5 {
+            color
+        } else {
+            TEXT
+        },
+        bold: style.attributes.bold,
+        underline: style.attributes.underline || style.attributes.reverse,
+    }
+}
+
 /// The contrast ratio of two colors, by WCAG's relative luminance.
 pub fn contrast(a: Color, b: Color) -> f64 {
     fn luminance(c: Color) -> f64 {
@@ -119,6 +208,24 @@ mod tests {
             let ratio = contrast(fg, bg);
             assert!(ratio >= 4.5, "{name}: {ratio:.2} to 1");
         }
+    }
+
+    #[test]
+    fn every_token_look_of_every_theme_meets_four_and_a_half_to_one() {
+        let registry = diroxide_theme::Registry::builtin();
+        let none = std::collections::BTreeMap::new();
+        for name in diroxide_theme::builtin::NAMES {
+            let (theme, _) = registry.resolve(name);
+            for role in diroxide_theme::PanelRole::TOKENS {
+                let look = token_look(theme, &none, role);
+                let ratio = contrast(look.color, PAGE);
+                assert!(ratio >= 4.5, "{name} {role:?}: {ratio:.2} to 1");
+            }
+        }
+        // Keywords keep their bold and links their underline.
+        let (galaxy, _) = registry.resolve(diroxide_theme::DEFAULT_THEME);
+        let link = token_look(galaxy, &none, diroxide_theme::PanelRole::TokenLink);
+        assert!(link.underline);
     }
 
     #[test]

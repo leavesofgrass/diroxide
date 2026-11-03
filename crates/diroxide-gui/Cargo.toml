@@ -23,9 +23,16 @@ gui = [
     "dep:tracing",
 ]
 
+# The viewer's syntax set, as the CLI forwards it to the app: the tests'
+# own build turns it on with --all-features, so token classes are drawn
+# there as in `diro`, whose default has it.
+syntax-set = ["diroxide-app/syntax-set"]
+
 [dependencies]
 diroxide-app.workspace = true
 diroxide-core.workspace = true
+# The theme's roles for the viewer's token classes (and G3's themes).
+diroxide-theme.workspace = true
 thiserror.workspace = true
 masonry = { workspace = true, optional = true }
 masonry_winit = { workspace = true, optional = true }
