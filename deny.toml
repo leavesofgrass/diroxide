@@ -14,6 +14,14 @@ ignore = [
     { id = "RUSTSEC-2026-0206", reason = "rustybuzz is unmaintained: text shaping inside usvg, through resvg, used only by `cargo xtask logo` to render the logo. Never in the diro binary. Move when resvg does." },
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained: font parsing inside usvg and rustybuzz, through resvg, used only by `cargo xtask logo`, as above." },
     { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained: syntect 5.3, through two-face (code highlighting, alpha.2), loads two-face's bundled syntax dumps with bincode 1.3. Only data built into the program is decoded, never a user's file. Remove when syntect moves (R17, research/syntax-highlighting.md)." },
+    # The GUI's stack (the GUI alpha's contract step, Monday, November 2,
+    # 2026), as textweaver's deny.toml has them since Saturday, October 17,
+    # 2026: zbus 5, the D-Bus library under AccessKit's Linux AT-SPI
+    # support, is built from three crates marked unmaintained, none a
+    # vulnerability. Move when AccessKit does.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant is unmaintained (not a vulnerability): part of zbus 5, the D-Bus library under AccessKit's Linux AT-SPI support in the GUI. No maintained replacement yet. Move when AccessKit does." },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names is unmaintained (not a vulnerability): part of zbus 5, the D-Bus library under AccessKit's Linux AT-SPI support in the GUI. No maintained replacement yet. Move when AccessKit does." },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive is unmaintained (not a vulnerability): part of zbus 5, the D-Bus library under AccessKit's Linux AT-SPI support in the GUI. No maintained replacement yet. Move when AccessKit does." },
 ]
 
 [licenses]
@@ -22,7 +30,12 @@ ignore = [
 # option-ext). CDLA-Permissive-2.0 is the license of webpki-roots, the
 # root certificates of ureq's rustls (the `fetch` feature of `diro`; a
 # permissive data license, reviewed for the Wave 1 contract step). Add a
-# license here only with the orchestrator's review.
+# license here only with the orchestrator's review. The GUI's stack
+# (vendored under third_party/, docs/dev/vendoring.md) is Apache-2.0 for
+# Xilem, Masonry and Parley and Apache-2.0 OR MIT for AccessKit, both
+# below; OFL-1.1 is the SIL Open Font License of the fonts the GUI
+# compiles in (Atkinson Hyperlegible, third_party/fonts) and of any font
+# crate that carries one (the GUI alpha's contract step).
 allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
@@ -37,6 +50,7 @@ allow = [
     "Unlicense",
     "Unicode-3.0",
     "MPL-2.0",
+    "OFL-1.1",
 ]
 confidence-threshold = 0.9
 # libbz2-rs-sys, the Rust port of bzip2 that the bzip2 crate (through zip

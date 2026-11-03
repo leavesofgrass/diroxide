@@ -6,6 +6,11 @@
 //! 3. Every member is in [`ALLOWED`]: a new crate is added only when a
 //!    wave's brief says so, here and in docs/dev/architecture.md.
 //! 4. Nothing depends on `xtask` or on the binary crate `diro`.
+//! 5. The vendored GUI stack (docs/dev/vendoring.md) stays apart: every
+//!    path in the root's `[workspace.dependencies]` and `[patch.crates-io]`
+//!    is a member's folder or lies in a [`VENDORED`] folder the root's
+//!    `exclude` lists, and only the crates in [`VENDORED_USERS`] depend on a
+//!    vendored crate.
 
 use std::fs;
 use std::path::Path;
@@ -139,7 +144,75 @@ pub const ALLOWED: [(&str, &[&str]); 19] = [
     ),
 ];
 
+/// The folders of vendored code, each its own workspace, copied whole from
+/// textweaver (docs/dev/vendoring.md). The fonts folder holds no crate.
+pub const VENDORED: [&str; 2] = ["third_party/xilem", "third_party/accesskit_windows"];
+
+/// The members that may depend on a vendored crate: the GUI frontend alone,
+/// behind its `gui` feature.
+pub const VENDORED_USERS: [&str; 1] = ["diroxide-gui"];
+
 const SECTIONS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
+
+/// The problems with the vendored tree in the root manifest, in words: a
+/// path outside the members' folders and the vendored ones, or a vendored
+/// folder the workspace does not exclude. Returns them with the names of
+/// the root's dependencies that are vendored crates.
+pub fn vendored_problems(root: &Table) -> (Vec<String>, Vec<String>) {
+    let mut problems = Vec::new();
+    let excluded: Vec<&str> = root
+        .get("workspace")
+        .and_then(|w| w.get("exclude"))
+        .and_then(Value::as_array)
+        .map(|list| list.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    for folder in VENDORED {
+        if !excluded.contains(&folder) {
+            problems.push(format!(
+                "the root Cargo.toml does not exclude {folder}: add it to [workspace] exclude"
+            ));
+        }
+    }
+    let in_vendored = |path: &str| {
+        let path = path.replace('\\', "/");
+        VENDORED
+            .iter()
+            .any(|folder| path == *folder || path.starts_with(&format!("{folder}/")))
+    };
+    let mut vendored = Vec::new();
+    let declared = root
+        .get("workspace")
+        .and_then(|w| w.get("dependencies"))
+        .and_then(Value::as_table);
+    for (name, spec) in declared.into_iter().flatten() {
+        let Some(path) = spec.get("path").and_then(Value::as_str) else {
+            continue;
+        };
+        if in_vendored(path) {
+            vendored.push(name.clone());
+        } else if !path.starts_with("crates/") {
+            problems.push(format!(
+                "{name} is declared with the path {path}, outside crates/ and the vendored folders"
+            ));
+        }
+    }
+    let patches = root
+        .get("patch")
+        .and_then(|p| p.get("crates-io"))
+        .and_then(Value::as_table);
+    for (name, spec) in patches.into_iter().flatten() {
+        match spec.get("path").and_then(Value::as_str) {
+            Some(path) if in_vendored(path) => {}
+            Some(path) => problems.push(format!(
+                "the patch for {name} points at {path}, outside the vendored folders"
+            )),
+            None => problems.push(format!(
+                "the patch for {name} has no path: patches come from the vendored folders"
+            )),
+        }
+    }
+    (problems, vendored)
+}
 
 fn read_table(path: &Path) -> Result<Table> {
     let text = fs::read_to_string(path)
@@ -198,7 +271,7 @@ fn dependency_tables(manifest: &Table) -> Vec<(String, &Table)> {
 pub fn check(root: &Path) -> Result<bool> {
     let manifest = read_table(&root.join("Cargo.toml"))?;
     let folders = member_folders(root, &manifest)?;
-    let mut problems = Vec::new();
+    let (mut problems, vendored) = vendored_problems(&manifest);
     let mut checked = 0;
     for folder in &folders {
         let member = read_table(&folder.join("Cargo.toml"))?;
@@ -226,6 +299,12 @@ pub fn check(root: &Path) -> Result<bool> {
                         "{name} declares {dependency} in [{section}] without workspace = true"
                     ));
                 }
+                if vendored.contains(dependency) && !VENDORED_USERS.contains(&name) {
+                    problems.push(format!(
+                        "{name} depends on the vendored {dependency} in [{section}]; only {} may",
+                        VENDORED_USERS.join(", ")
+                    ));
+                }
                 if dependency == "xtask" || dependency == "diro" {
                     problems.push(format!(
                         "{name} depends on {dependency}, which nothing may depend on"
@@ -245,7 +324,9 @@ pub fn check(root: &Path) -> Result<bool> {
     }
     if problems.is_empty() {
         println!(
-            "deps: Pass. {checked} crates checked; every dependency is inherited and points the allowed way."
+            "deps: Pass. {checked} crates checked; every dependency is inherited and points the allowed way; the {} vendored crates stay with {}.",
+            vendored.len(),
+            VENDORED_USERS.join(", ")
         );
         Ok(true)
     } else {
@@ -278,6 +359,48 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_vendored_tree_is_excluded_patched_from_and_used_by_the_gui_alone() {
+        let good: Table = r#"
+            [workspace]
+            members = ["crates/*"]
+            exclude = ["plugins", "third_party/xilem", "third_party/accesskit_windows"]
+            [workspace.dependencies]
+            diroxide-core = { path = "crates/diroxide-core" }
+            masonry = { path = "third_party/xilem/masonry", default-features = false }
+            serde = "1"
+            [patch.crates-io]
+            parley = { path = "third_party/xilem/parley" }
+            accesskit_windows = { path = "third_party/accesskit_windows" }
+        "#
+        .parse()
+        .unwrap();
+        let (problems, vendored) = vendored_problems(&good);
+        assert_eq!(problems, Vec::<String>::new());
+        assert_eq!(vendored, ["masonry"]);
+        let bad: Table = r#"
+            [workspace]
+            exclude = ["third_party/xilem"]
+            [workspace.dependencies]
+            stray = { path = "../elsewhere" }
+            [patch.crates-io]
+            parley = { path = "vendor/parley" }
+            winit = "0.30"
+        "#
+        .parse()
+        .unwrap();
+        let (problems, _) = vendored_problems(&bad);
+        assert_eq!(
+            problems,
+            [
+                "the root Cargo.toml does not exclude third_party/accesskit_windows: add it to [workspace] exclude",
+                "stray is declared with the path ../elsewhere, outside crates/ and the vendored folders",
+                "the patch for parley points at vendor/parley, outside the vendored folders",
+                "the patch for winit has no path: patches come from the vendored folders",
+            ]
+        );
     }
 
     #[test]

@@ -3,7 +3,11 @@ resolver = "3"
 members = ["crates/*", "xtask"]
 # Plugins live in workspaces of their own (plan section 5.8, item 3): the
 # main workspace, and so `cargo install diro`, never sees what they build.
-exclude = ["plugins"]
+# The vendored GUI stack is two workspaces of its own (docs/dev/vendoring.md):
+# its crates are depended on by path below, and patched in for crates.io's
+# parley and accesskit_windows at the end of this file, as textweaver's
+# root manifest does.
+exclude = ["plugins", "third_party/xilem", "third_party/accesskit_windows"]
 
 [workspace.package]
 version = "0.1.0-alpha.2"
@@ -27,7 +31,9 @@ publish = false
 # downloader's TLS provider behind the `fetch` feature of `diro` (the
 # owner's exception, Sunday, October 11, 2026); `psm` and `stacker`
 # (through `carta`), the converter's stack growth (alpha.2's contract
-# step, Friday, October 16, 2026).
+# step, Friday, October 16, 2026); `wayland-backend` (through winit) and
+# `android-activity` (Android only), both under the GUI's window runner
+# (the GUI alpha's contract step, Monday, November 2, 2026).
 [workspace.dependencies]
 # The workspace's own crates.
 diroxide-core = { path = "crates/diroxide-core", version = "0.1.0-alpha.2" }
@@ -165,8 +171,36 @@ crossterm = "0.29.0"
 # Gives the terminal back on a terminate signal or Ctrl+Break (W1d-2's
 # contract request 1); pure Rust.
 ctrlc = { version = "3.5.2", features = ["termination"] }
-accesskit = "0.25.1"
-accesskit_winit = "0.34.1"
+# AccessKit at textweaver's versions, exactly: accesskit_winit 0.34.2 asks
+# for accesskit_windows 0.35.2, which would leave the patched 0.35.1 below
+# unused and lose its AcceleratorKey change. A move to 0.25.2 (which fixes
+# password disclosure, AccessKit 841) is textweaver's refresh first, under
+# the sync rule of docs/dev/vendoring.md.
+accesskit = "=0.25.1"
+# The window's adapter with the features the vendored masonry_winit asks
+# for: AT-SPI on the tokio executor, so zbus is compiled once, and no
+# second executor (the default async-io would be).
+accesskit_winit = { version = "=0.34.1", default-features = false, features = ["accesskit_unix", "tokio", "rwh_06"] }
+# The GUI (alpha.3, the GUI alpha; ADR-0007; docs/dev/vendoring.md):
+# Masonry, Xilem's widget layer, vendored from textweaver under
+# third_party/xilem at upstream revision 271a27a6 (Monday, September 14,
+# 2026) with textweaver's patches and diroxide's one, behind the `gui`
+# feature of diroxide-gui. Default features off: the GUI crate chooses the
+# renderer (Vello) itself. Apache-2.0.
+masonry = { path = "third_party/xilem/masonry", default-features = false }
+masonry_winit = { path = "third_party/xilem/masonry_winit", default-features = false }
+# The headless harness of the GUI's tests: a real AccessKit tree with no
+# window, no display and no GPU. diroxide's patch drops its oxipng, the one
+# C build on this path (libdeflate). A dev-dependency only.
+masonry_testing = { path = "third_party/xilem/masonry_testing" }
+# The harness's tests check nodes through AccessKit's own consumer, the
+# filter the platform adapters use. Already in the tree through
+# masonry_testing; a dev-dependency only.
+accesskit_consumer = "=0.39.1"
+# Parley's font database, already in the tree through Parley: named so the
+# GUI loads Fontconfig at run time on Linux (`fontconfig-dlopen`) instead of
+# linking it, so diro starts on a server or in a container without it.
+fontique = { version = "0.11.1", default-features = false }
 # Command line and logging.
 clap = { version = "4.6.1", features = ["derive"] }
 # Shell completion scripts for diro completions SHELL (plan section 5.19).
@@ -235,3 +269,13 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 strip = true
+
+# The vendored GUI stack (docs/dev/vendoring.md), as textweaver patches it:
+# Parley 0.11.1 with its `accesskit` feature on AccessKit 0.25, which the
+# vendored Masonry needs; and AccessKit's Windows adapter 0.35.1 with the
+# keyboard shortcut given to UI Automation as AcceleratorKey, so a screen
+# reader can say a button's key. No other crate in the workspace uses
+# either.
+[patch.crates-io]
+parley = { path = "third_party/xilem/parley" }
+accesskit_windows = { path = "third_party/accesskit_windows" }
