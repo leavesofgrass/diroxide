@@ -1,12 +1,12 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with the window's foundation. Where a limit has a workaround, the workaround comes first.
 
 ## What is not in alpha 2
 
 Each item below is still to come. None of them is dated: a feature that is not in alpha 2 arrives in a later alpha.
 
-- The graphical interface (GUI). diroxide runs in the terminal only. `diro --gui` is accepted, says that the GUI comes later, and opens the terminal.
+- Much of the graphical interface (GUI). The window opens with `diro --gui`, and it shows the panels, takes every key and says what happens. `diro` by itself still opens the terminal, and the window leaves out the viewer, the quick view, dialogs with buttons, themes, drawing without a graphics driver, icons and input methods. [The GUI](#the-gui) below lists what it does not do yet.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
@@ -37,7 +37,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A plugin's columns are declared and not shown in the panels yet.
 - A plugin list opens inside a panel. These lists still open over the panels, as dialogs: the Volumes list, the trash browser, the Jobs list, search results, and the results of a script in `lister` mode.
 - A plugin list is not saved when you quit, and it stays in its panel when its plugin stops or is turned off: leave it with Backspace.
-- The GUI does not draw plugin lists yet; it comes in a later alpha.
+- The window draws a plugin list in its panel. A click on a row of a plugin list does not move the focus to it yet, and a double click presses Enter on the row that has the focus. Use the keys.
 - A plugin's keys are lines in `keymap.toml` and rows in the Keys list, and the Keys list cannot change them yet: Enter on a plugin's row says to edit `keymap.toml`. `diro keys check` does not know plugin commands and calls such a line unknown; the program does not. Manage plugins, on a plugin's Commands and keys row, also says what happened to each proposed key.
 - A script's `dry_run` promise is read and checked, and the program offers no preview with it yet.
 - The `terminal`, `terminal-wait` and `output-column` modes of a script command are not shown by the program yet.
@@ -290,6 +290,43 @@ The table of keys each terminal can send is built from a key probe run by hand o
 - In the terminal built into some desktop apps, Alt+F and Ctrl+Q never arrive. F9 opens the menus, and Quit is in the File menu and the palette. Other terminals built into programs may keep keys too; `diro keys test` says what arrives.
 - Terminals not yet tried: the classic console, Konsole, Alacritty, kitty, WezTerm, Ghostty, iTerm2 and macOS Terminal with VoiceOver.
 
+## The GUI
+
+[The GUI](gui.md) describes the window. These are its limits so far in this alpha. None is dated: each is to come in a later step of the alpha or a later alpha.
+
+Opening it:
+
+- `diro` by itself opens the terminal. Open the window with `diro --gui`, or set `frontend` to `gui`. The settings reference describes automatic as opening the GUI on a desktop, which is where it is going, and today automatic opens the terminal in every case.
+- The window needs a display and a graphics driver. Without a display, or with a driver that fails, one sentence says why and the terminal opens. Drawing on the processor, for a machine with no graphics driver, is not built, and `--graphics software` says so and opens the terminal.
+- A console that Windows opened for a shortcut can show for a moment before `diro` lets it go.
+- On Linux without Fontconfig only the two bundled Atkinson families draw. A character they lack, such as a Chinese or Japanese name or an emoji, is drawn as a missing glyph. The names a screen reader reads are the full names.
+
+What is said:
+
+- Nothing in the window has been heard on NVDA, JAWS, Orca or VoiceOver, or read on a Braille display. Tests and reports read its accessibility tree through UI Automation on Windows and AT-SPI on Linux, with no screen reader. macOS has not been tried.
+- Low messages are shown in the status line and not announced: "Top of the list", "Bottom of the list", "At the top already" and a running job's progress. Pressing Up on the first row is silent. Ctrl+D says where you are and how a job is going. Whether this is too quiet has not been decided by listening.
+- A running job's progress is not spoken in the window. A progress element that speaks at the progress interval comes in a later step.
+- When a dialog opens, its name may be said twice, once by the program and once by the dialog.
+- The first start's line "The key bar on the last line names the keys." is the terminal's wording.
+
+Dialogs and parts that are not built:
+
+- A confirmation is a list of two answers, "No, the default" and "Yes", not two buttons. A password field has no Show button. The lists in a dialog take no clicks.
+- The viewer and the quick view are not drawn in the window. Their keys reach the program, and the window shows nothing for them. Use the terminal.
+- A field opens no input method session, so typing Chinese, Japanese or Korean through an input method is not supported. Text the program copies, such as a file's path, is kept inside the program and is not put on the system clipboard.
+- The colors are one fixed set. Themes are not built, and the `theme` setting does nothing in the window. There is no setting for the text size or the font, and no icons.
+- Capturing a GUI key from a real key press in the Keys list is not built for the window. Type the key's name, as [customizing keys](customizing-keys.md) says.
+- Thumbnails and focus mode are settings that the reference marks as coming later.
+
+Menus and the mouse:
+
+- On macOS the menus are the list, as with `menus` set to `list`. The system's own menu bar there needs a binding that is not built.
+- The native menu bar on Windows leaves out the commands of plugins. The command palette and the keys you gave them run them. The bar was read through UI Automation while it was shown. Entering it by key, choosing an item and its hiding again were not tried on a real desktop.
+- The mouse has few jobs: a click focuses a row, a double click opens it, the wheel scrolls, and the buttons press. There is no right-click menu (Shift+F10 opens the actions list) and no drag and drop.
+- A click on a plugin list's row does not choose it. Use the keys.
+- The toolkit's helper window, whose class is "Winit Thread Event Target", has no title and shows as a pane with no name in the desktop's window list.
+- Keys the system keeps never arrive: Alt+F4 closes the window, and Alt+Space, Alt+Tab, Ctrl+Escape and Ctrl+Alt+Delete are the system's. Insert is the screen reader's, and chords of the Windows key are dropped. No default key uses one.
+
 ## Screen readers and Braille
 
 - NVDA in Windows Terminal is the main target. Nothing in alpha 1 had been heard on a screen reader when this page was written; the listening checks come after the build is complete. [The accessibility statement](accessibility.md) records what has been checked.
@@ -324,6 +361,7 @@ The table of keys each terminal can send is built from a key probe run by hand o
 ## See also
 
 - [The accessibility statement](accessibility.md)
+- [The GUI](gui.md)
 - [Plugins](plugins.md)
 - [Hooks](hooks.md)
 - [Remote places over SFTP](remote-places.md)

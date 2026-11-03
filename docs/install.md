@@ -51,21 +51,59 @@ diro --version
 
 The first line is the program's name and version, `diro 0.1.0-alpha.2`. The next lines name the project and its license.
 
+### What the window costs to build
+
+The window, the GUI, is part of the same `diro` program, and the `gui` feature that builds it is one of `diro`'s default features. So the two commands above build it, and the release files hold it, because they are built with the default features. [The GUI](gui.md) says how to open it.
+
+The window brings in a graphics stack, and that has a cost in time and room. These are measurements from one test machine, of debug builds. Release builds have not been measured here.
+
+- A cold debug build of `diro` took about five minutes with the window, against under three minutes without it.
+- The debug program grew from about 40 MB to about 56 MB.
+- The build folder grew from about 1.1 GB to about 2.0 GB.
+- The lock file gained about 260 packages. The stack compiles no C on Windows, macOS or Linux, so the window adds no need for a C compiler beyond the ones named above. `cargo xtask native --check` keeps that inventory.
+- A Linux build needs no Fontconfig package. Fontconfig is opened when the window starts and is never linked.
+
+A build that you only use in the terminal can leave all of this out, as the next section shows.
+
 ### A smaller diro
 
-The viewer colors code with a syntax set that adds about 3 MB to the program. A build can leave it out, and the downloader's secure connection library with it:
+`diro` has four default features: the window (`gui`), the viewer's syntax set (`syntax-set`), the downloader's secure connection client (`fetch`) and the terminal (`tui`, a name for the terminal frontend, which is always built). `--no-default-features` leaves out the window, the syntax set and the client, and keeps the terminal:
 
 ```bash
 cargo build --release -p diro --no-default-features
 ```
 
-In that build the viewer says "Highlighting off: not in this build" for every file, and the commands that need no grammar keep working, such as search, hex mode, the bracket jump and indentation. The downloader falls back to `curl` or `wget` on your PATH. To leave out only the syntax set and keep the downloader's client:
+That is the smallest build, and it does without three things.
+
+- The window. `diro --gui` says "This diro was built without the GUI; the terminal opens instead." and opens the terminal.
+- The viewer's syntax set, which adds about 3 MB to the program. The viewer says "Highlighting off: not in this build" for every file, and the commands that need no grammar keep working, such as search, hex mode, the bracket jump and indentation.
+- The downloader's secure connection library. The downloader falls back to `curl` or `wget` on your PATH.
+
+To leave out only the window and keep the other two:
 
 ```bash
-cargo build --release -p diro --no-default-features --features fetch
+cargo build --release -p diro --no-default-features --features syntax-set,fetch
+```
+
+To leave out only the syntax set, and keep the window and the downloader's client:
+
+```bash
+cargo build --release -p diro --no-default-features --features gui,fetch
 ```
 
 A smaller build still needs a C compiler, for carta. [Building, for contributors](dev/building.md) has the details.
+
+## What the GUI needs
+
+The window needs a display and a graphics driver, and it brings its own fonts. When one is missing, the program says so in one sentence and opens the terminal.
+
+- A display. Windows and macOS always have one. On Linux the window needs a Wayland or X11 display, and `diro` looks for `WAYLAND_DISPLAY` or `DISPLAY`. With neither, `diro --gui` says "There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead."
+- A graphics driver. The window draws with it. `--graphics` names the interface to use: `vulkan`, `dx12` on Windows, `metal` on macOS or `gl`, and `auto` lets the driver choose. When the driver fails, the window does not open and the terminal opens instead, after a sentence that begins "Could not open the GUI: the window could not start its graphics". Drawing on the processor, for a machine with no graphics driver, is not built yet.
+- Fonts. Two Atkinson Hyperlegible families, Next and Mono, regular and bold, are inside the program, so nothing has to be installed. On Linux the window also opens Fontconfig, when it is there, to find the system's fonts. Without Fontconfig only the two Atkinson families draw, and a character they lack, such as a Chinese or Japanese name or an emoji, is drawn as a missing glyph. That changes only what is drawn. A screen reader still reads the full name.
+
+A screen reader reads the window through the system's own interface: UI Automation on Windows and AT-SPI on Linux. Both were read by tests and reports of the window's tree, and neither has been heard with a screen reader yet. The macOS interface has not been tried.
+
+[The GUI](gui.md) covers opening it, the `frontend`, `graphics` and `menus` settings, and what the window does not do yet. [Troubleshooting](troubleshooting.md) has what to try when it does not open.
 
 ## The first run of a downloaded file
 
