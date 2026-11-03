@@ -6,6 +6,7 @@
 mod build;
 mod cross_check;
 mod cross_suite;
+mod fuzz_finds;
 mod hostile;
 mod jobs;
 mod memory;

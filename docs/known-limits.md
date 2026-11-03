@@ -231,6 +231,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - When diroxide opens a zip it compares each member's local header with the central list for up to 100,000 members. Past that, it checks each member when you read it.
 - The spool limit for archives inside archives, 4 GiB by default, is shared by the whole program rather than counted for each job.
 - Pack shows the free space and does not refuse when there is too little.
+- An xz of more than 100,000 streams is refused, with no setting to raise it. Each stream is a whole compressed file, so such an xz is 100,000 files joined end to end, which no archiver writes. Before each read, diroxide checks the list of blocks at the end of every stream, and past 100,000 it says so rather than read the rest unchecked.
 - An xz holds one file and no file name, so it takes its name from the archive. When you pack a file to an xz with a different name, the pack plan says what it will unpack as: "Unpacks as one: xz keeps no name".
 - Debug builds of diroxide are slow on archives with a million entries. A release build opens one in a few seconds. This matters only to people who build it.
 - A local file whose name holds an archive marker, such as `a.zip!b.txt`, is listed but has no place, so diroxide cannot act on it. The row is not yet flagged "name needs care".
