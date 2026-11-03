@@ -348,5 +348,30 @@ mod tests {
         assert!(paths.config_file(Paths::KEYMAP_DEFAULTS).exists());
         let offset = local_offset().seconds();
         assert!(offset.abs() <= 14 * 3600);
+        assert!(startup.user_themes.is_empty());
+        assert_eq!(startup.themes_dir, Some(paths.themes_dir()));
+    }
+
+    #[test]
+    fn the_owners_theme_files_load_and_a_broken_one_is_said_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+        fs::create_dir_all(paths.themes_dir()).unwrap();
+        let good = "[theme]\nname = \"harbor\"\ninherits = \"galaxy\"\n";
+        fs::write(paths.themes_dir().join("harbor.toml"), good).unwrap();
+        fs::write(paths.themes_dir().join("broken.toml"), "[theme\n").unwrap();
+        let config = diroxide_config::load(&paths);
+        let startup = load(&paths, &config, Platform::current());
+        let names: Vec<&str> = startup.user_themes.iter().map(|t| t.name()).collect();
+        assert_eq!(names, ["harbor"]);
+        // The broken file is the config's problem, said once, not twice.
+        let broken: Vec<&str> = startup
+            .problems
+            .iter()
+            .map(|p| p.text.as_str())
+            .filter(|t| t.contains("broken.toml"))
+            .collect();
+        assert_eq!(broken.len(), 1, "{:?}", startup.problems);
+        assert!(broken[0].starts_with("Theme file broken.toml was not loaded"));
     }
 }
