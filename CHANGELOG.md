@@ -4,6 +4,15 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased
 
+### Lane A4: the app's contract items from the merged lanes
+
+Written on Tuesday, November 3, 2026.
+
+- A copy cut by a quit now goes on where it stopped. Quit stops a running job the way a lost connection does, so a copy of 4 MiB or more on a place that keeps part files leaves its part file and its line in `partials.json`. At the next start, Retry on its Interrupted row resumes it when the source has not changed and the part file's first 64 KiB and last 1 MiB still match: "Resuming report.iso at 2.1 MB of 5.2 MB". Cancel still removes the part file. The quit's question keeps its words.
+- A held job's state is the engine's own, "held in line"; the words are unchanged: "Held 2 of 5: copy 3 items to build", "Held: copy 3 items to build", "Back in line: copy 3 items to build", and a lone held job's "Copying is held in line".
+- In the GUI, the first start says "The key bar names the keys.", since its key bar is a toolbar; the terminal still says "The key bar on the last line names the keys."
+- For the GUI, the app now gives what its dialogs lane will wire: a way to move a plugin list's focus to the row a click or a screen reader's Focus names, while a plugin's or the server's `panel/set` still moves the folder's cursor beneath the list; a menu's rows with the enabled plugins' commands, as the list menus show them; the bank the key bar shows, chosen in one place; and the frontend, graphics and menus settings.
+
 ### Lane X: the archive readers' fuzz findings
 
 Written on Tuesday, November 3, 2026.
@@ -12,6 +21,7 @@ Written on Tuesday, November 3, 2026.
 - Every xz decoder, for a tar.xz or a plain .xz, first checks the list of blocks at the end of each stream, each time a read starts: a count of blocks the list has no bytes for is "it is damaged: its index is damaged", and one whose memory passes the decoder's limit is refused with that limit. Before, 25 bytes could make the decoder ask for 506 GB. An xz of more than 100,000 streams is refused: "it uses more than 100,000 xz streams, which is not supported".
 - The check at open counts an xz's blocks against `archives.max_entries` before it keeps them, and keeps one number for a 7z header's sizes instead of a list.
 - The two inputs the fuzz run found are tests, and the xz one is also a seed. The `archive_xz` and `archive_stream` targets decode an xz only after the checks the program makes, as the program does.
+
 
 ### Lane F: the nightly fuzz workflow
 

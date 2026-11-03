@@ -108,6 +108,7 @@ fn a_name_search_streams_its_results_and_says_the_end() {
     // The key bar shows the results' keys.
     let bar = f.s.app.key_bar();
     assert!(bar.starts_with("Escape Stop  F2 Pause  F3 View"), "{bar}");
+    assert_eq!(f.s.shown_bank(), "Search results");
 }
 
 #[test]

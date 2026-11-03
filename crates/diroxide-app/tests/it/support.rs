@@ -450,6 +450,15 @@ impl Session {
         self.run(effects)
     }
 
+    /// The name of the bank the key bar shows, after checking that
+    /// `App::shown_bank` is the bank `App::key_bar` draws (lane A4: the
+    /// GUI's toolbar takes the bank from there).
+    pub fn shown_bank(&self) -> String {
+        let bank = self.app.shown_bank().expect("a bank is shown");
+        assert_eq!(bank.key_bar(self.app.keymap()), self.app.key_bar());
+        bank.name
+    }
+
     /// The focused row's id in the active panel.
     pub fn focused(&self) -> String {
         self.app

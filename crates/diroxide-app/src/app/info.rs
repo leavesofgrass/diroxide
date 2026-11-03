@@ -166,25 +166,12 @@ impl App {
         vec![self.say(Message::info(text))]
     }
 
-    /// Say Key Bar: every pair of the active bank, keys in words: "Key
-    /// bar: F2 Rename, F3 View, ... Control plus Q Quit."
+    /// Say Key Bar: every pair of the bank the key bar shows
+    /// ([`App::shown_bank`]), keys in words: "Key bar: F2 Rename, F3
+    /// View, ... Control plus Q Quit."
     pub(super) fn say_key_bar(&mut self) -> Vec<Effect> {
-        let viewer_bank = crate::menu::viewer_bank();
-        let preview_bank = crate::menu::preview_bank();
-        let results_bank = crate::menu::results_bank();
-        let compare_bank = crate::menu::compare_bank();
-        let bank = if self.viewer_open() {
-            Some(&viewer_bank)
-        } else if self.in_preview() {
-            Some(&preview_bank)
-        } else if self.results_shown() {
-            Some(&results_bank)
-        } else if self.compare_shown() {
-            Some(&compare_bank)
-        } else {
-            self.active_bank()
-        };
-        let text = bank
+        let text = self
+            .shown_bank()
             .map(|bank| bank.key_bar_spoken(&self.keymap))
             .filter(|text| !text.is_empty())
             .unwrap_or_else(|| "The key bar is empty.".to_owned());
@@ -495,7 +482,7 @@ impl App {
     pub(super) fn open_menu(&mut self, id: &str) -> Vec<Effect> {
         let caps = self.active_capabilities();
         // The enabled plugins' commands join the menus (W4d).
-        let Some(list) = self.menu_list(id, &caps) else {
+        let Some(list) = self.menu_list_for(id, &caps) else {
             return vec![self.say(Message::info(format!("No menu is named {id}.")))];
         };
         let dialog = Dialog::Choose {
@@ -966,8 +953,10 @@ impl App {
     pub(super) fn ask_quit(&mut self, keep_shell: bool) -> Vec<Effect> {
         self.keep_shell = keep_shell;
         // Running and waiting jobs alike: the queue is saved across a restart
-        // since alpha 3 (Q2), but a quit stops a running job the way Cancel
-        // does, so a copy cut by it starts over on Retry; the question stays.
+        // since alpha 3 (Q2), and a quit interrupts a running job the way a
+        // lost connection does (A4), so a copy cut by it resumes at its
+        // offset on Retry where the place keeps part files; the jobs still
+        // stop, so the question and its words stay.
         let jobs = if self.settings.confirm.quit_with_jobs {
             self.jobs.len() as u64
         } else {
@@ -1019,9 +1008,10 @@ impl App {
         )
     }
 
-    /// Quits: running jobs are cancelled, the session and the path jump
-    /// store are saved, and the shell's folder is noted for `--cwd-file`
-    /// unless the shell keeps its own.
+    /// Quits: running jobs are stopped (the runtime interrupts them,
+    /// keeping a copy's part file for a resume on Retry, lane A4), the
+    /// session and the path jump store are saved, and the shell's folder
+    /// is noted for `--cwd-file` unless the shell keeps its own.
     pub(super) fn quit_now(&mut self) -> Vec<Effect> {
         let mut effects: Vec<Effect> = self.jobs.ids().into_iter().map(Effect::CancelJob).collect();
         self.quit = true;

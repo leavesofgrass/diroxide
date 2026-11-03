@@ -8,7 +8,9 @@
 //! while it is up; leaving it says the folder's landing line again.
 
 use diroxide_core::format::count;
-use diroxide_core::{Effect, Entry, EntryKind, Message, Move, Place, Redraw, RequestId, Side};
+use diroxide_core::{
+    Effect, Entry, EntryKind, KeyColumn, Message, Move, Place, Redraw, RequestId, Side,
+};
 use diroxide_vfs::{LocalPlace, VfsError, WatchEvent};
 
 use super::{App, Purpose, capitalized};
@@ -171,8 +173,14 @@ impl App {
             }
             effects.push(self.say(Message::info(welcome)));
             if self.settings.key_bar && !self.settings.compact {
-                let bar = Message::info("The key bar on the last line names the keys.");
-                effects.push(self.say(bar));
+                // The terminal draws the key bar on its last line; the GUI
+                // shows it as a toolbar, so its line does not say where
+                // (lane A4): the app knows the keymap column it runs with.
+                let bar = match self.keymap.column() {
+                    KeyColumn::Terminal => "The key bar on the last line names the keys.",
+                    KeyColumn::Gui => "The key bar names the keys.",
+                };
+                effects.push(self.say(Message::info(bar)));
             }
             let layout = self.settings.layout.word();
             let line = if palette.is_empty() {

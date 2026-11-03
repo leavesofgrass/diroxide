@@ -344,8 +344,6 @@ struct Running {
     /// The start line, said when the queue lets it start, when it was
     /// held back first.
     start_line: Option<String>,
-    /// Held in its place in line by Pause (lane Q2).
-    held: bool,
 }
 
 impl Running {
@@ -361,12 +359,18 @@ impl Running {
             destination: None,
             sources: Vec::new(),
             start_line: None,
-            held: false,
         }
     }
 
+    /// Whether the job waits its turn, held in its place or not.
     fn waits(&self) -> bool {
-        self.state == Some(JobState::Queued)
+        matches!(self.state, Some(JobState::Queued | JobState::Held))
+    }
+
+    /// Whether Pause holds the waiting job in its place (lane Q2; core's
+    /// own state since lane A4).
+    fn held(&self) -> bool {
+        self.state == Some(JobState::Held)
     }
 
     fn kind(&self) -> JobKind {
@@ -383,25 +387,20 @@ impl Running {
     }
 
     /// Holds or lets go of a waiting job, with the jobs line's sentence
-    /// for it: "Copying is held in line", "Copying waits its turn".
+    /// for it, the engine's own: "Copying is held in line", "Copying
+    /// waits its turn".
     fn set_held(&mut self, held: bool) {
-        if self.held == held || !self.waits() {
+        if self.held() == held || !self.waits() {
             return;
         }
-        self.held = held;
-        self.shown = if held {
-            held_sentence(self.kind())
+        let progress = if held {
+            JobProgress::held(self.kind())
         } else {
-            JobProgress::queued(self.kind()).describe()
+            JobProgress::queued(self.kind())
         };
+        self.state = Some(progress.state);
+        self.shown = progress.describe();
     }
-}
-
-/// The jobs line's sentence for a held job, the job first like every
-/// progress sentence: "Copying is held in line". Core has no word for a
-/// hold yet (lane Q2's contract request), so the app says its own.
-pub fn held_sentence(kind: JobKind) -> String {
-    format!("{} is held in line", kind.progress_word())
 }
 
 /// The running and waiting jobs, their latest progress sentences, and the
@@ -524,7 +523,6 @@ impl JobTable {
                 if entry.waits() {
                     entry.state = Some(JobState::Running);
                 }
-                entry.held = false;
                 let line = entry.start_line.take()?;
                 entry.shown = line.clone();
                 Some(line)
@@ -532,7 +530,6 @@ impl JobTable {
             QueueNote::Waits(job) => {
                 let entry = self.entry_mut(*job)?;
                 entry.state = Some(JobState::Queued);
-                entry.held = false;
                 entry.shown = JobProgress::queued(entry.kind()).describe();
                 Some(format!(
                     "Queued: {}{}",
@@ -715,7 +712,7 @@ impl JobTable {
                 let waiting = self.waiting_entries();
                 waiting
                     .iter()
-                    .find(|r| !r.held)
+                    .find(|r| !r.held())
                     .or_else(|| waiting.first())
                     .copied()
             })
@@ -758,9 +755,7 @@ impl JobTable {
 
     /// Whether a waiting job is held in its place (lane Q2).
     pub fn is_held(&self, job: JobId) -> bool {
-        self.running
-            .iter()
-            .any(|r| r.job == job && r.waits() && r.held)
+        self.running.iter().any(|r| r.job == job && r.held())
     }
 
     /// How many jobs are running or waiting.
@@ -829,13 +824,17 @@ impl JobTable {
         };
         let percent = entry.latest.as_ref().map_or(0, JobProgress::percent);
         match entry.state {
-            Some(JobState::Queued) => {
+            Some(state @ (JobState::Queued | JobState::Held)) => {
                 let waiting = self.waiting_entries();
                 let at = waiting
                     .iter()
                     .position(|r| r.job == entry.job)
                     .map_or(1, |i| i + 1);
-                let state = if entry.held { "Held" } else { "Waiting" };
+                let state = if state == JobState::Held {
+                    "Held"
+                } else {
+                    "Waiting"
+                };
                 format!("{state} {at} of {}: {verb}{object}", waiting.len())
             }
             Some(JobState::Paused) => format!("Paused at {percent} percent: {verb}{object}"),
@@ -1067,18 +1066,31 @@ mod tests {
             Some("Back in line: copy 12 items to build")
         );
         assert!(!jobs.is_held(JobId::new(3)));
+        // The hold is core's own state since lane A4, not a flag beside it.
+        assert_eq!(jobs.state_of(JobId::new(2)), Some(JobState::Held));
+        assert_eq!(jobs.state_of(JobId::new(3)), Some(JobState::Queued));
+        assert!(jobs.waits(JobId::new(2)), "a held job still waits");
+        // The lone held job's sentence is the engine's, the job first.
+        jobs.finish(JobId::new(3));
+        assert_eq!(jobs.line(), "Copying is held in line");
+        assert_eq!(
+            jobs.row_of(JobId::new(2)).as_deref(),
+            Some("Held 1 of 1: copy 12 items to build")
+        );
         for line in [
             "Held: copy 12 items to build",
             "Back in line: copy 12 items to build",
             "Held 1 of 2: copy 12 items to build",
+            "Held 1 of 1: copy 12 items to build",
+            "Copying is held in line",
         ] {
             let head = line.split(':').next().unwrap();
             assert!(within_cells(line, head), "{line}");
         }
-        assert!(within_cells(&held_sentence(JobKind::Copy), "held"));
         // A job that starts is no longer held.
         jobs.queue_note(&QueueNote::Started(JobId::new(2)));
         assert!(!jobs.is_held(JobId::new(2)));
+        assert_eq!(jobs.state_of(JobId::new(2)), Some(JobState::Running));
     }
 
     /// Golden rows and lines at 40 cells (R25, 2.2): the state first.

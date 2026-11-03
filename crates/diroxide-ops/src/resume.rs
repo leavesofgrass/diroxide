@@ -14,8 +14,10 @@
 //!   passes: the first 64 KiB and the last 1 MiB of the part file equal the
 //!   same ranges of the source. Anything else removes the part file and
 //!   starts again, saying why ([`JobNotice::NotResumed`]).
-//! - **Cancel removes the part file**; a lost connection, a pause or a
-//!   crash keeps it.
+//! - **Cancel removes the part file**; a lost connection, a pause, a
+//!   crash, or the interrupt quit stops a job with
+//!   ([`JobControl::interrupt`](crate::JobControl::interrupt), lane A4)
+//!   keeps it, with its line.
 //! - **A move never trusts a resumed prefix**: the run hashes the source's
 //!   prefix again before the read-back, so resume saves the writing of the
 //!   prefix, never its reading.

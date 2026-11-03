@@ -1,21 +1,24 @@
 //! A fake place whose reads wait at a gate, and whose listings can arrive
 //! in batches: the queue's and the streamed listing's tests hold jobs
 //! running, and folders half listed, for as long as they need, with no
-//! timer and no network. Every other call is the fake provider's own.
+//! timer and no network. A read can also stop at a byte offset, so a
+//! copy is held in the middle of its file (lane A4's quit and resume).
+//! Every other call is the fake provider's own, its kept writes too.
 
-use std::io::Read;
+use std::io::{self, Read};
 use std::ops::ControlFlow;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use diroxide_app::AppEvent;
 use diroxide_core::{Effect, Entry, Place};
 use diroxide_ops::FakeProvider;
+use diroxide_vfs::provider::ResumableWrite;
 use diroxide_vfs::{
-    AttributeChange, Capabilities, CopyHint, FileWriter, LinkRequest, OpContext, Provider,
-    ReadSeek, SpaceInfo, StreamingList, TrashCheck, TrashGate, VfsError, VolumeInfo, WatchHandle,
-    WatchSink, WriteMode,
+    AttributeChange, CancelToken, Capabilities, CopyHint, FileWriter, LinkRequest, OpContext,
+    Provider, ReadSeek, SpaceInfo, StreamingList, TrashCheck, TrashGate, VfsError, VolumeInfo,
+    WatchHandle, WatchSink, WriteMode,
 };
 
 use crate::support::Session;
@@ -30,6 +33,11 @@ pub struct Held {
     batch: Arc<AtomicUsize>,
     /// Batches handed out so far.
     pub batches: Arc<AtomicUsize>,
+    /// Where a read stops while the gate is closed; `u64::MAX` waits at
+    /// the read's start instead.
+    hold_at: Arc<AtomicU64>,
+    /// A read reached `hold_at` and waits there.
+    reached: Arc<AtomicBool>,
 }
 
 impl Held {
@@ -40,7 +48,22 @@ impl Held {
             gate: Arc::new((Mutex::new(true), Condvar::new())),
             batch: Arc::new(AtomicUsize::new(0)),
             batches: Arc::new(AtomicUsize::new(0)),
+            hold_at: Arc::new(AtomicU64::new(u64::MAX)),
+            reached: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Reads go on to `offset` bytes, then wait while the gate is closed:
+    /// a copy is held in the middle of its file. The gate closes now.
+    pub fn hold_reads_at(&self, offset: u64) {
+        self.hold_at.store(offset, Ordering::SeqCst);
+        self.reached.store(false, Ordering::SeqCst);
+        self.close();
+    }
+
+    /// Whether a read waits at the offset [`Held::hold_reads_at`] set.
+    pub fn reached(&self) -> bool {
+        self.reached.load(Ordering::SeqCst)
     }
 
     /// Closes the gate: reads wait.
@@ -93,8 +116,18 @@ impl Provider for Held {
     }
 
     fn read(&self, place: &Place, ctx: &OpContext) -> Result<Box<dyn Read + Send>, VfsError> {
-        self.wait(ctx)?;
-        self.fake.read(place, ctx)
+        let at = self.hold_at.load(Ordering::SeqCst);
+        if at == u64::MAX {
+            self.wait(ctx)?;
+            return self.fake.read(place, ctx);
+        }
+        Ok(Box::new(HeldRead {
+            inner: self.fake.read(place, ctx)?,
+            pos: 0,
+            at,
+            held: self.clone(),
+            cancel: ctx.cancel.clone(),
+        }))
     }
 
     fn open_seekable(&self, place: &Place, ctx: &OpContext) -> Result<Box<dyn ReadSeek>, VfsError> {
@@ -179,6 +212,50 @@ impl Provider for Held {
 
     fn as_streaming(&self) -> Option<&dyn StreamingList> {
         (self.batch.load(Ordering::SeqCst) > 0).then_some(self as &dyn StreamingList)
+    }
+
+    /// The fake's kept writes: they resume only where its `resume` switch
+    /// says the place can.
+    fn as_resumable(&self) -> Option<&dyn ResumableWrite> {
+        self.fake.as_resumable()
+    }
+}
+
+/// A read that stops at its holder's offset while the gate is closed; a
+/// cancel there ends it as cancelled.
+struct HeldRead {
+    inner: Box<dyn Read + Send>,
+    pos: u64,
+    at: u64,
+    held: Held,
+    cancel: CancelToken,
+}
+
+impl Read for HeldRead {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.pos >= self.at {
+            let (open, changed) = &*self.held.gate;
+            let mut guard = open.lock().unwrap();
+            while !*guard {
+                self.held.reached.store(true, Ordering::SeqCst);
+                if self.cancel.is_cancelled() {
+                    return Err(io::Error::other(VfsError::Cancelled));
+                }
+                guard = changed
+                    .wait_timeout(guard, Duration::from_millis(10))
+                    .unwrap()
+                    .0;
+            }
+        }
+        let room = if self.pos < self.at {
+            usize::try_from(self.at - self.pos).unwrap_or(usize::MAX)
+        } else {
+            usize::MAX
+        };
+        let want = buffer.len().min(room);
+        let read = self.inner.read(&mut buffer[..want])?;
+        self.pos += read as u64;
+        Ok(read)
     }
 }
 

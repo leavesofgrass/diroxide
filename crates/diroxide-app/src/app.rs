@@ -1282,26 +1282,43 @@ impl App {
         &self.menus
     }
 
+    /// A menu's rows as the terminal's list menus show them now, for the
+    /// active place: its own items, unavailable ones with their reason,
+    /// and the enabled plugins' commands, in the Plugins menu after its
+    /// own items and wherever `menus.toml` names one (lane A4, for the
+    /// GUI's native menus). `None` when no menu has this id.
+    pub fn menu_list(&self, id: &str) -> Option<diroxide_core::ListModel> {
+        let caps = self.active_capabilities();
+        self.menu_list_for(id, &caps)
+    }
+
     /// The key bar: the active bank's pairs on one line, key first, the
     /// most common operations first ("F2 Rename  F3 View  F4 Edit"). The
     /// terminal draws it on its last line in every mode (answer 49); see
     /// [`App::key_bar_within`] for a line of fixed width.
     pub fn key_bar(&self) -> String {
-        if self.viewing.is_some() {
-            return crate::menu::viewer_bank().key_bar(&self.keymap);
-        }
-        if self.in_preview() {
-            return crate::menu::preview_bank().key_bar(&self.keymap);
-        }
-        if self.results_shown() {
-            return crate::menu::results_bank().key_bar(&self.keymap);
-        }
-        if self.compare_shown() {
-            return crate::menu::compare_bank().key_bar(&self.keymap);
-        }
-        self.active_bank()
+        self.shown_bank()
             .map(|bank| bank.key_bar(&self.keymap))
             .unwrap_or_default()
+    }
+
+    /// The bank the key bar shows now, chosen in this one place for the
+    /// terminal's line, Say Key Bar and the GUI's toolbar (lane A4): the
+    /// viewer's while a file is viewed, the quick view's while it has the
+    /// focus, the search results', the comparison's, else the active bank
+    /// (Switch bank). `None` with no bank at all.
+    pub fn shown_bank(&self) -> Option<Bank> {
+        if self.viewing.is_some() {
+            Some(crate::menu::viewer_bank())
+        } else if self.in_preview() {
+            Some(crate::menu::preview_bank())
+        } else if self.results_shown() {
+            Some(crate::menu::results_bank())
+        } else if self.compare_shown() {
+            Some(crate::menu::compare_bank())
+        } else {
+            self.active_bank().cloned()
+        }
     }
 
     /// The key bar cut to `cells`, whole pairs only, the first first; the
@@ -1311,19 +1328,7 @@ impl App {
         if !self.settings.key_bar {
             return String::new();
         }
-        if self.viewing.is_some() {
-            return crate::menu::viewer_bank().key_bar_within(&self.keymap, cells);
-        }
-        if self.in_preview() {
-            return crate::menu::preview_bank().key_bar_within(&self.keymap, cells);
-        }
-        if self.results_shown() {
-            return crate::menu::results_bank().key_bar_within(&self.keymap, cells);
-        }
-        if self.compare_shown() {
-            return crate::menu::compare_bank().key_bar_within(&self.keymap, cells);
-        }
-        self.active_bank()
+        self.shown_bank()
             .map(|bank| bank.key_bar_within(&self.keymap, cells))
             .unwrap_or_default()
     }
@@ -1377,10 +1382,28 @@ impl App {
     /// Puts a panel's focus on the row with this name (its real name);
     /// whether it was found. App-side hook for the server and the GUI.
     /// The quick view follows, as it does a key's move.
+    ///
+    /// It acts on the panel's folder, even under a plugin list (lane L):
+    /// a plugin's or the server's `panel/set` moves the folder's cursor
+    /// beneath the list. A row the panel shows is focused with
+    /// [`App::focus_shown_row`].
     pub fn focus_name(&mut self, side: Side, name: &str) -> bool {
         let found = self.panel_mut(side).list_mut().focus_id(name);
         self.follow_cursor();
         found
+    }
+
+    /// Puts a panel's focus on a row it shows, by the row's id, as
+    /// [`Panel::shown_list`] shows it; whether it was found. App-side hook
+    /// for the GUI's click and a screen reader's Focus (lane A4): with a
+    /// plugin list up, its row takes the focus and the folder beneath
+    /// keeps its own, and the quick view, which shows files, stays; with
+    /// none, it is [`App::focus_name`].
+    pub fn focus_shown_row(&mut self, side: Side, id: &str) -> bool {
+        match self.panel_mut(side).plugin_list_mut() {
+            Some(shown) => shown.list_mut().focus_id(id),
+            None => self.focus_name(side, id),
+        }
     }
 
     /// Marks or unmarks the rows with these names; returns how many
