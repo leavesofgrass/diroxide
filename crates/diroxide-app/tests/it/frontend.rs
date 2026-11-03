@@ -107,6 +107,7 @@ fn job_history_opens_the_jobs_list_and_show_what_failed_the_items() {
     let said = s.command(ids::JOB_HISTORY);
     assert!(said[0].starts_with("Jobs, Done: trash f1.txt"), "{said:?}");
     assert_eq!(s.dialog_title().as_deref(), Some("Jobs"));
+    assert_eq!(s.app.dialog_purpose(), Some("Jobs"));
     assert_eq!(rows(&s), ["Finished, 1 job", "Done: trash f1.txt"]);
 
     // Enter opens the job's actions, the first of them Show what failed.
@@ -114,6 +115,7 @@ fn job_history_opens_the_jobs_list_and_show_what_failed_the_items() {
     assert_eq!(s.dialog_title().as_deref(), Some("Done: trash f1.txt"));
     assert_eq!(rows(&s)[0], "Show what failed");
     let said = s.key("enter");
+    assert_eq!(s.app.dialog_purpose(), Some("JobItems"));
     let title = s.dialog_title().unwrap();
     assert!(title.starts_with("Move to the trash finished"), "{title}");
     assert_eq!(rows(&s), ["Nothing failed or was skipped."]);
@@ -125,8 +127,10 @@ fn job_history_opens_the_jobs_list_and_show_what_failed_the_items() {
     // Escape walks back to the Jobs list, then to the panel.
     s.key("escape");
     assert_eq!(s.dialog_title().as_deref(), Some("Jobs"));
+    assert_eq!(s.app.dialog_purpose(), Some("Jobs"));
     s.key("escape");
     assert!(s.app.dialog().is_none(), "{:?}", s.dialog_title());
+    assert_eq!(s.app.dialog_purpose(), None);
 }
 
 /// The GUI's handover: a launcher that does not wait, so the app says
