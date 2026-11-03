@@ -57,6 +57,8 @@ mod plugins;
 mod hooks;
 // The transfer queue (lane A2, R25 commit 79).
 mod queue;
+// The queue saved across restarts (lane Q2).
+mod saved_queue;
 // Free space asked with a short limit (lane A3, R25 commit 90).
 mod space;
 
@@ -773,7 +775,8 @@ impl Runtime {
 
     /// The same runtime with the config and state folders: the undo
     /// journal is written in the state folder, and the session, the
-    /// prompts' histories and changed settings are saved there.
+    /// prompts' histories, changed settings and the job queue (lane Q2)
+    /// are saved there.
     pub fn with_paths(mut self, paths: Paths) -> Self {
         // The ledger of partial files lives in the state folder, so the
         // next start finds what a crash left; one that cannot be read is
@@ -789,6 +792,19 @@ impl Runtime {
                 &error.to_string(),
                 "",
             ))),
+        }
+        // The saved queue lives beside it (lane Q2): what the last
+        // session held comes back as interrupted jobs, nothing started; a
+        // file that does not read is said and set aside. Writes go to a
+        // thread of their own, which says a failed one once.
+        let speaker = Arc::clone(&self.shared);
+        let report = Box::new(move |message| speaker.send(AppEvent::Problem(message)));
+        let (note, problem) = self.scheduler.open_file(&paths.state_dir, report);
+        if let Some(problem) = problem {
+            self.queue.push_back(AppEvent::Problem(problem));
+        }
+        if let Some(note) = note {
+            self.queue.push_back(AppEvent::Queue(Box::new(note)));
         }
         self.engine = self
             .engine
@@ -1088,6 +1104,9 @@ impl Runtime {
                     .request(*request, &self.shared, self.paths.as_ref(), &worker);
             }
             Request::Plan(job) => {
+                // Kept for the saved queue, so an interrupted job can be
+                // planned again (lane Q2).
+                self.scheduler.planned(&job);
                 let engine = self.engine.clone();
                 let control = JobControl::new();
                 let registry = Arc::clone(&self.registry);
@@ -1776,6 +1795,7 @@ impl Runtime {
     /// a speed limit reach a waiting job too.
     fn run(&mut self, plan: Plan) {
         if diroxide_ops::JobClass::of_plan(&plan) == diroxide_ops::JobClass::Unqueued {
+            self.scheduler.take_planned(plan.job);
             self.start_plan(plan);
             return;
         }
@@ -1812,16 +1832,20 @@ impl Runtime {
             Q::MoveDown(job) => self.scheduler.shift(job, queue::Shift::Down).1,
             Q::MoveToFront(job) => self.scheduler.shift(job, queue::Shift::Front).1,
             Q::MoveToEnd(job) => self.scheduler.shift(job, queue::Shift::End).1,
-            Q::Pause(job) | Q::Resume(job) => {
+            // A job that waits its turn is held in its place, and let go
+            // in it (lane Q2); a started one pauses after its chunk.
+            Q::Pause(job) => self.scheduler.hold(job).unwrap_or_else(|| {
                 if let Some(control) = control(self, job) {
-                    if matches!(request, Q::Pause(_)) {
-                        control.pause();
-                    } else {
-                        control.resume();
-                    }
+                    control.pause();
                 }
                 queue::Granted::default()
-            }
+            }),
+            Q::Resume(job) => self.scheduler.release(job).unwrap_or_else(|| {
+                if let Some(control) = control(self, job) {
+                    control.resume();
+                }
+                queue::Granted::default()
+            }),
             Q::PauseQueue => self.scheduler.set_paused(true),
             Q::ResumeQueue => self.scheduler.set_paused(false),
             Q::PauseAll | Q::ResumeAll => {
@@ -1833,7 +1857,13 @@ impl Runtime {
                         running.control.resume();
                     }
                 }
-                self.scheduler.set_paused(pause)
+                // Every waiting job is held with the queue, and let go
+                // with it (lane Q2).
+                if pause {
+                    self.scheduler.hold_all()
+                } else {
+                    self.scheduler.release_all()
+                }
             }
             Q::SpeedLimit {
                 job: Some(job),
@@ -1855,6 +1885,11 @@ impl Runtime {
             Q::Limits(limits) => self.scheduler.set_limits(limits),
             Q::ErrorPolicy { job, policy } => {
                 self.scheduler.set_error_policy(job, policy);
+                queue::Granted::default()
+            }
+            Q::Forget(key) => self.scheduler.forget(key),
+            Q::Retried { key, job } => {
+                self.scheduler.retried(key, job);
                 queue::Granted::default()
             }
         };
@@ -2181,6 +2216,11 @@ impl Runtime {
         self.plugins.set_settings(&app.settings().plugins);
         if self.components_source != app.settings().components_source {
             self.components_source = app.settings().components_source.clone();
+        }
+        // A batch that quits carries the cancels of its stop: the saved
+        // queue is written as it stands first, and kept so (lane Q2).
+        if effects.contains(&Effect::Quit) {
+            self.scheduler.freeze_for_quit();
         }
         let mut screen = Vec::new();
         for effect in effects {

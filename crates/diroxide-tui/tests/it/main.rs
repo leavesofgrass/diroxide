@@ -17,6 +17,8 @@ mod owners_check;
 mod owners_check_alpha3;
 // Alpha 2's stage 3 screens (lane A3).
 mod stage3;
+// The saved queue's interrupted jobs (lane Q2).
+mod saved_queue;
 // A plugin's dialogs (W4d).
 mod plugins;
 mod support;

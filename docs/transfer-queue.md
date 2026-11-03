@@ -1,6 +1,6 @@
 # The transfer queue
 
-This guide covers the Jobs list, the queue behind it, what happens when a server stops answering, retries, resume, the speed limit, and what quitting does while jobs are unfinished. It is about jobs that touch another computer, and it also says what the Jobs list shows for jobs on this computer.
+This guide covers the Jobs list, the queue behind it, what happens when a server stops answering, retries, resume, the speed limit, what quitting does while jobs are unfinished, and what the next start lists. It is about jobs that touch another computer, and it also says what the Jobs list shows for jobs on this computer.
 
 What this guide quotes is what the program says. Each sentence is checked in tests against the 40 cells of a Braille line, and each is written so its meaning comes first. None of it has been heard yet on NVDA, JAWS or a Braille display. If your experience differs, that is a finding.
 
@@ -15,7 +15,8 @@ There is no second thing to learn. A job you start goes through the same steps a
 - A job that touches two servers, such as a copy from one to the other, takes a place on both or on neither.
 - Downloads of optional components run one at a time.
 - A job that stops to ask you something gives its place back, so one forgotten question cannot hold the line. When you answer, the job waits for a place again, ahead of jobs that never started.
-- The queue lives in this session. It is not kept when you quit.
+- Pause holds a waiting job in its place. The queue passes over it until you resume it.
+- The queue is kept across a restart. Jobs that a quit or a crash stopped are listed at the next start, and none of them starts on its own. [The queue at the next start](#the-queue-at-the-next-start) says how.
 
 The two limits are settings, `jobs.per_host` and `jobs.remote`, below.
 
@@ -43,9 +44,10 @@ A change of state is said at once. Progress is said at most every ten seconds in
 
 Open it from the Tools menu: Alt+T, then J. It is also in the palette (Ctrl+P) as Jobs. "Job history" in the palette opens the same list on the first finished job.
 
-The list has up to three groups, each under a heading that gives its count:
+The list has up to four groups, each under a heading that gives its count:
 
 ```text
+Interrupted, 2 jobs
 Running, 2 jobs
 Waiting, 1 job
 Finished, 5 jobs
@@ -54,8 +56,10 @@ Finished, 5 jobs
 Every row puts its state first, then the job:
 
 ```text
+Interrupted: copy 12 items to build
 Copying 40 percent: 12 items to build
 Waiting 2 of 5: copy 3 items to build
+Held 3 of 5: copy report.iso to build
 Paused at 30 percent: copy to build
 Stalled at 30 percent: copy to build
 Waiting for build: copy at 30 percent
@@ -66,11 +70,12 @@ Failed: copy to build, 2 items not done
 Cancelled: copy 3 items to build, 1 done
 ```
 
+- Interrupted holds the jobs that the last quit or crash stopped, read back at this start. It comes first, and it stays until you retry or forget each job, across restarts too.
 - Running holds every job that started: running, paused, stalled, verifying, waiting for an answer, and waiting for the connection.
-- Waiting holds the jobs that wait their turn, in the order they will start. "Waiting 2 of 5" says the place in line.
+- Waiting holds the jobs that wait their turn, in the order they will start. "Waiting 2 of 5" says the place in line. A held job keeps its place and says "Held" instead: "Held 3 of 5".
 - Finished holds the jobs that ran, newest first. The list keeps the last 100.
 
-With nothing to show, the list says "No jobs have run yet." An open list follows the jobs as they change, and your focus stays on the same job when it moves from one group to another.
+With nothing to show, the list says "No jobs have run yet." An open list follows the jobs as they change, and your focus stays on the same job when it moves from one group to another. The focus starts on the job in front, or on the first interrupted job when nothing runs or waits.
 
 Up and Down move. A heading row has nothing to do, so Enter on one moves to the next row. Escape closes the list.
 
@@ -81,10 +86,13 @@ Enter on a job opens a list named for that job. It offers, in this order, what f
 A waiting job:
 
 - Run now. Starts it past the limits.
+- Pause. Holds it in its place, below.
 - Move to the front, Move up, Move down, Move to the end.
 - Set a speed limit.
 - On errors, with the current choice: "On errors: ask about each error".
 - Cancel this job.
+
+A held job offers the same, with Resume first and Run now after it.
 
 A running job:
 
@@ -97,14 +105,29 @@ A finished job:
 - Show what failed. It lists each item and why.
 - Retry the failed items. It is shown dimmed when nothing failed, or when the job was not a copy, a move, a trash or a delete.
 
-Under any of them come the queue's own rows:
+An interrupted job offers only these two:
 
-- Pause the queue, or Resume the queue. With the queue paused, no new job starts and you hear "Queue paused: nothing new starts." Jobs that run go on. New jobs wait, local ones too. "Queue goes on." ends it.
-- Pause all jobs: "All jobs paused." Resume all jobs: "All jobs go on."
+- Retry. Plans the job again and asks, as below.
+- Forget. Takes it off the list.
+
+Under the others come the queue's own rows:
+
+- Pause the queue, or Resume the queue. With the queue paused, no new job starts and you hear "Queue paused: nothing new starts." Jobs that run go on. New jobs wait, local ones too. "Queue goes on." ends it. A held job stays held when the queue goes on.
+- Pause all jobs: "All jobs paused." It pauses the queue and every running job, and holds every waiting job. Resume all jobs: "All jobs go on." It lets every one of them go, held jobs too.
 
 Every one of these is also in the palette, so no new key is needed.
 
-Pausing one job says "Pausing copy 12 items to build", and Resume says "Resuming copy 12 items to build". Pause is not offered for a job that is only waiting its turn. Cancel it or move it instead.
+Pausing a running job says "Pausing copy 12 items to build", and Resume says "Resuming copy 12 items to build".
+
+### Pause for a waiting job
+
+Pause on a job that waits its turn holds it in its place in line. You hear "Held: copy 12 items to build".
+
+- The queue passes over it. A job behind it can start in its place, and a held job never holds back the jobs behind it.
+- Its row says "Held 3 of 5: copy 12 items to build". The place in line is kept, and it is counted among the waiting: the jobs line still says "3 jobs, 2 waiting".
+- A lone held job's line is "Copying is held in line".
+- You can still move it, set its speed limit, change what it does on errors, run it now or cancel it. Run now ends the hold.
+- Resume lets it go in the place it kept: "Back in line: copy 12 items to build". When a place is free it starts at once, and you hear its start line.
 
 ### Cancel
 
@@ -112,6 +135,7 @@ Pausing one job says "Pausing copy 12 items to build", and Resume says "Resuming
 - A waiting job is cancelled at once, with no question. It has not started, so there is nothing to undo.
 - A running job asks first, and the question starts on No: "Cancel copy 12 items to build? No is the default. y or n". A yes says "Cancelling: copy 12 items to build", and a no says "Not cancelled."
 - When other jobs run beside it, or when the job never started, the end names it: "Copy cancelled: report.iso to build, 0 done."
+- On an interrupted job, these keys forget it: "Forgotten: copy 12 items to build".
 
 Escape on a panel cancels the job in front, as it always did.
 
@@ -210,14 +234,48 @@ The global limit applies to remote jobs only, unless the setting `jobs.speed_lim
 
 ## Quitting with jobs
 
-Ctrl+Q asks when any job runs or waits, because the queue is not kept:
+Ctrl+Q asks when any job runs or waits, because quitting stops them:
 
 ```text
 2 jobs are not finished.
 Quit and stop them? No is the default. y or n
 ```
 
-With one job it says "1 job is not finished." A no goes back. A yes stops the jobs and quits. The setting `confirm.quit_with_jobs` turns this question off.
+With one job it says "1 job is not finished." A no goes back. A yes stops the jobs and quits. The setting `confirm.quit_with_jobs` turns this question off. Interrupted jobs are not counted: they are not running, and quitting keeps them.
+
+The jobs a yes stops are not lost. The queue is written down as it stood, and the next start lists them.
+
+## The queue at the next start
+
+diroxide keeps the queue in `queue.json` in the state folder, beside `partials.json`. It is written again after every change: a job queued, started, held, moved or ended. It is written by a helper in the background, so a key is never held up by the disk, and it is written whole or not at all. When no job is left, the file is removed. [Settings and where the files live](settings.md) says where the state folder is.
+
+The file keeps each job's kind, what it is on, whether it had started, whether it was held, and the request it was planned from.
+
+At the next start:
+
+- The jobs it held are interrupted now, and none of them starts on its own.
+- You hear one sentence, once: "2 jobs were interrupted by the last quit. The Jobs list has them." With one job: "1 job was interrupted by the last quit. The Jobs list has it." After a crash or a kill, when no quit wrote the file last, it says "when the last session ended" instead of "by the last quit".
+- The Jobs list shows them first, under "Interrupted, 2 jobs". Each row says "Interrupted:" and then the job: "Interrupted: copy 12 items to build".
+- Enter on one offers Retry and Forget.
+- Retry plans the job again from its request, as a new job. The plan and its question come as for any job, starting on No. A job that had started skips what is already at the destination, and the plan says "Retry: what is already there is skipped". The row leaves the list when you answer yes, and stays when you answer no.
+- A copy of 4 MiB or more that a crash or a lost connection cut goes on from its part file, when the checks in [Resume](#resume) agree. A quit stops its jobs the way Cancel does, and Cancel removes the part file, so after a quit the file that was cut starts again from the start.
+- Forget, or Delete on the row, takes it off the list: "Forgotten: copy 12 items to build".
+- An interrupted job stays on the list until you retry or forget it, across later restarts too. The sentence is said only at the start right after the stop.
+- A job saved without its request, such as an undo, offers Retry dimmed, with the reason: "It cannot be planned again: it was not saved."
+
+A crash in the middle of a job is also said by the undo journal, as before: "Last session ended during a copy: 3 of 5 steps done." Both lines are true. The journal says what was done, and the Jobs list has the job.
+
+If `queue.json` cannot be read, it is never deleted. It is renamed beside itself as `queue.json.bad`, or `queue.json.bad2` when that name is taken, and you hear:
+
+```text
+Could not read the saved job queue: the file is damaged. It is kept as queue.json.bad in the state folder.
+```
+
+A file from a newer diroxide is set aside the same way. If it cannot even be renamed, nothing is saved in that session, so it is never written over, and the line says to move `queue.json` out of the state folder.
+
+If a write fails, for example on a full disk, you hear it once: "Could not save the job queue: the disk is full. The jobs go on, but a restart will not list them."
+
+Only one diroxide keeps the queue at a time. With two diroxide windows on the same state folder, the first one keeps the queue, and the second one neither lists nor saves it. Its jobs are not kept when it quits.
 
 ## Settings
 
@@ -237,9 +295,8 @@ Local jobs always start at once, whatever `jobs.per_host` says.
 
 [Known limits](known-limits.md) has the full list.
 
-- The queue is not saved across a restart.
-- Pause is not offered for a job that is waiting its turn.
 - A job's error policy can be changed only while the job waits.
+- With two windows on one state folder, only the first keeps the queue.
 - Retry covers copy, move, trash and delete.
 - Several connections for one big file are not built.
 - A lost connection is final only when the plugin is turned off for good. A plugin cannot yet tell diroxide that a loss is final.

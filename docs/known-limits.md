@@ -88,16 +88,20 @@ Each item below is still to come. None of them is dated: a feature that is not i
 
 [The transfer queue](transfer-queue.md) describes the Jobs list. These are the limits.
 
-- The queue is not saved when you quit. Quitting asks first when any job runs or waits.
-- Pause is not offered for a job that is waiting its turn. Cancel it or move it instead. Pausing one waiting job needs a hold in the job engine that is not built.
-- A job's error policy can be changed only while the job waits.
+- The queue is kept in `queue.json` in the state folder, and the next start lists what a quit or a crash stopped as interrupted jobs. With two diroxide windows on one state folder, only the first keeps the queue: the second neither lists nor saves it, and its jobs are lost when it quits. Quit the second window when its jobs are done.
+- A quit stops its jobs the way Cancel does, so a copy cut by a quit starts its file again on Retry. Only a crash, a kill or a lost connection leaves a part file to resume from.
+- Retry on an interrupted job needs the request it was planned from. An undo is saved without one, and offers Retry dimmed. Forget it, and undo again yourself.
+- Pack, unpack and archive tests, and a plugin's own commands, do not go through the queue, so they are not kept across a restart either.
+- An interrupted job that had started skips what is already at the destination on Retry, as Retry the failed items does, even where the first run would have asked or replaced.
+- A plain listing on a pipe (`diro` with its output not a terminal) reads the saved queue like any start, so its one line about interrupted jobs can be said there and not in the next window.
+- A job's error policy can be changed only while the job waits or is held.
 - Retry the failed items covers copy, move, trash and delete. It runs again the original selections that held failures and skips what is already at the destination.
 - Resume applies to copies of 4 MiB or more. The head and tail check compares the first 64 KiB and the last 1 MiB of the part file, so a bad byte in the middle is not seen by a plain copy. A move reads everything back before it removes the source.
 - Split and join never resume. A network share counts as a local place: it has no gate for a lost connection, only the per-item retries.
 - A copy cut by a lost network keeps its part file for a resume. On a network share, answering Skip can leave a `.diro-part-` file, listed in `partials.json` in the state folder and never deleted unasked.
 - Several connections for one big file are not built. The speed limit applies to remote jobs only, unless the scope setting says all.
 - A `select` hook also fires when the focus moves, after a pause of a third of a second.
-- A crash in the middle of a run is reported at the next start, but the queue is not rebuilt, and a retry goes on from a part file only if the ledger still holds it.
+- A crash in the middle of a run is said twice at the next start: once by the undo journal, "Last session ended during a copy: 3 of 5 steps done.", and once as interrupted jobs. A retry goes on from a part file only if the ledger still holds it.
 
 ## Search and the filter language
 

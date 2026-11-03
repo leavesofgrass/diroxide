@@ -135,9 +135,10 @@ fn two_copies_run_on_a_host_the_rest_wait_and_the_list_reorders_and_cancels() {
     key_held(&mut s, "enter");
     let actions = rows(&s);
     assert_eq!(
-        actions[..5],
+        actions[..6],
         [
             "Run now",
+            "Pause",
             "Move to the front",
             "Move up",
             "Move down",
@@ -217,6 +218,105 @@ fn two_copies_run_on_a_host_the_rest_wait_and_the_list_reorders_and_cancels() {
     }
     assert!(!fake.exists(&remote("/srv/f3.txt")));
     assert_eq!(s.app.panel(Side::Left).place(), &local("/a"));
+}
+
+/// Lane Q2: Pause on a job that waits its turn holds it in its place;
+/// the queue passes over it, the jobs line counts it among the waiting,
+/// its error policy can still change, and Resume lets it go.
+#[test]
+fn pause_holds_a_waiting_job_in_its_place_and_resume_lets_it_go() {
+    let (held, mut s) = world();
+    copy(&mut s, "f1.txt");
+    copy(&mut s, "f2.txt");
+    copy(&mut s, "f3.txt");
+    copy(&mut s, "f4.txt");
+    command_held(&mut s, ids::JOBS_LIST);
+    focus_row(&mut s, "Waiting 1 of 2: copy f3.txt");
+    key_held(&mut s, "enter");
+    assert_eq!(rows(&s)[..2], ["Run now", "Pause"]);
+    key_held(&mut s, "down");
+    let said = key_held(&mut s, "enter");
+    assert!(
+        said.contains(&"Held: copy f3.txt to srv".to_owned()),
+        "{said:?}"
+    );
+    let labels = rows(&s);
+    assert!(
+        labels.contains(&"Held 1 of 2: copy f3.txt to srv".to_owned()),
+        "{labels:?}"
+    );
+    assert!(labels.contains(&"Waiting, 2 jobs".to_owned()), "{labels:?}");
+    let line = s.app.jobs().line();
+    assert!(line.starts_with("4 jobs, 2 waiting: "), "{line}");
+    for label in &labels {
+        let head = label.split(':').next().unwrap();
+        assert!(diroxide_core::format::within_cells(label, head), "{label}");
+    }
+
+    // A held job offers Resume first, and its error policy still changes.
+    focus_row(&mut s, "Held 1 of 2");
+    key_held(&mut s, "enter");
+    let actions = rows(&s);
+    assert_eq!(actions[..2], ["Resume", "Run now"]);
+    assert!(
+        actions.iter().any(|a| a.starts_with("On errors: ")),
+        "{actions:?}"
+    );
+    key_held(&mut s, "escape");
+    key_held(&mut s, "escape");
+    assert!(s.app.dialog().is_none());
+
+    // The gate opens: the queue passes over the held job, so f4 runs
+    // before it, and f3 stays where it is.
+    held.open();
+    crate::held::drive(&mut s, Vec::new(), |s, _| crate::held::copies_ended(s) >= 3);
+    assert_eq!(crate::held::copies_ended(&s), 3);
+    assert!(held.fake.exists(&remote("/srv/f4.txt")));
+    assert!(!held.fake.exists(&remote("/srv/f3.txt")));
+    assert_eq!(s.app.jobs().line(), "Copying is held in line");
+
+    // Resume: back in line, and it starts at once with room on the host.
+    command_held(&mut s, ids::JOBS_LIST);
+    focus_row(&mut s, "Held 1 of 1");
+    key_held(&mut s, "enter");
+    let said = key_until(&mut s, "enter", |s, _| crate::held::settled_after(s, 4));
+    let back = said
+        .iter()
+        .position(|l| l == "Back in line: copy f3.txt to srv");
+    let started = said
+        .iter()
+        .position(|l| l.starts_with("Copy started: 1 item to srv"));
+    assert!(
+        back.is_some() && started.is_some() && back < started,
+        "{said:?}"
+    );
+    assert!(held.fake.exists(&remote("/srv/f3.txt")));
+}
+
+/// Lane Q2: Pause all jobs holds the waiting ones too, and Resume all
+/// jobs lets every one go.
+#[test]
+fn pause_all_holds_the_waiting_jobs_and_resume_all_lets_them_go() {
+    let (held, mut s) = world();
+    for name in ["f1.txt", "f2.txt", "f3.txt"] {
+        copy(&mut s, name);
+    }
+    let said = command_held(&mut s, ids::JOBS_PAUSE_ALL);
+    assert!(said.contains(&"All jobs paused.".to_owned()), "{said:?}");
+    command_held(&mut s, ids::JOBS_LIST);
+    let labels = rows(&s);
+    assert!(
+        labels.contains(&"Held 1 of 1: copy f3.txt to srv".to_owned()),
+        "{labels:?}"
+    );
+    key_held(&mut s, "escape");
+    held.open();
+    let said = command_held(&mut s, ids::JOBS_RESUME_ALL);
+    assert!(said.contains(&"All jobs go on.".to_owned()), "{said:?}");
+    crate::held::drive(&mut s, Vec::new(), |s, _| crate::held::settled_after(s, 3));
+    for name in ["f1.txt", "f2.txt", "f3.txt"] {
+        assert!(held.fake.exists(&remote(&format!("/srv/{name}"))), "{name}");
+    }
 }
 
 #[test]

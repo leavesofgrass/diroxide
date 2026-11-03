@@ -25,6 +25,14 @@
 //! - **Cancel from any state** ([`Queue::cancel`]): a waiting job leaves at
 //!   once; a running one is cancelled by its control and leaves when its
 //!   thread ends ([`Queue::finished`]).
+//! - **A hold for one waiting job** ([`Queue::hold`], lane Q2): Pause on a
+//!   job that waits its turn keeps it in its place in line, and the
+//!   scheduler passes over it as if it were not there, so it holds back
+//!   no later job; [`Queue::release`] lets it go in the same place. A
+//!   held job still counts among the waiting ([`Queue::waiting`],
+//!   [`Queue::position`]), moves like any waiting job, and leaves at once
+//!   when it is cancelled; Run now starts it past the limits and ends the
+//!   hold.
 //!
 //! Every method returns the grants it caused, in order; the runtime starts
 //! a worker for each [`Grant::Start`] and delivers the held answer for each
@@ -221,6 +229,8 @@ struct Item {
     slot: Slot,
     /// Started by Run now, past the limits.
     forced: bool,
+    /// Held in its place: never started, and passed over until released.
+    held: bool,
     submitted: Duration,
 }
 
@@ -272,9 +282,74 @@ impl Queue {
             class,
             slot: Slot::Waiting,
             forced: false,
+            held: false,
             submitted: now,
         });
         self.schedule()
+    }
+
+    /// Holds a job that waits its turn in its place: the scheduler passes
+    /// over it until [`Queue::release`]. The grants are what the hold lets
+    /// start: a later job it held back for its host or the remote total.
+    /// `None` when the job does not wait its turn (it started, or the
+    /// queue does not hold it); holding a held job changes nothing.
+    pub fn hold(&mut self, job: JobId) -> Option<Vec<Grant>> {
+        let at = self.index(job)?;
+        if self.items[at].slot != Slot::Waiting {
+            return None;
+        }
+        if self.items[at].held {
+            return Some(Vec::new());
+        }
+        self.items[at].held = true;
+        Some(self.schedule())
+    }
+
+    /// Lets a held job go, in the place it kept; the grants say whether it
+    /// starts now. `None` when the job is not held.
+    pub fn release(&mut self, job: JobId) -> Option<Vec<Grant>> {
+        let at = self.index(job)?;
+        if !self.items[at].held {
+            return None;
+        }
+        self.items[at].held = false;
+        Some(self.schedule())
+    }
+
+    /// Holds every job that waits its turn (Pause all jobs); the jobs it
+    /// held, in order.
+    pub fn hold_all(&mut self) -> Vec<JobId> {
+        let mut held = Vec::new();
+        for item in &mut self.items {
+            if item.slot == Slot::Waiting && !item.held {
+                item.held = true;
+                held.push(item.job);
+            }
+        }
+        held
+    }
+
+    /// Lets every held job go (Resume all jobs); the grants say what
+    /// starts now.
+    pub fn release_all(&mut self) -> Vec<Grant> {
+        for item in &mut self.items {
+            item.held = false;
+        }
+        self.schedule()
+    }
+
+    /// Whether a job is held in its place.
+    pub fn is_held(&self, job: JobId) -> bool {
+        self.index(job).is_some_and(|at| self.items[at].held)
+    }
+
+    /// The held jobs, in their places' order.
+    pub fn held(&self) -> Vec<JobId> {
+        self.items
+            .iter()
+            .filter(|item| item.held)
+            .map(|item| item.job)
+            .collect()
     }
 
     /// A job's thread ended (done, failed or cancelled): it leaves the
@@ -327,7 +402,8 @@ impl Queue {
     }
 
     /// Starts a waiting job now, past the limits (WinSCP's "execute
-    /// now"); its slots still count against the others.
+    /// now"); its slots still count against the others. A held job is
+    /// let go as it starts.
     pub fn run_now(&mut self, job: JobId) -> Vec<Grant> {
         match self.index(job) {
             Some(at) if matches!(self.items[at].slot, Slot::Waiting | Slot::Returning) => {
@@ -339,6 +415,7 @@ impl Queue {
                 };
                 item.slot = Slot::Running;
                 item.forced = true;
+                item.held = false;
                 vec![grant]
             }
             _ => Vec::new(),
@@ -401,8 +478,9 @@ impl Queue {
     }
 
     /// The state the jobs list shows for a job: waiting its turn (also
-    /// after an answer, until its slot is free), running, or waiting for
-    /// an answer; `None` when the queue does not hold it.
+    /// after an answer, until its slot is free, and while held: core has
+    /// no word for a hold yet, so [`Queue::is_held`] says it), running, or
+    /// waiting for an answer; `None` when the queue does not hold it.
     pub fn state(&self, job: JobId) -> Option<JobState> {
         self.index(job).map(|at| match self.items[at].slot {
             Slot::Waiting | Slot::Returning => JobState::Queued,
@@ -412,7 +490,8 @@ impl Queue {
     }
 
     /// The jobs that wait their turn, in order: never started first, as
-    /// listed; answered jobs that wait to go on are not counted here.
+    /// listed, the held ones in the places they keep; answered jobs that
+    /// wait to go on are not counted here.
     pub fn waiting(&self) -> Vec<JobId> {
         self.items
             .iter()
@@ -523,7 +602,8 @@ impl Queue {
     /// Starts every job the limits let start, answered jobs first, then
     /// waiting ones, each group in order; a job that cannot start holds
     /// back later jobs that need the same host or the same total, so the
-    /// order is first in, first out and nothing is starved.
+    /// order is first in, first out and nothing is starved. A held job is
+    /// passed over, and holds back nothing.
     fn schedule(&mut self) -> Vec<Grant> {
         let mut grants = Vec::new();
         let (mut hosts, mut remote, mut components) = self.usage();
@@ -540,7 +620,7 @@ impl Queue {
                 } else {
                     Slot::Waiting
                 };
-                if self.items[at].slot != wanted {
+                if self.items[at].slot != wanted || self.items[at].held {
                     continue;
                 }
                 let limits = self.limits;
@@ -838,11 +918,90 @@ mod tests {
         );
     }
 
+    /// Lane Q2: a hold keeps a waiting job's place, the scheduler passes
+    /// over it (it holds back nothing), it is counted among the waiting,
+    /// and Resume lets it go in the place it kept.
+    #[test]
+    fn a_held_job_keeps_its_place_is_passed_over_and_goes_on_in_place() {
+        let mut queue = Queue::new(QueueLimits::default());
+        let zero = Duration::ZERO;
+        for n in 1..=5 {
+            queue.submit(id(n), JobKind::Copy, remote("a"), zero);
+        }
+        assert_eq!(queue.hold(id(3)), Some(Vec::new()), "the host is full");
+        assert!(queue.is_held(id(3)));
+        assert_eq!(queue.held(), [id(3)]);
+        assert_eq!(queue.state(id(3)), Some(JobState::Queued));
+        // Counted among the waiting, in the place it keeps.
+        assert_eq!(queue.waiting(), [id(3), id(4), id(5)]);
+        assert_eq!(queue.position(id(3)), Some((1, 3)));
+        // A free slot passes over it.
+        assert_eq!(started(&queue.finished(id(1))), [4]);
+        assert_eq!(queue.position(id(3)), Some((1, 2)), "its place is kept");
+        assert_eq!(queue.release(id(3)), Some(Vec::new()), "the host is full");
+        assert!(!queue.is_held(id(3)));
+        // Released, it goes before the job that came after it.
+        assert_eq!(started(&queue.finished(id(2))), [3]);
+        assert_eq!(queue.waiting(), [id(5)]);
+
+        // Only a job that waits its turn can be held or let go.
+        assert_eq!(queue.hold(id(4)), None, "running");
+        assert_eq!(queue.hold(id(9)), None, "unknown");
+        assert_eq!(queue.release(id(5)), None, "not held");
+        assert_eq!(queue.hold(id(5)), Some(Vec::new()));
+        assert_eq!(queue.hold(id(5)), Some(Vec::new()), "held twice is held");
+        // A held job moves like any waiting job and stays held.
+        queue.submit(id(6), JobKind::Copy, remote("a"), zero);
+        assert!(queue.move_down(id(5)));
+        assert_eq!(queue.waiting(), [id(6), id(5)]);
+        assert!(queue.is_held(id(5)));
+        // Cancel takes it at once; Run now lets it go as it starts.
+        assert_eq!(queue.cancel(id(5)), Cancelled::BeforeStart);
+        queue.hold(id(6));
+        assert_eq!(queue.run_now(id(6)), [Grant::Start(id(6))]);
+        assert!(!queue.is_held(id(6)));
+        assert!(queue.held().is_empty());
+    }
+
+    #[test]
+    fn a_held_job_holds_back_nothing_and_pause_all_holds_every_waiting_job() {
+        let mut queue = Queue::new(QueueLimits::default());
+        let zero = Duration::ZERO;
+        let a = HostKey::new("sftp", "a", None);
+        let b = HostKey::new("sftp", "b", None);
+        queue.submit(id(1), JobKind::Copy, remote("a"), zero);
+        queue.submit(id(2), JobKind::Copy, remote("a"), zero);
+        // A job on both hosts waits for a, and holds back b for itself.
+        let both = JobClass::Remote(vec![a.clone(), b.clone()]);
+        assert!(queue.submit(id(3), JobKind::Copy, both, zero).is_empty());
+        assert!(
+            queue
+                .submit(id(4), JobKind::Copy, remote("b"), zero)
+                .is_empty()
+        );
+        // Held, it holds back nothing: the job on b alone starts.
+        assert_eq!(queue.hold(id(3)).map(|g| started(&g)), Some(vec![4]));
+        assert_eq!(queue.running_on(&b), 1);
+        assert!(queue.finished(id(1)).is_empty(), "the held job waits");
+
+        // Pause all holds every waiting job; Resume all lets them go.
+        queue.submit(id(5), JobKind::Copy, remote("c"), zero);
+        queue.submit(id(6), JobKind::Copy, remote("c"), zero);
+        queue.submit(id(7), JobKind::Copy, remote("c"), zero);
+        assert_eq!(queue.hold_all(), [id(7)], "3 is already held");
+        assert_eq!(queue.held(), [id(3), id(7)]);
+        assert!(queue.finished(id(5)).is_empty(), "both are held");
+        assert!(queue.finished(id(6)).is_empty(), "both are held");
+        assert_eq!(started(&queue.release_all()), [3, 7]);
+        assert!(queue.held().is_empty());
+    }
+
     /// The property test of R25 commit 66, on a fake clock: random
-    /// submissions, cancels, questions, answers, run-now, moves, pauses and
-    /// finishes. After every step the limits hold (a job started by Run
-    /// now counts, and may pass them), every job is where the grants put
-    /// it, and at the end the queue drains: no job lost or starved.
+    /// submissions, cancels, questions, answers, run-now, moves, holds and
+    /// releases (lane Q2), pauses and finishes. After every step the
+    /// limits hold (a job started by Run now counts, and may pass them),
+    /// every job is where the grants put it, no held job starts, and at
+    /// the end the queue drains: no job lost or starved.
     mod props {
         use std::collections::{HashMap, HashSet};
 
@@ -861,6 +1020,10 @@ mod tests {
             Move(u8, u8),
             Pause,
             Resume,
+            Hold(u8),
+            Release(u8),
+            HoldAll,
+            ReleaseAll,
         }
 
         fn op() -> impl Strategy<Value = Op> {
@@ -874,6 +1037,10 @@ mod tests {
                 1 => (any::<u8>(), any::<u8>()).prop_map(|(a, b)| Op::Move(a, b)),
                 1 => Just(Op::Pause),
                 1 => Just(Op::Resume),
+                1 => any::<u8>().prop_map(Op::Hold),
+                1 => any::<u8>().prop_map(Op::Release),
+                1 => Just(Op::HoldAll),
+                1 => Just(Op::ReleaseAll),
             ]
         }
 
@@ -904,6 +1071,7 @@ mod tests {
         struct Model {
             seen: HashMap<JobId, (Seen, JobClass)>,
             forced: HashSet<JobId>,
+            held: HashSet<JobId>,
         }
 
         impl Model {
@@ -922,6 +1090,7 @@ mod tests {
                 for grant in grants {
                     match grant {
                         Grant::Start(job) => {
+                            assert!(!self.held.contains(job), "{job:?} started while held");
                             let entry = self.seen.get_mut(job).expect("a known job");
                             assert_eq!(entry.0, Seen::Waiting, "{job:?} started twice");
                             entry.0 = Seen::Running;
@@ -969,6 +1138,9 @@ mod tests {
                     }
                 }
                 assert_eq!(queue.len(), self.seen.len(), "the queue holds a stray job");
+                for job in self.seen.keys() {
+                    assert_eq!(queue.is_held(*job), self.held.contains(job), "{job:?} held");
+                }
                 for (host, (running, forced)) in per_host {
                     assert!(running <= limits.per_host + forced, "{host}: {running}");
                     assert_eq!(queue.running_on(&host), running);
@@ -989,7 +1161,11 @@ mod tests {
                 ops in proptest::collection::vec(op(), 1..160)
             ) {
                 let mut queue = Queue::new(QueueLimits::default());
-                let mut model = Model { seen: HashMap::new(), forced: HashSet::new() };
+                let mut model = Model {
+                    seen: HashMap::new(),
+                    forced: HashSet::new(),
+                    held: HashSet::new(),
+                };
                 let mut clock = Duration::ZERO;
                 let mut next = 1;
                 for op in ops {
@@ -1019,6 +1195,7 @@ mod tests {
                                 if waiting {
                                     prop_assert_eq!(answer, Cancelled::BeforeStart);
                                     model.seen.remove(&job);
+                                    model.held.remove(&job);
                                 } else {
                                     prop_assert_eq!(answer, Cancelled::WhileRunning);
                                 }
@@ -1043,6 +1220,7 @@ mod tests {
                             if let Some(job) = model.pick(n, Seen::Waiting) {
                                 let grants = queue.run_now(job);
                                 prop_assert_eq!(&grants, &vec![Grant::Start(job)]);
+                                model.held.remove(&job);
                                 model.apply(&grants);
                                 model.forced.insert(job);
                             }
@@ -1068,11 +1246,49 @@ mod tests {
                             let grants = queue.resume();
                             model.apply(&grants);
                         }
+                        Op::Hold(n) => {
+                            if let Some(job) = model.pick(n, Seen::Waiting) {
+                                model.held.insert(job);
+                                let grants = queue.hold(job);
+                                prop_assert!(grants.is_some(), "{:?} would not hold", job);
+                                model.apply(&grants.unwrap_or_default());
+                            }
+                        }
+                        Op::Release(n) => {
+                            if let Some(job) = model.pick(n, Seen::Waiting) {
+                                let was = model.held.remove(&job);
+                                let grants = queue.release(job);
+                                prop_assert_eq!(grants.is_some(), was);
+                                model.apply(&grants.unwrap_or_default());
+                            }
+                        }
+                        Op::HoldAll => {
+                            let mut held = queue.hold_all();
+                            held.sort();
+                            let mut expected: Vec<JobId> = model.seen.iter()
+                                .filter(|(id, (seen, _))| {
+                                    *seen == Seen::Waiting && !model.held.contains(id)
+                                })
+                                .map(|(id, _)| *id)
+                                .collect();
+                            expected.sort();
+                            prop_assert_eq!(&held, &expected);
+                            model.held.extend(held);
+                        }
+                        Op::ReleaseAll => {
+                            model.held.clear();
+                            let grants = queue.release_all();
+                            model.apply(&grants);
+                        }
                     }
                     model.check(&queue);
                 }
-                // Drain: answer every question, finish every running job,
-                // until the queue is empty. Nothing may be left waiting.
+                // Drain: let every held job go, answer every question,
+                // finish every running job, until the queue is empty.
+                // Nothing may be left waiting.
+                model.held.clear();
+                let grants = queue.release_all();
+                model.apply(&grants);
                 let grants = queue.resume();
                 model.apply(&grants);
                 for _ in 0..1000 {

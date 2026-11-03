@@ -4,6 +4,17 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased
 
+### Lane Q2: Pause for waiting jobs, and the queue across restarts
+
+Written on Monday, November 2, 2026.
+
+- Pause on a job that waits its turn, from its row in the Jobs list, holds it in its place in line: "Held: copy 12 items to build". The queue passes over it, so the jobs behind it can start, and it holds back none of them. Its row says "Held 3 of 5: copy 12 items to build", it is counted among the waiting, and a lone held job's line is "Copying is held in line". Resume, first in a held job's actions, lets it go in the place it kept: "Back in line: copy 12 items to build". It can still be moved, run now, cancelled, or given another error policy or speed limit.
+- Pause all jobs holds every waiting job as well as pausing the queue and the running jobs; Resume all jobs lets every one of them go.
+- The queue is kept across a restart. After every change the waiting, held and running jobs are written to `queue.json` in the state folder, beside `partials.json`, by a helper in the background, whole or not at all, and the file is removed when no job is left. A quit writes the queue as it stood before it stops the jobs; the quit's question keeps its words.
+- The next start lists those jobs first in the Jobs list, under "Interrupted, 2 jobs", each row "Interrupted: copy 12 items to build", and starts none of them. It says once, at normal importance, "2 jobs were interrupted by the last quit. The Jobs list has them.", or "... when the last session ended." after a crash.
+- An interrupted job offers Retry and Forget. Retry plans its request again as a new job, with the usual question; one that had started skips what is already there. The row leaves when the new job is confirmed. Forget, or Delete on the row, says "Forgotten: copy 12 items to build". Interrupted jobs stay listed until one of those, across restarts.
+- A `queue.json` that does not read is said in words and renamed aside as `queue.json.bad` (then `.bad2` and on), never deleted. A write that fails is said once. A second window on the same state folder leaves the first one's queue alone.
+
 ### Lane L: plugin lists inside a panel
 
 Written on Monday, November 2, 2026.
