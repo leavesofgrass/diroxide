@@ -31,7 +31,7 @@ The window's dialogs, viewer and quick view.
 Themes, drawing without a graphics card, and focus mode.
 
 - The window draws all 24 themes, your `[colors]`, and Windows' High Contrast, and it can follow the system's light or dark setting. A theme chosen is said once with its contrast verdict: "Theme Galaxy Light, meets AA." Ten themes fall short of AA. The window draws the parts that fall short in the text color and says how many. `diro --theme NAME` works in the window. [Themes and colors](themes.md) is the new guide.
-- A graphics card is no longer needed. With none, or only a software adapter, the window draws on the processor itself, and `--graphics software` asks for that. The window says once, "Drawing on the processor: no graphics adapter was found." `diro --log FILE` records the road taken. [The GUI](gui.md#how-the-window-draws) has the order.
+- A graphics card is no longer needed. With none, or only a software adapter, the window draws on the processor itself, and `--graphics software` asks for that. The window says once, "Drawing on the processor: no graphics adapter was found." `diro --log FILE` records how the window drew. [The GUI](gui.md#how-the-window-draws) has the order.
 - Focus mode (a setting) and full screen (F11) fade the title line, the status bar and the key bar after three seconds of rest. Any key brings them back. Nothing is said.
 
 A quit keeps a copy's part file.

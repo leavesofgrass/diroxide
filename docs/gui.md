@@ -57,7 +57,7 @@ There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal op
 This diro was built without the GUI; the terminal opens instead.
 ```
 
-Graphics that cannot start on any road, after the window is tried. A machine with no graphics card does not end here, because the window then draws on the processor. This sentence is for a machine where every road failed. The part in brackets is the reason and changes from machine to machine:
+Graphics that cannot start in any way, after the window is tried. A machine with no graphics card does not end here, because the window then draws on the processor. This sentence is for a machine where every way of drawing failed. The part in brackets is the reason and changes from machine to machine:
 
 ```text
 Could not open the GUI: the window could not start its graphics (no compatible WGPU device found); the terminal opens instead. Try another graphics API with diro --graphics, such as software, dx12, vulkan or gl. The terminal, diro --tui, needs none.
@@ -69,7 +69,7 @@ Other failures use the same shape: "Could not open the GUI:", the cause, "the te
 
 The window draws with your graphics card when it has one, and on the processor when it has none. `--graphics NAME` chooses for one start, and the `graphics` setting ("GUI graphics" in Settings) keeps the choice. The names are `auto`, `vulkan`, `dx12`, `metal`, `gl` and `software`.
 
-- `auto` lets the program choose the road. It is the default. The next section says how.
+- `auto` lets the program choose how to draw. It is the default. The next section says how.
 - `vulkan`, `dx12` (Direct3D 12, on Windows), `metal` (on macOS) and `gl` (OpenGL) name one interface for the graphics card.
 - `software` is drawing on the processor, even where a graphics card is there. It needs no graphics driver.
 - A name that is not on the list is a usage mistake. `diro` says "the graphics API glide is not known; use auto, vulkan, dx12, metal, gl or software" and exits with 2.
@@ -77,16 +77,16 @@ The window draws with your graphics card when it has one, and on the processor w
 
 ### How the window draws
 
-When it draws its first frame, the window first asks for a graphics adapter. Then it takes the first of these roads that works.
+When it draws its first frame, the window first asks for a graphics adapter. Then it uses the first of these ways of drawing that works.
 
 1. The graphics card, when the adapter is a real one.
-2. The processor. The program draws each frame itself and hands it to the system's window, so no graphics driver is involved. The window takes this road when no adapter is found, when the only adapter is one that draws on the processor anyway (Windows' own software adapter, or llvmpipe or lavapipe on Linux), when the graphics card cannot draw, and when you ask for it with `--graphics software`.
-3. The hybrid renderer on a software adapter, when the processor road cannot start, for a display system it does not know.
-4. The terminal, after the sentence above, when no road works.
+2. The processor. The program draws each frame itself and hands it to the system's window, so no graphics driver is involved. The window draws this way when no adapter is found, when the only adapter is one that draws on the processor anyway (Windows' own software adapter, or llvmpipe or lavapipe on Linux), when the graphics card cannot draw, and when you ask for it with `--graphics software`.
+3. The hybrid renderer on a software adapter, when drawing on the processor cannot start, for a display system it does not know.
+4. The terminal, after the sentence above, when no way works.
 
-The road changes how the window is drawn and nothing that a screen reader reads. The accessibility tree is the same on every road. Drawing on the processor is slower than the graphics card, and the whole window is drawn again for each change.
+The way of drawing changes how the window looks and nothing that a screen reader reads. The accessibility tree is built the same for every way. Drawing on the processor is slower than the graphics card, and the whole window is drawn again for each change.
 
-When the road is not the graphics card, the window says so once when it opens, politely, and the status line keeps it. The reason follows a colon, and there are three forms:
+When the window is not drawn by the graphics card, it says so once when it opens, politely, and the status line shows it until another message replaces it. The reason follows a colon, and there are three forms:
 
 ```text
 Drawing on the processor: no graphics adapter was found.
@@ -94,7 +94,7 @@ Drawing on the processor, as the graphics setting asks.
 Drawing on a software adapter: no graphics adapter was found, and the processor's presenter could not start.
 ```
 
-Other reasons after the colon are "the only graphics adapter is a software one" with the adapter's name in brackets, and "the graphics card" with its name and "could not draw". The first words are the road, so the line is clear in the first 40 cells. Nothing is said when the graphics card draws.
+Other reasons after the colon are "the only graphics adapter is a software one" with the adapter's name in brackets, and "the graphics card" with its name and "could not draw". The first words say how the window draws, so the line is clear in the first 40 cells. Nothing is said when the graphics card draws.
 
 To keep a record, start with `--log FILE`:
 
@@ -102,7 +102,7 @@ To keep a record, start with `--log FILE`:
 diro --gui --log gui.log
 ```
 
-The program appends lines that begin with "graphics:" to the file. They say the road taken and why, the adapter found first, any road that failed before it, the graphics device the card made, and, when the window closes, how many frames were drawn and the average time of each. Use a plain file name: a name with a control character is refused. The log is for diagnosis, and a file that cannot be written is left alone.
+The program appends lines that begin with "graphics:" to the file. They say how the window drew and why, the adapter found first, any way that failed before it, the graphics device the card made, and, when the window closes, how many frames were drawn and the average time of each. Use a plain file name: a name with a control character is refused. The log is for diagnosis, and a file that cannot be written is left alone.
 
 ### In the background
 
@@ -250,7 +250,7 @@ The quick view turns the other panel into a preview of the file under the cursor
 
 - The other panel's list is named for what it is: "Right panel, Preview, notes.md".
 - The focus stays on the file's row. Tab goes into the preview, and Tab again comes back to the panel's row. The preview stays on while you are back in the panel.
-- In the preview the quick view's own keys work. The next heading moves to it. The links list is a dialog, and Escape returns to the preview. Find is a field.
+- In the preview the quick view's own keys work: the next heading, the links list and Find. The links list is a dialog, Find is a field, and Escape returns to the preview.
 - A click on a row of the preview goes into it, and Escape comes back.
 - Shift+F3 turns the quick view off, and the panel lists a folder again.
 
@@ -267,16 +267,16 @@ The shapes, in the window:
 - A confirmation, such as "Copy 3 items to Backup, 312 bytes?", is two buttons.
   - The dialog's name is the question, ending "No is the default. y or n".
   - The buttons are "No" and "Yes", No first, and the focus starts on No. A button's key is its keyboard shortcut, not part of its name: N for No and Y for Yes.
-  - Tab goes from No to Yes, to the listing when there is one, and back to No. Shift+Tab goes the other way. Left and Right move between the buttons.
+  - Tab goes from No to Yes, to the listing when there is one, and back to No. Shift+Tab goes the other way. The arrow keys move between the two buttons.
   - Enter or Space presses the focused button. The keys y, n and Escape answer as they do in the terminal. A click presses a button, and so does a screen reader's Click. A screen reader's Focus moves the focus to the button and answers nothing.
   - Yes waits out the dialog settle time (`dialog_settle_ms`, 250 milliseconds by default). A key that comes inside it cannot answer, so a held key cannot say yes, and a held F5 does not open a second question.
-  - When the question lists what it touches, the listing is a list to read, named with its count: "Listing, 3 lines". Down, Up, Home and End move line by line.
+  - When the question lists what it touches, the listing is a list to read, named with its count: "Listing, 3 lines". Its lines are the plan: what is copied and where, and each file. Up, Down, Page Up, Page Down, Home and End move through it. A screen reader meets the listing before the buttons in the tree, and Tab reaches the buttons first.
   - The answer closes the dialog, and the focus returns to the panel's row.
 - A question with choices, such as a name that is taken, is named by its first line: "Name taken: report.pdf". The rest of what it says is read after the name, as the dialog's description, and drawn under it.
   - The choices are a list, and the focus starts on the safe one. For a name that is taken it is "Skip this one", and Escape answers with it, so the old file stays.
   - When the question has two lines or more after its first, they are a list to read, named "Message, 11 lines" for eleven. Tab moves between the choices and the message, and the focus starts on the choices. A new server key is one of these: the host, the key's type, and the fingerprint one part of four groups a line, "Part 1 of 4: 2134 141b 8436 8a94", so each part fits a Braille line.
 - A list to choose from, such as a menu, Settings, the Jobs list or the search results, is one list named by its title. Its help is drawn above it as a line. Its keys are the program's, as in the terminal, and a letter jumps to the next row that starts with it. A click on a row moves the focus there, and a double click chooses it, as Enter does. A screen reader's Focus or Click on an option moves the focus there too.
-- A text to read, such as help or details, is a list of lines. Up, Down, Home and End move line by line, and Escape closes it.
+- A text to read, such as help or details, is a list of lines. Up, Down, Page Up, Page Down, Home and End move through it, and Escape closes it.
 - A field with a label, such as "Rename report.pdf to", is a text input. Its text is read as characters, and its caret is the text selection, so a screen reader reads each character as the caret moves over it. The caret starts before the file's extension, as in the terminal.
 - A field with completion, such as the palette or Go to a path, is an editable combo box. Its candidates are a list under it, named "Candidates". Tab completes a path from the folder you are in.
 - A password field is a password input. It holds only the mask, one asterisk for each key, or nothing when the `secret_echo` setting is `silent`. The password itself never enters the accessibility tree, the drawing or the live region. A test plants a password and checks each of them, and the program's debugging output too.
@@ -295,7 +295,7 @@ After a password field there is a check box, "Show the password", or "Show the p
 - Every field except a password field opens an input method session when it takes the focus, so what an input method commits, such as Chinese, Japanese or Korean text, is typed at the caret. A password field opens none.
 - A paste into a field types the first line of the pasted text. The system's paste key does it.
 - On a panel, a paste is refused in words, because its letters would run as keys: "Text paste ignored here. Paste files with Paste in the Edit menu."
-- Text the program copies, such as Copy path and Copy name, goes to the system clipboard: "Name copied: notes.txt". If another program holds the clipboard, you hear "Could not copy to the clipboard: another program is using it. Try again in a moment." The window goes on.
+- Text the program copies, such as Copy path and Copy name, goes to the system clipboard: "Name copied: notes.txt". On Windows, if another program holds the clipboard, you hear "Could not copy to the clipboard: another program is using it. Try again in a moment." The window goes on.
 
 ## Jobs in the window
 
@@ -356,7 +356,7 @@ What this means for listening:
 - The lines said in one step are one announcement, in their order. The same line twice is said once. A job's start line is left out when more came after it in the same step, such as the result of a quick job, so "Copy finished: 1 done" is not preceded by "Copy started: 1 file to Backup". The announcement is as urgent as its most urgent line.
 - A dialog is said once, by itself, as [the dialogs](#the-dialogs) say.
 - A running job's progress is shown in the jobs line and the "Job progress" indicator and is not spoken by the program. Ctrl+D says where the job is.
-- A theme chosen is said once with its verdict. A road other than the graphics card is said once. Focus mode and full screen say nothing.
+- A theme chosen is said once with its verdict. Drawing in a way other than the graphics card is said once. Focus mode and full screen say nothing.
 - The program's start-up lines are held until a screen reader asks for the window, then said once, as one announcement: the interrupted jobs of the last session, a problem with a settings file, or on a first start the welcome, the key bar and the layout. On the one run measured, they arrived about two seconds after launch.
 - The first start's line about the key bar is "The key bar names the keys." In the terminal it is "The key bar on the last line names the keys."
 
