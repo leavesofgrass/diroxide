@@ -2,6 +2,10 @@
 //! back and forward with each folder's cursor and marks, home, the other
 //! panel, swap, reload, watching, path jump and the go-to-place list, the
 //! startup lines and the restored session.
+//!
+//! A plugin list over a panel's place (lane L) closes when a new place
+//! opens in the panel, and the place's own listings stay quiet beneath it
+//! while it is up; leaving it says the folder's landing line again.
 
 use diroxide_core::format::count;
 use diroxide_core::{Effect, Entry, EntryKind, Message, Move, Place, Redraw, RequestId, Side};
@@ -57,6 +61,12 @@ impl App {
         focus: Option<String>,
         how: Load,
     ) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        // A new place closes a plugin list over the panel, saying so; the
+        // same place listed again keeps it (lane L).
+        if matches!(how, Load::Open | Load::Back | Load::Forward) {
+            effects.extend(self.close_plugin_list(side, true));
+        }
         if &place != self.panel(side).place() {
             self.keep_selection(side);
         }
@@ -69,7 +79,6 @@ impl App {
         let request = self.ids.request();
         self.panel_mut(side)
             .begin_load_as(request, place.clone(), focus, how);
-        let mut effects = Vec::new();
         if side == self.active {
             effects.push(Effect::Redraw(Redraw::TitleLine));
         }
@@ -217,7 +226,9 @@ impl App {
         }
         let clock = std::sync::Arc::clone(&self.clock);
         let refreshed = self.panels[side.index()].finish(entries, &self.types, clock.as_ref());
-        let active = side == self.active;
+        // Beneath a plugin list the folder's listing is quiet: the list
+        // is what the owner hears (lane L).
+        let active = side == self.active && self.panel(side).plugin_list().is_none();
         let mut effects = Vec::new();
         if active || !self.screen_reader {
             effects.push(self.redraw_panel(side));
@@ -379,7 +390,7 @@ impl App {
             return Vec::new();
         }
         let now = self.now();
-        let active = side == self.active;
+        let active = side == self.active && self.panel(side).plugin_list().is_none();
         let mut effects = Vec::new();
         if active || !self.screen_reader {
             effects.push(self.redraw_panel(side));
@@ -456,7 +467,7 @@ impl App {
             place: Some(place.clone()),
         });
         self.ask_room(side, place);
-        let active = side == self.active;
+        let active = side == self.active && self.panel(side).plugin_list().is_none();
         let mut effects = Vec::new();
         if active || !self.screen_reader {
             effects.push(self.redraw_panel(side));
@@ -491,7 +502,8 @@ impl App {
     }
 
     pub(super) fn list_progress(&mut self, request: RequestId, so_far: u64) -> Vec<Effect> {
-        let waiting = self.active_panel().waits_for(request);
+        let waiting =
+            self.active_panel().waits_for(request) && self.active_panel().plugin_list().is_none();
         if waiting && so_far > 0 && so_far.is_multiple_of(10_000) {
             let text = format!(
                 "Reading folder, {} so far",
@@ -535,7 +547,10 @@ impl App {
         // A place inside an archive has nothing to watch: it changes only
         // when its archive does, and a listing reads it again from the
         // cache. Saying so would be noise.
-        if side != self.active || place.kind() == diroxide_core::PlaceKind::Archive {
+        if side != self.active
+            || place.kind() == diroxide_core::PlaceKind::Archive
+            || self.panel(side).plugin_list().is_some()
+        {
             return Vec::new();
         }
         let key = self.key(&ids::RELOAD);
@@ -562,19 +577,46 @@ impl App {
     pub(super) fn focus_effects(&self, side: Side) -> Vec<Effect> {
         vec![
             Effect::Redraw(Redraw::Panel(side)),
-            Effect::Announce(Message::status(self.panel(side).list().announce_focus())),
+            Effect::Announce(Message::status(
+                self.panel(side).shown_list().announce_focus(),
+            )),
         ]
     }
 
     /// "Right panel: Backup, 12 items": the panel, its folder's name and
     /// its count.
     fn panel_words(&self, side: Side) -> String {
+        if let Some(words) = self.plugin_list_words(side) {
+            return words;
+        }
         let panel = self.panel(side);
         format!(
             "{}, {}",
             place_leaf(panel.place()),
             count(panel.list().len() as u64, "item", "items")
         )
+    }
+
+    /// A folder's landing line, as when a listing landed in it: "Backup,
+    /// 12 items, in D:/work", or inside an archive its own line. Said when
+    /// a plugin list over it is left (lane L).
+    pub(super) fn folder_landing(&self, side: Side) -> String {
+        if let Some(line) = self.archive_landing(side) {
+            return line;
+        }
+        let panel = self.panel(side);
+        let mut text = format!(
+            "{}, {}",
+            place_leaf(panel.place()),
+            count(panel.list().len() as u64, "item", "items")
+        );
+        if let Some(parent) = panel.place().parent() {
+            text.push_str(&format!(
+                ", in {}",
+                diroxide_core::names::display_name(&parent.to_string())
+            ));
+        }
+        text
     }
 
     pub(super) fn switch_panel(&mut self) -> Vec<Effect> {
@@ -629,10 +671,14 @@ impl App {
                 place: Some(place),
             });
         }
+        let leaf = |side: Side| match self.panel(side).plugin_list() {
+            Some(shown) => shown.bare_title(),
+            None => place_leaf(self.panel(side).place()),
+        };
         let text = format!(
             "Panels swapped: left {}, right {}",
-            place_leaf(self.panel(Side::Left).place()),
-            place_leaf(self.panel(Side::Right).place())
+            leaf(Side::Left),
+            leaf(Side::Right)
         );
         vec![Effect::Redraw(Redraw::All), self.say(Message::info(text))]
     }
@@ -677,6 +723,10 @@ impl App {
             return vec![self.say(Message::status(empty))];
         };
         let entry = entry.clone();
+        // A row that is not a file is never opened outside (R22's N1).
+        if entry.kind == EntryKind::Item {
+            return vec![self.say(Message::warning(diroxide_plugins::lines::not_a_file()))];
+        }
         if entry.name_not_unicode {
             let message =
                 Message::from_error("open", &entry.display_name(), &VfsError::NameNotUnicode);
@@ -716,6 +766,9 @@ impl App {
         };
         if entry.is_container() {
             return self.enter();
+        }
+        if entry.kind == EntryKind::Item {
+            return vec![self.say(Message::warning(diroxide_plugins::lines::not_a_file()))];
         }
         let kind = entry
             .type_name

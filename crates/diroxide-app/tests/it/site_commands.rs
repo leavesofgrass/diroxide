@@ -1,12 +1,13 @@
 //! The Sites list's commands and dialogs in the app (lane A3, wiring S-C's
-//! commit 73): a lister action that takes no row runs in an empty list
-//! (New site, Alt+N); a lister opened again by its plugin replaces the open
-//! one; after one of the lister's own commands, or a lost connection, the
-//! rows are brought up to date quietly; Connect's `panel/set` closes the
-//! lister so the owner lands in the start folder; Enter on a Sites row of
-//! the go-to-place list runs the site's plugin's own Connect. The test
-//! plugin and the fake plugin stand in for the SFTP plugin; nothing touches
-//! the network.
+//! commit 73; a plugin list inside the panel since lane L): a lister
+//! action that takes no row runs in an empty list (New site, Alt+N); a
+//! lister opened again by its plugin replaces the open one in its panel;
+//! after one of the lister's own commands, or a lost connection, the rows
+//! are brought up to date quietly; Connect's `panel/set` closes the list so
+//! the owner lands in the start folder; Enter on a Sites row of the
+//! go-to-place list runs the site's plugin's own Connect. The test plugin
+//! and the fake plugin stand in for the SFTP plugin; nothing touches the
+//! network.
 
 use std::sync::{Arc, Mutex};
 
@@ -78,7 +79,17 @@ fn id(text: &str) -> CommandId {
     CommandId::new(text).unwrap()
 }
 
+/// The rows of the plugin list in the active panel.
 fn lister_rows(s: &Session) -> Vec<String> {
+    s.app
+        .active_panel()
+        .plugin_list()
+        .map(|shown| shown.list().rows().iter().map(|r| r.spoken()).collect())
+        .unwrap_or_default()
+}
+
+/// The rows of the dialog on top.
+fn dialog_rows(s: &Session) -> Vec<String> {
     match s.dialog() {
         Some(Dialog::Choose { list, .. }) => list.rows().iter().map(|r| r.spoken()).collect(),
         _ => Vec::new(),
@@ -105,10 +116,11 @@ fn new_site_runs_in_an_empty_list_and_the_rows_follow_quietly() {
     let said = s.run_command(Command::new(id("line-counter.sites")));
     assert!(
         said.iter()
-            .any(|l| l.starts_with("Sites, 0 saved, no rows")),
+            .any(|l| l == "Sites, 0 saved, no rows, left panel (Line counter)"),
         "{said:?}"
     );
-    assert_eq!(s.app.dialogs().len(), 1);
+    assert!(s.app.dialogs().is_empty(), "in the panel, not a dialog");
+    assert!(s.app.active_panel().plugin_list().is_some());
     // Alt+N needs no row; the old rule refused it in an empty list.
     let said = s.key("alt+n");
     assert!(!said.iter().any(|l| l == "No row is chosen"), "{said:?}");
@@ -121,11 +133,12 @@ fn new_site_runs_in_an_empty_list_and_the_rows_follow_quietly() {
     // one dialog, no start or end line of that run.
     assert_eq!(said_count(&said, "Host said"), 1, "{said:?}");
     assert_eq!(said_count(&said, "Test sites"), 0, "{said:?}");
-    assert_eq!(s.app.dialogs().len(), 1, "replaced, not opened twice");
+    assert!(s.app.dialogs().is_empty(), "replaced in place, no dialog");
+    assert!(s.app.panel(Side::Right).plugin_list().is_none());
     // The quiet run leaves no row in the Jobs list.
     s.key("escape");
     s.command(ids::JOBS_LIST);
-    let jobs = lister_rows(&s);
+    let jobs = dialog_rows(&s);
     assert!(!jobs.iter().any(|r| r.contains("Test sites")), "{jobs:#?}");
 }
 
@@ -166,8 +179,18 @@ fn connect_from_the_list_closes_it_and_lands_in_the_start_folder() {
         ["build, saved, ada@build.example, state saved"]
     );
     let said = s.key("enter");
-    assert!(s.dialog().is_none(), "the list closed: {said:?}");
+    assert!(
+        s.app.panel(Side::Left).plugin_list().is_none(),
+        "the list closed: {said:?}"
+    );
+    assert!(s.dialog().is_none());
     assert_eq!(s.app.panel(Side::Left).place(), &place(&start), "{said:?}");
+    // Quietly: the folder's landing line is what is heard, no closing line.
+    assert!(
+        !said.iter().any(|l| l.starts_with("Plugin list closed")),
+        "{said:?}"
+    );
+    assert!(said.iter().any(|l| l.starts_with("docs, ")), "{said:?}");
 }
 
 #[test]
@@ -196,7 +219,7 @@ fn a_lost_connection_brings_the_open_list_up_to_date() {
     assert_eq!(said[0], "Connection to build lost (Line counter)");
     // The list's own command ran again, quietly, and its rows came.
     assert_eq!(said_count(&said, "Host said"), 1, "{said:?}");
-    assert_eq!(s.app.dialogs().len(), 1);
+    assert!(s.app.dialogs().is_empty());
     assert_eq!(
         lister_rows(&s),
         ["build, lost, ada@build.example, state lost"]

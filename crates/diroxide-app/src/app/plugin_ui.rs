@@ -3,7 +3,8 @@
 //! keys it feeds, Manage plugins with each item's consent, settings and
 //! log, a plugin command as a job, a plugin's own calls (its questions,
 //! documents, listers, the panels, jobs and commands), and the host's
-//! events in words.
+//! events in words. A lister shows inside a panel, over its place: see
+//! `plugin_lists` (lane L).
 //!
 //! The rules (answers 90 and 91; R22 sections 7 and 9):
 //!
@@ -30,7 +31,6 @@ use diroxide_core::{
 use diroxide_plugins::ask::{Answer as PluginAnswer, Question, QuestionKind, TextDocument};
 use diroxide_plugins::host::HostEvent;
 use diroxide_plugins::lines;
-use diroxide_plugins::listers::ListerView;
 use diroxide_plugins::panels::{PanelChange, PanelChoice, PanelSnapshot};
 use diroxide_plugins::protocol::{ErrorKind, RpcError};
 use diroxide_plugins::script::RunMode;
@@ -49,7 +49,7 @@ use crate::entry::{CompletionSource, EntryField};
 use crate::jobs::{FinishedJob, SIGHTED_INTERVAL_MS, millis_between};
 use crate::keymap::Lookup;
 use crate::plugins::catalog::{self, Catalog, CommandEntry, ItemState, Runs};
-use crate::plugins::lister::Lister;
+use crate::plugins::lister::PanelList;
 use crate::plugins::registry::{self, Proposal};
 use crate::plugins::{
     Call, CallId, Finished, Outcome, PluginEvent, PluginRequest, Reply, RunRequest, ask, log,
@@ -91,7 +91,7 @@ pub(super) struct Running {
 /// Whether a plugin command runs to bring a lister's rows up to date
 /// (lane A3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Refresh {
+pub(super) enum Refresh {
     /// A command the owner ran.
     No,
     /// After one of the lister's own commands, or a loss: nothing said.
@@ -151,12 +151,10 @@ pub(super) enum Wants {
     },
     /// A plugin's text document, answered on close when the plugin waits.
     Document { call: Option<CallId> },
-    /// A plugin's lister.
-    Lister { lister: Box<Lister> },
-    /// The lister's sort choices.
-    ListerSort,
-    /// The lister's filter, typed.
-    ListerFilter,
+    /// The sort choices of the plugin list in a panel (lane L).
+    ListerSort { side: Side },
+    /// The filter of the plugin list in a panel, typed (lane L).
+    ListerFilter { side: Side },
     /// A command's output to read.
     Output,
     /// An item's commands and keys.
@@ -184,7 +182,7 @@ pub(super) enum Wants {
 }
 
 /// The side a plugin names.
-fn side_of(active: Side, which: PanelChoice) -> Side {
+pub(super) fn side_of(active: Side, which: PanelChoice) -> Side {
     match which {
         PanelChoice::Active => active,
         PanelChoice::Other => active.other(),
@@ -211,39 +209,6 @@ fn argument(name: &str, value: &Value) -> Option<ArgValue> {
         ),
         _ => return None,
     })
-}
-
-/// The commands a row of a lister refuses: every one that acts on files.
-fn acts_on_files(action: Action) -> bool {
-    matches!(
-        action,
-        Action::View
-            | Action::Edit
-            | Action::Copy
-            | Action::Move
-            | Action::CopyTo
-            | Action::MoveTo
-            | Action::Trash
-            | Action::DeletePermanently
-            | Action::Rename
-            | Action::Duplicate
-            | Action::Details
-            | Action::ClipCopy
-            | Action::ClipCut
-            | Action::Paste
-            | Action::Pack
-            | Action::Unpack
-            | Action::TestArchive
-            | Action::Split
-            | Action::Join
-            | Action::MakeLink
-            | Action::Permissions
-            | Action::OpenAsArchive
-            | Action::CopyPath
-            | Action::CopyName
-            | Action::QuickView
-            | Action::OpenInTextweaver
-    )
 }
 
 impl App {
@@ -379,27 +344,66 @@ impl App {
     }
 
     /// The context of a run now: both panels, their cursors and the marks.
-    fn plugin_context(&self) -> RunContext {
+    /// A panel that shows a plugin list (lane L) keeps its folder beneath
+    /// as the place and gives the list's rows as the cursor and the marks,
+    /// each of kind item, so a command that needs files refuses them ("This
+    /// row is not a file."); the list itself is said beside the place.
+    pub(super) fn plugin_context(&self) -> RunContext {
         let side = self.active;
+        let item = |panel: &crate::panel::Panel, entry: &diroxide_core::Entry| {
+            let place = panel
+                .place()
+                .join(&entry.name)
+                .unwrap_or_else(|_| panel.place().clone());
+            (place, EntryKind::Item)
+        };
         let entry = |side: Side| {
             let panel = self.panel(side);
-            panel
-                .focused_entry()
-                .and_then(|e| panel.place().join(&e.name).ok().map(|p| (p, e.kind)))
+            match panel.plugin_list() {
+                Some(shown) => {
+                    let index = shown.list().focus_index()?;
+                    shown.entries().get(index).map(|e| item(panel, e))
+                }
+                None => panel
+                    .focused_entry()
+                    .and_then(|e| panel.place().join(&e.name).ok().map(|p| (p, e.kind))),
+            }
         };
         let panel = self.panel(side);
-        let marked = panel
-            .selected_entries()
-            .into_iter()
-            .filter_map(|e| panel.place().join(&e.name).ok().map(|p| (p, e.kind)))
-            .collect();
-        catalog::context_of(
+        let marked = match panel.plugin_list() {
+            Some(shown) => shown
+                .list()
+                .rows()
+                .iter()
+                .zip(shown.entries())
+                .filter(|(row, _)| row.selected)
+                .map(|(_, e)| item(panel, e))
+                .collect(),
+            None => panel
+                .selected_entries()
+                .into_iter()
+                .filter_map(|e| panel.place().join(&e.name).ok().map(|p| (p, e.kind)))
+                .collect(),
+        };
+        let mut context = catalog::context_of(
             panel.place(),
             self.panel(side.other()).place(),
             entry(side),
             entry(side.other()),
             marked,
-        )
+        );
+        context.list = panel.plugin_list().map(PanelList::wire);
+        context.other_list = self.panel(side.other()).plugin_list().map(PanelList::wire);
+        context
+    }
+
+    /// Whether a quiet run of this command, bringing a list's rows up to
+    /// date, is still going.
+    pub(super) fn plugin_refresh_running(&self, command: &CommandId) -> bool {
+        self.plugins
+            .running
+            .values()
+            .any(|r| r.refresh != Refresh::No && &r.command == command)
     }
 
     /// Enter on a Sites row of the go-to-place list (lane A3): the site's
@@ -537,7 +541,7 @@ impl App {
 
     /// Starts a plugin command as a job: the jobs line says it started,
     /// the plugin's name last.
-    fn start_plugin_run(
+    pub(super) fn start_plugin_run(
         &mut self,
         entry: &CommandEntry,
         context: RunContext,
@@ -549,7 +553,7 @@ impl App {
 
     /// Starts a plugin command as a job, said, or quietly to bring a
     /// lister's rows up to date.
-    fn start_plugin_run_with(
+    pub(super) fn start_plugin_run_with(
         &mut self,
         entry: &CommandEntry,
         context: RunContext,
@@ -1064,27 +1068,17 @@ impl App {
                 }
                 effects
             }
-            Wants::Lister { lister } => self.lister_activate(&lister),
-            Wants::ListerSort => {
+            Wants::ListerSort { side } => {
                 let Some(column) = row else {
                     return Vec::new();
                 };
                 let mut effects = self.close_top();
-                effects.extend(self.lister_change(|lister| lister.sort_by(&column)));
+                effects.extend(self.list_sorted(side, &column));
                 effects
             }
-            Wants::ListerFilter => {
+            Wants::ListerFilter { side } => {
                 let mut effects = self.close_top();
-                let filter = text.trim().to_owned();
-                effects.extend(self.lister_change(|lister| {
-                    if filter.is_empty() {
-                        lister.filter = None;
-                        "Filter off".to_owned()
-                    } else {
-                        lister.filter = Some(filter.clone());
-                        format!("Filter {filter}")
-                    }
-                }));
+                effects.extend(self.list_filtered(side, &text));
                 effects
             }
             Wants::Output | Wants::Commands | Wants::Log => Vec::new(),
@@ -1179,7 +1173,7 @@ impl App {
     }
 
     /// Escape (or No) in a plugin dialog: the plugin hears "cancelled",
-    /// a consent says "Not enabled.", a lister tells its plugin it closed.
+    /// a consent says "Not enabled.".
     pub(super) fn plugin_escape(&mut self, wants: Wants) -> Vec<Effect> {
         match wants {
             Wants::Consent { .. } => {
@@ -1207,16 +1201,6 @@ impl App {
             Wants::Document { call: Some(call) } => {
                 self.reply(call, Reply::Shown);
                 Vec::new()
-            }
-            Wants::Lister { lister } => {
-                self.request(Request::Plugins(Box::new(PluginRequest::ListerClosed {
-                    plugin: lister.view.plugin_id.clone(),
-                    lister: lister.view.spec.id.clone(),
-                })));
-                vec![self.say(Message::info(lines::with_source(
-                    "Lister closed",
-                    &lister.view.plugin,
-                )))]
             }
             Wants::RunConfirm { command, .. } => {
                 let name = self
@@ -1360,10 +1344,9 @@ impl App {
         Vec::new()
     }
 
-    /// Keys of a plugin's dialogs before the dialog's own: Space marks in
-    /// a choose list with several answers and in a lister; a lister's
-    /// action keys, sort and filter; a file command on a lister's row is
-    /// refused.
+    /// Keys of a plugin's dialogs before the dialog's own: F1 on a plugin's
+    /// setting, and Space marks in a choose list with several answers. A
+    /// plugin list's keys are the panel's (`plugin_lists`).
     pub(super) fn plugin_key(&mut self, key: &Key) -> Option<Vec<Effect>> {
         let wants = match self.opens.last().map(|o| &o.purpose) {
             Some(Purpose::Plugin(wants)) => (**wants).clone(),
@@ -1411,82 +1394,6 @@ impl App {
                     ]);
                 }
                 None
-            }
-            Wants::Lister { lister } => {
-                if let Some(effects) = self.lister_action_key(&lister, key) {
-                    return Some(effects);
-                }
-                match action? {
-                    // The end of the rows: more from the plugin, when it
-                    // has more.
-                    Action::Focus(movement) => {
-                        let at_end = match self.dialogs.last_mut() {
-                            Some((_, Dialog::Choose { list, .. })) => {
-                                list.move_focus(movement);
-                                list.focus_index().map(|i| i + 1) == Some(list.len())
-                            }
-                            _ => false,
-                        };
-                        let line = match self.dialogs.last() {
-                            Some((_, dialog)) => dialog.focus_line(),
-                            None => String::new(),
-                        };
-                        let mut effects = vec![
-                            Effect::Redraw(Redraw::All),
-                            Effect::Announce(Message::status(line)),
-                        ];
-                        if at_end && lister.has_more() && !lister.asking {
-                            effects.extend(self.ask_lister_rows(&lister, false));
-                        }
-                        Some(effects)
-                    }
-                    Action::Reload => Some(self.refresh_lister(
-                        &lister.view.plugin_id,
-                        &lister.view.spec.id,
-                        true,
-                    )),
-                    Action::ToggleSelect => {
-                        let state = match self.dialogs.last_mut() {
-                            Some((_, Dialog::Choose { list, .. })) => {
-                                let state = list.toggle_selected();
-                                list.move_focus(diroxide_core::Move::Down);
-                                state
-                            }
-                            _ => None,
-                        };
-                        let word = if state == Some(true) {
-                            "Marked"
-                        } else {
-                            "Unmarked"
-                        };
-                        Some(vec![
-                            Effect::Redraw(Redraw::All),
-                            self.say(Message::status(word)),
-                        ])
-                    }
-                    Action::SortList | Action::Sort => {
-                        let list = lister.sort_list();
-                        Some(self.open_dialog(
-                            Dialog::Choose {
-                                list,
-                                on_enter: Command::new(ids::ACCEPT),
-                            },
-                            Purpose::Plugin(Box::new(Wants::ListerSort)),
-                        ))
-                    }
-                    Action::Filter => {
-                        let field = EntryField::new("Filter the rows by", CompletionSource::None)
-                            .with_text(lister.filter.clone().unwrap_or_default());
-                        Some(self.open_dialog(
-                            Dialog::edit(field),
-                            Purpose::Plugin(Box::new(Wants::ListerFilter)),
-                        ))
-                    }
-                    action if acts_on_files(action) => {
-                        Some(vec![self.say(Message::warning(lines::not_a_file()))])
-                    }
-                    _ => None,
-                }
             }
             _ => None,
         }
@@ -1568,15 +1475,14 @@ impl App {
                 Vec::new()
             }
             Call::SetPanel(change) => {
-                // A plugin that opens a place in the active panel from its
-                // own lister (Connect's start folder) is done with the
-                // lister: it closes, so the owner lands in the folder.
+                // A place set on a panel that shows a plugin list closes
+                // the list quietly, so the owner lands in the folder
+                // (Connect's start folder from the Sites list; lanes A3
+                // and L).
                 let mut effects = Vec::new();
-                if change.place.is_some()
-                    && side_of(self.active, change.panel) == self.active
-                    && self.top_lister_of(&plugin)
-                {
-                    effects.extend(self.close_top());
+                let side = side_of(self.active, change.panel);
+                if change.place.is_some() {
+                    effects.extend(self.close_plugin_list(side, false));
                 }
                 effects.extend(self.apply_panel_change(&change));
                 self.reply(call, Reply::Done(Ok(Value::Null)));
@@ -1646,14 +1552,17 @@ impl App {
             selection: panel.selected_entries().into_iter().cloned().collect(),
             sort: Some(panel.sort().describe()),
             filter: panel.filter().map(|f| f.text().to_owned()),
-            list: None,
+            list: panel.plugin_list().map(PanelList::wire),
         }
     }
 
     /// A plugin's `panel/set`, made through the app's own moves, so the
-    /// app says its usual lines.
+    /// app says its usual lines. Without a place, on a panel that shows a
+    /// plugin list, the cursor and the marks change in the folder beneath,
+    /// and nothing is said: the list stays as the owner left it.
     fn apply_panel_change(&mut self, change: &PanelChange) -> Vec<Effect> {
         let side = side_of(self.active, change.panel);
+        let beneath = self.panel(side).plugin_list().is_some();
         if let Some(place) = &change.place {
             let focus = change
                 .cursor
@@ -1673,8 +1582,10 @@ impl App {
         let mut effects = vec![Effect::Redraw(Redraw::Panel(side))];
         if let Some(name) = change.cursor.as_ref().and_then(name_of) {
             self.focus_name(side, &name);
-            let line = self.panel(side).list().announce_focus();
-            effects.push(self.say(Message::status(line)));
+            if !beneath {
+                let line = self.panel(side).list().announce_focus();
+                effects.push(self.say(Message::status(line)));
+            }
         }
         if change.refresh {
             effects.extend(self.reload(side));
@@ -1714,339 +1625,6 @@ impl App {
             };
             self.reply(*call, reply);
         }
-    }
-
-    // ---- Listers ----
-
-    /// Whether the dialog on top is a lister of this plugin.
-    fn top_lister_of(&self, plugin: &str) -> bool {
-        matches!(
-            self.opens.last().map(|o| &o.purpose),
-            Some(Purpose::Plugin(w)) if matches!(&**w, Wants::Lister { lister } if lister.view.plugin_id == plugin)
-        )
-    }
-
-    /// Where the open lister of a plugin is, by its id, in the dialogs.
-    fn lister_index(&self, plugin: &str, lister: &str) -> Option<usize> {
-        self.opens.iter().rposition(|o| {
-            matches!(&o.purpose, Purpose::Plugin(w) if matches!(&**w, Wants::Lister { lister: l } if l.view.plugin_id == plugin && l.view.spec.id == lister))
-        })
-    }
-
-    /// A plugin opened a lister: a new dialog, or, when the same lister is
-    /// open, its rows brought up to date in place with the focus and the
-    /// marks kept by row id. `opener` is the command that opened it, and
-    /// whether that run brings the rows up to date.
-    fn open_lister(
-        &mut self,
-        view: ListerView,
-        opener: Option<(CommandId, Refresh)>,
-    ) -> Vec<Effect> {
-        let silent = opener
-            .as_ref()
-            .is_some_and(|(_, refresh)| *refresh == Refresh::Silent);
-        let opened_by = opener.map(|(command, _)| command);
-        if let Some(index) = self.lister_index(&view.plugin_id, &view.spec.id) {
-            let count = view.rows.len() as u64;
-            let Purpose::Plugin(wants) = &mut self.opens[index].purpose else {
-                return Vec::new();
-            };
-            let Wants::Lister { lister } = &mut **wants else {
-                return Vec::new();
-            };
-            lister.view = view;
-            lister.asking = false;
-            if opened_by.is_some() {
-                lister.opened_by = opened_by;
-            }
-            let lister = lister.clone();
-            if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.get_mut(index) {
-                let fresh = lister.list(Some(list));
-                *list = fresh;
-            }
-            if silent {
-                return vec![Effect::Redraw(Redraw::All)];
-            }
-            let line = lines::with_source(
-                &diroxide_core::format::count(count, "row", "rows"),
-                &lister.view.plugin,
-            );
-            return vec![Effect::Redraw(Redraw::All), self.say(Message::info(line))];
-        }
-        let mut lister = Lister::new(view);
-        lister.opened_by = opened_by;
-        let list = lister.list(None);
-        let count = lister.view.rows.len();
-        let suffix = format!(" ({})", lister.view.plugin);
-        let title = lister.title();
-        let bare = title.strip_suffix(&suffix).unwrap_or(&title);
-        let mut line = lines::with_source(
-            &format!(
-                "{bare}, {}",
-                diroxide_core::format::count(count as u64, "row", "rows")
-            ),
-            &lister.view.plugin,
-        );
-        if let Some(capped) = lister.view.capped_line() {
-            line.push_str(". ");
-            line.push_str(&capped);
-        }
-        self.open_dialog_saying(
-            Dialog::Choose {
-                list,
-                on_enter: Command::new(ids::ACCEPT),
-            },
-            Purpose::Plugin(Box::new(Wants::Lister {
-                lister: Box::new(lister),
-            })),
-            Message::info(line),
-        )
-    }
-
-    /// Changes the lister under the top dialog (or on top), and shows it
-    /// again with its marks and focus kept.
-    fn lister_change(&mut self, change: impl FnOnce(&mut Lister) -> String) -> Vec<Effect> {
-        let Some(index) = self.opens.iter().rposition(
-            |o| matches!(&o.purpose, Purpose::Plugin(w) if matches!(**w, Wants::Lister { .. })),
-        ) else {
-            return Vec::new();
-        };
-        let Purpose::Plugin(wants) = &mut self.opens[index].purpose else {
-            return Vec::new();
-        };
-        let Wants::Lister { lister } = &mut **wants else {
-            return Vec::new();
-        };
-        let sentence = change(lister);
-        let lister = lister.clone();
-        if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.get_mut(index) {
-            let fresh = lister.list(Some(list));
-            *list = fresh;
-        }
-        let line = match self.dialogs.get(index) {
-            Some((_, Dialog::Choose { list, .. })) => {
-                format!("{sentence}. {}", list.announce_focus())
-            }
-            _ => sentence,
-        };
-        vec![Effect::Redraw(Redraw::All), self.say(Message::info(line))]
-    }
-
-    /// Asks the plugin for more rows, or for all of them again.
-    fn ask_lister_rows(&mut self, lister: &Lister, refresh: bool) -> Vec<Effect> {
-        let offset = if refresh {
-            0
-        } else {
-            lister.view.rows.len() as u64
-        };
-        self.request(Request::Plugins(Box::new(PluginRequest::ListerRows {
-            plugin: lister.view.plugin_id.clone(),
-            lister: lister.view.spec.id.clone(),
-            offset,
-            refresh,
-        })));
-        self.lister_change(|lister| {
-            lister.asking = true;
-            lines::with_source("Asking for more rows", &lister.view.plugin)
-        })
-    }
-
-    /// Rows a plugin sent for its open lister: added after the ones shown,
-    /// or in their place.
-    fn lister_rows_came(
-        &mut self,
-        plugin: &str,
-        lister: &str,
-        rows: Vec<diroxide_core::Entry>,
-        refresh: bool,
-    ) -> Vec<Effect> {
-        let Some(index) = self.lister_index(plugin, lister) else {
-            return Vec::new();
-        };
-        // A refresh after one of the lister's own commands says nothing:
-        // the rows change in place, the focus and the marks kept.
-        if let Purpose::Plugin(wants) = &mut self.opens[index].purpose
-            && let Wants::Lister { lister: held } = &mut **wants
-            && refresh
-            && held.quiet_refresh
-        {
-            held.quiet_refresh = false;
-            held.take_rows(rows, true);
-            let held = (**held).clone();
-            if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.get_mut(index) {
-                let fresh = held.list(Some(list));
-                *list = fresh;
-            }
-            return vec![Effect::Redraw(Redraw::All)];
-        }
-        self.lister_change(|held| {
-            let added = held.take_rows(rows, refresh);
-            let words = if refresh {
-                diroxide_core::format::count(added as u64, "row", "rows")
-            } else {
-                format!(
-                    "{} more",
-                    diroxide_core::format::count(added as u64, "row", "rows")
-                )
-            };
-            lines::with_source(&words, &held.view.plugin)
-        })
-    }
-
-    fn lister_rows(&self, lister: &Lister) -> Vec<diroxide_core::Entry> {
-        match self.dialogs.last() {
-            Some((_, Dialog::Choose { list, .. })) => lister.chosen(list),
-            _ => Vec::new(),
-        }
-    }
-
-    /// Enter in a lister: its `activate` command with the chosen rows.
-    fn lister_activate(&mut self, lister: &Lister) -> Vec<Effect> {
-        let Some(local) = lister.view.activate().map(str::to_owned) else {
-            return vec![self.say(Message::info(lines::with_source(
-                "Enter does nothing here",
-                &lister.view.plugin,
-            )))];
-        };
-        self.lister_command(lister, &local, true)
-    }
-
-    /// Runs one of a lister's commands with its chosen rows; `needs_row`
-    /// is false for an action that takes no selection (New site in an
-    /// empty Sites list), which runs with the focused row when there is
-    /// one, and without one otherwise.
-    fn lister_command(&mut self, lister: &Lister, local: &str, needs_row: bool) -> Vec<Effect> {
-        let rows = self.lister_rows(lister);
-        if rows.is_empty() && needs_row {
-            return vec![self.say(Message::status("No row is chosen"))];
-        }
-        let Ok(id) = CommandId::new(format!("{}.{local}", lister.view.plugin_id)) else {
-            return Vec::new();
-        };
-        let entry = self
-            .plugins
-            .catalog
-            .any_command(&id)
-            .map(|(_, entry)| entry.clone());
-        let Some(entry) = entry else {
-            let text = format!("No enabled plugin has the command {id}.");
-            return vec![self.say(Message::info(text))];
-        };
-        let context = self.plugin_context();
-        self.start_plugin_run(
-            &entry,
-            context,
-            Some((lister.view.spec.id.clone(), rows)),
-            false,
-        )
-    }
-
-    fn lister_action_key(&mut self, lister: &Lister, key: &Key) -> Option<Vec<Effect>> {
-        let (local, selection) = lister.view.spec.actions.iter().find_map(|action| {
-            Key::parse(&action.key)
-                .ok()
-                .filter(|k| k == key)
-                .map(|_| (action.command.clone(), action.selection))
-        })?;
-        let needs_row = selection != diroxide_plugins::manifest::Selection::None;
-        Some(self.lister_command(lister, &local, needs_row))
-    }
-
-    /// Brings an open lister's rows up to date, asking its plugin for all
-    /// of them again (`lister/rows`); a plugin without that method has its
-    /// lister's opening command run again quietly instead
-    /// (`lister_no_rows`). `said` says the new count, for the
-    /// owner's reload; otherwise nothing is said. Nothing when the lister
-    /// is not open.
-    fn refresh_lister(&mut self, plugin: &str, lister: &str, said: bool) -> Vec<Effect> {
-        let Some(index) = self.lister_index(plugin, lister) else {
-            return Vec::new();
-        };
-        let Purpose::Plugin(wants) = &mut self.opens[index].purpose else {
-            return Vec::new();
-        };
-        let Wants::Lister { lister: held } = &mut **wants else {
-            return Vec::new();
-        };
-        held.quiet_refresh = !said;
-        let held = (**held).clone();
-        if said {
-            return self.ask_lister_rows(&held, true);
-        }
-        self.request(Request::Plugins(Box::new(PluginRequest::ListerRows {
-            plugin: plugin.to_owned(),
-            lister: lister.to_owned(),
-            offset: 0,
-            refresh: true,
-        })));
-        Vec::new()
-    }
-
-    /// The plugin has no `lister/rows`: its lister's opening command runs
-    /// again quietly, and its new rows replace the old in place, the focus
-    /// and the marks kept (the SFTP plugin's Sites list, after New site or
-    /// a lost connection).
-    fn lister_no_rows(&mut self, plugin: &str, lister: &str) -> Vec<Effect> {
-        let Some(index) = self.lister_index(plugin, lister) else {
-            return Vec::new();
-        };
-        let held = match &self.opens[index].purpose {
-            Purpose::Plugin(w) => match &**w {
-                Wants::Lister { lister } => (**lister).clone(),
-                _ => return Vec::new(),
-            },
-            _ => return Vec::new(),
-        };
-        // One refresh at a time: a run of the opener still going will
-        // bring the rows.
-        let opener_running = held.opened_by.as_ref().is_some_and(|command| {
-            self.plugins
-                .running
-                .values()
-                .any(|r| r.refresh != Refresh::No && &r.command == command)
-        });
-        if opener_running {
-            return Vec::new();
-        }
-        let entry = held
-            .opened_by
-            .as_ref()
-            .and_then(|command| self.plugins.catalog.any_command(command))
-            .map(|(_, entry)| entry.clone());
-        let Some(entry) = entry else {
-            let line = lines::with_source("These rows cannot be asked again", &held.view.plugin);
-            return vec![self.say(Message::info(line))];
-        };
-        let context = self.plugin_context();
-        let refresh = if held.quiet_refresh {
-            Refresh::Silent
-        } else {
-            Refresh::Said
-        };
-        self.start_plugin_run_with(&entry, context, None, false, refresh)
-    }
-
-    /// Brings every open lister of a plugin up to date (a lost
-    /// connection turns a site's row to "lost").
-    fn refresh_listers_of(&mut self, plugin: &str) -> Vec<Effect> {
-        let open: Vec<String> = self
-            .opens
-            .iter()
-            .filter_map(|o| match &o.purpose {
-                Purpose::Plugin(w) => match &**w {
-                    Wants::Lister { lister } if lister.view.plugin_id == plugin => {
-                        Some(lister.view.spec.id.clone())
-                    }
-                    _ => None,
-                },
-                _ => None,
-            })
-            .collect();
-        let mut effects = Vec::new();
-        for lister in open {
-            effects.extend(self.refresh_lister(plugin, &lister, false));
-        }
-        effects
     }
 
     // ---- Jobs and their ends ----
@@ -2528,7 +2106,5 @@ mod tests {
             Some(ArgValue::Text(_))
         ));
         assert_eq!(side_of(Side::Left, PanelChoice::Other), Side::Right);
-        assert!(acts_on_files(Action::Trash));
-        assert!(!acts_on_files(Action::Focus(diroxide_core::Move::Down)));
     }
 }
