@@ -19,6 +19,8 @@
 //!   closed.
 //! - On Windows, text put on the clipboard ([`clipboard`]), with the
 //!   cause in words when another program holds it.
+//! - On Windows, winit's helper window named ([`helper`]), so a screen
+//!   reader never meets a nameless pane on the desktop.
 //!
 //! Elsewhere the console calls do nothing: a program started from a
 //! terminal on Linux or macOS writes to it, and one started from the
@@ -166,6 +168,74 @@ pub(crate) mod win {
         let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
         // FILETIME counts 100-nanosecond intervals.
         ticks(now).checked_sub(ticks(created)).map(|d| d / 10_000)
+    }
+}
+
+#[cfg(all(windows, feature = "gui"))]
+pub(crate) mod helper {
+    //! winit's helper window ("Winit Thread Event Target"): a window of
+    //! this thread that winit keeps visible but transparent, so it gets
+    //! the messages that carry events during a resize. UI Automation shows
+    //! it as a top-level pane of the desktop with no name, which a screen
+    //! reader's object navigation and window lists would meet as a
+    //! nameless pane. It is named here, and kept a tool window (out of the
+    //! taskbar and the task switcher), right after the event loop makes
+    //! it. It is not hidden: winit needs it visible.
+
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumThreadWindows, GWL_EXSTYLE, GetClassNameW, GetWindowLongPtrW, SetWindowLongPtrW,
+        SetWindowTextW, WS_EX_TOOLWINDOW,
+    };
+
+    /// The helper window's class, as winit names it.
+    const CLASS: &str = "Winit Thread Event Target";
+
+    /// The name the helper window is given, its meaning first.
+    pub(crate) const NAME: &str = "diroxide background helper";
+
+    unsafe extern "system" fn visit(hwnd: HWND, found: LPARAM) -> i32 {
+        let mut class = [0u16; 64];
+        // SAFETY: the buffer is ours and its length is passed; the call
+        // writes at most that many units.
+        let len = unsafe { GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32) };
+        let class = String::from_utf16_lossy(&class[..len.max(0) as usize]);
+        if class == CLASS {
+            // SAFETY: `found` is the address of the caller's local, which
+            // outlives the enumeration.
+            unsafe { *(found as *mut HWND) = hwnd };
+            return 0;
+        }
+        1
+    }
+
+    /// Names this thread's helper window and keeps it a tool window.
+    /// True when it was found.
+    pub(crate) fn name() -> bool {
+        let mut found: HWND = std::ptr::null_mut();
+        // SAFETY: enumerates this thread's windows with a plain callback;
+        // `found` is a local the callback writes, alive for the call.
+        unsafe {
+            let _ = EnumThreadWindows(GetCurrentThreadId(), Some(visit), &raw mut found as LPARAM);
+        }
+        if found.is_null() {
+            return false;
+        }
+        let title: Vec<u16> = NAME.encode_utf16().chain(Some(0)).collect();
+        // SAFETY: `found` is a window of this thread that winit made and
+        // keeps; the title is ours, ends with a zero, and outlives the
+        // call, which copies it; the style is read and written back with
+        // one more bit.
+        unsafe {
+            let _ = SetWindowTextW(found, title.as_ptr());
+            let style = GetWindowLongPtrW(found, GWL_EXSTYLE);
+            let tool = WS_EX_TOOLWINDOW as isize;
+            if style & tool == 0 {
+                let _ = SetWindowLongPtrW(found, GWL_EXSTYLE, style | tool);
+            }
+        }
+        true
     }
 }
 

@@ -493,6 +493,10 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     let event_loop = EventLoop::with_user_event()
         .build()
         .map_err(|e| error_for_event_loop(&e))?;
+    // winit made its helper window with the event loop: named now, so a
+    // screen reader never meets a nameless pane on the desktop.
+    #[cfg(windows)]
+    let _ = crate::platform::helper::name();
     let proxy = event_loop.create_proxy();
     let window_id = WindowId::next();
     let pending = Arc::new(AtomicBool::new(false));
