@@ -1319,6 +1319,74 @@ fn a_plugins_prompt_completes_as_the_owner_types() {
 }
 
 #[test]
+fn escape_in_a_plugin_list_stops_its_job_before_it_leaves() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}},
+        {"name": "a.txt", "kind": "item", "extra": {"id": "a.txt", "state": "Added", "lines": "3"}}
+    ]});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[
+            ("show", Act::Call("lister/open", open)),
+            ("diff", Act::Hang),
+        ]),
+    );
+    s.run_command(Command::new(id("line-counter.show")));
+    assert_eq!(s.command(ids::SELECT_ALL), ["2 rows selected"]);
+    assert_eq!(s.command(ids::SELECT_NONE), ["Nothing selected"]);
+    let enter = diroxide_core::Key::parse("enter").unwrap();
+    let effects = s.app.handle(AppEvent::Key(enter));
+    let screen = s.runtime.carry_out(&mut s.app, effects);
+    s.run_quiet(screen);
+    assert_eq!(s.app.jobs().line(), "Show the diff: started (Line counter)");
+    let said = s.key("escape");
+    assert_eq!(said[0], "Show the diff: cancelling");
+    assert!(
+        s.app.active_panel().plugin_list().is_some(),
+        "the job stops first: {said:?}"
+    );
+    let said = s.key("escape");
+    assert_eq!(said[0], "Plugin list closed (Line counter)", "{said:?}");
+    assert!(s.app.active_panel().plugin_list().is_none());
+}
+
+#[test]
+fn a_plugins_panel_set_without_a_place_changes_the_folder_beneath_quietly() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}}
+    ]});
+    let notes = w.work.join("notes.txt");
+    let set = json!({"cursor": notes.to_str().unwrap()});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[
+            ("show", Act::Call("lister/open", open)),
+            ("ask", Act::Call("panel/set", set)),
+        ]),
+    );
+    s.run_command(Command::new(id("line-counter.show")));
+    let said = s.run_command(Command::new(id("line-counter.ask")));
+    assert!(
+        !said.iter().any(|l| l.starts_with("notes.txt")),
+        "nothing said of the folder beneath: {said:?}"
+    );
+    assert!(
+        s.app.active_panel().plugin_list().is_some(),
+        "the list stays"
+    );
+    s.key("backspace");
+    assert_eq!(
+        s.focused(),
+        "notes.txt",
+        "the folder's cursor moved beneath"
+    );
+}
+
+#[test]
 fn a_lister_asks_for_more_rows_at_its_end() {
     let w = world(MANIFEST);
     enable(&w.paths);
