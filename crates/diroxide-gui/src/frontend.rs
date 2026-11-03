@@ -102,6 +102,9 @@ pub trait Host {
     fn focused(&self) -> Option<WidgetId>;
     /// Moves the keyboard focus; false when the widget cannot take it.
     fn focus(&mut self, id: Option<WidgetId>) -> bool;
+    /// Names the window's accessibility node (AT-SPI and macOS read the
+    /// window's title from it).
+    fn set_window_label(&mut self, label: &str);
 }
 
 impl Host for RenderRoot {
@@ -124,6 +127,10 @@ impl Host for RenderRoot {
     fn focus(&mut self, id: Option<WidgetId>) -> bool {
         self.focus_on(id)
     }
+
+    fn set_window_label(&mut self, label: &str) {
+        RenderRoot::set_window_label(self, label);
+    }
 }
 
 /// What the widgets show now, so a refresh edits only what changed.
@@ -135,6 +142,8 @@ struct Shown {
     dialog: Option<model::DialogView>,
     key_bar: Vec<model::ButtonView>,
     sorting: Vec<model::ButtonView>,
+    /// The window's name as its accessibility node has it.
+    label: String,
 }
 
 /// The GUI's driver: the app, its runtime, and what the window shows.
@@ -725,6 +734,13 @@ impl Frontend {
             host.edit(JOBS_LINE, |mut l| Label::set_text(&mut l, text));
         }
         self.shown.lines = lines;
+        // The window's node is named by its title ("Documents -
+        // diroxide"); AT-SPI and macOS read the title from it.
+        let label = self.window_title();
+        if label != self.shown.label {
+            host.set_window_label(&label);
+            self.shown.label = label;
+        }
         let arranged = (self.app.settings().layout, self.app.active_side());
         if self.shown.arranged != Some(arranged) {
             host.edit(PANELS, |mut p| {

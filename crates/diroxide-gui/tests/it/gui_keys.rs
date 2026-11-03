@@ -44,7 +44,10 @@ fn no_default_in_the_gui_column_uses_a_key_the_window_cannot_get() {
                 ["system", "reader", "dropped"].contains(&entry.kind.as_str()),
                 "{entry:?}"
             );
-            assert!(!entry.why.is_empty() && !entry.why.ends_with('.'), "{entry:?}");
+            assert!(
+                !entry.why.is_empty() && !entry.why.ends_with('.'),
+                "{entry:?}"
+            );
             for text in &entry.keys {
                 let key = Key::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"));
                 let found = keymap.lookup(&layers, &key);
@@ -64,5 +67,8 @@ fn the_windows_key_chords_never_reach_the_keymap() {
     // are never pressed, whatever the keymap says.
     let key = Key::parse("meta+e").unwrap();
     let event = diroxide_gui::keys::press(&key, Platform::MacOs);
-    assert_eq!(diroxide_gui::keys::to_key(&event, Platform::Windows, false), None);
+    assert_eq!(
+        diroxide_gui::keys::to_key(&event, Platform::Windows, false),
+        None
+    );
 }

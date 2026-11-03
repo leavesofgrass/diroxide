@@ -52,6 +52,10 @@ impl Host for HostOf<'_> {
         self.0.focus_on(id);
         true
     }
+
+    fn set_window_label(&mut self, label: &str) {
+        self.0.set_window_label(label);
+    }
 }
 
 /// The window's size in the tests, in physical pixels.

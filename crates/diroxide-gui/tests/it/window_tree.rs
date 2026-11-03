@@ -28,7 +28,13 @@ fn the_window_tree_holds_the_title_line_the_panels_and_the_status_bar() {
     let (app, runtime) = here();
     let rig = Rig::new(app, runtime);
     let tree = rig.walk();
-    assert_eq!(tree[0].0, Role::Window, "{tree:?}");
+    // The window's node is named by its title (diroxide.patch gives the
+    // harness the call a real window's driver makes).
+    assert_eq!(
+        tree[0],
+        (Role::Window, "diroxide-gui - diroxide".to_owned()),
+        "{tree:?}"
+    );
     let labels: Vec<&str> = tree
         .iter()
         .filter(|(role, _)| *role == Role::Label)

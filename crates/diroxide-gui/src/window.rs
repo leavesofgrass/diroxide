@@ -327,10 +327,8 @@ impl Gui {
         step(frontend, ctx.render_root(self.window));
         let title = frontend.window_title();
         if title != self.title {
+            // The window's node is named by the frontend's refresh.
             ctx.window(self.window).handle().set_title(&title);
-            // AT-SPI and macOS read the title from the window's node.
-            ctx.render_root(self.window)
-                .set_window_label(title.as_str());
             self.title = title;
         }
         #[cfg(windows)]

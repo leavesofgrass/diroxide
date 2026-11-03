@@ -1074,6 +1074,14 @@ impl<W: Widget> TestHarness<W> {
         self.title.clone()
     }
 
+    /// Names the window's accessibility node, as a real window's driver
+    /// does with [`RenderRoot::set_window_label`] (diroxide.patch: the
+    /// harness's tests can then read the window's name).
+    pub fn set_window_label(&mut self, label: impl Into<String>) {
+        self.render_root.set_window_label(label);
+        self.process_signals();
+    }
+
     // --- MARK: SNAPSHOT
 
     /// Renders the current widget tree to a pixmap, and writes it to a temporary PNG file.
