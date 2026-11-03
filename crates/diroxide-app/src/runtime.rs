@@ -118,9 +118,13 @@ pub struct Program {
     pub env: Vec<(String, OsString)>,
 }
 
-/// Starts a program with the terminal handed over and waits for it.
+/// Starts a program: with the terminal handed over, waiting for it to
+/// end, or, for a launcher that does not wait ([`Launcher::waits`]), in a
+/// window of its own.
 pub trait Launcher: Send + Sync {
-    /// Runs the program to its end; the exit code when there is one.
+    /// Runs the program to its end, with the exit code when there is one;
+    /// a launcher that does not wait returns once it has started, with no
+    /// code.
     fn run(&self, program: &Program) -> Result<Option<i32>, String>;
 
     /// The user's shell and the arguments that make it run one command
