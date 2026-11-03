@@ -35,7 +35,7 @@ Get the source with git (`git clone https://github.com/leavesofgrass/diroxide`) 
 cargo build --release -p diro
 ```
 
-The first build takes a while: 5 minutes 6 seconds on the computer measured in the next section. The program is `target/release/diro`, or `target\release\diro.exe` on Windows. Copy it to a folder on your PATH.
+The first build takes a while: 5 minutes 6 seconds on the computer measured below. The program is `target/release/diro`, or `target\release\diro.exe` on Windows. Copy it to a folder on your PATH.
 
 To have cargo install it into its own program folder instead:
 

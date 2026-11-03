@@ -41,7 +41,7 @@ Ctrl+Z undoes the last job. Every delete, move and overwrite lists what it will 
 
 ## The terminal
 
-The terminal is `diro --tui`. It is also what `diro` opens over SSH, with no display, and when its output is piped; on a desktop a bare `diro` opens the window. To make a bare `diro` open the terminal there too, set `frontend` to `terminal`: see [The GUI](docs/gui.md#what-automatic-does-today). Windows Terminal is the main target, and the classic console, Linux terminals and macOS Terminal are best effort. Terminals keep some keys for themselves, so the palette and the menus reach every command: see [Terminals](docs/terminals.md).
+The terminal is `diro --tui`. It is also what `diro` opens over SSH, with no display, and when its input or output is a pipe or a file; on a desktop a bare `diro` opens the window. To make a bare `diro` open the terminal there too, set `frontend` to `terminal`: see [The GUI](docs/gui.md#what-automatic-does-today). Windows Terminal is the main target, and the classic console, Linux terminals and macOS Terminal are best effort. Terminals keep some keys for themselves, so the palette and the menus reach every command: see [Terminals](docs/terminals.md).
 
 ## Screen readers
 

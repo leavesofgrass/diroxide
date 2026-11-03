@@ -16,7 +16,7 @@ Run `diro --tui` with no paths to open the current folder in the left panel, in 
 diro --tui
 ```
 
-On a desktop, `diro` without `--tui` opens the window. Over SSH, with no display, or when its output is piped, `diro` opens the terminal by itself. To make a bare `diro` open the terminal on a desktop too, set `frontend` to `terminal` in Settings: [the GUI guide](gui.md#what-automatic-does-today) says how the choice is made.
+On a desktop, `diro` without `--tui` opens the window. Over SSH, with no display, or when its input or output is a pipe or a file, `diro` opens the terminal by itself. To make a bare `diro` open the terminal on a desktop too, set `frontend` to `terminal` in Settings: [the GUI guide](gui.md#what-automatic-does-today) says how the choice is made.
 
 The right panel opens where it was when you last quit. The first time, it opens on the same folder as the left panel, so nothing unexpected is on screen.
 

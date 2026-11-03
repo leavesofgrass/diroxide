@@ -52,7 +52,7 @@ So `diro` typed in Windows Terminal, in a shell on a Linux or macOS desktop, or 
 
 A window that cannot open never ends the program with a crash. It says one sentence, with the cause first, and the terminal opens instead. There are three sentences to know.
 
-No display, or a `diro` built without the window, before the window is tried. These two are said when you asked for the window, with `--gui` or the setting `gui`. Automatic chooses the terminal in those cases without a sentence.
+The first two are for no display, and for a `diro` built without the window. They are said before the window is tried, and only when you asked for the window with `--gui` or the setting `gui`. Automatic chooses the terminal in those cases without a sentence.
 
 ```text
 There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead.
