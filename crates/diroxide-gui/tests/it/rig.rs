@@ -227,6 +227,60 @@ impl Rig {
         self.f.spoken().iter().map(|m| m.text.clone()).collect()
     }
 
+    /// Runs a command by its id, as a menu or the palette does.
+    pub fn run(&mut self, id: &str) {
+        let id = diroxide_core::CommandId::new(id.to_owned()).unwrap();
+        let now = self.now;
+        self.f.command(
+            &mut HostOf(&mut self.h),
+            diroxide_core::Command::new(id),
+            now,
+        );
+        self.settle();
+    }
+
+    /// The rows of the open dialog's list in the app (a choice, a
+    /// question's choices, a field's candidates), by id, with the focus.
+    pub fn dialog_rows(&self) -> (Vec<String>, Option<usize>) {
+        use diroxide_app::Dialog;
+        let list = match self.f.app().dialog().map(|(_, d)| d) {
+            Some(Dialog::Choose { list, .. }) => list,
+            Some(Dialog::Question { choices, .. }) => choices,
+            Some(Dialog::Edit {
+                candidates: Some(list),
+                ..
+            }) => list,
+            _ => return (Vec::new(), None),
+        };
+        (
+            list.rows().iter().map(|r| r.id.clone()).collect(),
+            list.focus_index(),
+        )
+    }
+
+    /// Moves the open dialog's list to the row with `id` by its keys
+    /// (Home, then Down), as a person would.
+    pub fn focus_dialog_row(&mut self, id: &str) {
+        let (rows, _) = self.dialog_rows();
+        let index = rows
+            .iter()
+            .position(|r| r == id)
+            .unwrap_or_else(|| panic!("no row {id} in {rows:?}"));
+        self.press("home");
+        for _ in 0..index {
+            self.press("down");
+        }
+        assert_eq!(self.dialog_rows().1, Some(index));
+    }
+
+    /// The number of dialog nodes in the tree (only the top dialog is).
+    pub fn dialogs_in_tree(&self) -> usize {
+        self.walk()
+            .iter()
+            .filter(|(role, _)| *role == Role::Dialog)
+            .count()
+    }
+
     /// Puts the app's state on the widgets after a test changed it
     /// directly (a focus by name), and draws the tree again.
     pub fn refresh(&mut self) {
@@ -352,18 +406,28 @@ impl Rig {
         let at = {
             let state = self.h.access_tree().state();
             let mut stack = vec![state.root()];
+            // The node named exactly `name` wins over one whose name only
+            // starts with it.
             let mut at = None;
+            let mut exact = None;
             while let Some(node) = stack.pop() {
-                if node.role() == role && name_of(&node).starts_with(name) && !node.is_hidden() {
-                    at = node.bounding_box().map(|b| {
+                let text = name_of(&node);
+                if node.role() == role && text.starts_with(name) && !node.is_hidden() {
+                    let middle = node.bounding_box().map(|b| {
                         masonry::kurbo::Point::new((b.x0 + b.x1) / 2.0, (b.y0 + b.y1) / 2.0)
                     });
+                    if text == name {
+                        exact = exact.or(middle);
+                    }
+                    at = middle;
                 }
                 if !node.is_hidden() {
                     stack.extend(node.children());
                 }
             }
-            at.unwrap_or_else(|| panic!("no {role:?} named {name:?} with bounds"))
+            exact
+                .or(at)
+                .unwrap_or_else(|| panic!("no {role:?} named {name:?} with bounds"))
         };
         self.press_at(masonry::kurbo::Point::new(at.x, at.y), count);
     }

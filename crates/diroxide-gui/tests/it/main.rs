@@ -3,6 +3,8 @@
 //! this one, as in textweaver's `tests/it`).
 
 #[cfg(feature = "gui")]
+mod choose;
+#[cfg(feature = "gui")]
 mod confirm;
 mod contract;
 #[cfg(feature = "gui")]

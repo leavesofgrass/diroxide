@@ -265,15 +265,21 @@ impl Widget for Modal {
         let x0 = ((size.width - width) / 2.0).max(0.0);
         let top = MARGIN;
         let mut y = PAD + title_h + GAP;
-        let lines_h = ctx
-            .compute_length(
+        // The lines take the height their text needs (a column asked to
+        // fit the window's height would take all of it).
+        let lines_h = if self.view.lines.is_empty() {
+            0.0
+        } else {
+            ctx.compute_length(
                 &mut self.lines,
-                LenDef::FitContent(Length::px(size.height)),
+                LenDef::MaxContent,
                 context,
                 Axis::Vertical,
                 Some(Length::px(inner)),
             )
-            .get();
+            .get()
+            .min(size.height / 3.0)
+        };
         ctx.run_layout(&mut self.lines, Size::new(inner, lines_h));
         ctx.place_child(&mut self.lines, Point::new(x0 + PAD, top + y));
         y += lines_h + if lines_h > 0.0 { GAP } else { 0.0 };
