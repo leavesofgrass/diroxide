@@ -35,7 +35,7 @@ Get the source with git (`git clone https://github.com/leavesofgrass/diroxide`) 
 cargo build --release -p diro
 ```
 
-The first build takes a while. The program is `target/release/diro`, or `target\release\diro.exe` on Windows. Copy it to a folder on your PATH.
+The first build takes a while: 5 minutes 6 seconds on the computer measured in the next section. The program is `target/release/diro`, or `target\release\diro.exe` on Windows. Copy it to a folder on your PATH.
 
 To have cargo install it into its own program folder instead:
 
@@ -55,14 +55,22 @@ The first line is the program's name and version, `diro 0.1.0-alpha.2`. The next
 
 The window, the GUI, is part of the same `diro` program, and the `gui` feature that builds it is one of `diro`'s default features. So the two commands above build it, and the release files hold it, because they are built with the default features. [The GUI](gui.md) says how to open it.
 
-The window brings in a graphics stack, and that has a cost in time and room. These are measurements from one test machine, of debug builds. Release builds have not been measured here.
+The window brings in a graphics stack, and that has a cost in time and room. These are measurements from one computer, a Windows 11 machine with a graphics card. They show the size of the cost and are not a promise for yours. The project's bench records them with `cargo xtask bench --gui` and never fails a build over them; [building, for contributors](dev/building.md#the-guis-budgets) has the method.
 
-- A cold debug build of `diro` took about five minutes with the window, against under three minutes without it.
-- The debug program grew from about 40 MB to about 56 MB.
-- The build folder grew from about 1.1 GB to about 2.0 GB.
+The build and the program, with the default features, measured on the finished window:
+
+- A cold release build of `diro`, the one `cargo build --release -p diro` makes, from an empty target folder and with no compiler cache, took 5 minutes 6 seconds.
+- The release program is 44.1 MB. The `dist` profile, which the release files use, makes 39.5 MB. The debug program is 60.8 MB.
+- From starting `diro --gui --background` to the window's first frame took 1.2 seconds, the middle of three starts (1.67, 1.20 and 1.16 seconds), drawn on the graphics card by the release build.
+- The program held about 189 MB of memory at the first frame, the middle of the same three starts.
+- Other builds running beside it slow a build down. With two other builds running, a cold debug build took 7 minutes 40 seconds, a cold release build 7 minutes 52 seconds, and the `dist` build after it 12 minutes 54 seconds.
+
+Early in the alpha, with the window half built, debug builds were measured on a test machine:
+
+- A cold debug build of `diro` took about five minutes with the window, against under three minutes without it. The debug program then grew from about 40 MB to about 56 MB, and the build folder from about 1.1 GB to about 2.0 GB.
 - The lock file gained about 260 packages. The stack compiles no C on Windows, macOS or Linux, so the window adds no need for a C compiler beyond the ones named above. `cargo xtask native --check` keeps that inventory.
 - A Linux build needs no Fontconfig package. Fontconfig is opened when the window starts and is never linked.
-- Drawing on the processor adds a few packages more (softbuffer and what it needs). The figures above were measured before it was added. It compiles no C and links no library.
+- Drawing on the processor adds a few packages more (softbuffer and what it needs). It compiles no C and links no library. The early figures above were measured before it was added.
 
 A build that you only use in the terminal can leave all of this out, as the next section shows.
 
