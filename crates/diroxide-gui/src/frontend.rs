@@ -17,12 +17,13 @@
 //!   start makes before the window exists are held, and said once the
 //!   window and a screen reader are there.
 
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use diroxide_app::commands::ids;
 use diroxide_app::keymap::Platform;
 use diroxide_app::{App, AppEvent, Dialog, Runtime};
-use diroxide_core::{Command, Effect, Key, KeyCode, Message, Modifiers, Side};
+use diroxide_core::{Command, Effect, JobId, Key, KeyCode, Message, Modifiers, Side};
 use masonry::accesskit::Role;
 use masonry::app::RenderRoot;
 use masonry::core::keyboard::KeyboardEvent;
@@ -37,6 +38,7 @@ use crate::widgets::buttons::{ButtonPressed, ButtonRow};
 use crate::widgets::choice::ChoiceAction;
 use crate::widgets::panel::{PanelAction, PanelBox};
 use crate::widgets::panels::Panels;
+use crate::widgets::progress::JobProgressBar;
 use crate::widgets::push::PushAction;
 use crate::widgets::root::{Region, Root, RootAction};
 
@@ -57,6 +59,8 @@ pub const RIGHT_PANEL: WidgetTag<PanelBox> = WidgetTag::named("diroxide-right-pa
 pub const ANNOUNCER: WidgetTag<Announcer> = WidgetTag::named("diroxide-announcer");
 /// The root.
 pub const ROOT: WidgetTag<Root> = WidgetTag::named("diroxide-root");
+/// The progress of the job in front.
+pub const JOB_PROGRESS: WidgetTag<JobProgressBar> = WidgetTag::named("diroxide-job-progress");
 
 /// A panel's list box tag.
 pub const fn panel_tag(side: Side) -> WidgetTag<PanelBox> {
@@ -160,6 +164,8 @@ struct Shown {
     sorting: Vec<model::ButtonView>,
     /// The window's name as its accessibility node has it.
     label: String,
+    /// The job in front's percent as the progress indicator shows it.
+    progress: Option<u64>,
 }
 
 /// The GUI's driver: the app, its runtime, and what the window shows.
@@ -192,6 +198,14 @@ pub struct Frontend {
     quick_tick_at: Option<Instant>,
     viewer_tick_at: Option<Instant>,
     hold_retry_at: Option<Instant>,
+    /// Each running job's latest percent, from its progress.
+    percents: HashMap<JobId, u64>,
+    /// Every value the progress indicator was given, in order (the tests
+    /// read it).
+    progress_shown: Vec<Option<u64>>,
+    /// The percent of every progress report the workers sent, in order
+    /// (the tests read it).
+    progress_reports: Vec<u64>,
     /// The window has a native menu bar (Windows, the `menus` setting's
     /// native): the menu keys enter it.
     menu_bar: bool,
@@ -247,6 +261,9 @@ impl Frontend {
             quick_tick_at: None,
             viewer_tick_at: None,
             hold_retry_at: None,
+            percents: HashMap::new(),
+            progress_shown: Vec::new(),
+            progress_reports: Vec::new(),
             menu_bar: false,
             menu_requests: Vec::new(),
         }
@@ -342,9 +359,12 @@ impl Frontend {
         let active = self.app.active_side();
         self.shown.arranged = Some((layout, active));
         let panels = NewWidget::new(Panels::new(left, right, layout, active)).with_tag(PANELS);
+        let percent = self.front_percent();
+        self.shown.progress = percent;
         let status = Flex::column()
             .with_fixed(NewWidget::new(Label::new(lines.status.clone())).with_tag(STATUS_LINE))
-            .with_fixed(NewWidget::new(Label::new(lines.jobs.clone())).with_tag(JOBS_LINE));
+            .with_fixed(NewWidget::new(Label::new(lines.jobs.clone())).with_tag(JOBS_LINE))
+            .with_fixed(NewWidget::new(JobProgressBar::new(percent)).with_tag(JOB_PROGRESS));
         let status_bar = Region::new(NewWidget::new(status), Role::Status, "");
         let keys = model::key_bar_buttons(&self.app);
         self.shown.key_bar = keys.clone();
@@ -844,7 +864,11 @@ impl Frontend {
                 }
             }
             PanelAction::Page(side, rows) => {
-                if self.page[side.index()] != rows {
+                // The app is told the first page too, even when it equals
+                // the guess the window starts with (20 rows), or Page Up
+                // and Page Down would move the app's own default.
+                let told = self.app.panel(side).list().page_size() == rows;
+                if self.page[side.index()] != rows || !told {
                     self.page[side.index()] = rows;
                     self.app.set_page_rows(side, rows);
                     self.refresh(host);
@@ -885,12 +909,57 @@ impl Frontend {
                 break;
             }
             for event in events {
-                let effects = self.app.handle(event);
-                self.carry(effects);
+                self.handle_event(event);
             }
         }
         self.after(now);
         self.refresh(host);
+    }
+
+    /// A result from the runtime, as if a worker had sent it: handed to
+    /// the app, then the window refreshed (the tests send events the
+    /// workers would).
+    pub fn event(&mut self, host: &mut impl Host, event: AppEvent, now: Instant) {
+        self.handle_event(event);
+        self.after(now);
+        self.refresh(host);
+    }
+
+    /// The job in front's percent, when one runs: none while it only
+    /// waits its turn (held or queued), 0 before its first progress.
+    fn front_percent(&mut self) -> Option<u64> {
+        let jobs = self.app.jobs();
+        let running = jobs.ids();
+        self.percents.retain(|job, _| running.contains(job));
+        let job = jobs.front()?;
+        if jobs.waits(job) {
+            return None;
+        }
+        Some(self.percents.get(&job).copied().unwrap_or(0))
+    }
+
+    /// Every value the progress indicator was given, in order: a percent,
+    /// or none when no job ran.
+    pub fn progress_shown(&self) -> &[Option<u64>] {
+        &self.progress_shown
+    }
+
+    /// The percent of every progress report the workers sent, in order,
+    /// against which [`Self::progress_shown`] shows how few of them moved
+    /// the indicator.
+    pub fn progress_reports(&self) -> &[u64] {
+        &self.progress_reports
+    }
+
+    /// One result to the app; a job's progress is noted first, for the
+    /// progress indicator.
+    fn handle_event(&mut self, event: AppEvent) {
+        if let AppEvent::JobProgress { job, progress } = &event {
+            self.percents.insert(*job, progress.percent());
+            self.progress_reports.push(progress.percent());
+        }
+        let effects = self.app.handle(event);
+        self.carry(effects);
     }
 
     /// Waits for the workers to finish, at most `limit`, taking their
@@ -904,8 +973,7 @@ impl Frontend {
             }
             let events = self.runtime.wait(Duration::from_millis(10));
             for event in events {
-                let effects = self.app.handle(event);
-                self.carry(effects);
+                self.handle_event(event);
             }
         }
         self.wake(host, now);
@@ -1066,6 +1134,17 @@ impl Frontend {
         if lines.jobs != self.shown.lines.jobs {
             let text = lines.jobs.clone();
             host.edit(JOBS_LINE, |mut l| Label::set_text(&mut l, text));
+            // The progress indicator moves only with the jobs line, which
+            // the app paces (a change of state at once, progress at most
+            // every progress_interval_seconds in screen-reader mode).
+            let percent = self.front_percent();
+            if percent != self.shown.progress {
+                self.shown.progress = percent;
+                self.progress_shown.push(percent);
+                host.edit(JOB_PROGRESS, |mut p| {
+                    JobProgressBar::set_percent(&mut p, percent)
+                });
+            }
         }
         self.shown.lines = lines;
         // The window's node is named by its title ("Documents -

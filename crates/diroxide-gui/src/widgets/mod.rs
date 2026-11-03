@@ -10,5 +10,6 @@ pub mod modal;
 pub mod paint;
 pub mod panel;
 pub mod panels;
+pub mod progress;
 pub mod push;
 pub mod root;
