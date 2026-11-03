@@ -353,7 +353,15 @@ pub fn run_gui(
     // Before the app and its runtime exist, so no other thread runs yet.
     diroxide_gui::prepare(&gui);
     let released = diroxide_gui::console::release_for_window();
-    let (app, runtime) = build(options, paths, here)?;
+    let (app, runtime) = match build(options, paths, here) {
+        Ok(built) => built,
+        Err(error) => {
+            // The reason must reach a console (a shortcut that names a
+            // folder that is gone).
+            diroxide_gui::console::regain_for_terminal(released);
+            return Err(error);
+        }
+    };
     match diroxide_gui::run(app, runtime, gui) {
         Ok(app) => finish(&app, options, out),
         Err(error) => {
