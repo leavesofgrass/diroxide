@@ -29,7 +29,10 @@
 pub mod console;
 #[cfg(feature = "gui")]
 pub mod keys;
+pub mod model;
 mod platform;
+#[cfg(feature = "gui")]
+pub mod widgets;
 #[cfg(feature = "gui")]
 pub mod window;
 
