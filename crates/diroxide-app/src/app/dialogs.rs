@@ -684,10 +684,6 @@ impl App {
                 effects.extend(self.setting_typed(&key, &text));
                 effects
             }
-            Purpose::JobHistory => match row.and_then(|r| r.parse::<usize>().ok()) {
-                Some(index) => self.job_items(index),
-                None => Vec::new(),
-            },
             Purpose::LinkForm(form) => match row {
                 Some(row) => self.link_row(*form, &row),
                 None => Vec::new(),

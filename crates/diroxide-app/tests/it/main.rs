@@ -17,6 +17,8 @@ mod comparing;
 mod dialogs;
 // The panel filter on the filter language (W3a).
 mod filtering;
+// What a frontend reaches beside keys and commands (lane A5).
+mod frontend;
 // A place behind a gate, for held jobs and streamed listings (lane A2).
 mod held;
 // Hooks through the plugin host (lane A2).

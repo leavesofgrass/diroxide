@@ -673,9 +673,9 @@ enum Purpose {
     /// The labels, bookmarks, folder views and History list (W3l): what
     /// their dialogs are for.
     Organize(Box<organize::Wants>),
-    /// The job history.
-    JobHistory,
-    /// One job's items.
+    /// One finished job's items: what failed, was skipped or warned, with
+    /// the reasons. Opened by Show what failed on the job's row in the
+    /// Jobs list, whose Finished group is the job history (lane A2).
     JobItems,
     /// A dialog of Change key, the Keys list or the presets (W3k).
     Keys(Box<keys::KeysPurpose>),
@@ -1925,7 +1925,10 @@ impl App {
             Action::NextTheme => self.next_theme(),
             Action::Problems => self.list_problems(),
             Action::Undo => self.undo(),
-            Action::JobHistory => self.job_history(),
+            // The job history is the Jobs list's Finished group (lane
+            // A2); `jobs_dispatch` takes the command first, so this arm
+            // only keeps the two ways the same.
+            Action::JobHistory => self.open_jobs_list(Some(crate::jobs::JobGroup::Finished)),
             Action::Yes | Action::No | Action::Accept => Vec::new(),
             Action::QuickView => self.toggle_quick_view(),
             Action::OpenInTextweaver => self.open_in_textweaver(),

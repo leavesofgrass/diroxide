@@ -775,30 +775,9 @@ impl App {
         )
     }
 
-    /// The job history, newest first; Enter lists a job's failures, skips
-    /// and warnings with their reasons.
-    pub(super) fn job_history(&mut self) -> Vec<Effect> {
-        let history = self.jobs.history();
-        if history.is_empty() {
-            return vec![self.say(Message::info("No jobs have run yet."))];
-        }
-        let rows = history
-            .iter()
-            .enumerate()
-            .rev()
-            .map(|(i, job)| ListRow::new(i.to_string(), job.summary.clone()))
-            .collect();
-        let mut list = ListModel::new("Job history").with_rows(rows);
-        list.set_help("Up and Down choose, Enter lists what failed and why, Escape closes.");
-        self.open_dialog(
-            Dialog::Choose {
-                list,
-                on_enter: Command::new(ids::JOB_HISTORY),
-            },
-            Purpose::JobHistory,
-        )
-    }
-
+    /// One finished job's failures, skips and warnings with their reasons,
+    /// by its place in the history: Show what failed on its row in the
+    /// Jobs list, whose Finished group is the job history (lane A2).
     pub(super) fn job_items(&mut self, index: usize) -> Vec<Effect> {
         let Some(job) = self.jobs.history().get(index).cloned() else {
             return Vec::new();
