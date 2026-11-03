@@ -477,6 +477,25 @@ mod tests {
         assert_eq!(rgba[middle + 3], 255);
     }
 
+    /// The AppImage's scripts install and check the hicolor sizes this
+    /// task draws, and the scalable mark.
+    #[test]
+    fn the_appimage_installs_every_hicolor_size() {
+        let want: Vec<String> = HICOLOR_SIZES.iter().map(u32::to_string).collect();
+        let want = format!("for size in {}; do", want.join(" "));
+        for script in ["packaging/appimage/build.sh", "packaging/appimage/check.sh"] {
+            let text = fs::read_to_string(root().join(script)).unwrap();
+            assert!(
+                text.lines().any(|l| l.trim() == want),
+                "{script} lists the sizes as {want:?}"
+            );
+            assert!(
+                text.contains("hicolor/scalable/apps/diroxide.svg"),
+                "{script}"
+            );
+        }
+    }
+
     #[test]
     fn the_mark_draws_the_same_twice() {
         let svg = fs::read_to_string(root().join(MARK)).unwrap();
