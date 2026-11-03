@@ -51,5 +51,14 @@ accesskit_consumer.workspace = true
 masonry_testing.workspace = true
 tempfile.workspace = true
 
+# The harness reaches Parley, and so fontique with its system fonts,
+# whether or not the `gui` feature is on: the tests build without it too
+# (gui.yml's second run). Fontconfig is opened at run time there as
+# well, never linked, so the tests build on a runner with no Fontconfig
+# headers and no pkg-config (textweaver's way: its root manifest and
+# crates/textweaver-xilem/Cargo.toml).
+[target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
+fontique = { workspace = true, features = ["fontconfig-dlopen"] }
+
 [lints]
 workspace = true
