@@ -144,6 +144,27 @@ pub const ALLOWED: [(&str, &[&str]); 19] = [
     ),
 ];
 
+/// Workspace crates a member may use in its tests alone, each with the
+/// reason: a `[dev-dependencies]` entry, never a normal or a build one.
+/// Keep in step with docs/dev/architecture.md.
+pub const ALLOWED_DEV: [(&str, &str, &str); 1] = [(
+    "diroxide-gui",
+    "diroxide-vfs",
+    "the GUI's every-purpose test opens the trash browser on a test trash and the junction and item-error questions through a provider double, on every system, never the owner's trash or drives (G1's request 5, lane A5)",
+)];
+
+/// Whether `name` may depend on the workspace crate `dependency` in the
+/// manifest section labeled `section` ("dependencies", "dev-dependencies",
+/// "target cfg(windows) dev-dependencies"): `allowed` is its row of
+/// [`ALLOWED`]; [`ALLOWED_DEV`] adds a test-only crate in a dev section.
+fn points_allowed(name: &str, allowed: &[&str], dependency: &str, section: &str) -> bool {
+    allowed.contains(&dependency)
+        || (section.ends_with("dev-dependencies")
+            && ALLOWED_DEV
+                .iter()
+                .any(|(user, used, _)| *user == name && *used == dependency))
+}
+
 /// The folders of vendored code, each its own workspace, copied whole from
 /// textweaver (docs/dev/vendoring.md). The fonts folder holds no crate.
 pub const VENDORED: [&str; 2] = ["third_party/xilem", "third_party/accesskit_windows"];
@@ -314,9 +335,17 @@ pub fn check(root: &Path) -> Result<bool> {
                 let internal = ALLOWED
                     .iter()
                     .any(|(crate_name, _)| *crate_name == dependency);
-                if internal && !allowed.contains(&dependency.as_str()) {
+                if internal && !points_allowed(name, allowed, dependency, &section) {
+                    let tests_only = ALLOWED_DEV
+                        .iter()
+                        .any(|(user, used, _)| *user == name && *used == dependency);
+                    let only = if tests_only {
+                        ", allowed in [dev-dependencies] only"
+                    } else {
+                        ""
+                    };
                     problems.push(format!(
-                        "{name} depends on {dependency} in [{section}], which points the wrong way"
+                        "{name} depends on {dependency} in [{section}], which points the wrong way{only}"
                     ));
                 }
             }
@@ -359,6 +388,68 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Each test-only allowance names two crates of the table, is not
+    /// already a normal one, makes no cycle, and says why.
+    #[test]
+    fn each_test_only_allowance_is_new_one_way_and_has_its_reason() {
+        for (name, dependency, reason) in ALLOWED_DEV {
+            let (_, allowed) = ALLOWED.iter().find(|(n, _)| *n == name).unwrap();
+            let (_, theirs) = ALLOWED.iter().find(|(n, _)| *n == dependency).unwrap();
+            assert!(!allowed.contains(&dependency), "{name} on {dependency}");
+            assert!(!theirs.contains(&name), "{dependency} allows {name}");
+            assert_ne!(name, dependency);
+            assert!(reason.len() > 20, "{name} on {dependency}: {reason}");
+        }
+    }
+
+    /// A test-only crate is allowed in a dev section alone, and only for
+    /// the crate it is allowed to.
+    #[test]
+    fn a_test_only_crate_is_allowed_in_the_dev_sections_alone() {
+        let (_, gui) = ALLOWED.iter().find(|(n, _)| *n == "diroxide-gui").unwrap();
+        let (_, tui) = ALLOWED.iter().find(|(n, _)| *n == "diroxide-tui").unwrap();
+        let vfs = "diroxide-vfs";
+        assert!(points_allowed("diroxide-gui", gui, vfs, "dev-dependencies"));
+        assert!(points_allowed(
+            "diroxide-gui",
+            gui,
+            vfs,
+            "target cfg(windows) dev-dependencies"
+        ));
+        assert!(!points_allowed("diroxide-gui", gui, vfs, "dependencies"));
+        assert!(!points_allowed(
+            "diroxide-gui",
+            gui,
+            vfs,
+            "build-dependencies"
+        ));
+        assert!(!points_allowed(
+            "diroxide-gui",
+            gui,
+            vfs,
+            "target cfg(windows) dependencies"
+        ));
+        assert!(!points_allowed(
+            "diroxide-tui",
+            tui,
+            vfs,
+            "dev-dependencies"
+        ));
+        // The normal allowances hold in every section.
+        assert!(points_allowed(
+            "diroxide-gui",
+            gui,
+            "diroxide-app",
+            "dependencies"
+        ));
+        assert!(points_allowed(
+            "diroxide-gui",
+            gui,
+            "diroxide-app",
+            "dev-dependencies"
+        ));
     }
 
     #[test]

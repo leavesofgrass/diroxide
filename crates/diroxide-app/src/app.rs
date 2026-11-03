@@ -221,6 +221,21 @@ pub enum AppEvent {
         /// Its exit code, or why it could not start.
         result: Result<Option<i32>, String>,
     },
+    /// A program started without waiting for it (lane A5): the GUI's
+    /// handover, where a shell or a command runs in a terminal window of
+    /// its own and an editor or a tool in its own window, while diroxide
+    /// stays. Sent when the launcher does not wait
+    /// ([`crate::Launcher::waits`]); one that waits sends
+    /// [`AppEvent::ProgramEnded`] when the program ends.
+    ProgramStarted {
+        /// What started: the shell, a command line, the editor on a
+        /// file, or a tool.
+        kind: crate::request::SpawnKind,
+        /// The folder it started in.
+        folder: Place,
+        /// Whether it started, or why not, in lowercase words.
+        result: Result<(), String>,
+    },
     /// An archive job was planned, or could not be (the sentence says
     /// why).
     ArchivePlanned {
@@ -673,9 +688,9 @@ enum Purpose {
     /// The labels, bookmarks, folder views and History list (W3l): what
     /// their dialogs are for.
     Organize(Box<organize::Wants>),
-    /// The job history.
-    JobHistory,
-    /// One job's items.
+    /// One finished job's items: what failed, was skipped or warned, with
+    /// the reasons. Opened by Show what failed on the job's row in the
+    /// Jobs list, whose Finished group is the job history (lane A2).
     JobItems,
     /// A dialog of Change key, the Keys list or the presets (W3k).
     Keys(Box<keys::KeysPurpose>),
@@ -690,6 +705,92 @@ enum Purpose {
     Trash(Box<trash_ui::Wants>),
     /// The Volumes list and a row's actions (lane A3).
     Volumes(Box<volumes_ui::Wants>),
+}
+
+impl Purpose {
+    /// The variant's name, as this enum declares it: what
+    /// [`App::dialog_purpose`] gives a test.
+    fn name(&self) -> &'static str {
+        match self {
+            Self::RunPlan { .. } => "RunPlan",
+            Self::TypedPlan { .. } => "TypedPlan",
+            Self::Quit { .. } => "Quit",
+            Self::RunProgram { .. } => "RunProgram",
+            Self::Conflict { .. } => "Conflict",
+            Self::ConflictName { .. } => "ConflictName",
+            Self::ItemError { .. } => "ItemError",
+            Self::Secret { .. } => "Secret",
+            Self::WrongPassword { .. } => "WrongPassword",
+            Self::Rename { .. } => "Rename",
+            Self::Duplicate { .. } => "Duplicate",
+            Self::MakeFolder { .. } => "MakeFolder",
+            Self::GoPath { .. } => "GoPath",
+            Self::Places { .. } => "Places",
+            Self::History { .. } => "History",
+            Self::Filter { .. } => "Filter",
+            Self::FilterContents { .. } => "FilterContents",
+            Self::Pattern { .. } => "Pattern",
+            Self::SelectCount { .. } => "SelectCount",
+            Self::SelectKind { .. } => "SelectKind",
+            Self::NextRows { .. } => "NextRows",
+            Self::SearchForm { .. } => "SearchForm",
+            Self::SearchText { .. } => "SearchText",
+            Self::Results { .. } => "Results",
+            Self::Refine { .. } => "Refine",
+            Self::ResultsMenu { .. } => "ResultsMenu",
+            Self::SaveSearchName { .. } => "SaveSearchName",
+            Self::SavedList { .. } => "SavedList",
+            Self::DeleteSaved { .. } => "DeleteSaved",
+            Self::Space { .. } => "Space",
+            Self::OfferSizeSort { .. } => "OfferSizeSort",
+            Self::Compare { .. } => "Compare",
+            Self::Unified { .. } => "Unified",
+            Self::CompareLarge { .. } => "CompareLarge",
+            Self::CompareMenu { .. } => "CompareMenu",
+            Self::PickDestination { .. } => "PickDestination",
+            Self::RunCommand { .. } => "RunCommand",
+            Self::Palette { .. } => "Palette",
+            Self::MenuBar { .. } => "MenuBar",
+            Self::Menu { .. } => "Menu",
+            Self::ContextMenu { .. } => "ContextMenu",
+            Self::SortList { .. } => "SortList",
+            Self::Limit { .. } => "Limit",
+            Self::ArchiveQuestion { .. } => "ArchiveQuestion",
+            Self::RunArchive { .. } => "RunArchive",
+            Self::PlanQuestion { .. } => "PlanQuestion",
+            Self::PackForm { .. } => "PackForm",
+            Self::PackName { .. } => "PackName",
+            Self::PackChoice { .. } => "PackChoice",
+            Self::NewPassword { .. } => "NewPassword",
+            Self::UnpackForm { .. } => "UnpackForm",
+            Self::SplitSize { .. } => "SplitSize",
+            Self::SplitTyped { .. } => "SplitTyped",
+            Self::TrashParts { .. } => "TrashParts",
+            Self::LinkForm { .. } => "LinkForm",
+            Self::JunctionInstead { .. } => "JunctionInstead",
+            Self::Relink { .. } => "Relink",
+            Self::AccessForm { .. } => "AccessForm",
+            Self::Details { .. } => "Details",
+            Self::ViewerJump { .. } => "ViewerJump",
+            Self::ViewerSearch { .. } => "ViewerSearch",
+            Self::ViewerOutline { .. } => "ViewerOutline",
+            Self::PreviewFind { .. } => "PreviewFind",
+            Self::PreviewLinks { .. } => "PreviewLinks",
+            Self::PreviewLink { .. } => "PreviewLink",
+            Self::Settings { .. } => "Settings",
+            Self::SettingValue { .. } => "SettingValue",
+            Self::SettingText { .. } => "SettingText",
+            Self::Read { .. } => "Read",
+            Self::Organize { .. } => "Organize",
+            Self::JobItems { .. } => "JobItems",
+            Self::Keys { .. } => "Keys",
+            Self::Plugin { .. } => "Plugin",
+            Self::Component { .. } => "Component",
+            Self::Jobs { .. } => "Jobs",
+            Self::Trash { .. } => "Trash",
+            Self::Volumes { .. } => "Volumes",
+        }
+    }
 }
 
 /// An open dialog's purpose and moment of opening, beside the dialog
@@ -1253,6 +1354,15 @@ impl App {
         &self.dialogs
     }
 
+    /// What the dialog on top is for, by the name its purpose has in the
+    /// app's source ("Rename", "Jobs", "JobItems"), when one is open. A
+    /// test hook (lane A5): the GUI's every-purpose test checks that each
+    /// dialog it opens is the one it meant, not only that it has a title.
+    /// The names are the source's, never words to say.
+    pub fn dialog_purpose(&self) -> Option<&'static str> {
+        self.opens.last().map(|open| open.purpose.name())
+    }
+
     /// Whether the app asked to quit.
     pub fn wants_quit(&self) -> bool {
         self.quit
@@ -1644,6 +1754,11 @@ impl App {
                 folder,
                 result,
             } => self.program_ended(&what, &folder, result),
+            AppEvent::ProgramStarted {
+                kind,
+                folder,
+                result,
+            } => self.program_started(&kind, &folder, result),
             AppEvent::ArchiveOpened { request, facts } => self.archive_opened(request, *facts),
             AppEvent::ArchivePlanned { job, result } => self.archive_planned(job, result),
             AppEvent::ArchiveEntries { place, line } => self.archive_entries_counted(&place, line),
@@ -1925,7 +2040,10 @@ impl App {
             Action::NextTheme => self.next_theme(),
             Action::Problems => self.list_problems(),
             Action::Undo => self.undo(),
-            Action::JobHistory => self.job_history(),
+            // The job history is the Jobs list's Finished group (lane
+            // A2); `jobs_dispatch` takes the command first, so this arm
+            // only keeps the two ways the same.
+            Action::JobHistory => self.open_jobs_list(Some(crate::jobs::JobGroup::Finished)),
             Action::Yes | Action::No | Action::Accept => Vec::new(),
             Action::QuickView => self.toggle_quick_view(),
             Action::OpenInTextweaver => self.open_in_textweaver(),

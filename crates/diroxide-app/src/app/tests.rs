@@ -180,3 +180,49 @@ fn quit_and_keep_the_shell_where_it_was() {
     assert!(app.keeps_shell_folder());
     assert_eq!(app.quit_folder(), None);
 }
+
+/// Lane A5: every purpose's name is its variant's own, as the source
+/// declares it, so a test that reads the enum from the source and one
+/// that asks `App::dialog_purpose` agree.
+#[test]
+fn each_purpose_is_named_as_the_source_declares_it() {
+    let source = include_str!("../app.rs");
+    let body = source
+        .split("enum Purpose {")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}").next())
+        .unwrap();
+    let variants: Vec<String> = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("    "))
+        .filter(|line| line.starts_with(|c: char| c.is_ascii_uppercase()))
+        .map(|line| {
+            line.chars()
+                .take_while(char::is_ascii_alphanumeric)
+                .collect()
+        })
+        .collect();
+    assert!(variants.len() > 70, "{variants:?}");
+    for variant in &variants {
+        let arm = format!("Self::{variant} {{ .. }} => \"{variant}\",");
+        let unit = format!("Self::{variant} => \"{variant}\",");
+        assert!(
+            source.contains(&arm) || source.contains(&unit),
+            "{variant} is not named as itself"
+        );
+    }
+}
+
+#[test]
+fn the_dialog_purpose_names_the_dialog_on_top() {
+    let (mut app, mut runtime) = app();
+    let start = app.start();
+    settle(&mut app, &mut runtime, start);
+    assert_eq!(app.dialog_purpose(), None);
+    let effects = app.handle(AppEvent::Command(Command::new(ids::PALETTE)));
+    settle(&mut app, &mut runtime, effects);
+    assert_eq!(app.dialog_purpose(), Some("Palette"));
+    let effects = app.handle(AppEvent::Key(key("escape")));
+    settle(&mut app, &mut runtime, effects);
+    assert_eq!(app.dialog_purpose(), None);
+}

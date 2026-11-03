@@ -719,6 +719,20 @@ impl JobTable {
             .map(|r| r.job)
     }
 
+    /// The last progress report of the job in front (lane A5, for the
+    /// GUI's progress indicator): every report is kept here, not only
+    /// those that changed the jobs line. `None` with no job, or before
+    /// the job in front sent its first report. A job that waits its turn
+    /// may have none, or one in the queued or held state, so a frontend
+    /// that shows a percent asks [`JobTable::waits`] first.
+    pub fn front_progress(&self) -> Option<&JobProgress> {
+        let job = self.front()?;
+        self.running
+            .iter()
+            .find(|r| r.job == job)
+            .and_then(|r| r.latest.as_ref())
+    }
+
     /// The job in front (the name kept from alpha 1).
     pub fn newest(&self) -> Option<JobId> {
         self.front()
@@ -972,6 +986,34 @@ mod tests {
         assert!(changed);
         assert_eq!(line, "Copying paused at 90 percent");
         assert!(jobs.detail(job).unwrap().contains("90 of 100 items"));
+    }
+
+    /// Lane A5: the job in front's last report, every one of them, for a
+    /// frontend's progress indicator; none before the first.
+    #[test]
+    fn the_front_progress_is_the_last_report_of_the_job_in_front() {
+        let mut jobs = JobTable::new();
+        assert!(jobs.front_progress().is_none());
+        let job = JobId::new(5);
+        jobs.begin(job, JobKind::Copy, "Copy started: 100 items", at(0));
+        assert!(jobs.front_progress().is_none());
+        let mut progress = JobProgress::start(JobKind::Copy, 100, None);
+        progress.state = JobState::Running;
+        progress.items_done = 30;
+        jobs.progress(job, &progress, at(1), 10_000);
+        // A report that leaves the jobs line as it was is kept as well.
+        progress.items_done = 40;
+        assert!(jobs.progress(job, &progress, at(2), 10_000).is_none());
+        assert_eq!(jobs.front_progress().map(JobProgress::percent), Some(40));
+        // A job that starts after it is in front, with no report yet.
+        let other = JobId::new(6);
+        jobs.begin(other, JobKind::Move, "Move started: 1 item", at(3));
+        assert_eq!(jobs.front(), Some(other));
+        assert!(jobs.front_progress().is_none());
+        jobs.finish(other);
+        assert_eq!(jobs.front_progress().map(JobProgress::percent), Some(40));
+        jobs.finish(job);
+        assert!(jobs.front_progress().is_none());
     }
 
     #[test]

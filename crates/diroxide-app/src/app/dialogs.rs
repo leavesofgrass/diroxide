@@ -147,6 +147,30 @@ impl App {
         }
     }
 
+    /// Puts the focus of the dialog on top on the row at `index` of its
+    /// list: a choice list, a question's choices, or a field's open
+    /// candidates, which the focus then enters, as Down enters them;
+    /// whether the list has a row there. App-side hook for the GUI's
+    /// click and a screen reader's Focus on a dialog's row (lane A5), so
+    /// the row is focused at once instead of by walking Home and Down.
+    /// Nothing is said, since the frontend's own focus follows the row;
+    /// the search results' check of the focused file waits its pause, as
+    /// after a key's move.
+    pub fn focus_dialog_row(&mut self, index: usize) -> bool {
+        let Some(list) = self.dialog_list_mut() else {
+            return false;
+        };
+        if index >= list.len() {
+            return false;
+        }
+        list.move_focus(Move::To(index));
+        if let Some((_, Dialog::Edit { in_list, .. })) = self.dialogs.last_mut() {
+            *in_list = true;
+        }
+        self.results_focus_moved();
+        true
+    }
+
     fn list_focus_said(&mut self) -> Vec<Effect> {
         let line = match self.dialogs.last() {
             Some((_, dialog)) => dialog.focus_line(),
@@ -684,10 +708,6 @@ impl App {
                 effects.extend(self.setting_typed(&key, &text));
                 effects
             }
-            Purpose::JobHistory => match row.and_then(|r| r.parse::<usize>().ok()) {
-                Some(index) => self.job_items(index),
-                None => Vec::new(),
-            },
             Purpose::LinkForm(form) => match row {
                 Some(row) => self.link_row(*form, &row),
                 None => Vec::new(),

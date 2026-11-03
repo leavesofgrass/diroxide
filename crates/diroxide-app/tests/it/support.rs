@@ -271,6 +271,9 @@ pub struct Setup {
     pub home: Option<Place>,
     /// Records programs and opened files.
     pub recorder: Arc<Recorder>,
+    /// Starts programs in the test's own way in place of the recorder,
+    /// never a real one (lane A5: a launcher that does not wait).
+    pub launcher: Option<Arc<dyn Launcher>>,
     /// Starts plugins in the test's own way, never a real process (W4d).
     pub plugin_launcher: Option<Arc<dyn diroxide_plugins::host::Launcher>>,
     /// Starts with plugins off, as `--no-plugins` does (W4d).
@@ -286,6 +289,7 @@ impl Default for Setup {
             paths: None,
             home: None,
             recorder: Arc::new(Recorder::default()),
+            launcher: None,
             plugin_launcher: None,
             no_plugins: false,
             component_fetcher: None,
@@ -362,6 +366,9 @@ impl Session {
             .with_components_offline();
         if let Some(paths) = paths {
             runtime = runtime.with_paths(paths.clone());
+        }
+        if let Some(launcher) = setup.launcher.clone() {
+            runtime = runtime.with_launcher(launcher);
         }
         if let Some(launcher) = setup.plugin_launcher.clone() {
             runtime = runtime.with_plugin_launcher(launcher);

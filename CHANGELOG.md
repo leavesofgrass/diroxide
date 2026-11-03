@@ -4,6 +4,14 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased
 
+### Lane A5: the app's second set of contract items
+
+Written on Tuesday, November 3, 2026.
+
+- A program that runs in a window of its own, as every program the GUI starts does, is now said in the app's own words once it has started: "Started a shell in work", "Started the command in work", "Started the editor on notes.txt", "Started textweaver". One that could not start says why and what to do: "Could not start a shell in work: no terminal program was found. Set the TERMINAL variable to a terminal program, such as xterm." With the GUI's keys, Shell here no longer says "exit the shell to come back" first, since nothing is handed over. The terminal's handover is unchanged: "Shell here: exit the shell to come back.", then "Back in diroxide, work".
+- Job history still opens the Jobs list at its Finished group, and Show what failed on a finished job lists its items. The separate Job history list from alpha 1, which nothing could open since the Jobs list took its place, is gone.
+- For the GUI, the app now gives what its next lane will wire: a dialog's row focused by its place and a preview's row by its id, for a click; the job in front's last progress report, for the progress indicator; a launcher that says it does not wait, for the handover above; and the open dialog's purpose by name, for the tests. The dependency check lets the GUI's tests, and only its tests, use the file system crate for a test trash and a provider double.
+
 ### Lane A4: the app's contract items from the merged lanes
 
 Written on Tuesday, November 3, 2026.
