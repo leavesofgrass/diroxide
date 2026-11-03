@@ -495,7 +495,7 @@ impl App {
     pub(super) fn open_menu(&mut self, id: &str) -> Vec<Effect> {
         let caps = self.active_capabilities();
         // The enabled plugins' commands join the menus (W4d).
-        let Some(list) = self.menu_list(id, &caps) else {
+        let Some(list) = self.menu_list_for(id, &caps) else {
             return vec![self.say(Message::info(format!("No menu is named {id}.")))];
         };
         let dialog = Dialog::Choose {

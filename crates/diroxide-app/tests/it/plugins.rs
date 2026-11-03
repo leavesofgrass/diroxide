@@ -1628,3 +1628,31 @@ fn focus_by_name_moves_a_plugin_lists_focus_and_keeps_the_folders() {
     assert_eq!(s.focused(), "notes.txt");
 }
 
+/// Lane A4 (G1's request 2): `App::menu_list` gives a menu's rows as the
+/// terminal's list menus show them, the enabled plugins' commands among
+/// them, so the GUI's native menus can list them too.
+#[test]
+fn menu_list_holds_the_plugins_commands_the_list_menu_shows() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let mut s = session(&w, TestLauncher::with(&[]));
+    let menu = s.app.menu_list(diroxide_app::Menu::Plugins.id()).unwrap();
+    let spoken: Vec<String> = menu.rows().iter().map(|row| row.spoken()).collect();
+    assert_eq!(spoken[0], "Manage plugins");
+    assert!(
+        spoken.contains(&"Count lines, Ctrl+Alt+L".to_owned()),
+        "{spoken:?}"
+    );
+    assert!(
+        menu.rows().iter().any(|row| row.id == "line-counter.count"),
+        "the row's id is the plugin's command"
+    );
+    // The same rows the list menu shows, in the same order.
+    s.command(ids::MENU_PLUGINS);
+    assert_eq!(rows(&s), spoken);
+    s.key("escape");
+    // A built-in menu has its own rows; no menu has a made-up id.
+    let file = s.app.menu_list(diroxide_app::Menu::File.id()).unwrap();
+    assert!(!file.is_empty());
+    assert!(s.app.menu_list("no-such-menu").is_none());
+}

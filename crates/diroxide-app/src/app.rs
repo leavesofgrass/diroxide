@@ -1282,6 +1282,16 @@ impl App {
         &self.menus
     }
 
+    /// A menu's rows as the terminal's list menus show them now, for the
+    /// active place: its own items, unavailable ones with their reason,
+    /// and the enabled plugins' commands, in the Plugins menu after its
+    /// own items and wherever `menus.toml` names one (lane A4, for the
+    /// GUI's native menus). `None` when no menu has this id.
+    pub fn menu_list(&self, id: &str) -> Option<diroxide_core::ListModel> {
+        let caps = self.active_capabilities();
+        self.menu_list_for(id, &caps)
+    }
+
     /// The key bar: the active bank's pairs on one line, key first, the
     /// most common operations first ("F2 Rename  F3 View  F4 Edit"). The
     /// terminal draws it on its last line in every mode (answer 49); see

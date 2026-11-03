@@ -315,7 +315,7 @@ impl App {
     /// A menu's list for the active place, with the enabled plugins'
     /// commands: in the Plugins menu after its own items, and wherever
     /// `menus.toml` names one.
-    pub(super) fn menu_list(&self, id: &str, caps: &Capabilities) -> Option<ListModel> {
+    pub(super) fn menu_list_for(&self, id: &str, caps: &Capabilities) -> Option<ListModel> {
         let context = self.plugin_context();
         let catalog = &self.plugins.catalog;
         let keymap = &self.keymap;
