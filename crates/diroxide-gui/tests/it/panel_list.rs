@@ -91,6 +91,39 @@ fn every_windowed_option_is_a_node_with_its_place_and_the_real_count() {
     assert!(name.starts_with("file-000003.txt"), "{name}");
 }
 
+/// How a marked row reads on this system: on Windows and Linux the
+/// option is selected and the word is not in its name; on macOS, where
+/// VoiceOver reads a list's options as static text, the word is in the
+/// name and there is no state (`model::states_in_name`). An unmarked row
+/// has neither, so nothing says "not selected" on every row.
+fn assert_mark(option: &OptionNode, marked: bool) {
+    let (name, _, state) = option;
+    let word = name.contains(", selected");
+    if diroxide_gui::model::states_in_name() {
+        assert_eq!(*state, None, "no state on macOS: {option:?}");
+        assert_eq!(word, marked, "the word in the name on macOS: {option:?}");
+    } else {
+        assert_eq!(*state, marked.then_some(true), "the state: {option:?}");
+        assert!(!word, "the state is not in the name: {option:?}");
+    }
+}
+
+/// Both forms of a marked row, whatever the system the tests run on:
+/// the word in the name with no state (macOS), the state with no word
+/// (Windows and Linux).
+#[test]
+fn a_marked_row_has_its_state_or_its_word_never_both() {
+    let mut row = diroxide_core::ListRow::new("b.txt", "b.txt").with_details(["text", "8 bytes"]);
+    row.selected = true;
+    let mac = diroxide_gui::model::RowView::of(&row, true);
+    assert!(mac.name.contains(", selected"), "{mac:?}");
+    let other = diroxide_gui::model::RowView::of(&row, false);
+    assert!(!other.name.contains("selected"), "{other:?}");
+    assert!(mac.selected && other.selected);
+    // The drawn row says it in words on every system.
+    assert!(other.text.starts_with("* "), "{other:?}");
+}
+
 #[test]
 fn a_mark_is_a_state_said_once_and_follows_its_row_across_a_refresh() {
     let dir = fixture(&["a.txt", "b.txt", "c.txt"], &[]);
@@ -101,15 +134,9 @@ fn a_mark_is_a_state_said_once_and_follows_its_row_across_a_refresh() {
     rig.press("space");
     let (_, options) = list_options(&rig);
     let b = options.iter().find(|o| o.0.starts_with("b.txt")).unwrap();
-    assert_eq!(b.2, Some(true), "{options:?}");
-    assert!(
-        !b.0.contains("selected"),
-        "the state is not in the name: {b:?}"
-    );
-    // An unmarked row has no selection state at all, so a screen reader
-    // never says "not selected" on every row.
+    assert_mark(b, true);
     let a = options.iter().find(|o| o.0.starts_with("a.txt")).unwrap();
-    assert_eq!(a.2, None, "{options:?}");
+    assert_mark(a, false);
     // A new file arrives before it: the mark stays on b.txt's node.
     let list = rig.h.access_node(rig.panel_id(Side::Left)).unwrap();
     let b_node = list
@@ -119,13 +146,30 @@ fn a_mark_is_a_state_said_once_and_follows_its_row_across_a_refresh() {
         .id();
     std::fs::write(dir.path().join("aa.txt"), b"new").unwrap();
     rig.press("ctrl+r");
+    // The listing comes back from a worker: wait for the new row, not
+    // for a time.
+    assert!(
+        rig.settle_until(|rig| list_options(rig)
+            .1
+            .iter()
+            .any(|o| o.0.starts_with("aa.txt"))),
+        "aa.txt never arrived: {:?}",
+        list_options(&rig).1
+    );
     let list = rig.h.access_node(rig.panel_id(Side::Left)).unwrap();
     let b_again = list
         .children()
         .find(|o| name_of(o).starts_with("b.txt"))
         .unwrap();
     assert_eq!(b_again.id(), b_node, "the row keeps its node");
-    assert_eq!(b_again.is_selected(), Some(true));
+    assert_mark(
+        &(
+            name_of(&b_again),
+            b_again.position_in_set(),
+            b_again.is_selected(),
+        ),
+        true,
+    );
     assert_eq!(b_again.position_in_set(), Some(2));
 }
 

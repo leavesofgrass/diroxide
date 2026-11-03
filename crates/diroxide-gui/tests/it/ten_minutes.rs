@@ -56,6 +56,27 @@ impl Heard {
         rig.said().len()
     }
 
+    /// The same for a line the workers bring (a job's result): the walk
+    /// settles until an announcement since `from` says `fact`, for at
+    /// most ten seconds of the real clock, then hears it. A state, never
+    /// a time, so a loaded machine only makes it slower.
+    fn said_when_done(&mut self, rig: &mut Rig, from: usize, fact: &str) -> usize {
+        rig.settle_until(|rig| {
+            rig.said()[from..]
+                .iter()
+                .any(|m| within_cells(&m.text, fact))
+        });
+        self.said(rig, from, fact)
+    }
+
+    /// The focus's name once it starts with `start`, for a row the
+    /// workers bring (a renamed file arrives with the folder's next
+    /// listing): the walk settles until it does, then hears it.
+    fn focus_when_listed(&mut self, rig: &mut Rig, start: &str) {
+        rig.settle_until(|rig| rig.focus_node().1.starts_with(start));
+        self.focus(rig, start);
+    }
+
     /// The focus's name, asserted to start with `start`.
     fn focus(&mut self, rig: &Rig, start: &str) {
         let (role, name) = rig.focus_node();
@@ -157,7 +178,7 @@ fn the_owners_ten_minutes_in_the_window() {
         .push(first_cells(&question, BRAILLE_CELLS).to_owned());
     heard.focus(&rig, "No");
     rig.press("y");
-    at = heard.said(&rig, at, "Copy finished: 3 done");
+    at = heard.said_when_done(&mut rig, at, "Copy finished: 3 done");
     assert!(dialog(&rig).is_none());
     for name in ["budget.xlsx", "notes.txt", "raccoon \u{1f99d}.txt"] {
         assert!(backup.join(name).exists(), "{name} was not copied");
@@ -171,9 +192,11 @@ fn the_owners_ten_minutes_in_the_window() {
     heard.lines.push(field);
     rig.type_text("-2026");
     rig.press("enter");
-    heard.said(&rig, at, "Renamed report.pdf to report-2026.pdf");
+    heard.said_when_done(&mut rig, at, "Renamed report.pdf to report-2026.pdf");
     assert!(work.join("report-2026.pdf").exists());
-    heard.focus(&rig, "report-2026.pdf");
+    // The renamed row comes with the folder's next listing, from a
+    // worker: CI's loaded Windows runner checked before it came.
+    heard.focus_when_listed(&mut rig, "report-2026.pdf");
     // 8. The trash question, answered No here (see the module's note).
     rig.press("f8");
     let trash = dialog(&rig).unwrap();
@@ -190,7 +213,7 @@ fn the_owners_ten_minutes_in_the_window() {
     at = rig.said().len();
     // Undo takes back the rename.
     rig.press("ctrl+z");
-    heard.said(&rig, at, "Undid rename");
+    heard.said_when_done(&mut rig, at, "Undid rename");
     assert!(work.join("report.pdf").exists());
     // 9. The palette: its field is a combo box named by its label.
     rig.press("ctrl+shift+p");
