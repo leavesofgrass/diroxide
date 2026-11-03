@@ -44,7 +44,7 @@ fontique = { workspace = true, optional = true, features = ["fontconfig-dlopen"]
 # The console a window program was started from (src/console.rs, the one
 # module of this crate that may use `unsafe`).
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_System_Console", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { workspace = true, features = ["Win32_System_Console", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 accesskit_consumer.workspace = true

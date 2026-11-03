@@ -171,6 +171,129 @@ impl Drop for Ticker {
     }
 }
 
+/// The message the event loop gets from the native menu bar.
+#[cfg(windows)]
+#[derive(Debug)]
+struct MenuMessage(crate::platform::menu::MenuEvent);
+
+/// The window's native menu bar (Windows): built from the app's menu
+/// model, built again when the model's tree changes, shown always or
+/// only while a key has it open (`auto_hide_menu`).
+#[cfg(windows)]
+#[derive(Default)]
+struct NativeMenus {
+    hwnd: Option<isize>,
+    bar: Option<crate::platform::menu::Bar>,
+    fingerprint: u64,
+    watching: bool,
+}
+
+#[cfg(windows)]
+impl NativeMenus {
+    /// The window's handle, from winit.
+    fn hwnd_of(window: &WinitWindow) -> Option<isize> {
+        use masonry_winit::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        match window.window_handle().ok()?.as_raw() {
+            RawWindowHandle::Win32(handle) => Some(handle.hwnd.get()),
+            _ => None,
+        }
+    }
+
+    /// Brings the bar in line with the app after a step, then carries out
+    /// what the menu keys asked.
+    fn sync(
+        &mut self,
+        window: &WinitWindow,
+        frontend: &mut Frontend,
+        proxy: &EventLoopProxy,
+        window_id: WindowId,
+    ) {
+        if !crate::menus::native(frontend.app()) {
+            self.bar = None;
+            frontend.set_menu_bar(false);
+            let _ = frontend.take_menu_requests();
+            return;
+        }
+        if self.hwnd.is_none() {
+            self.hwnd = Self::hwnd_of(window);
+        }
+        let Some(hwnd) = self.hwnd else {
+            return;
+        };
+        if !self.watching {
+            let proxy = Mutex::new(proxy.clone());
+            self.watching = crate::platform::menu::watch(
+                hwnd,
+                Box::new(move |event| {
+                    let proxy = proxy.lock().unwrap_or_else(PoisonError::into_inner);
+                    let _ = proxy.send_event(MasonryUserEvent::AsyncAction(
+                        window_id,
+                        Box::new(MenuMessage(event)),
+                    ));
+                }),
+            );
+        }
+        let tree = crate::menus::tree(frontend.app());
+        let fingerprint = crate::menus::fingerprint(&tree);
+        if self.bar.is_none() || fingerprint != self.fingerprint {
+            let was_shown = self
+                .bar
+                .as_ref()
+                .is_some_and(crate::platform::menu::Bar::shown);
+            self.bar = crate::platform::menu::Bar::build(&tree);
+            self.fingerprint = fingerprint;
+            if was_shown && let Some(bar) = self.bar.as_mut() {
+                let _ = bar.attach(hwnd);
+            }
+        }
+        let auto_hide = frontend.app().settings().auto_hide_menu;
+        if let Some(bar) = self.bar.as_mut()
+            && !auto_hide
+            && !bar.shown()
+        {
+            let _ = bar.attach(hwnd);
+        }
+        frontend.set_menu_bar(self.bar.is_some());
+        for request in frontend.take_menu_requests() {
+            if let Some(bar) = self.bar.as_mut()
+                && !bar.shown()
+            {
+                let _ = bar.attach(hwnd);
+            }
+            let letter = match request {
+                crate::frontend::MenuEnter::Bar => None,
+                crate::frontend::MenuEnter::Menu(c) => Some(c),
+            };
+            crate::platform::menu::enter(hwnd, letter);
+        }
+    }
+
+    /// A message from the bar: a chosen item's command, or the menu
+    /// closed (a bar a key showed hides again, saying nothing).
+    fn message(
+        &mut self,
+        event: crate::platform::menu::MenuEvent,
+        frontend: &Frontend,
+    ) -> Option<String> {
+        use crate::platform::menu::MenuEvent;
+        match event {
+            MenuEvent::Chosen(id) => self
+                .bar
+                .as_ref()
+                .and_then(|bar| bar.command(id))
+                .map(str::to_owned),
+            MenuEvent::Closed => {
+                if frontend.app().settings().auto_hide_menu
+                    && let Some(bar) = self.bar.as_mut()
+                {
+                    bar.detach();
+                }
+                None
+            }
+        }
+    }
+}
+
 /// The driver: the frontend, and what the window last showed.
 struct Gui {
     /// The frontend, until the driver is dropped and gives its app to
@@ -183,6 +306,11 @@ struct Gui {
     wake: diroxide_app::runtime::Waker,
     ticker: Ticker,
     slot: Rc<RefCell<Option<App>>>,
+    /// The event loop, for the native menu's messages.
+    #[cfg(windows)]
+    proxy: EventLoopProxy,
+    #[cfg(windows)]
+    menus: NativeMenus,
 }
 
 impl Gui {
@@ -204,6 +332,11 @@ impl Gui {
             ctx.render_root(self.window)
                 .set_window_label(title.as_str());
             self.title = title;
+        }
+        #[cfg(windows)]
+        {
+            let window = ctx.window(self.window).handle();
+            self.menus.sync(window, frontend, &self.proxy, self.window);
         }
         self.ticker.set(frontend.next_deadline());
         if frontend.wants_quit() {
@@ -249,6 +382,19 @@ impl AppDriver for Gui {
             self.step(ctx, |frontend, root| frontend.wake(root, Instant::now()));
         } else if action.is::<Tick>() {
             self.step(ctx, |frontend, root| frontend.tick(root, Instant::now()));
+        } else {
+            #[cfg(windows)]
+            if let Ok(message) = action.downcast::<MenuMessage>() {
+                let command = match self.frontend.as_ref() {
+                    Some(frontend) => self.menus.message(message.0, frontend),
+                    None => None,
+                };
+                if let Some(command) = command {
+                    self.step(ctx, |frontend, root| {
+                        frontend.menu_command(root, &command, Instant::now());
+                    });
+                }
+            }
         }
     }
 
@@ -371,8 +517,12 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
         title: String::new(),
         pending: Arc::clone(&pending),
         wake,
-        ticker: Ticker::start(proxy, window_id),
+        ticker: Ticker::start(proxy.clone(), window_id),
         slot: Rc::clone(&slot),
+        #[cfg(windows)]
+        proxy,
+        #[cfg(windows)]
+        menus: NativeMenus::default(),
     };
     // The console a double-click opened was let go by diro before the app
     // was built (`crate::console::release_for_window`), and is given back
@@ -412,6 +562,48 @@ mod tests {
             error_for_panic("index out of bounds: the len is 0\nbacktrace"),
             GuiError::Stopped("index out of bounds: the len is 0".to_owned())
         );
+    }
+
+    /// The model's tree as a Win32 menu, read back as UI Automation reads
+    /// it: the bar's menus with their access keys, each item's label and,
+    /// after a tab, its key (AcceleratorKey); no window needed.
+    #[cfg(windows)]
+    #[test]
+    fn the_native_menu_holds_the_models_items_and_keys() {
+        use diroxide_app::AppOptions;
+        use diroxide_core::Place;
+        let here = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let app = App::new(AppOptions::new(here.clone(), here));
+        let tree = crate::menus::tree(&app);
+        let bar = crate::platform::menu::Bar::build(&tree).unwrap();
+        let texts = bar.texts();
+        let bar_menus: Vec<&str> = texts
+            .iter()
+            .filter(|(depth, _)| *depth == 0)
+            .map(|(_, text)| text.as_str())
+            .collect();
+        let expected: Vec<&str> = tree.iter().map(|t| t.label.as_str()).collect();
+        assert_eq!(bar_menus, expected);
+        assert_eq!(bar_menus[0], "&File");
+        // Every item of the File menu, in order, with its key after a tab.
+        let file: Vec<String> = tree[0]
+            .entries
+            .iter()
+            .map(crate::menus::Entry::windows_text)
+            .collect();
+        let held: Vec<&str> = texts
+            .iter()
+            .skip(1)
+            .take_while(|(depth, _)| *depth >= 1)
+            .filter(|(depth, _)| *depth == 1)
+            .map(|(_, text)| text.as_str())
+            .collect();
+        assert_eq!(held, file);
+        assert!(held.iter().any(|t| t.contains('\t')), "{held:?}");
+        // The first item's id gives its command back.
+        assert!(bar.command(1).is_some());
+        assert!(bar.command(0).is_none());
+        assert!(!bar.shown());
     }
 
     #[test]

@@ -19,7 +19,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use masonry::accesskit::{Node, Role};
-use masonry::core::keyboard::{KeyState, KeyboardEvent};
+use masonry::core::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
 use masonry::core::{
     AccessCtx, ChildrenIds, EventCtx, Ime, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx,
     PropertiesMut, PropertiesRef, RegisterCtx, TextEvent, Widget, WidgetMut, WidgetPod,
@@ -35,15 +35,20 @@ use crate::model::DialogView;
 /// What the root tells the driver.
 #[derive(Clone, Debug, PartialEq)]
 pub enum RootAction {
-    /// A key, pressed or released, for the app.
+    /// A key pressed, for the app.
     Key(KeyboardEvent),
     /// Text an input method finished composing, or pasted text: typed
     /// into the open field.
     Text(String),
+    /// Alt was pressed and let go with no other key: the hidden menu bar
+    /// shows (with native menus).
+    AltAlone,
 }
 
 /// The window's content.
 pub struct Root {
+    /// Alt is down and no other key came since.
+    alt_alone: bool,
     probe: WidgetPod<FullPassProbe>,
     main: WidgetPod<Region>,
     announcer: WidgetPod<dyn Widget>,
@@ -60,6 +65,7 @@ impl Root {
         full_passes: Rc<Cell<u64>>,
     ) -> Self {
         Self {
+            alt_alone: false,
             probe: NewWidget::new(FullPassProbe {
                 full_passes: Rc::clone(&full_passes),
             })
@@ -129,11 +135,17 @@ impl Widget for Root {
     ) {
         match event {
             TextEvent::Keyboard(key) => {
-                // A release runs nothing; it is still handled, so Masonry
-                // never acts on it.
+                let alt = key.key == Key::Named(NamedKey::Alt);
                 if key.state == KeyState::Down {
+                    // Alt alone is told apart from Alt with a key: any
+                    // other key between Alt's press and its release.
+                    self.alt_alone = alt;
                     ctx.submit_action::<RootAction>(RootAction::Key(key.clone()));
+                } else if alt && std::mem::take(&mut self.alt_alone) {
+                    ctx.submit_action::<RootAction>(RootAction::AltAlone);
                 }
+                // A release runs nothing else; it is still handled, so
+                // Masonry never acts on it.
                 ctx.set_handled();
             }
             TextEvent::Ime(Ime::Commit(text)) => {

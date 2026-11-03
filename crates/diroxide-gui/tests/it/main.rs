@@ -10,6 +10,8 @@ mod live_region;
 #[cfg(feature = "gui")]
 mod loop_keys;
 #[cfg(feature = "gui")]
+mod menus;
+#[cfg(feature = "gui")]
 mod panel_list;
 #[cfg(feature = "gui")]
 mod rig;

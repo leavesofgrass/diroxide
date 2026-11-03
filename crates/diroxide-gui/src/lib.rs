@@ -33,6 +33,7 @@ pub mod fonts;
 pub mod frontend;
 #[cfg(feature = "gui")]
 pub mod keys;
+pub mod menus;
 pub mod model;
 mod platform;
 #[cfg(feature = "gui")]

@@ -141,6 +141,20 @@ pub struct Frontend {
     quick_tick_at: Option<Instant>,
     viewer_tick_at: Option<Instant>,
     hold_retry_at: Option<Instant>,
+    /// The window has a native menu bar (Windows, the `menus` setting's
+    /// native): the menu keys enter it.
+    menu_bar: bool,
+    /// What the menu keys asked of the native bar, for the window.
+    menu_requests: Vec<MenuEnter>,
+}
+
+/// How a key enters the native menu bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuEnter {
+    /// The bar, its first menu selected (Alt alone, F10, Menus).
+    Bar,
+    /// The menu with this access key, open (Alt with the letter).
+    Menu(char),
 }
 
 impl Frontend {
@@ -167,6 +181,8 @@ impl Frontend {
             quick_tick_at: None,
             viewer_tick_at: None,
             hold_retry_at: None,
+            menu_bar: false,
+            menu_requests: Vec::new(),
         }
     }
 
@@ -293,10 +309,80 @@ impl Frontend {
         if self.key_test_since.is_some() {
             self.key_test_since = Some(now);
         }
+        if let Some(enter) = self.menu_key(&key) {
+            // The native menu bar takes the key: the window shows the bar
+            // (when it is hidden) and enters it, as Windows' own menu keys
+            // would.
+            self.menu_requests.push(enter);
+            return;
+        }
         let effects = self.app.handle(AppEvent::Key(key));
         self.carry(effects);
         self.after(now);
         self.refresh(host);
+    }
+
+    /// Tells the driver whether the window has a native menu bar now, so
+    /// the menu keys enter it.
+    pub fn set_menu_bar(&mut self, native: bool) {
+        self.menu_bar = native;
+    }
+
+    /// Takes what the menu keys asked of the native bar since the last
+    /// call.
+    pub fn take_menu_requests(&mut self) -> Vec<MenuEnter> {
+        std::mem::take(&mut self.menu_requests)
+    }
+
+    /// Whether `key` enters the native menu bar rather than going to the
+    /// app: only with a native bar, no dialog open, and no key test or
+    /// capture waiting; the Menus command's keys (F9, F10) enter the bar,
+    /// a bar menu's command (Alt+F for File) or Alt with a menu's letter
+    /// that the keymap leaves free opens that menu. A key the owner bound
+    /// to something else stays the app's.
+    fn menu_key(&self, key: &Key) -> Option<MenuEnter> {
+        if !self.menu_bar || self.app.dialog().is_some() || self.app.key_test_active() {
+            return None;
+        }
+        let layers = [
+            diroxide_core::Layer::Global,
+            diroxide_core::Layer::Panel,
+            diroxide_core::Layer::List,
+        ];
+        let tree = crate::menus::tree(&self.app);
+        match self.app.keymap().lookup(&layers, key) {
+            diroxide_app::Lookup::Command(id) if id == ids::MENU => Some(MenuEnter::Bar),
+            diroxide_app::Lookup::Command(id) => {
+                let menu = diroxide_app::Menu::ALL.iter().find(|m| m.command() == id)?;
+                let top = tree.iter().find(|t| t.id == menu.id())?;
+                top.access.map(MenuEnter::Menu)
+            }
+            diroxide_app::Lookup::NoMatch => {
+                let only_alt = key.mods.alt && !key.mods.ctrl && !key.mods.meta;
+                match key.code {
+                    KeyCode::Char(c) if only_alt => crate::menus::by_access(&tree, c)
+                        .and_then(|m| m.access)
+                        .map(MenuEnter::Menu),
+                    _ => None,
+                }
+            }
+        }
+    }
+
+    /// A native menu's item was chosen: an open dialog is closed as
+    /// Escape closes it, then the command runs as from the palette.
+    pub fn menu_command(&mut self, host: &mut impl Host, command: &str, now: Instant) {
+        let Ok(id) = diroxide_core::CommandId::new(command.to_owned()) else {
+            return;
+        };
+        for _ in 0..8 {
+            if self.app.dialog().is_none() {
+                break;
+            }
+            let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Escape)));
+            self.carry(effects);
+        }
+        self.command(host, Command::new(id), now);
     }
 
     /// Text an input method composed, or a paste: typed into the open
@@ -342,6 +428,11 @@ impl Frontend {
                 match *root {
                     RootAction::Key(event) => self.key_event(host, &event, now),
                     RootAction::Text(text) => self.text(host, &text, now),
+                    RootAction::AltAlone => {
+                        if self.menu_bar && self.app.dialog().is_none() {
+                            self.menu_requests.push(MenuEnter::Bar);
+                        }
+                    }
                 }
                 return;
             }

@@ -758,7 +758,7 @@ pub const SCHEMA: [SettingInfo; 104] = [
         kind: K::Flag,
         default: "true",
         help: "In the GUI on Windows, keeps the menu bar hidden until the Menus command or Alt alone shows it.",
-        arrives: Some("alpha.6"),
+        arrives: None,
     },
     SettingInfo {
         key: "focus_mode",
@@ -796,7 +796,7 @@ pub const SCHEMA: [SettingInfo; 104] = [
         kind: SettingKind::Choice(MENU_KINDS),
         default: "\"native\"",
         help: "Native shows the GUI's menus in the system's menu bar on Windows and macOS, and as a list in the window elsewhere. List uses the list everywhere.",
-        arrives: Some("alpha.6"),
+        arrives: None,
     },
     // The viewer (alpha.2, W2d; research/alpha2-plan.md part three and
     // R17's caps).
