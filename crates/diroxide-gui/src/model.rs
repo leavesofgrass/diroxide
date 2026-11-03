@@ -32,7 +32,8 @@ use diroxide_app::App;
 use diroxide_app::panel::place_leaf;
 use diroxide_core::format::count;
 use diroxide_core::names::display_name;
-use diroxide_core::{ListRow, Side};
+use diroxide_core::{EntryKind, ListRow, Side};
+use diroxide_theme::PanelRole;
 
 /// Whether an option's states go in its name: on macOS, where VoiceOver
 /// gets a list's options as static text with no states (R4 section 2.2);
@@ -57,6 +58,11 @@ pub struct RowView {
     pub selected: bool,
     /// Can be chosen (unavailable rows are listed and say so).
     pub enabled: bool,
+    /// What the row is, for its colors and shape: a folder, an archive, a
+    /// link, a broken link, a hidden entry, or plain text (the terminal's
+    /// rule, `crates/diroxide-tui/src/view.rs`). The row says it in words
+    /// too; the role is the extra.
+    pub role: PanelRole,
 }
 
 impl RowView {
@@ -80,7 +86,34 @@ impl RowView {
             text,
             selected: row.selected,
             enabled: row.enabled,
+            role: PanelRole::Text,
         }
+    }
+
+    /// The same row drawn in `role`.
+    #[must_use]
+    pub fn with_role(mut self, role: PanelRole) -> Self {
+        self.role = role;
+        self
+    }
+}
+
+/// What a panel's row is, for its colors: the folder's entry at that
+/// place, a plugin list's rows plain text whatever their names.
+pub fn row_role(app: &App, side: Side, index: usize, row: &ListRow) -> PanelRole {
+    let panel = app.panel(side);
+    if panel.plugin_list().is_some() {
+        return PanelRole::Text;
+    }
+    match panel.entries().get(index).filter(|e| e.name == row.id) {
+        Some(e) if e.kind == EntryKind::Folder => PanelRole::Folder,
+        Some(e) if e.kind == EntryKind::Archive => PanelRole::Archive,
+        Some(e) if e.kind == EntryKind::Link => match &e.link {
+            Some(link) if link.points_to.is_none() => PanelRole::BrokenLink,
+            _ => PanelRole::Link,
+        },
+        Some(e) if e.hidden => PanelRole::Hidden,
+        _ => PanelRole::Text,
     }
 }
 
@@ -290,7 +323,10 @@ pub fn panel_view(app: &App, side: Side, top: usize, page: usize) -> PanelView {
     let in_name = states_in_name();
     let rows = list.rows()[range.clone()]
         .iter()
-        .map(|row| RowView::of(row, in_name))
+        .enumerate()
+        .map(|(offset, row)| {
+            RowView::of(row, in_name).with_role(row_role(app, side, range.start + offset, row))
+        })
         .collect();
     let empty = if panel.is_loading() && panel.plugin_list().is_none() {
         "Reading folder".to_owned()
@@ -360,6 +396,7 @@ impl ListView {
                 text: display_name(line).into_owned(),
                 selected: false,
                 enabled: true,
+                role: PanelRole::Text,
             })
             .collect();
         let total = rows.len();
@@ -438,6 +475,9 @@ pub enum DialogFocus {
     Yes,
     /// A confirmation's listing.
     Listing,
+    /// A question's message, read line by line (a new server key's
+    /// fingerprint in groups of four).
+    Message,
     /// A secret's Show toggle.
     Show,
 }
@@ -502,6 +542,12 @@ pub struct DialogView {
     /// Lines drawn under the title, before the control: a question's
     /// situation, a list's help. Readable text, never focused.
     pub lines: Vec<String>,
+    /// A question's message as a list to read line by line, when it has
+    /// two lines or more after its first (a new server key: the host,
+    /// the key's type, the fingerprint one part a line): "Message, 10
+    /// lines". Tab moves between it and the choices; the focus starts on
+    /// the choices, the safe answer first.
+    pub message: Option<ListView>,
     /// The control the focus is on.
     pub control: ControlView,
     /// The buttons and toggles under the control, in their order.
@@ -522,6 +568,7 @@ impl DialogView {
         self.id == other.id
             && self.lines == other.lines
             && self.description == other.description
+            && self.message.is_some() == other.message.is_some()
             && ids(&self.buttons) == ids(&other.buttons)
             && match (&self.control, &other.control) {
                 (ControlView::Field(_), ControlView::Field(_))
@@ -547,6 +594,9 @@ impl DialogView {
             }
             _ => {
                 order.push(DialogFocus::Control);
+                if self.message.is_some() {
+                    order.push(DialogFocus::Message);
+                }
                 order.extend(self.buttons.iter().map(|b| b.id));
             }
         }
@@ -639,6 +689,7 @@ pub fn dialog_view_at(app: &App, local: &LocalFocus) -> Option<DialogView> {
     let mut buttons = Vec::new();
     let mut description = None;
     let mut local_list = false;
+    let mut message = None;
     let (lines, control) = match dialog {
         Dialog::Confirm { listing, .. } => {
             // The answer starts on No; y, n, Enter and Escape answer it,
@@ -714,8 +765,20 @@ pub fn dialog_view_at(app: &App, local: &LocalFocus) -> Option<DialogView> {
             if !rest.is_empty() {
                 description = Some(display_name(&rest.join(" ")).into_owned());
             }
+            // Two lines or more are a list to read line by line too, so a
+            // Braille display shows one part of a fingerprint at a time.
+            let drawn = if rest.len() >= 2 {
+                message = Some(ListView::lines(
+                    format!("Message, {}", count(rest.len() as u64, "line", "lines")),
+                    &rest,
+                    local.line,
+                ));
+                Vec::new()
+            } else {
+                rest
+            };
             (
-                rest,
+                drawn,
                 ControlView::List(ListView::of(choices, choices.title(), DIALOG_PAGE)),
             )
         }
@@ -755,6 +818,7 @@ pub fn dialog_view_at(app: &App, local: &LocalFocus) -> Option<DialogView> {
             .iter()
             .map(|line| display_name(line).into_owned())
             .collect(),
+        message,
         control,
         buttons,
         focus: local.on,
@@ -833,9 +897,7 @@ impl ButtonView {
 /// ADR-0007's status update of October 17), or `None` for plain text. As
 /// the terminal maps them (`crates/diroxide-tui/src/viewer.rs`,
 /// `class_role`).
-pub fn class_role(
-    class: diroxide_app::viewer::TokenClass,
-) -> Option<diroxide_app::settings::PanelRole> {
+pub fn class_role(class: diroxide_app::viewer::TokenClass) -> Option<PanelRole> {
     use diroxide_app::settings::PanelRole as R;
     use diroxide_app::viewer::TokenClass as C;
     Some(match class {
@@ -875,7 +937,7 @@ pub struct ViewerRowView {
     pub line: u64,
     /// The token runs, byte ranges of `text` with the theme role each is
     /// drawn with (none when highlighting is off).
-    pub runs: Vec<(usize, usize, diroxide_app::settings::PanelRole)>,
+    pub runs: Vec<(usize, usize, PanelRole)>,
     /// The search's matches in `text`, drawn marked.
     pub matches: Vec<(usize, usize)>,
 }

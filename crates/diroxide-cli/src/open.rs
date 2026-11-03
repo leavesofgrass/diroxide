@@ -66,6 +66,9 @@ pub struct OpenOptions {
     pub cwd_file: Option<String>,
     /// The theme for this session.
     pub theme: Option<String>,
+    /// `--log FILE`: the GUI's diagnostic lines (the graphics adapter and
+    /// the drawing road taken) appended to this file.
+    pub log: Option<String>,
 }
 
 /// The current folder as a place.
@@ -311,6 +314,7 @@ pub fn run(options: &OpenOptions, out: &mut dyn Write) -> Result<i32, CliError> 
         let gui = GuiOptions {
             background: options.background,
             graphics: graphics_api(options.graphics, settings.graphics),
+            log: options.log.as_ref().map(std::path::PathBuf::from),
             ..GuiOptions::default()
         };
         return run_gui(options, paths.as_ref(), &here, gui, out);
@@ -791,7 +795,7 @@ mod tests {
         ));
         assert_eq!(
             said,
-            "Could not open the GUI: the window could not start its graphics (no compatible WGPU device found); the terminal opens instead. Try another graphics API with diro --graphics, such as dx12, vulkan or gl. The terminal, diro --tui, needs none."
+            "Could not open the GUI: the window could not start its graphics (no compatible WGPU device found); the terminal opens instead. Try another graphics API with diro --graphics, such as software, dx12, vulkan or gl. The terminal, diro --tui, needs none."
         );
     }
 

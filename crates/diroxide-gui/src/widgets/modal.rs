@@ -31,7 +31,6 @@ use masonry::imaging::Painter;
 use masonry::kurbo::{Affine, Axis, Point, Rect, Size, Stroke, Vec2};
 use masonry::layout::{LayoutSize, LenDef, LenReq, Length};
 use masonry::parley::Layout;
-use masonry::peniko::Color;
 use masonry::widgets::{Flex, Label};
 
 use super::choice::ChoiceBox;
@@ -55,13 +54,16 @@ const TITLE_SIZE: f32 = 19.0;
 
 /// The page behind a dialog, darkened, so the card stands out; the window
 /// behind is also hidden from screen readers.
-const VEIL: Color = Color::from_rgba8(0, 0, 0, 0xb0);
+/// How much of the window behind a dialog shows through the veil.
+const VEIL: f32 = 0.7;
 
 /// A dialog over the window.
 pub struct Modal {
     view: DialogView,
     title: Option<Layout<BrushIndex>>,
     lines: WidgetPod<Flex>,
+    /// A question's message as a list to read.
+    message: Option<WidgetPod<ChoiceBox>>,
     field: Option<WidgetPod<Field>>,
     list: Option<WidgetPod<ChoiceBox>>,
     buttons: Vec<WidgetPod<PushButton>>,
@@ -124,10 +126,15 @@ impl Modal {
             .iter()
             .map(|button| NewWidget::new(PushButton::new(button.clone())).to_pod())
             .collect();
+        let message = view
+            .message
+            .clone()
+            .map(|list| NewWidget::new(ChoiceBox::message(list)).to_pod());
         Self {
             list_shown: list_shown(&view),
             view,
             title: None,
+            message,
             lines: NewWidget::new(lines).to_pod(),
             field,
             list,
@@ -158,6 +165,7 @@ impl Modal {
                 }
             }
             DialogFocus::Listing => self.list.as_ref().map(WidgetPod::id),
+            DialogFocus::Message => self.message.as_ref().map(WidgetPod::id),
             other => self
                 .buttons
                 .iter()
@@ -183,6 +191,10 @@ impl Modal {
             _ => list_of(&view),
         };
         if let (Some(list), Some(pod)) = (list, this.widget.list.as_mut()) {
+            let mut widget = this.ctx.get_mut(pod);
+            ChoiceBox::set_view(&mut widget, list);
+        }
+        if let (Some(list), Some(pod)) = (view.message.clone(), this.widget.message.as_mut()) {
             let mut widget = this.ctx.get_mut(pod);
             ChoiceBox::set_view(&mut widget, list);
         }
@@ -221,6 +233,9 @@ impl Widget for Modal {
 
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
         ctx.register_child(&mut self.lines);
+        if let Some(message) = &mut self.message {
+            ctx.register_child(message);
+        }
         if let Some(field) = &mut self.field {
             ctx.register_child(field);
         }
@@ -283,6 +298,23 @@ impl Widget for Modal {
         ctx.run_layout(&mut self.lines, Size::new(inner, lines_h));
         ctx.place_child(&mut self.lines, Point::new(x0 + PAD, top + y));
         y += lines_h + if lines_h > 0.0 { GAP } else { 0.0 };
+        if let Some(message) = &mut self.message {
+            // Half the room left at most, so the choices stay on screen.
+            let room = ((size.height - top - y - PAD - MARGIN) / 2.0).max(28.0);
+            let h = ctx
+                .compute_length(
+                    message,
+                    LenDef::FitContent(Length::px(room)),
+                    context,
+                    Axis::Vertical,
+                    Some(Length::px(inner)),
+                )
+                .get()
+                .min(room);
+            ctx.run_layout(message, Size::new(inner, h));
+            ctx.place_child(message, Point::new(x0 + PAD, top + y));
+            y += h + GAP;
+        }
         if let Some(field) = &mut self.field {
             let h = super::field::FIELD_HEIGHT;
             ctx.run_layout(field, Size::new(inner, h));
@@ -339,21 +371,26 @@ impl Widget for Modal {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
+        let card = palette.look(diroxide_theme::PanelRole::Dialog);
         let size = ctx.content_box().size();
-        painter.fill(size.to_rect(), VEIL).draw();
-        painter.fill(self.card, paint::PAGE).draw();
+        // The window behind, veiled in its own page color.
         painter
-            .stroke(self.card, &Stroke::new(2.0), paint::RING)
+            .fill(size.to_rect(), paint::color(palette.page).with_alpha(VEIL))
+            .draw();
+        painter.fill(self.card, paint::color(card.bg)).draw();
+        painter
+            .stroke(self.card, &Stroke::new(2.0), paint::color(palette.ring))
             .draw();
         if let Some(title) = &self.title {
             render_text(
                 painter,
                 Affine::translate(Vec2::new(self.card.x0 + PAD, self.card.y0 + PAD)),
                 title,
-                &[paint::TEXT.into()],
+                &[paint::color(card.fg).into()],
                 true,
             );
         }
@@ -378,6 +415,9 @@ impl Widget for Modal {
 
     fn children_ids(&self) -> ChildrenIds {
         let mut ids = ChildrenIds::from_slice(&[self.lines.id()]);
+        if let Some(message) = &self.message {
+            ids.push(message.id());
+        }
         if let Some(field) = &self.field {
             ids.push(field.id());
         }

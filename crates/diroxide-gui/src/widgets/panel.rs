@@ -29,9 +29,11 @@
 //! Adapted from textweaver's `crates/textweaver-xilem/src/dialog.rs`,
 //! `ChoiceList` (the owner's own project).
 
+use std::any::TypeId;
 use std::collections::HashMap;
 
 use diroxide_core::Side;
+use diroxide_theme::PanelRole;
 use masonry::accesskit::{Action, Node, NodeId, Rect as NodeRect, Role};
 use masonry::core::{
     AccessCtx, AccessEvent, BrushIndex, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, PaintCtx,
@@ -108,8 +110,11 @@ pub struct PanelBox {
     visible: usize,
     width: f64,
     header: Option<Layout<BrushIndex>>,
-    /// The drawn rows' layouts, by absolute index, with their text.
-    rows: HashMap<usize, (String, Layout<BrushIndex>)>,
+    /// Whether the header was laid out for the active panel (bold).
+    header_active: bool,
+    /// The drawn rows' layouts, by absolute index, with their text, role
+    /// and mark (a role's attributes shape the layout: bold folders).
+    rows: HashMap<usize, (String, PanelRole, bool, Layout<BrushIndex>)>,
     empty: Option<Layout<BrushIndex>>,
     pool: NodePool,
     /// The empty list's one node.
@@ -127,6 +132,7 @@ impl PanelBox {
             visible: 0,
             width: 0.0,
             header: None,
+            header_active: false,
             rows: HashMap::new(),
             empty: None,
             pool: NodePool::default(),
@@ -163,11 +169,12 @@ impl PanelBox {
             return;
         }
         let relayout = this.widget.view.header != view.header
+            || this.widget.view.active != view.active
             || this.widget.view.top != view.top
             || this.widget.view.generation != view.generation
             || this.widget.view.rows != view.rows
             || this.widget.view.empty != view.empty;
-        if this.widget.view.header != view.header {
+        if this.widget.view.header != view.header || this.widget.view.active != view.active {
             this.widget.header = None;
         }
         this.widget.view = view;
@@ -195,6 +202,15 @@ impl Widget for PanelBox {
     }
 
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
+
+    fn property_changed(&mut self, ctx: &mut UpdateCtx<'_>, property_type: TypeId) {
+        // Another theme: the rows' shapes may change too (bold, italic).
+        if paint::is_colors(property_type) {
+            self.rows.clear();
+            self.header = None;
+            ctx.request_layout();
+        }
+    }
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
         if let Update::FocusChanged(focused) = event {
@@ -295,7 +311,8 @@ impl Widget for PanelBox {
         }
     }
 
-    fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
+    fn layout(&mut self, ctx: &mut LayoutCtx<'_>, props: &PropertiesRef<'_>, size: Size) {
+        let palette = paint::palette_of(props, ctx.property_cache());
         let visible = (((size.height - HEADER_HEIGHT) / ROW_HEIGHT).floor() as usize).max(1);
         self.visible = visible;
         if visible != self.told_page {
@@ -306,11 +323,17 @@ impl Widget for PanelBox {
             self.width = size.width;
         }
         if self.header.is_none() {
-            self.header = Some(paint::line_layout(
+            let role = if self.view.active {
+                PanelRole::ActiveTitle
+            } else {
+                PanelRole::InactiveTitle
+            };
+            self.header_active = self.view.active;
+            self.header = Some(paint::styled_layout(
                 ctx,
                 &self.view.header,
                 paint::TEXT_SIZE,
-                true,
+                palette.look(role).attrs,
             ));
         }
         let first = self.view.top;
@@ -323,11 +346,18 @@ impl Widget for PanelBox {
             let fresh = self
                 .rows
                 .get(&index)
-                .is_some_and(|(text, _)| *text == row.text);
+                .is_some_and(|(text, role, marked, _)| {
+                    *text == row.text && *role == row.role && *marked == row.selected
+                });
             if !fresh {
                 let text = row.text.clone();
-                let layout = paint::line_layout(ctx, &text, paint::TEXT_SIZE, false);
-                self.rows.insert(index, (text, layout));
+                let mut attrs = palette.look(row.role).attrs;
+                if row.selected {
+                    attrs = attrs.with(palette.look(PanelRole::MarkedRow).attrs);
+                }
+                let layout = paint::styled_layout(ctx, &text, paint::TEXT_SIZE, attrs);
+                self.rows
+                    .insert(index, (text, row.role, row.selected, layout));
             }
         }
         self.empty = (self.view.total == 0)
@@ -338,18 +368,36 @@ impl Widget for PanelBox {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
         let size = ctx.content_box().size();
-        painter.fill(size.to_rect(), paint::PAGE).draw();
+        painter
+            .fill(size.to_rect(), paint::color(palette.page))
+            .draw();
+        // The header: the active panel's in the active title's band, the
+        // other's in the inactive title's color on the page.
+        let title = palette.look(if self.header_active {
+            PanelRole::ActiveTitle
+        } else {
+            PanelRole::InactiveTitle
+        });
+        if title.bg != palette.page {
+            painter
+                .fill(
+                    Rect::new(0.0, 0.0, size.width, HEADER_HEIGHT - 3.0),
+                    paint::color(title.bg),
+                )
+                .draw();
+        }
         if let Some(header) = &self.header {
-            let y = (HEADER_HEIGHT - f64::from(header.height())) / 2.0;
+            let y = (HEADER_HEIGHT - 3.0 - f64::from(header.height())) / 2.0;
             render_text(
                 painter,
-                Affine::translate(Vec2::new(PAD, y)),
+                Affine::translate(Vec2::new(PAD, y.max(0.0))),
                 header,
-                &[paint::HEADER.into()],
+                &[paint::color(title.fg).into()],
                 true,
             );
         }
@@ -362,7 +410,7 @@ impl Widget for PanelBox {
                     size.width - PAD,
                     HEADER_HEIGHT - 1.0,
                 ),
-                paint::HEADER,
+                paint::color(palette.look(PanelRole::InactiveTitle).fg),
             )
             .draw();
         if let Some(empty) = &self.empty {
@@ -371,7 +419,7 @@ impl Widget for PanelBox {
                 painter,
                 Affine::translate(Vec2::new(PAD, y)),
                 empty,
-                &[paint::TEXT.into()],
+                &[paint::color(palette.text).into()],
                 true,
             );
         }
@@ -384,30 +432,35 @@ impl Widget for PanelBox {
             let y = HEADER_HEIGHT + (index - first) as f64 * ROW_HEIGHT;
             let bar = Rect::new(2.0, y + 1.0, size.width - 2.0, y + ROW_HEIGHT - 1.0);
             let focused = self.view.focus == Some(index);
-            let mut color = if !row.enabled {
-                paint::DIM
-            } else if row.selected {
-                paint::MARKED
+            // The row's own look: unavailable, marked (its band), or what
+            // it is (a folder, a link); the focused row in the active
+            // panel takes the focus band.
+            let look = if row.selected {
+                palette.look(PanelRole::MarkedRow)
             } else {
-                paint::TEXT
+                palette.look(row.role)
             };
-            if focused {
-                if self.view.active {
-                    painter.fill(bar, paint::FOCUS_BAR).draw();
-                    color = paint::ON_FOCUS_BAR;
-                }
-                // The outline, in both panels: the focus's shape.
-                painter
-                    .stroke(bar.inset(-1.0), &Stroke::new(2.0), paint::RING)
-                    .draw();
+            let mut color = if row.enabled { look.fg } else { palette.dim };
+            if row.enabled && look.bg != palette.page {
+                painter.fill(bar, paint::color(look.bg)).draw();
             }
-            if let Some((_, layout)) = self.rows.get(&index) {
+            let filled = focused && self.view.active;
+            if filled {
+                let band = palette.look(PanelRole::FocusedRow);
+                painter.fill(bar, paint::color(band.bg)).draw();
+                color = band.fg;
+            }
+            if focused {
+                // The outline, in both panels: the focus's shape.
+                paint::outline(painter, bar, &palette, filled);
+            }
+            if let Some((_, _, _, layout)) = self.rows.get(&index) {
                 let ty = y + (ROW_HEIGHT - f64::from(layout.height())) / 2.0;
                 render_text(
                     painter,
                     Affine::translate(Vec2::new(PAD, ty)),
                     layout,
-                    &[color.into()],
+                    &[paint::color(color).into()],
                     true,
                 );
             }
@@ -415,7 +468,11 @@ impl Widget for PanelBox {
         if self.focused {
             // The ring of the panel with the keyboard focus.
             painter
-                .stroke(size.to_rect().inset(-1.5), &Stroke::new(3.0), paint::RING)
+                .stroke(
+                    size.to_rect().inset(-1.5),
+                    &Stroke::new(3.0),
+                    paint::color(palette.ring),
+                )
                 .draw();
         }
     }

@@ -52,7 +52,10 @@ param(
     # Settings for this run, as config.toml lines ("auto_hide_menu =
     # false" keeps the menu bar shown, so the report can read it), written
     # to the portable configuration beside the program.
-    [string[]] $Settings = @()
+    [string[]] $Settings = @(),
+    # A file for diro's --log lines (the graphics adapter and the drawing
+    # road the window took), printed into the report after the run.
+    [string] $Log = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -460,6 +463,10 @@ Say ''
 [DiroUia]::Listen()
 $beforePid = [DiroUia]::ForegroundPid()
 $arguments = "--gui --background --portable `"$Folder`" `"$Other`""
+if ($Log) {
+    if (Test-Path -LiteralPath $Log) { Clear-Content -LiteralPath $Log }
+    $arguments = "--log `"$Log`" " + $arguments
+}
 $procId = [DiroUia]::LaunchInactive($Exe, $arguments, $Folder)
 [DiroUia]::ListenFor($procId)
 $window = [DiroUia]::WaitForWindow($procId, 30000)
@@ -526,6 +533,12 @@ $frame = [DiroUia]::FindFrame($procId)
 $code = [DiroUia]::WaitExit(15000)
 Say '## Closing'
 Say ''
+if ($Log -and (Test-Path -LiteralPath $Log)) {
+    Say ''
+    Say '## The drawing road (--log)'
+    Say ''
+    Get-Content -LiteralPath $Log | ForEach-Object { Say ("- " + $_) }
+}
 if ($code -eq 0) { Say 'Pass: WM_CLOSE ran the quit rule and the program ended with 0.' } elseif ($code -lt 0) { Say 'Fail: the program did not end within 15 seconds of WM_CLOSE; the report ended it.' } else { Say "Fail: the program ended with $code." }
 Say ''
 if ($code -lt 0) {

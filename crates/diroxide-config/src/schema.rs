@@ -786,7 +786,7 @@ pub const SCHEMA: [SettingInfo; 104] = [
         group: G::Look,
         kind: SettingKind::Choice(GRAPHICS_APIS),
         default: "\"auto\"",
-        help: "The graphics API the GUI draws with. Auto lets the graphics driver choose; software, drawing on the processor, comes later in this alpha. diro --graphics NAME chooses for one start.",
+        help: "The graphics API the GUI draws with. Auto lets the graphics driver choose, and draws on the processor where there is no graphics card; software draws on the processor always. diro --graphics NAME chooses for one start.",
         arrives: None,
     },
     SettingInfo {

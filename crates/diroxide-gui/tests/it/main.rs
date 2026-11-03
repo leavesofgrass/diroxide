@@ -8,11 +8,19 @@ mod choose;
 mod completion;
 #[cfg(feature = "gui")]
 mod confirm;
+#[cfg(feature = "gui")]
+mod connect;
 mod contract;
 #[cfg(feature = "gui")]
 mod dialogs;
 #[cfg(feature = "gui")]
+mod doubles;
+#[cfg(feature = "gui")]
+mod drawing;
+#[cfg(feature = "gui")]
 mod every_purpose;
+#[cfg(feature = "gui")]
+mod focus_mode;
 #[cfg(feature = "gui")]
 mod goldens;
 #[cfg(feature = "gui")]
@@ -36,6 +44,8 @@ mod menus;
 #[cfg(feature = "gui")]
 mod panel_list;
 #[cfg(feature = "gui")]
+mod plugins;
+#[cfg(feature = "gui")]
 mod quick_view;
 #[cfg(feature = "gui")]
 mod rig;
@@ -43,6 +53,8 @@ mod rig;
 mod secret;
 #[cfg(feature = "gui")]
 mod ten_minutes;
+#[cfg(feature = "gui")]
+mod themes;
 #[cfg(feature = "gui")]
 mod viewer;
 #[cfg(feature = "gui")]

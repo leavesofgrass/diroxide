@@ -16,26 +16,41 @@
 //! - Announcements go to the live region by importance. Those the app's
 //!   start makes before the window exists are held, and said once the
 //!   window and a screen reader are there.
+//! - The window's colors follow the theme setting, the owner's `[colors]`,
+//!   the system's appearance while following it, and the system's high
+//!   contrast colors while that mode is on ([`crate::theme`]); a theme
+//!   chosen is said with its contrast verdict in words.
+//! - Focus mode (the `focus_mode` setting) and full screen (F11): after
+//!   [`FADE_AFTER`] with no key and no mouse move, the bars around the
+//!   body fade under a veil; any key or a moving mouse brings them back.
+//!   Painting only: the tree stays exactly as it was, and nothing is said
+//!   by either (textweaver's `bars.rs`, the owner's own project).
 
-use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use diroxide_app::commands::ids;
 use diroxide_app::keymap::Platform;
 use diroxide_app::{App, AppEvent, Dialog, Runtime};
-use diroxide_core::{Command, Effect, JobId, Key, KeyCode, Message, Modifiers, Side};
+use diroxide_core::{Command, Effect, Key, KeyCode, Message, Modifiers, Side};
+use diroxide_theme::PanelRole;
+use diroxide_theme::os::OsScheme;
 use masonry::accesskit::Role;
 use masonry::app::RenderRoot;
 use masonry::core::keyboard::KeyboardEvent;
 use masonry::core::{
-    ErasedAction, FromDynWidget, NewWidget, Widget, WidgetId, WidgetMut, WidgetTag,
+    DefaultProperties, ErasedAction, FromDynWidget, NewWidget, Widget, WidgetId, WidgetMut,
+    WidgetTag,
 };
+use masonry::properties::ContentColor;
 use masonry::widgets::{Flex, Label};
 
 use crate::model::{self, Lines, PanelView};
+use crate::theme::{Choice, Palette, SystemColors};
 use crate::widgets::announcer::Announcer;
 use crate::widgets::buttons::{ButtonPressed, ButtonRow};
 use crate::widgets::choice::ChoiceAction;
+use crate::widgets::paint;
 use crate::widgets::panel::{PanelAction, PanelBox};
 use crate::widgets::panels::Panels;
 use crate::widgets::progress::JobProgressBar;
@@ -99,6 +114,10 @@ pub const KEY_TEST_IDLE: Duration = Duration::from_secs(10);
 /// for a screen reader that has not asked for the tree yet.
 pub const HOLD_RETRY: Duration = Duration::from_millis(200);
 
+/// How long the window rests (no key, no mouse move) before focus mode
+/// fades the bars.
+pub const FADE_AFTER: Duration = Duration::from_secs(3);
+
 /// Where the driver edits widgets: the real window's render root, or the
 /// tests' harness.
 pub trait Host {
@@ -117,6 +136,9 @@ pub trait Host {
     /// Names the window's accessibility node (AT-SPI and macOS read the
     /// window's title from it).
     fn set_window_label(&mut self, label: &str);
+    /// Replaces the window's default properties: another theme's colors
+    /// for every widget at once.
+    fn set_default_properties(&mut self, props: DefaultProperties);
     /// Puts text on the system clipboard, or says why not in words. By
     /// default through Masonry's clipboard signal (the window runner's
     /// clipboard; the tests' harness keeps the text).
@@ -151,6 +173,10 @@ impl Host for RenderRoot {
         RenderRoot::set_window_label(self, label);
     }
 
+    fn set_default_properties(&mut self, props: DefaultProperties) {
+        RenderRoot::set_default_properties(self, Arc::new(props));
+    }
+
     #[cfg(windows)]
     fn set_clipboard(&mut self, text: String) -> Result<(), String> {
         // Written directly: the window runner's clipboard would end the
@@ -169,8 +195,9 @@ struct Shown {
     viewing: bool,
     /// The viewer's rows as shown.
     viewer: Option<model::ViewerView>,
-    /// The theme and the owner's colors the viewer draws with.
-    theme: Option<(String, std::collections::BTreeMap<String, String>)>,
+    /// What the window's colors were made from, as last put on the
+    /// widgets.
+    colors: Option<Choice>,
     dialog: Option<model::DialogView>,
     key_bar: Vec<model::ButtonView>,
     sorting: Vec<model::ButtonView>,
@@ -210,13 +237,8 @@ pub struct Frontend {
     quick_tick_at: Option<Instant>,
     viewer_tick_at: Option<Instant>,
     hold_retry_at: Option<Instant>,
-    /// What the window's launcher started and the frontend has not said
-    /// yet ([`crate::spawn`]).
-    starts: Option<crate::spawn::Starts>,
     /// The viewer's columns and rows, as its list box last told them.
     viewer_size: (usize, usize),
-    /// Each running job's latest percent, from its progress.
-    percents: HashMap<JobId, u64>,
     /// Every value the progress indicator was given, in order (the tests
     /// read it).
     progress_shown: Vec<Option<u64>>,
@@ -228,6 +250,25 @@ pub struct Frontend {
     menu_bar: bool,
     /// What the menu keys asked of the native bar, for the window.
     menu_requests: Vec<MenuEnter>,
+    /// The colors the window draws with.
+    palette: Arc<Palette>,
+    /// The system's high contrast colors while that mode is on.
+    system: Option<SystemColors>,
+    /// The system's light, dark or high contrast appearance, read at the
+    /// start.
+    appearance: OsScheme,
+    /// The theme setting at the start: following the system's appearance
+    /// stops once the owner chooses a theme in the session.
+    start_theme: String,
+    /// When the window last had a key or a mouse move: focus mode's rest
+    /// starts there.
+    rest_since: Instant,
+    /// Focus mode's veil is down over the bars.
+    veiled: bool,
+    /// The window is full screen (F11).
+    full_screen: bool,
+    /// Full screen turned on or off, for the window to carry out.
+    full_screen_asked: Option<bool>,
 }
 
 /// A message waiting for the live region.
@@ -258,7 +299,16 @@ impl Frontend {
         // The quick view reads through the runtime's providers, archives
         // among them, as in the terminal.
         app.set_quick_view_registry(runtime.registry().clone());
+        let start_theme = app.settings().theme.clone();
         Self {
+            start_theme,
+            rest_since: Instant::now(),
+            veiled: false,
+            full_screen: false,
+            full_screen_asked: None,
+            palette: Arc::new(Palette::default()),
+            system: None,
+            appearance: OsScheme::Unknown,
             app,
             runtime,
             platform: Platform::current(),
@@ -278,9 +328,7 @@ impl Frontend {
             quick_tick_at: None,
             viewer_tick_at: None,
             hold_retry_at: None,
-            starts: None,
             viewer_size: (80, 20),
-            percents: HashMap::new(),
             progress_shown: Vec::new(),
             progress_reports: Vec::new(),
             menu_bar: false,
@@ -328,12 +376,6 @@ impl Frontend {
         &self.spoken
     }
 
-    /// Tells the driver what the window's launcher starts, so a program
-    /// that opened in a window of its own is said as opened.
-    pub fn set_starts(&mut self, starts: crate::spawn::Starts) {
-        self.starts = Some(starts);
-    }
-
     /// The window's own focus in the open dialog.
     pub fn local_focus(&self) -> model::LocalFocus {
         self.local
@@ -347,6 +389,166 @@ impl Frontend {
     /// Whether the app quit.
     pub fn wants_quit(&self) -> bool {
         self.quit
+    }
+
+    /// The colors the window draws with now.
+    pub fn palette(&self) -> &Arc<Palette> {
+        &self.palette
+    }
+
+    /// Whether focus mode's veil is down over the bars.
+    pub fn veiled(&self) -> bool {
+        self.veiled
+    }
+
+    /// Whether the window is full screen.
+    pub fn full_screen(&self) -> bool {
+        self.full_screen
+    }
+
+    /// Full screen turned on (`Some(true)`) or off since the last call,
+    /// for the window to carry out.
+    pub fn take_full_screen(&mut self) -> Option<bool> {
+        self.full_screen_asked.take()
+    }
+
+    /// Whether the bars fade when the window rests: focus mode, or full
+    /// screen.
+    fn fades(&self) -> bool {
+        self.app.settings().focus_mode || self.full_screen
+    }
+
+    /// A key or a moving mouse: the rest starts over, and the veil lifts.
+    fn wake_bars(&mut self, host: &mut impl Host, now: Instant) {
+        self.rest_since = now;
+        if self.veiled {
+            self.veiled = false;
+            host.edit(ROOT, |mut root| Root::set_veiled(&mut root, false));
+        }
+    }
+
+    /// The veil comes down once the window has rested [`FADE_AFTER`] in
+    /// focus mode or full screen, with no dialog up; it lifts when
+    /// neither is on any more.
+    fn fade(&mut self, host: &mut impl Host, now: Instant) {
+        let rested = now.saturating_duration_since(self.rest_since) >= FADE_AFTER;
+        let veil = self.fades() && self.app.dialog().is_none() && (self.veiled || rested);
+        if veil != self.veiled {
+            self.veiled = veil;
+            host.edit(ROOT, |mut root| Root::set_veiled(&mut root, veil));
+        }
+    }
+
+    /// The system's high contrast colors while that mode is on (Windows'
+    /// contrast themes), or `None`: the window reads them on every step,
+    /// so turning the mode on or off applies at once.
+    pub fn set_system_colors(&mut self, colors: Option<SystemColors>) {
+        self.system = colors;
+    }
+
+    /// The system's light, dark or high contrast appearance, read once
+    /// at the start (the theme crate's `os::probe`).
+    pub fn set_appearance(&mut self, scheme: OsScheme) {
+        self.appearance = scheme;
+    }
+
+    /// What the window's colors are made from now: the theme setting, or
+    /// while following the system's appearance (and no theme was chosen
+    /// in this session) the theme the system's setting gives; the owner's
+    /// `[colors]`; and the system's high contrast colors, which win.
+    /// Elsewhere than Windows, the system's high contrast setting chooses
+    /// the built-in high-contrast theme.
+    pub fn colors_choice(&self) -> Choice {
+        let settings = self.app.settings();
+        let chosen = settings.theme != self.start_theme;
+        let theme = if self.appearance == OsScheme::HighContrast && !cfg!(windows) && !chosen {
+            "high-contrast".to_owned()
+        } else {
+            crate::theme::drawn_theme(
+                &settings.theme,
+                settings.follow_system_appearance && !chosen,
+                self.appearance,
+            )
+        };
+        Choice {
+            theme,
+            colors: settings.colors.clone(),
+            system: self.system,
+        }
+    }
+
+    /// The window's default properties with the colors as they stand, for
+    /// the window's start.
+    pub fn window_properties(&mut self) -> DefaultProperties {
+        self.palette = Arc::new(Palette::of(&self.colors_choice()));
+        paint::default_properties(&self.palette)
+    }
+
+    /// Puts the colors on the widgets when what they are made from
+    /// changed: the default properties of every widget, and the three
+    /// lines' text colors (the title line on the page, the status and
+    /// jobs lines on the status bar's band). A theme chosen after the
+    /// first is said with its verdict.
+    fn sync_colors(&mut self, host: &mut impl Host) {
+        let choice = self.colors_choice();
+        if self.shown.colors.as_ref() == Some(&choice) {
+            return;
+        }
+        let first = self.shown.colors.is_none();
+        let palette = Arc::new(Palette::of(&choice));
+        host.set_default_properties(paint::default_properties(&palette));
+        let text = paint::color(palette.text);
+        let status = paint::color(palette.look(PanelRole::StatusLine).fg);
+        let jobs = paint::color(palette.look(PanelRole::JobsLine).fg);
+        host.edit(TITLE_LINE, |mut l| l.insert_prop(ContentColor::new(text)));
+        host.edit(STATUS_LINE, |mut l| {
+            l.insert_prop(ContentColor::new(status))
+        });
+        host.edit(JOBS_LINE, |mut l| l.insert_prop(ContentColor::new(jobs)));
+        let changed =
+            palette.key != self.palette.key || palette.fell_back() != self.palette.fell_back();
+        self.palette = palette;
+        self.shown.colors = Some(choice);
+        if !first
+            && changed
+            && let Some(line) = self.colors_line()
+        {
+            let effects = self.app.handle(AppEvent::Problem(Message::info(line)));
+            self.carry(effects);
+        }
+    }
+
+    /// What is said when the window's colors change: the theme and its
+    /// contrast verdict in words ("Theme Nord, meets AA."), with the
+    /// window's own roles in the text color when there are any. It takes
+    /// the place of the setting's plain line ("Theme: nord"); after Next
+    /// theme, whose line already says the verdict, only the window's
+    /// part is said.
+    fn colors_line(&mut self) -> Option<String> {
+        if self.palette.key == "system" {
+            return Some("System high contrast colors in use.".to_owned());
+        }
+        let mut settings = self.app.settings().clone();
+        if let Some(choice) = &self.shown.colors {
+            settings.theme = choice.theme.clone();
+        }
+        let verdict = diroxide_app::settings::theme_line(&settings, None);
+        let said = self
+            .to_say
+            .iter()
+            .any(|s| s.message.text.starts_with(verdict.as_str()));
+        // The setting's own line is replaced by the verdict.
+        self.to_say.retain(|s| {
+            !(s.message.text.starts_with("Theme: ") || s.message.text.starts_with("Theme back to "))
+        });
+        let mut parts = Vec::new();
+        if !said {
+            parts.push(format!("{verdict}."));
+        }
+        if let Some(words) = self.palette.fallback_words() {
+            parts.push(words);
+        }
+        (!parts.is_empty()).then(|| parts.join(" "))
     }
 
     /// The window's title as the app stands: "Documents - diroxide".
@@ -390,7 +592,8 @@ impl Frontend {
             .with_fixed(NewWidget::new(Label::new(lines.status.clone())).with_tag(STATUS_LINE))
             .with_fixed(NewWidget::new(Label::new(lines.jobs.clone())).with_tag(JOBS_LINE))
             .with_fixed(NewWidget::new(JobProgressBar::new(percent)).with_tag(JOB_PROGRESS));
-        let status_bar = Region::new(NewWidget::new(status), Role::Status, "");
+        let status_bar =
+            Region::new(NewWidget::new(status), Role::Status, "").with_band(PanelRole::StatusLine);
         let keys = model::key_bar_buttons(&self.app);
         self.shown.key_bar = keys.clone();
         let key_bar = NewWidget::new(ButtonRow::new(model::KEY_BAR_NAME, keys)).with_tag(KEY_BAR);
@@ -403,7 +606,12 @@ impl Frontend {
             lines: 0,
         }))
         .with_tag(VIEWER);
-        let screen = NewWidget::new(Screen::new(panels, viewer)).with_tag(SCREEN);
+        // The body's place in the window, which focus mode's veil leaves
+        // clear.
+        let body = std::rc::Rc::new(std::cell::Cell::new(masonry::kurbo::Rect::ZERO));
+        let screen =
+            NewWidget::new(Screen::new(panels, viewer).with_area(std::rc::Rc::clone(&body)))
+                .with_tag(SCREEN);
         let column = Flex::column()
             .with_fixed(NewWidget::new(Label::new(lines.title.clone())).with_tag(TITLE_LINE))
             .with(screen, 1.0)
@@ -422,7 +630,7 @@ impl Frontend {
             Role::GenericContainer,
             "",
         ));
-        NewWidget::new(Root::new(main, announcer, full_passes)).with_tag(ROOT)
+        NewWidget::new(Root::new(main, announcer, full_passes).with_body(body)).with_tag(ROOT)
     }
 
     fn view(&mut self, side: Side) -> PanelView {
@@ -452,6 +660,22 @@ impl Frontend {
     pub fn key(&mut self, host: &mut impl Host, key: Key, now: Instant) {
         if self.key_test_since.is_some() {
             self.key_test_since = Some(now);
+        }
+        // Any key brings the bars back, and says nothing of it.
+        self.wake_bars(host, now);
+        if key.code == KeyCode::F(11)
+            && key.mods.is_empty()
+            && self.app.dialog().is_none()
+            && !self.app.key_test_active()
+        {
+            // F11, the key the GUI column keeps for full screen: on or off,
+            // and nothing said (a contract request asks for the app's own
+            // view.full-screen command, so the key can be rebound).
+            self.full_screen = !self.full_screen;
+            self.full_screen_asked = Some(self.full_screen);
+            self.after(now);
+            self.refresh(host);
+            return;
         }
         if let Some(enter) = self.menu_key(&key) {
             // The native menu bar takes the key: the window shows the bar
@@ -550,8 +774,15 @@ impl Frontend {
                     false
                 }
             },
-            model::DialogFocus::Listing | model::DialogFocus::Control if view.local_list => {
+            model::DialogFocus::Listing
+            | model::DialogFocus::Control
+            | model::DialogFocus::Message
+                if view.local_list || view.focus == model::DialogFocus::Message =>
+            {
                 let total = match &view.control {
+                    _ if view.focus == model::DialogFocus::Message => {
+                        view.message.as_ref().map_or(0, |l| l.total)
+                    }
                     model::ControlView::List(list) => list.total,
                     model::ControlView::Confirm(confirm) => {
                         confirm.listing.as_ref().map_or(0, |l| l.total)
@@ -587,7 +818,9 @@ impl Frontend {
             model::DialogFocus::Show => self
                 .app
                 .handle(AppEvent::Key(Key::new(KeyCode::Char('s'), Modifiers::ALT))),
-            model::DialogFocus::Control | model::DialogFocus::Listing => Vec::new(),
+            model::DialogFocus::Control
+            | model::DialogFocus::Listing
+            | model::DialogFocus::Message => Vec::new(),
         };
         self.carry(effects);
     }
@@ -698,6 +931,10 @@ impl Frontend {
                 match *root {
                     RootAction::Key(event) => self.key_event(host, &event, now),
                     RootAction::Text(text) => self.text(host, &text, now),
+                    RootAction::Moved => {
+                        self.wake_bars(host, now);
+                        self.after(now);
+                    }
                     RootAction::AltAlone => {
                         if self.menu_bar && self.app.dialog().is_none() {
                             self.menu_requests.push(MenuEnter::Bar);
@@ -787,12 +1024,25 @@ impl Frontend {
                     self.refresh(host);
                 }
             }
+            ChoiceAction::MessageFocused => {
+                if self.local.on != model::DialogFocus::Message {
+                    self.local.on = model::DialogFocus::Message;
+                    self.refresh(host);
+                }
+            }
+            ChoiceAction::MessageLine(index) => {
+                self.local.on = model::DialogFocus::Message;
+                self.local.line = index;
+                self.refresh(host);
+            }
             ChoiceAction::Row { index, open } => {
                 self.local.on = list_focus;
                 if view.local_list {
                     self.local.line = index;
                 } else {
-                    self.move_app_list(index);
+                    // The app's own row at once (lane A5), said by the
+                    // focus that follows it, not by the app.
+                    let _ = self.app.focus_dialog_row(index);
                 }
                 if open {
                     let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Enter)));
@@ -801,69 +1051,6 @@ impl Frontend {
                 self.after(now);
                 self.refresh(host);
             }
-        }
-    }
-
-    /// Moves the app's focus in the open dialog's list to the row at
-    /// `index`, through the list's own moves (the app has no command to
-    /// focus a row by its place; a contract request asks for one): into
-    /// a field's candidates first, then Home or End, whichever is nearer,
-    /// and Down or Up the rest of the way. The moves are Low lines,
-    /// shown only.
-    fn move_app_list(&mut self, index: usize) {
-        let focus_and_total = |app: &App| -> Option<(Option<usize>, usize, bool)> {
-            match app.dialog()?.1 {
-                Dialog::Choose { list, .. } => Some((list.focus_index(), list.len(), true)),
-                Dialog::Question { choices, .. } => {
-                    Some((choices.focus_index(), choices.len(), true))
-                }
-                Dialog::Edit {
-                    candidates: Some(list),
-                    in_list,
-                    ..
-                } => Some((list.focus_index(), list.len(), *in_list)),
-                _ => None,
-            }
-        };
-        let Some((_, total, in_list)) = focus_and_total(&self.app) else {
-            return;
-        };
-        if total == 0 {
-            return;
-        }
-        let index = index.min(total - 1);
-        if !in_list {
-            // Down from a field enters its candidates at their focus.
-            let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Down)));
-            self.carry(effects);
-        }
-        let Some((Some(at), _, _)) = focus_and_total(&self.app) else {
-            return;
-        };
-        if at == index {
-            return;
-        }
-        let (start, from) = if index < at.abs_diff(index) {
-            (Some(ids::LIST_HOME), 0)
-        } else if total - 1 - index < at.abs_diff(index) {
-            (Some(ids::LIST_END), total - 1)
-        } else {
-            (None, at)
-        };
-        if let Some(start) = start {
-            let effects = self.app.handle(AppEvent::Command(Command::new(start)));
-            self.carry(effects);
-        }
-        let step = if index > from {
-            ids::LIST_DOWN
-        } else {
-            ids::LIST_UP
-        };
-        for _ in 0..from.abs_diff(index) {
-            let effects = self
-                .app
-                .handle(AppEvent::Command(Command::new(step.clone())));
-            self.carry(effects);
         }
     }
 
@@ -941,7 +1128,10 @@ impl Frontend {
                 // The folder's row, or a plugin list's while one is up; a
                 // click in the preview goes into it, its rows moved by keys
                 // (the app has no call to move the region by a row's id).
-                if !model::shows_preview(&self.app, side) {
+                if model::shows_preview(&self.app, side) {
+                    // Into the preview by the switch above, then its row.
+                    self.app.focus_preview_row(&id);
+                } else {
                     self.app.focus_shown_row(side, &id);
                 }
                 self.after(now);
@@ -983,15 +1173,13 @@ impl Frontend {
 
     /// The job in front's percent, when one runs: none while it only
     /// waits its turn (held or queued), 0 before its first progress.
-    fn front_percent(&mut self) -> Option<u64> {
+    fn front_percent(&self) -> Option<u64> {
         let jobs = self.app.jobs();
-        let running = jobs.ids();
-        self.percents.retain(|job, _| running.contains(job));
         let job = jobs.front()?;
         if jobs.waits(job) {
             return None;
         }
-        Some(self.percents.get(&job).copied().unwrap_or(0))
+        Some(jobs.front_progress().map_or(0, |p| p.percent()))
     }
 
     /// Every value the progress indicator was given, in order: a percent,
@@ -1010,38 +1198,9 @@ impl Frontend {
     /// One result to the app; a job's progress is noted first, for the
     /// progress indicator.
     fn handle_event(&mut self, event: AppEvent) {
-        // A program the window started is running in its own window, not
-        // ended: said as opened, in place of the app's "Back in diroxide"
-        // (the panels are read again when the watcher sees a change).
-        if let AppEvent::ProgramEnded {
-            what,
-            folder,
-            result: Ok(None) | Err(_),
-        } = &event
-            && let Some((started, outcome)) = self.starts.as_ref().and_then(|starts| {
-                starts
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .pop_front()
-            })
-        {
-            let place = diroxide_app::panel::place_leaf(folder);
-            // Why it could not start, in the window's words (no terminal
-            // program on Linux), rather than the app's general line.
-            let message = match outcome {
-                Ok(()) => Message::info(started.words(what, &place)),
-                Err(cause) => crate::spawn::failure(started, what, &cause),
-            };
-            self.said.push(message.clone());
-            self.to_say.push(Said {
-                message,
-                start: false,
-                opening: false,
-            });
-            return;
-        }
-        if let AppEvent::JobProgress { job, progress } = &event {
-            self.percents.insert(*job, progress.percent());
+        // A program the window started says so in the app's own words
+        // (the launcher does not wait, so the app hears ProgramStarted).
+        if let AppEvent::JobProgress { progress, .. } = &event {
             self.progress_reports.push(progress.percent());
         }
         let effects = self.app.handle(event);
@@ -1104,6 +1263,7 @@ impl Frontend {
         if self.hold_retry_at.is_some_and(|at| now >= at) {
             self.hold_retry_at = None;
         }
+        self.fade(host, now);
         self.after(now);
         self.refresh(host);
     }
@@ -1116,6 +1276,7 @@ impl Frontend {
             self.quick_tick_at,
             self.viewer_tick_at,
             self.hold_retry_at,
+            (self.fades() && !self.veiled).then_some(self.rest_since + FADE_AFTER),
         ]
         .into_iter()
         .flatten()
@@ -1208,6 +1369,7 @@ impl Frontend {
     /// Puts the app's state on the widgets where it changed, then the
     /// keyboard focus where the app has it.
     pub fn refresh(&mut self, host: &mut impl Host) {
+        self.sync_colors(host);
         let lines = model::lines(&self.app);
         if lines.title != self.shown.lines.title {
             let text = lines.title.clone();
@@ -1262,16 +1424,6 @@ impl Frontend {
             host.edit(SCREEN, |mut s| Screen::set_viewing(&mut s, viewing));
         }
         if viewing {
-            let theme = (
-                self.app.settings().theme.clone(),
-                self.app.settings().colors.clone(),
-            );
-            if self.shown.theme.as_ref() != Some(&theme) {
-                self.shown.theme = Some(theme.clone());
-                host.edit(VIEWER, |mut v| {
-                    ViewerBox::set_theme(&mut v, theme.0, theme.1)
-                });
-            }
             let (columns, rows) = self.viewer_size;
             let view = model::viewer_view(&mut self.app, columns, rows);
             if view.is_some() && view != self.shown.viewer {

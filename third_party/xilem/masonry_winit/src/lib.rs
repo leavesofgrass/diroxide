@@ -90,6 +90,7 @@ use vello as _;
 
 mod app_driver;
 mod convert_winit_event;
+mod drawing;
 mod event_loop_runner;
 mod vello_util;
 
@@ -98,6 +99,9 @@ pub use winit;
 /// Types needed for running a Masonry app.
 pub mod app {
     pub use super::app_driver::{AppDriver, DriverCtx, WgpuContext, WgpuLimits, WindowId};
+    pub use super::drawing::{
+        Drawing, DrawingReport, Frames, Road, drawing_report, frames_presented,
+    };
     pub use super::event_loop_runner::{
         EventLoop, EventLoopBuilder, EventLoopProxy, GRAPHICS_FAILURE, MasonryState,
         MasonryUserEvent, NewWindow, Window, run, run_with,

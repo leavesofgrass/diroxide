@@ -19,6 +19,8 @@
 //!   closed.
 //! - On Windows, text put on the clipboard ([`clipboard`]), with the
 //!   cause in words when another program holds it.
+//! - On Windows, the system's high contrast colors ([`contrast`]), which
+//!   the window draws with while that mode is on.
 //! - On Windows, winit's helper window named ([`helper`]), so a screen
 //!   reader never meets a nameless pane on the desktop.
 //! - On Windows, a program started in a console of its own
@@ -248,7 +250,7 @@ pub(crate) mod win {
             ) != 0
         };
         if !ok {
-            return Err(std::io::Error::last_os_error().to_string());
+            return Err(crate::spawn::plain_cause(&std::io::Error::last_os_error()));
         }
         // SAFETY: the handles are the ones CreateProcessW just gave us.
         unsafe {
@@ -287,6 +289,66 @@ pub(crate) mod win {
         let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
         // FILETIME counts 100-nanosecond intervals.
         ticks(now).checked_sub(ticks(created)).map(|d| d / 10_000)
+    }
+}
+
+#[cfg(all(windows, feature = "gui"))]
+pub(crate) mod contrast {
+    //! Windows High Contrast ("Contrast themes" in Windows 11): whether it
+    //! is on, and the system's own colors while it is, which the window
+    //! then draws with instead of its theme ([`crate::theme::SystemColors`]).
+    //! Two cheap calls, made on every step of the window, so turning the
+    //! mode on or off applies at the next key. Adapted from textweaver's
+    //! `crates/textweaver-xilem/src/system_colors.rs` (the owner's own
+    //! project).
+
+    use diroxide_theme::Rgb;
+    use windows_sys::Win32::Graphics::Gdi::{
+        COLOR_BTNFACE, COLOR_BTNTEXT, COLOR_GRAYTEXT, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT,
+        COLOR_HOTLIGHT, COLOR_WINDOW, COLOR_WINDOWTEXT, GetSysColor, SYS_COLOR_INDEX,
+    };
+    use windows_sys::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SPI_GETHIGHCONTRAST, SystemParametersInfoW};
+
+    use crate::theme::SystemColors;
+
+    fn color(index: SYS_COLOR_INDEX) -> Rgb {
+        // SAFETY: GetSysColor reads one system color by its index and has
+        // no other effect; every index passed is a named constant.
+        let bgr = unsafe { GetSysColor(index) };
+        Rgb::new(
+            (bgr & 0xff) as u8,
+            ((bgr >> 8) & 0xff) as u8,
+            ((bgr >> 16) & 0xff) as u8,
+        )
+    }
+
+    /// The system's high contrast colors, or `None` when that mode is off.
+    pub(crate) fn colors() -> Option<SystemColors> {
+        let mut hc = HIGHCONTRASTW {
+            cbSize: size_of::<HIGHCONTRASTW>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: SPI_GETHIGHCONTRAST fills the HIGHCONTRASTW it is given,
+        // whose size is in `cbSize` as the call requires; the pointer is
+        // to a live local for the call, and no setting is written (no
+        // update flags).
+        let read = unsafe {
+            SystemParametersInfoW(SPI_GETHIGHCONTRAST, hc.cbSize, (&raw mut hc).cast(), 0)
+        };
+        if read == 0 || hc.dwFlags & HCF_HIGHCONTRASTON == 0 {
+            return None;
+        }
+        Some(SystemColors {
+            window: color(COLOR_WINDOW),
+            window_text: color(COLOR_WINDOWTEXT),
+            highlight: color(COLOR_HIGHLIGHT),
+            highlight_text: color(COLOR_HIGHLIGHTTEXT),
+            hot_light: color(COLOR_HOTLIGHT),
+            button_face: color(COLOR_BTNFACE),
+            button_text: color(COLOR_BTNTEXT),
+            gray_text: color(COLOR_GRAYTEXT),
+        })
     }
 }
 

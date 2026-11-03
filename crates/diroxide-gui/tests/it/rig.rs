@@ -56,6 +56,10 @@ impl Host for HostOf<'_> {
     fn set_window_label(&mut self, label: &str) {
         self.0.set_window_label(label);
     }
+
+    fn set_default_properties(&mut self, props: masonry::core::DefaultProperties) {
+        self.0.set_default_properties(std::sync::Arc::new(props));
+    }
 }
 
 /// The window's size in the tests, in physical pixels.
@@ -76,10 +80,19 @@ impl Rig {
 
     /// The same, pressing keys as on `platform`.
     pub fn on(app: App, runtime: Runtime, platform: Platform) -> Self {
+        Self::sized_on(app, runtime, platform, SIZE)
+    }
+
+    /// The window at `size` in physical pixels (spike S4's 1080p frame).
+    pub fn sized(app: App, runtime: Runtime, size: (u32, u32)) -> Self {
+        Self::sized_on(app, runtime, Platform::current(), size)
+    }
+
+    fn sized_on(app: App, runtime: Runtime, platform: Platform, size: (u32, u32)) -> Self {
         let mut f = Frontend::new(app, runtime, "diroxide").with_platform(platform);
         f.start();
         let root = f.root_widget();
-        let h = TestHarness::create_with_size(masonry::theme::default_property_set(), root, SIZE);
+        let h = TestHarness::create_with_size(masonry::theme::default_property_set(), root, size);
         let mut rig = Self {
             f,
             h,

@@ -7,25 +7,31 @@
 //!   (Switch panel) and Masonry's own F11 and F12 debugging keys never
 //!   fire. While a dialog is open, the window behind it is disabled and
 //!   hidden from screen readers, so reading and the focus stay inside.
+//! - Focus mode's veil ([`Root::set_veiled`]): the bars around the body
+//!   (the title line, the status bar, the key bar) covered with the page's
+//!   color, painted over them, so their nodes, bounds and Tab order stay
+//!   exactly as they are and nothing is announced.
 //! - [`FullPassProbe`]: tells the live region when an accessibility pass
 //!   rebuilds every node (a screen reader asked for the tree).
 //! - [`Region`]: a part of the window with a role and a name (the status
-//!   bar), drawn with Masonry's box properties.
+//!   bar), filled with a theme role's band when it has one.
 //!
 //! Adapted from textweaver's `crates/textweaver-xilem/src/widgets.rs`
 //! (`Root`, `FullPassProbe`, `Region`; the owner's own project).
 
 use std::cell::Cell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use masonry::accesskit::{Node, Role};
+use masonry::core::PointerEvent;
 use masonry::core::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
 use masonry::core::{
     AccessCtx, ChildrenIds, EventCtx, Ime, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx,
     PropertiesMut, PropertiesRef, RegisterCtx, TextEvent, Widget, WidgetMut, WidgetPod,
 };
 use masonry::imaging::Painter;
-use masonry::kurbo::{Axis, Point, Size};
+use masonry::kurbo::{Axis, Point, Rect, Size};
 use masonry::layout::{LayoutSize, LenReq, Length};
 
 use super::modal::Modal;
@@ -43,7 +49,16 @@ pub enum RootAction {
     /// Alt was pressed and let go with no other key: the hidden menu bar
     /// shows (with native menus).
     AltAlone,
+    /// The mouse moved (said at most every half second, and at once while
+    /// focus mode's veil is down): the rest starts over.
+    Moved,
 }
+
+/// How often a moving mouse is told to the driver.
+const MOVED_EVERY: Duration = Duration::from_millis(500);
+
+/// How much of the bars shows through focus mode's veil: nearly nothing.
+const VEIL: f32 = 0.92;
 
 /// The window's content.
 pub struct Root {
@@ -54,6 +69,13 @@ pub struct Root {
     announcer: WidgetPod<dyn Widget>,
     dialog: Option<WidgetPod<Modal>>,
     full_passes: Rc<Cell<u64>>,
+    /// Focus mode's veil is down over the bars.
+    veiled: bool,
+    /// Where the body is in the window (the panels or the viewer), which
+    /// the veil leaves clear.
+    body: Rc<Cell<Rect>>,
+    /// When a moving mouse was last told to the driver.
+    moved_at: Option<Instant>,
 }
 
 impl Root {
@@ -74,7 +96,31 @@ impl Root {
             announcer: announcer.erased().to_pod(),
             dialog: None,
             full_passes,
+            veiled: false,
+            body: Rc::new(Cell::new(Rect::ZERO)),
+            moved_at: None,
         }
+    }
+
+    /// The same root leaving `body` clear under focus mode's veil.
+    #[must_use]
+    pub fn with_body(mut self, body: Rc<Cell<Rect>>) -> Self {
+        self.body = body;
+        self
+    }
+
+    /// Lowers focus mode's veil over the bars, or lifts it: painting
+    /// only, so the tree is the same either way.
+    pub fn set_veiled(this: &mut WidgetMut<'_, Self>, veiled: bool) {
+        if this.widget.veiled != veiled {
+            this.widget.veiled = veiled;
+            this.ctx.request_paint_only();
+        }
+    }
+
+    /// Whether focus mode's veil is down.
+    pub fn veiled(&self) -> bool {
+        self.veiled
     }
 
     /// The count of passes that rebuilt every node.
@@ -126,6 +172,26 @@ impl Root {
 
 impl Widget for Root {
     type Action = RootAction;
+
+    fn on_pointer_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &PointerEvent,
+    ) {
+        // A moving mouse ends focus mode's rest: told at once while the
+        // veil is down, else at most every half second.
+        if let PointerEvent::Move(_) = event {
+            let now = Instant::now();
+            let due = self
+                .moved_at
+                .is_none_or(|at| now.saturating_duration_since(at) >= MOVED_EVERY);
+            if self.veiled || due {
+                self.moved_at = Some(now);
+                ctx.submit_action::<RootAction>(RootAction::Moved);
+            }
+        }
+    }
 
     fn on_text_event(
         &mut self,
@@ -196,12 +262,53 @@ impl Widget for Root {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
         painter
-            .fill(ctx.content_box().size().to_rect(), paint::PAGE)
+            .fill(
+                ctx.content_box().size().to_rect(),
+                paint::color(palette.page),
+            )
             .draw();
+    }
+
+    fn post_paint(
+        &mut self,
+        ctx: &mut PaintCtx<'_>,
+        props: &PropertiesRef<'_>,
+        painter: &mut Painter<'_>,
+    ) {
+        // Focus mode's veil: the page's color over everything but the
+        // body, unless a dialog is up (its keys lift the veil anyway).
+        if !self.veiled || self.dialog.is_some() {
+            return;
+        }
+        let palette = paint::palette_of(props, ctx.property_cache());
+        let veil = paint::color(palette.page).with_alpha(VEIL);
+        let window = ctx.content_box().size().to_rect();
+        let body = self.body.get().intersect(window);
+        for band in [
+            Rect::new(window.x0, window.y0, window.x1, body.y0),
+            Rect::new(window.x0, body.y1, window.x1, window.y1),
+            Rect::new(window.x0, body.y0, body.x0, body.y1),
+            Rect::new(body.x1, body.y0, window.x1, body.y1),
+        ] {
+            if band.width() > 0.0 && band.height() > 0.0 {
+                painter.fill(band, veil).draw();
+            }
+        }
+    }
+
+    fn property_changed(
+        &mut self,
+        ctx: &mut masonry::core::UpdateCtx<'_>,
+        property_type: std::any::TypeId,
+    ) {
+        if paint::is_colors(property_type) {
+            ctx.request_render();
+        }
     }
 
     fn accessibility_role(&self) -> Role {
@@ -285,6 +392,8 @@ pub struct Region {
     role: Role,
     label: String,
     hidden: bool,
+    /// The theme role whose band fills the region (the status bar's).
+    band: Option<diroxide_theme::PanelRole>,
 }
 
 impl Region {
@@ -300,7 +409,17 @@ impl Region {
             role,
             label: label.into(),
             hidden: false,
+            band: None,
         }
+    }
+
+    /// The same region filled with `band`'s background (the status bar
+    /// in the status line's band); its labels take the band's text color
+    /// from the driver.
+    #[must_use]
+    pub fn with_band(mut self, band: diroxide_theme::PanelRole) -> Self {
+        self.band = Some(band);
+        self
     }
 
     /// Hides the region and everything in it from screen readers (while
@@ -343,7 +462,23 @@ impl Widget for Region {
         ctx.derive_baselines(&self.child);
     }
 
-    fn paint(&mut self, _ctx: &mut PaintCtx<'_>, _props: &PropertiesRef<'_>, _p: &mut Painter<'_>) {
+    fn paint(&mut self, ctx: &mut PaintCtx<'_>, props: &PropertiesRef<'_>, p: &mut Painter<'_>) {
+        if let Some(band) = self.band {
+            let palette = paint::palette_of(props, ctx.property_cache());
+            let look = palette.look(band);
+            p.fill(ctx.content_box().size().to_rect(), paint::color(look.bg))
+                .draw();
+        }
+    }
+
+    fn property_changed(
+        &mut self,
+        ctx: &mut masonry::core::UpdateCtx<'_>,
+        property_type: std::any::TypeId,
+    ) {
+        if self.band.is_some() && paint::is_colors(property_type) {
+            ctx.request_render();
+        }
     }
 
     fn accessibility_role(&self) -> Role {

@@ -79,14 +79,14 @@ jobs:
           if ($screen -notmatch 'left panel') { "Fail: diro --tui through a pipe printed no screen."; $screen; exit 1 }
           "Pass: ls, serve and --tui through pipes."
       # The window, off screen and never activated (--background). The
-      # runner has no graphics card: the window either opens on the
-      # system's software adapter, or diro says in words that it could not
-      # start its graphics and opens the terminal; a crash fails. Textweaver
-      # found Vello's compute shaders crash on that adapter, so this step
-      # reports without failing the run until software drawing lands (R27's
-      # commit 31); then continue-on-error goes.
-      - name: The GUI off screen, or its failure in words
-        continue-on-error: true
+      # runner has no graphics card, only Windows' software adapter (WARP),
+      # whose compute shaders Vello's GPU renderer cannot rely on: the
+      # window draws on the processor instead (R27's commit 31, the
+      # owner's answer 106), Vello's CPU renderer presented through
+      # softbuffer, and --log says the road and the frames presented. A
+      # window that does not open, or a crash, fails the run; so does a
+      # start that says it could not draw.
+      - name: The GUI off screen, drawn on the processor
         shell: pwsh
         run: |
           Add-Type -TypeDefinition @'
@@ -114,7 +114,8 @@ jobs:
           $diro = (Resolve-Path target/debug/diro.exe).Path
           $out = Join-Path $env:RUNNER_TEMP 'gui-out.txt'
           $err = Join-Path $env:RUNNER_TEMP 'gui-err.txt'
-          $p = Start-Process -FilePath $diro -ArgumentList '--gui', '--background', '--portable', '.' -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          $log = Join-Path $env:RUNNER_TEMP 'gui-log.txt'
+          $p = Start-Process -FilePath $diro -ArgumentList '--gui', '--background', '--portable', '--log', $log, '.' -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
           # Reading the handle now keeps the exit code readable after the end.
           $null = $p.Handle
           $deadline = (Get-Date).AddSeconds(30)
@@ -132,12 +133,16 @@ jobs:
             if (-not $p.WaitForExit(15000)) { "Fail: the window did not close."; Stop-Process -Id $p.Id; exit 1 }
             "Exit code after closing: $($p.ExitCode)"
             if ($p.ExitCode -ne 0) { Get-Content -Raw $err; exit 1 }
-            "Pass: the window opened, was titled with its place, and quit by the app's rule."
+            $drawn = Get-Content -Raw $log
+            "The drawing road (--log):"
+            $drawn
+            if ($drawn -notmatch 'graphics: drawing with ') { "Fail: the log names no drawing road."; exit 1 }
+            if ($drawn -match 'graphics: 0 frames presented') { "Fail: no frame was presented."; exit 1 }
+            "Pass: the window opened, drew, was titled with its place, and quit by the app's rule."
           } elseif ($p.HasExited) {
-            $said = Get-Content -Raw $out
-            "diro said: $said"
-            if ($said -match 'Could not open the GUI: ') { "Pass: the GUI could not start here and said why in words." }
-            else { "Fail: diro ended without a window and without saying why (exit $($p.ExitCode))."; Get-Content -Raw $err; exit 1 }
+            "diro said: $(Get-Content -Raw $out)"
+            if (Test-Path $log) { Get-Content -Raw $log }
+            "Fail: diro ended without a window (exit $($p.ExitCode))."; Get-Content -Raw $err; exit 1
           } else {
             "Fail: no window within 30 seconds."; Stop-Process -Id $p.Id; exit 1
           }
@@ -167,9 +172,10 @@ jobs:
   # never activated, writes every element's type, name and patterns, the
   # panels' options with their positions and set size, the menu bar (shown
   # for this run), the live-region events, the process's top-level windows
-  # and whether the window took the foreground, then closes it. The runner
-  # has no graphics card, so this reports without failing the run until
-  # software drawing lands (R27's commit 31).
+  # and whether the window took the foreground, then closes it, with the
+  # drawing road from --log. The runner has no graphics card, so the
+  # window draws on the processor (R27's commit 31); the report stays
+  # report-only until its first green run on that road has been read.
   report-windows:
     name: UI Automation report on Windows
     runs-on: windows-latest
@@ -183,7 +189,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File tools/a11y/uia-report.ps1 -Out uia-diroxide.md -Settings 'auto_hide_menu = false'
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools/a11y/uia-report.ps1 -Out uia-diroxide.md -Settings 'auto_hide_menu = false' -Log (Join-Path $env:RUNNER_TEMP 'uia-log.txt')
           Get-Content -Raw uia-diroxide.md | Add-Content -Path $env:GITHUB_STEP_SUMMARY
       - uses: actions/upload-artifact@v4
         if: always()
@@ -195,8 +201,10 @@ jobs:
   # What Orca gets on Linux, through AT-SPI: tools/a11y/atspi-check.sh
   # under Xvfb with a private D-Bus session and the AT-SPI bus, on Mesa's
   # software Vulkan, with the packages of the GUI image stage
-  # (docker/Dockerfile, target gui). Report-only until software drawing
-  # lands, since Vello's compute shaders are slow on lavapipe.
+  # (docker/Dockerfile, target gui). lavapipe is a software adapter, so
+  # the window draws on the processor through softbuffer on X11 (R27's
+  # commit 31); report-only until its first green run on that road has
+  # been read.
   report-linux:
     name: AT-SPI report on Linux
     runs-on: ubuntu-latest

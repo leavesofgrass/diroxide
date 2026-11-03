@@ -17,6 +17,11 @@ gui = [
     "dep:masonry",
     "dep:masonry_winit",
     "masonry_winit/imaging_vello",
+    # Software drawing (the owner's answer 106): Vello's CPU renderer
+    # presented through softbuffer where there is no graphics card, the
+    # hybrid renderer on a software adapter as its fallback.
+    "masonry_winit/imaging_vello_hybrid",
+    "masonry_winit/software",
     "dep:accesskit",
     "dep:accesskit_winit",
     "dep:fontique",
@@ -52,10 +57,14 @@ fontique = { workspace = true, optional = true, features = ["fontconfig-dlopen"]
 # the clipboard (src/platform.rs, the one
 # module of this crate that may use `unsafe`).
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_System_Console", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { workspace = true, features = ["Win32_Graphics_Gdi", "Win32_System_Console", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Accessibility", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 accesskit_consumer.workspace = true
+# Test doubles for the every-purpose test: a provider that refuses a link
+# for the privilege or a file's reading, and a trash of one item (lane
+# A5's xtask deps allowance: the GUI's dev-dependencies alone).
+diroxide-vfs.workspace = true
 masonry_testing.workspace = true
 serde.workspace = true
 tempfile.workspace = true
