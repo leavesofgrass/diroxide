@@ -33,6 +33,7 @@ use masonry::widgets::{Flex, Label};
 
 use crate::model::{self, Lines, PanelView};
 use crate::widgets::announcer::Announcer;
+use crate::widgets::buttons::{ButtonPressed, ButtonRow};
 use crate::widgets::panel::{PanelAction, PanelBox};
 use crate::widgets::panels::Panels;
 use crate::widgets::root::{Region, Root, RootAction};
@@ -60,6 +61,21 @@ pub const fn panel_tag(side: Side) -> WidgetTag<PanelBox> {
     match side {
         Side::Left => LEFT_PANEL,
         Side::Right => RIGHT_PANEL,
+    }
+}
+
+/// The key bar.
+pub const KEY_BAR: WidgetTag<ButtonRow> = WidgetTag::named("diroxide-key-bar");
+/// The left panel's sort buttons.
+pub const LEFT_SORT: WidgetTag<ButtonRow> = WidgetTag::named("diroxide-left-sort");
+/// The right panel's sort buttons.
+pub const RIGHT_SORT: WidgetTag<ButtonRow> = WidgetTag::named("diroxide-right-sort");
+
+/// A panel's sort buttons' tag.
+pub const fn sort_tag(side: Side) -> WidgetTag<ButtonRow> {
+    match side {
+        Side::Left => LEFT_SORT,
+        Side::Right => RIGHT_SORT,
     }
 }
 
@@ -117,6 +133,8 @@ struct Shown {
     panels: [Option<PanelView>; 2],
     arranged: Option<(diroxide_app::config::Layout, Side)>,
     dialog: Option<model::DialogView>,
+    key_bar: Vec<model::ButtonView>,
+    sorting: Vec<model::ButtonView>,
 }
 
 /// The GUI's driver: the app, its runtime, and what the window shows.
@@ -246,10 +264,17 @@ impl Frontend {
     pub fn root_widget(&mut self) -> NewWidget<Root> {
         let full_passes = std::rc::Rc::new(std::cell::Cell::new(0));
         let lines = model::lines(&self.app);
+        let sorting = model::sort_buttons(&self.app);
+        self.shown.sorting = sorting.clone();
         let panel = |frontend: &mut Self, side: Side| {
             let view = frontend.view(side);
             frontend.shown.panels[side.index()] = Some(view.clone());
-            NewWidget::new(PanelBox::new(view)).with_tag(panel_tag(side))
+            // The panel's sort buttons above its list box (the header
+            // buttons), then the list box.
+            let sort = NewWidget::new(ButtonRow::new(model::sort_row_name(side), sorting.clone()))
+                .with_tag(sort_tag(side));
+            let list = NewWidget::new(PanelBox::new(view)).with_tag(panel_tag(side));
+            (sort, list)
         };
         let left = panel(self, Side::Left);
         let right = panel(self, Side::Right);
@@ -261,10 +286,14 @@ impl Frontend {
             .with_fixed(NewWidget::new(Label::new(lines.status.clone())).with_tag(STATUS_LINE))
             .with_fixed(NewWidget::new(Label::new(lines.jobs.clone())).with_tag(JOBS_LINE));
         let status_bar = Region::new(NewWidget::new(status), Role::Status, "");
+        let keys = model::key_bar_buttons(&self.app);
+        self.shown.key_bar = keys.clone();
+        let key_bar = NewWidget::new(ButtonRow::new(model::KEY_BAR_NAME, keys)).with_tag(KEY_BAR);
         let column = Flex::column()
             .with_fixed(NewWidget::new(Label::new(lines.title.clone())).with_tag(TITLE_LINE))
             .with(panels, 1.0)
-            .with_fixed(NewWidget::new(status_bar));
+            .with_fixed(NewWidget::new(status_bar))
+            .with_fixed(key_bar);
         self.shown.lines = lines;
         // The start's lines, said before the window existed, wait in the
         // live region for a screen reader to ask for the tree, as one
@@ -438,8 +467,52 @@ impl Frontend {
             }
             Err(other) => other,
         };
-        if let Ok(panel) = action.downcast::<PanelAction>() {
-            self.panel_action(host, *panel, now);
+        let action = match action.downcast::<PanelAction>() {
+            Ok(panel) => {
+                self.panel_action(host, *panel, now);
+                return;
+            }
+            Err(other) => other,
+        };
+        if let Ok(pressed) = action.downcast::<ButtonPressed>() {
+            self.button(host, *pressed, now);
+        }
+    }
+
+    /// A button pressed: a key bar button runs its commands, in order; a
+    /// panel's sort button makes that panel the active one and sorts it.
+    fn button(&mut self, host: &mut impl Host, pressed: ButtonPressed, now: Instant) {
+        if self.app.dialog().is_some() {
+            return;
+        }
+        if pressed.row == model::KEY_BAR_NAME {
+            let commands = pressed
+                .id
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| model::shown_bank(&self.app)?.buttons.into_iter().nth(i))
+                .map(|button| button.commands)
+                .unwrap_or_default();
+            for command in commands {
+                let effects = self.app.handle(AppEvent::Command(command));
+                self.carry(effects);
+            }
+            self.after(now);
+            self.refresh(host);
+            return;
+        }
+        let Some(side) = Side::BOTH
+            .into_iter()
+            .find(|side| pressed.row == model::sort_row_name(*side))
+        else {
+            return;
+        };
+        if side != self.app.active_side() {
+            let effects = self.app.dispatch(&Command::new(ids::SWITCH_PANEL));
+            self.carry(effects);
+        }
+        if let Ok(id) = diroxide_core::CommandId::new(pressed.id) {
+            self.command(host, Command::new(id), now);
         }
     }
 
@@ -664,6 +737,23 @@ impl Frontend {
             if self.shown.panels[side.index()].as_ref() != Some(&view) {
                 self.shown.panels[side.index()] = Some(view.clone());
                 host.edit(panel_tag(side), |mut p| PanelBox::set_view(&mut p, view));
+            }
+        }
+        // The key bar (another bank, a rebound key) and the sort buttons'
+        // keys.
+        let keys = model::key_bar_buttons(&self.app);
+        if keys != self.shown.key_bar {
+            self.shown.key_bar = keys.clone();
+            host.edit(KEY_BAR, |mut row| ButtonRow::set_buttons(&mut row, keys));
+        }
+        let sorting = model::sort_buttons(&self.app);
+        if sorting != self.shown.sorting {
+            self.shown.sorting = sorting.clone();
+            for side in Side::BOTH {
+                let buttons = sorting.clone();
+                host.edit(sort_tag(side), |mut row| {
+                    ButtonRow::set_buttons(&mut row, buttons)
+                });
             }
         }
         // The modal host: the top dialog, changed in place while it is the

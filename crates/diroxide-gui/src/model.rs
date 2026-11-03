@@ -524,6 +524,108 @@ pub fn join_messages(said: &[(diroxide_core::Message, bool)]) -> Vec<diroxide_co
     )]
 }
 
+/// One button.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ButtonView {
+    /// What pressing it does, given back in the action: an index or a
+    /// command's id.
+    pub id: String,
+    /// The name, said and shown: "Rename".
+    pub label: String,
+    /// The key, written ("F2"), shown before the label and given as the
+    /// keyboard shortcut; `None` when nothing is bound.
+    pub key: Option<String>,
+    /// Whether the drawn text starts with the key ("F2 Rename"), as the
+    /// key bar draws it.
+    pub key_first: bool,
+}
+
+impl ButtonView {
+    /// What is drawn.
+    pub fn text(&self) -> String {
+        match (&self.key, self.key_first) {
+            (Some(key), true) => format!("{key} {}", self.label),
+            _ => self.label.clone(),
+        }
+    }
+}
+
+/// The bank the key bar shows: the viewer's, the quick view's, the
+/// search results', the comparison's, or the active bank, as
+/// [`App::key_bar`] chooses (a contract request asks the app for it, so
+/// the choice is made in one place; a test holds the two together).
+pub fn shown_bank(app: &App) -> Option<diroxide_app::menu::Bank> {
+    use diroxide_app::menu;
+    if app.viewer().is_some() {
+        Some(menu::viewer_bank())
+    } else if app.in_preview() {
+        Some(menu::preview_bank())
+    } else if app.results_shown() {
+        Some(menu::results_bank())
+    } else if app.compare_shown() {
+        Some(menu::compare_bank())
+    } else {
+        app.active_bank().cloned()
+    }
+}
+
+/// The key bar's name, as a toolbar.
+pub const KEY_BAR_NAME: &str = "Key bar";
+
+/// The key bar's buttons: the shown bank's buttons that have a key, the
+/// key first as the bar draws it ("F2 Rename"), each named by its label
+/// with the key as its shortcut; none when the `key_bar` setting is off.
+/// The id is the button's place in the bank.
+pub fn key_bar_buttons(app: &App) -> Vec<ButtonView> {
+    if !app.settings().key_bar {
+        return Vec::new();
+    }
+    let Some(bank) = shown_bank(app) else {
+        return Vec::new();
+    };
+    bank.buttons
+        .iter()
+        .enumerate()
+        .filter_map(|(i, button)| {
+            let key = app.keymap().key_text(&button.commands.first()?.id);
+            (!key.is_empty()).then(|| ButtonView {
+                id: i.to_string(),
+                label: button.label.clone(),
+                key: Some(key),
+                key_first: true,
+            })
+        })
+        .collect()
+}
+
+/// A panel's sort buttons' toolbar name: "Sort the left panel".
+pub fn sort_row_name(side: Side) -> String {
+    format!("Sort the {} panel", side.word())
+}
+
+/// A panel's sort buttons, above its rows: by name, by size, by date
+/// modified, each named for what it does with its key as its shortcut.
+/// The id is the command's.
+pub fn sort_buttons(app: &App) -> Vec<ButtonView> {
+    use diroxide_app::commands::ids;
+    [
+        ("Sort by name", ids::SORT_NAME),
+        ("Sort by size", ids::SORT_SIZE),
+        ("Sort by date", ids::SORT_MODIFIED),
+    ]
+    .into_iter()
+    .map(|(label, id)| {
+        let key = app.keymap().key_text(&id);
+        ButtonView {
+            id: id.to_string(),
+            label: label.to_owned(),
+            key: (!key.is_empty()).then_some(key),
+            key_first: false,
+        }
+    })
+    .collect()
+}
+
 /// The three lines under the panels and above them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Lines {

@@ -2,7 +2,8 @@
 //! (the default, as in every orthodox manager), stacked (one above the
 //! other, each row at full width: the fallback for a screen reader's
 //! line and a 40-cell display), or single (the active panel alone; the
-//! other is stashed, out of the drawing and the tree, until Tab).
+//! other is stashed, out of the drawing and the tree, until Tab). Each
+//! panel is its sort buttons above its list box.
 
 use diroxide_app::config::Layout;
 use diroxide_core::Side;
@@ -12,33 +13,47 @@ use masonry::core::{
     RegisterCtx, Widget, WidgetMut, WidgetPod,
 };
 use masonry::imaging::Painter;
-use masonry::kurbo::{Axis, Point, Size};
+use masonry::kurbo::{Axis, Point, Rect, Size};
 use masonry::layout::{LenReq, Length};
 
+use super::buttons::ButtonRow;
 use super::panel::PanelBox;
 
 /// The gap between the panels, in logical pixels.
 const GAP: f64 = 6.0;
+/// The sort buttons' height.
+const SORT_HEIGHT: f64 = 32.0;
+
+/// One panel: its sort buttons and its list box.
+struct PanelPods {
+    sort: WidgetPod<ButtonRow>,
+    list: WidgetPod<PanelBox>,
+}
 
 /// The two panels.
 pub struct Panels {
-    left: WidgetPod<PanelBox>,
-    right: WidgetPod<PanelBox>,
+    left: PanelPods,
+    right: PanelPods,
     layout: Layout,
     active: Side,
 }
 
 impl Panels {
-    /// The panels in `layout`, `active` the one shown alone in single.
+    /// The panels, each its sort buttons and its list box, in `layout`,
+    /// `active` the one shown alone in single.
     pub fn new(
-        left: NewWidget<PanelBox>,
-        right: NewWidget<PanelBox>,
+        left: (NewWidget<ButtonRow>, NewWidget<PanelBox>),
+        right: (NewWidget<ButtonRow>, NewWidget<PanelBox>),
         layout: Layout,
         active: Side,
     ) -> Self {
+        let side = |(sort, list): (NewWidget<ButtonRow>, NewWidget<PanelBox>)| PanelPods {
+            sort: sort.to_pod(),
+            list: list.to_pod(),
+        };
         Self {
-            left: left.to_pod(),
-            right: right.to_pod(),
+            left: side(left),
+            right: side(right),
             layout,
             active,
         }
@@ -58,22 +73,32 @@ impl Panels {
         this.widget.active = active;
         this.ctx.request_layout();
     }
+}
 
-    /// One panel's list box.
-    pub fn panel_mut<'t>(this: &'t mut WidgetMut<'_, Self>, side: Side) -> WidgetMut<'t, PanelBox> {
-        match side {
-            Side::Left => this.ctx.get_mut(&mut this.widget.left),
-            Side::Right => this.ctx.get_mut(&mut this.widget.right),
-        }
-    }
+/// Lays out one panel in `area`: the sort buttons on top, the list box
+/// under them.
+fn place(ctx: &mut LayoutCtx<'_>, side: &mut PanelPods, area: Rect) {
+    let sort_h = SORT_HEIGHT.min(area.height());
+    ctx.run_layout(&mut side.sort, Size::new(area.width(), sort_h));
+    ctx.place_child(&mut side.sort, Point::new(area.x0, area.y0));
+    let list_h = (area.height() - sort_h).max(0.0);
+    ctx.run_layout(&mut side.list, Size::new(area.width(), list_h));
+    ctx.place_child(&mut side.list, Point::new(area.x0, area.y0 + sort_h));
+}
+
+fn stash(ctx: &mut LayoutCtx<'_>, side: &mut PanelPods, stashed: bool) {
+    ctx.set_stashed(&mut side.sort, stashed);
+    ctx.set_stashed(&mut side.list, stashed);
 }
 
 impl Widget for Panels {
     type Action = NoAction;
 
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
-        ctx.register_child(&mut self.left);
-        ctx.register_child(&mut self.right);
+        for side in [&mut self.left, &mut self.right] {
+            ctx.register_child(&mut side.sort);
+            ctx.register_child(&mut side.list);
+        }
     }
 
     fn measure(
@@ -95,30 +120,33 @@ impl Widget for Panels {
         // In single the other panel is stashed: not drawn, not in the
         // tree, and not laid out.
         let single = self.layout == Layout::Single;
-        ctx.set_stashed(&mut self.left, single && self.active != Side::Left);
-        ctx.set_stashed(&mut self.right, single && self.active != Side::Right);
+        stash(ctx, &mut self.left, single && self.active != Side::Left);
+        stash(ctx, &mut self.right, single && self.active != Side::Right);
         match self.layout {
             Layout::SideBySide => {
                 let w = ((size.width - GAP) / 2.0).max(0.0);
-                ctx.run_layout(&mut self.left, Size::new(w, size.height));
-                ctx.place_child(&mut self.left, Point::ORIGIN);
-                ctx.run_layout(&mut self.right, Size::new(w, size.height));
-                ctx.place_child(&mut self.right, Point::new(w + GAP, 0.0));
+                place(ctx, &mut self.left, Rect::new(0.0, 0.0, w, size.height));
+                place(
+                    ctx,
+                    &mut self.right,
+                    Rect::new(w + GAP, 0.0, w + GAP + w, size.height),
+                );
             }
             Layout::Stacked => {
                 let h = ((size.height - GAP) / 2.0).max(0.0);
-                ctx.run_layout(&mut self.left, Size::new(size.width, h));
-                ctx.place_child(&mut self.left, Point::ORIGIN);
-                ctx.run_layout(&mut self.right, Size::new(size.width, h));
-                ctx.place_child(&mut self.right, Point::new(0.0, h + GAP));
+                place(ctx, &mut self.left, Rect::new(0.0, 0.0, size.width, h));
+                place(
+                    ctx,
+                    &mut self.right,
+                    Rect::new(0.0, h + GAP, size.width, h + GAP + h),
+                );
             }
             Layout::Single => {
                 let shown = match self.active {
                     Side::Left => &mut self.left,
                     Side::Right => &mut self.right,
                 };
-                ctx.run_layout(shown, size);
-                ctx.place_child(shown, Point::ORIGIN);
+                place(ctx, shown, size.to_rect());
             }
         }
     }
@@ -139,6 +167,11 @@ impl Widget for Panels {
     }
 
     fn children_ids(&self) -> ChildrenIds {
-        ChildrenIds::from_slice(&[self.left.id(), self.right.id()])
+        ChildrenIds::from_slice(&[
+            self.left.sort.id(),
+            self.left.list.id(),
+            self.right.sort.id(),
+            self.right.list.id(),
+        ])
     }
 }
