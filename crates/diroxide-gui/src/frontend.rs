@@ -20,11 +20,15 @@
 //!   the system's appearance while following it, and the system's high
 //!   contrast colors while that mode is on ([`crate::theme`]); a theme
 //!   chosen is said with its contrast verdict in words.
-//! - Focus mode (the `focus_mode` setting) and full screen (F11): after
+//! - Focus mode (the `focus_mode` setting) and full screen: after
 //!   [`FADE_AFTER`] with no key and no mouse move, the bars around the
 //!   body fade under a veil; any key or a moving mouse brings them back.
-//!   Painting only: the tree stays exactly as it was, and nothing is said
-//!   by either (textweaver's `bars.rs`, the owner's own project).
+//!   Painting only: the tree stays exactly as it was, and the fade says
+//!   nothing (textweaver's `bars.rs`, the owner's own project). Full
+//!   screen is the app's command, `view.full-screen` (F11 in the GUI
+//!   column, the View menu, the palette; lane A6), which says "Full
+//!   screen on." or "Full screen off."; the window carries out the app's
+//!   [`App::full_screen`] after each event.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -265,7 +269,8 @@ pub struct Frontend {
     rest_since: Instant,
     /// Focus mode's veil is down over the bars.
     veiled: bool,
-    /// The window is full screen (F11).
+    /// The window is full screen: the app's `view.full-screen`, as last
+    /// carried out.
     full_screen: bool,
     /// Full screen turned on or off, for the window to carry out.
     full_screen_asked: Option<bool>,
@@ -410,6 +415,14 @@ impl Frontend {
     /// for the window to carry out.
     pub fn take_full_screen(&mut self) -> Option<bool> {
         self.full_screen_asked.take()
+    }
+
+    /// The window stays as it is: a window that runs in the background
+    /// for a check never goes full screen. The app is told, so the next
+    /// Full screen starts from off.
+    pub fn refuse_full_screen(&mut self) {
+        self.full_screen = false;
+        self.app.set_full_screen(false);
     }
 
     /// Whether the bars fade when the window rests: focus mode, or full
@@ -661,22 +674,10 @@ impl Frontend {
         if self.key_test_since.is_some() {
             self.key_test_since = Some(now);
         }
-        // Any key brings the bars back, and says nothing of it.
+        // Any key brings the bars back, and says nothing of it. F11 is
+        // the app's: the GUI column binds it to view.full-screen, which
+        // the window carries out after the event ([`Self::after`]).
         self.wake_bars(host, now);
-        if key.code == KeyCode::F(11)
-            && key.mods.is_empty()
-            && self.app.dialog().is_none()
-            && !self.app.key_test_active()
-        {
-            // F11, the key the GUI column keeps for full screen: on or off,
-            // and nothing said (a contract request asks for the app's own
-            // view.full-screen command, so the key can be rebound).
-            self.full_screen = !self.full_screen;
-            self.full_screen_asked = Some(self.full_screen);
-            self.after(now);
-            self.refresh(host);
-            return;
-        }
         if let Some(enter) = self.menu_key(&key) {
             // The native menu bar takes the key: the window shows the bar
             // (when it is hidden) and enters it, as Windows' own menu keys
@@ -1285,6 +1286,14 @@ impl Frontend {
 
     /// After a step: the key test's clock, and the app's own timer.
     fn after(&mut self, now: Instant) {
+        // Full screen is the app's (view.full-screen, lane A6): a change,
+        // from F11, the View menu or the palette, is for the window to
+        // carry out.
+        let full_screen = self.app.full_screen();
+        if full_screen != self.full_screen {
+            self.full_screen = full_screen;
+            self.full_screen_asked = Some(full_screen);
+        }
         match (self.app.key_test_active(), self.key_test_since) {
             (true, None) => self.key_test_since = Some(now),
             (false, Some(_)) => self.key_test_since = None,

@@ -490,15 +490,17 @@ impl Gui {
                 );
             }
         }
-        // F11: full screen on or off, never for a window that runs in the
-        // background for a check.
-        if let Some(on) = frontend.take_full_screen()
-            && !self.background
-        {
-            use masonry_winit::winit::window::Fullscreen;
-            ctx.window(self.window)
-                .handle()
-                .set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
+        // Full screen on or off (the app's view.full-screen, F11), never
+        // for a window that runs in the background for a check.
+        if let Some(on) = frontend.take_full_screen() {
+            if self.background {
+                frontend.refuse_full_screen();
+            } else {
+                use masonry_winit::winit::window::Fullscreen;
+                ctx.window(self.window)
+                    .handle()
+                    .set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
+            }
         }
         let title = frontend.window_title();
         if title != self.title {
