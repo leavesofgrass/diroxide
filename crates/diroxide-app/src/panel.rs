@@ -18,6 +18,11 @@
 //!   so through [`Refreshed`], so the app can announce it.
 //! - Back and forward keep each folder's cursor and marks.
 //! - Names are drawn and said by their display names only.
+//! - A plugin list (lane L) sits over the place without replacing it: the
+//!   place, its rows, its marks and its history stay as they are beneath
+//!   it, every method here keeps speaking of the place, and
+//!   [`Panel::shown_list`] gives the rows the panel shows. The list is
+//!   never saved.
 //!
 //! Wave 1 (W1d) owns this module.
 
@@ -34,6 +39,8 @@ use diroxide_core::{
 };
 use diroxide_filetype::TypeRegistry;
 use diroxide_vfs::Capabilities;
+
+use crate::plugins::lister::PanelList;
 
 /// A detail said after an entry's name: the Phase 0 set, kept for its
 /// callers. The panel itself uses the configuration crate's
@@ -317,6 +324,8 @@ pub struct Panel {
     capabilities: Option<Capabilities>,
     watching: Watching,
     listed: bool,
+    /// A plugin's list shown over the place (lane L).
+    plugin_list: Option<Box<PanelList>>,
 }
 
 impl Panel {
@@ -343,6 +352,7 @@ impl Panel {
             capabilities: None,
             watching: Watching::Unknown,
             listed: false,
+            plugin_list: None,
         }
     }
 
@@ -369,6 +379,46 @@ impl Panel {
     /// The list of rows, to move the focus or select.
     pub fn list_mut(&mut self) -> &mut ListModel {
         &mut self.list
+    }
+
+    /// The rows the panel shows: a plugin list's when one is over the
+    /// place, the place's own otherwise (lane L).
+    pub fn shown_list(&self) -> &ListModel {
+        match &self.plugin_list {
+            Some(shown) => shown.list(),
+            None => &self.list,
+        }
+    }
+
+    /// The plugin list shown over the place, when one is.
+    pub fn plugin_list(&self) -> Option<&PanelList> {
+        self.plugin_list.as_deref()
+    }
+
+    /// The plugin list shown over the place, to move in it, mark rows or
+    /// change it.
+    pub fn plugin_list_mut(&mut self) -> Option<&mut PanelList> {
+        self.plugin_list.as_deref_mut()
+    }
+
+    /// Shows a plugin list over the place; the list shown before, if any,
+    /// is returned, so its plugin can be told it closed.
+    pub fn show_plugin_list(&mut self, list: PanelList) -> Option<PanelList> {
+        self.plugin_list.replace(Box::new(list)).map(|old| *old)
+    }
+
+    /// Takes the plugin list away: the place shows again as it was.
+    pub fn take_plugin_list(&mut self) -> Option<PanelList> {
+        self.plugin_list.take().map(|old| *old)
+    }
+
+    /// Sets how many rows Page Up and Page Down move, for the place and
+    /// for a plugin list over it.
+    pub fn set_page_size(&mut self, rows: usize) {
+        self.list.set_page_size(rows);
+        if let Some(shown) = self.plugin_list.as_deref_mut() {
+            shown.list_mut().set_page_size(rows);
+        }
     }
 
     /// The entries shown, in row order.

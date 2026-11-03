@@ -36,6 +36,8 @@ mod keys;
 mod labeling;
 mod nav;
 mod organize;
+// A plugin's list inside a panel, over its place (lane L).
+mod plugin_lists;
 // Plugins and script commands (W4d).
 mod plugin_ui;
 mod preview;
@@ -1340,7 +1342,7 @@ impl App {
     /// Sets how many rows Page Up and Page Down move in each panel: the
     /// frontend gives the rows it shows.
     pub fn set_page_rows(&mut self, side: Side, rows: usize) {
-        self.panel_mut(side).list_mut().set_page_size(rows);
+        self.panel_mut(side).set_page_size(rows);
     }
 
     /// Whether the app behaves for a screen reader: progress at its
@@ -1423,6 +1425,10 @@ impl App {
         if let Some(title) = self.preview_title(cells) {
             return title;
         }
+        // A plugin list over the panel's place says its own title (lane L).
+        if let Some(title) = self.plugin_list_title(cells) {
+            return title;
+        }
         let panel = self.active_panel();
         let place = panel.loading_place().unwrap_or(panel.place());
         if place.kind() == diroxide_core::PlaceKind::Archive {
@@ -1497,6 +1503,11 @@ impl App {
             && let Some(viewer) = self.viewer()
         {
             return viewer.status();
+        }
+        if self.status.is_empty()
+            && let Some(line) = self.plugin_list_status_line()
+        {
+            return line;
         }
         if self.status.is_empty() {
             let panel = self.active_panel();
@@ -1719,6 +1730,11 @@ impl App {
         if self.dialogs.is_empty()
             && let Some(effects) = self.preview_dispatch(action, &command.id)
         {
+            return effects;
+        }
+        // A plugin list in the panel takes its own commands, and refuses
+        // the file commands in words (lane L).
+        if let Some(effects) = self.plugin_list_dispatch(command, action) {
             return effects;
         }
         // The labels, bookmarks, folder views and History list (W3l).
@@ -1977,6 +1993,10 @@ impl App {
                     Lookup::NoMatch => Vec::new(),
                 },
             };
+        }
+        // A plugin list's own keys, and type-ahead over its rows (lane L).
+        if let Some(effects) = self.plugin_list_key(&key) {
+            return effects;
         }
         let layers = [
             diroxide_core::Layer::Panel,

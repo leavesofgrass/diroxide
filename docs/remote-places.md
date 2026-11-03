@@ -228,7 +228,7 @@ The last line is a command for you to run yourself, in a terminal, after you hav
 
 A site is a name for a server, with the user, the port, a start folder and how its password is kept. The Sites list is the place to manage them.
 
-Open it from the Plugins menu (Alt+P), SFTP sites, or from the palette. It opens over the panels, with a title that gives the counts first:
+Open it from the Plugins menu (Alt+P), SFTP sites, or from the palette. It opens inside the panel you are in, over its folder, with a title that gives the counts first:
 
 ```text
 Sites, 3 saved, 5 from ssh config
@@ -413,7 +413,7 @@ The plugin's settings are in the Settings list, on the Plugin settings row, unde
 [Known limits](known-limits.md) has the full list. The main points:
 
 - No editing of a remote file in place, and no synchronized browsing.
-- The Sites list and other lists the plugin opens come over the panels, not inside one.
+- The doctor report opens over the panels, as a document. The Sites list opens inside a panel.
 - No importing of sites from PuTTY, WinSCP or FileZilla.
 - Only SFTP. There is no FTP.
 - The plugin is built from the source tree. A download comes with a later build.

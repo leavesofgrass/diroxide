@@ -877,8 +877,8 @@ fn command_params(local: &str, run: &RunRequest) -> Value {
     let context = &run.context;
     let mut wire = WireContext::new(
         &run.command,
-        PanelRef::for_place(&context.active),
-        PanelRef::for_place(&context.other),
+        PanelRef::for_place(&context.active).with_list(context.list.clone()),
+        PanelRef::for_place(&context.other).with_list(context.other_list.clone()),
     );
     match &run.lister {
         Some((lister, rows)) => {

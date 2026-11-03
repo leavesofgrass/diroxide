@@ -4,10 +4,13 @@
 //!
 //! - `panel/get` needs `permissions.panel = "read"` or `"write"`; it gives
 //!   a panel's place, cursor, selection, sort and filter, with entries in
-//!   the shared shape.
+//!   the shared shape, and `list`: null, or the plugin list shown over the
+//!   place (its plugin, its id, its title and its count of rows). The place
+//!   and the rest stay the folder's beneath a list (lane L).
 //! - `panel/set` needs `"write"`; it changes a panel through ordinary app
 //!   commands, so the app says its own position message and the plugin
 //!   need not announce navigation. Every place is parsed, never trusted.
+//!   A place set on a panel that shows a plugin list closes the list.
 //! - `command/execute` runs a diroxide command by id when an id pattern
 //!   of `permissions.commands` matches it.
 //!
@@ -22,7 +25,7 @@ use serde_json::{Map, Value, json};
 
 use crate::places::{plugin_place, plugin_places};
 use crate::protocol::{ErrorKind, Params, RpcError};
-use crate::shapes::{MAX_CONTEXT_SELECTION, PanelRef, WireEntry};
+use crate::shapes::{MAX_CONTEXT_SELECTION, PanelRef, WireEntry, WireList};
 
 /// Which panel a call is about.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -83,6 +86,10 @@ pub struct PanelSnapshot {
     pub sort: Option<String>,
     /// Its filter, as typed.
     pub filter: Option<String>,
+    /// The plugin list shown over its place, when one is (lane L); the
+    /// place, the cursor, the selection, the sort and the filter stay the
+    /// folder's beneath it.
+    pub list: Option<WireList>,
 }
 
 impl PanelSnapshot {
@@ -96,6 +103,7 @@ impl PanelSnapshot {
             selection: Vec::new(),
             sort: None,
             filter: None,
+            list: None,
         }
     }
 
@@ -149,6 +157,9 @@ impl PanelSnapshot {
         }
         if wanted("filter") {
             out.insert("filter".into(), json!(self.filter));
+        }
+        if wanted("list") {
+            out.insert("list".into(), json!(self.list));
         }
         Value::Object(out)
     }
@@ -302,6 +313,30 @@ mod tests {
         let some = panel.to_value(Some(&["place".to_owned()]));
         assert!(some.get("cursor").is_none());
         assert!(some.get("place").is_some());
+        assert!(some.get("list").is_none());
+        assert!(all["list"].is_null(), "no plugin list: null");
+    }
+
+    #[test]
+    fn a_plugin_list_is_said_beside_the_folder_beneath_it() {
+        let mut panel = PanelSnapshot::at(Side::Right, root());
+        panel.cursor = Some(Entry::new("a.txt", EntryKind::File));
+        panel.list = Some(WireList {
+            plugin: "changed-files".into(),
+            id: "changes".into(),
+            title: "Changed files (Changed files)".into(),
+            rows: 2,
+        });
+        let all = panel.to_value(None);
+        assert!(all["place"].as_str().unwrap().ends_with("docs"));
+        assert_eq!(all["cursor"]["name"], "a.txt", "the folder's cursor");
+        assert_eq!(all["list"]["plugin"], "changed-files");
+        assert_eq!(all["list"]["id"], "changes");
+        assert_eq!(all["list"]["title"], "Changed files (Changed files)");
+        assert_eq!(all["list"]["rows"], 2);
+        let asked = panel.to_value(Some(&["list".to_owned()]));
+        assert_eq!(asked["list"]["id"], "changes");
+        assert!(asked.get("place").is_none());
     }
 
     #[test]

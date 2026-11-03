@@ -764,8 +764,17 @@ fn menus_toml_naming_a_plugins_command_hides_it_while_not_enabled() {
     assert_eq!(menu[0], "Count my lines, Ctrl+Alt+L", "{menu:?}");
 }
 
+/// The rows of the plugin list over the active panel's place (lane L).
+fn list_rows(s: &Session) -> Vec<String> {
+    s.app
+        .active_panel()
+        .plugin_list()
+        .map(|shown| shown.list().rows().iter().map(|r| r.spoken()).collect())
+        .unwrap_or_default()
+}
+
 #[test]
-fn a_lister_sorts_filters_marks_and_refuses_file_commands() {
+fn a_lister_opens_in_the_panel_sorts_filters_marks_and_refuses_file_commands() {
     let w = world(MANIFEST);
     enable(&w.paths);
     let open = json!({"lister": "changes", "title": "Changed files", "rows": [
@@ -779,20 +788,38 @@ fn a_lister_sorts_filters_marks_and_refuses_file_commands() {
             ("diff", Act::Rows),
         ]),
     );
+    let folder = s.names(Side::Left);
     let said = s.run_command(Command::new(id("line-counter.show")));
     assert!(
-        said.contains(&"Changed files, 2 rows (Line counter)".to_owned()),
-        "{said:?}"
+        said.contains(&"Changed files, 2 rows, left panel (Line counter)".to_owned()),
+        "the landing line, meaning first and the plugin last: {said:?}"
     );
+    // In the panel, not a dialog over both; the folder beneath untouched.
+    assert!(s.dialog().is_none());
     assert_eq!(
-        rows(&s),
+        list_rows(&s),
         [
             "b.txt, state Modified, lines 12",
             "a.txt, state Added, lines 3"
         ]
     );
+    assert_eq!(s.app.active_panel().place(), &place(&w.work));
+    assert_eq!(s.names(Side::Left), folder);
+    assert_eq!(
+        s.app.title_line(),
+        "Changed files, left panel (Line counter)"
+    );
+    // Every file command refuses before a file is looked for.
     assert_eq!(s.key("f5"), ["This row is not a file."]);
     assert_eq!(s.key("f8"), ["This row is not a file."]);
+    assert_eq!(s.key("f6"), ["This row is not a file."]);
+    assert_eq!(s.key("f7"), ["This row is not a file."]);
+    assert!(w.work.join("notes.txt").exists());
+    // A plugin command that needs a file refuses a row that is not one.
+    assert_eq!(
+        s.run_command(Command::new(id("line-counter.count"))),
+        ["This row is not a file."]
+    );
     s.key("ctrl+f3");
     assert_eq!(s.dialog_title().as_deref(), Some("Sort the rows by"));
     s.key("down");
@@ -801,6 +828,10 @@ fn a_lister_sorts_filters_marks_and_refuses_file_commands() {
     assert_eq!(
         said[0], "Sorted by lines. b.txt, state Modified, lines 12, 2 of 2",
         "the focus stays on its row"
+    );
+    assert_eq!(
+        s.app.title_line(),
+        "Changed files, left panel, sorted by lines (Line counter)"
     );
     let said = s.key("space");
     assert_eq!(said, ["Marked"]);
@@ -812,13 +843,119 @@ fn a_lister_sorts_filters_marks_and_refuses_file_commands() {
         said[0],
         "Filter modif. b.txt, selected, state Modified, lines 12, 1 of 1"
     );
+    let said = s.command(ids::SAY_STATUS);
+    assert!(
+        said[0].starts_with("1 selected. Changed files, 1 row, on b.txt, 1 of 1, filter modif"),
+        "{said:?}"
+    );
+    assert!(said[0].contains("(Line counter)"), "{said:?}");
     let said = s.key("enter");
     assert!(
         said.contains(&"Rows: b.txt. By Line counter.".to_owned()),
         "Enter runs activate with the row: {said:?}"
     );
-    s.key("escape");
+    // Escape takes the list's filter off first, then leaves the list. (The
+    // diff, one of the list's own commands, brought its rows up to date
+    // quietly: the test plugin answers with c.txt alone.)
+    let said = s.key("escape");
+    assert_eq!(said, ["Filter off. c.txt, state Deleted, lines 7, 1 of 1"]);
+    assert!(s.app.active_panel().plugin_list().is_some());
+    let said = s.key("escape");
+    assert_eq!(said[0], "Plugin list closed (Line counter)");
+    assert!(said[1].starts_with("work, 8 items, in "), "{said:?}");
+    assert!(s.app.active_panel().plugin_list().is_none());
+    assert_eq!(
+        s.names(Side::Left),
+        folder,
+        "the folder came back as it was"
+    );
     assert!(s.dialog().is_none());
+}
+
+#[test]
+fn the_up_keys_and_back_leave_a_plugin_list_and_say_the_folder() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}}
+    ]});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("show", Act::Call("lister/open", open))]),
+    );
+    s.focus("notes.txt");
+    let history = s.app.active_panel().history().to_vec();
+    for key in ["backspace", "left", "alt+up", "alt+left"] {
+        s.run_command(Command::new(id("line-counter.show")));
+        assert!(s.app.active_panel().plugin_list().is_some(), "{key}");
+        let said = s.key(key);
+        assert_eq!(
+            said[0], "Plugin list closed (Line counter)",
+            "{key}: {said:?}"
+        );
+        assert!(said[1].starts_with("work, 8 items"), "{key}: {said:?}");
+        assert!(s.app.active_panel().plugin_list().is_none(), "{key}");
+        assert_eq!(s.app.active_panel().place(), &place(&w.work), "{key}");
+        assert_eq!(s.focused(), "notes.txt", "{key}: the folder's cursor kept");
+    }
+    assert_eq!(s.app.active_panel().history(), history.as_slice());
+    // The list is never saved: the session holds the folder only.
+    let session = s.app.session();
+    assert_eq!(
+        session.panel(Side::Left).place.as_ref(),
+        Some(&place(&w.work))
+    );
+    assert_eq!(
+        session.panel(Side::Left).focused.as_deref(),
+        Some("notes.txt")
+    );
+}
+
+#[test]
+fn a_lister_opens_in_the_panel_it_names_and_panel_get_says_it() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "panel": "other", "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}}
+    ]});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[
+            ("show", Act::Call("lister/open", open)),
+            ("ask", Act::Call("panel/get", json!({"panel": "right"}))),
+        ]),
+    );
+    let said = s.run_command(Command::new(id("line-counter.show")));
+    assert!(
+        said.contains(&"Changed files, 1 row, right panel (Line counter)".to_owned()),
+        "{said:?}"
+    );
+    assert_eq!(s.app.active_side(), Side::Right, "the focus moved to it");
+    assert!(s.app.panel(Side::Left).plugin_list().is_none());
+    let said = s.run_command(Command::new(id("line-counter.ask")));
+    let answer = said.iter().find(|l| l.starts_with("Host said")).unwrap();
+    assert!(answer.contains(r#""id":"changes""#), "{answer}");
+    assert!(answer.contains(r#""rows":1"#), "{answer}");
+    assert!(answer.contains("work"), "the folder beneath: {answer}");
+    // Switch panels says each side as it shows.
+    let said = s.command(ids::SWITCH_PANEL);
+    assert!(said[0].starts_with("Left panel: work, 8 items"), "{said:?}");
+    let said = s.command(ids::SAY_OTHER);
+    assert_eq!(
+        said[0],
+        "Other panel: Changed files, 1 row, on b.txt, state Modified, lines 12, 1 of 1 (Line counter)"
+    );
+    let said = s.command(ids::SWITCH_PANEL);
+    assert_eq!(said[0], "Right panel: Changed files, 1 row (Line counter)");
+    // Go to a path closes the list and opens the place.
+    let backup = w.work.join("Backup");
+    let said = s.run_command(
+        Command::new(ids::GO_PATH)
+            .with_arg("place", diroxide_core::ArgValue::Place(place(&backup))),
+    );
+    assert_eq!(said[0], "Plugin list closed (Line counter)", "{said:?}");
+    assert!(s.app.panel(Side::Right).plugin_list().is_none());
+    assert_eq!(s.app.panel(Side::Right).place(), &place(&backup));
 }
 
 #[test]
@@ -1182,6 +1319,74 @@ fn a_plugins_prompt_completes_as_the_owner_types() {
 }
 
 #[test]
+fn escape_in_a_plugin_list_stops_its_job_before_it_leaves() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}},
+        {"name": "a.txt", "kind": "item", "extra": {"id": "a.txt", "state": "Added", "lines": "3"}}
+    ]});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[
+            ("show", Act::Call("lister/open", open)),
+            ("diff", Act::Hang),
+        ]),
+    );
+    s.run_command(Command::new(id("line-counter.show")));
+    assert_eq!(s.command(ids::SELECT_ALL), ["2 rows selected"]);
+    assert_eq!(s.command(ids::SELECT_NONE), ["Nothing selected"]);
+    let enter = diroxide_core::Key::parse("enter").unwrap();
+    let effects = s.app.handle(AppEvent::Key(enter));
+    let screen = s.runtime.carry_out(&mut s.app, effects);
+    s.run_quiet(screen);
+    assert_eq!(s.app.jobs().line(), "Show the diff: started (Line counter)");
+    let said = s.key("escape");
+    assert_eq!(said[0], "Show the diff: cancelling");
+    assert!(
+        s.app.active_panel().plugin_list().is_some(),
+        "the job stops first: {said:?}"
+    );
+    let said = s.key("escape");
+    assert_eq!(said[0], "Plugin list closed (Line counter)", "{said:?}");
+    assert!(s.app.active_panel().plugin_list().is_none());
+}
+
+#[test]
+fn a_plugins_panel_set_without_a_place_changes_the_folder_beneath_quietly() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}}
+    ]});
+    let notes = w.work.join("notes.txt");
+    let set = json!({"cursor": notes.to_str().unwrap()});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[
+            ("show", Act::Call("lister/open", open)),
+            ("ask", Act::Call("panel/set", set)),
+        ]),
+    );
+    s.run_command(Command::new(id("line-counter.show")));
+    let said = s.run_command(Command::new(id("line-counter.ask")));
+    assert!(
+        !said.iter().any(|l| l.starts_with("notes.txt")),
+        "nothing said of the folder beneath: {said:?}"
+    );
+    assert!(
+        s.app.active_panel().plugin_list().is_some(),
+        "the list stays"
+    );
+    s.key("backspace");
+    assert_eq!(
+        s.focused(),
+        "notes.txt",
+        "the folder's cursor moved beneath"
+    );
+}
+
+#[test]
 fn a_lister_asks_for_more_rows_at_its_end() {
     let w = world(MANIFEST);
     enable(&w.paths);
@@ -1194,15 +1399,15 @@ fn a_lister_asks_for_more_rows_at_its_end() {
         TestLauncher::with(&[("show", Act::Call("lister/open", open))]),
     );
     s.run_command(Command::new(id("line-counter.show")));
-    assert_eq!(rows(&s).len(), 2);
+    assert_eq!(list_rows(&s).len(), 2);
     let said = s.key("down");
     assert!(
         said.iter()
             .any(|l| l.starts_with("1 row more (Line counter)")),
         "{said:?}"
     );
-    assert_eq!(rows(&s).len(), 3);
-    assert_eq!(rows(&s)[2], "c.txt, state Deleted, lines 7");
+    assert_eq!(list_rows(&s).len(), 3);
+    assert_eq!(list_rows(&s)[2], "c.txt, state Deleted, lines 7");
     let said = s.key("ctrl+r");
     assert!(
         said.iter().any(|l| l.starts_with("1 row (Line counter)")),

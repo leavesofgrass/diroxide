@@ -9,14 +9,158 @@
 //! The rows keep the plugin's order until the owner sorts; a sort by a
 //! number, size or time column compares numbers, a text column compares
 //! words naturally, and the same column again reverses it.
+//!
+//! In the app a lister is a **plugin list** ([`PanelList`], lane L): it
+//! opens inside the panel its plugin names, over the panel's place, which
+//! stays untouched beneath it and shows again when the list is left. The
+//! list is never saved in the session or the history: a restart could not
+//! rebuild it, since its rows have no place and its plugin must be
+//! running.
 
 use std::cmp::Ordering;
 
-use diroxide_core::{Entry, ListModel, ListRow};
+use diroxide_core::format::count;
+use diroxide_core::{Entry, ListModel, ListRow, Side};
 use diroxide_plugins::listers::{ITEM_ID, ListerView};
 use diroxide_plugins::manifest::ListerColumn;
+use diroxide_plugins::shapes::WireList;
 
 use crate::panel::natural_cmp;
+
+/// A plugin list in a panel (lane L): a lister shown over the panel's
+/// place, its rows as the panel shows them, and the item entries beside
+/// them in the same order. Marks and the focus keep to the row id
+/// (`extra["id"]`, or the name) through every sort, filter and refresh.
+#[derive(Clone, Debug)]
+pub struct PanelList {
+    lister: Lister,
+    list: ListModel,
+    entries: Vec<Entry>,
+}
+
+impl PanelList {
+    /// A list for a lister, its focus on the first row; `help` is what F1
+    /// says first, and `page_size` the rows Page Up and Page Down move.
+    pub fn new(lister: Lister, help: impl Into<String>, page_size: usize) -> Self {
+        let mut list = ListModel::new(lister.title());
+        list.set_help(help);
+        list.set_page_size(page_size);
+        let mut shown = Self {
+            lister,
+            list,
+            entries: Vec::new(),
+        };
+        shown.rebuild();
+        shown
+    }
+
+    /// The lister: its plugin, its columns, its sort and its filter.
+    pub fn lister(&self) -> &Lister {
+        &self.lister
+    }
+
+    /// The rows as the panel shows them.
+    pub fn list(&self) -> &ListModel {
+        &self.list
+    }
+
+    /// The rows, to move the focus or mark.
+    pub fn list_mut(&mut self) -> &mut ListModel {
+        &mut self.list
+    }
+
+    /// The item entries shown, in row order.
+    pub fn entries(&self) -> &[Entry] {
+        &self.entries
+    }
+
+    /// Changes the lister (its rows, its sort, its filter, what the plugin
+    /// sent again) and shows the rows again, the marks and the focus kept
+    /// by row id. Returns what the change returned.
+    pub fn change<R>(&mut self, change: impl FnOnce(&mut Lister) -> R) -> R {
+        let out = change(&mut self.lister);
+        self.rebuild();
+        out
+    }
+
+    fn rebuild(&mut self) {
+        let shown: Vec<Entry> = self.lister.shown().into_iter().cloned().collect();
+        let rows = shown.iter().map(|entry| self.lister.row(entry)).collect();
+        self.list.set_rows(rows);
+        self.list.set_title(self.lister.title());
+        self.list.set_empty_text(if self.lister.filter.is_some() {
+            "No row matches the filter"
+        } else {
+            "No rows"
+        });
+        self.entries = shown;
+    }
+
+    /// The rows chosen for a command: the marked rows, or the one under
+    /// the cursor.
+    pub fn chosen(&self) -> Vec<Entry> {
+        self.lister.chosen(&self.list)
+    }
+
+    /// The id of the plugin that opened it.
+    pub fn plugin_id(&self) -> &str {
+        &self.lister.view.plugin_id
+    }
+
+    /// The plugin's name, last in every line the list causes.
+    pub fn plugin(&self) -> &str {
+        &self.lister.view.plugin
+    }
+
+    /// The lister's id, as its manifest names it.
+    pub fn id(&self) -> &str {
+        &self.lister.view.spec.id
+    }
+
+    /// Whether it is this plugin's lister of this id.
+    pub fn is(&self, plugin: &str, id: &str) -> bool {
+        self.plugin_id() == plugin && self.id() == id
+    }
+
+    /// The title without the plugin's name: "Changed files".
+    pub fn bare_title(&self) -> String {
+        let title = self.lister.title();
+        let suffix = format!(" ({})", self.plugin());
+        title
+            .strip_suffix(&suffix)
+            .unwrap_or(&title)
+            .trim()
+            .to_owned()
+    }
+
+    /// How many rows it shows, in words: "2 rows", "1 row".
+    pub fn rows_words(&self) -> String {
+        count(self.list.len() as u64, "row", "rows")
+    }
+
+    /// The line said when the list opens or the panel is landed in, the
+    /// meaning first and the plugin's name last: "Changed files, 2 rows,
+    /// left panel (Changed files)".
+    pub fn landing_line(&self, side: Side) -> String {
+        format!(
+            "{}, {}, {} panel ({})",
+            self.bare_title(),
+            self.rows_words(),
+            side.word(),
+            self.plugin()
+        )
+    }
+
+    /// The list as `panel/get` and a command's context name it.
+    pub fn wire(&self) -> WireList {
+        WireList {
+            plugin: self.plugin_id().to_owned(),
+            id: self.id().to_owned(),
+            title: self.lister.title(),
+            rows: self.lister.view.rows.len() as u64,
+        }
+    }
+}
 
 /// The column a lister is sorted by, and which way.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -151,7 +295,9 @@ impl Lister {
         ListRow::new(row_id(entry), entry.name.clone()).with_details(details)
     }
 
-    /// The list for the dialog, its marks and focus kept from `old`.
+    /// The rows as one list model, its marks and focus kept from `old`.
+    /// A panel keeps its own through [`PanelList`], whose help comes from
+    /// the live keymap.
     pub fn list(&self, old: Option<&ListModel>) -> ListModel {
         let rows = self
             .shown()
@@ -173,7 +319,7 @@ impl Lister {
             "No rows"
         });
         list.set_help(
-            "Enter runs the lister's command, Space marks, the sort and filter keys sort and filter by its columns, Escape closes.",
+            "Enter runs the plugin's command, Space marks, the sort and filter keys use its columns, Backspace or Escape leaves the list.",
         );
         list
     }
@@ -225,6 +371,29 @@ impl Lister {
         list
     }
 
+    /// The sort in words, for the title line and Say Status: "sorted by
+    /// lines", "sorted by state, reversed"; `None` in the plugin's order.
+    pub fn sort_words(&self) -> Option<String> {
+        let sort = self.sort.as_ref()?;
+        let header = self.header_of(&sort.column);
+        Some(if sort.reversed {
+            format!("sorted by {header}, reversed")
+        } else {
+            format!("sorted by {header}")
+        })
+    }
+
+    fn header_of(&self, column: &str) -> String {
+        if column == "name" {
+            "name".to_owned()
+        } else {
+            self.columns()
+                .iter()
+                .find(|c| c.id == column)
+                .map_or_else(|| column.to_owned(), |c| c.header.to_lowercase())
+        }
+    }
+
     /// Sorts by a column (`name` or a column's id); the same column again
     /// reverses. Returns the sentence: "Sorted by state", "Sorted by
     /// state, reversed".
@@ -237,14 +406,7 @@ impl Lister {
             column: column.to_owned(),
             reversed,
         });
-        let header = if column == "name" {
-            "name".to_owned()
-        } else {
-            self.columns()
-                .iter()
-                .find(|c| c.id == column)
-                .map_or_else(|| column.to_owned(), |c| c.header.to_lowercase())
-        };
+        let header = self.header_of(column);
         if reversed {
             format!("Sorted by {header}, reversed")
         } else {
@@ -365,5 +527,38 @@ mod tests {
         let mut plain = lister.list(None);
         plain.focus_id("c.txt");
         assert_eq!(lister.chosen(&plain)[0].name, "c.txt");
+    }
+
+    #[test]
+    fn a_panel_list_lands_meaning_first_and_keeps_its_marks_by_id() {
+        let mut view = changed_files();
+        view.title = "Changed files (Changed files)".into();
+        let mut shown = PanelList::new(Lister::new(view), "Enter runs its command.", 12);
+        assert_eq!(shown.list().page_size(), 12);
+        assert_eq!(
+            shown.landing_line(Side::Left),
+            "Changed files, 3 rows, left panel (Changed files)"
+        );
+        assert!(shown.landing_line(Side::Left).len() <= 50);
+        assert_eq!(shown.entries().len(), 3);
+        assert_eq!(shown.entries()[0].name, "b.txt");
+        shown.list_mut().focus_id("a.txt");
+        shown.list_mut().toggle_selected();
+        shown.change(|lister| lister.sort_by("lines"));
+        assert_eq!(shown.entries()[0].name, "a.txt", "sorted by lines");
+        assert_eq!(shown.list().focused().unwrap().id, "a.txt");
+        assert_eq!(shown.list().selected_ids(), ["a.txt"]);
+        assert_eq!(shown.chosen()[0].name, "a.txt");
+        shown.change(|lister| lister.filter = Some("nothing".into()));
+        assert!(shown.list().is_empty());
+        assert_eq!(shown.list().empty_text(), "No row matches the filter");
+        let wire = shown.wire();
+        assert_eq!(
+            (wire.plugin.as_str(), wire.id.as_str()),
+            ("changed-files", "changes")
+        );
+        assert_eq!(wire.rows, 3, "every row it holds, filtered or not");
+        assert!(shown.is("changed-files", "changes"));
+        assert_eq!(shown.bare_title(), "Changed files");
     }
 }
