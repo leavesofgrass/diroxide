@@ -4,6 +4,15 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased
 
+### Lane A4: the app's contract items from the merged lanes
+
+Written on Tuesday, November 3, 2026.
+
+- A copy cut by a quit now goes on where it stopped. Quit stops a running job the way a lost connection does, so a copy of 4 MiB or more on a place that keeps part files leaves its part file and its line in `partials.json`. At the next start, Retry on its Interrupted row resumes it when the source has not changed and the part file's first 64 KiB and last 1 MiB still match: "Resuming report.iso at 2.1 MB of 5.2 MB". Cancel still removes the part file. The quit's question keeps its words.
+- A held job's state is the engine's own, "held in line"; the words are unchanged: "Held 2 of 5: copy 3 items to build", "Held: copy 3 items to build", "Back in line: copy 3 items to build", and a lone held job's "Copying is held in line".
+- In the GUI, the first start says "The key bar names the keys.", since its key bar is a toolbar; the terminal still says "The key bar on the last line names the keys."
+- For the GUI: a click or a screen reader's Focus on a row of a plugin list moves the list's focus there; the app gives a menu's rows with the enabled plugins' commands, as the list menus show them, and the bank the key bar shows, chosen in one place; and the GUI reads its frontend, graphics and menus settings through the app.
+
 ### Lane F: the nightly fuzz workflow
 
 Written on Tuesday, November 3, 2026.
