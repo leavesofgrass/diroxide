@@ -129,7 +129,7 @@ pub struct Frontend {
     top: [usize; 2],
     shown: Shown,
     /// Messages for the live region, said on the next refresh.
-    to_say: Vec<Message>,
+    to_say: Vec<(Message, bool)>,
     /// Every message the app announced, in order (the tests read it).
     said: Vec<Message>,
     /// Text the app put on the clipboard (the platform clipboard is G2's
@@ -251,8 +251,9 @@ impl Frontend {
             .with_fixed(NewWidget::new(status_bar));
         self.shown.lines = lines;
         // The start's lines, said before the window existed, wait in the
-        // live region for a screen reader to ask for the tree.
-        let held = std::mem::take(&mut self.to_say);
+        // live region for a screen reader to ask for the tree, as one
+        // announcement in their order.
+        let held = model::join_messages(&std::mem::take(&mut self.to_say));
         let announcer =
             NewWidget::new(Announcer::new(std::rc::Rc::clone(&full_passes)).with_pending(held))
                 .with_tag(ANNOUNCER);
@@ -525,7 +526,10 @@ impl Frontend {
             match effect {
                 Effect::Announce(message) => {
                     self.said.push(message.clone());
-                    self.to_say.push(message);
+                    // A job's start line is the jobs line's too; a later
+                    // line in the same step goes before it.
+                    let start = message.text == self.app.jobs().line();
+                    self.to_say.push((message, start));
                 }
                 Effect::Quit => self.quit = true,
                 Effect::SetClipboardText(text) => self.clipboard.push(text),
@@ -578,7 +582,11 @@ impl Frontend {
             self.shown.dialog = dialog.clone();
             host.edit(ROOT, |mut root| Root::set_dialog(&mut root, dialog));
         }
-        let say = std::mem::take(&mut self.to_say);
+        // What the app said in this step is one announcement, its lines in
+        // their order, as the terminal's status line joins them; a screen
+        // reader is not handed a burst of live nodes in an order of the
+        // adapter's choosing.
+        let say = model::join_messages(&std::mem::take(&mut self.to_say));
         let holding = host.edit(ANNOUNCER, |mut a| {
             if !say.is_empty() {
                 Announcer::say(&mut a, say);

@@ -128,18 +128,21 @@ fn the_starts_lines_wait_for_the_tree_and_are_said_once() {
         crate::rig::SIZE,
     );
     let first: Vec<String> = live_values(&h.redraw().1);
-    assert!(!first.contains(&welcome), "{first:?}");
-    // The driver's next turn releases them: each is a new live node in
-    // that update, the welcome and the lines after it.
+    assert!(first.iter().all(|t| !t.contains(&welcome)), "{first:?}");
+    // The driver's next turn releases them as one new live node, the
+    // welcome first and the lines after it in their order.
     f.refresh(&mut HostOf(&mut h));
     let (_, update) = h.redraw();
     let released = live_values(&update);
-    assert!(released.contains(&welcome), "{released:?}");
-    assert_eq!(released.len(), start_lines, "{released:?}");
+    assert_eq!(released.len(), 1, "{released:?}");
+    assert!(released[0].starts_with(&welcome), "{released:?}");
+    for message in f.said() {
+        assert!(released[0].contains(&message.text), "{released:?}");
+    }
     // Said once: a later update does not send them as new.
     f.refresh(&mut HostOf(&mut h));
-    let later = h.get_widget(ANNOUNCER).inner().announced();
-    assert_eq!(later, start_lines);
+    let _ = h.redraw();
+    assert_eq!(h.get_widget(ANNOUNCER).inner().announced(), 1);
 }
 
 /// The texts of the live nodes an update sends.

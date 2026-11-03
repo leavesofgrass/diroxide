@@ -487,6 +487,43 @@ pub fn dialog_view(app: &App) -> Option<DialogView> {
     })
 }
 
+/// The messages the app said in one step as the one announcement the
+/// live region makes, as the terminal's status line joins the messages
+/// between two frames: the lines in their order joined with a space, a
+/// line the same as the one before it once, a job's start line dropped
+/// when more came after it (a quick job's result), Low lines left out
+/// (they are only shown). The announcement is as urgent as its most
+/// urgent line. Each entry is a message and whether it is a job's start
+/// line. Empty when nothing is to be said.
+pub fn join_messages(said: &[(diroxide_core::Message, bool)]) -> Vec<diroxide_core::Message> {
+    use diroxide_core::Importance;
+    let spoken: Vec<&(diroxide_core::Message, bool)> = said
+        .iter()
+        .filter(|(m, _)| m.importance != Importance::Low && !m.text.is_empty())
+        .collect();
+    let Some(last) = spoken.len().checked_sub(1) else {
+        return Vec::new();
+    };
+    let mut parts: Vec<&str> = Vec::new();
+    let mut importance = Importance::Normal;
+    for (i, (message, start)) in spoken.iter().enumerate() {
+        if *start && i < last {
+            continue;
+        }
+        if parts.last() == Some(&message.text.as_str()) {
+            continue;
+        }
+        parts.push(&message.text);
+        importance = importance.max(message.importance);
+    }
+    let kind = spoken[last].0.kind;
+    vec![diroxide_core::Message::new(
+        parts.join(" "),
+        importance,
+        kind,
+    )]
+}
+
 /// The three lines under the panels and above them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Lines {
@@ -546,6 +583,31 @@ mod tests {
         assert_eq!(option.name, "Eject, needs a plugin");
         assert_eq!(option.text, "Eject, unavailable, needs a plugin");
         assert!(!option.enabled);
+    }
+
+    #[test]
+    fn a_steps_lines_are_one_announcement_in_their_order() {
+        use diroxide_core::{Importance, Message};
+        let said = [
+            (Message::info("Copy started: 1 file to Backup"), true),
+            (Message::status("Reading 40 percent"), false),
+            (Message::info("Copy finished: 1 done"), false),
+            (Message::info("Copy finished: 1 done"), false),
+            (Message::error("Could not list Backup: gone. Go up."), false),
+        ];
+        let joined = join_messages(&said);
+        assert_eq!(joined.len(), 1);
+        assert_eq!(
+            joined[0].text,
+            "Copy finished: 1 done Could not list Backup: gone. Go up."
+        );
+        assert_eq!(joined[0].importance, Importance::High);
+        // A start line alone is said.
+        let alone = join_messages(&said[..1]);
+        assert_eq!(alone[0].text, "Copy started: 1 file to Backup");
+        // Low only: nothing is said.
+        assert!(join_messages(&said[1..2]).is_empty());
+        assert!(join_messages(&[]).is_empty());
     }
 
     #[test]

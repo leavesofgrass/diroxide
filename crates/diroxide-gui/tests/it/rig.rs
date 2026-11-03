@@ -101,7 +101,15 @@ impl Rig {
     pub fn settle(&mut self) {
         self.pump();
         self.f
-            .settle(&mut HostOf(&mut self.h), self.now, Duration::from_secs(10));
+            .settle(&mut HostOf(&mut self.h), self.now, Duration::from_secs(20));
+        // The app's timers, as the terminal's scripted test runs them: a
+        // tick now, the clock 200 ms on, a tick again, and the workers'
+        // results that brought.
+        self.f.tick(&mut HostOf(&mut self.h), self.now);
+        self.now += Duration::from_millis(200);
+        self.f.tick(&mut HostOf(&mut self.h), self.now);
+        self.f
+            .settle(&mut HostOf(&mut self.h), self.now, Duration::from_secs(20));
         self.redraw();
     }
 
