@@ -1,4 +1,4 @@
-//! Every dialog purpose (R27's commit 25): the app's dialogs are 78
+//! Every dialog purpose (R27's commit 25): the app's dialogs are 77
 //! purposes (`Purpose` in `crates/diroxide-app/src/app.rs`) drawn as
 //! seven shapes, and this test opens each one the app can open from a
 //! test through the window, checking that the dialog has a name and that
@@ -22,10 +22,9 @@ use crate::rig::{HostOf, Rig, app_with, name_of};
 /// The purposes no test can open, each with the reason, in words.
 const UNREACHABLE: &[(&str, &str)] = &[
     (
-        "JobHistory",
-        "the app routes jobs.history to the Jobs list first (jobs_ui.rs), so nothing opens it",
+        "JobItems",
+        "it opens from a finished job's row in the Jobs list, a scenario the next GUI lane adds (lane A5 removed JobHistory, whose dialog the Jobs list had replaced)",
     ),
-    ("JobItems", "it opens only from JobHistory"),
     (
         "JunctionInstead",
         "it needs a link the system refuses for want of a privilege, which needs a provider double from diroxide-vfs, not a dependency of the GUI crate",
@@ -898,7 +897,7 @@ fn checked(rig: &Rig) -> Result<(String, Role, String), String> {
 #[test]
 fn every_dialog_purpose_opens_with_a_name_and_a_focus() {
     let variants = purpose_variants();
-    assert_eq!(variants.len(), 78, "{variants:?}");
+    assert_eq!(variants.len(), 77, "{variants:?}");
     let scenarios = scenarios();
     let mut listed: BTreeSet<String> = scenarios.iter().map(|(p, _, _)| (*p).to_owned()).collect();
     for (purpose, _) in UNREACHABLE {
