@@ -133,6 +133,17 @@ These lines show what diroxide says for each key. The status line says the same 
 - The status line shows "Waiting for scan-004.pdf to settle" but diroxide does not say it.
 - In a shell, `diro watch in`: "Watching in for new files. Ctrl+C stops."
 
+### Plugin lists
+
+A plugin's list of rows that are not files, such as the changed files of a git folder or the Sites list, opens inside a panel. [The panels](panels.md#plugin-lists) describes it. What you should hear:
+
+- The landing line puts its meaning first and the plugin's name last: "Changed files, 2 rows, left panel (Changed files)". The list's name, its count and the panel are inside the first 40 cells. The plugin's name closes the line, so a plugin cannot pass for diroxide.
+- Down and Up read a row as a folder's row is read, the name first and then the details: "b.txt, state Modified, lines 12". The title line names the list, "Changed files, left panel (Changed files)", and says the sort when there is one.
+- Space says "Marked" or "Unmarked". Enter runs the list's own command as a job and says its start line, with the plugin's name last.
+- A file key such as F5, F6, F7 or F8 says "This row is not a file." The same words answer a command that works on the folder beneath the list, such as Make folder.
+- A plugin can open a document of its own from a row, such as a diff. Closing that document with Escape says nothing, and your screen reader reads the row again.
+- Left, Backspace and Alt+Up leave the list: "Plugin list closed (Changed files)", and then the folder's line again, such as "work, 8 items, in D:\". Escape takes the list's filter off first, "Filter off", and leaves the list on the next press.
+
 ## Choosing a layout
 
 Side by side is the default and the first choice of sighted users. For a screen reader, stacked is recommended, because every line is one row at full width and Tab changes only the cursor, a marker and a title. Press Ctrl+P, type "layout" and press Enter to change it; the `layout` setting keeps the choice. The listening check will say which layout to recommend, and this guide will change if it finds that side by side reads well. [The panels guide](panels.md) has the reasons.
