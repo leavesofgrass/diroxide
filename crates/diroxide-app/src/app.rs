@@ -1377,7 +1377,16 @@ impl App {
     /// Puts a panel's focus on the row with this name (its real name);
     /// whether it was found. App-side hook for the server and the GUI.
     /// The quick view follows, as it does a key's move.
+    ///
+    /// When a plugin list is up in the panel (lane L), the name is the id
+    /// of one of its rows, and the list's focus moves, as
+    /// [`Panel::shown_list`] shows it: a click or a screen reader's Focus
+    /// on a plugin list's row lands there (lane A4). The folder beneath
+    /// keeps its own focus, and the quick view, which shows files, stays.
     pub fn focus_name(&mut self, side: Side, name: &str) -> bool {
+        if let Some(shown) = self.panel_mut(side).plugin_list_mut() {
+            return shown.list_mut().focus_id(name);
+        }
         let found = self.panel_mut(side).list_mut().focus_id(name);
         self.follow_cursor();
         found

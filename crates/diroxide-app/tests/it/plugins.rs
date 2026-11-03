@@ -1584,3 +1584,47 @@ fn a_plugin_component_is_found_in_its_own_folder() {
     s.command(ids::PLUGINS);
     assert_eq!(rows(&s), ["Line counter: not enabled, plugin 0.1.0"]);
 }
+
+/// Lane A4 (G1's request 1): a click or a screen reader's Focus on a
+/// plugin list's row goes through `App::focus_name`, which moves the
+/// list's focus, as the panel shows it; the folder beneath keeps its own.
+#[test]
+fn focus_by_name_moves_a_plugin_lists_focus_and_keeps_the_folders() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let open = json!({"lister": "changes", "title": "Changed files", "rows": [
+        {"name": "b.txt", "kind": "item", "extra": {"id": "b.txt", "state": "Modified", "lines": "12"}},
+        {"name": "a.txt", "kind": "item", "extra": {"id": "a.txt", "state": "Added", "lines": "3"}}
+    ]});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("show", Act::Call("lister/open", open))]),
+    );
+    let folder_focus = s.focused();
+    s.run_command(Command::new(id("line-counter.show")));
+    let shown = |s: &Session| {
+        s.app
+            .active_panel()
+            .shown_list()
+            .focused()
+            .map(|row| row.id.clone())
+    };
+    assert_eq!(shown(&s).as_deref(), Some("b.txt"));
+    assert!(s.app.focus_name(Side::Left, "a.txt"));
+    assert_eq!(shown(&s).as_deref(), Some("a.txt"));
+    // The next key moves on from there, and says the row it reached.
+    let said = s.key("up");
+    assert_eq!(said, ["b.txt, state Modified, lines 12, 1 of 2"]);
+    assert!(s.app.focus_name(Side::Left, "a.txt"));
+    assert_eq!(s.key("down"), ["Bottom of the list"]);
+    // A name the list does not hold moves nothing.
+    assert!(!s.app.focus_name(Side::Left, "notes.txt"));
+    assert_eq!(shown(&s).as_deref(), Some("a.txt"));
+    assert_eq!(s.focused(), folder_focus, "the folder's focus is its own");
+    // With the list closed, the name is the folder's again.
+    s.key("escape");
+    assert!(s.app.active_panel().plugin_list().is_none());
+    assert!(s.app.focus_name(Side::Left, "notes.txt"));
+    assert_eq!(s.focused(), "notes.txt");
+}
+
