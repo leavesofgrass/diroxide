@@ -51,7 +51,9 @@ These lines show what diroxide says for each key. The status line says the same 
 - A copy running: "Copy started: 1 item to Backup", then "Copying 30 percent, 2 minutes left" at most every ten seconds, and once at the end, "Copy finished: 1 done."
 - F2 (rename): "Rename report.pdf to: report.pdf", with the cursor before the extension. A name that needs care: "Name needs care: ends in a dot or space. Nothing renamed."
 - F8 (trash): "Move 1 item to the trash, 2.1 KB? No is the default. y or n". Then "Moved 1 item to the trash. It can be restored." Ctrl+Z: "Undid trash: 1 item is back".
-- Ctrl+Q with a job running: "Quit? 1 job is running. No is the default. y or n".
+- Ctrl+Q with a job running or waiting: "1 job is not finished.", then "Quit and stop them? No is the default. y or n". A yes keeps the stopped jobs for the next start.
+- The start after such a quit: "2 jobs were interrupted by the last quit. The Jobs list has them." It is said once. In the Jobs list (Alt+T, J) they come first: "Interrupted, 2 jobs", then rows such as "Interrupted: copy report.pdf to Backup". Enter offers Retry and Forget. Forget says "Forgotten: copy report.pdf to Backup".
+- Pause on a job that waits its turn, from its row in the Jobs list: "Held: copy report.pdf to Backup". Its row reads "Held 1 of 2: copy report.pdf to Backup". Resume: "Back in line: copy report.pdf to Backup".
 
 ### Archives
 
