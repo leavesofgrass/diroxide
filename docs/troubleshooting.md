@@ -78,7 +78,7 @@ On Windows a program cannot start in a folder whose path is 259 characters or lo
 
 ## A copy did not finish
 
-- The jobs line says what happened: "Copy had 8 failures: 290 done, 2 skipped." The entries that failed stay selected, so you can see what to try again. Job history, in the Tools menu (Alt+T, then J), lists each job, and Enter on one lists what failed or was skipped, and why.
+- The jobs line says what happened: "Copy had 8 failures: 290 done, 2 skipped." The entries that failed stay selected, so you can see what to try again. To read why, open the Jobs list (Alt+T, then J), or Job history in the palette, which opens the same list on the first finished job. It takes two steps. Enter on the finished job opens its actions, and the first of them is Show what failed. Enter on that lists what failed or was skipped, and why.
 - A failure names the file and the cause, and says what to do. "Could not copy report.pdf: another program is using it. Close it in the other program, then retry."
 - A copy that stops moving says "Copying stalled at 30 percent". Press Escape to cancel the job.
 - If diroxide was killed during a job, the next start says "Last session ended during a copy: 3 of 5 steps done." A leftover file whose name begins with `.diro-part-` is a partly written copy. Delete it yourself; diroxide never does.
@@ -142,7 +142,7 @@ The viewer says why, once, when you open the file: "Highlighting off: over 512 K
 
 ## diroxide asks before it quits
 
-It asks only when a job is running or a prompt still holds text you typed: "Quit? 1 job is running. No is the default. y or n". Answer y to quit anyway, and the job is cancelled. Answer n and press Escape to cancel the job first.
+It asks only when a job is running or waiting, or a prompt still holds text you typed. With a job it says "1 job is not finished." and asks "Quit and stop them? No is the default. y or n". With only typed text it asks "Quit? A prompt holds text. No is the default. y or n". Answer y to quit anyway. The job stops where it is, and nothing more is copied. A copy that was cut keeps its part file, and the next start lists the job as interrupted. Retry goes on from the part file. Answer n, then press Escape on a panel to cancel the job first, which removes the part file.
 
 ## A settings or keymap file has a problem
 

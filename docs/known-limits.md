@@ -89,7 +89,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 [The transfer queue](transfer-queue.md) describes the Jobs list. These are the limits.
 
 - The queue is kept in `queue.json` in the state folder, and the next start lists what a quit or a crash stopped as interrupted jobs. With two diroxide windows on one state folder, only the first keeps the queue: the second neither lists nor saves it, and its jobs are lost when it quits. Quit the second window when its jobs are done.
-- A quit stops its jobs the way Cancel does, so a copy cut by a quit starts its file again on Retry. Only a crash, a kill or a lost connection leaves a part file to resume from.
+- A quit stops a running copy the way a lost connection does, so a copy of 4 MiB or more that a quit cuts keeps its part file, and Retry on its Interrupted row goes on from it. A smaller copy starts again. Cancel still removes the part file. Only this computer's own disks keep part files so far: an SFTP place has the calls in its protocol and the program does not use them yet, so a copy to a server that is cut starts again.
 - Retry on an interrupted job needs the request it was planned from. An undo is saved without one, and offers Retry dimmed. Forget it, and undo again yourself.
 - Pack, unpack and archive tests, and a plugin's own commands, do not go through the queue, so they are not kept across a restart either.
 - An interrupted job that had started skips what is already at the destination on Retry, as Retry the failed items does, even where the first run would have asked or replaced.

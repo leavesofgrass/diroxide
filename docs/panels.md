@@ -54,7 +54,7 @@ Permissions are read in words first. On Linux and macOS the permissions column s
 
 When you go to the parent with Left or Backspace, the cursor lands on the folder you just left. Back and forward return you to the row you were on, with the marks you had, folder by folder.
 
-Enter on a folder goes in. Enter on a file hands it to your system's program for that kind of file: "Opening report.pdf". Enter on a program asks first, and the question starts on No: "Run setup.exe? No is the default. y or n". F4 hands the file to your editor instead, with the screen suspended; when you come back diroxide says "Back in diroxide, Documents". The editor is the `editor` setting, or else the VISUAL or EDITOR variable, or else the system's text editor. Enter or Right on an archive opens it like a folder; [archives](archives.md) describes it. F3 reads a file in the viewer ([the viewer](viewer.md)).
+Enter on a folder goes in. Enter on a file hands it to your system's program for that kind of file: "Opening report.pdf". Enter on a program asks first, and the question starts on No: "Run setup.exe? No is the default. y or n". F4 hands the file to your editor instead, with the screen suspended; when you come back diroxide says "Back in diroxide, Documents". In the window, F4 starts the editor in a window of its own and diroxide goes on, saying "Started the editor on report.pdf". The editor is the `editor` setting, or else the VISUAL or EDITOR variable, or else the system's text editor. Enter or Right on an archive opens it like a folder; [archives](archives.md) describes it. F3 reads a file in the viewer ([the viewer](viewer.md)).
 
 ## Go to a path
 

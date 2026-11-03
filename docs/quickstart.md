@@ -1,6 +1,6 @@
 # Quick start
 
-This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, because alpha 2 has no GUI yet. If you have not built diroxide yet, start with [installing diroxide](install.md).
+This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, which is what `diro` opens when you type it with nothing else. The window version, `diro --gui`, is in this source tree and comes with the next alpha: [the GUI](gui.md) covers it, and most of the keys here are the same in it. If you have not built diroxide yet, start with [installing diroxide](install.md).
 
 ## How keys are written
 
@@ -109,7 +109,7 @@ Press F3 on a file to read it in the viewer. Up and Down move a line, Ctrl+D say
 
 ## Quit
 
-Press Ctrl+Q. diroxide does not ask unless a job is running or a prompt still holds what you typed: "Quit? 1 job is running. No is the default. y or n". If you quit with a job running, the job is cancelled.
+Press Ctrl+Q. diroxide does not ask unless a job is running or waiting, or a prompt still holds what you typed. With a job it says "1 job is not finished." and asks "Quit and stop them? No is the default. y or n". With only typed text it asks "Quit? A prompt holds text. No is the default. y or n". If you quit with a job running, the job stops where it is. The next start lists it as interrupted, and Retry runs it again. A big copy that was cut keeps its part file, and Retry goes on from it.
 
 ## Leave your shell in the folder you were in
 
@@ -138,6 +138,7 @@ diro init bash
 ## See also
 
 - [Installing diroxide](install.md)
+- [The GUI](gui.md)
 - [Every key](keyboard.md)
 - [Known limits](known-limits.md)
 - [The documentation index](README.md)
