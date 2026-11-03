@@ -52,23 +52,47 @@ fn normal_is_polite_high_is_assertive_and_low_is_only_shown() {
     let dir = fixture(&["a.txt"], &[]);
     let (app, runtime) = app_on(dir.path(), dir.path());
     let mut rig = Rig::new(app, runtime);
-    rig.h.edit_widget(ANNOUNCER, |mut a| {
-        Announcer::say(
-            &mut a,
-            [
-                Message::status("Reading 40 percent"),
-                Message::info("Copy finished: 3 done"),
-                Message::error("Could not copy report.pdf: the disk is full. Free some space."),
-            ],
-        );
-    });
-    rig.redraw();
+    let say = |rig: &mut Rig, messages: Vec<Message>| {
+        rig.h
+            .edit_widget(ANNOUNCER, |mut a| Announcer::say(&mut a, messages));
+        rig.redraw();
+    };
+    say(
+        &mut rig,
+        vec![
+            Message::status("Reading 40 percent"),
+            Message::info("Copy finished: 3 done"),
+        ],
+    );
     assert!(heard(&rig, "Reading 40 percent").is_empty());
     assert_eq!(heard(&rig, "Copy finished: 3 done"), [Live::Polite]);
+    say(
+        &mut rig,
+        vec![Message::error(
+            "Could not copy report.pdf: the disk is full. Free some space.",
+        )],
+    );
     assert_eq!(
         heard(
             &rig,
             "Could not copy report.pdf: the disk is full. Free some space."
+        ),
+        [Live::Assertive]
+    );
+    // Lines that reach the live region in one update are one node in
+    // their order, as urgent as the most urgent: two live nodes at once
+    // reach a screen reader in an order of the adapter's choosing.
+    say(
+        &mut rig,
+        vec![
+            Message::info("Copy finished: 1 done"),
+            Message::error("Could not list Backup: gone. Go up."),
+        ],
+    );
+    assert_eq!(
+        heard(
+            &rig,
+            "Copy finished: 1 done Could not list Backup: gone. Go up."
         ),
         [Live::Assertive]
     );

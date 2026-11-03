@@ -197,11 +197,25 @@ impl Widget for Announcer {
             }
         }
         // Every new message goes into this update, however many came
-        // since the last one (a start says four lines in one frame), so
-        // each is announced; only the last few stay for the next update.
-        while let Some((text, live)) = self.pending.pop_front() {
+        // since the last one (the start's held lines and the first
+        // listing's, released together), as one node in their order: two
+        // live nodes in one update reach a screen reader in an order of
+        // the adapter's choosing (the UI Automation report heard the
+        // start's lines reversed). It is as urgent as its most urgent
+        // line; only the last few stay for the next update.
+        if !self.pending.is_empty() {
+            let mut texts: Vec<String> = Vec::new();
+            let mut urgency = Live::Polite;
+            for (text, live) in self.pending.drain(..) {
+                if live == Live::Assertive {
+                    urgency = Live::Assertive;
+                }
+                if texts.last() != Some(&text) {
+                    texts.push(text);
+                }
+            }
             self.shown
-                .push_back((AccessCtx::next_node_id(), text, live));
+                .push_back((AccessCtx::next_node_id(), texts.join(" "), urgency));
             self.announced += 1;
         }
         for (id, text, live) in &self.shown {
