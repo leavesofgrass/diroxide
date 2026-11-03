@@ -130,6 +130,64 @@ impl JobFacts {
     }
 }
 
+/// A job the queue held when diroxide last ended, read back from the
+/// saved queue at the next start (lane Q2): listed first in the Jobs list
+/// as Interrupted, with Retry and Forget, and never started on its own.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterruptedJob {
+    /// Its number in this session's list, for Retry and Forget; not the
+    /// job id it had, which a new job may have now.
+    pub key: u64,
+    /// What kind of job it was.
+    pub kind: JobKind,
+    /// What it was on: "12 items to build"; empty when not known.
+    pub what: String,
+    /// Whether it had started: a retry then skips what is already there.
+    pub started: bool,
+    /// Its request, when the queue knew it: Retry plans it again. An undo
+    /// has none, and is not retried.
+    pub request: Option<diroxide_core::JobRequest>,
+}
+
+impl InterruptedJob {
+    /// Its row, the state first: "Interrupted: copy 12 items to build".
+    pub fn row(&self) -> String {
+        if self.what.is_empty() {
+            format!("Interrupted: {}", short_verb(self.kind))
+        } else {
+            format!("Interrupted: {} {}", short_verb(self.kind), self.what)
+        }
+    }
+
+    /// The job in words, its verb first: "copy 12 items to build".
+    pub fn name(&self) -> String {
+        if self.what.is_empty() {
+            short_verb(self.kind).to_owned()
+        } else {
+            format!("{} {}", short_verb(self.kind), self.what)
+        }
+    }
+}
+
+/// The one sentence the first start after an interruption says, at
+/// Normal importance, the count first: "2 jobs were interrupted by the
+/// last quit. The Jobs list has them." After a crash or a kill, when no
+/// quit wrote the queue last: "1 job was interrupted when the last
+/// session ended. The Jobs list has it."
+pub fn interrupted_sentence(jobs: usize, by_quit: bool) -> String {
+    let (counted, them) = if jobs == 1 {
+        ("1 job was".to_owned(), "it")
+    } else {
+        (format!("{jobs} jobs were"), "them")
+    };
+    let when = if by_quit {
+        "by the last quit"
+    } else {
+        "when the last session ended"
+    };
+    format!("{counted} interrupted {when}. The Jobs list has {them}.")
+}
+
 /// What the queue said about its jobs (the runtime's side of the jobs
 /// list, R25, 2.2).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -154,6 +212,21 @@ pub enum QueueNote {
     Held(JobId),
     /// Resume let a held job go, in the place it kept (lane Q2).
     Released(JobId),
+    /// The saved queue was read at start (lane Q2): the jobs it held,
+    /// each now interrupted, and how many of them the last session's end
+    /// interrupted (the rest were interrupted before, and not yet retried
+    /// or forgotten).
+    Interrupted {
+        /// Every interrupted job, in the saved order.
+        jobs: Vec<InterruptedJob>,
+        /// How many the last session's end interrupted: said once.
+        new: usize,
+        /// Whether a quit wrote the queue last, rather than a crash.
+        by_quit: bool,
+    },
+    /// An interrupted job left the list: forgotten, or retried and
+    /// confirmed (lane Q2).
+    Forgotten(u64),
 }
 
 /// What the app asks of the queue: the Jobs list's actions and the
@@ -202,11 +275,25 @@ pub enum QueueRequest {
         /// Its policy.
         policy: diroxide_core::job::ErrorPolicy,
     },
+    /// Forget an interrupted job: it leaves the list and the saved queue
+    /// (lane Q2).
+    Forget(u64),
+    /// An interrupted job is planned again as this new job: it leaves the
+    /// list and the saved queue once the new one is confirmed (lane Q2).
+    Retried {
+        /// The interrupted job's number.
+        key: u64,
+        /// The new job.
+        job: JobId,
+    },
 }
 
 /// The group a row of the Jobs list belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum JobGroup {
+    /// Held by the queue when diroxide last ended, listed first (lane
+    /// Q2); the row's number is its key, not a job id.
+    Interrupted,
     /// Started and not finished: running, paused, stalled, waiting for an
     /// answer or a connection, verifying.
     Running,
@@ -220,6 +307,7 @@ impl JobGroup {
     /// The group's heading with its count: "Running, 2 jobs".
     pub fn heading(self, jobs: usize) -> String {
         let name = match self {
+            JobGroup::Interrupted => "Interrupted",
             JobGroup::Running => "Running",
             JobGroup::Waiting => "Waiting",
             JobGroup::Finished => "Finished",
@@ -326,6 +414,8 @@ pub struct JobTable {
     order: Vec<JobId>,
     /// Whether the queue is paused.
     queue_paused: bool,
+    /// The jobs the saved queue held when diroxide last ended (lane Q2).
+    interrupted: Vec<InterruptedJob>,
 }
 
 /// The milliseconds from `from` to `to`, zero when `to` is earlier.
@@ -481,7 +571,32 @@ impl JobTable {
                     entry.object()
                 ))
             }
+            QueueNote::Interrupted { jobs, new, by_quit } => {
+                self.interrupted = jobs.clone();
+                (*new > 0).then(|| interrupted_sentence(*new, *by_quit))
+            }
+            QueueNote::Forgotten(key) => {
+                self.forget_interrupted(*key);
+                None
+            }
         }
+    }
+
+    /// The jobs the saved queue held when diroxide last ended, in their
+    /// order (lane Q2).
+    pub fn interrupted(&self) -> &[InterruptedJob] {
+        &self.interrupted
+    }
+
+    /// An interrupted job, by its number.
+    pub fn interrupted_job(&self, key: u64) -> Option<&InterruptedJob> {
+        self.interrupted.iter().find(|job| job.key == key)
+    }
+
+    /// Takes an interrupted job off the list; what it was.
+    pub fn forget_interrupted(&mut self, key: u64) -> Option<InterruptedJob> {
+        let at = self.interrupted.iter().position(|job| job.key == key)?;
+        Some(self.interrupted.remove(at))
     }
 
     /// Updates a job's progress sentence.
@@ -760,19 +875,24 @@ impl JobTable {
         waiting
     }
 
-    /// The rows of the Jobs list, group by group: running, then waiting in
-    /// the queue's order, then finished, newest first.
+    /// The rows of the Jobs list, group by group: interrupted first (each
+    /// row's number its key), then running, then waiting in the queue's
+    /// order, then finished, newest first.
     pub fn rows(&self) -> Vec<JobRow> {
         let mut rows: Vec<JobRow> = self
-            .running
+            .interrupted
             .iter()
-            .filter(|r| !r.waits())
-            .map(|r| JobRow {
-                job: r.job,
-                group: JobGroup::Running,
-                text: self.row(r),
+            .map(|job| JobRow {
+                job: JobId::new(job.key),
+                group: JobGroup::Interrupted,
+                text: job.row(),
             })
             .collect();
+        rows.extend(self.running.iter().filter(|r| !r.waits()).map(|r| JobRow {
+            job: r.job,
+            group: JobGroup::Running,
+            text: self.row(r),
+        }));
         rows.extend(self.waiting_entries().into_iter().map(|r| JobRow {
             job: r.job,
             group: JobGroup::Waiting,
@@ -1022,6 +1142,71 @@ mod tests {
             let head = row.text.split(':').next().unwrap();
             assert!(within_cells(&row.text, head), "{}", row.text);
         }
+    }
+
+    /// Lane Q2: the first start's sentence and the interrupted rows, the
+    /// count or the state first inside 40 cells, listed before the rest.
+    #[test]
+    fn interrupted_jobs_come_first_and_the_sentence_counts_them() {
+        let sentences = [
+            (
+                interrupted_sentence(2, true),
+                "2 jobs were interrupted by the last quit. The Jobs list has them.",
+            ),
+            (
+                interrupted_sentence(1, true),
+                "1 job was interrupted by the last quit. The Jobs list has it.",
+            ),
+            (
+                interrupted_sentence(3, false),
+                "3 jobs were interrupted when the last session ended. The Jobs list has them.",
+            ),
+        ];
+        for (made, want) in &sentences {
+            assert_eq!(made, want);
+            let head = want.split(" interrupted").next().unwrap();
+            assert!(within_cells(made, &format!("{head} interrupted")), "{made}");
+        }
+        let mut jobs = queue();
+        let copy = InterruptedJob {
+            key: 1,
+            kind: JobKind::Copy,
+            what: "12 items to build".into(),
+            started: true,
+            request: None,
+        };
+        let trash = InterruptedJob {
+            key: 2,
+            kind: JobKind::Trash,
+            what: String::new(),
+            started: false,
+            request: None,
+        };
+        let line = jobs.queue_note(&QueueNote::Interrupted {
+            jobs: vec![copy.clone(), trash],
+            new: 2,
+            by_quit: true,
+        });
+        assert_eq!(line.as_deref(), Some(sentences[0].1));
+        let rows = jobs.rows();
+        assert_eq!(rows[0].group, JobGroup::Interrupted);
+        assert_eq!(rows[0].text, "Interrupted: copy 12 items to build");
+        assert_eq!(rows[1].text, "Interrupted: trash");
+        assert_eq!(rows[2].group, JobGroup::Running);
+        assert_eq!(JobGroup::Interrupted.heading(2), "Interrupted, 2 jobs");
+        assert_eq!(copy.name(), "copy 12 items to build");
+        // Interrupted jobs are not jobs that run: the line and the quit
+        // question do not count them.
+        assert_eq!(jobs.len(), 3);
+        assert_eq!(jobs.queue_note(&QueueNote::Forgotten(1)), None);
+        assert_eq!(jobs.interrupted().len(), 1);
+        // Read again with nothing new: no sentence.
+        let again = jobs.queue_note(&QueueNote::Interrupted {
+            jobs: vec![copy],
+            new: 0,
+            by_quit: false,
+        });
+        assert_eq!(again, None);
     }
 
     #[test]
