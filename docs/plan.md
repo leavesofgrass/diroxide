@@ -414,7 +414,7 @@ Each line: the need, the crate, and the fallback. Versions are those textweaver 
 - Lua: no in-process tier; a Lua runner plugin (`mlua` with a vendored Lua, in its own plugin crate) runs Lua scripts through the protocol.
 - Terminal: `ratatui` 0.30 and `crossterm`. GUI: textweaver's vendored Masonry with AccessKit 0.25.1 and `accesskit_winit` 0.34.1.
 - Serialization and config: `serde`, `serde_json`, `toml` 1.1. Errors: `thiserror` 2 in libraries, `anyhow` in binaries. CLI: `clap` 4.6. Logging: `tracing`.
-- Tests: `cargo-nextest`, `insta`, `proptest`, `cargo-fuzz` (archive readers, the protocol parser, the name sanitizer), `cargo-deny`, `cargo-about`.
+- Tests: `cargo-nextest`, `insta`, `proptest`, `cargo-fuzz` 0.13.2 on a nightly toolchain (seventeen targets: the name sanitizer, filters and patterns, the archive readers and writers, the highlighter, the components list, the protocol parser, plugin manifests, script headers and the SFTP codec; ten minutes each every night with AddressSanitizer in `.github/workflows/fuzz.yml`, checked to compile by day; `docs/dev/fuzzing.md`), `cargo-deny`, `cargo-about`.
 
 ## 7. Quick wins folded in
 
