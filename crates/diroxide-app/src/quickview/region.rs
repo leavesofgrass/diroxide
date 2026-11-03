@@ -327,6 +327,19 @@ impl QuickView {
         ))]
     }
 
+    /// Puts the focus on the row with this id, as [`QuickView::region`]
+    /// shows it: a document row's number ("12"), or a wrapped row's later
+    /// part ("12.1"); whether it was found. Nothing is said: it is a
+    /// frontend's click (lane A5), which its own focus follows. A table
+    /// cell's place is left, as a move by line leaves it.
+    pub fn region_focus_id(&mut self, id: &str) -> bool {
+        if !self.region.list.focus_id(id) {
+            return false;
+        }
+        self.region.cell = None;
+        true
+    }
+
     /// The next heading below the cursor, its level said first: "Heading
     /// 2: Installation, 3 of 12".
     pub fn next_heading(&mut self) -> Vec<Message> {

@@ -1,6 +1,8 @@
 //! What a frontend reaches beside keys and commands (lane A5): the job
-//! history's dialogs, and a program started without waiting for it.
-//! Every place is the fake provider's and every program a recorded one;
+//! history's dialogs and the open dialog's purpose, a program started
+//! without waiting for it, and a click's row focused by its place in a
+//! dialog or by its id in the preview. Every place is the fake
+//! provider's and every program a recorded one;
 //! nothing touches a disk, a trash or the network, and nothing starts.
 
 use std::ffi::OsString;
@@ -23,13 +25,14 @@ fn local(path: &str) -> Place {
     }
 }
 
-/// Two files in one folder of the fake provider, both panels on it, set
-/// up as given and with these keys.
+/// Three files in one folder of the fake provider, both panels on it,
+/// set up as given and with these keys.
 fn world_with(setup: Setup, keymap: Keymap) -> (FakeProvider, Session) {
     let fake = FakeProvider::new();
     fake.add_folder(&local("/a"));
     fake.add_file(&local("/a/f1.txt"), b"one");
     fake.add_file(&local("/a/f2.txt"), b"two");
+    fake.add_file(&local("/a/notes.md"), b"# One\n\ntwo\n\nthree\n");
     let mut registry = Registry::new();
     registry.set_local(Arc::new(fake.clone()));
     let session = Session::open_with_keymap(local("/a"), local("/a"), registry, setup, keymap);
@@ -202,4 +205,121 @@ fn the_terminal_still_hands_over_and_comes_back() {
             "Back in diroxide, a"
         ]
     );
+}
+
+/// The focused row's index of the top dialog's list, and whether a
+/// field's candidates have the focus.
+fn dialog_focus(s: &Session) -> (Option<usize>, bool) {
+    match s.dialog() {
+        Some(Dialog::Choose { list, .. }) => (list.focus_index(), true),
+        Some(Dialog::Question { choices, .. }) => (choices.focus_index(), true),
+        Some(Dialog::Edit {
+            candidates: Some(list),
+            in_list,
+            ..
+        }) => (list.focus_index(), *in_list),
+        other => panic!("no list: {other:?}"),
+    }
+}
+
+/// A click on a dialog's row focuses it by its place, without walking
+/// Home and Down: a choice list's row, and a field's candidate, which the
+/// focus then enters; a place past the end, or a dialog with no list,
+/// changes nothing.
+#[test]
+fn a_dialogs_row_is_focused_by_its_place() {
+    let (_, mut s) = world();
+    assert!(!s.app.focus_dialog_row(0), "no dialog is open");
+
+    // The menu bar, a choice list: Enter opens the menu the click chose.
+    s.command(ids::MENU);
+    let menus = rows(&s);
+    assert!(menus.len() > 3, "{menus:?}");
+    assert!(s.app.focus_dialog_row(2));
+    assert_eq!(dialog_focus(&s), (Some(2), true));
+    assert!(!s.app.focus_dialog_row(menus.len()));
+    assert_eq!(dialog_focus(&s), (Some(2), true));
+    assert!(s.app.focus_dialog_row(0));
+    assert_eq!(dialog_focus(&s), (Some(0), true));
+    assert!(s.app.focus_dialog_row(2));
+    s.key("enter");
+    assert_eq!(s.app.dialog_purpose(), Some("Menu"));
+    assert_eq!(s.dialog_title(), Some(format!("{} menu", menus[2])));
+    s.key("escape");
+    s.key("escape");
+    assert!(s.app.dialog().is_none());
+
+    // The palette, a field with its candidates open: the click enters them.
+    s.command(ids::PALETTE);
+    assert!(!dialog_focus(&s).1, "the field has the focus");
+    assert!(s.app.focus_dialog_row(3));
+    assert_eq!(dialog_focus(&s), (Some(3), true));
+    s.key("escape");
+    s.key("escape");
+    assert!(s.app.dialog().is_none());
+
+    // A confirmation has no list to focus.
+    assert!(s.app.focus_name(Side::Left, "f1.txt"));
+    s.key("f8");
+    assert!(matches!(s.dialog(), Some(Dialog::Confirm { .. })));
+    assert!(!s.app.focus_dialog_row(0));
+    s.key("escape");
+}
+
+/// The quick view's time until it is done, in real time: it reads on its
+/// own thread.
+fn settle_quick(s: &mut Session) -> Vec<String> {
+    let mut said = Vec::new();
+    for _ in 0..400 {
+        if s.app.quick_view_wants_tick().is_none() {
+            break;
+        }
+        let effects = s.app.quick_view_tick();
+        said.extend(s.run(effects));
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    said
+}
+
+/// A click on a row of the preview focuses it by its id, with nothing
+/// said; an id the region has not, or the quick view off, changes
+/// nothing.
+#[test]
+fn a_preview_row_is_focused_by_its_id() {
+    let mut quick = crate::support::settings();
+    quick.quick_view.wait_ms = 0;
+    let setup = Setup {
+        settings: quick,
+        ..Setup::default()
+    };
+    let (_, mut s) = world_with(setup, Keymap::defaults());
+    let registry = s.runtime.registry().clone();
+    s.app.set_quick_view_registry(registry);
+    assert!(!s.app.focus_preview_row("0"), "the quick view is off");
+
+    assert!(s.app.focus_name(Side::Left, "notes.md"));
+    let mut said = s.key("shift+f3");
+    said.extend(settle_quick(&mut s));
+    assert_eq!(said, ["Quick view on", "Preview: notes.md, 1 heading"]);
+    s.key("tab");
+    assert!(s.app.in_preview());
+    let region = s.app.quick_view().unwrap().region();
+    let ids: Vec<String> = region.rows().iter().map(|r| r.id.clone()).collect();
+    assert!(ids.len() >= 3, "{ids:?}");
+    assert_eq!(region.focus_index(), Some(0));
+
+    let before = s.said.len();
+    let last = ids.last().unwrap().clone();
+    assert!(s.app.focus_preview_row(&last));
+    let region = s.app.quick_view().unwrap().region();
+    assert_eq!(region.focused().map(|r| r.id.as_str()), Some(last.as_str()));
+    assert!(!s.app.focus_preview_row("99"));
+    let region = s.app.quick_view().unwrap().region();
+    assert_eq!(region.focused().map(|r| r.id.as_str()), Some(last.as_str()));
+    assert_eq!(s.said.len(), before, "nothing is said");
+    // The keys go on from the clicked row.
+    let said = s.key("up");
+    assert_eq!(said.len(), 1, "{said:?}");
+    let region = s.app.quick_view().unwrap().region();
+    assert_eq!(region.focus_index(), Some(ids.len() - 2));
 }

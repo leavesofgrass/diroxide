@@ -166,6 +166,20 @@ impl App {
         self.preview.focused && self.quick_view_on()
     }
 
+    /// Puts the preview region's focus on the row with this id, as
+    /// [`QuickView::region`] shows it ("12", or "12.1" for a wrapped
+    /// row's second part); whether the quick view is on and has it.
+    /// App-side hook for the GUI's click in the preview (lane A5). It
+    /// does not enter the region: the frontend enters it first, as Tab
+    /// does (the GUI's switch to that panel), and nothing is said.
+    pub fn focus_preview_row(&mut self, id: &str) -> bool {
+        self.preview
+            .view
+            .as_mut()
+            .filter(|view| view.is_on())
+            .is_some_and(|view| view.region_focus_id(id))
+    }
+
     /// The columns the preview region is drawn in, from the frontend:
     /// rows wrap there when the viewer's `wrap` setting is on.
     pub fn set_preview_width(&mut self, columns: usize) {
