@@ -18,7 +18,7 @@ A key in a higher layer wins. Choosing a preset sets its name in `config.toml` (
 
 Every key is one key with its modifiers. There are no key sequences and no leader keys, so a key never waits for a second one. Insert and Caps Lock are never bound, because they are the screen readers' keys.
 
-There are two columns of keys, because a terminal cannot send everything a graphical interface (GUI) can. The terminal column holds the keys a terminal can send. The GUI column, used when the GUI comes in a later alpha, also holds keys such as Ctrl+Enter. Most keys are the same in both, and the lists say "in both".
+There are two columns of keys, because a terminal cannot send everything a graphical interface (GUI) can. The terminal column holds the keys a terminal can send. The GUI column, used by the window (`diro --gui`), also holds keys such as Ctrl+Enter. Most keys are the same in both, and the lists say "in both".
 
 ## The Keys list
 
@@ -57,7 +57,7 @@ Enter on a row opens its actions: Change key (press the new key), Change the GUI
 
 Choose a row, press Enter, and choose Change key.
 
-1. Which column. In a terminal, only the terminal column can be changed by pressing a key. The GUI column is changed by typing the key's name, because a terminal cannot produce keys such as Ctrl+Enter that only the GUI sends. That is the action "Change the GUI key, type its name".
+1. Which column. In a terminal, only the terminal column can be changed by pressing a key. The GUI column is changed by typing the key's name, because a terminal cannot produce keys such as Ctrl+Enter that only the GUI sends. That is the action "Change the GUI key, type its name". In the window it is the other way round. Change key takes a real key press in the GUI column, including a chord a terminal never sends, such as Ctrl+Shift+K, and the terminal column is changed with the action "Change the terminal key, type its name". [The GUI](gui.md#settings-and-the-keys-list) has the window's side.
 2. Press the new key. diroxide says "Press the new key now. Escape cancels." The next key press is taken before the keymap sees it. A key release and a bare modifier are ignored. A pasted text is refused: "Pasted text is not a key. Press one key." The first key press ends the capture.
 3. diroxide says the key back, in words: "Got Control plus F9". On a terminal that sends some keys as others, it adds what it knows: "Got Tab. This terminal sends Ctrl+I as Tab too."
 4. If nothing arrives in 10 seconds, it says "No key heard. The terminal may keep it." and opens a field: "Type the key's name, such as ctrl+f5". The typed name is an equal way in. It is read with the same code as `keymap.toml`, so `ctrl+f9` and `alt+home` work, and to bind Escape itself you type its name. A name that is not a key says so: "Not a key name: hyper+q. Write it as keymap.toml does, such as ctrl+f5." Two keys in a row are refused: "Two keys in a row: ctrl+x ctrl+f. A key is one key with its modifiers."
@@ -180,6 +180,7 @@ The palette lists the command you used last first when the field is empty. After
 ## See also
 
 - [Every key](keyboard.md)
+- [The GUI](gui.md)
 - [Plugins](plugins.md)
 - [Terminals](terminals.md)
 - [Settings and where the files live](settings.md)

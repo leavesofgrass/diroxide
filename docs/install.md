@@ -62,6 +62,7 @@ The window brings in a graphics stack, and that has a cost in time and room. The
 - The build folder grew from about 1.1 GB to about 2.0 GB.
 - The lock file gained about 260 packages. The stack compiles no C on Windows, macOS or Linux, so the window adds no need for a C compiler beyond the ones named above. `cargo xtask native --check` keeps that inventory.
 - A Linux build needs no Fontconfig package. Fontconfig is opened when the window starts and is never linked.
+- Drawing on the processor adds a few packages more (softbuffer and what it needs). The figures above were measured before it was added. It compiles no C and links no library.
 
 A build that you only use in the terminal can leave all of this out, as the next section shows.
 
@@ -95,10 +96,12 @@ A smaller build still needs a C compiler, for carta. [Building, for contributors
 
 ## What the GUI needs
 
-The window needs a display and a graphics driver, and it brings its own fonts. When one is missing, the program says so in one sentence and opens the terminal.
+The window needs a display, and it brings its own fonts. A graphics card is welcome and is not needed. When a display is missing, or every way of drawing fails, the program says so in one sentence and opens the terminal.
 
 - A display. Windows and macOS always have one. On Linux the window needs a Wayland or X11 display, and `diro` looks for `WAYLAND_DISPLAY` or `DISPLAY`. With neither, `diro --gui` says "There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead."
-- A graphics driver. The window draws with it. `--graphics` names the interface to use: `vulkan`, `dx12` on Windows, `metal` on macOS or `gl`, and `auto` lets the driver choose. When the driver fails, the window does not open and the terminal opens instead, after a sentence that begins "Could not open the GUI: the window could not start its graphics". Drawing on the processor, for a machine with no graphics driver, is not built yet.
+- A graphics card, if you have one. The window draws with it when the adapter is a real one. `--graphics` names the interface to use: `vulkan`, `dx12` on Windows, `metal` on macOS or `gl`, and `auto` lets the program choose.
+- No graphics card is needed. With no graphics adapter, or only one that draws on the processor anyway, such as Windows' own software adapter or llvmpipe on Linux, the window draws on the processor itself and needs no graphics driver. `--graphics software` asks for it even where a card is there. The program opens the display system at run time and links none, so a build needs no extra package for it. The window says once, "Drawing on the processor: no graphics adapter was found.", and the accessibility tree is built the same for every way of drawing. It has been tried on Windows, and on Linux in a virtual X11 display. Wayland and macOS have not been tried. [The GUI](gui.md#how-the-window-draws) has the order of the ways.
+- When every way fails, the window does not open and the terminal opens instead, after a sentence that begins "Could not open the GUI: the window could not start its graphics". `diro --gui --log FILE` writes what each way did to FILE.
 - Fonts. Two Atkinson Hyperlegible families, Next and Mono, regular and bold, are inside the program, so nothing has to be installed. On Linux the window also opens Fontconfig, when it is there, to find the system's fonts. Without Fontconfig only the two Atkinson families draw, and a character they lack, such as a Chinese or Japanese name or an emoji, is drawn as a missing glyph. That changes only what is drawn. A screen reader still reads the full name.
 
 A screen reader reads the window through the system's own interface: UI Automation on Windows and AT-SPI on Linux. Both were read by tests and reports of the window's tree, and neither has been heard with a screen reader yet. The macOS interface has not been tried.

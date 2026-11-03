@@ -125,7 +125,7 @@ Pause on a job that waits its turn holds it in its place in line. You hear "Held
 
 - The queue passes over it. A job behind it can start in its place, and a held job never holds back the jobs behind it.
 - Its row says "Held 3 of 5: copy 12 items to build". The place in line is kept, and it is counted among the waiting: the jobs line still says "3 jobs, 2 waiting".
-- A lone held job's line is "Copying is held in line".
+- A lone held job's line names its kind of job: "Copying is held in line", "Moving to the trash is held in line".
 - You can still move it, set its speed limit, change what it does on errors, run it now or cancel it. Run now ends the hold.
 - Resume lets it go in the place it kept: "Back in line: copy 12 items to build". When a place is free it starts at once, and you hear its start line.
 
@@ -196,9 +196,9 @@ It works for copy, move, trash and delete. "Nothing to retry: no job failed." an
 
 A copy cut by a lost connection goes on where it stopped, but only when everything agrees. Resume never trusts the length alone.
 
-- It applies to a copy of 4 MiB or more, to or from a place that can resume. SFTP places can. A smaller file simply starts again.
+- It applies to a copy of 4 MiB or more whose destination can resume and whose source can be read from an offset. This computer's own disks can resume. A copy to an SFTP place cannot yet: the plugin's protocol has the calls for it, and the program does not connect them to the copy, so a copy to a server that was cut starts again. A smaller file simply starts again.
 - When the network is lost, the part file stays. A part file is the file written under its temporary name, `.diro-part-` and eight hex digits. diroxide writes down what it knows about each one in `partials.json` in the state folder: the target, the part file, the source, the source's size and time, and the bytes written.
-- Cancel removes the part file and its line. A pause, a lost connection or a crash keeps them.
+- Cancel removes the part file and its line. A pause, a lost connection, a crash or a quit keeps them.
 - To resume, the target and the source must be the same, the source's size and time must be what they were, the part file must be there and no longer than the source, and the head and tail check must pass. The check compares the first 64 KiB and the last 1 MiB of the part file with the same ranges of the source.
 - When it resumes you hear: "Resuming report.iso at 410 MB of 800 MB".
 - When it does not, you hear why, and the file starts over: "Not resumed: the source changed." (or "Not resumed: the part file is too long.", "Not resumed: the part file differs.", "Not resumed: the part file is gone.") and then "Starting again from the start."
@@ -243,7 +243,7 @@ Quit and stop them? No is the default. y or n
 
 With one job it says "1 job is not finished." A no goes back. A yes stops the jobs and quits. The setting `confirm.quit_with_jobs` turns this question off. Interrupted jobs are not counted: they are not running, and quitting keeps them.
 
-The jobs a yes stops are not lost. The queue is written down as it stood, and the next start lists them.
+The jobs a yes stops are not lost. The queue is written down as it stood, and the next start lists them. A running copy is stopped the way a lost connection stops it, so its part file stays, as [the next part](#the-queue-at-the-next-start) says. In the window the question is two buttons, No first, with the focus on No.
 
 ## The queue at the next start
 
@@ -258,7 +258,7 @@ At the next start:
 - The Jobs list shows them first, under "Interrupted, 2 jobs". Each row says "Interrupted:" and then the job: "Interrupted: copy 12 items to build".
 - Enter on one offers Retry and Forget.
 - Retry plans the job again from its request, as a new job. The plan and its question come as for any job, starting on No. A job that had started skips what is already at the destination, and the plan says "Retry: what is already there is skipped". The row leaves the list when you answer yes, and stays when you answer no.
-- A copy of 4 MiB or more that a crash or a lost connection cut goes on from its part file, when the checks in [Resume](#resume) agree. A quit stops its jobs the way Cancel does, and Cancel removes the part file, so after a quit the file that was cut starts again from the start.
+- A copy of 4 MiB or more that a crash, a lost connection or a quit cut goes on from its part file, when the checks in [Resume](#resume) agree. A quit stops a running copy the way a lost connection does, so its part file and its line in `partials.json` stay. Retry says "Resuming big.bin at 2.1 MB of 5.2 MB" and goes on from there. Cancel still removes the part file. Where a place cannot resume, such as an SFTP place today, the file that was cut starts again from the start.
 - Forget, or Delete on the row, takes it off the list: "Forgotten: copy 12 items to build".
 - An interrupted job stays on the list until you retry or forget it, across later restarts too. The sentence is said only at the start right after the stop.
 - A job saved without its request, such as an undo, offers Retry dimmed, with the reason: "It cannot be planned again: it was not saved."
