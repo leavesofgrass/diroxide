@@ -5,7 +5,10 @@
 //!   (docs/dev/architecture.md).
 //! - `regen [--check]`: writes every generated page (`docs/keyboard.md`,
 //!   `docs/settings-reference.md`, `docs/dev/plugin-protocol.md`, the
-//!   components list), or checks that each is current.
+//!   components list) and the icon files, or checks that each is current.
+//! - `icons [--check]`: draws the application icon from the approved mark
+//!   (the PNG sizes, the `.ico`, the `.icns`, the Windows `.res` and the
+//!   window's own icon), or checks that each file is current.
 //! - `components [--check]`: builds the optional components this
 //!   repository makes, writes them as a folder source under the target
 //!   folder, and writes the public list the binary embeds.
@@ -23,13 +26,14 @@
 //! - `demo PATH`: the owner's demo set for the alpha.2 check, in a new or
 //!   empty folder on drive D:.
 //!
-//! Later waves add `notices`, `icons` and `dist`.
+//! Later waves add `notices` and `dist`.
 
 mod bench;
 mod components;
 mod demo;
 mod deps;
 mod docs_check;
+mod icons;
 mod keyboard;
 mod logo;
 mod native;
@@ -43,7 +47,7 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] | keyboard [--check] | logo | bench [--quick] [--only ID] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH";
 
 fn main() -> ExitCode {
     match run() {
@@ -76,6 +80,7 @@ fn run() -> Result<bool> {
         ["components", rest @ ..] => components::run(&root, rest),
         ["keyboard"] => keyboard::write(&root),
         ["keyboard", "--check"] => keyboard::check(&root),
+        ["icons", rest @ ..] => icons::run(&root, rest),
         ["logo"] => logo::run(&root),
         ["bench", rest @ ..] => bench::run(&root, rest),
         ["docs", "--check"] | ["docs"] => docs_check::check(&root),

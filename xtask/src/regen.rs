@@ -6,15 +6,17 @@
 //! Today it writes `docs/keyboard.md`, the keymap presets' sheets
 //! (`docs/keyboard-NAME.md`), `docs/settings-reference.md`, the plugin
 //! protocol reference (`docs/dev/plugin-protocol.md`) and the components
-//! list the binary embeds (`crates/diroxide-components/components.toml`).
-//! `THIRD-PARTY-NOTICES.md` joins it when the notices task arrives.
+//! list the binary embeds (`crates/diroxide-components/components.toml`),
+//! and the icon files drawn from the mark (`cargo xtask icons`), compared
+//! byte for byte. `THIRD-PARTY-NOTICES.md` joins it when the notices task
+//! arrives.
 
 use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::{components, keyboard, plugin_doc, settings_doc};
+use crate::{components, icons, keyboard, plugin_doc, settings_doc};
 
 /// Each generated page: its path from the root, and its text.
 fn pages(root: &Path) -> Result<Vec<(String, String)>> {
@@ -36,7 +38,7 @@ pub fn write(root: &Path) -> Result<bool> {
         fs::write(&path, text).with_context(|| format!("{page} could not be written"))?;
         println!("regen: wrote {page}.");
     }
-    Ok(true)
+    icons::write(root)
 }
 
 /// Checks every page; fails when any is out of date.
@@ -48,8 +50,9 @@ pub fn check(root: &Path) -> Result<bool> {
             stale.push(page);
         }
     }
+    stale.extend(icons::stale(root)?);
     if stale.is_empty() {
-        println!("regen: Pass. Every generated page is current.");
+        println!("regen: Pass. Every generated page and icon file is current.");
         Ok(true)
     } else {
         println!(
