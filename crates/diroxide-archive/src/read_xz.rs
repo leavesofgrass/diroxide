@@ -300,7 +300,7 @@ fn streams(source: &Source, limits: &Limits) -> Result<Option<Vec<Stream>>, VfsE
     let mut end = source.len();
     let mut found = Vec::new();
     let mut records_seen = 0u64;
-    for _ in 0..STREAMS_MAX {
+    for walked in 0..=STREAMS_MAX {
         end = before_padding(source, end)?;
         if end == 0 {
             if found.is_empty() {
@@ -308,6 +308,9 @@ fn streams(source: &Source, limits: &Limits) -> Result<Option<Vec<Stream>>, VfsE
             }
             found.reverse();
             return Ok(Some(found));
+        }
+        if walked == STREAMS_MAX {
+            break;
         }
         let mut records = Vec::new();
         let ends = stream_ending_at(
@@ -357,13 +360,16 @@ fn streams(source: &Source, limits: &Limits) -> Result<Option<Vec<Stream>>, VfsE
 pub(crate) fn check_indexes(source: &Source, mem_limit_kb: u32) -> Result<(), VfsError> {
     let memory = u64::from(mem_limit_kb).saturating_mul(1024);
     let mut end = source.len();
-    for walked in 0..GUARD_STREAMS_MAX {
+    for walked in 0..=GUARD_STREAMS_MAX {
         end = before_padding(source, end)?;
         if end == 0 {
             if walked == 0 {
                 return Err(damaged("it holds no xz stream"));
             }
             return Ok(());
+        }
+        if walked == GUARD_STREAMS_MAX {
+            break;
         }
         let ends = stream_ending_at(
             source,
@@ -1180,11 +1186,25 @@ pub(crate) mod tests {
         let source = Source::from_bytes(many);
         assert_eq!(verify(&source, &Limits::default()), Ok(None));
         assert_eq!(check_indexes(&source, 1 << 20), Err(damaged(BAD_INDEX)));
-        // Past its own cap, the guard refuses in words.
+        // Exactly 1,000 streams are walked whole.
+        let mut thousand = Vec::new();
+        for _ in 0..STREAMS_MAX {
+            thousand.extend_from_slice(&empty);
+        }
+        assert_eq!(
+            verify(&Source::from_bytes(thousand), &Limits::default()),
+            Ok(Some(0))
+        );
+        // The guard takes exactly its cap, and past it refuses in words.
         let mut more = Vec::with_capacity(empty.len() * (GUARD_STREAMS_MAX + 1));
-        for _ in 0..=GUARD_STREAMS_MAX {
+        for _ in 0..GUARD_STREAMS_MAX {
             more.extend_from_slice(&empty);
         }
+        assert_eq!(
+            check_indexes(&Source::from_bytes(more.clone()), 1 << 20),
+            Ok(())
+        );
+        more.extend_from_slice(&empty);
         assert_eq!(
             check_indexes(&Source::from_bytes(more), 1 << 20)
                 .unwrap_err()
