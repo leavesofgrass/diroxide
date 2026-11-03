@@ -159,6 +159,12 @@ pub const NOT_BUILT_NOTICE: &str =
 pub const NO_DISPLAY_NOTICE: &str =
     "There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead.";
 
+/// Whether a desktop opens the GUI with no flag and no setting. False until
+/// the GUI alpha's last lane flips it (R27's commit 34): until then the
+/// window shows two lines, and the terminal stays what `diro` opens. The
+/// decision table below already knows the rest, so the flip is this line.
+pub const GUI_BY_DEFAULT: bool = false;
+
 /// Which frontend opens, in this order (the GUI alpha's contract step):
 ///
 /// 1. `--tui` opens the terminal, whatever else is asked.
@@ -200,7 +206,7 @@ pub fn choose_frontend(inputs: &FrontendInputs) -> FrontendChoice {
         && inputs.display
         && inputs.interactive
         && inputs.gui_built;
-    if automatic {
+    if automatic && GUI_BY_DEFAULT {
         FrontendChoice {
             frontend: Frontend::Gui,
             notice: None,
@@ -603,7 +609,12 @@ mod tests {
         use Frontend::{Gui, Terminal};
         let base = desktop();
         let rows: Vec<(&str, FrontendInputs, Frontend, Option<&str>)> = vec![
-            ("a desktop opens the GUI", base, Gui, None),
+            (
+                "a desktop opens the GUI once the GUI alpha flips the default",
+                base,
+                if GUI_BY_DEFAULT { Gui } else { Terminal },
+                None,
+            ),
             (
                 "--tui wins over --gui and the setting",
                 FrontendInputs {

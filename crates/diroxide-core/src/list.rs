@@ -69,6 +69,22 @@ impl ListRow {
         );
         parts.join(", ")
     }
+
+    /// The row's name for a frontend that carries its states itself: the
+    /// label and the details, with no "selected" or "unavailable" word, so
+    /// a list box's option says each state once through the platform (the
+    /// GUI; R27's C1). The terminal prints [`Self::spoken`], which says the
+    /// states in words.
+    pub fn name(&self) -> String {
+        let mut parts: Vec<&str> = vec![&self.label];
+        parts.extend(
+            self.details
+                .iter()
+                .map(String::as_str)
+                .filter(|d| !d.is_empty()),
+        );
+        parts.join(", ")
+    }
 }
 
 /// What replacing a list's rows did to the focus and the marks, so the app
@@ -600,5 +616,11 @@ mod tests {
         let mut disabled = ListRow::new("x", "Paste");
         disabled.enabled = false;
         assert_eq!(disabled.spoken(), "Paste, unavailable");
+        assert_eq!(disabled.name(), "Paste");
+        let mut row = ListRow::new("r", "report.pdf");
+        row.selected = true;
+        row.details = vec!["PDF".to_owned(), String::new(), "2.1 MB".to_owned()];
+        assert_eq!(row.spoken(), "report.pdf, selected, PDF, 2.1 MB");
+        assert_eq!(row.name(), "report.pdf, PDF, 2.1 MB");
     }
 }
