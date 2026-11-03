@@ -28,6 +28,8 @@ mod labels;
 mod palette;
 // The queue's settings, messages and questions (lane A2).
 mod queue;
+// The queue saved across restarts and its interrupted jobs (lane Q2).
+mod saved_queue;
 // A plugin's keys in keymap.toml and the Keys list (lane A2).
 mod plugin_keys;
 // Plugins and script commands (W4d).

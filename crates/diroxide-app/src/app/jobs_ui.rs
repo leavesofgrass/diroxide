@@ -14,6 +14,10 @@
 //!   5: copy 3 items to build", and Resume lets it go (lane Q2).
 //! - **Delete** cancels a waiting job without a question, and asks first
 //!   for a running one, starting on No.
+//! - **Interrupted jobs come first** (lane Q2): the saved queue's jobs
+//!   from the last session, "Interrupted: copy 12 items to build", each
+//!   with Retry (planned and asked again, as any job) and Forget; Delete
+//!   forgets one. Nothing starts on its own.
 //! - The list follows the jobs while it is open: a row keeps its focus by
 //!   the job's id from group to group.
 
@@ -74,6 +78,11 @@ pub(super) enum Wants {
         /// The job.
         job: JobId,
     },
+    /// An interrupted job's actions: Retry and Forget (lane Q2).
+    Interrupted {
+        /// Its number.
+        key: u64,
+    },
     /// The one question for a lost host: Keep waiting, Try again now,
     /// Cancel these jobs.
     Connection {
@@ -102,6 +111,17 @@ fn job_of(row: &str) -> Option<JobId> {
     row.strip_prefix("job:")
         .and_then(|n| n.parse().ok())
         .map(JobId::new)
+}
+
+/// The row id of an interrupted job, by its number (lane Q2).
+fn interrupted_id(key: u64) -> String {
+    format!("interrupted:{key}")
+}
+
+/// The interrupted job a row id names.
+fn interrupted_of(row: &str) -> Option<u64> {
+    row.strip_prefix("interrupted:")
+        .and_then(|n| n.parse().ok())
 }
 
 impl App {
@@ -187,27 +207,42 @@ impl App {
             return None;
         }
         let mut list_rows = Vec::new();
-        for group in [JobGroup::Running, JobGroup::Waiting, JobGroup::Finished] {
+        for group in [
+            JobGroup::Interrupted,
+            JobGroup::Running,
+            JobGroup::Waiting,
+            JobGroup::Finished,
+        ] {
             let in_group: Vec<_> = rows.iter().filter(|r| r.group == group).collect();
             if in_group.is_empty() {
                 continue;
             }
             let heading = match group {
+                JobGroup::Interrupted => "group:interrupted",
                 JobGroup::Running => "group:running",
                 JobGroup::Waiting => "group:waiting",
                 JobGroup::Finished => "group:finished",
             };
             list_rows.push(ListRow::new(heading, group.heading(in_group.len())));
-            list_rows.extend(
-                in_group
-                    .into_iter()
-                    .map(|row| ListRow::new(row_id(row.job), row.text.clone())),
-            );
+            list_rows.extend(in_group.into_iter().map(|row| {
+                // An interrupted row's number is its key, not a job id.
+                let id = if group == JobGroup::Interrupted {
+                    interrupted_id(row.job.get())
+                } else {
+                    row_id(row.job)
+                };
+                ListRow::new(id, row.text.clone())
+            }));
         }
         let mut list = ListModel::new("Jobs").with_rows(list_rows);
         let delete = self.keymap.key_text(&ids::TRASH);
+        let interrupted = !self.jobs.interrupted().is_empty();
         let help = if delete.is_empty() {
             "Up and Down choose, Enter opens a job's actions, Escape closes.".to_owned()
+        } else if interrupted {
+            format!(
+                "Up and Down choose, Enter opens a job's actions, {delete} cancels a job or forgets an interrupted one, Escape closes."
+            )
         } else {
             format!(
                 "Up and Down choose, Enter opens a job's actions, {delete} cancels a job, Escape closes."
@@ -228,15 +263,23 @@ impl App {
                 .rows()
                 .into_iter()
                 .find(|row| row.group == group)
-                .map(|row| row.job)
+                .map(|row| match group {
+                    JobGroup::Interrupted => interrupted_id(row.job.get()),
+                    _ => row_id(row.job),
+                })
         };
+        let front = self.jobs.front().map(row_id);
+        // The job in front, else the first interrupted job, which is
+        // listed first, else the newest that ran.
         let target = match focus {
-            Some(group) => first_of(group).or_else(|| self.jobs.front()),
-            None => self.jobs.front().or_else(|| first_of(JobGroup::Finished)),
+            Some(group) => first_of(group).or(front),
+            None => front
+                .or_else(|| first_of(JobGroup::Interrupted))
+                .or_else(|| first_of(JobGroup::Finished)),
         };
         match target {
-            Some(job) => {
-                list.focus_id(&row_id(job));
+            Some(id) => {
+                list.focus_id(&id);
             }
             None => {
                 list.move_focus(diroxide_core::Move::To(1));
@@ -342,6 +385,82 @@ impl App {
         )
     }
 
+    /// An interrupted job's actions (lane Q2): Retry, unavailable with
+    /// its reason when its request was not saved, and Forget.
+    fn interrupted_actions(&mut self, key: u64) -> Vec<Effect> {
+        let Some(job) = self.jobs.interrupted_job(key).cloned() else {
+            return vec![self.say(Message::info("That job is gone."))];
+        };
+        let mut retry = ListRow::new("retry", "Retry");
+        if job.request.is_none() {
+            retry.enabled = false;
+            retry
+                .details
+                .push("It cannot be planned again: it was not saved.".to_owned());
+        }
+        let rows = vec![retry, ListRow::new("forget", "Forget")];
+        let mut list = ListModel::new(job.row()).with_rows(rows);
+        list.set_help("Up and Down choose, Enter does it, Escape goes back to the jobs.");
+        self.open_dialog(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::JOBS_LIST),
+            },
+            Purpose::Jobs(Box::new(Wants::Interrupted { key })),
+        )
+    }
+
+    /// Retry on an interrupted job: a new job from its request, planned
+    /// and asked as any job is; one that had started skips what is
+    /// already there. The interrupted job leaves the list when the new
+    /// one is confirmed, and stays when it is not.
+    fn retry_interrupted(&mut self, key: u64) -> Vec<Effect> {
+        let Some(job) = self.jobs.interrupted_job(key).cloned() else {
+            return vec![self.say(Message::info("That job is gone."))];
+        };
+        let Some(mut request) = job.request.clone() else {
+            let line = format!(
+                "Retry is not offered for this {}: it was not saved.",
+                short_verb(job.kind)
+            );
+            return vec![self.say(Message::info(line))];
+        };
+        let new = self.next_job_id();
+        request.id = new;
+        let note = if job.started {
+            request.conflicts = ConflictPolicy::Skip;
+            Some("Retry: what is already there is skipped".to_owned())
+        } else {
+            None
+        };
+        let mut effects = self.close_all();
+        self.request(Request::Queue(QueueRequest::Retried { key, job: new }));
+        let side = self.active;
+        effects.extend(self.plan_job(side, request, note, Then::Report, true));
+        effects
+    }
+
+    /// Forget on an interrupted job: it leaves the list and the saved
+    /// queue, "Forgotten: copy 12 items to build".
+    fn forget_interrupted(&mut self, key: u64) -> Vec<Effect> {
+        let Some(job) = self.jobs.forget_interrupted(key) else {
+            return vec![self.say(Message::info("That job is gone."))];
+        };
+        self.request(Request::Queue(QueueRequest::Forget(key)));
+        let mut effects = vec![self.say(Message::info(format!("Forgotten: {}", job.name())))];
+        let list_on_top = matches!(
+            self.opens.last().map(|o| &o.purpose),
+            Some(Purpose::Jobs(w)) if matches!(**w, Wants::List)
+        );
+        if list_on_top && self.jobs_list_model().is_none() {
+            // Nothing is left to list: back to the panel.
+            effects.extend(self.close_top());
+        } else {
+            effects.extend(self.refresh_jobs_list());
+        }
+        effects
+    }
+
     /// Enter in one of the Jobs list's dialogs.
     pub(super) fn jobs_accept(
         &mut self,
@@ -354,6 +473,9 @@ impl App {
                 let Some(row) = row else {
                     return Vec::new();
                 };
+                if let Some(key) = interrupted_of(&row) {
+                    return self.interrupted_actions(key);
+                }
                 match job_of(&row) {
                     Some(job) => self.job_actions(job),
                     None => {
@@ -371,6 +493,15 @@ impl App {
                 };
                 self.job_action(job, &action)
             }
+            Wants::Interrupted { key } => match row.as_deref() {
+                Some("retry") => self.retry_interrupted(key),
+                Some("forget") => {
+                    let mut effects = self.close_top();
+                    effects.extend(self.forget_interrupted(key));
+                    effects
+                }
+                _ => Vec::new(),
+            },
             Wants::SpeedLimit { job } => self.speed_limit_typed(job, &text),
             Wants::ErrorPolicy { job } => {
                 let policy = match row.as_deref() {
@@ -679,6 +810,10 @@ impl App {
             Some((_, Dialog::Choose { list, .. })) => list.focused().map(|r| r.id.clone()),
             _ => None,
         };
+        // On an interrupted job the key forgets it (lane Q2).
+        if let Some(key) = row.as_deref().and_then(interrupted_of) {
+            return Some(self.forget_interrupted(key));
+        }
         let Some(job) = row.as_deref().and_then(job_of) else {
             return Some(vec![self.say(Message::status("Choose a job first."))]);
         };
