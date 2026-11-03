@@ -117,6 +117,26 @@ impl Rig {
         self.redraw();
     }
 
+    /// Settles until `done` holds, the clock a tenth of a second on each
+    /// round, for at most ten seconds of the real clock: for what a
+    /// worker or a watcher brings after the runtime looks idle (a folder
+    /// listed again after a rename). A state, never a time, so a loaded
+    /// machine only makes it slower.
+    pub fn settle_until(&mut self, mut done: impl FnMut(&Self) -> bool) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if done(self) {
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+            self.now += Duration::from_millis(100);
+            self.settle();
+        }
+    }
+
     /// Draws the tree again, handing any action the drawing caused to the
     /// driver (a panel's new page size) and drawing again after it.
     pub fn redraw(&mut self) {

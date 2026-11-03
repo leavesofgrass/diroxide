@@ -78,8 +78,11 @@ fn spike_s7_a_rename_field_states_its_characters_and_caret() {
         rig.said(),
         rig.f.app().dialog().map(|(_, d)| d.title())
     );
-    // The dialog is gone, and the focus is the panel's row again.
+    // The dialog is gone, and the focus is the panel's row again, once
+    // the folder is listed again (a worker's result, which can come after
+    // the runtime looks idle).
     assert!(!rig.walk().iter().any(|(role, _)| *role == Role::Dialog));
+    rig.settle_until(|rig| rig.focus_node().1.starts_with("report-2026.pdf"));
     let (role, row) = rig.focus_node();
     assert_eq!(role, Role::ListBoxOption);
     assert!(row.starts_with("report-2026.pdf"), "{row}");
