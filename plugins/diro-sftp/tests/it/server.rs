@@ -16,8 +16,9 @@
 //! folder and the port replaced by `DIR` and `PORT`.
 //!
 //! Every test is ignored natively, with its reason; `run-tests.sh` runs
-//! them in the container. Nothing reaches the network: every address is
-//! 127.0.0.1.
+//! them in the container. They are slow tests too: each runs only with
+//! `DIRO_SLOW=1`, which `run-tests.sh` sets unless it is told otherwise.
+//! Nothing reaches the network: every address is 127.0.0.1.
 
 #![cfg(unix)]
 
@@ -40,6 +41,18 @@ use sha2::{Digest, Sha256};
 use crate::fakes::FAKE_SSH;
 use crate::host::{TestHost, kind};
 use crate::plugin_exe;
+
+/// The slow tests' gate (`docs/dev/building.md`, "Slow tests"): a slow
+/// test runs only when `DIRO_SLOW` is `1`, as CI and
+/// `docker/sftp/run-tests.sh` set it. Otherwise it says so and passes at
+/// once.
+fn slow_test_skipped() -> bool {
+    if std::env::var_os("DIRO_SLOW").is_some_and(|v| v == "1") {
+        return false;
+    }
+    println!("skipped: slow, set DIRO_SLOW=1");
+    true
+}
 
 const MIB: usize = 1024 * 1024;
 const SSH: &str = "/usr/bin/ssh";
@@ -459,6 +472,9 @@ fn keep(server: Option<&Server>, folder: &str, name: &str, text: &str) {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_a_password_signs_in_and_the_keyring_fills_it_next_time() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case::new(Auth::Password));
     let sites = format!(
         "[[site]]\nid = \"t3st\"\nname = \"test\"\nhost = \"127.0.0.1\"\nport = {}\nuser = \"{}\"\nsecret = \"keyring\"\n",
@@ -501,6 +517,9 @@ fn server_a_password_signs_in_and_the_keyring_fills_it_next_time() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_a_key_signs_in_and_binary_files_round_trip() {
+    if slow_test_skipped() {
+        return;
+    }
     // SF3's Linux half: binary-clean SFTP over ssh's pipes, both ways.
     let server = Server::start(&Case::new(Auth::Key));
     let (host, _, _root) = host(&server, Vec::new());
@@ -522,6 +541,9 @@ fn server_a_key_signs_in_and_binary_files_round_trip() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_keyboard_interactive_is_the_servers_question() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case::new(Auth::Keyboard));
     let (host, _, _root) = host(&server, vec![json!({"text": password()})]);
     connect(&host, &server.place("/")).unwrap();
@@ -546,6 +568,9 @@ fn server_keyboard_interactive_is_the_servers_question() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_a_key_passphrase_is_asked_by_the_keys_name() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case::new(Auth::Passphrase));
     let (host, _, _root) = host(&server, vec![json!({"text": "test-passphrase-only"})]);
     connect(&host, &server.place("/")).unwrap();
@@ -556,6 +581,9 @@ fn server_a_key_passphrase_is_asked_by_the_keys_name() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_a_new_host_key_is_asked_and_ssh_writes_known_hosts() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case {
         known: false,
         ..Case::new(Auth::Key)
@@ -582,6 +610,9 @@ fn server_a_new_host_key_is_asked_and_ssh_writes_known_hosts() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_internal_sftp_serves_the_same() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case {
         subsystem: "Subsystem sftp internal-sftp".to_owned(),
         ..Case::new(Auth::Key)
@@ -598,6 +629,9 @@ fn server_internal_sftp_serves_the_same() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_a_noisy_shell_startup_file_is_said() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case {
         subsystem: "Subsystem sftp @DIR@/noisy-sftp-server".to_owned(),
         ..Case::new(Auth::Key)
@@ -614,6 +648,9 @@ fn server_a_noisy_shell_startup_file_is_said() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_a_read_only_server_refuses_writes_in_words() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case {
         subsystem: "Subsystem sftp internal-sftp -R".to_owned(),
         ..Case::new(Auth::Key)
@@ -639,6 +676,9 @@ fn server_a_read_only_server_refuses_writes_in_words() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_the_small_volume_reports_its_room_and_a_full_disk_is_said() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case::new(Auth::Key));
     let (host, _, _root) = host(&server, Vec::new());
     connect(&host, &server.place("/")).unwrap();
@@ -714,6 +754,9 @@ fn window_matches(partial: &[u8], source: &[u8]) -> bool {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_q1_resume_after_a_cut_link_and_a_killed_server() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case::new(Auth::Key));
     let data = pattern(32 * MIB, 11);
     let mut results = Vec::new();
@@ -827,6 +870,9 @@ fn server_q1_resume_after_a_cut_link_and_a_killed_server() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_q2_a_dead_link_is_noticed_within_a_minute() {
+    if slow_test_skipped() {
+        return;
+    }
     // A typed password: no automatic reconnect, so the loss is said.
     let server = Server::start(&Case::new(Auth::Password));
     for (mode, signal, limit) in [
@@ -910,6 +956,9 @@ fn prompts_recorded(record: &Path) -> Vec<String> {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_the_real_refusals_classify_as_the_table_says() {
+    if slow_test_skipped() {
+        return;
+    }
     let mut seen: Vec<(&str, Cause, Cause)> = Vec::new();
     let me = user();
 
@@ -1170,6 +1219,9 @@ fn server_the_real_refusals_classify_as_the_table_says() {
 #[test]
 #[ignore = "needs the container's OpenSSH server: docker/sftp/run-tests.sh"]
 fn server_nothing_listens_outside_loopback() {
+    if slow_test_skipped() {
+        return;
+    }
     let server = Server::start(&Case::new(Auth::Key));
     let config = read(&server.dir().join("sshd_config"));
     assert!(config.contains("ListenAddress 127.0.0.1"));

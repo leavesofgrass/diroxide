@@ -3,7 +3,20 @@
   "platforms": {
     "windows": {
       "platform": "windows",
-      "recorded_utc": "2026-10-16",
+      "recorded_utc": "2026-11-03",
+      "started_utc": "2026-11-03 17:38 UTC",
+      "machine": {
+        "processor": "AMD Ryzen 5 5600G with Radeon Graphics",
+        "cores": "6 cores, 12 threads",
+        "memory": "64 GB",
+        "system": "Windows 11 Home, build 26200",
+        "disk": "Samsung SSD 990 EVO 2TB, NVMe"
+      },
+      "versions": {
+        "diroxide": "0.1.0-alpha.2",
+        "commit": "160467c",
+        "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)"
+      },
       "quick": false,
       "optimized": true,
       "scenarios": [
@@ -11,11 +24,11 @@
           "id": "list",
           "label": "List 100,000 entries",
           "runs_ms": [
-            93.5,
-            94.9,
-            95.2
+            120.6,
+            117.9,
+            121.4
           ],
-          "median_ms": 94.9,
+          "median_ms": 120.6,
           "budget_ms": 800,
           "note": "warm, through the local provider"
         },
@@ -23,11 +36,11 @@
           "id": "stat",
           "label": "Stat 100,000 entries",
           "runs_ms": [
-            5078.0,
-            4788.9,
-            8328.2
+            6582.0,
+            6569.4,
+            6536.9
           ],
-          "median_ms": 5078.0,
+          "median_ms": 6569.4,
           "budget_ms": 800,
           "note": "each by its place, without a listing"
         },
@@ -35,49 +48,179 @@
           "id": "list-stat",
           "label": "List, then stat each of 100,000",
           "runs_ms": [
-            7255.0,
-            7871.6,
-            6862.2
+            6669.6,
+            6707.4,
+            6722.1
           ],
-          "median_ms": 7255.0,
+          "median_ms": 6707.4,
           "budget_ms": null,
           "note": "as a panel that fills its columns late"
         },
         {
           "id": "copy",
-          "label": "Copy 1.0 GB through the engine",
+          "label": "Copy 10.0 GB through the engine",
           "runs_ms": [
-            696.3,
-            781.3,
-            736.7
+            8857.3,
+            19852.2,
+            24549.9
           ],
-          "median_ms": 736.7,
+          "median_ms": 19852.2,
           "budget_ms": null,
-          "note": "1.4 GB a second"
+          "note": "504 MB a second"
         },
         {
           "id": "copy-system",
-          "label": "Copy 1.0 GB with the system call",
+          "label": "Copy 10.0 GB with the system call",
           "runs_ms": [
-            502.8,
-            401.9,
-            416.4
+            16964.1,
+            27669.5,
+            14418.9
           ],
-          "median_ms": 416.4,
+          "median_ms": 16964.1,
           "budget_ms": null,
-          "note": "2.4 GB a second"
+          "note": "589 MB a second"
         },
         {
           "id": "slow-place",
           "label": "Copy 40 files from a slow place",
           "runs_ms": [
-            1601.7,
-            1560.1,
-            1462.1
+            1421.4,
+            1411.9,
+            1400.1
           ],
-          "median_ms": 1560.1,
+          "median_ms": 1411.9,
           "budget_ms": null,
           "note": "stall said in 3 of 3 runs"
+        },
+        {
+          "id": "archive-zip",
+          "label": "List 100,000 entries in a zip",
+          "runs_ms": [
+            218.8,
+            216.3,
+            214.9
+          ],
+          "median_ms": 216.3,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "archive-tar",
+          "label": "List 100,000 entries in a tar",
+          "runs_ms": [
+            221.7,
+            216.3,
+            217.2
+          ],
+          "median_ms": 217.2,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "archive-7z",
+          "label": "List 100,000 entries in a 7z",
+          "runs_ms": [
+            172.8,
+            174.6,
+            171.2
+          ],
+          "median_ms": 172.8,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "unpack",
+          "label": "Unpack a zip of 200 MB",
+          "runs_ms": [
+            372.3,
+            363.3,
+            365.3
+          ],
+          "median_ms": 365.3,
+          "budget_ms": null,
+          "note": "547 MB a second, through the unpack runner"
+        },
+        {
+          "id": "viewer",
+          "label": "View the first screen of a 256 MB log",
+          "runs_ms": [
+            16.1,
+            8.2,
+            8.1
+          ],
+          "median_ms": 8.2,
+          "budget_ms": null,
+          "note": "24 rows, screen-reader mode"
+        },
+        {
+          "id": "search-name",
+          "label": "Search 100,000 files by name",
+          "runs_ms": [
+            228.5,
+            74.7,
+            76.8
+          ],
+          "median_ms": 76.8,
+          "budget_ms": 1500,
+          "note": "1,000 found, through the search engine"
+        },
+        {
+          "id": "search-content",
+          "label": "Search 995 MB of files by contents",
+          "runs_ms": [
+            1373.7,
+            1442.5,
+            1575.8
+          ],
+          "median_ms": 1442.5,
+          "budget_ms": 3750,
+          "note": "1,000 found, through the search engine"
+        }
+      ],
+      "gui": [
+        {
+          "id": "binary-size",
+          "label": "Binary size",
+          "value": 44.1,
+          "unit": "MB",
+          "runs": [
+            44.1
+          ],
+          "note": "the release build of diro, 44135424 bytes"
+        },
+        {
+          "id": "gui-start",
+          "label": "Start to the first frame",
+          "value": 1191.1,
+          "unit": "ms",
+          "runs": [
+            1712.5,
+            1191.1,
+            1149.9
+          ],
+          "note": "started with --gui --background, drawing with the graphics card"
+        },
+        {
+          "id": "gui-working-set",
+          "label": "Working set at the first frame",
+          "value": 188.0,
+          "unit": "MB",
+          "runs": [
+            214.2,
+            187.5,
+            188.0
+          ],
+          "note": "the peak, a second after the first frame"
+        },
+        {
+          "id": "cold-build",
+          "label": "Cold release build of diro",
+          "value": 306159.6,
+          "unit": "ms",
+          "runs": [
+            306159.6
+          ],
+          "note": "no compiler cache; the build is left in D:/diroxide/target/b-bench\\bench\\cold-build, to be removed with safe-remove.ps1"
         }
       ]
     }

@@ -258,6 +258,9 @@ fn the_provider_lists_the_root_and_a_deep_folder() {
     use diroxide_core::Place;
     use diroxide_vfs::{OpContext, Registry};
 
+    if crate::slow_test_skipped() {
+        return;
+    }
     let count = entry_count();
     let (_dir, paths) = spike_archives(count);
     for path in paths.iter().filter(|p| {

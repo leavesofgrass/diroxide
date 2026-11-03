@@ -38,11 +38,14 @@ mod docs_check;
 mod icons;
 mod keyboard;
 mod logo;
+mod machine;
 mod native;
 mod plugin_doc;
 mod regen;
 mod sample;
 mod settings_doc;
+#[cfg(test)]
+mod slow;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

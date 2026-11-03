@@ -173,9 +173,13 @@ mod path_b {
 }
 
 /// How long carta takes on a 5 MB Org file, printed for the record: the
-/// quick view's two-second deadline must cut a longer read off.
+/// quick view's two-second deadline must cut a longer read off. Slow in
+/// the container (up to minutes), so it runs with `DIRO_SLOW=1`.
 #[test]
 fn five_megabytes_of_org_for_the_record() {
+    if crate::slow_test_skipped() {
+        return;
+    }
     let mut text = String::new();
     while text.len() < 5_000_000 {
         text.push_str(&String::from_utf8_lossy(&sample("notes-1.org")));

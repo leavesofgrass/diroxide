@@ -31,3 +31,24 @@ test-group = 'heavy'
 [[profile.default.overrides]]
 filter = 'test(conformance)'
 test-group = 'conformance'
+
+# The slow tests (docs/dev/building.md, "Slow tests"): the tests that took
+# ten seconds or more in the full run, natively or in the container, as
+# timed on Tuesday, November 3, 2026. Each runs only when DIRO_SLOW is 1,
+# which CI's jobs and scripts/dev-check.sh set. A quick run leaves it
+# unset: each of these then passes at once and writes "skipped: slow, set
+# DIRO_SLOW=1", and this override shows that line as the test ends. A new
+# slow test calls its crate's slow_test_skipped() first and is named here;
+# xtask's slow::tests check both ways. The SFTP plugin's server tests are
+# gated the same way in their own workspace.
+[[profile.default.overrides]]
+filter = '''
+test(=demo::tests::the_demo_set_holds_every_file_part_six_names)
+| test(=bench::tests::a_quick_run_of_every_scenario_works_and_cleans_up)
+| test(=spike_listing::the_provider_lists_the_root_and_a_deep_folder)
+| test(=script::examples::the_python_examples_pass_their_own_tests)
+| test(=script::examples::total_size_reports_progress_on_a_long_list)
+| test(=script::skeleton::tests::the_python_skeletons_pass_their_own_tests_and_the_conformance_suite)
+| test(=carta_paths::five_megabytes_of_org_for_the_record)
+'''
+success-output = 'immediate'

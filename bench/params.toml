@@ -29,10 +29,13 @@ search_name_other = 600
 search_content_windows = 3750
 search_content_other = 1500
 
-# The full run.
+# The full run. The copy is the plan's 10 GB (plan section 4, principle
+# 8), from the alpha 3 baseline on; it was 1 GB before, and the ratchet
+# compares only baselines of the same sizes. It needs about 20 GB free
+# under the target folder while it runs.
 [full]
 list_entries = 100000
-copy_bytes = 1000000000
+copy_bytes = 10000000000
 # The slow-place scenario (R23): a copy from a fake provider whose every
 # call waits and one call stalls, long enough for the stall to be said.
 # The stalled call is counted from the start of the run, after the plan.

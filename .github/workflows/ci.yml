@@ -14,6 +14,9 @@ env:
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: never
   RUST_BACKTRACE: "1"
+  # Every job runs the slow tests (docs/dev/building.md, "Slow tests").
+  # The container step below passes it in with --env.
+  DIRO_SLOW: "1"
 
 jobs:
   fmt:
@@ -71,6 +74,7 @@ jobs:
           docker build --file docker/Dockerfile --tag diroxide-dev .
           docker run --rm --user root --volume "$PWD:/work" --workdir /work \
             --env CARGO_TARGET_DIR=/target --env CARGO_TERM_COLOR=never \
+            --env DIRO_SLOW \
             --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory \
             --env GIT_CONFIG_VALUE_0=/work \
             diroxide-dev bash docker/sftp/run-tests.sh

@@ -50,7 +50,54 @@ cargo xtask deps --check
 cargo xtask keyboard --check
 ```
 
-`scripts/dev-check.sh` and `scripts/dev-check.ps1` run all of them in order and stop at the first failure.
+`scripts/dev-check.sh` and `scripts/dev-check.ps1` run all of them in order and stop at the first failure. They run the slow tests too (see the next section).
+
+## Slow tests
+
+A few tests take ten seconds or more in the full run, natively or in the container. They run only when `DIRO_SLOW` is `1`. CI's jobs, `scripts/dev-check.sh`, `scripts/dev-check.ps1` and `docker/sftp/run-tests.sh` set it, so CI and the full check run every test. A builder's quick run leaves it unset and skips only these: on the owner's machine that halves the workspace's test run, from 78 seconds to 40.
+
+A skipped slow test passes at once, and nextest shows its one line as the test ends:
+
+```text
+skipped: slow, set DIRO_SLOW=1
+```
+
+nextest counts such a test as passed, not as skipped, since a Rust test cannot skip itself as it runs; the line is what says it. To count them in a run's output, search it for "skipped: slow".
+
+To run the slow tests in a quick run:
+
+```bash
+DIRO_SLOW=1 cargo nextest run --workspace --all-features
+```
+
+To run the full check without them:
+
+```bash
+DIRO_SLOW=0 scripts/dev-check.sh
+```
+
+The slow tests, with their times in two full runs on the owner's Windows machine on Tuesday, November 3, 2026, and in the container on Friday, October 23, 2026:
+
+- xtask's demo set test, which builds `diro` and writes the whole demo set: 35 and 103 seconds; 28 to 96 seconds in the container.
+- xtask's quick run of every bench scenario: 10 and 29 seconds.
+- The archive crate's listing spike, the provider listing the root and a deep folder: 17 and 19 seconds; 26 seconds in the container.
+- The plugin crate's Python examples passing their own tests: 16 and 17 seconds.
+- The plugin crate's total-size script reporting progress on a long list: 13 and 14 seconds.
+- The plugin crate's Python skeletons passing their own tests and the conformance suite: 11 and 12 seconds.
+- The preview crate's five-megabyte Org read for the record: 3 seconds natively, 30 seconds to 4 minutes in the container.
+- The SFTP plugin's 13 server tests against the container's OpenSSH, which `docker/sftp/run-tests.sh` runs.
+
+Two tests came close and run always: the GUI's check that every dialog purpose opens with a name and a focus (10.3 and 9.5 seconds) and the job engine's ten thousand parts (9.6 seconds in both). The preview crate's other five-megabyte test, the Org file cut off after two seconds, is bounded by that deadline and runs always.
+
+A new slow test starts with its crate's gate, and is named in the slow override of `.config/nextest.toml` so its line shows:
+
+```rust
+if crate::slow_test_skipped() {
+    return;
+}
+```
+
+xtask's `slow` tests fail when a gated test is not named in the override, when a name there calls no gate, or when a crate's copy of the gate reads the variable another way or says another line.
 
 cargo-nextest is pre-approved; install it into the D: cargo home when it is missing:
 
@@ -138,7 +185,7 @@ The GUI workflow (`.github/workflows/gui.yml`) packs a real AppImage and runs th
 
 `cargo run --release -p xtask -- bench --gui` records, beside the bench's scenarios and never gated: the size of the `diro` it built, the time from the start of `diro --gui --background` to the window's first frame (the `--log` line "graphics: drawing with"), and the peak working set a second after it; `--cold-build` adds a cold release build of `diro` into `target/bench/cold-build`, a folder that must not exist yet and is left for `.claude/tools/safe-remove.ps1`. Each start is one window, off screen and never activated.
 
-The first numbers, on the owner's Windows 11 machine with a graphics card (an NVIDIA GeForce RTX 3060), on Tuesday, November 3, 2026, from `bench --only gui --cold-build`; the bench lane records the baseline on a quiet machine:
+The baseline, saved on a quiet machine later the same morning with the bench's scenarios, gave the same figures within 2 percent: 5 minutes 6 seconds, 44.1 MB, 1.19 seconds and 188.0 MB ("The alpha 3 baseline" in [the bench](bench.md)). The first numbers, on the owner's Windows 11 machine with a graphics card (an NVIDIA GeForce RTX 3060), on Tuesday, November 3, 2026, from `bench --only gui --cold-build`:
 
 - The cold release build of `diro`: 5 minutes 6 seconds. Earlier the same morning, with two other lanes building beside it, a cold debug build (`cargo build -p diro`, an empty target folder, no compiler cache) took 7 minutes 40 seconds and a cold release build 7 minutes 52 seconds; the `dist` build after the release one took 12 minutes 54 seconds.
 - The binary: 60.8 MB in the debug profile, 44.1 MB in the release profile, and 39.5 MB in the `dist` profile, which the release files use.
@@ -152,5 +199,6 @@ The first clean build of the workspace, its time and its target folder's size ar
 ## See also
 
 - [Docker](docker.md)
+- [The bench](bench.md)
 - [Architecture](architecture.md)
 - [ADR-0001: Workspace and dependencies](../adr/0001-workspace-and-dependencies.md)
