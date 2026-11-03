@@ -4,4 +4,26 @@
 
 mod contract;
 #[cfg(feature = "gui")]
+mod dialogs;
+#[cfg(feature = "gui")]
+mod goldens;
+#[cfg(feature = "gui")]
+mod gui_keys;
+#[cfg(feature = "gui")]
+mod keybar_mouse;
+#[cfg(feature = "gui")]
+mod layouts;
+#[cfg(feature = "gui")]
+mod live_region;
+#[cfg(feature = "gui")]
+mod loop_keys;
+#[cfg(feature = "gui")]
+mod menus;
+#[cfg(feature = "gui")]
+mod panel_list;
+#[cfg(feature = "gui")]
+mod rig;
+#[cfg(feature = "gui")]
+mod ten_minutes;
+#[cfg(feature = "gui")]
 mod window_tree;

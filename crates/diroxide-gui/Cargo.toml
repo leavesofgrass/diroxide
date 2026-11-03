@@ -44,11 +44,24 @@ fontique = { workspace = true, optional = true, features = ["fontconfig-dlopen"]
 # The console a window program was started from (src/console.rs, the one
 # module of this crate that may use `unsafe`).
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_System_Console", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+windows-sys = { workspace = true, features = ["Win32_System_Console", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 accesskit_consumer.workspace = true
 masonry_testing.workspace = true
+serde.workspace = true
+tempfile.workspace = true
+# The reachability test reads crates/diroxide-app/keys/gui-unsafe.toml.
+toml.workspace = true
+
+# The harness reaches Parley, and so fontique with its system fonts,
+# whether or not the `gui` feature is on: the tests build without it too
+# (gui.yml's second run). Fontconfig is opened at run time there as
+# well, never linked, so the tests build on a runner with no Fontconfig
+# headers and no pkg-config (textweaver's way: its root manifest and
+# crates/textweaver-xilem/Cargo.toml).
+[target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
+fontique = { workspace = true, features = ["fontconfig-dlopen"] }
 
 [lints]
 workspace = true

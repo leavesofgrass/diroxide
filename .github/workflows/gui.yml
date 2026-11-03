@@ -4,9 +4,12 @@
 # card, and the one program's start on each runner. On Windows the
 # terminal and the subcommands keep their pipes and the GUI opens off
 # screen, never in front, or says in words why it cannot; on Linux, with
-# no display, the GUI says so and the terminal opens. ci.yml compiles the
-# GUI with every other check (--all-features); this workflow runs it.
-# Plain logs, no color, so they read well in a screen reader.
+# no display, the GUI says so and the terminal opens. The reports (the GUI
+# alpha's foundation lane): what UI Automation gives a screen reader on
+# Windows and what AT-SPI gives Orca on Linux, each in the run's summary
+# and as an artifact. ci.yml compiles the GUI with every other check
+# (--all-features); this workflow runs it. Plain logs, no color, so they
+# read well in a screen reader.
 name: GUI
 
 on:
@@ -158,3 +161,66 @@ jobs:
           grep -q '^There is no display for the GUI' gui-out.txt
           grep -q 'left panel' gui-out.txt
           echo "Pass: no display is said, and the terminal opens."
+
+  # What a screen reader gets on Windows, through UI Automation (R27's
+  # commit 15): tools/a11y/uia-report.ps1 opens the window off screen and
+  # never activated, writes every element's type, name and patterns, the
+  # panels' options with their positions and set size, the menu bar (shown
+  # for this run), the live-region events, the process's top-level windows
+  # and whether the window took the foreground, then closes it. The runner
+  # has no graphics card, so this reports without failing the run until
+  # software drawing lands (R27's commit 31).
+  report-windows:
+    name: UI Automation report on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p diro
+      - name: The UI Automation report
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools/a11y/uia-report.ps1 -Out uia-diroxide.md -Settings 'auto_hide_menu = false'
+          Get-Content -Raw uia-diroxide.md | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uia-report
+          path: uia-diroxide.md
+          if-no-files-found: warn
+
+  # What Orca gets on Linux, through AT-SPI: tools/a11y/atspi-check.sh
+  # under Xvfb with a private D-Bus session and the AT-SPI bus, on Mesa's
+  # software Vulkan, with the packages of the GUI image stage
+  # (docker/Dockerfile, target gui). Report-only until software drawing
+  # lands, since Vello's compute shaders are slow on lavapipe.
+  report-linux:
+    name: AT-SPI report on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: The display, the AT-SPI bus and Mesa's software Vulkan
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            xvfb xauth dbus dbus-x11 at-spi2-core python3-pyatspi python3-gi gir1.2-atspi-2.0 \
+            mesa-vulkan-drivers libvulkan1 libgl1-mesa-dri libegl1 \
+            libxkbcommon-x11-0 libxcursor1 libxrandr2 libxi6 libx11-xcb1
+      - run: cargo build -p diro
+      - name: The AT-SPI report
+        continue-on-error: true
+        run: |
+          bash tools/a11y/atspi-check.sh | tee atspi-diroxide.md
+          cat atspi-diroxide.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atspi-report
+          path: atspi-diroxide.md
+          if-no-files-found: warn

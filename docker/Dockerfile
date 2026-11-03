@@ -15,7 +15,7 @@
 #   MSYS_NO_PATHCONV=1 docker compose build dev
 # See docs/dev/docker.md.
 
-FROM rust:1.96-slim-trixie
+FROM rust:1.96-slim-trixie AS dev
 
 ARG NEXTEST_VERSION=0.9.148
 
@@ -62,3 +62,53 @@ ENV CARGO_HOME=/home/builder/.cargo \
     CARGO_TERM_COLOR=never \
     CARGO_TARGET_DIR=/target
 WORKDIR /work
+
+# The GUI's accessibility checks on Linux (the GUI alpha's foundation
+# lane, G1; the owner's answer 107, Monday, November 2, 2026: these tools
+# in a separate image stage). The dev image above stays as it is; this
+# stage adds what the AT-SPI check (tools/a11y/atspi-check.sh) needs: a
+# virtual display (Xvfb), a D-Bus session and the AT-SPI bus, Mesa's
+# software Vulkan (lavapipe) and GL for the renderer, Python's AT-SPI
+# binding, the X11 libraries winit opens at run time, and
+# accessibility-cli (DioxusLabs, MIT or Apache-2.0; not on crates.io)
+# built from a pinned commit with its own lock file, as textweaver builds
+# it (its ADR-0039). The -dev packages are accessibility-cli's build's.
+#
+#   MSYS_NO_PATHCONV=1 docker compose build gui
+FROM dev AS gui
+
+ARG A11Y_CLI_REV=f64c036915095fbb9187b6fdf0f039879618a159
+
+USER root
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends \
+      xvfb \
+      xauth \
+      dbus \
+      dbus-x11 \
+      at-spi2-core \
+      python3-pyatspi \
+      python3-gi \
+      gir1.2-atspi-2.0 \
+      mesa-vulkan-drivers \
+      libvulkan1 \
+      libgl1-mesa-dri \
+      libegl1 \
+      libxkbcommon-x11-0 \
+      libxcursor1 \
+      libxrandr2 \
+      libxi6 \
+      libx11-xcb1 \
+      libdbus-1-dev \
+      libatspi2.0-dev \
+      libx11-xcb-dev \
+ && rm -rf /var/lib/apt/lists/*
+# Built with a cargo home and a target folder of its own inside the
+# image, both gone after, so the builder's cache stays the builder's and
+# the build output is not left in the image; the binary lands in
+# /usr/local/bin.
+RUN CARGO_HOME=/tmp/a11y-cli-cargo CARGO_TARGET_DIR=/tmp/a11y-cli-target cargo install --locked \
+      --git https://github.com/DioxusLabs/accessibility-cli \
+      --rev "${A11Y_CLI_REV}" accessibility-cli --root /usr/local \
+ && rm -rf /tmp/a11y-cli-cargo /tmp/a11y-cli-target
+USER builder

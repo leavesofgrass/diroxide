@@ -32,7 +32,7 @@ use std::path::Path;
 use diroxide_app::keymap::Platform;
 use diroxide_app::{App, AppOptions, Runtime};
 use diroxide_config::{Frontend as FrontendSetting, Graphics, Paths};
-use diroxide_core::{Message, Place, PlaceKind};
+use diroxide_core::{KeyColumn, Message, Place, PlaceKind};
 use diroxide_filetype::TypeRegistry;
 use diroxide_gui::{GraphicsApi, GuiOptions};
 use diroxide_tui::{Files, Tui, TuiOptions};
@@ -359,11 +359,15 @@ pub fn run_gui(
     // Before the app and its runtime exist, so no other thread runs yet.
     diroxide_gui::prepare(&gui);
     let released = diroxide_gui::console::release_for_window();
-    let (app, runtime) = match build(options, paths, here) {
+    // The window reads the GUI column of the keymap.
+    let registry = std::sync::Arc::new(diroxide_vfs::Registry::with_local());
+    let (app, runtime) = match build_for(options, paths, here, registry, KeyColumn::Gui) {
         Ok(built) => built,
         Err(error) => {
-            // The reason must reach a console (a shortcut that names a
-            // folder that is gone).
+            // The reason must reach the person: a message box when the
+            // console was let go (a shortcut that names a folder that is
+            // gone), and a console for the error line.
+            diroxide_gui::console::tell_start_error(released, &error.to_string());
             diroxide_gui::console::regain_for_terminal(released);
             return Err(error);
         }
@@ -371,9 +375,13 @@ pub fn run_gui(
     match diroxide_gui::run(app, runtime, gui) {
         Ok(app) => finish(&app, options, out),
         Err(error) => {
+            let sentence = gui_failed_sentence(&error);
+            // Started from a shortcut, the console is gone: a message box
+            // says why before the terminal opens on a new one.
+            diroxide_gui::console::tell_start_error(released, &sentence);
             diroxide_gui::console::regain_for_terminal(released);
             let write_failed = |e: std::io::Error| CliError::Failed(e.to_string());
-            writeln!(out, "{}", gui_failed_sentence(&error)).map_err(write_failed)?;
+            writeln!(out, "{sentence}").map_err(write_failed)?;
             open_terminal(options, paths, here, out)
         }
     }
@@ -464,13 +472,33 @@ pub fn build_on(
     here: &Place,
     registry: std::sync::Arc<diroxide_vfs::Registry>,
 ) -> Result<(App, Runtime), CliError> {
+    build_for(options, paths, here, registry, KeyColumn::Terminal)
+}
+
+/// The app as [`build_on`] makes it, with the keys of one keymap column:
+/// the terminal's, or the GUI's for the window (the GUI alpha's
+/// foundation lane), whose keys a terminal cannot deliver (Ctrl+Tab,
+/// F11, Shift with Enter).
+pub fn build_for(
+    options: &OpenOptions,
+    paths: Option<&Paths>,
+    here: &Place,
+    registry: std::sync::Arc<diroxide_vfs::Registry>,
+    column: KeyColumn,
+) -> Result<(App, Runtime), CliError> {
     let resolve = |text: &str| {
         Place::resolve(text, here)
             .map_err(|e| CliError::Failed(Message::from_error("open", text, &e).text))
     };
     let platform = Platform::current();
     let config = paths.map(diroxide_config::load).unwrap_or_default();
-    let keymap = diroxide_app::startup::terminal_keymap(&config, platform);
+    let keymap = match column {
+        KeyColumn::Terminal => diroxide_app::startup::terminal_keymap(&config, platform),
+        KeyColumn::Gui => {
+            let preset = diroxide_app::keymap::presets::chosen(&config.settings.preset);
+            diroxide_app::keymap::presets::keymaps(&config.keymap, preset, platform).1
+        }
+    };
     let startup = paths
         .map(|paths| diroxide_app::startup::load(paths, &config, platform))
         .unwrap_or_default();

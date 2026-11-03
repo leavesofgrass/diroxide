@@ -21,13 +21,40 @@
 //! says the GUI was left out of this build. [`panel_grid`] stays as the
 //! data both a list box and a grid are built from.
 //!
+//! The foundation lane (G1) put the app in the window:
+//!
+//! - `keys`: the window's key events as the keymap's keys (the GUI
+//!   column), with AltGr, the keypad, repeats and macOS's Option.
+//! - `frontend`: the loop one step at a time over any host of widgets
+//!   (the real window, or the tests' harness): keys to the app, effects
+//!   to the runtime, the app's timers, and a refresh that edits only what
+//!   changed and keeps the keyboard focus where the app has it.
+//! - [`model`]: what the window shows, as plain data: each panel's list
+//!   box with its window of rows, the three lines, the open dialog, the
+//!   key bar, and one announcement for each step's lines.
+//! - `widgets`: the panels' list boxes, the live region, the modal host
+//!   with its app-driven text field and lists, the key bar and the sort
+//!   buttons, the root that takes every key.
+//! - [`menus`]: the app's menu model as a native Windows menu bar, hidden
+//!   until a menu key shows it; elsewhere the app's list menus.
+//!
 //! On Windows `diro` stays a console program, so a shell waits for it and
 //! the terminal frontend keeps its console; [`console`] lets go of a
 //! console that only the window's start opened (a double-click in
 //! Explorer), and gives one back if the window cannot start.
 
 pub mod console;
+#[cfg(feature = "gui")]
+pub mod fonts;
+#[cfg(feature = "gui")]
+pub mod frontend;
+#[cfg(feature = "gui")]
+pub mod keys;
+pub mod menus;
+pub mod model;
 mod platform;
+#[cfg(feature = "gui")]
+pub mod widgets;
 #[cfg(feature = "gui")]
 pub mod window;
 
@@ -237,10 +264,14 @@ pub fn panel_grid(panel: &Panel) -> GridModel {
 /// - diroxide"). A screen reader says it when the window takes the focus.
 pub fn window_title(app: &App, program: &str) -> String {
     let panel = app.active_panel();
-    let place = panel.loading_place().unwrap_or(panel.place());
-    let leaf = diroxide_app::panel::place_leaf(place);
-    let leaf = diroxide_core::names::display_name(&leaf).into_owned();
-    format!("{leaf} - {program}")
+    // A plugin list over the place names the window, as in the terminal
+    // (lane L).
+    let shown = match panel.plugin_list() {
+        Some(list) => list.list().title().to_owned(),
+        None => diroxide_app::panel::place_leaf(panel.loading_place().unwrap_or(panel.place())),
+    };
+    let shown = diroxide_core::names::display_name(&shown).into_owned();
+    format!("{shown} - {program}")
 }
 
 /// Runs the GUI with the app and runtime `diro` built, until the window

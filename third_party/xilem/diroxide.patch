@@ -1,8 +1,7 @@
 diff --git a/masonry_testing/Cargo.toml b/masonry_testing/Cargo.toml
-index 618be75..8d6910f 100644
 --- a/masonry_testing/Cargo.toml
 +++ b/masonry_testing/Cargo.toml
-@@ -22,7 +22,6 @@ accesskit_consumer.workspace = true
+@@ -22,7 +22,6 @@
  image = { workspace = true, features = ["png"] }
  imaging_vello_cpu = { workspace = true }
  masonry_core.workspace = true
@@ -11,10 +10,9 @@ index 618be75..8d6910f 100644
  
  [dev-dependencies]
 diff --git a/masonry_testing/src/harness.rs b/masonry_testing/src/harness.rs
-index 81412c6..5f9b458 100644
 --- a/masonry_testing/src/harness.rs
 +++ b/masonry_testing/src/harness.rs
-@@ -30,7 +30,6 @@ use image::{DynamicImage, ImageFormat, ImageReader, Rgba, RgbaImage};
+@@ -30,7 +30,6 @@
  use imaging_vello_cpu::VelloCpuRenderer;
  use masonry_core::imaging::record::{Scene, replay_transformed};
  use masonry_core::imaging::{ImageRenderer as _, Painter};
@@ -22,7 +20,7 @@ index 81412c6..5f9b458 100644
  use tracing::debug;
  
  use masonry_core::accesskit::{
-@@ -202,7 +201,8 @@ pub struct TestHarnessParams {
+@@ -202,7 +201,8 @@
      ///
      /// You can use [`TestHarnessParams::KIBIBYTE`] to help set this.
      /// Keeping screenshot files small avoids clones of this repository taking too long.
@@ -32,7 +30,22 @@ index 81412c6..5f9b458 100644
      pub max_screenshot_size: u32,
  }
  
-@@ -1125,13 +1125,9 @@ impl<W: Widget> TestHarness<W> {
+@@ -1074,6 +1074,14 @@
+         self.title.clone()
+     }
+ 
++    /// Names the window's accessibility node, as a real window's driver
++    /// does with [`RenderRoot::set_window_label`] (diroxide.patch: the
++    /// harness's tests can then read the window's name).
++    pub fn set_window_label(&mut self, label: impl Into<String>) {
++        self.render_root.set_window_label(label);
++        self.process_signals();
++    }
++
+     // --- MARK: SNAPSHOT
+ 
+     /// Renders the current widget tree to a pixmap, and writes it to a temporary PNG file.
+@@ -1125,13 +1133,9 @@
              let mut buffer = Cursor::new(Vec::new());
              image.write_to(&mut buffer, ImageFormat::Png).unwrap();
  
@@ -50,7 +63,6 @@ index 81412c6..5f9b458 100644
              std::fs::write(path, data).unwrap();
              if let Some(max_size) = max_size
 diff --git a/masonry_testing/src/lib.rs b/masonry_testing/src/lib.rs
-index b390228..151a86f 100644
 --- a/masonry_testing/src/lib.rs
 +++ b/masonry_testing/src/lib.rs
 @@ -35,7 +35,7 @@

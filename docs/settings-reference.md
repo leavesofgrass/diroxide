@@ -367,7 +367,6 @@ Hide the menu bar. In the GUI on Windows, keeps the menu bar hidden until the Me
 
 - Holds: true or false.
 - Default: `true`.
-- Comes with a later alpha.
 
 ### focus_mode
 
@@ -408,7 +407,6 @@ GUI menus. Native shows the GUI's menus in the system's menu bar on Windows and 
 - Default: `"native"`.
 - `native`: the system's menu bar.
 - `list`: a list in the window.
-- Comes with a later alpha.
 
 ## Viewer and quick view
 

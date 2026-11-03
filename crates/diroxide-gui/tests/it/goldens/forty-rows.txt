@@ -1,0 +1,75 @@
+Window "synthetic - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        GenericContainer ""
+          Label "synthetic, left panel, in <dir>"
+          GenericContainer ""
+            Toolbar "Sort the left panel"
+              Button "Sort by name"
+              Button "Sort by size"
+              Button "Sort by date"
+            ListBox "Left panel, synthetic"
+              ListBoxOption "file-000001.txt, text, 1 byte" 1 of 40
+              ListBoxOption "file-000002.txt, text, 2 bytes" 2 of 40
+              ListBoxOption "file-000003.txt, text, 3 bytes" 3 of 40
+              ListBoxOption "file-000004.txt, text, 4 bytes" selected 4 of 40
+              ListBoxOption "file-000005.txt, text, 5 bytes" 5 of 40 FOCUS
+              ListBoxOption "file-000006.txt, text, 6 bytes" 6 of 40
+              ListBoxOption "file-000007.txt, text, 7 bytes" 7 of 40
+              ListBoxOption "file-000008.txt, text, 8 bytes" 8 of 40
+              ListBoxOption "file-000009.txt, text, 9 bytes" 9 of 40
+              ListBoxOption "file-000010.txt, text, 10 bytes" 10 of 40
+              ListBoxOption "file-000011.txt, text, 11 bytes" 11 of 40
+              ListBoxOption "file-000012.txt, text, 12 bytes" 12 of 40
+              ListBoxOption "file-000013.txt, text, 13 bytes" 13 of 40
+              ListBoxOption "file-000014.txt, text, 14 bytes" 14 of 40
+              ListBoxOption "file-000015.txt, text, 15 bytes" 15 of 40
+              ListBoxOption "file-000016.txt, text, 16 bytes" 16 of 40
+              ListBoxOption "file-000017.txt, text, 17 bytes" 17 of 40
+              ListBoxOption "file-000018.txt, text, 18 bytes" 18 of 40
+              ListBoxOption "file-000019.txt, text, 19 bytes" 19 of 40
+              ListBoxOption "file-000020.txt, text, 20 bytes" 20 of 40
+              ListBoxOption "file-000021.txt, text, 21 bytes" 21 of 40
+              ListBoxOption "file-000022.txt, text, 22 bytes" 22 of 40
+              ListBoxOption "file-000023.txt, text, 23 bytes" 23 of 40
+              ListBoxOption "file-000024.txt, text, 24 bytes" 24 of 40
+              ListBoxOption "file-000025.txt, text, 25 bytes" 25 of 40
+              ListBoxOption "file-000026.txt, text, 26 bytes" 26 of 40
+              ListBoxOption "file-000027.txt, text, 27 bytes" 27 of 40
+              ListBoxOption "file-000028.txt, text, 28 bytes" 28 of 40
+              ListBoxOption "file-000029.txt, text, 29 bytes" 29 of 40
+              ListBoxOption "file-000030.txt, text, 30 bytes" 30 of 40
+              ListBoxOption "file-000031.txt, text, 31 bytes" 31 of 40
+              ListBoxOption "file-000032.txt, text, 32 bytes" 32 of 40
+              ListBoxOption "file-000033.txt, text, 33 bytes" 33 of 40
+              ListBoxOption "file-000034.txt, text, 34 bytes" 34 of 40
+              ListBoxOption "file-000035.txt, text, 35 bytes" 35 of 40
+              ListBoxOption "file-000036.txt, text, 36 bytes" 36 of 40
+              ListBoxOption "file-000037.txt, text, 37 bytes" 37 of 40
+              ListBoxOption "file-000038.txt, text, 38 bytes" 38 of 40
+              ListBoxOption "file-000039.txt, text, 39 bytes" 39 of 40
+              ListBoxOption "file-000040.txt, text, 40 bytes" 40 of 40
+            Toolbar "Sort the right panel"
+              Button "Sort by name"
+              Button "Sort by size"
+              Button "Sort by date"
+            ListBox "Right panel, <dir>"
+              Label "Empty folder"
+          Status ""
+            GenericContainer ""
+              Label "Selected file-000004.txt. 1 selected."
+              Label "No jobs"
+          Toolbar "Key bar"
+            Button "Rename"
+            Button "View"
+            Button "Edit"
+            Button "Copy"
+            Button "Move"
+            Button "Folder"
+            Button "Trash"
+            Button "Menu"
+            Button "Quit"
+      GenericContainer ""
+        Label "<dir>, no items, in <tmp>" live=polite
+        Label "Selected file-000004.txt. 1 selected." live=polite

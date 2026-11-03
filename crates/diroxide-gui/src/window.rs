@@ -1,75 +1,53 @@
 //! The window (the `gui` feature): one Masonry window on winit, driven by
-//! the app's loop.
+//! the app's loop through [`Frontend`].
 //!
-//! - [`root_widget`] builds what the window shows, and [`lines`] what each
-//!   of its texts says; the in-process harness tests build the same tree
-//!   with no display and no graphics card.
 //! - [`run`] builds the event loop, sets the runtime's waker to post a
-//!   winit user event, carries out the app's start, opens the window titled
-//!   with the active place ([`crate::window_title`]), and runs until the
-//!   app quits. Closing the window runs the app's quit rule, which saves
-//!   the session.
+//!   winit user event, carries out the app's start (its announcements
+//!   held for the live region), opens the window titled with the active
+//!   place, and runs until the app quits. Closing the window runs the
+//!   app's quit rule: when jobs still run, the app asks first and the
+//!   window stays.
+//! - A ticker thread posts one event when the app's next timer is due
+//!   ([`Frontend::next_deadline`]): the filter's pause, the quick view's
+//!   wait, the viewer's slices, the key test's end.
+//! - The fonts are compiled in and registered when the window starts.
 //! - A window that cannot start is a [`GuiError`], never a panic: no
 //!   display is the event loop's error, and the window runner's graphics
 //!   failure, a panic inside it that textweaver's patch names
 //!   ([`masonry_winit::app::GRAPHICS_FAILURE`]), is caught and said.
 //!
-//! The GUI alpha's foundation lane (G1) adds the panels' list boxes, keys,
-//! the live region and the rest; this is the frame they go in. Patterns
-//! adapted from textweaver's `crates/textweaver-xilem/src/gui.rs` and
-//! `src/safety.rs` (the owner's own project).
+//! Patterns adapted from textweaver's `crates/textweaver-xilem/src/gui.rs`
+//! and `src/safety.rs` (the owner's own project).
 
 use std::cell::RefCell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::thread::JoinHandle;
+use std::time::Instant;
 
 use diroxide_app::commands::ids;
 use diroxide_app::{App, Runtime};
-use diroxide_core::{Command, Effect};
-use masonry::core::{ErasedAction, NewWidget, WidgetId, WidgetTag};
+use diroxide_core::Command;
+use masonry::core::{ErasedAction, WidgetId};
 use masonry::dpi::{LogicalSize, PhysicalPosition};
-use masonry::widgets::{Flex, Label};
 use masonry_winit::app::{
-    AppDriver, DriverCtx, EventLoop, EventLoopProxy, GRAPHICS_FAILURE, MasonryUserEvent, NewWindow,
-    WindowId,
+    AppDriver, DriverCtx, EventLoop, EventLoopProxy, GRAPHICS_FAILURE, MasonryState,
+    MasonryUserEvent, NewWindow, WindowId,
 };
 use masonry_winit::winit::window::Window as WinitWindow;
 
-use crate::{GuiError, GuiOptions, window_title};
+use crate::frontend::Frontend;
+use crate::{GuiError, GuiOptions};
 
-/// The title line's text: the active place first ("Documents, left panel,
-/// in D:\work"), the whole line, never cut.
-pub const TITLE_LINE: WidgetTag<Label> = WidgetTag::named("diroxide-title-line");
-
-/// The status line's text: the last message, or the active folder and its
-/// counts.
-pub const STATUS_LINE: WidgetTag<Label> = WidgetTag::named("diroxide-status-line");
+pub use crate::frontend::{JOBS_LINE, STATUS_LINE, TITLE_LINE};
 
 /// The window's first size, in logical pixels.
 pub const FIRST_SIZE: (f64, f64) = (960.0, 640.0);
 
 /// Where a `--background` window opens: far off every screen.
 pub const OFF_SCREEN: (i32, i32) = (-30_000, -30_000);
-
-/// The texts of the window as the app stands: each tag and what it says.
-pub fn lines(app: &App) -> [(WidgetTag<Label>, String); 2] {
-    [
-        (TITLE_LINE, app.title_line()),
-        (STATUS_LINE, app.status_line()),
-    ]
-}
-
-/// What the window shows: the title line above the status line, in a
-/// column. G1 puts the panels between them.
-pub fn root_widget(app: &App) -> NewWidget<Flex> {
-    let [(title_tag, title), (status_tag, status)] = lines(app);
-    let column = Flex::column()
-        .with_fixed(NewWidget::new(Label::new(title)).with_tag(title_tag))
-        .with_fixed(NewWidget::new(Label::new(status)).with_tag(status_tag));
-    NewWidget::new(column)
-}
 
 /// The window's attributes: its title, its first size, and for
 /// `--background` off screen, never activated and (on Windows) with no
@@ -95,10 +73,9 @@ pub fn attributes(title: &str, background: bool) -> masonry_winit::winit::window
 #[derive(Debug)]
 struct Wake;
 
-/// The app's command that quits by the quit rule.
-fn quit_command() -> Command {
-    Command::new(ids::QUIT)
-}
+/// The message the event loop gets when the app's next timer is due.
+#[derive(Debug)]
+struct Tick;
 
 /// The runtime's waker: posts one [`Wake`] to the event loop until the
 /// loop has handled it, so a busy worker does not flood the queue.
@@ -117,84 +94,251 @@ fn waker(
     })
 }
 
-/// The driver: the app, its runtime, and what the window last showed.
+/// The ticker's shared state: the next deadline, and whether to stop.
+#[derive(Debug, Default)]
+struct TickerState {
+    deadline: Option<Instant>,
+    stop: bool,
+}
+
+/// A thread that posts one [`Tick`] when the deadline it was given comes.
+struct Ticker {
+    shared: Arc<(Mutex<TickerState>, Condvar)>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Ticker {
+    fn start(proxy: EventLoopProxy, window: WindowId) -> Self {
+        let shared = Arc::new((Mutex::new(TickerState::default()), Condvar::new()));
+        let theirs = Arc::clone(&shared);
+        let thread = std::thread::Builder::new()
+            .name("diroxide-gui-ticker".to_owned())
+            .spawn(move || {
+                let (lock, wakeup) = &*theirs;
+                let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
+                loop {
+                    if state.stop {
+                        return;
+                    }
+                    match state.deadline {
+                        None => {
+                            state = wakeup.wait(state).unwrap_or_else(PoisonError::into_inner);
+                        }
+                        Some(at) => {
+                            let now = Instant::now();
+                            if now >= at {
+                                state.deadline = None;
+                                let _ = proxy.send_event(MasonryUserEvent::AsyncAction(
+                                    window,
+                                    Box::new(Tick),
+                                ));
+                            } else {
+                                state = wakeup
+                                    .wait_timeout(state, at - now)
+                                    .unwrap_or_else(PoisonError::into_inner)
+                                    .0;
+                            }
+                        }
+                    }
+                }
+            })
+            .ok();
+        Self { shared, thread }
+    }
+
+    /// Sets the next deadline (or none).
+    fn set(&self, deadline: Option<Instant>) {
+        let (lock, wakeup) = &*self.shared;
+        let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.deadline != deadline {
+            state.deadline = deadline;
+            wakeup.notify_one();
+        }
+    }
+}
+
+impl Drop for Ticker {
+    fn drop(&mut self) {
+        {
+            let (lock, wakeup) = &*self.shared;
+            let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
+            state.stop = true;
+            wakeup.notify_one();
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// The message the event loop gets from the native menu bar.
+#[cfg(windows)]
+#[derive(Debug)]
+struct MenuMessage(crate::platform::menu::MenuEvent);
+
+/// The window's native menu bar (Windows): built from the app's menu
+/// model, built again when the model's tree changes, shown always or
+/// only while a key has it open (`auto_hide_menu`).
+#[cfg(windows)]
+#[derive(Default)]
+struct NativeMenus {
+    hwnd: Option<isize>,
+    bar: Option<crate::platform::menu::Bar>,
+    fingerprint: u64,
+    watching: bool,
+}
+
+#[cfg(windows)]
+impl NativeMenus {
+    /// The window's handle, from winit.
+    fn hwnd_of(window: &WinitWindow) -> Option<isize> {
+        use masonry_winit::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        match window.window_handle().ok()?.as_raw() {
+            RawWindowHandle::Win32(handle) => Some(handle.hwnd.get()),
+            _ => None,
+        }
+    }
+
+    /// Brings the bar in line with the app after a step, then carries out
+    /// what the menu keys asked.
+    fn sync(
+        &mut self,
+        window: &WinitWindow,
+        frontend: &mut Frontend,
+        proxy: &EventLoopProxy,
+        window_id: WindowId,
+    ) {
+        if !crate::menus::native(frontend.app()) {
+            self.bar = None;
+            frontend.set_menu_bar(false);
+            let _ = frontend.take_menu_requests();
+            return;
+        }
+        if self.hwnd.is_none() {
+            self.hwnd = Self::hwnd_of(window);
+        }
+        let Some(hwnd) = self.hwnd else {
+            return;
+        };
+        if !self.watching {
+            let proxy = Mutex::new(proxy.clone());
+            self.watching = crate::platform::menu::watch(
+                hwnd,
+                Box::new(move |event| {
+                    let proxy = proxy.lock().unwrap_or_else(PoisonError::into_inner);
+                    let _ = proxy.send_event(MasonryUserEvent::AsyncAction(
+                        window_id,
+                        Box::new(MenuMessage(event)),
+                    ));
+                }),
+            );
+        }
+        let tree = crate::menus::tree(frontend.app());
+        let fingerprint = crate::menus::fingerprint(&tree);
+        if self.bar.is_none() || fingerprint != self.fingerprint {
+            let was_shown = self
+                .bar
+                .as_ref()
+                .is_some_and(crate::platform::menu::Bar::shown);
+            self.bar = crate::platform::menu::Bar::build(&tree);
+            self.fingerprint = fingerprint;
+            if was_shown && let Some(bar) = self.bar.as_mut() {
+                let _ = bar.attach(hwnd);
+            }
+        }
+        let auto_hide = frontend.app().settings().auto_hide_menu;
+        if let Some(bar) = self.bar.as_mut()
+            && !auto_hide
+            && !bar.shown()
+        {
+            let _ = bar.attach(hwnd);
+        }
+        frontend.set_menu_bar(self.bar.is_some());
+        for request in frontend.take_menu_requests() {
+            if let Some(bar) = self.bar.as_mut()
+                && !bar.shown()
+            {
+                let _ = bar.attach(hwnd);
+            }
+            let letter = match request {
+                crate::frontend::MenuEnter::Bar => None,
+                crate::frontend::MenuEnter::Menu(c) => Some(c),
+            };
+            crate::platform::menu::enter(hwnd, letter);
+        }
+    }
+
+    /// A message from the bar: a chosen item's command, or the menu
+    /// closed (a bar a key showed hides again, saying nothing).
+    fn message(
+        &mut self,
+        event: crate::platform::menu::MenuEvent,
+        frontend: &Frontend,
+    ) -> Option<String> {
+        use crate::platform::menu::MenuEvent;
+        match event {
+            MenuEvent::Chosen(id) => self
+                .bar
+                .as_ref()
+                .and_then(|bar| bar.command(id))
+                .map(str::to_owned),
+            MenuEvent::Closed => {
+                if frontend.app().settings().auto_hide_menu
+                    && let Some(bar) = self.bar.as_mut()
+                {
+                    bar.detach();
+                }
+                None
+            }
+        }
+    }
+}
+
+/// The driver: the frontend, and what the window last showed.
 struct Gui {
-    /// The app, until the driver is dropped and gives it to `slot`.
-    app: Option<App>,
-    runtime: Runtime,
+    /// The frontend, until the driver is dropped and gives its app to
+    /// `slot`.
+    frontend: Option<Frontend>,
     window: WindowId,
-    program: String,
     title: String,
-    shown: Vec<String>,
     pending: Arc<AtomicBool>,
     /// The runtime's waker, kept to wake the loop once the window exists.
     wake: diroxide_app::runtime::Waker,
+    ticker: Ticker,
     slot: Rc<RefCell<Option<App>>>,
+    /// The event loop, for the native menu's messages.
+    #[cfg(windows)]
+    proxy: EventLoopProxy,
+    #[cfg(windows)]
+    menus: NativeMenus,
 }
 
 impl Gui {
-    /// Carries out screen effects: a redraw refreshes the texts, quit
-    /// closes the window. Announcements reach the live region in G1; the
-    /// status line shows the last message until then.
-    fn apply(&mut self, ctx: &mut DriverCtx<'_>, effects: Vec<Effect>) {
-        let mut quit = false;
-        for effect in effects {
-            if effect == Effect::Quit {
-                quit = true;
-            }
-        }
-        self.refresh(ctx);
-        if quit {
-            ctx.exit();
-        }
-    }
-
-    /// Takes the workers' results, hands them to the app, carries out what
-    /// the app asks, until nothing is waiting.
-    fn pump(&mut self, ctx: &mut DriverCtx<'_>) {
-        let Some(app) = self.app.as_mut() else {
+    /// One step of the frontend on the window's widgets, then the title,
+    /// the next timer and the quit.
+    fn step(
+        &mut self,
+        ctx: &mut DriverCtx<'_>,
+        step: impl FnOnce(&mut Frontend, &mut masonry::app::RenderRoot),
+    ) {
+        let Some(frontend) = self.frontend.as_mut() else {
             return;
         };
-        let mut screen = Vec::new();
-        loop {
-            let events = self.runtime.poll();
-            if events.is_empty() {
-                break;
-            }
-            for event in events {
-                let effects = app.handle(event);
-                screen.extend(self.runtime.carry_out(app, effects));
-            }
-        }
-        self.apply(ctx, screen);
-    }
-
-    /// Puts the app's texts and title on the window where they changed.
-    fn refresh(&mut self, ctx: &mut DriverCtx<'_>) {
-        let Some(app) = self.app.as_ref() else {
-            return;
-        };
-        let texts = lines(app);
-        let root = ctx.render_root(self.window);
-        for (index, (tag, text)) in texts.into_iter().enumerate() {
-            if self.shown.get(index) != Some(&text) {
-                root.edit_widget_with_tag(tag, |mut label| {
-                    Label::set_text(&mut label, text.clone())
-                });
-                if let Some(slot) = self.shown.get_mut(index) {
-                    *slot = text;
-                } else {
-                    self.shown.push(text);
-                }
-            }
-        }
-        let title = window_title(app, &self.program);
+        step(frontend, ctx.render_root(self.window));
+        let title = frontend.window_title();
         if title != self.title {
+            // The window's node is named by the frontend's refresh.
             ctx.window(self.window).handle().set_title(&title);
-            // AT-SPI and macOS read the title from the window's node.
-            ctx.render_root(self.window)
-                .set_window_label(title.as_str());
             self.title = title;
+        }
+        #[cfg(windows)]
+        {
+            let window = ctx.window(self.window).handle();
+            self.menus.sync(window, frontend, &self.proxy, self.window);
+        }
+        self.ticker.set(frontend.next_deadline());
+        if frontend.wants_quit() {
+            ctx.exit();
         }
     }
 }
@@ -203,17 +347,24 @@ impl AppDriver for Gui {
     fn on_action(
         &mut self,
         _window: WindowId,
-        _ctx: &mut DriverCtx<'_>,
+        ctx: &mut DriverCtx<'_>,
         _widget: WidgetId,
-        _action: ErasedAction,
+        action: ErasedAction,
     ) {
-        // The frame has no controls yet; G1's panels send their actions.
+        self.step(ctx, |frontend, root| {
+            frontend.action(root, action, Instant::now());
+        });
     }
 
-    fn on_start(&mut self, _state: &mut masonry_winit::app::MasonryState) {
+    fn on_start(&mut self, state: &mut MasonryState) {
+        for root in state.roots() {
+            for blob in crate::fonts::blobs() {
+                let _ = root.register_fonts(blob);
+            }
+        }
         // The window exists now. A wake posted before it did was dropped
         // as meant for an unknown window, so post one again: the first
-        // pump also names the window's accessibility node.
+        // step names the window's node and shows the held messages.
         self.pending.store(false, Ordering::Release);
         (self.wake)();
     }
@@ -226,28 +377,39 @@ impl AppDriver for Gui {
     ) {
         if action.is::<Wake>() {
             self.pending.store(false, Ordering::Release);
-            self.pump(ctx);
+            self.step(ctx, |frontend, root| frontend.wake(root, Instant::now()));
+        } else if action.is::<Tick>() {
+            self.step(ctx, |frontend, root| frontend.tick(root, Instant::now()));
+        } else {
+            #[cfg(windows)]
+            if let Ok(message) = action.downcast::<MenuMessage>() {
+                let command = match self.frontend.as_ref() {
+                    Some(frontend) => self.menus.message(message.0, frontend),
+                    None => None,
+                };
+                if let Some(command) = command {
+                    self.step(ctx, |frontend, root| {
+                        frontend.menu_command(root, &command, Instant::now());
+                    });
+                }
+            }
         }
     }
 
     fn on_close_requested(&mut self, _window: WindowId, ctx: &mut DriverCtx<'_>) {
-        // The app's quit rule: the session and the history are saved. The
-        // frame cannot start a job, so no question stands in the way; G2's
-        // dialogs ask when one runs.
-        if let Some(app) = self.app.as_mut() {
-            let effects = app.dispatch(&quit_command());
-            let screen = self.runtime.carry_out(app, effects);
-            self.apply(ctx, screen);
-        }
-        ctx.exit();
+        // The app's quit rule: the session and the history are saved, and
+        // a running job is asked about first (the window stays then).
+        self.step(ctx, |frontend, root| {
+            frontend.command(root, Command::new(ids::QUIT), Instant::now());
+        });
     }
 }
 
 impl Drop for Gui {
     fn drop(&mut self) {
         // The app goes back to `run`'s caller however the loop ended.
-        if let Some(app) = self.app.take() {
-            *self.slot.borrow_mut() = Some(app);
+        if let Some(frontend) = self.frontend.take() {
+            *self.slot.borrow_mut() = Some(frontend.into_app());
         }
     }
 }
@@ -334,37 +496,35 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     let proxy = event_loop.create_proxy();
     let window_id = WindowId::next();
     let pending = Arc::new(AtomicBool::new(false));
-    let wake = waker(proxy, window_id, Arc::clone(&pending));
+    let wake = waker(proxy.clone(), window_id, Arc::clone(&pending));
     runtime.set_waker(Arc::clone(&wake));
-    let mut app = app;
-    let start = app.start();
-    let _ = runtime.carry_out(&mut app, start);
-    // The window shows the app as it stands after its start, and the
-    // driver remembers exactly that.
-    let title = window_title(&app, &options.title);
+    let mut frontend = Frontend::new(app, runtime, options.title.clone());
+    frontend.start();
+    let title = frontend.window_title();
     let window = NewWindow::new_with_id(
         window_id,
         attributes(&title, options.background),
-        root_widget(&app).erased(),
+        frontend.root_widget().erased(),
     );
-    let shown = lines(&app).into_iter().map(|(_, text)| text).collect();
     let slot = Rc::new(RefCell::new(None));
     let gui = Gui {
-        app: Some(app),
-        runtime,
+        frontend: Some(frontend),
         window: window_id,
-        program: options.title.clone(),
-        // Empty, so the first refresh names the window's accessibility
-        // node too (AT-SPI and macOS read the title from it).
+        // Empty, so the first step names the window's accessibility node
+        // too (AT-SPI and macOS read the title from it).
         title: String::new(),
-        shown,
         pending: Arc::clone(&pending),
         wake,
+        ticker: Ticker::start(proxy.clone(), window_id),
         slot: Rc::clone(&slot),
+        #[cfg(windows)]
+        proxy,
+        #[cfg(windows)]
+        menus: NativeMenus::default(),
     };
     // The console a double-click opened was let go by diro before the app
-    // was built (`crate::console::release_for_window`), and is given back by it
-    // if this returns an error.
+    // was built (`crate::console::release_for_window`), and is given back
+    // by it if this returns an error.
     let restore_hook = hush_graphics_failure();
     let ran = catch_unwind(AssertUnwindSafe(|| {
         masonry_winit::app::run_with(
@@ -400,6 +560,48 @@ mod tests {
             error_for_panic("index out of bounds: the len is 0\nbacktrace"),
             GuiError::Stopped("index out of bounds: the len is 0".to_owned())
         );
+    }
+
+    /// The model's tree as a Win32 menu, read back as UI Automation reads
+    /// it: the bar's menus with their access keys, each item's label and,
+    /// after a tab, its key (AcceleratorKey); no window needed.
+    #[cfg(windows)]
+    #[test]
+    fn the_native_menu_holds_the_models_items_and_keys() {
+        use diroxide_app::AppOptions;
+        use diroxide_core::Place;
+        let here = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let app = App::new(AppOptions::new(here.clone(), here));
+        let tree = crate::menus::tree(&app);
+        let bar = crate::platform::menu::Bar::build(&tree).unwrap();
+        let texts = bar.texts();
+        let bar_menus: Vec<&str> = texts
+            .iter()
+            .filter(|(depth, _)| *depth == 0)
+            .map(|(_, text)| text.as_str())
+            .collect();
+        let expected: Vec<&str> = tree.iter().map(|t| t.label.as_str()).collect();
+        assert_eq!(bar_menus, expected);
+        assert_eq!(bar_menus[0], "&File");
+        // Every item of the File menu, in order, with its key after a tab.
+        let file: Vec<String> = tree[0]
+            .entries
+            .iter()
+            .map(crate::menus::Entry::windows_text)
+            .collect();
+        let held: Vec<&str> = texts
+            .iter()
+            .skip(1)
+            .take_while(|(depth, _)| *depth >= 1)
+            .filter(|(depth, _)| *depth == 1)
+            .map(|(_, text)| text.as_str())
+            .collect();
+        assert_eq!(held, file);
+        assert!(held.iter().any(|t| t.contains('\t')), "{held:?}");
+        // The first item's id gives its command back.
+        assert!(bar.command(1).is_some());
+        assert!(bar.command(0).is_none());
+        assert!(!bar.shown());
     }
 
     #[test]
