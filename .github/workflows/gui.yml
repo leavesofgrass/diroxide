@@ -1,0 +1,160 @@
+# The GUI's own checks, apart from ci.yml, as textweaver keeps its window's
+# checks apart (the GUI alpha's contract step): the in-process
+# accessibility harness on each system with no display and no graphics
+# card, and the one program's start on each runner. On Windows the
+# terminal and the subcommands keep their pipes and the GUI opens off
+# screen, never in front, or says in words why it cannot; on Linux, with
+# no display, the GUI says so and the terminal opens. ci.yml compiles the
+# GUI with every other check (--all-features); this workflow runs it.
+# Plain logs, no color, so they read well in a screen reader.
+name: GUI
+
+on:
+  push:
+    branches: [main, "alpha3/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: never
+  RUST_BACKTRACE: "1"
+
+jobs:
+  harness:
+    name: Accessibility harness on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      # The window's tree under masonry_testing: no window, no display, no
+      # GPU. Spike S6 measured about 20 ms and 16 MB a test, so the tests
+      # keep nextest's parallelism (no test group).
+      - name: The window's tree, with and without the gui feature
+        run: |
+          cargo nextest run -p diroxide-gui --all-features
+          cargo nextest run -p diroxide-gui
+
+  start-windows:
+    name: One program on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p diro
+      # Spike S8: diro.exe is a console program (subsystem 3), so shells
+      # wait for it and its pipes work; --tui through a pipe prints one
+      # screen of plain lines.
+      - name: The terminal and the subcommands through pipes
+        shell: pwsh
+        run: |
+          $diro = (Resolve-Path target/debug/diro.exe).Path
+          $bytes = [IO.File]::ReadAllBytes($diro)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          $subsystem = [BitConverter]::ToUInt16($bytes, $pe + 24 + 68)
+          "Subsystem: $subsystem (3 is a console program)"
+          if ($subsystem -ne 3) { "Fail: diro.exe is not a console program."; exit 1 }
+          & $diro ls . | findstr /b Cargo
+          if ($LASTEXITCODE -ne 0) { "Fail: diro ls through findstr found no Cargo files."; exit 1 }
+          $null | & $diro serve --stdio
+          if ($LASTEXITCODE -ne 0) { "Fail: diro serve --stdio did not end at the end of its input."; exit 1 }
+          $screen = & $diro --tui --portable . | Out-String
+          if ($screen -notmatch 'left panel') { "Fail: diro --tui through a pipe printed no screen."; $screen; exit 1 }
+          "Pass: ls, serve and --tui through pipes."
+      # The window, off screen and never activated (--background). The
+      # runner has no graphics card: the window either opens on the
+      # system's software adapter, or diro says in words that it could not
+      # start its graphics and opens the terminal; a crash fails. Textweaver
+      # found Vello's compute shaders crash on that adapter, so this step
+      # reports without failing the run until software drawing lands (R27's
+      # commit 31); then continue-on-error goes.
+      - name: The GUI off screen, or its failure in words
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Text;
+          using System.Runtime.InteropServices;
+          public static class Windows {
+            delegate bool EnumProc(IntPtr h, IntPtr l);
+            [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+            [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+            [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+            public static IntPtr Titled(uint pid, string end, out string title) {
+              IntPtr found = IntPtr.Zero; string seen = "";
+              EnumWindows((h, l) => {
+                uint p; GetWindowThreadProcessId(h, out p);
+                var s = new StringBuilder(512); GetWindowText(h, s, 512);
+                if (p == pid && s.ToString().EndsWith(end)) { found = h; seen = s.ToString(); return false; }
+                return true;
+              }, IntPtr.Zero);
+              title = seen; return found;
+            }
+          }
+          '@
+          $diro = (Resolve-Path target/debug/diro.exe).Path
+          $out = Join-Path $env:RUNNER_TEMP 'gui-out.txt'
+          $err = Join-Path $env:RUNNER_TEMP 'gui-err.txt'
+          $p = Start-Process -FilePath $diro -ArgumentList '--gui', '--background', '--portable', '.' -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          # Reading the handle now keeps the exit code readable after the end.
+          $null = $p.Handle
+          $deadline = (Get-Date).AddSeconds(30)
+          $window = [IntPtr]::Zero
+          $title = ''
+          while ((Get-Date) -lt $deadline -and -not $p.HasExited) {
+            $window = [Windows]::Titled([uint32]$p.Id, ' - diroxide', [ref]$title)
+            if ($window -ne [IntPtr]::Zero) { break }
+            Start-Sleep -Milliseconds 250
+          }
+          if ($window -ne [IntPtr]::Zero) {
+            "Window title: $title"
+            Start-Sleep -Seconds 2
+            [void][Windows]::PostMessage($window, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+            if (-not $p.WaitForExit(15000)) { "Fail: the window did not close."; Stop-Process -Id $p.Id; exit 1 }
+            "Exit code after closing: $($p.ExitCode)"
+            if ($p.ExitCode -ne 0) { Get-Content -Raw $err; exit 1 }
+            "Pass: the window opened, was titled with its place, and quit by the app's rule."
+          } elseif ($p.HasExited) {
+            $said = Get-Content -Raw $out
+            "diro said: $said"
+            if ($said -match 'Could not open the GUI: ') { "Pass: the GUI could not start here and said why in words." }
+            else { "Fail: diro ended without a window and without saying why (exit $($p.ExitCode))."; Get-Content -Raw $err; exit 1 }
+          } else {
+            "Fail: no window within 30 seconds."; Stop-Process -Id $p.Id; exit 1
+          }
+
+  start-linux:
+    name: The GUI with no display on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p diro
+      # No WAYLAND_DISPLAY or DISPLAY on the runner: --gui says why and the
+      # terminal opens, printing one screen through the pipe.
+      - name: The GUI asked for with no display
+        run: |
+          unset WAYLAND_DISPLAY DISPLAY
+          target/debug/diro --gui --portable . > gui-out.txt
+          head -n 2 gui-out.txt
+          grep -q '^There is no display for the GUI' gui-out.txt
+          grep -q 'left panel' gui-out.txt
+          echo "Pass: no display is said, and the terminal opens."
