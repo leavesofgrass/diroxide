@@ -702,8 +702,15 @@ impl Frontend {
                     false
                 }
             },
-            model::DialogFocus::Listing | model::DialogFocus::Control if view.local_list => {
+            model::DialogFocus::Listing
+            | model::DialogFocus::Control
+            | model::DialogFocus::Message
+                if view.local_list || view.focus == model::DialogFocus::Message =>
+            {
                 let total = match &view.control {
+                    _ if view.focus == model::DialogFocus::Message => {
+                        view.message.as_ref().map_or(0, |l| l.total)
+                    }
                     model::ControlView::List(list) => list.total,
                     model::ControlView::Confirm(confirm) => {
                         confirm.listing.as_ref().map_or(0, |l| l.total)
@@ -739,7 +746,9 @@ impl Frontend {
             model::DialogFocus::Show => self
                 .app
                 .handle(AppEvent::Key(Key::new(KeyCode::Char('s'), Modifiers::ALT))),
-            model::DialogFocus::Control | model::DialogFocus::Listing => Vec::new(),
+            model::DialogFocus::Control
+            | model::DialogFocus::Listing
+            | model::DialogFocus::Message => Vec::new(),
         };
         self.carry(effects);
     }
@@ -938,6 +947,17 @@ impl Frontend {
                     self.local.on = list_focus;
                     self.refresh(host);
                 }
+            }
+            ChoiceAction::MessageFocused => {
+                if self.local.on != model::DialogFocus::Message {
+                    self.local.on = model::DialogFocus::Message;
+                    self.refresh(host);
+                }
+            }
+            ChoiceAction::MessageLine(index) => {
+                self.local.on = model::DialogFocus::Message;
+                self.local.line = index;
+                self.refresh(host);
             }
             ChoiceAction::Row { index, open } => {
                 self.local.on = list_focus;

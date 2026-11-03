@@ -210,12 +210,17 @@ fn wait(rig: &mut Rig) {
 
 /// Chooses the open list's row whose name starts with `start`, by keys.
 fn choose(rig: &mut Rig, start: &str) {
-    let names: Vec<String> = rig
-        .dialog_walk()
-        .into_iter()
-        .filter(|(role, _)| *role == Role::ListBoxOption)
-        .map(|(_, name)| name)
-        .collect();
+    // The choices' options, not the lines of a question's message, which
+    // is a list to read before them ("Message, 2 lines").
+    let mut in_message = false;
+    let mut names: Vec<String> = Vec::new();
+    for (role, name) in rig.dialog_walk() {
+        if role == Role::ListBox {
+            in_message = name.starts_with("Message, ");
+        } else if role == Role::ListBoxOption && !in_message {
+            names.push(name);
+        }
+    }
     let at = names
         .iter()
         .position(|n| n.starts_with(start))

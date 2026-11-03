@@ -8,6 +8,8 @@ mod choose;
 mod completion;
 #[cfg(feature = "gui")]
 mod confirm;
+#[cfg(feature = "gui")]
+mod connect;
 mod contract;
 #[cfg(feature = "gui")]
 mod dialogs;

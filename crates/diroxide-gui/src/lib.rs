@@ -69,6 +69,10 @@
 //!   High Contrast honored with the system's own colors; the system's
 //!   light or dark appearance followed through the theme crate's `os`
 //!   module. A theme chosen is said with its verdict in words.
+//! - A plugin's prompts and the connect flow in the dialog shapes, the
+//!   plugin's name last; a question's message of two lines or more is a
+//!   list to read line by line ("Message, 11 lines"), so a new server
+//!   key's fingerprint is read one part of four groups a line.
 //!
 //! On Windows `diro` stays a console program, so a shell waits for it and
 //! the terminal frontend keeps its console; [`console`] lets go of a

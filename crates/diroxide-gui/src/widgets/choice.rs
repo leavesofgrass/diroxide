@@ -51,6 +51,12 @@ pub enum ChoiceAction {
         /// Whether to choose it, as Enter does.
         open: bool,
     },
+    /// A question's message list took the focus another way than the
+    /// driver's.
+    MessageFocused,
+    /// A click or a screen reader's action on a line of a question's
+    /// message.
+    MessageLine(usize),
 }
 
 /// A dialog's list box.
@@ -62,6 +68,8 @@ pub struct ChoiceBox {
     width: f64,
     rows: HashMap<usize, (String, Layout<BrushIndex>)>,
     ids: HashMap<String, NodeId>,
+    /// A question's message, whose lines are read, never chosen.
+    message: bool,
 }
 
 impl ChoiceBox {
@@ -75,6 +83,25 @@ impl ChoiceBox {
             width: 0.0,
             rows: HashMap::new(),
             ids: HashMap::new(),
+            message: false,
+        }
+    }
+
+    /// A question's message as a list of its lines to read.
+    pub fn message(view: ListView) -> Self {
+        Self {
+            message: true,
+            ..Self::new(view)
+        }
+    }
+
+    /// What a click or a screen reader's action on the row at `index`
+    /// tells the driver.
+    fn row_action(&self, index: usize, open: bool) -> ChoiceAction {
+        if self.message {
+            ChoiceAction::MessageLine(index)
+        } else {
+            ChoiceAction::Row { index, open }
         }
     }
 
@@ -144,7 +171,11 @@ impl Widget for ChoiceBox {
         if let Update::FocusChanged(focused) = event {
             self.focused = *focused;
             if *focused {
-                ctx.submit_action::<ChoiceAction>(ChoiceAction::Focused);
+                ctx.submit_action::<ChoiceAction>(if self.message {
+                    ChoiceAction::MessageFocused
+                } else {
+                    ChoiceAction::Focused
+                });
             }
             ctx.request_render();
         }
@@ -161,7 +192,7 @@ impl Widget for ChoiceBox {
             let local = ctx.local_position(state.position);
             if let Some(index) = self.row_at(local.y) {
                 let open = state.count >= 2 && self.view.focus == Some(index);
-                ctx.submit_action::<ChoiceAction>(ChoiceAction::Row { index, open });
+                ctx.submit_action::<ChoiceAction>(self.row_action(index, open));
             }
             ctx.set_handled();
         }
@@ -181,7 +212,7 @@ impl Widget for ChoiceBox {
         }
         ctx.request_focus();
         if let Some(index) = event.node.and_then(|node| self.row_of_node(node)) {
-            ctx.submit_action::<ChoiceAction>(ChoiceAction::Row { index, open: false });
+            ctx.submit_action::<ChoiceAction>(self.row_action(index, false));
         }
         ctx.set_handled();
     }
