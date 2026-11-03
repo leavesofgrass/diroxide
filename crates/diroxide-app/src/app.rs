@@ -1383,18 +1383,27 @@ impl App {
     /// whether it was found. App-side hook for the server and the GUI.
     /// The quick view follows, as it does a key's move.
     ///
-    /// When a plugin list is up in the panel (lane L), the name is the id
-    /// of one of its rows, and the list's focus moves, as
-    /// [`Panel::shown_list`] shows it: a click or a screen reader's Focus
-    /// on a plugin list's row lands there (lane A4). The folder beneath
-    /// keeps its own focus, and the quick view, which shows files, stays.
+    /// It acts on the panel's folder, even under a plugin list (lane L):
+    /// a plugin's or the server's `panel/set` moves the folder's cursor
+    /// beneath the list. A row the panel shows is focused with
+    /// [`App::focus_shown_row`].
     pub fn focus_name(&mut self, side: Side, name: &str) -> bool {
-        if let Some(shown) = self.panel_mut(side).plugin_list_mut() {
-            return shown.list_mut().focus_id(name);
-        }
         let found = self.panel_mut(side).list_mut().focus_id(name);
         self.follow_cursor();
         found
+    }
+
+    /// Puts a panel's focus on a row it shows, by the row's id, as
+    /// [`Panel::shown_list`] shows it; whether it was found. App-side hook
+    /// for the GUI's click and a screen reader's Focus (lane A4): with a
+    /// plugin list up, its row takes the focus and the folder beneath
+    /// keeps its own, and the quick view, which shows files, stays; with
+    /// none, it is [`App::focus_name`].
+    pub fn focus_shown_row(&mut self, side: Side, id: &str) -> bool {
+        match self.panel_mut(side).plugin_list_mut() {
+            Some(shown) => shown.list_mut().focus_id(id),
+            None => self.focus_name(side, id),
+        }
     }
 
     /// Marks or unmarks the rows with these names; returns how many
