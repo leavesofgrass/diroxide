@@ -33,6 +33,10 @@
 //!   is in it; while typing, one line says the count.
 //! - Rows scroll only as far as the focus needs, so moving inside the
 //!   visible rows never rewrites them.
+//! - A plugin list in a panel (lane L) is drawn in the panel's place: its
+//!   title in the header, its rows meaning first, the cursor on the
+//!   focused row's first cell. Its scroll is its own, so the folder's
+//!   rows come back where they were when the list is left.
 
 use std::collections::HashMap;
 
@@ -122,6 +126,7 @@ pub(crate) struct View {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum ScrollKey {
     Panel(Side),
+    PluginList(Side),
     Preview,
     Dialog(DialogId),
     Candidates(DialogId),
@@ -131,6 +136,8 @@ enum ScrollKey {
 #[derive(Clone, Debug)]
 struct Frozen {
     place: Place,
+    /// The plugin list drawn over the place, by its plugin and id.
+    list: Option<(String, String)>,
     complete: bool,
     area: (u16, u16, u16),
     lines: Vec<Line>,
@@ -229,6 +236,10 @@ fn row_role(app: &App, side: Side, index: usize, row: &ListRow, focused: bool) -
     if row.selected {
         return PanelRole::MarkedRow;
     }
+    // A plugin list's rows are not files: plain text, whatever their name.
+    if app.panel(side).plugin_list().is_some() {
+        return PanelRole::Text;
+    }
     let entry = app
         .panel(side)
         .entries()
@@ -261,6 +272,9 @@ fn row_runs(
     width: u16,
     text: String,
 ) -> Line {
+    if app.panel(side).plugin_list().is_some() {
+        return vec![Run::new(x, width, text, role)];
+    }
     let entry = app
         .panel(side)
         .entries()
@@ -338,11 +352,14 @@ fn panel_region(
 ) -> Region {
     let panel = app.panel(side);
     let shown = panel.loading_place().unwrap_or(panel.place()).clone();
+    let plugin_list = panel.plugin_list();
+    let list_key = plugin_list.map(|l| (l.plugin_id().to_owned(), l.id().to_owned()));
     let frozen_ok = memory.freeze && !active;
     if frozen_ok
         && let Some(f) = &memory.frozen[side.index()]
         && f.complete
         && f.place == shown
+        && f.list == list_key
         && f.area == (x, width, height as u16)
     {
         return Region {
@@ -352,10 +369,16 @@ fn panel_region(
     }
     let mut lines: Vec<Line> = Vec::new();
     if header && height > 0 {
-        let mut text = clean(&place_title(&shown));
-        if panel.is_loading() {
-            text.push_str(", loading");
-        }
+        let text = match plugin_list {
+            Some(shown_list) => clean(shown_list.list().title()),
+            None => {
+                let mut text = clean(&place_title(&shown));
+                if panel.is_loading() {
+                    text.push_str(", loading");
+                }
+                text
+            }
+        };
         let role = if active {
             PanelRole::ActiveTitle
         } else {
@@ -364,11 +387,11 @@ fn panel_region(
         lines.push(vec![Run::new(x, width, text, role)]);
     }
     let rows = height.saturating_sub(lines.len());
-    let list = panel.list();
+    let list = panel.shown_list();
     let mut focus = None;
     if rows > 0 {
         if list.is_empty() {
-            let text = if panel.is_loading() {
+            let text = if panel.is_loading() && plugin_list.is_none() {
                 "Reading folder".to_owned()
             } else {
                 clean(list.empty_text())
@@ -379,13 +402,12 @@ fn panel_region(
             lines.push(vec![Run::new(x, width, text, PanelRole::Text)]);
         } else {
             let focused = list.focus_index();
-            let start = memory.start(
-                ScrollKey::Panel(side),
-                Some(panel.place()),
-                focused,
-                rows,
-                list.len(),
-            );
+            let key = if plugin_list.is_some() {
+                ScrollKey::PluginList(side)
+            } else {
+                ScrollKey::Panel(side)
+            };
+            let start = memory.start(key, Some(panel.place()), focused, rows, list.len());
             for (i, row) in list.rows().iter().enumerate().skip(start).take(rows) {
                 let is_focus = active && Some(i) == focused;
                 if is_focus {
@@ -410,6 +432,7 @@ fn panel_region(
                 ));
         memory.frozen[side.index()] = Some(Frozen {
             place: shown,
+            list: list_key,
             complete,
             area: (x, width, height as u16),
             lines: lines.clone(),

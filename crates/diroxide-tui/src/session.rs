@@ -732,12 +732,12 @@ impl<'a, B: Backend> Session<'a, B> {
         self.lines = lines;
         self.cursor = view.cursor;
         let active = self.app.active_panel();
-        let title = format!(
-            "{} - diroxide",
-            view::clean(&place_title(
-                active.loading_place().unwrap_or(active.place())
-            ))
-        );
+        // A plugin list over the place names the window (lane L).
+        let shown = match active.plugin_list() {
+            Some(shown) => shown.list().title().to_owned(),
+            None => place_title(active.loading_place().unwrap_or(active.place())),
+        };
+        let title = format!("{} - diroxide", view::clean(&shown));
         if title != self.title {
             if let Some(sink) = self.title_sink.as_mut() {
                 sink(&title);
