@@ -18,8 +18,9 @@
 //! - `native --check`: the pure-Rust gate: no `cc`, `cmake` or `cxx` build
 //!   dependency in the main workspace but the one allow entry (ring, for
 //!   the `fetch` feature of `diro`).
-//! - `bench [--quick] [--only ID] [--save-baseline] [--gate]`: the bench,
-//!   on trees it writes under the target folder (docs/dev/bench.md).
+//! - `bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline]
+//!   [--gate]`: the bench, on trees it writes under the target folder
+//!   (docs/dev/bench.md), with the GUI's budgets under `--gui`.
 //! - `docs --check`: the documentation rules of plan section 11.
 //! - `sample-folder PATH [--big-mb N]`: the owner's check folder.
 //! - `search-tree PATH [--small]`: the 1 GB search tree of alpha.3.
@@ -29,6 +30,7 @@
 //! Later waves add `notices` and `dist`.
 
 mod bench;
+mod budgets;
 mod components;
 mod demo;
 mod deps;
@@ -47,7 +49,7 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH";
 
 fn main() -> ExitCode {
     match run() {
