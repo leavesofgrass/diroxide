@@ -18,6 +18,8 @@ mod drawing;
 #[cfg(feature = "gui")]
 mod every_purpose;
 #[cfg(feature = "gui")]
+mod focus_mode;
+#[cfg(feature = "gui")]
 mod goldens;
 #[cfg(feature = "gui")]
 mod gui_keys;

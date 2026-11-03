@@ -1,6 +1,11 @@
 //! The window's body: the two panels, or the viewer in their place while
 //! a file is viewed, as the terminal's viewer takes its body. The one not
 //! shown is stashed, so it is out of the tree and out of the focus order.
+//! Its place in the window is kept for focus mode's veil
+//! ([`super::root::Root::set_veiled`]), which covers everything else.
+
+use std::cell::Cell;
+use std::rc::Rc;
 
 use masonry::accesskit::{Node, Role};
 use masonry::core::{
@@ -8,7 +13,7 @@ use masonry::core::{
     RegisterCtx, Widget, WidgetMut, WidgetPod,
 };
 use masonry::imaging::Painter;
-use masonry::kurbo::{Axis, Point, Size};
+use masonry::kurbo::{Axis, Point, Rect, Size};
 use masonry::layout::{LayoutSize, LenReq, Length};
 
 /// The panels or the viewer.
@@ -16,6 +21,8 @@ pub struct Screen {
     panels: WidgetPod<dyn Widget>,
     viewer: WidgetPod<dyn Widget>,
     viewing: bool,
+    /// Where the body is in the window, as last painted.
+    area: Rc<Cell<Rect>>,
 }
 
 impl Screen {
@@ -28,7 +35,15 @@ impl Screen {
             panels: panels.erased().to_pod(),
             viewer: viewer.erased().to_pod(),
             viewing: false,
+            area: Rc::new(Cell::new(Rect::ZERO)),
         }
+    }
+
+    /// The same body telling `area` where it is in the window.
+    #[must_use]
+    pub fn with_area(mut self, area: Rc<Cell<Rect>>) -> Self {
+        self.area = area;
+        self
     }
 
     /// Shows the viewer (`true`) or the panels.
@@ -84,7 +99,11 @@ impl Widget for Screen {
         ctx.place_child(shown, Point::ORIGIN);
     }
 
-    fn paint(&mut self, _ctx: &mut PaintCtx<'_>, _props: &PropertiesRef<'_>, _p: &mut Painter<'_>) {
+    fn paint(&mut self, ctx: &mut PaintCtx<'_>, _props: &PropertiesRef<'_>, _p: &mut Painter<'_>) {
+        let area = ctx
+            .window_transform()
+            .transform_rect_bbox(ctx.content_box());
+        self.area.set(area);
     }
 
     fn accessibility_role(&self) -> Role {

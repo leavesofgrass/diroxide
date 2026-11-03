@@ -412,6 +412,9 @@ struct Gui {
     log: Option<std::path::PathBuf>,
     /// Whether the road taken was logged and said.
     road_told: bool,
+    /// `--background`: the window never goes full screen, so a check
+    /// never covers the person's screen.
+    background: bool,
     /// The event loop, for the native menu's messages.
     #[cfg(windows)]
     proxy: EventLoopProxy,
@@ -449,6 +452,16 @@ impl Gui {
                     Instant::now(),
                 );
             }
+        }
+        // F11: full screen on or off, never for a window that runs in the
+        // background for a check.
+        if let Some(on) = frontend.take_full_screen()
+            && !self.background
+        {
+            use masonry_winit::winit::window::Fullscreen;
+            ctx.window(self.window)
+                .handle()
+                .set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
         }
         let title = frontend.window_title();
         if title != self.title {
@@ -672,6 +685,7 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
         ),
         log: options.log.clone(),
         road_told: false,
+        background: options.background,
         #[cfg(windows)]
         proxy,
         #[cfg(windows)]

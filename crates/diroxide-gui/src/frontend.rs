@@ -20,6 +20,11 @@
 //!   the system's appearance while following it, and the system's high
 //!   contrast colors while that mode is on ([`crate::theme`]); a theme
 //!   chosen is said with its contrast verdict in words.
+//! - Focus mode (the `focus_mode` setting) and full screen (F11): after
+//!   [`FADE_AFTER`] with no key and no mouse move, the bars around the
+//!   body fade under a veil; any key or a moving mouse brings them back.
+//!   Painting only: the tree stays exactly as it was, and nothing is said
+//!   by either (textweaver's `bars.rs`, the owner's own project).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -109,6 +114,10 @@ pub const KEY_TEST_IDLE: Duration = Duration::from_secs(10);
 /// How often the driver looks again while the live region holds messages
 /// for a screen reader that has not asked for the tree yet.
 pub const HOLD_RETRY: Duration = Duration::from_millis(200);
+
+/// How long the window rests (no key, no mouse move) before focus mode
+/// fades the bars.
+pub const FADE_AFTER: Duration = Duration::from_secs(3);
 
 /// Where the driver edits widgets: the real window's render root, or the
 /// tests' harness.
@@ -257,6 +266,15 @@ pub struct Frontend {
     /// The theme setting at the start: following the system's appearance
     /// stops once the owner chooses a theme in the session.
     start_theme: String,
+    /// When the window last had a key or a mouse move: focus mode's rest
+    /// starts there.
+    rest_since: Instant,
+    /// Focus mode's veil is down over the bars.
+    veiled: bool,
+    /// The window is full screen (F11).
+    full_screen: bool,
+    /// Full screen turned on or off, for the window to carry out.
+    full_screen_asked: Option<bool>,
 }
 
 /// A message waiting for the live region.
@@ -290,6 +308,10 @@ impl Frontend {
         let start_theme = app.settings().theme.clone();
         Self {
             start_theme,
+            rest_since: Instant::now(),
+            veiled: false,
+            full_screen: false,
+            full_screen_asked: None,
             palette: Arc::new(Palette::default()),
             system: None,
             appearance: OsScheme::Unknown,
@@ -386,6 +408,49 @@ impl Frontend {
     /// The colors the window draws with now.
     pub fn palette(&self) -> &Arc<Palette> {
         &self.palette
+    }
+
+    /// Whether focus mode's veil is down over the bars.
+    pub fn veiled(&self) -> bool {
+        self.veiled
+    }
+
+    /// Whether the window is full screen.
+    pub fn full_screen(&self) -> bool {
+        self.full_screen
+    }
+
+    /// Full screen turned on (`Some(true)`) or off since the last call,
+    /// for the window to carry out.
+    pub fn take_full_screen(&mut self) -> Option<bool> {
+        self.full_screen_asked.take()
+    }
+
+    /// Whether the bars fade when the window rests: focus mode, or full
+    /// screen.
+    fn fades(&self) -> bool {
+        self.app.settings().focus_mode || self.full_screen
+    }
+
+    /// A key or a moving mouse: the rest starts over, and the veil lifts.
+    fn wake_bars(&mut self, host: &mut impl Host, now: Instant) {
+        self.rest_since = now;
+        if self.veiled {
+            self.veiled = false;
+            host.edit(ROOT, |mut root| Root::set_veiled(&mut root, false));
+        }
+    }
+
+    /// The veil comes down once the window has rested [`FADE_AFTER`] in
+    /// focus mode or full screen, with no dialog up; it lifts when
+    /// neither is on any more.
+    fn fade(&mut self, host: &mut impl Host, now: Instant) {
+        let rested = now.saturating_duration_since(self.rest_since) >= FADE_AFTER;
+        let veil = self.fades() && self.app.dialog().is_none() && (self.veiled || rested);
+        if veil != self.veiled {
+            self.veiled = veil;
+            host.edit(ROOT, |mut root| Root::set_veiled(&mut root, veil));
+        }
     }
 
     /// The system's high contrast colors while that mode is on (Windows'
@@ -555,7 +620,12 @@ impl Frontend {
             lines: 0,
         }))
         .with_tag(VIEWER);
-        let screen = NewWidget::new(Screen::new(panels, viewer)).with_tag(SCREEN);
+        // The body's place in the window, which focus mode's veil leaves
+        // clear.
+        let body = std::rc::Rc::new(std::cell::Cell::new(masonry::kurbo::Rect::ZERO));
+        let screen =
+            NewWidget::new(Screen::new(panels, viewer).with_area(std::rc::Rc::clone(&body)))
+                .with_tag(SCREEN);
         let column = Flex::column()
             .with_fixed(NewWidget::new(Label::new(lines.title.clone())).with_tag(TITLE_LINE))
             .with(screen, 1.0)
@@ -574,7 +644,7 @@ impl Frontend {
             Role::GenericContainer,
             "",
         ));
-        NewWidget::new(Root::new(main, announcer, full_passes)).with_tag(ROOT)
+        NewWidget::new(Root::new(main, announcer, full_passes).with_body(body)).with_tag(ROOT)
     }
 
     fn view(&mut self, side: Side) -> PanelView {
@@ -604,6 +674,22 @@ impl Frontend {
     pub fn key(&mut self, host: &mut impl Host, key: Key, now: Instant) {
         if self.key_test_since.is_some() {
             self.key_test_since = Some(now);
+        }
+        // Any key brings the bars back, and says nothing of it.
+        self.wake_bars(host, now);
+        if key.code == KeyCode::F(11)
+            && key.mods.is_empty()
+            && self.app.dialog().is_none()
+            && !self.app.key_test_active()
+        {
+            // F11, the key the GUI column keeps for full screen: on or off,
+            // and nothing said (a contract request asks for the app's own
+            // view.full-screen command, so the key can be rebound).
+            self.full_screen = !self.full_screen;
+            self.full_screen_asked = Some(self.full_screen);
+            self.after(now);
+            self.refresh(host);
+            return;
         }
         if let Some(enter) = self.menu_key(&key) {
             // The native menu bar takes the key: the window shows the bar
@@ -859,6 +945,10 @@ impl Frontend {
                 match *root {
                     RootAction::Key(event) => self.key_event(host, &event, now),
                     RootAction::Text(text) => self.text(host, &text, now),
+                    RootAction::Moved => {
+                        self.wake_bars(host, now);
+                        self.after(now);
+                    }
                     RootAction::AltAlone => {
                         if self.menu_bar && self.app.dialog().is_none() {
                             self.menu_requests.push(MenuEnter::Bar);
@@ -1276,6 +1366,7 @@ impl Frontend {
         if self.hold_retry_at.is_some_and(|at| now >= at) {
             self.hold_retry_at = None;
         }
+        self.fade(host, now);
         self.after(now);
         self.refresh(host);
     }
@@ -1288,6 +1379,7 @@ impl Frontend {
             self.quick_tick_at,
             self.viewer_tick_at,
             self.hold_retry_at,
+            (self.fades() && !self.veiled).then_some(self.rest_since + FADE_AFTER),
         ]
         .into_iter()
         .flatten()

@@ -81,6 +81,11 @@
 //!   `--graphics software` asks for the processor; the road goes to the
 //!   `--log` file and, when it is not the graphics card, once to the
 //!   status line (`window`).
+//! - Focus mode and full screen: with the `focus_mode` setting on, or
+//!   full screen (F11), the bars around the body fade under a veil after
+//!   three seconds with no key and no mouse move, and come back on any
+//!   key; painting only, so the tree is the same and nothing is said. A
+//!   `--background` window never goes full screen.
 //!
 //! On Windows `diro` stays a console program, so a shell waits for it and
 //! the terminal frontend keeps its console; [`console`] lets go of a

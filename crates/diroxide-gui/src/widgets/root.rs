@@ -7,6 +7,10 @@
 //!   (Switch panel) and Masonry's own F11 and F12 debugging keys never
 //!   fire. While a dialog is open, the window behind it is disabled and
 //!   hidden from screen readers, so reading and the focus stay inside.
+//! - Focus mode's veil ([`Root::set_veiled`]): the bars around the body
+//!   (the title line, the status bar, the key bar) covered with the page's
+//!   color, painted over them, so their nodes, bounds and Tab order stay
+//!   exactly as they are and nothing is announced.
 //! - [`FullPassProbe`]: tells the live region when an accessibility pass
 //!   rebuilds every node (a screen reader asked for the tree).
 //! - [`Region`]: a part of the window with a role and a name (the status
@@ -17,15 +21,17 @@
 
 use std::cell::Cell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use masonry::accesskit::{Node, Role};
+use masonry::core::PointerEvent;
 use masonry::core::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
 use masonry::core::{
     AccessCtx, ChildrenIds, EventCtx, Ime, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx,
     PropertiesMut, PropertiesRef, RegisterCtx, TextEvent, Widget, WidgetMut, WidgetPod,
 };
 use masonry::imaging::Painter;
-use masonry::kurbo::{Axis, Point, Size};
+use masonry::kurbo::{Axis, Point, Rect, Size};
 use masonry::layout::{LayoutSize, LenReq, Length};
 
 use super::modal::Modal;
@@ -43,7 +49,16 @@ pub enum RootAction {
     /// Alt was pressed and let go with no other key: the hidden menu bar
     /// shows (with native menus).
     AltAlone,
+    /// The mouse moved (said at most every half second, and at once while
+    /// focus mode's veil is down): the rest starts over.
+    Moved,
 }
+
+/// How often a moving mouse is told to the driver.
+const MOVED_EVERY: Duration = Duration::from_millis(500);
+
+/// How much of the bars shows through focus mode's veil: nearly nothing.
+const VEIL: f32 = 0.92;
 
 /// The window's content.
 pub struct Root {
@@ -54,6 +69,13 @@ pub struct Root {
     announcer: WidgetPod<dyn Widget>,
     dialog: Option<WidgetPod<Modal>>,
     full_passes: Rc<Cell<u64>>,
+    /// Focus mode's veil is down over the bars.
+    veiled: bool,
+    /// Where the body is in the window (the panels or the viewer), which
+    /// the veil leaves clear.
+    body: Rc<Cell<Rect>>,
+    /// When a moving mouse was last told to the driver.
+    moved_at: Option<Instant>,
 }
 
 impl Root {
@@ -74,7 +96,31 @@ impl Root {
             announcer: announcer.erased().to_pod(),
             dialog: None,
             full_passes,
+            veiled: false,
+            body: Rc::new(Cell::new(Rect::ZERO)),
+            moved_at: None,
         }
+    }
+
+    /// The same root leaving `body` clear under focus mode's veil.
+    #[must_use]
+    pub fn with_body(mut self, body: Rc<Cell<Rect>>) -> Self {
+        self.body = body;
+        self
+    }
+
+    /// Lowers focus mode's veil over the bars, or lifts it: painting
+    /// only, so the tree is the same either way.
+    pub fn set_veiled(this: &mut WidgetMut<'_, Self>, veiled: bool) {
+        if this.widget.veiled != veiled {
+            this.widget.veiled = veiled;
+            this.ctx.request_paint_only();
+        }
+    }
+
+    /// Whether focus mode's veil is down.
+    pub fn veiled(&self) -> bool {
+        self.veiled
     }
 
     /// The count of passes that rebuilt every node.
@@ -126,6 +172,26 @@ impl Root {
 
 impl Widget for Root {
     type Action = RootAction;
+
+    fn on_pointer_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &PointerEvent,
+    ) {
+        // A moving mouse ends focus mode's rest: told at once while the
+        // veil is down, else at most every half second.
+        if let PointerEvent::Move(_) = event {
+            let now = Instant::now();
+            let due = self
+                .moved_at
+                .is_none_or(|at| now.saturating_duration_since(at) >= MOVED_EVERY);
+            if self.veiled || due {
+                self.moved_at = Some(now);
+                ctx.submit_action::<RootAction>(RootAction::Moved);
+            }
+        }
+    }
 
     fn on_text_event(
         &mut self,
@@ -206,6 +272,33 @@ impl Widget for Root {
                 paint::color(palette.page),
             )
             .draw();
+    }
+
+    fn post_paint(
+        &mut self,
+        ctx: &mut PaintCtx<'_>,
+        props: &PropertiesRef<'_>,
+        painter: &mut Painter<'_>,
+    ) {
+        // Focus mode's veil: the page's color over everything but the
+        // body, unless a dialog is up (its keys lift the veil anyway).
+        if !self.veiled || self.dialog.is_some() {
+            return;
+        }
+        let palette = paint::palette_of(props, ctx.property_cache());
+        let veil = paint::color(palette.page).with_alpha(VEIL);
+        let window = ctx.content_box().size().to_rect();
+        let body = self.body.get().intersect(window);
+        for band in [
+            Rect::new(window.x0, window.y0, window.x1, body.y0),
+            Rect::new(window.x0, body.y1, window.x1, window.y1),
+            Rect::new(window.x0, body.y0, body.x0, body.y1),
+            Rect::new(body.x1, body.y0, window.x1, body.y1),
+        ] {
+            if band.width() > 0.0 && band.height() > 0.0 {
+                painter.fill(band, veil).draw();
+            }
+        }
     }
 
     fn property_changed(
