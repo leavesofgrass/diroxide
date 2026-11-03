@@ -166,7 +166,9 @@ pub fn help_text() -> String {
         "--portable                keep the settings beside the program",
         "--no-plugins              start without plugins",
         "--tui                     open in the terminal, even with a display",
-        "--gui                     open the GUI (it comes with a later alpha)",
+        "--gui                     open the GUI, even where the terminal would open",
+        "--graphics NAME           GUI graphics: auto, vulkan, dx12, metal, gl or software",
+        "--background              the GUI off screen and never in front, for checks",
         "--inline                  draw below the prompt, not on the whole screen",
         "--cwd-file FILE           at quit, write the active folder to FILE for the shell",
         "--theme NAME              use this theme for this session",
@@ -212,6 +214,17 @@ fn parse_open(args: &[String]) -> Result<OpenOptions, CliError> {
             "--no-plugins" => options.no_plugins = true,
             "--tui" => options.tui = true,
             "--gui" => options.gui = true,
+            "--background" => options.background = true,
+            "--graphics" => {
+                let name = value("--graphics")?;
+                let api = diroxide_gui::GraphicsApi::parse(&name).ok_or_else(|| {
+                    CliError::Failed(format!(
+                        "the graphics API {name} is not known; use {}",
+                        diroxide_gui::GraphicsApi::names_in_words()
+                    ))
+                })?;
+                options.graphics = Some(api);
+            }
             "--inline" => options.inline = true,
             "--cwd-file" => {
                 let file = value("--cwd-file")?;
@@ -407,6 +420,22 @@ mod tests {
                 theme: Some("nord".into()),
                 ..open(&["left"])
             }))
+        );
+        assert_eq!(
+            parse(args(&["--gui", "--background", "--graphics=DX12"])),
+            Ok(Invocation::Open(OpenOptions {
+                gui: true,
+                background: true,
+                graphics: Some(diroxide_gui::GraphicsApi::Dx12),
+                ..open(&[])
+            }))
+        );
+        assert_eq!(
+            parse(args(&["--graphics", "glide"])),
+            Err(CliError::Failed(
+                "the graphics API glide is not known; use auto, vulkan, dx12, metal, gl or software"
+                    .into()
+            ))
         );
         assert_eq!(
             parse(args(&["--cwd-file"])),

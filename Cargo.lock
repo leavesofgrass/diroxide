@@ -1552,6 +1552,7 @@ dependencies = [
  "diroxide-core",
  "diroxide-diff",
  "diroxide-filetype",
+ "diroxide-gui",
  "diroxide-ops",
  "diroxide-plugins",
  "diroxide-search",
