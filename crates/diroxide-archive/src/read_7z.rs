@@ -107,10 +107,16 @@ struct HeaderPlan {
     unpack_size: u64,
 }
 
+/// The cause when an encoded header's stream counts add up past what any
+/// archive holds (the fuzz find of Tuesday, November 3, 2026).
+const COUNTS: &str = "its header's stream counts are too large";
+
 /// Reads the coders of an encoded header's streams info, as far as the
-/// pre-scan needs. `None` when the bytes are not what the format says;
-/// the crate then decides, under the limits already checked.
-fn header_plan(next: &[u8]) -> Option<HeaderPlan> {
+/// pre-scan needs. `None` when the bytes are not what the pre-scan reads;
+/// the crate then decides, under the limits already checked. A sum or a
+/// product of the header's own numbers that would pass 64 bits is damage,
+/// `Some(Err)` in words, never a wrap or a panic.
+fn header_plan(next: &[u8]) -> Option<Result<HeaderPlan, VfsError>> {
     let mut b = Bytes { data: next, at: 0 };
     if b.byte()? != 0x17 {
         return None;
@@ -137,7 +143,12 @@ fn header_plan(next: &[u8]) -> Option<HeaderPlan> {
                             if all == 0 {
                                 return None;
                             }
-                            b.take(usize::try_from(count).ok()?.checked_mul(4)?)?;
+                            let Some(crcs) =
+                                usize::try_from(count).ok().and_then(|n| n.checked_mul(4))
+                            else {
+                                return Some(Err(damaged(COUNTS)));
+                            };
+                            b.take(crcs)?;
                         }
                         _ => return None,
                     }
@@ -164,8 +175,13 @@ fn header_plan(next: &[u8]) -> Option<HeaderPlan> {
                         } else {
                             (1, 1)
                         };
-                        inputs += ins;
-                        outs += out;
+                        let (Some(all_in), Some(all_out)) =
+                            (inputs.checked_add(ins), outs.checked_add(out))
+                        else {
+                            return Some(Err(damaged(COUNTS)));
+                        };
+                        inputs = all_in;
+                        outs = all_out;
                         let props = if flags & 0x20 != 0 {
                             let size = usize::try_from(b.number()?).ok()?;
                             b.take(size)?.to_vec()
@@ -189,19 +205,19 @@ fn header_plan(next: &[u8]) -> Option<HeaderPlan> {
                 if b.byte()? != 0x0C {
                     return None;
                 }
-                let mut sizes = Vec::new();
+                // The largest size, kept as it is read: a header of a
+                // million one-byte sizes keeps one number, not a million.
                 for &outs in &outs_per_folder {
                     for _ in 0..outs {
-                        sizes.push(b.number()?);
+                        plan.unpack_size = plan.unpack_size.max(b.number()?);
                     }
                 }
-                plan.unpack_size = sizes.into_iter().max().unwrap_or(0);
-                return Some(plan);
+                return Some(Ok(plan));
             }
             _ => return None,
         }
     }
-    Some(plan)
+    Some(Ok(plan))
 }
 
 /// Holds the start header to the file and the limits, and reads the
@@ -249,6 +265,7 @@ fn pre_scan(
         }
         return Ok(false);
     };
+    let plan = plan?;
     if plan.unpack_size > limits.max_header_bytes {
         return Err(refuse("header size", limit_words(limits.max_header_bytes)).into());
     }
@@ -443,10 +460,15 @@ impl SevenZBackend {
             .get(*block)
             .copied()
             .unwrap_or(file);
-        self.archive.files[first..file.min(self.archive.files.len())]
+        // Sizes from the file: summed so they stop at the largest number
+        // rather than wrap, and a first member past this one is nothing
+        // before it rather than a panic.
+        self.archive
+            .files
+            .get(first..file.min(self.archive.files.len()))
+            .unwrap_or_default()
             .iter()
-            .map(sevenz_rust2::ArchiveEntry::size)
-            .sum()
+            .fold(0u64, |sum, entry| sum.saturating_add(entry.size()))
     }
 
     /// Reads one member on a thread of its own: its block decoded from the
@@ -629,6 +651,69 @@ mod tests {
         assert_eq!(
             unix_seconds(sevenz_rust2::NtTime::from(116_444_736_000_000_000)),
             Some(0)
+        );
+    }
+
+    /// An encoded header of one folder whose two coders' input counts add
+    /// past 64 bits: the first says u64::MAX inputs, the second one more.
+    fn overflowing_coders() -> Vec<u8> {
+        // Encoded header, unpack info, folder, one folder, not external,
+        // two coders.
+        let mut next = vec![0x17, 0x07, 0x0B, 0x01, 0x00, 0x02];
+        // A coder with a one-byte id (LZMA2) and its own stream counts:
+        // u64::MAX inputs (0xFF, then eight bytes), one output.
+        next.extend_from_slice(&[0x11, 0x21, 0xFF]);
+        next.extend_from_slice(&[0xFF; 8]);
+        next.push(0x01);
+        // The second: one input, one output.
+        next.extend_from_slice(&[0x11, 0x21, 0x01, 0x01]);
+        next
+    }
+
+    /// A 7z of a start header and `next` as its encoded header.
+    pub(crate) fn sevenz_with_header(next: &[u8]) -> Vec<u8> {
+        let mut start = Vec::with_capacity(32);
+        start.extend_from_slice(&SIGNATURE);
+        start.extend_from_slice(&[0, 4]);
+        let mut tail = Vec::new();
+        tail.extend_from_slice(&0u64.to_le_bytes());
+        tail.extend_from_slice(&(next.len() as u64).to_le_bytes());
+        tail.extend_from_slice(&crc32fast::hash(next).to_le_bytes());
+        start.extend_from_slice(&crc32fast::hash(&tail).to_le_bytes());
+        start.extend_from_slice(&tail);
+        start.extend_from_slice(next);
+        start
+    }
+
+    #[test]
+    fn stream_counts_past_64_bits_are_damage_in_words() {
+        let next = overflowing_coders();
+        let plan = header_plan(&next).map(|plan| plan.map(|plan| plan.coders.len()));
+        assert_eq!(plan, Some(Err(damaged(COUNTS))));
+        // The outputs too: one coder with u64::MAX outputs, then one.
+        let mut outs = vec![0x17, 0x07, 0x0B, 0x01, 0x00, 0x02, 0x11, 0x21, 0x01, 0xFF];
+        outs.extend_from_slice(&[0xFF; 8]);
+        outs.extend_from_slice(&[0x11, 0x21, 0x01, 0x01]);
+        let plan = header_plan(&outs).map(|plan| plan.map(|plan| plan.coders.len()));
+        assert_eq!(plan, Some(Err(damaged(COUNTS))));
+        // A CRC list of u64::MAX streams is damage, not a wrapped size.
+        let mut crcs = vec![0x17, 0x06, 0x00, 0xFF];
+        crcs.extend_from_slice(&[0xFF; 8]);
+        crcs.extend_from_slice(&[0x0A, 0x01]);
+        let plan = header_plan(&crcs).map(|plan| plan.map(|plan| plan.coders.len()));
+        assert_eq!(plan, Some(Err(damaged(COUNTS))));
+        // Through the pre-scan at open: the reader's words, meaning first.
+        let source = Source::from_bytes(sevenz_with_header(&next));
+        let error = pre_scan(
+            &source,
+            "crafted.7z",
+            &Limits::default(),
+            Allowances::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "it is damaged: its header's stream counts are too large"
         );
     }
 
