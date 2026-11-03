@@ -6,7 +6,7 @@ This page says what diroxide does not do yet, where it is limited on purpose or 
 
 Each item below is still to come. None of them is dated: a feature that is not in alpha 2 arrives in a later alpha.
 
-- Parts of the graphical interface (GUI). The window opens with `diro --gui`, and it shows the panels, takes every key and says what happens. `diro` by itself still opens the terminal, and the window leaves out the viewer, the quick view, dialogs with buttons, themes, drawing without a graphics driver, icons and input methods. [The GUI](#the-gui) below lists what it does not do yet.
+- Parts of the graphical interface (GUI). The window opens with `diro --gui`, and it shows the panels, takes every key and says what happens. `diro` by itself still opens the terminal, and the window leaves out icons, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
@@ -161,7 +161,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A command that Change key has no sentence for is described as "runs" and its name.
 - On Windows a text paste arrives as typed keys, so during Change key its first character is taken as the key. The questions that follow start on No. The capture says nothing about the terminal on Windows, because whether Windows reports keys exactly is not probed.
 - The Explorer and Finder preset has no Command+D, because on a Mac Command+D is Say status. In the Worker preset Alt+T sorts in a panel, so the Tools menu is F9, then T.
-- In the Explorer and Finder preset, Control with 1 to 7 sets the favorite labels, and macOS may keep those keys for Mission Control. That is checked when the GUI arrives on a Mac. The Labels submenu of the Edit menu is the sure way.
+- In the Explorer and Finder preset, Control with 1 to 7 sets the favorite labels, and macOS may keep those keys for Mission Control. That has not been checked, because the GUI has not been tried on a Mac. The Labels submenu of the Edit menu is the sure way.
 - A key that a plugin or a script proposes binds only when it is free and has no concern. The Keys list and Manage plugins both say what happened to it.
 
 ## The trash
@@ -298,34 +298,41 @@ The table of keys each terminal can send is built from a key probe run by hand o
 Opening it:
 
 - `diro` by itself opens the terminal. Open the window with `diro --gui`, or set `frontend` to `gui`. The settings reference describes automatic as opening the GUI on a desktop, which is where it is going, and today automatic opens the terminal in every case.
-- The window needs a display and a graphics driver. Without a display, or with a driver that fails, one sentence says why and the terminal opens. Drawing on the processor, for a machine with no graphics driver, is not built, and `--graphics software` says so and opens the terminal.
+- The window needs a display. With a graphics card it draws with it, and without one it draws on the processor. Without a display, or when every way of drawing fails, one sentence says why and the terminal opens.
+- Drawing on the processor has been tried on Windows, and on Linux in a virtual X11 display. It has not been tried on Wayland or macOS. It is slower than a graphics card on a big window, and the accessibility tree is the same either way.
 - A console that Windows opened for a shortcut can show for a moment before `diro` lets it go.
 - On Linux without Fontconfig only the two bundled Atkinson families draw. A character they lack, such as a Chinese or Japanese name or an emoji, is drawn as a missing glyph. The names a screen reader reads are the full names.
 
 What is said:
 
 - Nothing in the window has been heard on NVDA, JAWS, Orca or VoiceOver, or read on a Braille display. Tests and reports read its accessibility tree through UI Automation on Windows and AT-SPI on Linux, with no screen reader. macOS has not been tried.
+- The dialogs have been read only in the tests' harness. The UI Automation report cannot open a dialog without taking the foreground, so a real window's dialogs have not been read through UI Automation.
 - Low messages are shown in the status line and not announced: "Top of the list", "Bottom of the list", "At the top already" and a running job's progress. Pressing Up on the first row is silent. Ctrl+D says where you are and how a job is going. Whether this is too quiet has not been decided by listening.
-- A running job's progress is not spoken in the window. A progress element that speaks at the progress interval comes in a later step.
-- When a dialog opens, its name may be said twice, once by the program and once by the dialog.
-- The first start's line "The key bar on the last line names the keys." is the terminal's wording.
+- A running job's progress is not spoken by the program. The "Job progress" indicator changes at the program's pace, and whether your screen reader speaks a progress bar's changes is its own setting. Nobody has listened to it.
+- A dialog's name is said once, by the dialog, and the program leaves its own line for the same words out of the live region. Tests check that. It has not been heard.
 
-Dialogs and parts that are not built:
+Dialogs, the viewer and the clipboard:
 
-- A confirmation is a list of two answers, "No, the default" and "Yes", not two buttons. A password field has no Show button. The lists in a dialog take no clicks.
-- The viewer and the quick view are not drawn in the window. Their keys reach the program, but the window does not draw the viewer's text or the quick view's preview. Use the terminal.
-- A field opens no input method session, so typing Chinese, Japanese or Korean through an input method is not supported. Text the program copies, such as a file's path, is kept inside the program and is not put on the system clipboard.
-- The colors are one fixed set. Themes are not built, and the `theme` setting does nothing in the window. There is no setting for the text size or the font, and no icons.
-- Capturing a GUI key from a real key press in the Keys list is not built for the window. Type the key's name, as [customizing keys](customizing-keys.md) says.
-- Thumbnails and focus mode are settings that the reference marks as coming later.
+- Every field except a password field opens an input method session. It has not been tried with a real input method. On Linux an input method might deliver typed text twice, once as keys and once as a commit.
+- On Wayland, text the program copies may not reach the clipboard, even though the program says it was copied.
+- A field that keeps a history changes between a text field and a combo box as its candidates open, so a screen reader may announce the change.
+- F4 starts the editor directly, with no terminal. A console editor such as vi has no terminal to run in on Linux. Use an editor that has a window of its own.
+- Starting a shell, a command or an editor on macOS has not been tried by a person.
+- The viewer takes no mouse. A token class that a theme draws reversed is drawn underlined.
+
+Colors and bars:
+
+- The window draws the 24 built-in themes. Your own theme files are not read, and the terminal does read them.
+- Ten themes are below AA. The window draws the parts that fall short in the text color, and says how many. [Themes and colors](themes.md) names the ten. No italic face is built in, so a part that a theme draws in italics, such as the archive and hidden rows, may draw upright. Their words say what they are.
+- The system's light or dark setting is read once, when the window starts. Windows' High Contrast is read at every step.
+- Focus mode and full screen have no command. F11 and the `focus_mode` setting are the ways, and F11 cannot be rebound yet. The panels' sort buttons and the native menu bar are not under focus mode's veil. The Settings list and the reference still mark focus mode as coming later, though it works.
+- There is no setting for the text size or the font, and no icons. Thumbnails are a setting that the reference marks as coming later.
 
 Menus and the mouse:
 
 - On macOS the menus are the list, as with `menus` set to `list`. The system's own menu bar there needs a binding that is not built.
-- The native menu bar on Windows leaves out the commands of plugins. The command palette and the keys you gave them run them. The bar was read through UI Automation while it was shown. Entering it by key, choosing an item and its hiding again were not tried on a real desktop.
+- The native menu bar on Windows was read through UI Automation while it was shown. Entering it by key, choosing an item and its hiding again were not tried on a real desktop. The bar's Search menu shows its access key as "Alt+r", in lower case, where the other menus show upper case. The bar's Plugins menu is built from the same list as the list menus, and only its Manage plugins item is checked by a test.
 - The mouse has few jobs: a click focuses a row, a double click opens it, the wheel scrolls, and the buttons press. There is no right-click menu (Shift+F10 opens the actions list) and no drag and drop.
-- A click on a plugin list's row does not choose it. Use the keys.
-- The toolkit's helper window, whose class is "Winit Thread Event Target", has no title and shows as a pane with no name in the desktop's window list.
 - Keys the system keeps never arrive: Alt+F4 closes the window, and Alt+Space, Alt+Tab, Ctrl+Escape and Ctrl+Alt+Delete are the system's. Insert is the screen reader's, and chords of the Windows key are dropped. No default key uses one.
 
 ## Screen readers and Braille
