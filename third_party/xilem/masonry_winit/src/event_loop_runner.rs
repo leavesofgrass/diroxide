@@ -36,7 +36,15 @@ use crate::app::{
     winit_ime_to_masonry,
 };
 use crate::app_driver::WindowId;
+use crate::drawing::{Drawing, DrawingReport, Road};
 use crate::vello_util::{RenderContext, RenderSurface};
+
+/// diroxide.patch: the hybrid renderer for the software adapter's road,
+/// made at its first frame.
+#[cfg(feature = "imaging_vello_hybrid")]
+type HybridRenderer = Option<masonry_imaging::vello_hybrid::TargetRenderer>;
+#[cfg(not(feature = "imaging_vello_hybrid"))]
+type HybridRenderer = ();
 
 /// The custom event type that we inject into winit's [`EventLoop`](winit::event_loop::EventLoop).
 ///
@@ -230,6 +238,16 @@ pub struct MasonryState {
 
     clipboard_cx: Box<dyn ClipboardProvider>,
 
+    /// diroxide.patch: how the windows draw, and the road the first one
+    /// took ([`crate::drawing`]).
+    drawing: Drawing,
+    road: Option<Road>,
+    /// diroxide.patch: the processor's presenters, one a window.
+    #[cfg(feature = "software")]
+    presenters: HashMap<HandleId, crate::drawing::CpuPresenter>,
+    /// diroxide.patch: the hybrid renderer, on the software adapter's road.
+    hybrid: HybridRenderer,
+
     // Is `Some` if the most recently displayed frame was an animation frame.
     last_anim: Option<Instant>,
     signal_receiver: mpsc::Receiver<(WindowId, RenderRootSignal)>,
@@ -407,13 +425,14 @@ impl MasonryState {
 
         let clipboard_cx =
             ClipboardContext::new().map(|cx| -> Box<dyn ClipboardProvider> { Box::new(cx) });
-        let clipboard_cx = if cfg!(target_os = "linux") {
-            // If we're running on Linux, we might fail to get the clipboard context because
-            // we're using Wayland, so we fall back to NopClipboardContext to be safe.
-            clipboard_cx.unwrap_or_else(|_| Box::new(NopClipboardContext))
-        } else {
-            clipboard_cx.unwrap()
-        };
+        // diroxide.patch: a clipboard that cannot be had leaves the window
+        // without one (copying then does nothing, and says so in the log)
+        // rather than ending it, on every system; upstream fell back only
+        // on Linux, where Wayland may refuse it.
+        let clipboard_cx = clipboard_cx.unwrap_or_else(|err| {
+            tracing::warn!("Couldn't open the clipboard: {err}");
+            Box::new(NopClipboardContext)
+        });
 
         Self {
             is_suspended: true,
@@ -434,12 +453,29 @@ impl MasonryState {
 
             clipboard_cx,
 
+            drawing: Drawing::Auto,
+            road: None,
+            #[cfg(feature = "software")]
+            presenters: HashMap::new(),
+            hybrid: Default::default(),
+
             signal_sender,
             default_properties: Arc::new(default_properties),
             exit: false,
             new_windows,
             need_first_frame: Vec::new(),
         }
+    }
+
+    /// diroxide.patch: how the windows are to draw ([`Drawing`]): call it
+    /// before the first frame, in [`AppDriver::on_start`]. Returns `false`
+    /// when a window has already chosen its road.
+    pub fn set_drawing(&mut self, drawing: Drawing) -> bool {
+        if self.road.is_some() {
+            return false;
+        }
+        self.drawing = drawing;
+        true
     }
 
     /// Configure how Masonry requests the WGPU device (features and limits).
@@ -522,6 +558,8 @@ impl MasonryState {
         // All surfaces needs to be cleared when suspended.
         // They will be recreated when resumed.
         self.surfaces.clear();
+        #[cfg(feature = "software")]
+        self.presenters.clear();
     }
 
     pub(crate) fn create_window(&mut self, event_loop: &ActiveEventLoop, new_window: NewWindow) {
@@ -601,6 +639,8 @@ impl MasonryState {
             .remove(&window_id)
             .unwrap_or_else(|| panic!("could not find window for id {window_id:?}"));
         self.surfaces.remove(&window_id);
+        #[cfg(feature = "software")]
+        self.presenters.remove(&window_id);
         self.transparent_windows.remove(&window_id);
         let window = self.windows.remove(&window_id).unwrap();
 
@@ -614,16 +654,22 @@ impl MasonryState {
     fn redraw(&mut self, handle_id: HandleId, app_driver: &mut dyn AppDriver) {
         let _span = info_span!("redraw");
 
-        let window = self.windows.get_mut(&handle_id).unwrap();
-        let size = window.render_root.size();
+        let size = self.windows.get_mut(&handle_id).unwrap().render_root.size();
         if size.width == 0 || size.height == 0 {
             // Surface can't have a dimension of zero, remove the stale surface to save memory.
             self.surfaces.remove(&handle_id);
+            #[cfg(feature = "software")]
+            self.presenters.remove(&handle_id);
             return;
         }
 
-        // Get the existing surface or create a new one
-        let surface = if let Some(surface) = self.surfaces.get_mut(&handle_id) {
+        // diroxide.patch: the road is chosen at the first frame (the
+        // adapter asked for before the surface is made); a window with no
+        // target yet (its first frame, or after a suspend) gets one.
+        let road = self.ensure_target(handle_id, size, app_driver);
+
+        if road != Road::Processor {
+            let surface = self.surfaces.get_mut(&handle_id).unwrap();
             #[cfg(target_os = "macos")]
             if self.resized_window == Some(handle_id) {
                 self.render_cx.on_window_resize_state_change(surface, true);
@@ -634,34 +680,9 @@ impl MasonryState {
                 self.render_cx
                     .resize_surface(surface, size.width, size.height);
             }
-            surface
-        } else {
-            let devices_before = self.render_cx.devices.len();
-            let transparent = self.transparent_windows.contains(&handle_id);
-            let surface = create_surface(
-                &mut self.render_cx,
-                window.handle.clone(),
-                size,
-                transparent,
-            );
-            let dev_id = surface.dev_id;
-            self.surfaces.insert(handle_id, surface);
-            let surface = self.surfaces.get_mut(&handle_id).unwrap();
+        }
 
-            if self.render_cx.devices.len() != devices_before {
-                let device_handle = &self.render_cx.devices[dev_id];
-                let wgpu = WgpuContext {
-                    instance: &self.render_cx.instance,
-                    adapter: &device_handle.adapter,
-                    device: &device_handle.device,
-                    queue: &device_handle.queue,
-                };
-                app_driver.on_wgpu_ready(&wgpu);
-            }
-
-            surface
-        };
-
+        let window = self.windows.get_mut(&handle_id).unwrap();
         let now = Instant::now();
         // TODO: this calculation uses wall-clock time of the paint call, which
         // potentially has jitter.
@@ -678,11 +699,6 @@ impl MasonryState {
         // If a new animation starts, then it will have zero reported elapsed time.
         let animation_continues = window.render_root.needs_anim();
         self.last_anim = animation_continues.then_some(now);
-
-        #[cfg(target_os = "macos")]
-        if self.resized_window == Some(handle_id) {
-            self.render_cx.on_window_resize_state_change(surface, true);
-        }
 
         let (visual_layers, tree_update) = window.render_root.redraw();
         // textweaver: the tree update goes to AccessKit before the frame is
@@ -719,9 +735,155 @@ impl MasonryState {
             root_scene,
             &overlays,
         );
-        Self::render(surface, window, frame, &self.render_cx, &mut self.renderer);
+        match road {
+            #[cfg(feature = "software")]
+            Road::Processor => {
+                // diroxide.patch: the whole frame drawn on the processor
+                // and presented through softbuffer.
+                if let Some(presenter) = self.presenters.get_mut(&handle_id) {
+                    crate::drawing::presented(presenter.present(frame, &window.handle));
+                }
+            }
+            _ => {
+                let surface = self.surfaces.get_mut(&handle_id).unwrap();
+                #[cfg(target_os = "macos")]
+                if self.resized_window == Some(handle_id) {
+                    self.render_cx.on_window_resize_state_change(surface, true);
+                }
+                Self::render(
+                    surface,
+                    window,
+                    frame,
+                    &self.render_cx,
+                    &mut self.renderer,
+                    road,
+                    &mut self.hybrid,
+                );
+            }
+        }
         #[cfg(feature = "tracy")]
         drop(self.frame.take());
+    }
+
+    /// diroxide.patch: whether the window has its target for `road`.
+    fn has_target(&self, road: Road, handle_id: HandleId) -> bool {
+        match road {
+            #[cfg(feature = "software")]
+            Road::Processor => self.presenters.contains_key(&handle_id),
+            #[cfg(not(feature = "software"))]
+            Road::Processor => false,
+            Road::Gpu | Road::Hybrid => self.surfaces.contains_key(&handle_id),
+        }
+    }
+
+    /// diroxide.patch: the window's drawing target, made on the road taken,
+    /// or at the first frame on the first road of the plan that works: the
+    /// adapter is asked for before any surface is made, and none, or one
+    /// that draws on the processor, takes the processor's road (see
+    /// [`crate::drawing`]). When no road works, the window panics with
+    /// [`GRAPHICS_FAILURE`] and every road's reason.
+    fn ensure_target(
+        &mut self,
+        handle_id: HandleId,
+        size: PhysicalSize<u32>,
+        app_driver: &mut dyn AppDriver,
+    ) -> Road {
+        if let Some(road) = self.road
+            && self.has_target(road, handle_id)
+        {
+            return road;
+        }
+        let handle = self.windows.get(&handle_id).unwrap().handle.clone();
+        let (roads, probe) = match self.road {
+            // Another window, or this one after a suspend: the road taken.
+            Some(road) => (vec![(road, String::new())], None),
+            None => {
+                let probe = match self.drawing {
+                    Drawing::Auto => {
+                        pollster::block_on(wgpu::util::initialize_adapter_from_env_or_default(
+                            &self.render_cx.instance,
+                            None,
+                        ))
+                        .ok()
+                        .map(|adapter| adapter.get_info())
+                    }
+                    Drawing::Processor | Drawing::Hybrid => None,
+                };
+                (crate::drawing::plan(self.drawing, probe.as_ref()), probe)
+            }
+        };
+        let mut failed = Vec::new();
+        for (road, reason) in roads {
+            match self.make_target(road, handle_id, Arc::clone(&handle), size, app_driver) {
+                Ok(()) => {
+                    if self.road.is_none() {
+                        crate::drawing::set_report(DrawingReport {
+                            road,
+                            reason,
+                            adapter: probe.as_ref().map(crate::drawing::adapter_words),
+                            failed: failed.clone(),
+                        });
+                        self.road = Some(road);
+                    }
+                    return road;
+                }
+                Err(err) => {
+                    tracing::warn!("Couldn't draw with {}: {err}", road.words());
+                    failed.push(format!("{}: {err}", road.words()));
+                }
+            }
+        }
+        panic!("{GRAPHICS_FAILURE}: {}", failed.join("; "))
+    }
+
+    /// diroxide.patch: makes the window's target for `road`, or says why
+    /// it cannot.
+    fn make_target(
+        &mut self,
+        road: Road,
+        handle_id: HandleId,
+        handle: Arc<WindowHandle>,
+        size: PhysicalSize<u32>,
+        app_driver: &mut dyn AppDriver,
+    ) -> Result<(), String> {
+        match road {
+            Road::Processor => {
+                #[cfg(feature = "software")]
+                {
+                    let presenter = crate::drawing::CpuPresenter::new(handle)?;
+                    self.presenters.insert(handle_id, presenter);
+                    Ok(())
+                }
+                #[cfg(not(feature = "software"))]
+                {
+                    let _ = (handle, handle_id);
+                    Err("drawing on the processor is not in this build".to_owned())
+                }
+            }
+            Road::Gpu | Road::Hybrid => {
+                if road == Road::Hybrid && !cfg!(feature = "imaging_vello_hybrid") {
+                    return Err("the hybrid renderer is not in this build".to_owned());
+                }
+                self.render_cx.prefer_software = road == Road::Hybrid;
+                let devices_before = self.render_cx.devices.len();
+                let transparent = self.transparent_windows.contains(&handle_id);
+                let surface = create_surface(&mut self.render_cx, handle, size, transparent)
+                    .map_err(|e| e.to_string())?;
+                let dev_id = surface.dev_id;
+                self.surfaces.insert(handle_id, surface);
+                if self.render_cx.devices.len() != devices_before {
+                    let device_handle = &self.render_cx.devices[dev_id];
+                    let wgpu = WgpuContext {
+                        instance: &self.render_cx.instance,
+                        adapter: &device_handle.adapter,
+                        device: &device_handle.device,
+                        queue: &device_handle.queue,
+                    };
+                    app_driver.on_wgpu_ready(&wgpu);
+                }
+                Ok(())
+            }
+        }
     }
 
     // --- MARK: RENDER
@@ -731,6 +893,8 @@ impl MasonryState {
         frame: PreparedFrame<'_>,
         render_cx: &RenderContext,
         renderer: &mut ImagingRenderer,
+        road: Road,
+        hybrid: &mut HybridRenderer,
     ) {
         let dev_id = surface.dev_id;
         let device = &render_cx.devices[dev_id].device;
@@ -739,6 +903,40 @@ impl MasonryState {
         else {
             return;
         };
+
+        if road == Road::Hybrid {
+            // diroxide.patch: the hybrid renderer, simple shaders a
+            // software adapter runs, into the same target texture.
+            #[cfg(feature = "imaging_vello_hybrid")]
+            {
+                use masonry_imaging::TextureRenderer as _;
+                let renderer = hybrid.get_or_insert_with(|| {
+                    masonry_imaging::vello_hybrid::new_target_renderer(
+                        device.clone(),
+                        queue.clone(),
+                    )
+                });
+                let target = masonry_imaging::vello_hybrid::TextureTarget::new(
+                    &surface.target_view,
+                    frame.width,
+                    frame.height,
+                );
+                let mut frame = frame;
+                if let Err(err) = renderer.render_source_into_texture(&mut frame, target) {
+                    tracing::error!(
+                        "Couldn't render Masonry content with the hybrid renderer: {err:?}"
+                    );
+                    return;
+                }
+            }
+            #[cfg(not(feature = "imaging_vello_hybrid"))]
+            let _ = (hybrid, frame);
+            Self::present_surface(surface, surface_texture, &window.handle, device, queue);
+            crate::drawing::presented(Ok(()));
+            return;
+        }
+        #[cfg(feature = "imaging_vello_hybrid")]
+        let _ = hybrid;
 
         let _render_span = tracing::info_span!(
             "Rendering Masonry window",
@@ -759,9 +957,11 @@ impl MasonryState {
                 backend = ImagingRenderer::BACKEND_NAME,
                 "Couldn't render Masonry content into target texture: {err}"
             );
+            crate::drawing::presented(Err(format!("the renderer failed: {err}")));
             return;
         }
         Self::present_surface(surface, surface_texture, &window.handle, device, queue);
+        crate::drawing::presented(Ok(()));
     }
 
     fn acquire_surface_texture(
@@ -1099,7 +1299,11 @@ impl MasonryState {
                     handle.set_ime_cursor_area(position, size);
                 }
                 RenderRootSignal::ClipboardStore(text) => {
-                    self.clipboard_cx.set_contents(text).unwrap();
+                    // diroxide.patch: another program holding the clipboard
+                    // no longer ends the window.
+                    if let Err(err) = self.clipboard_cx.set_contents(text) {
+                        tracing::error!("Couldn't put text on the clipboard: {err}");
+                    }
                 }
                 RenderRootSignal::RequestRedraw => {
                     need_redraw.insert(*handle_id);
@@ -1222,12 +1426,15 @@ impl MasonryState {
     }
 }
 
+/// The window's wgpu surface, or why it cannot be made (diroxide.patch:
+/// the caller tries the next road, and panics with [`GRAPHICS_FAILURE`]
+/// only when none works).
 fn create_surface(
     render_cx: &mut RenderContext,
     handle: Arc<WindowHandle>,
     size: PhysicalSize<u32>,
     transparent: bool,
-) -> RenderSurface<'static> {
+) -> Result<RenderSurface<'static>, crate::vello_util::RenderSurfaceError> {
     assert!(
         size.width != 0 && size.height != 0,
         "cannot create a surface with a width or height of zero"
@@ -1239,7 +1446,6 @@ fn create_surface(
         wgpu::PresentMode::AutoVsync,
         transparent,
     ))
-    .unwrap_or_else(|e| panic!("{GRAPHICS_FAILURE}: {e}"))
 }
 
 /// The start of the panic message when a window's drawing surface cannot

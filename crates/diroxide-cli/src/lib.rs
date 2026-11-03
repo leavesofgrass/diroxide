@@ -169,6 +169,7 @@ pub fn help_text() -> String {
         "--gui                     open the GUI, even where the terminal would open",
         "--graphics NAME           GUI graphics: auto, vulkan, dx12, metal, gl or software",
         "--background              the GUI off screen and never in front, for checks",
+        "--log FILE                the GUI's graphics adapter and drawing road to FILE",
         "--inline                  draw below the prompt, not on the whole screen",
         "--cwd-file FILE           at quit, write the active folder to FILE for the shell",
         "--theme NAME              use this theme for this session",
@@ -237,6 +238,15 @@ fn parse_open(args: &[String]) -> Result<OpenOptions, CliError> {
                 options.cwd_file = Some(file);
             }
             "--theme" => options.theme = Some(value("--theme")?),
+            "--log" => {
+                let file = value("--log")?;
+                if file.chars().any(char::is_control) {
+                    return Err(CliError::Failed(
+                        "the --log name has control characters; choose a plain name".to_owned(),
+                    ));
+                }
+                options.log = Some(file);
+            }
             option if option.starts_with("--") => {
                 return Err(CliError::UnknownOption(option.to_owned()));
             }
@@ -430,6 +440,25 @@ mod tests {
                 ..open(&[])
             }))
         );
+        assert_eq!(
+            parse(args(&[
+                "--gui",
+                "--graphics",
+                "software",
+                "--log",
+                "gui.log"
+            ])),
+            Ok(Invocation::Open(OpenOptions {
+                gui: true,
+                graphics: Some(diroxide_gui::GraphicsApi::Software),
+                log: Some("gui.log".into()),
+                ..open(&[])
+            }))
+        );
+        assert!(matches!(
+            parse(args(&["--log", "a\u{7}b"])),
+            Err(CliError::Failed(_))
+        ));
         assert_eq!(
             parse(args(&["--graphics", "glide"])),
             Err(CliError::Failed(

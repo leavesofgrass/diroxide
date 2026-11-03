@@ -117,6 +117,10 @@ pub(crate) struct RenderContext {
     pub devices: Vec<DeviceHandle>,
     requested_features: wgpu::Features,
     requested_limits: WgpuLimits,
+    /// diroxide.patch: the hybrid renderer's road wants a software adapter
+    /// (WARP, llvmpipe): only such a device is taken, and a new one is
+    /// asked for as the fallback adapter.
+    pub(crate) prefer_software: bool,
 }
 
 pub(crate) struct DeviceHandle {
@@ -141,6 +145,7 @@ impl RenderContext {
             devices: Vec::new(),
             requested_features: wgpu::Features::empty(),
             requested_limits: WgpuLimits::Default,
+            prefer_software: false,
         }
     }
 
@@ -365,14 +370,18 @@ impl RenderContext {
         &mut self,
         compatible_surface: Option<&Surface<'_>>,
     ) -> Option<usize> {
+        let software = self.prefer_software;
+        let wanted = |d: &DeviceHandle| {
+            !software || d.adapter.get_info().device_type == wgpu::DeviceType::Cpu
+        };
         let compatible = match compatible_surface {
             Some(s) => self
                 .devices
                 .iter()
                 .enumerate()
-                .find(|(_, d)| d.adapter.is_surface_supported(s))
+                .find(|(_, d)| wanted(d) && d.adapter.is_surface_supported(s))
                 .map(|(i, _)| i),
-            None => (!self.devices.is_empty()).then_some(0),
+            None => self.devices.iter().position(wanted),
         };
         if compatible.is_none() {
             return self.new_device(compatible_surface).await;
@@ -382,10 +391,21 @@ impl RenderContext {
 
     /// Creates a compatible device handle id.
     async fn new_device(&mut self, compatible_surface: Option<&Surface<'_>>) -> Option<usize> {
-        let adapter =
+        let adapter = if self.prefer_software {
+            // diroxide.patch: the system's software adapter.
+            self.instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::default(),
+                    force_fallback_adapter: true,
+                    compatible_surface,
+                })
+                .await
+                .ok()?
+        } else {
             wgpu::util::initialize_adapter_from_env_or_default(&self.instance, compatible_surface)
                 .await
-                .ok()?;
+                .ok()?
+        };
         let _ = FIRST_ADAPTER.set(adapter.get_info());
         let supported_features = adapter.features();
         let required_limits = match &self.requested_limits {

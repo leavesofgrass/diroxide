@@ -15,10 +15,22 @@
 //!   appearance is read once at the start (while following it, and
 //!   elsewhere than Windows for its high contrast setting), and Windows'
 //!   high contrast mode on every step, so its colors apply at once.
+//! - The window draws on the road the vendored runner chooses at its
+//!   first frame (diroxide's third patch, `third_party/xilem/diroxide.patch`;
+//!   R27's commit 31, the owner's answer 106): the graphics card when the
+//!   adapter asked for before the surface is made is a real one; else the
+//!   processor, Vello's CPU renderer presented through softbuffer with no
+//!   graphics driver at all; else the hybrid renderer on a software
+//!   adapter. `--graphics software` (or the `graphics` setting) asks for
+//!   the processor. The road and the adapter go to the `--log` file, and a
+//!   road other than the graphics card is said once in the status line
+//!   ([`road_line`]). For checks of the fallback, `DIROXIDE_DRAWING=hybrid`
+//!   (or `processor`) chooses the road whatever the setting.
 //! - A window that cannot start is a [`GuiError`], never a panic: no
 //!   display is the event loop's error, and the window runner's graphics
-//!   failure, a panic inside it that textweaver's patch names
-//!   ([`masonry_winit::app::GRAPHICS_FAILURE`]), is caught and said.
+//!   failure on every road, a panic inside it that textweaver's patch names
+//!   ([`masonry_winit::app::GRAPHICS_FAILURE`]), is caught and said; `diro`
+//!   then opens the terminal with one plain sentence.
 //!
 //! Patterns adapted from textweaver's `crates/textweaver-xilem/src/gui.rs`
 //! and `src/safety.rs` (the owner's own project).
@@ -37,13 +49,13 @@ use diroxide_core::Command;
 use masonry::core::{ErasedAction, WidgetId};
 use masonry::dpi::{LogicalSize, PhysicalPosition};
 use masonry_winit::app::{
-    AppDriver, DriverCtx, EventLoop, EventLoopProxy, GRAPHICS_FAILURE, MasonryState,
-    MasonryUserEvent, NewWindow, WindowId,
+    AppDriver, Drawing, DriverCtx, EventLoop, EventLoopProxy, GRAPHICS_FAILURE, MasonryState,
+    MasonryUserEvent, NewWindow, Road, WindowId,
 };
 use masonry_winit::winit::window::Window as WinitWindow;
 
 use crate::frontend::Frontend;
-use crate::{GuiError, GuiOptions};
+use crate::{GraphicsApi, GuiError, GuiOptions};
 
 pub use crate::frontend::{JOBS_LINE, STATUS_LINE, TITLE_LINE};
 
@@ -71,6 +83,90 @@ pub fn attributes(title: &str, background: bool) -> masonry_winit::winit::window
         }
     }
     attributes
+}
+
+/// How the window is to draw: `DIROXIDE_DRAWING` (`processor`, `hybrid`
+/// or `auto`, for checks of each road) when it is set, else the processor
+/// for `--graphics software`, else the runner's own choice.
+pub fn drawing_for(graphics: GraphicsApi, asked: Option<&str>) -> Drawing {
+    match asked.map(|a| a.trim().to_ascii_lowercase()).as_deref() {
+        Some("processor" | "cpu" | "software") => Drawing::Processor,
+        Some("hybrid") => Drawing::Hybrid,
+        Some("auto") => Drawing::Auto,
+        _ if graphics == GraphicsApi::Software => Drawing::Processor,
+        _ => Drawing::Auto,
+    }
+}
+
+/// What the status line says once of the road the window draws by: the
+/// processor or a software adapter, with why; nothing for the graphics
+/// card. "Drawing on the processor: no graphics adapter was found."
+pub fn road_line(road: Road, reason: &str) -> Option<String> {
+    let why = |lead: &str| {
+        if reason == "asked for" || reason.is_empty() {
+            format!("{lead}, as the graphics setting asks.")
+        } else {
+            format!("{lead}: {reason}.")
+        }
+    };
+    match road {
+        Road::Gpu => None,
+        Road::Processor => Some(why("Drawing on the processor")),
+        Road::Hybrid => Some(why("Drawing on a software adapter")),
+    }
+}
+
+/// The `--log` file's lines for the road taken: the road, why, the
+/// adapter the probe found, the roads that failed before it, and the
+/// device the graphics card's road made.
+pub fn road_log(report: &masonry_winit::app::DrawingReport) -> Vec<String> {
+    let mut lines = vec![format!(
+        "graphics: drawing with {}; why: {}; adapter found first: {}",
+        report.road.words(),
+        if report.reason.is_empty() {
+            "the road taken"
+        } else {
+            report.reason.as_str()
+        },
+        report.adapter.as_deref().unwrap_or("none")
+    )];
+    for failed in &report.failed {
+        lines.push(format!("graphics: could not draw with {failed}"));
+    }
+    if report.road != Road::Processor
+        && let Some(a) = masonry_winit::app::graphics_adapter()
+    {
+        lines.push(format!(
+            "graphics: device on {}, {}, {}{}",
+            a.name,
+            a.backend,
+            a.kind,
+            if a.driver.is_empty() {
+                String::new()
+            } else {
+                format!(", driver {}", a.driver)
+            }
+        ));
+    }
+    lines
+}
+
+/// Appends `lines` to the `--log` file, if there is one; a file that
+/// cannot be written is left alone (the log is for diagnosis only).
+fn log_lines(file: Option<&std::path::Path>, lines: &[String]) {
+    use std::io::Write as _;
+    let Some(file) = file else {
+        return;
+    };
+    if let Ok(mut out) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(file)
+    {
+        for line in lines {
+            let _ = writeln!(out, "{line}");
+        }
+    }
 }
 
 /// The message the event loop gets when a worker has a result.
@@ -310,6 +406,12 @@ struct Gui {
     wake: diroxide_app::runtime::Waker,
     ticker: Ticker,
     slot: Rc<RefCell<Option<App>>>,
+    /// How the window is to draw, for the runner's first frame.
+    drawing: Drawing,
+    /// The `--log` file.
+    log: Option<std::path::PathBuf>,
+    /// Whether the road taken was logged and said.
+    road_told: bool,
     /// The event loop, for the native menu's messages.
     #[cfg(windows)]
     proxy: EventLoopProxy,
@@ -333,6 +435,21 @@ impl Gui {
         #[cfg(windows)]
         frontend.set_system_colors(crate::platform::contrast::colors());
         step(frontend, ctx.render_root(self.window));
+        // The road the first frame took: logged, and said once in the
+        // status line when it is not the graphics card.
+        if !self.road_told
+            && let Some(report) = masonry_winit::app::drawing_report()
+        {
+            self.road_told = true;
+            log_lines(self.log.as_deref(), &road_log(&report));
+            if let Some(line) = road_line(report.road, &report.reason) {
+                frontend.event(
+                    ctx.render_root(self.window),
+                    diroxide_app::AppEvent::Problem(diroxide_core::Message::info(line)),
+                    Instant::now(),
+                );
+            }
+        }
         let title = frontend.window_title();
         if title != self.title {
             // The window's node is named by the frontend's refresh.
@@ -365,6 +482,8 @@ impl AppDriver for Gui {
     }
 
     fn on_start(&mut self, state: &mut MasonryState) {
+        // Before the first frame: the road the runner is to take.
+        let _ = state.set_drawing(self.drawing);
         for root in state.roots() {
             for blob in crate::fonts::blobs() {
                 let _ = root.register_fonts(blob);
@@ -547,6 +666,12 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
         wake,
         ticker: Ticker::start(proxy.clone(), window_id),
         slot: Rc::clone(&slot),
+        drawing: drawing_for(
+            options.graphics,
+            std::env::var("DIROXIDE_DRAWING").ok().as_deref(),
+        ),
+        log: options.log.clone(),
+        road_told: false,
         #[cfg(windows)]
         proxy,
         #[cfg(windows)]
@@ -560,10 +685,27 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
         masonry_winit::app::run_with(event_loop, vec![window], gui, properties)
     }));
     restore_hook();
+    // The frames the window presented, for the log: a machine with no
+    // graphics card shows it really drew.
+    let (frames, failure) = masonry_winit::app::frames_presented();
+    let mut lines = vec![format!("graphics: {frames} frames presented")];
+    if let Some(failure) = failure {
+        lines.push(format!(
+            "graphics: a frame could not be presented: {failure}"
+        ));
+    }
+    log_lines(options.log.as_deref(), &lines);
     match ran {
         Ok(Ok(())) => {}
         Ok(Err(e)) => return Err(GuiError::EventLoop(e.to_string())),
-        Err(payload) => return Err(error_for_panic(&panic_text(payload.as_ref()))),
+        Err(payload) => {
+            let error = error_for_panic(&panic_text(payload.as_ref()));
+            log_lines(
+                options.log.as_deref(),
+                &[format!("graphics: the window could not start: {error}")],
+            );
+            return Err(error);
+        }
     }
     slot.borrow_mut()
         .take()
@@ -627,6 +769,49 @@ mod tests {
         assert!(bar.command(1).is_some());
         assert!(bar.command(0).is_none());
         assert!(!bar.shown());
+    }
+
+    #[test]
+    fn the_drawing_follows_the_setting_and_the_check_variable() {
+        assert_eq!(drawing_for(GraphicsApi::Auto, None), Drawing::Auto);
+        assert_eq!(drawing_for(GraphicsApi::Dx12, None), Drawing::Auto);
+        assert_eq!(drawing_for(GraphicsApi::Software, None), Drawing::Processor);
+        assert_eq!(
+            drawing_for(GraphicsApi::Auto, Some("hybrid")),
+            Drawing::Hybrid
+        );
+        assert_eq!(
+            drawing_for(GraphicsApi::Software, Some(" Auto ")),
+            Drawing::Auto
+        );
+        assert_eq!(
+            drawing_for(GraphicsApi::Auto, Some("cpu")),
+            Drawing::Processor
+        );
+        assert_eq!(
+            drawing_for(GraphicsApi::Software, Some("?")),
+            Drawing::Processor
+        );
+    }
+
+    #[test]
+    fn the_road_is_said_meaning_first_and_the_card_not_at_all() {
+        use diroxide_core::format::{BRAILLE_CELLS, within_cells};
+        assert_eq!(road_line(Road::Gpu, "the graphics card A"), None);
+        let none = road_line(Road::Processor, "no graphics adapter was found").unwrap();
+        assert_eq!(
+            none,
+            "Drawing on the processor: no graphics adapter was found."
+        );
+        assert!(within_cells(&none, "Drawing on the processor"));
+        let asked = road_line(Road::Processor, "asked for").unwrap();
+        assert_eq!(
+            asked,
+            "Drawing on the processor, as the graphics setting asks."
+        );
+        let hybrid = road_line(Road::Hybrid, "asked for").unwrap();
+        assert!(hybrid.starts_with("Drawing on a software adapter"));
+        assert!("Drawing on a software adapter".chars().count() <= BRAILLE_CELLS);
     }
 
     #[test]

@@ -388,7 +388,7 @@ Opens in. Where diro opens its panels. Auto opens the GUI on a desktop and the t
 
 ### graphics
 
-GUI graphics. The graphics API the GUI draws with. Auto lets the graphics driver choose; software, drawing on the processor, comes later in this alpha. diro --graphics NAME chooses for one start.
+GUI graphics. The graphics API the GUI draws with. Auto lets the graphics driver choose, and draws on the processor where there is no graphics card; software draws on the processor always. diro --graphics NAME chooses for one start.
 
 - Holds: one of auto, vulkan, dx12, metal, gl or software.
 - Default: `"auto"`.

@@ -17,6 +17,11 @@ gui = [
     "dep:masonry",
     "dep:masonry_winit",
     "masonry_winit/imaging_vello",
+    # Software drawing (the owner's answer 106): Vello's CPU renderer
+    # presented through softbuffer where there is no graphics card, the
+    # hybrid renderer on a software adapter as its fallback.
+    "masonry_winit/imaging_vello_hybrid",
+    "masonry_winit/software",
     "dep:accesskit",
     "dep:accesskit_winit",
     "dep:fontique",

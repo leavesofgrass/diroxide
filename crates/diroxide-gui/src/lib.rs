@@ -73,6 +73,14 @@
 //!   plugin's name last; a question's message of two lines or more is a
 //!   list to read line by line ("Message, 11 lines"), so a new server
 //!   key's fingerprint is read one part of four groups a line.
+//! - Software drawing (the owner's answer 106): the vendored runner asks
+//!   for an adapter before it makes the surface, and with none, or only a
+//!   software one, draws on the processor (Vello's CPU renderer through
+//!   softbuffer, no graphics driver), the hybrid renderer on a software
+//!   adapter its fallback, the terminal with one plain sentence last;
+//!   `--graphics software` asks for the processor; the road goes to the
+//!   `--log` file and, when it is not the graphics card, once to the
+//!   status line (`window`).
 //!
 //! On Windows `diro` stays a console program, so a shell waits for it and
 //! the terminal frontend keeps its console; [`console`] lets go of a
@@ -115,9 +123,11 @@ pub enum GraphicsApi {
     Metal,
     /// OpenGL.
     Gl,
-    /// Drawn on the processor, with no graphics card. The renderer for it
-    /// comes later in this alpha (R27's commit 31); until then the window
-    /// says so and does not start.
+    /// Drawn on the processor, with no graphics card: Vello's CPU renderer
+    /// presented through softbuffer, which needs no graphics driver, the
+    /// hybrid renderer on a software adapter its fallback (the owner's
+    /// answer 106). `auto` takes this road by itself where there is no
+    /// graphics adapter or only one that draws on the processor.
     Software,
 }
 
@@ -169,6 +179,9 @@ pub struct GuiOptions {
     pub background: bool,
     /// The graphics API to draw with.
     pub graphics: GraphicsApi,
+    /// `--log FILE`: the window's diagnostic lines (the graphics adapter
+    /// and the drawing road taken) appended to this file.
+    pub log: Option<std::path::PathBuf>,
 }
 
 impl Default for GuiOptions {
@@ -177,6 +190,7 @@ impl Default for GuiOptions {
             title: "diroxide".to_owned(),
             background: false,
             graphics: GraphicsApi::Auto,
+            log: None,
         }
     }
 }
@@ -193,14 +207,10 @@ pub enum GuiError {
     /// system refused the window.
     #[error("there is no display to open a window on ({0})")]
     NoDisplay(String),
-    /// The window could not start its graphics: no adapter, no surface, or
-    /// a driver that failed.
+    /// The window could not start its graphics on any road: the graphics
+    /// card, the processor, the hybrid renderer on a software adapter.
     #[error("the window could not start its graphics ({0})")]
     Graphics(String),
-    /// Drawing on the processor was asked for, and its renderer is not
-    /// built yet.
-    #[error("drawing on the processor comes later in this alpha")]
-    SoftwareNotYet,
     /// The window's event loop failed after it started.
     #[error("the window's event loop failed ({0})")]
     EventLoop(String),
@@ -220,11 +230,8 @@ impl Explain for GuiError {
                 "Use the terminal with diro --tui, or start diro from the desktop.".to_owned()
             }
             GuiError::Graphics(_) => {
-                "Try another graphics API with diro --graphics, such as dx12, vulkan or gl. The terminal, diro --tui, needs none."
+                "Try another graphics API with diro --graphics, such as software, dx12, vulkan or gl. The terminal, diro --tui, needs none."
                     .to_owned()
-            }
-            GuiError::SoftwareNotYet => {
-                "Set graphics to auto, or use the terminal with diro --tui.".to_owned()
             }
             GuiError::EventLoop(_) | GuiError::Stopped(_) => {
                 "Start diro again; the terminal, diro --tui, does not use the window.".to_owned()
@@ -317,9 +324,6 @@ pub fn window_title(app: &App, program: &str) -> String {
 /// `--cwd-file`). Every failure is a [`GuiError`] in words; the app is
 /// dropped then, and `diro` builds a new one for the terminal.
 pub fn run(app: App, runtime: Runtime, options: GuiOptions) -> Result<App, GuiError> {
-    if options.graphics == GraphicsApi::Software {
-        return Err(GuiError::SoftwareNotYet);
-    }
     #[cfg(feature = "gui")]
     {
         window::run(app, runtime, options)
@@ -352,23 +356,6 @@ mod tests {
     }
 
     #[test]
-    fn software_drawing_is_said_and_never_started() {
-        let here = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
-        let app = App::new(AppOptions::new(here.clone(), here));
-        let options = GuiOptions {
-            graphics: GraphicsApi::Software,
-            ..GuiOptions::default()
-        };
-        let err = run(app, Runtime::with_local(), options).unwrap_err();
-        assert_eq!(err, GuiError::SoftwareNotYet);
-        let said = diroxide_core::Message::from_error("open", "the GUI", &err).text;
-        assert_eq!(
-            said,
-            "Could not open the GUI: drawing on the processor comes later in this alpha. Set graphics to auto, or use the terminal with diro --tui."
-        );
-    }
-
-    #[test]
     fn graphics_names_parse_and_map_to_wgpu() {
         for name in GraphicsApi::NAMES {
             let api = GraphicsApi::parse(name).unwrap();
@@ -392,7 +379,6 @@ mod tests {
             GuiError::NotBuilt,
             GuiError::NoDisplay("neither WAYLAND_DISPLAY nor DISPLAY is set".into()),
             GuiError::Graphics("no compatible WGPU device found".into()),
-            GuiError::SoftwareNotYet,
             GuiError::EventLoop("the system closed it".into()),
             GuiError::Stopped("index out of bounds".into()),
         ];
