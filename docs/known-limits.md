@@ -35,7 +35,9 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The preview region and the conversions dialog come in a later alpha. Until then `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
 - Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
 - A plugin's columns are declared and not shown in the panels yet.
-- A list a plugin opens always opens over the panels, like search results, whichever panel the plugin names. A list that opens inside a panel is not built.
+- A plugin list opens inside a panel. These lists still open over the panels, as dialogs: the Volumes list, the trash browser, the Jobs list, search results, and the results of a script in `lister` mode.
+- A plugin list is not saved when you quit, and it stays in its panel when its plugin stops or is turned off: leave it with Backspace.
+- The GUI does not draw plugin lists yet; it comes in a later alpha.
 - A plugin's keys are lines in `keymap.toml` and rows in the Keys list, and the Keys list cannot change them yet: Enter on a plugin's row says to edit `keymap.toml`. `diro keys check` does not know plugin commands and calls such a line unknown; the program does not. Manage plugins, on a plugin's Commands and keys row, also says what happened to each proposed key.
 - A script's `dry_run` promise is read and checked, and the program offers no preview with it yet.
 - The `terminal`, `terminal-wait` and `output-column` modes of a script command are not shown by the program yet.
@@ -80,7 +82,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A server-side copy that was cancelled still finishes on the server. The cleanup runs after it.
 - Changing the permissions of a link changes what the link points to.
 - The plugin is a component with a program for Windows on x86-64, Linux on x86-64 and macOS, in the release files. On any other computer, and in a build made from source, it is built from the source tree.
-- A list the plugin opens, the Sites list and the doctor report, comes over the panels, not inside one.
+- The doctor report comes over the panels, as a document. The Sites list opens inside a panel.
 
 ## The transfer queue
 
@@ -174,7 +176,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 [Volumes and the trash](volumes-trash.md) describes both lists. These are the limits.
 
-- Both lists open over the panels, not inside one. A list inside a panel is not built.
+- Both lists open over the panels, as dialogs, not inside one, unlike a plugin's list.
 - Neither list has terminal tests yet. Their tests run the program's logic over made-up volumes and a test-only trash, and never drew the screen. No test touches your real trash or your real drives.
 - Unmount, Eject and Mount, done by the Volume actions plugin, were tried only against stand-ins for `udisksctl`, `diskutil` and PowerShell. The words those tools use for a busy volume were written from typical text and not captured, so a real busy volume may say "the system refused" where the plugin means "files are open". Nothing is forced either way.
 - On Windows, Eject was run only as far as PowerShell starting with no console window and saying that it does not list a drive that is not there. Ejecting a real stick, idle and with a file open, has not been tried. The name of the shell's Eject verb has not been tried on Windows in other languages.

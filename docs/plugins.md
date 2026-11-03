@@ -222,7 +222,9 @@ A plugin's question waits behind a confirmation, a password prompt, a job's ques
 
 ### A list of rows that are not files
 
-A plugin can open a list of rows that are not files, such as the changed files of a git folder. It opens over the panels, like search results, and says "Changed files, 2 rows (Line counter)". A row says its name first and its columns after it: "b.txt, state Modified, lines 12, 2 of 2".
+A plugin can open a list of rows that are not files, such as the changed files of a git folder. It is a plugin list, and it opens inside a panel: the one you are in, or the other one when the plugin asks for it. The focus moves to that panel, and you hear the list's name, its count and the panel, with the plugin's name last: "Changed files, 2 rows, left panel (Changed files)". A row says its name first and its columns after it: "b.txt, state Modified, lines 12, 2 of 2".
+
+The list sits over the panel's folder. The folder stays as it was beneath it, with its cursor and its marks, and it comes back when you leave the list. The title line names the list: "Changed files, left panel (Changed files)". Ctrl+D says the list, its count, the row you are on and its filter.
 
 - Up and Down move. At the end of a long list, diroxide asks the plugin for more rows by itself.
 - Space marks and unmarks a row: you hear "Marked" or "Unmarked".
@@ -230,16 +232,18 @@ A plugin can open a list of rows that are not files, such as the changed files o
 - Ctrl+S opens "Filter the rows by". Rows whose name or columns hold the text stay. "Filter off" says it is cleared.
 - Enter runs the plugin's own command for the marked rows, or for the row you are on. The plugin's other action keys, such as Alt+S for "stage" in the changed-files example, do the same with their commands.
 - Ctrl+R asks the plugin for the rows again.
-- A key that acts on files, such as F5 or F8, says "This row is not a file."
-- Escape closes the list and says "Lister closed (Changed files)".
+- A key that acts on files, such as F5 or F8, says "This row is not a file." So does a command that works on the folder beneath, such as Make folder, Select by kind or a label.
+- Left, Backspace or Alt+Up leaves the list. Escape leaves it too, after it has stopped a job you started from the list and taken the list's filter off. Alt+Left and Alt+Right, Back and Forward, only leave the list; press them again to go through the folder history.
+- Leaving says "Plugin list closed (Changed files)", then the folder as when you came to it: "work, 8 items, in D:\projects".
+- Going somewhere else in the panel, with Go to a path, Home or a place list, closes the list too.
 
-Today a list always opens over the panels, whichever panel the plugin names.
+The list is not saved when you quit. At the next start the panel shows its folder.
 
 ### The Sites list
 
-The SFTP places plugin opens a list of this kind: your saved sites and the hosts from your ssh configuration. It is in the Plugins menu as SFTP sites once the plugin is turned on. Its title gives the counts first, "Sites, 3 saved, 5 from ssh config", and each row starts with the name and the state: "build, saved, alice@build.example" and "nas, from ssh config". Escape closes it.
+The SFTP places plugin opens a list of this kind: your saved sites and the hosts from your ssh configuration. It is in the Plugins menu as SFTP sites once the plugin is turned on. Its title gives the counts first, "Sites, 3 saved, 5 from ssh config", and each row starts with the name and the state: "build, saved, alice@build.example" and "nas, from ssh config". It opens inside the panel you are in, over its folder. Backspace or Escape leaves it.
 
-Enter connects to the site. The plugin's other action keys act on the row you are on:
+Enter connects to the site. The list then closes, and the panel opens the site's start folder: you hear the folder's name and count. The plugin's other action keys act on the row you are on:
 
 - Alt+N: new site. On a host from your ssh configuration it saves that host.
 - Alt+E: edit the site.

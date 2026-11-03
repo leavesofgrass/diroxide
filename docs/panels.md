@@ -153,6 +153,17 @@ In a terminal the keypad's plus, minus and star arrive as the main row's charact
 - Alt+Enter lists the details of the focused entry, one fact a row: the type, then the size in words with the exact bytes (a folder says "folder size not computed", and an archive adds "Entries: 10 items"), the modified, created and accessed times in words, attributes, owner, group, link target, whether it is hidden, and the full path. A name that needs care adds the reason and the name spelled out. Windows Terminal keeps Alt+Enter; the File menu has Details.
 - Shift+F10 or the Menu key opens the context menu: "Actions for report.pdf", a list of what the File menu offers here plus copy, cut, copy to the other panel and move to the other panel, each with its key. On Windows the Menu key never reaches a terminal program, so Shift+F10 is the way there.
 
+## Plugin lists
+
+A plugin can show a list of rows that are not files inside a panel, such as the changed files of a git folder or the SFTP plugin's Sites list. The list sits over the panel's folder, and you hear its name, its count and the panel first, with the plugin's name last: "Changed files, 2 rows, left panel (Changed files)". The folder stays as it was beneath it.
+
+- Up, Down, Space, the sort keys, Ctrl+S and Enter work on the list's rows. [Plugins](plugins.md) has the details.
+- A file key, such as F5, F6 or F8, says "This row is not a file."
+- Left, Backspace or Alt+Up leaves the list and says the folder again. Escape leaves it when no job or filter is there to cancel. Back and Forward only leave the list the first time.
+- Go to a path, Home or a place list closes the list and goes there.
+- The list is not saved when you quit.
+- The other panel's folder beneath a list is still where F5 and F6 copy and move to. The confirmation names it.
+
 ## Refresh and watching
 
 diroxide watches the folders on screen on a fixed local drive and merges outside changes into the list. "Folder changed: 2 added, 1 removed" is said when it matters, not on every change. If the folder you are in is renamed or deleted, diroxide says "Folder is gone" and goes up to the nearest folder that still exists. A folder that cannot be watched says so: "Folder not watched. Reload with Ctrl+R." That is always true of network drives and of removable drives, which diroxide checks again when you return to the panel and every two seconds.
