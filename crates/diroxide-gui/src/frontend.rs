@@ -212,8 +212,7 @@ pub struct Frontend {
     hold_retry_at: Option<Instant>,
     /// What the window's launcher started and the frontend has not said
     /// yet ([`crate::spawn`]).
-    starts:
-        Option<std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<crate::spawn::Started>>>>,
+    starts: Option<crate::spawn::Starts>,
     /// The viewer's columns and rows, as its list box last told them.
     viewer_size: (usize, usize),
     /// Each running job's latest percent, from its progress.
@@ -331,10 +330,7 @@ impl Frontend {
 
     /// Tells the driver what the window's launcher starts, so a program
     /// that opened in a window of its own is said as opened.
-    pub fn set_starts(
-        &mut self,
-        starts: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<crate::spawn::Started>>>,
-    ) {
+    pub fn set_starts(&mut self, starts: crate::spawn::Starts) {
         self.starts = Some(starts);
     }
 
@@ -1020,9 +1016,9 @@ impl Frontend {
         if let AppEvent::ProgramEnded {
             what,
             folder,
-            result: Ok(None),
+            result: Ok(None) | Err(_),
         } = &event
-            && let Some(started) = self.starts.as_ref().and_then(|starts| {
+            && let Some((started, outcome)) = self.starts.as_ref().and_then(|starts| {
                 starts
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1030,7 +1026,12 @@ impl Frontend {
             })
         {
             let place = diroxide_app::panel::place_leaf(folder);
-            let message = Message::info(started.words(what, &place));
+            // Why it could not start, in the window's words (no terminal
+            // program on Linux), rather than the app's general line.
+            let message = match outcome {
+                Ok(()) => Message::info(started.words(what, &place)),
+                Err(cause) => crate::spawn::failure(started, what, &cause),
+            };
             self.said.push(message.clone());
             self.to_say.push(Said {
                 message,

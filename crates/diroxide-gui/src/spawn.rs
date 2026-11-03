@@ -169,9 +169,8 @@ pub fn plan(
         }
         System::Unix => {
             if started != Started::Program {
-                let terminal = terminal.ok_or_else(|| {
-                    "no terminal program was found; set the TERMINAL variable to one".to_owned()
-                })?;
+                let terminal =
+                    terminal.ok_or_else(|| "no terminal program was found".to_owned())?;
                 let mut inner = vec![program.program.clone()];
                 let mut args = program.args.clone();
                 if started == Started::Command
@@ -287,8 +286,15 @@ pub type Starter = Box<dyn Fn(&Planned) -> Result<(), String> + Send + Sync>;
 pub struct WindowLauncher {
     system: SystemLauncher,
     starter: Starter,
-    started: Arc<Mutex<VecDeque<Started>>>,
+    started: Starts,
+    /// The Unix terminal emulator, when a test chooses it; else
+    /// `TERMINAL` or the first on the path.
+    terminal: Option<OsString>,
 }
+
+/// What the window started, and whether it could, in the order started:
+/// shared by the launcher and the frontend, which says each.
+pub type Starts = Arc<Mutex<VecDeque<(Started, Result<(), String>)>>>;
 
 impl WindowLauncher {
     /// A launcher that starts programs for real.
@@ -302,12 +308,35 @@ impl WindowLauncher {
             system: SystemLauncher,
             starter,
             started: Arc::new(Mutex::new(VecDeque::new())),
+            terminal: None,
         }
     }
 
+    /// The same launcher with this Unix terminal emulator (the tests'
+    /// choice, so they never depend on what the machine has).
+    pub fn with_terminal(mut self, terminal: impl Into<OsString>) -> Self {
+        self.terminal = Some(terminal.into());
+        self
+    }
+
     /// The starts not yet said, shared with the frontend.
-    pub fn started(&self) -> Arc<Mutex<VecDeque<Started>>> {
+    pub fn started(&self) -> Starts {
         Arc::clone(&self.started)
+    }
+}
+
+/// What is said when the window could not start a program: the cause,
+/// then the next step, by what it was.
+pub fn failure(started: Started, what: &str, cause: &str) -> diroxide_core::Message {
+    let next = if cause.contains("no terminal program") {
+        "Set the TERMINAL variable to a terminal program, such as xterm"
+    } else {
+        "Check the command, or the shell and editor settings"
+    };
+    match started {
+        Started::Terminal => diroxide_core::Message::could_not("open", "a terminal", cause, next),
+        Started::Command => diroxide_core::Message::could_not("start", "the command", cause, next),
+        Started::Program => diroxide_core::Message::could_not("open", what, cause, next),
     }
 }
 
@@ -334,17 +363,21 @@ impl Launcher for WindowLauncher {
     fn run(&self, program: &Program) -> Result<Option<i32>, String> {
         let (shell, _) = self.shell();
         let terminal = match System::current() {
-            System::Unix => unix_terminal(std::env::var_os("TERMINAL"), on_path),
+            System::Unix => self
+                .terminal
+                .clone()
+                .or_else(|| unix_terminal(std::env::var_os("TERMINAL"), on_path)),
             _ => None,
         };
-        let planned = plan(program, &shell, System::current(), terminal)?;
-        (self.starter)(&planned)?;
+        let kind = kind_of(program, &shell);
+        let result = plan(program, &shell, System::current(), terminal)
+            .and_then(|planned| (self.starter)(&planned));
         self.started
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .push_back(planned.started);
-        // Nothing has ended: the frontend says what opened.
-        Ok(None)
+            .push_back((kind, result.clone()));
+        // Nothing has ended: the frontend says what opened, or why not.
+        result.map(|()| None)
     }
 
     fn shell(&self) -> (OsString, Vec<OsString>) {
@@ -445,7 +478,11 @@ mod tests {
         assert_eq!(p.program, OsString::from("gedit"));
         // No terminal: said in words, with a next step.
         let err = plan(&program("/bin/bash", &[]), &shell, System::Unix, None).unwrap_err();
-        assert!(err.contains("TERMINAL"), "{err}");
+        assert_eq!(err, "no terminal program was found");
+        assert_eq!(
+            failure(Started::Terminal, "Shell", &err).text,
+            "Could not open a terminal: no terminal program was found. Set the TERMINAL variable to a terminal program, such as xterm."
+        );
         assert_eq!(
             unix_terminal(None, |name| name == "konsole"),
             Some(OsString::from("konsole"))

@@ -20,13 +20,15 @@ fn recording(dir: &std::path::Path) -> (Rig, Arc<Mutex<Vec<Planned>>>) {
     let (app, runtime) = app_on(dir, dir);
     let plans = Arc::new(Mutex::new(Vec::new()));
     let theirs = Arc::clone(&plans);
+    // The terminal is the test's choice on Unix, whatever the machine has.
     let launcher = WindowLauncher::with_starter(Box::new(move |planned: &Planned| {
         theirs
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(planned.clone());
         Ok(())
-    }));
+    }))
+    .with_terminal("xterm");
     let starts = launcher.started();
     let runtime = runtime.with_launcher(Arc::new(launcher));
     let mut rig = Rig::new(app, runtime);
@@ -89,6 +91,31 @@ fn shell_here_opens_a_terminal_and_f4_starts_the_editor_directly() {
     );
     // The window was never held: the focus is still on the row.
     assert!(rig.focus_node().1.starts_with("notes.txt"));
+}
+
+#[test]
+fn a_program_that_cannot_start_says_why_in_the_windows_words() {
+    let dir = fixture(&["notes.txt"], &[]);
+    let (app, runtime) = app_on(dir.path(), dir.path());
+    let launcher = WindowLauncher::with_starter(Box::new(|_: &Planned| {
+        Err("no terminal program was found".to_owned())
+    }));
+    let starts = launcher.started();
+    let runtime = runtime.with_launcher(Arc::new(launcher));
+    let mut rig = Rig::new(app, runtime);
+    rig.f.set_starts(starts);
+    rig.run("file.shell-here");
+    assert!(
+        rig.spoken().iter().any(|s| s
+            == "Could not open a terminal: no terminal program was found. Set the TERMINAL variable to a terminal program, such as xterm."),
+        "{:?}",
+        rig.spoken()
+    );
+    assert!(
+        !rig.spoken()
+            .iter()
+            .any(|s| s.starts_with("Could not start Shell"))
+    );
 }
 
 #[test]
