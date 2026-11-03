@@ -2,6 +2,36 @@
 
 This page says in plain words what each alpha added. [The changelog](../CHANGELOG.md) has the full list, by area, and [known limits](known-limits.md) says what is still missing.
 
+## Unreleased
+
+The changes since alpha 2 that the next alpha, alpha 3, will carry. None of this is released yet, and more is coming before it is.
+
+The GUI, a window version of diroxide.
+
+- The foundation of the window is built. `diro --gui` opens a window with the two panels, the status bar and the key bar. The terminal is still what `diro` opens when you type it alone. [The GUI](gui.md) is the new guide: how the window opens, its parts in reading order, its keys and menus, what it says and when, and what it does not do yet.
+- Each panel is one list, and each row is an option that a screen reader reads name first, with "selected" as a state and the position as a property. The focused row is what a screen reader follows. The title line, the two panels' sort buttons, the status bar with its two lines and the key bar are named parts of the window.
+- Messages go to a live region by importance. Normal is said politely, high is said at once, and low is only shown. The program's start-up lines are held until a screen reader asks for the window, then said once.
+- On Windows the menus are the system's menu bar. It stays hidden until Alt pressed alone, F9, F10 or Alt with a menu's letter shows it. On Linux and macOS the menus are lists in the window.
+- New settings: Opens in (`frontend`), GUI graphics (`graphics`), GUI menus (`menus`) and Hide the menu bar (`auto_hide_menu`). New options: `diro --graphics NAME` and `diro --background`. With no display, or no graphics driver, the window says one sentence and the terminal opens.
+- The key bar and each panel's sort buttons are buttons with names and keyboard shortcuts. A click focuses a row, and a double click opens it.
+- The fonts are inside the program: Atkinson Hyperlegible Next and Atkinson Hyperlegible Mono. [Installing diroxide](install.md#what-the-gui-needs) says what the window needs and what it costs to build.
+- Reports read the window's accessibility tree through UI Automation on Windows and AT-SPI on Linux, with no screen reader. Nobody has listened to the window yet.
+- Not in the window yet: dialogs with buttons, the viewer and the quick view, themes, drawing on the processor, icons, input methods, and a native menu bar on macOS.
+
+Plugin lists inside a panel.
+
+- A list of rows that are not files, such as the changed files of a git folder or the Sites list, opens inside the panel the plugin names, over the panel's folder, instead of over both panels. The focus moves to that panel. You hear the list's name, its count and the panel first, with the plugin's name last: "Changed files, 2 rows, left panel (Changed files)".
+- The panel's keys work on the list's rows. A file key such as F5 says "This row is not a file." Left, Backspace and Alt+Up leave the list and say "Plugin list closed (Changed files)", and then the folder again. [The panels](panels.md#plugin-lists) has the rest.
+
+Pause for waiting jobs, and the queue across restarts.
+
+- Pause on a job that waits its turn holds it in its place: "Held: copy 12 items to build". The jobs behind it can start. Resume lets it go: "Back in line: copy 12 items to build". Pause all jobs holds every waiting job, and Resume all jobs lets them go.
+- The queue is kept across a restart, in `queue.json` in the state folder. The next start says once, "2 jobs were interrupted by the last quit. The Jobs list has them.", and the Jobs list shows them first, under "Interrupted, 2 jobs". None of them starts on its own. Enter on one offers Retry and Forget. [The transfer queue](transfer-queue.md#the-queue-at-the-next-start) has the details.
+
+The nightly fuzz run.
+
+- Every night the project feeds random input to the code that reads what other people make, for ten minutes on each of 17 targets: names, filters, archives, the highlighter, the components list, plugin messages, script headers and the SFTP plugin's packets. A crash fails the run and saves the input that caused it. This changes nothing in the program you run. It looks for bugs before you meet them. [Fuzzing](dev/fuzzing.md) is in the contributor pages.
+
 ## Alpha 2
 
 Plugins, script commands and optional components.
@@ -54,6 +84,7 @@ The first alpha is a terminal file manager for local folders and archives, built
 ## See also
 
 - [Known limits](known-limits.md)
+- [The GUI](gui.md)
 - [Quick start](quickstart.md)
 - [Plugins](plugins.md)
 - [Remote places over SFTP](remote-places.md)
