@@ -250,7 +250,7 @@ impl Shared {
     fn end(&self) {
         let _ = self
             .busy
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
                 Some(n.saturating_sub(1))
             });
     }
@@ -259,7 +259,7 @@ impl Shared {
     /// is counted at all; returns whether it did.
     fn lower(&self) -> bool {
         self.busy
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
             .is_ok()
     }
 
