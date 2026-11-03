@@ -18,4 +18,6 @@ mod panel_list;
 #[cfg(feature = "gui")]
 mod rig;
 #[cfg(feature = "gui")]
+mod ten_minutes;
+#[cfg(feature = "gui")]
 mod window_tree;
