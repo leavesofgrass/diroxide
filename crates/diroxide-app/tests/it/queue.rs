@@ -271,7 +271,15 @@ fn retry_the_failed_items_makes_a_new_job_that_skips_what_is_there() {
         s.app.jobs().history()
     );
     held.fake.switches_mut().call_faults.clear();
-    let said = command_held(&mut s, ids::JOBS_RETRY_FAILED);
+    // The retry is planned on a worker: wait for its question, not for a
+    // quiet moment, which a loaded machine can pass before the plan comes
+    // (the one failure seen beside a container build, lane Q2).
+    let effects = s.app.handle(AppEvent::Command(diroxide_core::Command::new(
+        ids::JOBS_RETRY_FAILED,
+    )));
+    let said = drive(&mut s, effects, |s, _| {
+        matches!(s.dialog(), Some(Dialog::Confirm { .. }))
+    });
     assert!(
         said.iter().any(|l| l.starts_with("Copy 1 item to srv")),
         "{said:?}"
