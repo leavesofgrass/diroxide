@@ -144,19 +144,19 @@ hex_row = "narrow"
 wait_ms = 800
 ```
 
-Some settings are kept now and do nothing yet: thumbnails, and hiding the menu bar and focus mode in the GUI. The reference marks each as coming with a later alpha.
+Thumbnails are kept now and do nothing yet. The reference marks them as coming with a later alpha. Hiding the menu bar works on Windows in the window, and focus mode works in the window too ([the GUI](gui.md#focus-mode-and-full-screen) says how). The Settings list and the reference still mark focus mode as coming with a later alpha, though it works.
 
 ## Themes and colors
 
-diroxide comes with 24 themes. Their names, for the `theme` setting, are in the reference. The default is `galaxy`. Among the others are its light partner `galaxy-light`, `contrast` and `high-contrast`, `lamplight`, `sepia`, `amber`, `phosphor`, dark and light pairs of Gruvbox, One and Solarized, and `nord`, `dracula` and `tokyo-night`.
+diroxide comes with 24 themes. Their names, for the `theme` setting, are in the reference. The default is `galaxy`. Among the others are its light partner `galaxy-light`, `contrast` and `high-contrast`, `lamplight`, `sepia`, `amber`, `phosphor`, dark and light pairs of Gruvbox, One and Solarized, and `nord`, `dracula` and `tokyo-night`. [Themes and colors](themes.md) lists all 24 with what each is like, the ten that fall short of contrast, and what the window does for them.
 
-- Choose one in Settings (`theme`), or for one session with `diro --theme NAME`. An unknown name says "Unknown theme" and Galaxy is used. Next theme, in the View menu (Alt+V, then T) and the palette, steps through them.
-- When you choose a theme, diroxide says whether it meets contrast in words: "Theme Nord, meets AA", or "Theme Nord, below AA: 2 checks fall short". A high-contrast theme is held to AAA.
+- Choose one in Settings (`theme`), or for one session with `diro --theme NAME`. An unknown name gives Galaxy, and the terminal says "Unknown theme" first. Next theme, in the View menu (Alt+V, then T) and the palette, steps through them. The window draws the same themes.
+- When you choose a theme, diroxide says whether it meets contrast in words: "Theme Nord, meets AA", or "Theme Nord, below AA: 2 checks fall short". A high-contrast theme is held to AAA. In the window the verdict is said once, and a theme that falls short adds how many parts of the screen use the text color.
 - Nothing is shown by color alone. Every highlight is also bold, underlined, reversed or marked in text, such as the word "selected" on a marked row.
-- Themes come in light and dark partners, and `follow_system_appearance` (off) can switch between them with your system.
-- Your own theme is a TOML file in the `themes` folder in the config folder. It is listed after the built-in ones.
+- Themes come in light and dark partners, and `follow_system_appearance` (off) can switch between them with your system. The window reads the system's setting once, when it starts. Windows' High Contrast, when it is on, wins over every theme in the window.
+- Your own theme is a TOML file in the `themes` folder in the config folder. The terminal lists it after the built-in ones. The window does not read that folder yet.
 - To change one color, use the `[colors]` table in `config.toml` with a role's name and a color as `#rrggbb`, such as `folder = "#ffaa00"`. The reference lists the roles. diroxide checks the contrast and says the result in words.
-- `NO_COLOR` is honored: with it set, diroxide uses attributes alone. The default look draws no boxes. The `borders` setting (off) turns on box drawing for sighted users.
+- `NO_COLOR` is honored: with it set, the terminal uses attributes alone. The default look draws no boxes. The `borders` setting (off) turns on box drawing for sighted users.
 
 ## Changing keys
 
@@ -211,6 +211,8 @@ To go back to the defaults, move the config folder aside by renaming it, and sta
 
 - [The settings reference](settings-reference.md)
 - [The panels](panels.md)
+- [Themes and colors](themes.md)
+- [The GUI](gui.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Every key](keyboard.md)
 - [Customizing keys](customizing-keys.md)
