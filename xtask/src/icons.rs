@@ -272,6 +272,9 @@ pub fn icns(images: &[(&str, Vec<u8>)]) -> Vec<u8> {
     out
 }
 
+/// One image of an icon: its side in pixels and its PNG bytes.
+pub type IconImage = (u32, Vec<u8>);
+
 /// The resource type of one icon image.
 pub const RT_ICON: u16 = 3;
 /// The resource type of an icon group.
@@ -283,7 +286,7 @@ const LANG_EN_US: u16 = 0x0409;
 /// group is (group id, images), and its images get ids from 1 up. The
 /// Microsoft linker takes a `.res` file as an input, so a program links
 /// it with no resource compiler.
-pub fn res(groups: &[(u16, &[(u32, Vec<u8>)])]) -> Vec<u8> {
+pub fn res(groups: &[(u16, &[IconImage])]) -> Vec<u8> {
     fn entry(out: &mut Vec<u8>, kind: u16, id: u16, flags: u16, lang: u16, data: &[u8]) {
         // The head: the data's size, the head's own size (32 bytes, with
         // a numbered type and name), the type and name as 0xFFFF and a
@@ -301,7 +304,7 @@ pub fn res(groups: &[(u16, &[(u32, Vec<u8>)])]) -> Vec<u8> {
         out.extend_from_slice(&0u32.to_le_bytes());
         out.extend_from_slice(&0u32.to_le_bytes());
         out.extend_from_slice(data);
-        while out.len() % 4 != 0 {
+        while !out.len().is_multiple_of(4) {
             out.push(0);
         }
     }

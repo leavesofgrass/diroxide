@@ -776,7 +776,6 @@ mod tests {
     /// terminal, with no sentence before it.
     #[test]
     fn a_desktop_opens_the_gui_by_default() {
-        assert!(GUI_BY_DEFAULT);
         let choice = choose_frontend(&desktop());
         assert_eq!(choice.frontend, Frontend::Gui);
         assert_eq!(choice.notice, None);
