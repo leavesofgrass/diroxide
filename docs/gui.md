@@ -409,7 +409,7 @@ The same two commands are in the terminal's menus and palette, and they only exp
 
 ## What the window does not do yet
 
-These are not in the window yet. None of them is dated: each is to come in a later step of this alpha or a later alpha.
+These are not in the window yet. None of them is dated: each is to come in a later alpha.
 
 - An icon on macOS. The mark's smallest sizes, 16 to 24 pixels, have not been looked at by a sighted person.
 - A native menu bar on macOS. Its menus are the list.

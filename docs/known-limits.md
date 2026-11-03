@@ -1,21 +1,21 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with the window's foundation. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrives with alpha 3. Where a limit has a workaround, the workaround comes first.
 
-## What is not in alpha 2
+## What is not in alpha 3
 
-Each item below is still to come. None of them is dated: a feature that is not in alpha 2 arrives in a later alpha.
+Each item below is still to come. None of them is dated: a feature that is not in alpha 3 arrives in a later alpha.
 
 - Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out an icon on macOS, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
 - A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes in a later alpha.
-- Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 2, although copies keep dates.
+- Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 3, although copies keep dates.
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
 - Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands come in a later alpha.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
-- Download files for each platform come in a later alpha, first for Windows x86_64 and Linux x86_64 and then for the other platforms. `cargo install diro` comes with the first beta.
+- Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
 
 ## Plugins and script commands
@@ -293,7 +293,7 @@ The table of keys each terminal can send is built from a key probe run by hand o
 
 ## The GUI
 
-[The GUI](gui.md) describes the window. These are its limits so far in this alpha. None is dated: each is to come in a later step of the alpha or a later alpha.
+[The GUI](gui.md) describes the window. These are its limits in this alpha. None is dated: each is to come in a later alpha.
 
 Opening it:
 

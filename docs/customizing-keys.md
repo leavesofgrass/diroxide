@@ -18,7 +18,7 @@ A key in a higher layer wins. Choosing a preset sets its name in `config.toml` (
 
 Every key is one key with its modifiers. There are no key sequences and no leader keys, so a key never waits for a second one. Insert and Caps Lock are never bound, because they are the screen readers' keys.
 
-There are two columns of keys, because a terminal cannot send everything a graphical interface (GUI) can. The terminal column holds the keys a terminal can send. The GUI column, used by the window (`diro --gui`), also holds keys such as Ctrl+Enter. Most keys are the same in both, and the lists say "in both".
+There are two columns of keys, because a terminal cannot send everything a graphical interface (GUI) can. The terminal column holds the keys a terminal can send. The GUI column, used by the window, which `diro` opens on a desktop, also holds keys such as Ctrl+Enter. Most keys are the same in both, and the lists say "in both".
 
 ## The Keys list
 
