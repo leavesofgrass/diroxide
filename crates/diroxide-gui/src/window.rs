@@ -127,6 +127,8 @@ struct Gui {
     title: String,
     shown: Vec<String>,
     pending: Arc<AtomicBool>,
+    /// The runtime's waker, kept to wake the loop once the window exists.
+    wake: diroxide_app::runtime::Waker,
     slot: Rc<RefCell<Option<App>>>,
 }
 
@@ -206,6 +208,14 @@ impl AppDriver for Gui {
         _action: ErasedAction,
     ) {
         // The frame has no controls yet; G1's panels send their actions.
+    }
+
+    fn on_start(&mut self, _state: &mut masonry_winit::app::MasonryState) {
+        // The window exists now. A wake posted before it did was dropped
+        // as meant for an unknown window, so post one again: the first
+        // pump also names the window's accessibility node.
+        self.pending.store(false, Ordering::Release);
+        (self.wake)();
     }
 
     fn on_async_action(
@@ -301,17 +311,21 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
         .build()
         .map_err(|e| error_for_event_loop(&e))?;
     let proxy = event_loop.create_proxy();
-    let title = window_title(&app, &options.title);
-    let window = NewWindow::new(
-        attributes(&title, options.background),
-        root_widget(&app).erased(),
-    );
-    let window_id = window.id;
+    let window_id = WindowId::next();
     let pending = Arc::new(AtomicBool::new(false));
-    runtime.set_waker(waker(proxy, window_id, Arc::clone(&pending)));
+    let wake = waker(proxy, window_id, Arc::clone(&pending));
+    runtime.set_waker(Arc::clone(&wake));
     let mut app = app;
     let start = app.start();
     let _ = runtime.carry_out(&mut app, start);
+    // The window shows the app as it stands after its start, and the
+    // driver remembers exactly that.
+    let title = window_title(&app, &options.title);
+    let window = NewWindow::new_with_id(
+        window_id,
+        attributes(&title, options.background),
+        root_widget(&app).erased(),
+    );
     let shown = lines(&app).into_iter().map(|(_, text)| text).collect();
     let slot = Rc::new(RefCell::new(None));
     let gui = Gui {
@@ -319,9 +333,12 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
         runtime,
         window: window_id,
         program: options.title.clone(),
-        title,
+        // Empty, so the first refresh names the window's accessibility
+        // node too (AT-SPI and macOS read the title from it).
+        title: String::new(),
         shown,
         pending: Arc::clone(&pending),
+        wake,
         slot: Rc::clone(&slot),
     };
     let released = console::release_for_window();
