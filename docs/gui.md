@@ -386,6 +386,7 @@ The window is drawn in one of 24 themes. The default is Galaxy, a dark page with
 - On Windows, High Contrast (Contrast themes) wins over every theme: while it is on, the window draws only with the system's own colors. Turning it on while the window is open is said: "System high contrast colors in use." When you turn it off, your theme comes back.
 - With the `follow_system_appearance` setting on, the window takes the light or dark partner of your theme to match the system's setting. It reads that setting once, when it starts.
 - The text is 16 pixels at your display's scale. There is no setting for the size or the font yet.
+- The window has an icon, the diroxide mark, and it changes nothing a screen reader reads. On Windows, Explorer shows it for `diro.exe` and for a shortcut to it, and the taskbar and the title bar show it while the window is open. On Linux, the AppImage carries the mark in every size a desktop's icon theme asks for, and in two menu entries: "diroxide", which opens the window, and "diroxide in a terminal", which opens the terminal in a terminal of its own. A build from source has no menu entry of its own; the two entry files are in the source, under `packaging/appimage`. macOS shows no icon in this alpha.
 
 The window carries its own fonts, Atkinson Hyperlegible Next and Atkinson Hyperlegible Mono, regular and bold, so nothing has to be installed. On Linux it also opens Fontconfig when it is there, to find the system's fonts. Without Fontconfig only the two Atkinson families draw, and a character they lack, such as a Chinese or Japanese name or an emoji, is drawn as a missing glyph. That affects only what is drawn. The names a screen reader reads are the full names. [Installing diroxide](install.md#what-the-gui-needs) has the rest.
 
@@ -410,7 +411,7 @@ The same two commands are in the terminal's menus and palette, and they only exp
 
 These are not in the window yet. None of them is dated: each is to come in a later step of this alpha or a later alpha.
 
-- Icons.
+- An icon on macOS. The mark's smallest sizes, 16 to 24 pixels, have not been looked at by a sighted person.
 - A native menu bar on macOS. Its menus are the list.
 - Your own theme files. The window draws the 24 built-in themes. The terminal also reads the theme files in your `themes` folder.
 - A setting for the text size or the font.

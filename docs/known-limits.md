@@ -6,7 +6,7 @@ This page says what diroxide does not do yet, where it is limited on purpose or 
 
 Each item below is still to come. None of them is dated: a feature that is not in alpha 2 arrives in a later alpha.
 
-- Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out icons, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
+- Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out an icon on macOS, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
@@ -326,7 +326,7 @@ Colors and bars:
 - Ten themes are below AA. The window draws the parts that fall short in the text color, and says how many. [Themes and colors](themes.md) names the ten. No italic face is built in, so a part that a theme draws in italics, such as the archive and hidden rows, may draw upright. Their words say what they are.
 - The system's light or dark setting is read once, when the window starts. Windows' High Contrast is read at every step.
 - Full screen and focus mode are commands, in the View menu and the palette, and F11 is Full screen's key. The panels' sort buttons and the native menu bar are not under focus mode's veil. A window opened with `--background` never goes full screen. In a terminal, Full screen changes nothing and says so, because full screen there is the terminal program's. The Settings list and the reference still mark focus mode as coming with a later alpha, though it works.
-- There is no setting for the text size or the font, and no icons. Thumbnails are a setting that the reference marks as coming later.
+- There is no setting for the text size or the font. macOS shows no icon, and the mark's smallest sizes, 16 to 24 pixels, have not been looked at by a sighted person. Thumbnails are a setting that the reference marks as coming later.
 
 Menus and the mouse:
 

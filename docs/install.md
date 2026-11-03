@@ -133,6 +133,8 @@ If you prefer, choose Open Anyway under Privacy and Security in System Settings 
 chmod +x diro.AppImage
 ```
 
+The AppImage holds the icon in every size and two menu entries: "diroxide", which opens the window, and "diroxide in a terminal", which opens the terminal in a terminal of its own.
+
 If your system cannot run AppImages, build from source, or install with `cargo install diro` once it is available.
 
 ## Checking a download

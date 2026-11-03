@@ -16,7 +16,7 @@ The GUI, a window version of diroxide.
 - The key bar and each panel's sort buttons are buttons with names and keyboard shortcuts. A click focuses a row, and a double click opens it.
 - The fonts are inside the program: Atkinson Hyperlegible Next and Atkinson Hyperlegible Mono. [Installing diroxide](install.md#what-the-gui-needs) says what the window needs and what it costs to build.
 - Reports read the window's accessibility tree through UI Automation on Windows and AT-SPI on Linux, with no screen reader. Nobody has listened to the window yet.
-- Not in the window yet: icons, your own theme files, and a native menu bar on macOS.
+- Not in the window yet: an icon on macOS, your own theme files, and a native menu bar on macOS.
 
 The window's dialogs, viewer and quick view.
 
@@ -33,6 +33,10 @@ Themes, drawing without a graphics card, and focus mode.
 - The window draws all 24 themes, your `[colors]`, and Windows' High Contrast, and it can follow the system's light or dark setting. A theme chosen is said once with its contrast verdict: "Theme Galaxy Light, meets AA." Ten themes fall short of AA. The window draws the parts that fall short in the text color and says how many. `diro --theme NAME` works in the window. [Themes and colors](themes.md) is the new guide.
 - A graphics card is no longer needed. With none, or only a software adapter, the window draws on the processor itself, and `--graphics software` asks for that. The window says once, "Drawing on the processor: no graphics adapter was found." `diro --log FILE` records how the window drew. [The GUI](gui.md#how-the-window-draws) has the order.
 - Focus mode and full screen fade the title line, the status bar and the key bar after three seconds of rest. Any key brings them back. The fade says nothing. Both are commands now, in the View menu (Full screen, letter U, on F11; Focus mode, letter M) and the palette, and each says what it did: "Full screen on.", "Full screen off.", "Focus mode on: the bars fade after three seconds." and "Focus mode off." The Settings switch says the same words. In a terminal, Full screen says "Full screen is the window's; the terminal program may have its own." and changes nothing, and Focus mode says "Focus mode on, for the window; the terminal keeps its bars."
+
+The icon.
+
+- diroxide has an icon, its mark. On Windows, Explorer shows it for `diro.exe`, and the taskbar and the title bar show it on the window. On Linux, the AppImage carries it in every size a desktop's icon theme asks for, and in two menu entries: "diroxide", which opens the window, and "diroxide in a terminal", which opens the terminal. macOS shows no icon yet. [The GUI](gui.md#the-look) says more.
 
 A quit keeps a copy's part file.
 
