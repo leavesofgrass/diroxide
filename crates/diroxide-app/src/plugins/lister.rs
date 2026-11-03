@@ -295,7 +295,9 @@ impl Lister {
         ListRow::new(row_id(entry), entry.name.clone()).with_details(details)
     }
 
-    /// The list for the dialog, its marks and focus kept from `old`.
+    /// The rows as one list model, its marks and focus kept from `old`.
+    /// A panel keeps its own through [`PanelList`], whose help comes from
+    /// the live keymap.
     pub fn list(&self, old: Option<&ListModel>) -> ListModel {
         let rows = self
             .shown()
@@ -317,7 +319,7 @@ impl Lister {
             "No rows"
         });
         list.set_help(
-            "Enter runs the lister's command, Space marks, the sort and filter keys sort and filter by its columns, Escape closes.",
+            "Enter runs the plugin's command, Space marks, the sort and filter keys use its columns, Backspace or Escape leaves the list.",
         );
         list
     }
