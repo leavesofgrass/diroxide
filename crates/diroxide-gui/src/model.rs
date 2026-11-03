@@ -227,8 +227,60 @@ pub fn window_range(top: usize, page: usize, len: usize) -> Range<usize> {
     start.min(end)..end
 }
 
+/// Whether `side` shows the quick view's preview region: the other panel
+/// while the quick view is on, as in the terminal.
+pub fn shows_preview(app: &App, side: Side) -> bool {
+    app.quick_view_on() && side != app.active_side()
+}
+
+/// The preview region in the other panel's place (R27's commit 23): the
+/// same list box as a panel, named "Right panel, Preview, notes.md", its
+/// options the region's rows (a heading, a paragraph, a table's row) and
+/// its focus the region's; before anything is shown, the line that says
+/// how to go in ("Tab goes into the preview").
+fn preview_view(app: &App, side: Side, top: usize, page: usize) -> Option<PanelView> {
+    let quick = app.quick_view()?;
+    let list = quick.region();
+    let title = display_name(&quick.region_title()).into_owned();
+    let total = list.len();
+    let focus = list.focus_index();
+    let top = scroll_top(top, focus, page, total);
+    let range = window_range(top, page, total);
+    let in_name = states_in_name();
+    let rows = list.rows()[range.clone()]
+        .iter()
+        .map(|row| RowView::of(row, in_name))
+        .collect();
+    let mut hasher = DefaultHasher::new();
+    "preview".hash(&mut hasher);
+    title.hash(&mut hasher);
+    let empty = if list.empty_text().is_empty() {
+        app.preview_placeholder()
+    } else {
+        display_name(list.empty_text()).into_owned()
+    };
+    Some(PanelView {
+        side,
+        name: format!("{} panel, {title}", side_word(side)),
+        header: title,
+        generation: hasher.finish(),
+        total,
+        top,
+        first: range.start,
+        rows,
+        focus,
+        active: app.in_preview(),
+        empty,
+    })
+}
+
 /// A panel's view with the rows from `top` drawn and `page` rows visible.
 pub fn panel_view(app: &App, side: Side, top: usize, page: usize) -> PanelView {
+    if shows_preview(app, side)
+        && let Some(view) = preview_view(app, side, top, page)
+    {
+        return view;
+    }
     let panel = app.panel(side);
     let list = panel.shown_list();
     let total = list.len();
@@ -348,13 +400,90 @@ pub struct FieldView {
     pub in_list: bool,
 }
 
-/// What a dialog's focus is on: a text field, or a list.
+/// What a dialog's focus is on: a text field, a list, or a
+/// confirmation's buttons with its listing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ControlView {
     /// A text field, with its candidates.
     Field(FieldView),
-    /// A list to choose from, or lines to read.
+    /// A list to choose from (the app moves its focus), or lines to read
+    /// (the window moves it: [`DialogView::local_list`]).
     List(ListView),
+    /// A yes-or-no question: No and Yes as buttons, No focused, and the
+    /// listing of what it touches as a list to read, with its count.
+    Confirm(ConfirmView),
+}
+
+/// A confirmation's listing: every path it touches, the count in its
+/// name ("Listing, 6 lines"), read line by line with the window's own
+/// focus.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConfirmView {
+    /// The listing, when the question lists anything.
+    pub listing: Option<ListView>,
+}
+
+/// Which control of a dialog has the keyboard focus. The app moves the
+/// focus inside its own lists and fields; the window moves it between a
+/// confirmation's buttons and listing, through a text's lines and to a
+/// secret's Show toggle, which the app does not model.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DialogFocus {
+    /// The shape's own control: the field, or the list.
+    #[default]
+    Control,
+    /// A confirmation's No button, where every confirmation starts.
+    No,
+    /// A confirmation's Yes button.
+    Yes,
+    /// A confirmation's listing.
+    Listing,
+    /// A secret's Show toggle.
+    Show,
+}
+
+/// The window's own focus in the open dialog: which control, and the line
+/// of a text to read or of a confirmation's listing. It starts again for
+/// every dialog ([`LocalFocus::start`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LocalFocus {
+    /// The dialog it is for.
+    pub dialog: Option<diroxide_core::DialogId>,
+    /// The focused control.
+    pub on: DialogFocus,
+    /// The focused line, counted from the first.
+    pub line: usize,
+}
+
+impl LocalFocus {
+    /// Where the focus starts in a dialog: on No for a confirmation (the
+    /// safe answer), on the control for every other shape.
+    pub fn start(id: diroxide_core::DialogId, dialog: &diroxide_app::Dialog) -> Self {
+        let on = match dialog {
+            diroxide_app::Dialog::Confirm { .. } => DialogFocus::No,
+            _ => DialogFocus::Control,
+        };
+        Self {
+            dialog: Some(id),
+            on,
+            line: 0,
+        }
+    }
+}
+
+/// A button in a dialog (a confirmation's No and Yes) or a toggle (a
+/// secret's Show), as a focusable control named by its label, with its
+/// key as its keyboard shortcut.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PushView {
+    /// Which control it is, for the focus and for what pressing does.
+    pub id: DialogFocus,
+    /// The name, said and drawn: "No".
+    pub label: String,
+    /// The key, written ("n"); `None` when nothing is bound.
+    pub key: Option<String>,
+    /// A toggle's state (`Some`), or `None` for a button.
+    pub toggled: Option<bool>,
 }
 
 /// The open dialog as the modal host shows it: one of the seven shapes
@@ -366,11 +495,22 @@ pub struct DialogView {
     /// The dialog's name, said when it opens: the question, the list's
     /// title, the field's label.
     pub title: String,
-    /// Lines to read before the control: a question's situation, the
-    /// paths a confirmation touches, a list's help.
+    /// What a screen reader reads after the name as the dialog opens: a
+    /// question's situation after its first line ("The one in Backup:
+    /// 2.1 KB, modified yesterday"). `None` when the name says it all.
+    pub description: Option<String>,
+    /// Lines drawn under the title, before the control: a question's
+    /// situation, a list's help. Readable text, never focused.
     pub lines: Vec<String>,
     /// The control the focus is on.
     pub control: ControlView,
+    /// The buttons and toggles under the control, in their order.
+    pub buttons: Vec<PushView>,
+    /// Which control has the keyboard focus.
+    pub focus: DialogFocus,
+    /// Whether the window moves the list's focus itself (a text to read,
+    /// a listing), since the app does not model it.
+    pub local_list: bool,
 }
 
 impl DialogView {
@@ -378,36 +518,140 @@ impl DialogView {
     /// modal is changed in place rather than built again (and its focus
     /// kept).
     pub fn same_shape(&self, other: &Self) -> bool {
+        let ids = |b: &[PushView]| b.iter().map(|p| p.id).collect::<Vec<_>>();
         self.id == other.id
             && self.lines == other.lines
-            && matches!(
-                (&self.control, &other.control),
+            && self.description == other.description
+            && ids(&self.buttons) == ids(&other.buttons)
+            && match (&self.control, &other.control) {
                 (ControlView::Field(_), ControlView::Field(_))
-                    | (ControlView::List(_), ControlView::List(_))
-            )
+                | (ControlView::List(_), ControlView::List(_)) => true,
+                (ControlView::Confirm(a), ControlView::Confirm(b)) => {
+                    a.listing.is_some() == b.listing.is_some()
+                }
+                _ => false,
+            }
+    }
+
+    /// The controls Tab moves through, in order: a confirmation's No, Yes
+    /// and listing; a secret's field and Show toggle; else the one
+    /// control.
+    pub fn tab_order(&self) -> Vec<DialogFocus> {
+        let mut order = Vec::new();
+        match &self.control {
+            ControlView::Confirm(confirm) => {
+                order.extend(self.buttons.iter().map(|b| b.id));
+                if confirm.listing.is_some() {
+                    order.push(DialogFocus::Listing);
+                }
+            }
+            _ => {
+                order.push(DialogFocus::Control);
+                order.extend(self.buttons.iter().map(|b| b.id));
+            }
+        }
+        order
+    }
+
+    /// Whether `line` is what the dialog says by itself when the focus
+    /// moves into it (its name, then the focused control), so the app's
+    /// own line on opening it would say the same twice: the question, a
+    /// list's title with its focused row, a field's label with its text,
+    /// a password's prompt. The app's line is then left unsaid (the
+    /// settled double: the dialog says it, the live region does not).
+    pub fn says(&self, line: &str) -> bool {
+        let line = display_name(line);
+        !self.title.is_empty() && line.starts_with(self.title.as_str())
     }
 }
 
 /// The rows a dialog's list shows at a time, for its window.
 pub const DIALOG_PAGE: usize = 12;
 
-/// The top dialog as the modal host shows it, or `None`.
+/// A confirmation's listing as a list to read, named with its count.
+pub fn listing_view(listing: &[String], line: usize) -> Option<ListView> {
+    (!listing.is_empty()).then(|| {
+        ListView::lines(
+            format!("Listing, {}", count(listing.len() as u64, "line", "lines")),
+            listing,
+            line,
+        )
+    })
+}
+
+/// A confirmation's two buttons, No first: each named by its word, with
+/// the key the keymap gives the answer.
+pub fn confirm_buttons(app: &App) -> Vec<PushView> {
+    use diroxide_app::commands::ids;
+    [
+        (DialogFocus::No, "No", ids::NO),
+        (DialogFocus::Yes, "Yes", ids::YES),
+    ]
+    .into_iter()
+    .map(|(id, label, command)| {
+        let key = app.keymap().key_text(&command);
+        PushView {
+            id,
+            label: label.to_owned(),
+            key: (!key.is_empty()).then_some(key),
+            toggled: None,
+        }
+    })
+    .collect()
+}
+
+/// The key that turns a secret's Show toggle, as the app reads it.
+pub const SHOW_KEY: &str = "Alt+S";
+
+/// A secret's Show toggle: "Show the password", on or off, with its key.
+pub fn show_toggle(request: &diroxide_core::SecretRequest, shown: bool) -> PushView {
+    PushView {
+        id: DialogFocus::Show,
+        label: format!("Show the {}", request.kind.word().to_lowercase()),
+        key: Some(SHOW_KEY.to_owned()),
+        toggled: Some(shown),
+    }
+}
+
+/// The top dialog as the modal host shows it, with the focus where it
+/// starts; see [`dialog_view_at`].
 pub fn dialog_view(app: &App) -> Option<DialogView> {
+    let (id, dialog) = app.dialog()?;
+    dialog_view_at(app, &LocalFocus::start(id, dialog))
+}
+
+/// The top dialog as the modal host shows it with the window's own focus
+/// `local` (which starts again when it is for another dialog), or
+/// `None`.
+pub fn dialog_view_at(app: &App, local: &LocalFocus) -> Option<DialogView> {
     use diroxide_app::Dialog;
     use diroxide_app::entry::CompletionSource;
     let (id, dialog) = app.dialog()?;
+    let start;
+    let local = if local.dialog == Some(id) {
+        local
+    } else {
+        start = LocalFocus::start(id, dialog);
+        &start
+    };
     let title = display_name(&dialog.title()).into_owned();
     let silent = app.settings().secret_echo == diroxide_app::config::SecretEcho::Silent;
+    let mut buttons = Vec::new();
+    let mut description = None;
+    let mut local_list = false;
     let (lines, control) = match dialog {
-        Dialog::Confirm { listing, .. } => (
-            listing.clone(),
-            // The answer starts on No; y, n, Enter and Escape answer it.
-            ControlView::List(ListView::lines(
-                "Answers",
-                &["No, the default".to_owned(), "Yes".to_owned()],
-                0,
-            )),
-        ),
+        Dialog::Confirm { listing, .. } => {
+            // The answer starts on No; y, n, Enter and Escape answer it,
+            // and the buttons press as those keys do.
+            buttons = confirm_buttons(app);
+            local_list = true;
+            (
+                Vec::new(),
+                ControlView::Confirm(ConfirmView {
+                    listing: listing_view(listing, local.line),
+                }),
+            )
+        }
         Dialog::Prompt { label, text, .. } => (
             Vec::new(),
             ControlView::Field(FieldView {
@@ -432,28 +676,49 @@ pub fn dialog_view(app: &App) -> Option<DialogView> {
                 ControlView::List(ListView::of(list, list.title(), DIALOG_PAGE)),
             )
         }
-        Dialog::Read { title, lines } => (
-            Vec::new(),
-            ControlView::List(ListView::lines(title.clone(), lines, 0)),
-        ),
-        Dialog::Secret { request, .. } => (
-            Vec::new(),
-            ControlView::Field(FieldView {
-                label: request.title(),
-                text: dialog.masked_text(silent).unwrap_or_default(),
-                cursor: dialog
-                    .masked_text(silent)
-                    .map_or(0, |masked| masked.chars().count()),
-                secret: true,
-                combo: false,
-                candidates: None,
-                in_list: false,
-            }),
-        ),
-        Dialog::Question { lines, choices } => (
-            lines.clone(),
-            ControlView::List(ListView::of(choices, choices.title(), DIALOG_PAGE)),
-        ),
+        Dialog::Read { title, lines } => {
+            // The app keeps no focus in a text to read; the window moves
+            // through its lines itself.
+            local_list = true;
+            (
+                Vec::new(),
+                ControlView::List(ListView::lines(title.clone(), lines, local.line)),
+            )
+        }
+        Dialog::Secret { request, shown, .. } => {
+            // The Show toggle after the field: off by default, its key the
+            // app's (Alt+S). While it is on, the field shows the text and
+            // a screen reader reads it, as the app says when it is turned
+            // on; while it is off, only the mask reaches the field, the
+            // drawing and the tree.
+            buttons = vec![show_toggle(request, *shown)];
+            let shown_text = dialog.masked_text(silent).unwrap_or_default();
+            (
+                Vec::new(),
+                ControlView::Field(FieldView {
+                    label: request.title(),
+                    cursor: shown_text.chars().count(),
+                    text: shown_text,
+                    secret: !*shown,
+                    combo: false,
+                    candidates: None,
+                    in_list: false,
+                }),
+            )
+        }
+        Dialog::Question { lines, choices } => {
+            // The first line names the dialog ("Name taken: report.pdf");
+            // the rest of the situation is drawn under it and read after
+            // the name as the dialog opens, before the safe choice.
+            let rest: Vec<String> = lines.iter().skip(1).cloned().collect();
+            if !rest.is_empty() {
+                description = Some(display_name(&rest.join(" ")).into_owned());
+            }
+            (
+                rest,
+                ControlView::List(ListView::of(choices, choices.title(), DIALOG_PAGE)),
+            )
+        }
         Dialog::Edit {
             field,
             candidates,
@@ -465,10 +730,14 @@ pub fn dialog_view(app: &App) -> Option<DialogView> {
                 text: field.text().to_owned(),
                 cursor: field.cursor(),
                 secret: false,
-                combo: !matches!(
-                    field.source(),
-                    CompletionSource::None | CompletionSource::History
-                ),
+                // A field that completes, or that a list of candidates
+                // goes with (the Keys list, a typed confirmation's
+                // listing), is a combo box naming its list.
+                combo: candidates.is_some()
+                    || !matches!(
+                        field.source(),
+                        CompletionSource::None | CompletionSource::History
+                    ),
                 candidates: candidates
                     .as_ref()
                     .map(|list| ListView::of(list, "Candidates", DIALOG_PAGE)),
@@ -476,15 +745,25 @@ pub fn dialog_view(app: &App) -> Option<DialogView> {
             }),
         ),
     };
-    Some(DialogView {
+    // The focus is on a control the dialog has: a confirmation's listing
+    // only when it lists something, else No.
+    let mut view = DialogView {
         id,
         title,
+        description,
         lines: lines
             .iter()
             .map(|line| display_name(line).into_owned())
             .collect(),
         control,
-    })
+        buttons,
+        focus: local.on,
+        local_list,
+    };
+    if !view.tab_order().contains(&view.focus) {
+        view.focus = view.tab_order().first().copied().unwrap_or_default();
+    }
+    Some(view)
 }
 
 /// The messages the app said in one step as the one announcement the
@@ -550,23 +829,147 @@ impl ButtonView {
     }
 }
 
-/// The bank the key bar shows: the viewer's, the quick view's, the
-/// search results', the comparison's, or the active bank, as
-/// [`App::key_bar`] chooses (a contract request asks the app for it, so
-/// the choice is made in one place; a test holds the two together).
-pub fn shown_bank(app: &App) -> Option<diroxide_app::menu::Bank> {
-    use diroxide_app::menu;
-    if app.viewer().is_some() {
-        Some(menu::viewer_bank())
-    } else if app.in_preview() {
-        Some(menu::preview_bank())
-    } else if app.results_shown() {
-        Some(menu::results_bank())
-    } else if app.compare_shown() {
-        Some(menu::compare_bank())
-    } else {
-        app.active_bank().cloned()
+/// The theme role a token class is drawn with (the theme's token roles,
+/// ADR-0007's status update of October 17), or `None` for plain text. As
+/// the terminal maps them (`crates/diroxide-tui/src/viewer.rs`,
+/// `class_role`).
+pub fn class_role(
+    class: diroxide_app::viewer::TokenClass,
+) -> Option<diroxide_app::settings::PanelRole> {
+    use diroxide_app::settings::PanelRole as R;
+    use diroxide_app::viewer::TokenClass as C;
+    Some(match class {
+        C::Plain => return None,
+        C::Keyword => R::TokenKeyword,
+        C::String => R::TokenString,
+        C::Comment => R::TokenComment,
+        C::Number => R::TokenNumber,
+        C::Constant => R::TokenConstant,
+        C::FunctionName => R::TokenFunction,
+        C::TypeName => R::TokenType,
+        C::Variable => R::TokenVariable,
+        C::Operator => R::TokenOperator,
+        C::Punctuation => R::TokenPunctuation,
+        C::Heading => R::TokenHeading,
+        C::Link => R::TokenLink,
+        C::Emphasis => R::TokenEmphasis,
+        C::Code => R::TokenCode,
+        C::Tag => R::TokenTag,
+        C::Attribute => R::TokenAttribute,
+        C::Problem => R::TokenProblem,
+        _ => return None,
+    })
+}
+
+/// One row of the viewer, as an option of its list box.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewerRowView {
+    /// The row's place, kept while it stays drawn: "LINE:PART".
+    pub id: String,
+    /// The text as drawn: the line number when they are on, or
+    /// "continued: " on a continued part, then the text.
+    pub text: String,
+    /// The option's name: the text with hidden characters spelled out.
+    pub name: String,
+    /// The line, from 0.
+    pub line: u64,
+    /// The token runs, byte ranges of `text` with the theme role each is
+    /// drawn with (none when highlighting is off).
+    pub runs: Vec<(usize, usize, diroxide_app::settings::PanelRole)>,
+    /// The search's matches in `text`, drawn marked.
+    pub matches: Vec<(usize, usize)>,
+}
+
+/// The viewer as its list box shows it: the rows on screen, which is all
+/// a 100,000-line file gives the tree.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewerView {
+    /// The list box's name: "Viewer, report.txt" (", hex" in hex mode).
+    pub name: String,
+    /// Changes when another file or mode is shown, so the rows' node ids
+    /// start again.
+    pub generation: u64,
+    /// The rows on screen.
+    pub rows: Vec<ViewerRowView>,
+    /// The cursor's row in `rows`.
+    pub focus: Option<usize>,
+    /// The file's lines, as far as they are counted (the list's size).
+    pub lines: u64,
+}
+
+/// Whether the viewer draws token classes: the `highlighting` setting,
+/// automatic meaning colored except in screen-reader mode, as in the
+/// terminal (a screen reader hears classes through Say Token Kind and
+/// Say Line by Kind).
+pub fn colors_code(app: &App) -> bool {
+    use diroxide_app::viewer::HighlightSetting;
+    match app.settings().highlighting {
+        HighlightSetting::On => true,
+        HighlightSetting::Off => false,
+        HighlightSetting::Auto => !app.screen_reader(),
     }
+}
+
+/// The viewer's rows for a list `columns` wide and `rows` high, after
+/// telling the viewer that size; `None` when no viewer is open.
+pub fn viewer_view(app: &mut App, columns: usize, rows: usize) -> Option<ViewerView> {
+    use diroxide_app::viewer::ViewerMode;
+    let colored = colors_code(app);
+    let viewer = app.viewer_mut()?;
+    viewer.set_size(columns.max(1), rows.max(1));
+    let hex = viewer.mode() == ViewerMode::Hex;
+    let name = if hex {
+        format!("Viewer, {}, hex", display_name(viewer.name()))
+    } else {
+        format!("Viewer, {}", display_name(viewer.name()))
+    };
+    let mut hasher = DefaultHasher::new();
+    viewer.place().to_string().hash(&mut hasher);
+    hex.hash(&mut hasher);
+    let generation = hasher.finish();
+    let shown = viewer.rows();
+    let mut out = Vec::with_capacity(shown.len());
+    let mut focus = None;
+    for (i, row) in shown.iter().enumerate() {
+        if row.focused {
+            focus = Some(i);
+        }
+        let runs = if colored && !hex {
+            viewer
+                .row_runs(row)
+                .iter()
+                .filter_map(|run| {
+                    class_role(run.class).map(|role| (run.start as usize, run.end as usize, role))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let matches = viewer
+            .match_ranges(&row.text)
+            .into_iter()
+            .map(|m| (m.start, m.end))
+            .collect();
+        out.push(ViewerRowView {
+            id: format!("{}:{}", row.pos.line, row.pos.part),
+            text: row.text.clone(),
+            name: display_name(&row.text).into_owned(),
+            line: row.pos.line,
+            runs,
+            matches,
+        });
+    }
+    let lines = viewer
+        .line_count()
+        .unwrap_or_else(|| viewer.lines_known())
+        .max(1);
+    Some(ViewerView {
+        name,
+        generation,
+        rows: out,
+        focus,
+        lines,
+    })
 }
 
 /// The key bar's name, as a toolbar.
@@ -580,7 +983,7 @@ pub fn key_bar_buttons(app: &App) -> Vec<ButtonView> {
     if !app.settings().key_bar {
         return Vec::new();
     }
-    let Some(bank) = shown_bank(app) else {
+    let Some(bank) = app.shown_bank() else {
         return Vec::new();
     };
     bank.buttons

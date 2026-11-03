@@ -17,6 +17,14 @@
 //!   menu loop entered as Windows' own menu keys would, and the window's
 //!   procedure subclassed to hear which item was chosen and when the menu
 //!   closed.
+//! - On Windows, text put on the clipboard ([`clipboard`]), with the
+//!   cause in words when another program holds it.
+//! - On Windows, winit's helper window named ([`helper`]), so a screen
+//!   reader never meets a nameless pane on the desktop.
+//! - On Windows, a program started in a console of its own
+//!   ([`win::start_in_new_console`]) for the window's Shell here and Run
+//!   command (`crate::spawn`), with its command line quoted as Windows
+//!   programs split it.
 //!
 //! Elsewhere the console calls do nothing: a program started from a
 //! terminal on Linux or macOS writes to it, and one started from the
@@ -135,6 +143,121 @@ pub(crate) mod win {
         }
     }
 
+    /// A program's command line as Windows programs split it back into
+    /// arguments (the C runtime's rules): an argument with a space, a tab
+    /// or a quote is quoted, its quotes escaped and the backslashes before
+    /// a quote doubled.
+    pub(crate) fn command_line(program: &std::ffi::OsStr, args: &[std::ffi::OsString]) -> Vec<u16> {
+        use std::os::windows::ffi::OsStrExt;
+        let mut line: Vec<u16> = Vec::new();
+        for (i, arg) in std::iter::once(program)
+            .chain(args.iter().map(std::ffi::OsString::as_os_str))
+            .enumerate()
+        {
+            if i > 0 {
+                line.push(u16::from(b' '));
+            }
+            let units: Vec<u16> = arg.encode_wide().collect();
+            let plain = !units.is_empty()
+                && !units.iter().any(|&c| {
+                    c == u16::from(b' ') || c == u16::from(b'\t') || c == u16::from(b'"')
+                });
+            if plain {
+                line.extend(units);
+                continue;
+            }
+            line.push(u16::from(b'"'));
+            let mut backslashes = 0usize;
+            for c in units {
+                if c == u16::from(b'\\') {
+                    backslashes += 1;
+                    continue;
+                }
+                let repeat = if c == u16::from(b'"') {
+                    backslashes * 2 + 1
+                } else {
+                    backslashes
+                };
+                line.extend(std::iter::repeat_n(u16::from(b'\\'), repeat));
+                line.push(c);
+                backslashes = 0;
+            }
+            line.extend(std::iter::repeat_n(u16::from(b'\\'), backslashes * 2));
+            line.push(u16::from(b'"'));
+        }
+        line
+    }
+
+    /// Starts a program in a console window of its own, which owns its
+    /// input and output (the window's handles are not passed on, as the
+    /// standard library would), with this process's environment and
+    /// `env` over it, in `folder`; not waited for.
+    pub(crate) fn start_in_new_console(
+        program: &std::ffi::OsStr,
+        args: &[std::ffi::OsString],
+        folder: &std::path::Path,
+        env: &[(String, std::ffi::OsString)],
+    ) -> Result<(), String> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            CREATE_NEW_CONSOLE, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, PROCESS_INFORMATION,
+            STARTUPINFOW,
+        };
+        let mut line = command_line(program, args);
+        line.push(0);
+        let mut vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
+            .filter(|(name, _)| !env.iter().any(|(n, _)| name.eq_ignore_ascii_case(n)))
+            .collect();
+        vars.extend(
+            env.iter()
+                .map(|(name, value)| (std::ffi::OsString::from(name), value.clone())),
+        );
+        let mut block: Vec<u16> = Vec::new();
+        for (name, value) in &vars {
+            block.extend(name.encode_wide());
+            block.push(u16::from(b'='));
+            block.extend(value.encode_wide());
+            block.push(0);
+        }
+        block.push(0);
+        let folder: Vec<u16> = folder.as_os_str().encode_wide().chain(Some(0)).collect();
+        let startup = STARTUPINFOW {
+            cb: size_of::<STARTUPINFOW>() as u32,
+            ..Default::default()
+        };
+        let mut info = PROCESS_INFORMATION::default();
+        // SAFETY: every buffer is ours, ends as CreateProcessW requires
+        // (the command line and folder with a zero, the environment block
+        // with two) and outlives the call; the command line is writable as
+        // the call may change it; no handles are inherited and the
+        // startup information names none; the two handles returned are
+        // closed here, which leaves the program running.
+        let ok = unsafe {
+            CreateProcessW(
+                std::ptr::null(),
+                line.as_mut_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                CREATE_NEW_CONSOLE | CREATE_UNICODE_ENVIRONMENT,
+                block.as_ptr().cast(),
+                folder.as_ptr(),
+                &startup,
+                &mut info,
+            ) != 0
+        };
+        if !ok {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+        // SAFETY: the handles are the ones CreateProcessW just gave us.
+        unsafe {
+            let _ = CloseHandle(info.hThread);
+            let _ = CloseHandle(info.hProcess);
+        }
+        Ok(())
+    }
+
     /// Milliseconds since this process was created, from the system's
     /// clock; `None` when the times cannot be read.
     pub(crate) fn ms_since_process_start() -> Option<u64> {
@@ -164,6 +287,152 @@ pub(crate) mod win {
         let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
         // FILETIME counts 100-nanosecond intervals.
         ticks(now).checked_sub(ticks(created)).map(|d| d / 10_000)
+    }
+}
+
+#[cfg(all(windows, feature = "gui"))]
+pub(crate) mod helper {
+    //! winit's helper window ("Winit Thread Event Target"): a window of
+    //! this thread that winit keeps visible but transparent, so it gets
+    //! the messages that carry events during a resize. UI Automation shows
+    //! it as a top-level pane of the desktop with no name, which a screen
+    //! reader's object navigation and window lists would meet as a
+    //! nameless pane. It is named here, and kept a tool window (out of the
+    //! taskbar and the task switcher), right after the event loop makes
+    //! it. It is not hidden: winit needs it visible.
+
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumThreadWindows, GWL_EXSTYLE, GetClassNameW, GetWindowLongPtrW, SetWindowLongPtrW,
+        SetWindowTextW, WS_EX_TOOLWINDOW,
+    };
+
+    /// The helper window's class, as winit names it.
+    const CLASS: &str = "Winit Thread Event Target";
+
+    /// The name the helper window is given, its meaning first.
+    pub(crate) const NAME: &str = "diroxide background helper";
+
+    unsafe extern "system" fn visit(hwnd: HWND, found: LPARAM) -> i32 {
+        let mut class = [0u16; 64];
+        // SAFETY: the buffer is ours and its length is passed; the call
+        // writes at most that many units.
+        let len = unsafe { GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32) };
+        let class = String::from_utf16_lossy(&class[..len.max(0) as usize]);
+        if class == CLASS {
+            // SAFETY: `found` is the address of the caller's local, which
+            // outlives the enumeration.
+            unsafe { *(found as *mut HWND) = hwnd };
+            return 0;
+        }
+        1
+    }
+
+    /// Names this thread's helper window and keeps it a tool window.
+    /// True when it was found.
+    pub(crate) fn name() -> bool {
+        let mut found: HWND = std::ptr::null_mut();
+        // SAFETY: enumerates this thread's windows with a plain callback;
+        // `found` is a local the callback writes, alive for the call.
+        unsafe {
+            let _ = EnumThreadWindows(GetCurrentThreadId(), Some(visit), &raw mut found as LPARAM);
+        }
+        if found.is_null() {
+            return false;
+        }
+        let title: Vec<u16> = NAME.encode_utf16().chain(Some(0)).collect();
+        // SAFETY: `found` is a window of this thread that winit made and
+        // keeps; the title is ours, ends with a zero, and outlives the
+        // call, which copies it; the style is read and written back with
+        // one more bit.
+        unsafe {
+            let _ = SetWindowTextW(found, title.as_ptr());
+            let style = GetWindowLongPtrW(found, GWL_EXSTYLE);
+            let tool = WS_EX_TOOLWINDOW as isize;
+            if style & tool == 0 {
+                let _ = SetWindowLongPtrW(found, GWL_EXSTYLE, style | tool);
+            }
+        }
+        true
+    }
+}
+
+#[cfg(all(windows, feature = "gui"))]
+pub(crate) mod clipboard {
+    //! Text put on the Windows clipboard, written here rather than through
+    //! the window runner's clipboard, which ends the window when the
+    //! clipboard cannot be opened (another program holding it for a
+    //! moment); here that is a sentence and the window goes on. Each call
+    //! is a plain Win32 call; the memory block is ours until the
+    //! clipboard takes it.
+
+    use windows_sys::Win32::Foundation::GlobalFree;
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+    };
+    use windows_sys::Win32::System::Memory::{
+        GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock,
+    };
+
+    /// The clipboard's format for UTF-16 text.
+    const CF_UNICODETEXT: u32 = 13;
+
+    /// Puts `text` on the clipboard as Unicode text; the cause in words
+    /// when it could not.
+    pub(crate) fn set_text(text: &str) -> Result<(), String> {
+        let wide: Vec<u16> = text.encode_utf16().chain(Some(0)).collect();
+        let bytes = wide.len() * 2;
+        // Another program may hold the clipboard for a moment, so opening
+        // it is tried a few times.
+        let mut opened = false;
+        for _ in 0..10 {
+            // SAFETY: opens the clipboard with no owner window; closed
+            // below on every path.
+            if unsafe { OpenClipboard(std::ptr::null_mut()) } != 0 {
+                opened = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !opened {
+            return Err("another program is using it".to_owned());
+        }
+        // SAFETY: the clipboard is open (and closed at the end); the block
+        // is allocated with the size of `wide`, locked while `wide` is
+        // copied into it, unlocked, and handed to the clipboard, which
+        // owns it from then on; it is freed here only when the clipboard
+        // did not take it.
+        let result = unsafe {
+            if EmptyClipboard() == 0 {
+                Err("it could not be emptied".to_owned())
+            } else {
+                let block = GlobalAlloc(GMEM_MOVEABLE, bytes);
+                if block.is_null() {
+                    Err("there was no memory for the text".to_owned())
+                } else {
+                    let to = GlobalLock(block).cast::<u16>();
+                    if to.is_null() {
+                        let _ = GlobalFree(block);
+                        Err("there was no memory for the text".to_owned())
+                    } else {
+                        std::ptr::copy_nonoverlapping(wide.as_ptr(), to, wide.len());
+                        let _ = GlobalUnlock(block);
+                        if SetClipboardData(CF_UNICODETEXT, block).is_null() {
+                            let _ = GlobalFree(block);
+                            Err("it did not take the text".to_owned())
+                        } else {
+                            Ok(())
+                        }
+                    }
+                }
+            }
+        };
+        // SAFETY: closes the clipboard this function opened.
+        unsafe {
+            let _ = CloseClipboard();
+        }
+        result
     }
 }
 

@@ -26,7 +26,8 @@
   - It lists every top-level window of the process with its class, its
     title, whether it is visible, and whether UI Automation's control
     view of the desktop shows it, which is what a screen reader's object
-    navigation and its window list meet.
+    navigation and its window list meet; one the desktop shows with no
+    name is a Fail line (winit's helper window is named by the GUI).
   - It closes the window with WM_CLOSE (the app's quit rule) and reports
     the exit code.
 
@@ -484,9 +485,21 @@ Say ''
 
 Say "## The process's top-level windows"
 Say ''
+$nameless = @()
 foreach ($hwnd in [DiroUia]::WindowsOf($procId)) {
     $visible = if ([DiroUia]::Visible($hwnd)) { 'visible' } else { 'hidden' }
-    Say ("- {0}, class {1}, title {2}; on the desktop's control view: {3}" -f $visible, [DiroUia]::Q([DiroUia]::ClassOf($hwnd)), [DiroUia]::Q([DiroUia]::TitleOf($hwnd)), [DiroUia]::OnDesktop($hwnd))
+    $onDesktop = [DiroUia]::OnDesktop($hwnd)
+    Say ("- {0}, class {1}, title {2}; on the desktop's control view: {3}" -f $visible, [DiroUia]::Q([DiroUia]::ClassOf($hwnd)), [DiroUia]::Q([DiroUia]::TitleOf($hwnd)), $onDesktop)
+    # A window a screen reader can meet on the desktop must have a name.
+    if ($onDesktop.StartsWith('yes') -and [string]::IsNullOrWhiteSpace([DiroUia]::TitleOf($hwnd))) {
+        $nameless += [DiroUia]::ClassOf($hwnd)
+    }
+}
+Say ''
+if ($nameless.Count -eq 0) {
+    Say 'Pass: every window of the process a screen reader can meet on the desktop has a name.'
+} else {
+    Say ("Fail: a window a screen reader can meet on the desktop has no name: class {0}." -f ($nameless -join ', '))
 }
 Say ''
 

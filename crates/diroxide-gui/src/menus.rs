@@ -110,34 +110,29 @@ pub fn marked(label: &str, access: Option<char>) -> String {
     out
 }
 
+/// A menu's entries from the app's own list of it ([`App::menu_list`]):
+/// the items whose condition the place meets, the enabled plugins'
+/// commands among them (the Plugins menu lists every plugin's), each with
+/// its access key from the model where the model has the item.
 fn entries(app: &App, menu: &str, depth: usize) -> Vec<Entry> {
-    let menus = app.menus();
-    let Some(def) = menus.menu(menu) else {
+    let Some(list) = app.menu_list(menu) else {
         return Vec::new();
     };
-    let caps = app.active_panel().capabilities().unwrap_or_default();
+    let def = app.menus().menu(menu);
     let mut out = Vec::new();
-    for item in &def.items {
-        if item.when.is_some_and(|w| !w.holds(&caps)) {
+    for row in list.rows() {
+        // A row the app lists as unavailable (a plugin that is off) is
+        // left out of the native menu, as an item whose condition fails.
+        if !row.enabled {
             continue;
         }
-        let label = marked(&item.label, item.access);
-        match &item.action {
-            ItemAction::Command(command) => {
-                // A plugin's command joins the list menus through the
-                // app; the window's tree leaves it out until the app
-                // gives its row (a contract request).
-                if diroxide_app::commands::info(command).is_none() {
-                    continue;
-                }
-                let key = app.keymap().key_text(command);
-                out.push(Entry::Item {
-                    command: command.to_string(),
-                    label,
-                    key: (!key.is_empty()).then_some(key),
-                });
-            }
-            ItemAction::Submenu(sub) if depth < MAX_DEPTH => {
+        let item = def.and_then(|d| d.items.iter().find(|i| i.row_id() == row.id));
+        let label = match item {
+            Some(item) => marked(&item.label, item.access),
+            None => marked(&row.label, None),
+        };
+        if let Some(sub) = row.id.strip_prefix("menu:") {
+            if depth < MAX_DEPTH {
                 let inner = entries(app, sub, depth + 1);
                 if !inner.is_empty() {
                     out.push(Entry::Submenu {
@@ -146,8 +141,21 @@ fn entries(app: &App, menu: &str, depth: usize) -> Vec<Entry> {
                     });
                 }
             }
-            ItemAction::Submenu(_) => {}
+            continue;
         }
+        let command = match item.map(|i| &i.action) {
+            Some(ItemAction::Command(command)) => command.clone(),
+            _ => match diroxide_core::CommandId::new(row.id.clone()) {
+                Ok(command) => command,
+                Err(_) => continue,
+            },
+        };
+        let key = app.keymap().key_text(&command);
+        out.push(Entry::Item {
+            command: command.to_string(),
+            label,
+            key: (!key.is_empty()).then_some(key),
+        });
     }
     out
 }
@@ -176,10 +184,7 @@ pub fn fingerprint(menus: &[TopMenu]) -> u64 {
 /// Whether the window shows the system's menu bar: on Windows, unless the
 /// `menus` setting is `list`. Elsewhere the list menus serve.
 pub fn native(app: &App) -> bool {
-    // The setting's type is the config crate's, which the GUI does not
-    // depend on (G0's contract request 1 re-exports it through the app);
-    // its name is read instead.
-    cfg!(windows) && format!("{:?}", app.settings().menus) != "List"
+    cfg!(windows) && app.settings().menus != diroxide_app::config::Menus::List
 }
 
 /// The bar menu whose access key is `letter`, for Alt with a letter.

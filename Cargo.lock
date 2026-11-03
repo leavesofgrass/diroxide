@@ -1644,6 +1644,7 @@ dependencies = [
  "accesskit_winit",
  "diroxide-app",
  "diroxide-core",
+ "diroxide-theme",
  "fontique",
  "masonry",
  "masonry_testing",

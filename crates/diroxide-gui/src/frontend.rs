@@ -17,12 +17,13 @@
 //!   start makes before the window exists are held, and said once the
 //!   window and a screen reader are there.
 
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use diroxide_app::commands::ids;
 use diroxide_app::keymap::Platform;
 use diroxide_app::{App, AppEvent, Dialog, Runtime};
-use diroxide_core::{Command, Effect, Key, KeyCode, Message, Modifiers, Side};
+use diroxide_core::{Command, Effect, JobId, Key, KeyCode, Message, Modifiers, Side};
 use masonry::accesskit::Role;
 use masonry::app::RenderRoot;
 use masonry::core::keyboard::KeyboardEvent;
@@ -34,9 +35,14 @@ use masonry::widgets::{Flex, Label};
 use crate::model::{self, Lines, PanelView};
 use crate::widgets::announcer::Announcer;
 use crate::widgets::buttons::{ButtonPressed, ButtonRow};
+use crate::widgets::choice::ChoiceAction;
 use crate::widgets::panel::{PanelAction, PanelBox};
 use crate::widgets::panels::Panels;
+use crate::widgets::progress::JobProgressBar;
+use crate::widgets::push::PushAction;
 use crate::widgets::root::{Region, Root, RootAction};
+use crate::widgets::screen::Screen;
+use crate::widgets::viewer::{ViewerAction, ViewerBox};
 
 /// The title line's text: the active place first.
 pub const TITLE_LINE: WidgetTag<Label> = WidgetTag::named("diroxide-title-line");
@@ -55,6 +61,12 @@ pub const RIGHT_PANEL: WidgetTag<PanelBox> = WidgetTag::named("diroxide-right-pa
 pub const ANNOUNCER: WidgetTag<Announcer> = WidgetTag::named("diroxide-announcer");
 /// The root.
 pub const ROOT: WidgetTag<Root> = WidgetTag::named("diroxide-root");
+/// The panels, or the viewer in their place.
+pub const SCREEN: WidgetTag<Screen> = WidgetTag::named("diroxide-screen");
+/// The viewer's list box.
+pub const VIEWER: WidgetTag<ViewerBox> = WidgetTag::named("diroxide-viewer");
+/// The progress of the job in front.
+pub const JOB_PROGRESS: WidgetTag<JobProgressBar> = WidgetTag::named("diroxide-job-progress");
 
 /// A panel's list box tag.
 pub const fn panel_tag(side: Side) -> WidgetTag<PanelBox> {
@@ -105,6 +117,13 @@ pub trait Host {
     /// Names the window's accessibility node (AT-SPI and macOS read the
     /// window's title from it).
     fn set_window_label(&mut self, label: &str);
+    /// Puts text on the system clipboard, or says why not in words. By
+    /// default through Masonry's clipboard signal (the window runner's
+    /// clipboard; the tests' harness keeps the text).
+    fn set_clipboard(&mut self, text: String) -> Result<(), String> {
+        self.edit(ROOT, |mut root| root.ctx.set_clipboard(text));
+        Ok(())
+    }
 }
 
 impl Host for RenderRoot {
@@ -131,6 +150,13 @@ impl Host for RenderRoot {
     fn set_window_label(&mut self, label: &str) {
         RenderRoot::set_window_label(self, label);
     }
+
+    #[cfg(windows)]
+    fn set_clipboard(&mut self, text: String) -> Result<(), String> {
+        // Written directly: the window runner's clipboard would end the
+        // window when another program holds the clipboard.
+        crate::platform::clipboard::set_text(&text)
+    }
 }
 
 /// What the widgets show now, so a refresh edits only what changed.
@@ -139,11 +165,19 @@ struct Shown {
     lines: Lines,
     panels: [Option<PanelView>; 2],
     arranged: Option<(diroxide_app::config::Layout, Side)>,
+    /// Whether the viewer is shown in the panels' place.
+    viewing: bool,
+    /// The viewer's rows as shown.
+    viewer: Option<model::ViewerView>,
+    /// The theme and the owner's colors the viewer draws with.
+    theme: Option<(String, std::collections::BTreeMap<String, String>)>,
     dialog: Option<model::DialogView>,
     key_bar: Vec<model::ButtonView>,
     sorting: Vec<model::ButtonView>,
     /// The window's name as its accessibility node has it.
     label: String,
+    /// The job in front's percent as the progress indicator shows it.
+    progress: Option<u64>,
 }
 
 /// The GUI's driver: the app, its runtime, and what the window shows.
@@ -156,23 +190,56 @@ pub struct Frontend {
     top: [usize; 2],
     shown: Shown,
     /// Messages for the live region, said on the next refresh.
-    to_say: Vec<(Message, bool)>,
+    to_say: Vec<Said>,
     /// Every message the app announced, in order (the tests read it).
     said: Vec<Message>,
-    /// Text the app put on the clipboard (the platform clipboard is G2's
-    /// commit 25; until then the texts are kept here).
+    /// Every announcement the live region made, in order: what a screen
+    /// reader was told (the tests read it).
+    spoken: Vec<Message>,
+    /// The window's own focus in the open dialog: a confirmation's
+    /// buttons and listing, a text's lines, a secret's toggle.
+    local: model::LocalFocus,
+    /// Every text the app put on the clipboard, in order (the tests read
+    /// it).
     clipboard: Vec<String>,
+    /// Text for the system clipboard, put there on the next refresh.
+    to_copy: Vec<String>,
     quit: bool,
     key_test_since: Option<Instant>,
     app_tick_at: Option<Instant>,
     quick_tick_at: Option<Instant>,
     viewer_tick_at: Option<Instant>,
     hold_retry_at: Option<Instant>,
+    /// What the window's launcher started and the frontend has not said
+    /// yet ([`crate::spawn`]).
+    starts: Option<crate::spawn::Starts>,
+    /// The viewer's columns and rows, as its list box last told them.
+    viewer_size: (usize, usize),
+    /// Each running job's latest percent, from its progress.
+    percents: HashMap<JobId, u64>,
+    /// Every value the progress indicator was given, in order (the tests
+    /// read it).
+    progress_shown: Vec<Option<u64>>,
+    /// The percent of every progress report the workers sent, in order
+    /// (the tests read it).
+    progress_reports: Vec<u64>,
     /// The window has a native menu bar (Windows, the `menus` setting's
     /// native): the menu keys enter it.
     menu_bar: bool,
     /// What the menu keys asked of the native bar, for the window.
     menu_requests: Vec<MenuEnter>,
+}
+
+/// A message waiting for the live region.
+#[derive(Clone, Debug)]
+struct Said {
+    message: Message,
+    /// A job's start line, dropped when a later line comes in the same
+    /// step.
+    start: bool,
+    /// The line the app said as it opened a dialog: left unsaid when the
+    /// dialog says the same by itself as the focus moves into it.
+    opening: bool,
 }
 
 /// How a key enters the native menu bar.
@@ -201,13 +268,21 @@ impl Frontend {
             shown: Shown::default(),
             to_say: Vec::new(),
             said: Vec::new(),
+            spoken: Vec::new(),
+            local: model::LocalFocus::default(),
             clipboard: Vec::new(),
+            to_copy: Vec::new(),
             quit: false,
             key_test_since: None,
             app_tick_at: None,
             quick_tick_at: None,
             viewer_tick_at: None,
             hold_retry_at: None,
+            starts: None,
+            viewer_size: (80, 20),
+            percents: HashMap::new(),
+            progress_shown: Vec::new(),
+            progress_reports: Vec::new(),
             menu_bar: false,
             menu_requests: Vec::new(),
         }
@@ -244,6 +319,24 @@ impl Frontend {
     /// Everything the app announced so far, in order.
     pub fn said(&self) -> &[Message] {
         &self.said
+    }
+
+    /// Everything the live region announced so far, in order: the app's
+    /// lines of each step joined, Low lines and a dialog's opening line
+    /// left out where the dialog says it by itself.
+    pub fn spoken(&self) -> &[Message] {
+        &self.spoken
+    }
+
+    /// Tells the driver what the window's launcher starts, so a program
+    /// that opened in a window of its own is said as opened.
+    pub fn set_starts(&mut self, starts: crate::spawn::Starts) {
+        self.starts = Some(starts);
+    }
+
+    /// The window's own focus in the open dialog.
+    pub fn local_focus(&self) -> model::LocalFocus {
+        self.local
     }
 
     /// The texts the app put on the clipboard.
@@ -291,23 +384,36 @@ impl Frontend {
         let active = self.app.active_side();
         self.shown.arranged = Some((layout, active));
         let panels = NewWidget::new(Panels::new(left, right, layout, active)).with_tag(PANELS);
+        let percent = self.front_percent();
+        self.shown.progress = percent;
         let status = Flex::column()
             .with_fixed(NewWidget::new(Label::new(lines.status.clone())).with_tag(STATUS_LINE))
-            .with_fixed(NewWidget::new(Label::new(lines.jobs.clone())).with_tag(JOBS_LINE));
+            .with_fixed(NewWidget::new(Label::new(lines.jobs.clone())).with_tag(JOBS_LINE))
+            .with_fixed(NewWidget::new(JobProgressBar::new(percent)).with_tag(JOB_PROGRESS));
         let status_bar = Region::new(NewWidget::new(status), Role::Status, "");
         let keys = model::key_bar_buttons(&self.app);
         self.shown.key_bar = keys.clone();
         let key_bar = NewWidget::new(ButtonRow::new(model::KEY_BAR_NAME, keys)).with_tag(KEY_BAR);
+        // The viewer takes the panels' place while a file is viewed.
+        let viewer = NewWidget::new(ViewerBox::new(model::ViewerView {
+            name: "Viewer".to_owned(),
+            generation: 0,
+            rows: Vec::new(),
+            focus: None,
+            lines: 0,
+        }))
+        .with_tag(VIEWER);
+        let screen = NewWidget::new(Screen::new(panels, viewer)).with_tag(SCREEN);
         let column = Flex::column()
             .with_fixed(NewWidget::new(Label::new(lines.title.clone())).with_tag(TITLE_LINE))
-            .with(panels, 1.0)
+            .with(screen, 1.0)
             .with_fixed(NewWidget::new(status_bar))
             .with_fixed(key_bar);
         self.shown.lines = lines;
         // The start's lines, said before the window existed, wait in the
         // live region for a screen reader to ask for the tree, as one
         // announcement in their order.
-        let held = model::join_messages(&std::mem::take(&mut self.to_say));
+        let held = self.take_to_say(None);
         let announcer =
             NewWidget::new(Announcer::new(std::rc::Rc::clone(&full_passes)).with_pending(held))
                 .with_tag(ANNOUNCER);
@@ -354,10 +460,136 @@ impl Frontend {
             self.menu_requests.push(enter);
             return;
         }
+        if !self.app.key_test_active() && self.local_key(&key) {
+            // The window moved its own focus in the dialog, or answered
+            // for the focused button.
+            self.after(now);
+            self.refresh(host);
+            return;
+        }
         let effects = self.app.handle(AppEvent::Key(key));
         self.carry(effects);
         self.after(now);
         self.refresh(host);
+    }
+
+    /// The window's own focus, started again when the top dialog is
+    /// another one.
+    fn sync_local(&mut self) {
+        match self.app.dialog() {
+            Some((id, dialog)) if self.local.dialog != Some(id) => {
+                self.local = model::LocalFocus::start(id, dialog);
+            }
+            Some(_) => {}
+            None => self.local = model::LocalFocus::default(),
+        }
+    }
+
+    /// A key the window handles in a dialog by itself, since the app does
+    /// not model what it moves: Tab and the arrows between a
+    /// confirmation's buttons and listing, the arrows through a text's
+    /// lines or the listing, and Enter or Space on a button, which
+    /// answers as that button's key does (the app's settle time still
+    /// holds for Yes). True when the key was the window's.
+    fn local_key(&mut self, key: &Key) -> bool {
+        self.sync_local();
+        // Change key's prompt waits for any key, exactly as it came.
+        if self.app.capturing_key() {
+            return false;
+        }
+        let Some(view) = model::dialog_view_at(&self.app, &self.local) else {
+            return false;
+        };
+        let shift_only = key.mods == Modifiers::SHIFT;
+        let plain = key.mods.is_empty();
+        if key.code == KeyCode::Tab && (plain || shift_only) {
+            let order = view.tab_order();
+            if order.len() < 2 {
+                return false;
+            }
+            let at = order.iter().position(|f| *f == view.focus).unwrap_or(0);
+            let next = if shift_only {
+                (at + order.len() - 1) % order.len()
+            } else {
+                (at + 1) % order.len()
+            };
+            self.local.on = order[next];
+            return true;
+        }
+        if !plain {
+            return false;
+        }
+        match view.focus {
+            model::DialogFocus::No | model::DialogFocus::Yes => match key.code {
+                KeyCode::Left | KeyCode::Up => {
+                    self.local.on = model::DialogFocus::No;
+                    true
+                }
+                KeyCode::Right | KeyCode::Down => {
+                    self.local.on = model::DialogFocus::Yes;
+                    true
+                }
+                KeyCode::Enter | KeyCode::Char(' ') => {
+                    self.press(view.focus);
+                    true
+                }
+                _ => false,
+            },
+            model::DialogFocus::Show => match key.code {
+                KeyCode::Char(' ') => {
+                    self.press(model::DialogFocus::Show);
+                    true
+                }
+                // Anything typed goes to the field, with the focus.
+                _ => {
+                    if key.typed_char().is_some()
+                        || matches!(key.code, KeyCode::Backspace | KeyCode::Delete)
+                    {
+                        self.local.on = model::DialogFocus::Control;
+                    }
+                    false
+                }
+            },
+            model::DialogFocus::Listing | model::DialogFocus::Control if view.local_list => {
+                let total = match &view.control {
+                    model::ControlView::List(list) => list.total,
+                    model::ControlView::Confirm(confirm) => {
+                        confirm.listing.as_ref().map_or(0, |l| l.total)
+                    }
+                    model::ControlView::Field(_) => 0,
+                };
+                let page = model::DIALOG_PAGE.saturating_sub(1).max(1);
+                let last = total.saturating_sub(1);
+                let line = self.local.line.min(last);
+                let to = match key.code {
+                    KeyCode::Up => line.saturating_sub(1),
+                    KeyCode::Down => (line + 1).min(last),
+                    KeyCode::PageUp => line.saturating_sub(page),
+                    KeyCode::PageDown => (line + page).min(last),
+                    KeyCode::Home => 0,
+                    KeyCode::End => last,
+                    _ => return false,
+                };
+                self.local.line = to;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Presses a dialog's button: No and Yes answer as their keys do
+    /// (through the app's commands, so Yes waits out the settle time);
+    /// Show turns the secret's toggle as its key does.
+    fn press(&mut self, button: model::DialogFocus) {
+        let effects = match button {
+            model::DialogFocus::No => self.app.handle(AppEvent::Command(Command::new(ids::NO))),
+            model::DialogFocus::Yes => self.app.handle(AppEvent::Command(Command::new(ids::YES))),
+            model::DialogFocus::Show => self
+                .app
+                .handle(AppEvent::Key(Key::new(KeyCode::Char('s'), Modifiers::ALT))),
+            model::DialogFocus::Control | model::DialogFocus::Listing => Vec::new(),
+        };
+        self.carry(effects);
     }
 
     /// Tells the driver whether the window has a native menu bar now, so
@@ -483,8 +715,155 @@ impl Frontend {
             }
             Err(other) => other,
         };
+        let action = match action.downcast::<PushAction>() {
+            Ok(push) => {
+                self.push_action(host, *push, now);
+                return;
+            }
+            Err(other) => other,
+        };
+        let action = match action.downcast::<ViewerAction>() {
+            Ok(viewer) => {
+                let ViewerAction::Size(columns, rows) = *viewer;
+                if self.viewer_size != (columns, rows) {
+                    self.viewer_size = (columns, rows);
+                    self.refresh(host);
+                }
+                return;
+            }
+            Err(other) => other,
+        };
+        let action = match action.downcast::<ChoiceAction>() {
+            Ok(choice) => {
+                self.choice_action(host, *choice, now);
+                return;
+            }
+            Err(other) => other,
+        };
         if let Ok(pressed) = action.downcast::<ButtonPressed>() {
             self.button(host, *pressed, now);
+        }
+    }
+
+    /// A dialog's button was pressed (a click, a screen reader's Click),
+    /// or took the focus another way: the window's focus follows it.
+    fn push_action(&mut self, host: &mut impl Host, action: PushAction, now: Instant) {
+        self.sync_local();
+        if self.app.dialog().is_none() {
+            return;
+        }
+        match action {
+            PushAction::Focused(id) => {
+                if self.local.on != id {
+                    self.local.on = id;
+                    self.refresh(host);
+                }
+            }
+            PushAction::Pressed(id) => {
+                self.local.on = id;
+                self.press(id);
+                self.after(now);
+                self.refresh(host);
+            }
+        }
+    }
+
+    /// A dialog's list took the focus, or a row was clicked: the focus
+    /// moves there (the app's list focus, or the window's own line), and
+    /// a double click chooses the row as Enter does.
+    fn choice_action(&mut self, host: &mut impl Host, action: ChoiceAction, now: Instant) {
+        self.sync_local();
+        let Some(view) = model::dialog_view_at(&self.app, &self.local) else {
+            return;
+        };
+        let list_focus = match &view.control {
+            model::ControlView::Confirm(_) => model::DialogFocus::Listing,
+            _ => model::DialogFocus::Control,
+        };
+        match action {
+            ChoiceAction::Focused => {
+                if self.local.on != list_focus {
+                    self.local.on = list_focus;
+                    self.refresh(host);
+                }
+            }
+            ChoiceAction::Row { index, open } => {
+                self.local.on = list_focus;
+                if view.local_list {
+                    self.local.line = index;
+                } else {
+                    self.move_app_list(index);
+                }
+                if open {
+                    let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Enter)));
+                    self.carry(effects);
+                }
+                self.after(now);
+                self.refresh(host);
+            }
+        }
+    }
+
+    /// Moves the app's focus in the open dialog's list to the row at
+    /// `index`, through the list's own moves (the app has no command to
+    /// focus a row by its place; a contract request asks for one): into
+    /// a field's candidates first, then Home or End, whichever is nearer,
+    /// and Down or Up the rest of the way. The moves are Low lines,
+    /// shown only.
+    fn move_app_list(&mut self, index: usize) {
+        let focus_and_total = |app: &App| -> Option<(Option<usize>, usize, bool)> {
+            match app.dialog()?.1 {
+                Dialog::Choose { list, .. } => Some((list.focus_index(), list.len(), true)),
+                Dialog::Question { choices, .. } => {
+                    Some((choices.focus_index(), choices.len(), true))
+                }
+                Dialog::Edit {
+                    candidates: Some(list),
+                    in_list,
+                    ..
+                } => Some((list.focus_index(), list.len(), *in_list)),
+                _ => None,
+            }
+        };
+        let Some((_, total, in_list)) = focus_and_total(&self.app) else {
+            return;
+        };
+        if total == 0 {
+            return;
+        }
+        let index = index.min(total - 1);
+        if !in_list {
+            // Down from a field enters its candidates at their focus.
+            let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Down)));
+            self.carry(effects);
+        }
+        let Some((Some(at), _, _)) = focus_and_total(&self.app) else {
+            return;
+        };
+        if at == index {
+            return;
+        }
+        let (start, from) = if index < at.abs_diff(index) {
+            (Some(ids::LIST_HOME), 0)
+        } else if total - 1 - index < at.abs_diff(index) {
+            (Some(ids::LIST_END), total - 1)
+        } else {
+            (None, at)
+        };
+        if let Some(start) = start {
+            let effects = self.app.handle(AppEvent::Command(Command::new(start)));
+            self.carry(effects);
+        }
+        let step = if index > from {
+            ids::LIST_DOWN
+        } else {
+            ids::LIST_UP
+        };
+        for _ in 0..from.abs_diff(index) {
+            let effects = self
+                .app
+                .handle(AppEvent::Command(Command::new(step.clone())));
+            self.carry(effects);
         }
     }
 
@@ -499,7 +878,7 @@ impl Frontend {
                 .id
                 .parse::<usize>()
                 .ok()
-                .and_then(|i| model::shown_bank(&self.app)?.buttons.into_iter().nth(i))
+                .and_then(|i| self.app.shown_bank()?.buttons.into_iter().nth(i))
                 .map(|button| button.commands)
                 .unwrap_or_default();
             for command in commands {
@@ -529,13 +908,19 @@ impl Frontend {
         match action {
             PanelAction::Focused(side) => {
                 // A click or a screen reader put the focus on the other
-                // panel: it becomes the active one, as Tab makes it.
-                if side != self.app.active_side() && self.app.dialog().is_none() {
+                // panel: it becomes the active one, as Tab makes it (into
+                // the preview while the quick view shows there, and out
+                // of it again).
+                if side != self.focus_side() && self.app.dialog().is_none() {
                     self.command(host, Command::new(ids::SWITCH_PANEL), now);
                 }
             }
             PanelAction::Page(side, rows) => {
-                if self.page[side.index()] != rows {
+                // The app is told the first page too, even when it equals
+                // the guess the window starts with (20 rows), or Page Up
+                // and Page Down would move the app's own default.
+                let told = self.app.panel(side).list().page_size() == rows;
+                if self.page[side.index()] != rows || !told {
                     self.page[side.index()] = rows;
                     self.app.set_page_rows(side, rows);
                     self.refresh(host);
@@ -549,14 +934,15 @@ impl Frontend {
                 if self.app.dialog().is_some() {
                     return;
                 }
-                if side != self.app.active_side() {
+                if side != self.focus_side() {
                     let effects = self.app.dispatch(&Command::new(ids::SWITCH_PANEL));
                     self.carry(effects);
                 }
-                // A plugin list's rows are moved by keys only for now
-                // (`App::focus_name` moves the folder's focus).
-                if self.app.panel(side).plugin_list().is_none() {
-                    self.app.focus_name(side, &id);
+                // The folder's row, or a plugin list's while one is up; a
+                // click in the preview goes into it, its rows moved by keys
+                // (the app has no call to move the region by a row's id).
+                if !model::shows_preview(&self.app, side) {
+                    self.app.focus_shown_row(side, &id);
                 }
                 self.after(now);
                 self.refresh(host);
@@ -565,9 +951,7 @@ impl Frontend {
                 if self.app.dialog().is_some() {
                     return;
                 }
-                if self.app.panel(side).plugin_list().is_none() {
-                    self.app.focus_name(side, &id);
-                }
+                self.app.focus_shown_row(side, &id);
                 self.command(host, Command::new(ids::ENTER), now);
             }
         }
@@ -581,12 +965,87 @@ impl Frontend {
                 break;
             }
             for event in events {
-                let effects = self.app.handle(event);
-                self.carry(effects);
+                self.handle_event(event);
             }
         }
         self.after(now);
         self.refresh(host);
+    }
+
+    /// A result from the runtime, as if a worker had sent it: handed to
+    /// the app, then the window refreshed (the tests send events the
+    /// workers would).
+    pub fn event(&mut self, host: &mut impl Host, event: AppEvent, now: Instant) {
+        self.handle_event(event);
+        self.after(now);
+        self.refresh(host);
+    }
+
+    /// The job in front's percent, when one runs: none while it only
+    /// waits its turn (held or queued), 0 before its first progress.
+    fn front_percent(&mut self) -> Option<u64> {
+        let jobs = self.app.jobs();
+        let running = jobs.ids();
+        self.percents.retain(|job, _| running.contains(job));
+        let job = jobs.front()?;
+        if jobs.waits(job) {
+            return None;
+        }
+        Some(self.percents.get(&job).copied().unwrap_or(0))
+    }
+
+    /// Every value the progress indicator was given, in order: a percent,
+    /// or none when no job ran.
+    pub fn progress_shown(&self) -> &[Option<u64>] {
+        &self.progress_shown
+    }
+
+    /// The percent of every progress report the workers sent, in order,
+    /// against which [`Self::progress_shown`] shows how few of them moved
+    /// the indicator.
+    pub fn progress_reports(&self) -> &[u64] {
+        &self.progress_reports
+    }
+
+    /// One result to the app; a job's progress is noted first, for the
+    /// progress indicator.
+    fn handle_event(&mut self, event: AppEvent) {
+        // A program the window started is running in its own window, not
+        // ended: said as opened, in place of the app's "Back in diroxide"
+        // (the panels are read again when the watcher sees a change).
+        if let AppEvent::ProgramEnded {
+            what,
+            folder,
+            result: Ok(None) | Err(_),
+        } = &event
+            && let Some((started, outcome)) = self.starts.as_ref().and_then(|starts| {
+                starts
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .pop_front()
+            })
+        {
+            let place = diroxide_app::panel::place_leaf(folder);
+            // Why it could not start, in the window's words (no terminal
+            // program on Linux), rather than the app's general line.
+            let message = match outcome {
+                Ok(()) => Message::info(started.words(what, &place)),
+                Err(cause) => crate::spawn::failure(started, what, &cause),
+            };
+            self.said.push(message.clone());
+            self.to_say.push(Said {
+                message,
+                start: false,
+                opening: false,
+            });
+            return;
+        }
+        if let AppEvent::JobProgress { job, progress } = &event {
+            self.percents.insert(*job, progress.percent());
+            self.progress_reports.push(progress.percent());
+        }
+        let effects = self.app.handle(event);
+        self.carry(effects);
     }
 
     /// Waits for the workers to finish, at most `limit`, taking their
@@ -600,8 +1059,7 @@ impl Frontend {
             }
             let events = self.runtime.wait(Duration::from_millis(10));
             for event in events {
-                let effects = self.app.handle(event);
-                self.carry(effects);
+                self.handle_event(event);
             }
         }
         self.wake(host, now);
@@ -695,17 +1153,28 @@ impl Frontend {
     /// Carries out effects: the runtime's I/O, then the screen's.
     fn carry(&mut self, effects: Vec<Effect>) {
         let screen = self.runtime.carry_out(&mut self.app, effects);
+        // The app says a dialog's name as it opens it, in the effect after
+        // the opening.
+        let mut opened = false;
         for effect in screen {
             match effect {
+                Effect::OpenDialog(_) => opened = true,
                 Effect::Announce(message) => {
                     self.said.push(message.clone());
                     // A job's start line is the jobs line's too; a later
                     // line in the same step goes before it.
                     let start = message.text == self.app.jobs().line();
-                    self.to_say.push((message, start));
+                    self.to_say.push(Said {
+                        message,
+                        start,
+                        opening: std::mem::take(&mut opened),
+                    });
                 }
                 Effect::Quit => self.quit = true,
-                Effect::SetClipboardText(text) => self.clipboard.push(text),
+                Effect::SetClipboardText(text) => {
+                    self.clipboard.push(text.clone());
+                    self.to_copy.push(text);
+                }
                 _ => {}
             }
         }
@@ -715,6 +1184,25 @@ impl Frontend {
         if self.app.wants_quit() {
             self.quit = true;
         }
+    }
+
+    /// The waiting lines as the one announcement the live region makes
+    /// ([`model::join_messages`]), kept in [`Self::spoken`]. With a dialog
+    /// shown for the first time (`fresh`), the line the app said as it
+    /// opened it is left out when the dialog says the same by itself (its
+    /// name, then its focused control, as the focus moves into it), so
+    /// the screen reader hears it once: the settled double.
+    fn take_to_say(&mut self, fresh: Option<&model::DialogView>) -> Vec<Message> {
+        let lines: Vec<(Message, bool)> = std::mem::take(&mut self.to_say)
+            .into_iter()
+            .filter(|said| {
+                !(said.opening && fresh.is_some_and(|view| view.says(&said.message.text)))
+            })
+            .map(|said| (said.message, said.start))
+            .collect();
+        let joined = model::join_messages(&lines);
+        self.spoken.extend(joined.iter().cloned());
+        joined
     }
 
     /// Puts the app's state on the widgets where it changed, then the
@@ -732,6 +1220,17 @@ impl Frontend {
         if lines.jobs != self.shown.lines.jobs {
             let text = lines.jobs.clone();
             host.edit(JOBS_LINE, |mut l| Label::set_text(&mut l, text));
+            // The progress indicator moves only with the jobs line, which
+            // the app paces (a change of state at once, progress at most
+            // every progress_interval_seconds in screen-reader mode).
+            let percent = self.front_percent();
+            if percent != self.shown.progress {
+                self.shown.progress = percent;
+                self.progress_shown.push(percent);
+                host.edit(JOB_PROGRESS, |mut p| {
+                    JobProgressBar::set_percent(&mut p, percent)
+                });
+            }
         }
         self.shown.lines = lines;
         // The window's node is named by its title ("Documents -
@@ -755,6 +1254,35 @@ impl Frontend {
                 host.edit(panel_tag(side), |mut p| PanelBox::set_view(&mut p, view));
             }
         }
+        // The viewer in the panels' place while a file is viewed: the rows
+        // on screen for the size its list box told, drawn with the theme.
+        let viewing = self.app.viewer().is_some();
+        if viewing != self.shown.viewing {
+            self.shown.viewing = viewing;
+            host.edit(SCREEN, |mut s| Screen::set_viewing(&mut s, viewing));
+        }
+        if viewing {
+            let theme = (
+                self.app.settings().theme.clone(),
+                self.app.settings().colors.clone(),
+            );
+            if self.shown.theme.as_ref() != Some(&theme) {
+                self.shown.theme = Some(theme.clone());
+                host.edit(VIEWER, |mut v| {
+                    ViewerBox::set_theme(&mut v, theme.0, theme.1)
+                });
+            }
+            let (columns, rows) = self.viewer_size;
+            let view = model::viewer_view(&mut self.app, columns, rows);
+            if view.is_some() && view != self.shown.viewer {
+                self.shown.viewer = view.clone();
+                if let Some(view) = view {
+                    host.edit(VIEWER, |mut v| ViewerBox::set_view(&mut v, view));
+                }
+            }
+        } else {
+            self.shown.viewer = None;
+        }
         // The key bar (another bank, a rebound key) and the sort buttons'
         // keys.
         let keys = model::key_bar_buttons(&self.app);
@@ -772,9 +1300,45 @@ impl Frontend {
                 });
             }
         }
+        // Copied text to the system clipboard; a clipboard another program
+        // holds is said, after the app's own line.
+        for text in std::mem::take(&mut self.to_copy) {
+            if let Err(cause) = host.set_clipboard(text) {
+                let message = Message::could_not(
+                    "copy",
+                    "to the clipboard",
+                    &cause,
+                    "Try again in a moment.",
+                );
+                self.said.push(message.clone());
+                self.to_say.push(Said {
+                    message,
+                    start: false,
+                    opening: false,
+                });
+            }
+        }
         // The modal host: the top dialog, changed in place while it is the
         // same dialog in the same shape, built again otherwise.
-        let dialog = model::dialog_view(&self.app);
+        self.sync_local();
+        let dialog = model::dialog_view_at(&self.app, &self.local);
+        if let Some(view) = &dialog {
+            // The window's focus as the view settled it (a listing that
+            // is not there falls back to No).
+            self.local.on = view.focus;
+        }
+        // A dialog shown now that was not before says its name and its
+        // focused control as the focus moves into it.
+        let fresh: Option<model::DialogView> = dialog
+            .as_ref()
+            .filter(|view| {
+                self.shown
+                    .dialog
+                    .as_ref()
+                    .is_none_or(|shown| shown.id != view.id)
+            })
+            .cloned();
+        let say = self.take_to_say(fresh.as_ref());
         if dialog != self.shown.dialog {
             self.shown.dialog = dialog.clone();
             host.edit(ROOT, |mut root| Root::set_dialog(&mut root, dialog));
@@ -783,7 +1347,6 @@ impl Frontend {
         // their order, as the terminal's status line joins them; a screen
         // reader is not handed a burst of live nodes in an order of the
         // adapter's choosing.
-        let say = model::join_messages(&std::mem::take(&mut self.to_say));
         let holding = host.edit(ANNOUNCER, |mut a| {
             if !say.is_empty() {
                 Announcer::say(&mut a, say);
@@ -806,7 +1369,20 @@ impl Frontend {
         {
             return Some(id);
         }
-        host.id_of(panel_tag(self.app.active_side()))
+        if self.shown.viewing {
+            return host.id_of(VIEWER);
+        }
+        host.id_of(panel_tag(self.focus_side()))
+    }
+
+    /// The side whose list box has the focus: the active panel, or the
+    /// other one while the focus is in the quick view's preview there.
+    fn focus_side(&self) -> Side {
+        if self.app.in_preview() {
+            self.app.active_side().other()
+        } else {
+            self.app.active_side()
+        }
     }
 
     fn place_focus(&mut self, host: &mut impl Host) {
