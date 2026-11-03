@@ -8,9 +8,12 @@
 //! (`Runtime::with_launcher`). It plans each program ([`plan`]) and hands
 //! the plan to a starter: the real one ([`start`]) starts it detached and
 //! reaps it on a thread of its own; the tests' starter records it, so no
-//! test starts a program. Each start is noted ([`Started`]) for the
-//! frontend, which says what opened in place of the app's "Back in
-//! diroxide", since nothing has ended yet.
+//! test starts a program. It does not wait ([`Launcher::waits`] is
+//! false), so the app hears that the program started, or why not, and
+//! says it in its own words: "Started a shell in work", "Started the
+//! editor on notes.txt" (lane A5's `AppEvent::ProgramStarted`). Its
+//! causes are plain lowercase words, which the app says as they are
+//! ([`plain_cause`]).
 //!
 //! - **Windows:** every program gets a console of its own
 //!   (`CREATE_NEW_CONSOLE`, started by the platform module, which passes
@@ -27,35 +30,21 @@
 //! - **macOS** (not verified by a person): Terminal opens in the folder
 //!   for the shell, and runs a command line through `osascript`.
 
-use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
 
 use diroxide_app::runtime::SystemLauncher;
 use diroxide_app::{Launcher, Program};
 
-/// What the window started, for what it says.
+/// What kind of program a plan starts, for how it is started.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Started {
-    /// The shell, in a terminal: "Opened a terminal in work".
+    /// The shell, in a terminal.
     Terminal,
-    /// A command line, in a terminal: "Started the command in work".
+    /// A command line, in a terminal left open on it.
     Command,
-    /// A program on its own, the editor or a tool: "Opened notes.txt".
+    /// A program on its own, the editor or a tool.
     Program,
-}
-
-impl Started {
-    /// What is said when it started: `what` is the app's name for it
-    /// (the file for the editor, the tool's name), `place` the folder's.
-    pub fn words(self, what: &str, place: &str) -> String {
-        match self {
-            Started::Terminal => format!("Opened a terminal in {place}"),
-            Started::Command => format!("Started the command in {place}"),
-            Started::Program => format!("Opened {what}"),
-        }
-    }
 }
 
 /// The system the plan is for.
@@ -270,7 +259,7 @@ pub fn start(planned: &Planned) -> Result<(), String> {
     for (name, value) in &planned.env {
         command.env(name, value);
     }
-    let mut child = command.spawn().map_err(|e| e.to_string())?;
+    let mut child = command.spawn().map_err(|e| plain_cause(&e))?;
     let _ = std::thread::Builder::new()
         .name("diroxide-gui-reaper".to_owned())
         .spawn(move || {
@@ -282,19 +271,40 @@ pub fn start(planned: &Planned) -> Result<(), String> {
 /// What starts a planned program: the real [`start`], or a test's.
 pub type Starter = Box<dyn Fn(&Planned) -> Result<(), String> + Send + Sync>;
 
+/// Why a program could not start, in plain lowercase words, as the app
+/// says a launcher's cause word for word: "the program was not found",
+/// or the system's own words with their first letter lowered and the
+/// error's number left off.
+pub fn plain_cause(error: &std::io::Error) -> String {
+    use std::io::ErrorKind;
+    match error.kind() {
+        ErrorKind::NotFound => "the program was not found".to_owned(),
+        ErrorKind::PermissionDenied => "the system did not let it run".to_owned(),
+        _ => {
+            let text = error.to_string();
+            let text = text
+                .split(" (os error")
+                .next()
+                .unwrap_or(&text)
+                .trim()
+                .trim_end_matches('.');
+            let mut chars = text.chars();
+            match chars.next() {
+                Some(first) => first.to_lowercase().chain(chars).collect(),
+                None => "it could not start".to_owned(),
+            }
+        }
+    }
+}
+
 /// The runtime's launcher in the window.
 pub struct WindowLauncher {
     system: SystemLauncher,
     starter: Starter,
-    started: Starts,
     /// The Unix terminal emulator, when a test chooses it; else
     /// `TERMINAL` or the first on the path.
     terminal: Option<OsString>,
 }
-
-/// What the window started, and whether it could, in the order started:
-/// shared by the launcher and the frontend, which says each.
-pub type Starts = Arc<Mutex<VecDeque<(Started, Result<(), String>)>>>;
 
 impl WindowLauncher {
     /// A launcher that starts programs for real.
@@ -307,7 +317,6 @@ impl WindowLauncher {
         Self {
             system: SystemLauncher,
             starter,
-            started: Arc::new(Mutex::new(VecDeque::new())),
             terminal: None,
         }
     }
@@ -317,26 +326,6 @@ impl WindowLauncher {
     pub fn with_terminal(mut self, terminal: impl Into<OsString>) -> Self {
         self.terminal = Some(terminal.into());
         self
-    }
-
-    /// The starts not yet said, shared with the frontend.
-    pub fn started(&self) -> Starts {
-        Arc::clone(&self.started)
-    }
-}
-
-/// What is said when the window could not start a program: the cause,
-/// then the next step, by what it was.
-pub fn failure(started: Started, what: &str, cause: &str) -> diroxide_core::Message {
-    let next = if cause.contains("no terminal program") {
-        "Set the TERMINAL variable to a terminal program, such as xterm"
-    } else {
-        "Check the command, or the shell and editor settings"
-    };
-    match started {
-        Started::Terminal => diroxide_core::Message::could_not("open", "a terminal", cause, next),
-        Started::Command => diroxide_core::Message::could_not("start", "the command", cause, next),
-        Started::Program => diroxide_core::Message::could_not("open", what, cause, next),
     }
 }
 
@@ -369,15 +358,14 @@ impl Launcher for WindowLauncher {
                 .or_else(|| unix_terminal(std::env::var_os("TERMINAL"), on_path)),
             _ => None,
         };
-        let kind = kind_of(program, &shell);
-        let result = plan(program, &shell, System::current(), terminal)
-            .and_then(|planned| (self.starter)(&planned));
-        self.started
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push_back((kind, result.clone()));
-        // Nothing has ended: the frontend says what opened, or why not.
-        result.map(|()| None)
+        // Nothing has ended: the app says what started, or why not.
+        plan(program, &shell, System::current(), terminal)
+            .and_then(|planned| (self.starter)(&planned))
+            .map(|()| None)
+    }
+
+    fn waits(&self) -> bool {
+        false
     }
 
     fn shell(&self) -> (OsString, Vec<OsString>) {
@@ -480,10 +468,6 @@ mod tests {
         let err = plan(&program("/bin/bash", &[]), &shell, System::Unix, None).unwrap_err();
         assert_eq!(err, "no terminal program was found");
         assert_eq!(
-            failure(Started::Terminal, "Shell", &err).text,
-            "Could not open a terminal: no terminal program was found. Set the TERMINAL variable to a terminal program, such as xterm."
-        );
-        assert_eq!(
             unix_terminal(None, |name| name == "konsole"),
             Some(OsString::from("konsole"))
         );
@@ -536,18 +520,20 @@ mod tests {
     }
 
     #[test]
-    fn what_is_said_puts_the_meaning_first() {
+    fn a_cause_is_plain_lowercase_words_and_the_launcher_does_not_wait() {
+        use std::io::{Error, ErrorKind};
         assert_eq!(
-            Started::Terminal.words("Shell", "work"),
-            "Opened a terminal in work"
+            plain_cause(&Error::from(ErrorKind::NotFound)),
+            "the program was not found"
         );
         assert_eq!(
-            Started::Command.words("Command", "work"),
-            "Started the command in work"
+            plain_cause(&Error::from(ErrorKind::PermissionDenied)),
+            "the system did not let it run"
         );
         assert_eq!(
-            Started::Program.words("notes.txt", "work"),
-            "Opened notes.txt"
+            plain_cause(&Error::other("The pipe is being closed. (os error 232)")),
+            "the pipe is being closed"
         );
+        assert!(!WindowLauncher::new().waits());
     }
 }

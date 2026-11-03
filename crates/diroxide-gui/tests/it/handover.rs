@@ -1,9 +1,11 @@
 //! The handover in the window (R27's commit 25, decision 8): Shell here
 //! opens the system's terminal in the folder, F4 starts the editor
 //! directly, Run command runs its line in a terminal left open; the
-//! window waits for none of them and says what opened. The launcher's
-//! starter records each plan here, so no test starts a program. And the
-//! text clipboard both ways: a copied name pasted into a field.
+//! window waits for none of them, and the app says what started in its
+//! own words (lane A5's `ProgramStarted`: the window's launcher does not
+//! wait). The launcher's starter records each plan here, so no test
+//! starts a program. And the text clipboard both ways: a copied name
+//! pasted into a field.
 
 #![allow(clippy::unwrap_used)]
 
@@ -29,10 +31,8 @@ fn recording(dir: &std::path::Path) -> (Rig, Arc<Mutex<Vec<Planned>>>) {
         Ok(())
     }))
     .with_terminal("xterm");
-    let starts = launcher.started();
     let runtime = runtime.with_launcher(Arc::new(launcher));
-    let mut rig = Rig::new(app, runtime);
-    rig.f.set_starts(starts);
+    let rig = Rig::new(app, runtime);
     (rig, plans)
 }
 
@@ -50,7 +50,7 @@ fn shell_here_opens_a_terminal_and_f4_starts_the_editor_directly() {
     assert!(
         rig.spoken()
             .iter()
-            .any(|s| s == &format!("Opened a terminal in {leaf}")),
+            .any(|s| s == &format!("Started a shell in {leaf}")),
         "{:?}",
         rig.spoken()
     );
@@ -74,7 +74,9 @@ fn shell_here_opens_a_terminal_and_f4_starts_the_editor_directly() {
     rig.refresh();
     rig.press("f4");
     assert!(
-        rig.spoken().iter().any(|s| s == "Opened notes.txt"),
+        rig.spoken()
+            .iter()
+            .any(|s| s == "Started the editor on notes.txt"),
         "{:?}",
         rig.spoken()
     );
@@ -94,23 +96,25 @@ fn shell_here_opens_a_terminal_and_f4_starts_the_editor_directly() {
 }
 
 #[test]
-fn a_program_that_cannot_start_says_why_in_the_windows_words() {
+fn a_program_that_cannot_start_says_why_in_plain_words() {
     let dir = fixture(&["notes.txt"], &[]);
+    let leaf = dir
+        .path()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
     let (app, runtime) = app_on(dir.path(), dir.path());
     let launcher = WindowLauncher::with_starter(Box::new(|_: &Planned| {
         Err("no terminal program was found".to_owned())
     }));
-    let starts = launcher.started();
     let runtime = runtime.with_launcher(Arc::new(launcher));
     let mut rig = Rig::new(app, runtime);
-    rig.f.set_starts(starts);
     rig.run("file.shell-here");
-    assert!(
-        rig.spoken().iter().any(|s| s
-            == "Could not open a terminal: no terminal program was found. Set the TERMINAL variable to a terminal program, such as xterm."),
-        "{:?}",
-        rig.spoken()
+    let said = format!(
+        "Could not start a shell in {leaf}: no terminal program was found. Set the TERMINAL variable to a terminal program, such as xterm."
     );
+    assert!(rig.spoken().contains(&said), "{:?}", rig.spoken());
     assert!(
         !rig.spoken()
             .iter()

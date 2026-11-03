@@ -250,7 +250,7 @@ pub(crate) mod win {
             ) != 0
         };
         if !ok {
-            return Err(std::io::Error::last_os_error().to_string());
+            return Err(crate::spawn::plain_cause(&std::io::Error::last_os_error()));
         }
         // SAFETY: the handles are the ones CreateProcessW just gave us.
         unsafe {

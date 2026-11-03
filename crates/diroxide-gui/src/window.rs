@@ -646,10 +646,8 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     // (decision 8): the shell in the system's terminal, the editor
     // directly.
     let launcher = crate::spawn::WindowLauncher::new();
-    let starts = launcher.started();
     let runtime = runtime.with_launcher(Arc::new(launcher));
     let mut frontend = Frontend::new(app, runtime, options.title.clone());
-    frontend.set_starts(starts);
     // The system's appearance: read while following it, and elsewhere
     // than Windows (whose high contrast mode is read on every step) for
     // its high contrast setting. A few milliseconds, at most half a

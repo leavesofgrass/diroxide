@@ -26,14 +26,13 @@
 //!   Painting only: the tree stays exactly as it was, and nothing is said
 //!   by either (textweaver's `bars.rs`, the owner's own project).
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use diroxide_app::commands::ids;
 use diroxide_app::keymap::Platform;
 use diroxide_app::{App, AppEvent, Dialog, Runtime};
-use diroxide_core::{Command, Effect, JobId, Key, KeyCode, Message, Modifiers, Side};
+use diroxide_core::{Command, Effect, Key, KeyCode, Message, Modifiers, Side};
 use diroxide_theme::PanelRole;
 use diroxide_theme::os::OsScheme;
 use masonry::accesskit::Role;
@@ -238,13 +237,8 @@ pub struct Frontend {
     quick_tick_at: Option<Instant>,
     viewer_tick_at: Option<Instant>,
     hold_retry_at: Option<Instant>,
-    /// What the window's launcher started and the frontend has not said
-    /// yet ([`crate::spawn`]).
-    starts: Option<crate::spawn::Starts>,
     /// The viewer's columns and rows, as its list box last told them.
     viewer_size: (usize, usize),
-    /// Each running job's latest percent, from its progress.
-    percents: HashMap<JobId, u64>,
     /// Every value the progress indicator was given, in order (the tests
     /// read it).
     progress_shown: Vec<Option<u64>>,
@@ -334,9 +328,7 @@ impl Frontend {
             quick_tick_at: None,
             viewer_tick_at: None,
             hold_retry_at: None,
-            starts: None,
             viewer_size: (80, 20),
-            percents: HashMap::new(),
             progress_shown: Vec::new(),
             progress_reports: Vec::new(),
             menu_bar: false,
@@ -382,12 +374,6 @@ impl Frontend {
     /// left out where the dialog says it by itself.
     pub fn spoken(&self) -> &[Message] {
         &self.spoken
-    }
-
-    /// Tells the driver what the window's launcher starts, so a program
-    /// that opened in a window of its own is said as opened.
-    pub fn set_starts(&mut self, starts: crate::spawn::Starts) {
-        self.starts = Some(starts);
     }
 
     /// The window's own focus in the open dialog.
@@ -1054,7 +1040,9 @@ impl Frontend {
                 if view.local_list {
                     self.local.line = index;
                 } else {
-                    self.move_app_list(index);
+                    // The app's own row at once (lane A5), said by the
+                    // focus that follows it, not by the app.
+                    let _ = self.app.focus_dialog_row(index);
                 }
                 if open {
                     let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Enter)));
@@ -1063,69 +1051,6 @@ impl Frontend {
                 self.after(now);
                 self.refresh(host);
             }
-        }
-    }
-
-    /// Moves the app's focus in the open dialog's list to the row at
-    /// `index`, through the list's own moves (the app has no command to
-    /// focus a row by its place; a contract request asks for one): into
-    /// a field's candidates first, then Home or End, whichever is nearer,
-    /// and Down or Up the rest of the way. The moves are Low lines,
-    /// shown only.
-    fn move_app_list(&mut self, index: usize) {
-        let focus_and_total = |app: &App| -> Option<(Option<usize>, usize, bool)> {
-            match app.dialog()?.1 {
-                Dialog::Choose { list, .. } => Some((list.focus_index(), list.len(), true)),
-                Dialog::Question { choices, .. } => {
-                    Some((choices.focus_index(), choices.len(), true))
-                }
-                Dialog::Edit {
-                    candidates: Some(list),
-                    in_list,
-                    ..
-                } => Some((list.focus_index(), list.len(), *in_list)),
-                _ => None,
-            }
-        };
-        let Some((_, total, in_list)) = focus_and_total(&self.app) else {
-            return;
-        };
-        if total == 0 {
-            return;
-        }
-        let index = index.min(total - 1);
-        if !in_list {
-            // Down from a field enters its candidates at their focus.
-            let effects = self.app.handle(AppEvent::Key(Key::plain(KeyCode::Down)));
-            self.carry(effects);
-        }
-        let Some((Some(at), _, _)) = focus_and_total(&self.app) else {
-            return;
-        };
-        if at == index {
-            return;
-        }
-        let (start, from) = if index < at.abs_diff(index) {
-            (Some(ids::LIST_HOME), 0)
-        } else if total - 1 - index < at.abs_diff(index) {
-            (Some(ids::LIST_END), total - 1)
-        } else {
-            (None, at)
-        };
-        if let Some(start) = start {
-            let effects = self.app.handle(AppEvent::Command(Command::new(start)));
-            self.carry(effects);
-        }
-        let step = if index > from {
-            ids::LIST_DOWN
-        } else {
-            ids::LIST_UP
-        };
-        for _ in 0..from.abs_diff(index) {
-            let effects = self
-                .app
-                .handle(AppEvent::Command(Command::new(step.clone())));
-            self.carry(effects);
         }
     }
 
@@ -1203,7 +1128,10 @@ impl Frontend {
                 // The folder's row, or a plugin list's while one is up; a
                 // click in the preview goes into it, its rows moved by keys
                 // (the app has no call to move the region by a row's id).
-                if !model::shows_preview(&self.app, side) {
+                if model::shows_preview(&self.app, side) {
+                    // Into the preview by the switch above, then its row.
+                    self.app.focus_preview_row(&id);
+                } else {
                     self.app.focus_shown_row(side, &id);
                 }
                 self.after(now);
@@ -1245,15 +1173,13 @@ impl Frontend {
 
     /// The job in front's percent, when one runs: none while it only
     /// waits its turn (held or queued), 0 before its first progress.
-    fn front_percent(&mut self) -> Option<u64> {
+    fn front_percent(&self) -> Option<u64> {
         let jobs = self.app.jobs();
-        let running = jobs.ids();
-        self.percents.retain(|job, _| running.contains(job));
         let job = jobs.front()?;
         if jobs.waits(job) {
             return None;
         }
-        Some(self.percents.get(&job).copied().unwrap_or(0))
+        Some(jobs.front_progress().map_or(0, |p| p.percent()))
     }
 
     /// Every value the progress indicator was given, in order: a percent,
@@ -1272,38 +1198,9 @@ impl Frontend {
     /// One result to the app; a job's progress is noted first, for the
     /// progress indicator.
     fn handle_event(&mut self, event: AppEvent) {
-        // A program the window started is running in its own window, not
-        // ended: said as opened, in place of the app's "Back in diroxide"
-        // (the panels are read again when the watcher sees a change).
-        if let AppEvent::ProgramEnded {
-            what,
-            folder,
-            result: Ok(None) | Err(_),
-        } = &event
-            && let Some((started, outcome)) = self.starts.as_ref().and_then(|starts| {
-                starts
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .pop_front()
-            })
-        {
-            let place = diroxide_app::panel::place_leaf(folder);
-            // Why it could not start, in the window's words (no terminal
-            // program on Linux), rather than the app's general line.
-            let message = match outcome {
-                Ok(()) => Message::info(started.words(what, &place)),
-                Err(cause) => crate::spawn::failure(started, what, &cause),
-            };
-            self.said.push(message.clone());
-            self.to_say.push(Said {
-                message,
-                start: false,
-                opening: false,
-            });
-            return;
-        }
-        if let AppEvent::JobProgress { job, progress } = &event {
-            self.percents.insert(*job, progress.percent());
+        // A program the window started says so in the app's own words
+        // (the launcher does not wait, so the app hears ProgramStarted).
+        if let AppEvent::JobProgress { progress, .. } = &event {
             self.progress_reports.push(progress.percent());
         }
         let effects = self.app.handle(event);
