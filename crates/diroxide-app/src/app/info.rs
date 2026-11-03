@@ -7,8 +7,8 @@
 use diroxide_config::{Layout, SettingKind};
 use diroxide_core::format::count;
 use diroxide_core::{
-    Command, CommandId, Effect, Key, Layer, ListModel, ListRow, Message, Place, PlaceKind, Redraw,
-    Side, Timestamp,
+    Command, CommandId, Effect, Key, KeyColumn, Layer, ListModel, ListRow, Message, Place,
+    PlaceKind, Redraw, Side, Timestamp,
 };
 use diroxide_vfs::Capabilities;
 
@@ -869,10 +869,18 @@ impl App {
         self.open_dialog(Dialog::edit(field), Purpose::RunCommand(side))
     }
 
+    /// Shell here, in the active panel's folder. The terminal hands its
+    /// screen over, so its line says how to come back first; the GUI's
+    /// shell runs in a terminal window of its own while diroxide stays,
+    /// so the GUI hears only "Started a shell in work" when it has (lane
+    /// A5): the app knows the keymap column it runs with.
     pub(super) fn shell_here(&mut self) -> Vec<Effect> {
         let side = self.active;
         let spawn = self.spawn_for(side, SpawnKind::Shell);
         self.request(Request::Spawn(Box::new(spawn)));
+        if self.keymap.column() == KeyColumn::Gui {
+            return Vec::new();
+        }
         vec![self.say(Message::info("Shell here: exit the shell to come back."))]
     }
 
@@ -921,6 +929,47 @@ impl App {
             effects.extend(self.open_as(side, place, focus, crate::panel::Load::Refresh));
         }
         effects
+    }
+
+    /// A program started without waiting for it (lane A5), the GUI's
+    /// handover: "Started a shell in work", "Started the command in
+    /// work", "Started the editor on notes.txt", "Started textweaver";
+    /// or why not, with the next step: "Could not start a shell in work:
+    /// no terminal program was found. Set the TERMINAL variable to a
+    /// terminal program, such as xterm." The panels are not read again:
+    /// the program still runs, and the watchers see what it changes.
+    pub(super) fn program_started(
+        &mut self,
+        kind: &SpawnKind,
+        folder: &Place,
+        result: Result<(), String>,
+    ) -> Vec<Effect> {
+        let what = match kind {
+            SpawnKind::Shell => format!("a shell in {}", place_leaf(folder)),
+            SpawnKind::CommandLine(_) => format!("the command in {}", place_leaf(folder)),
+            SpawnKind::Editor(file) | SpawnKind::EditorAt { file, .. } => {
+                format!("the editor on {}", place_leaf(file))
+            }
+            SpawnKind::Program { name, .. } => name.clone(),
+        };
+        let message = match result {
+            Ok(()) => Message::info(format!("Started {what}")),
+            Err(cause) => {
+                let cause = cause.trim();
+                let cause = if cause.is_empty() {
+                    "the program was not found or could not run"
+                } else {
+                    cause
+                };
+                let next = if cause.contains("no terminal program") {
+                    "Set the TERMINAL variable to a terminal program, such as xterm"
+                } else {
+                    "Check the command, or the shell and editor settings"
+                };
+                Message::could_not("start", &what, cause, next)
+            }
+        };
+        vec![Effect::Redraw(Redraw::All), self.say(message)]
     }
 
     /// Quit: asks only when a job runs or waits, or a prompt holds text

@@ -221,6 +221,21 @@ pub enum AppEvent {
         /// Its exit code, or why it could not start.
         result: Result<Option<i32>, String>,
     },
+    /// A program started without waiting for it (lane A5): the GUI's
+    /// handover, where a shell or a command runs in a terminal window of
+    /// its own and an editor or a tool in its own window, while diroxide
+    /// stays. Sent when the launcher does not wait
+    /// ([`crate::Launcher::waits`]); one that waits sends
+    /// [`AppEvent::ProgramEnded`] when the program ends.
+    ProgramStarted {
+        /// What started: the shell, a command line, the editor on a
+        /// file, or a tool.
+        kind: crate::request::SpawnKind,
+        /// The folder it started in.
+        folder: Place,
+        /// Whether it started, or why not, in lowercase words.
+        result: Result<(), String>,
+    },
     /// An archive job was planned, or could not be (the sentence says
     /// why).
     ArchivePlanned {
@@ -1644,6 +1659,11 @@ impl App {
                 folder,
                 result,
             } => self.program_ended(&what, &folder, result),
+            AppEvent::ProgramStarted {
+                kind,
+                folder,
+                result,
+            } => self.program_started(&kind, &folder, result),
             AppEvent::ArchiveOpened { request, facts } => self.archive_opened(request, *facts),
             AppEvent::ArchivePlanned { job, result } => self.archive_planned(job, result),
             AppEvent::ArchiveEntries { place, line } => self.archive_entries_counted(&place, line),
