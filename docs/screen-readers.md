@@ -1,6 +1,6 @@
 # Using diroxide with a screen reader
 
-This guide is for people who use a screen reader such as NVDA, JAWS, Orca or VoiceOver, with or without a Braille display. It says how diroxide works with a screen reader, what you should hear for each key, the settings to check in NVDA and JAWS, how to read it on a 40-cell display, and a short check you can run yourself.
+This guide is for people who use a screen reader such as NVDA, JAWS, Orca or VoiceOver, with or without a Braille display. It says how diroxide works with a screen reader, what you should hear for each key, the settings to check in NVDA and JAWS, how to read it on a 40-cell display, and a short check you can run yourself. Most of it is about the terminal. The window, `diro --gui`, has its own section, [The GUI](#the-gui), because a screen reader reads a window another way than it reads a terminal.
 
 What this guide says about diroxide comes from its design. A setting that comes from a screen reader's own documentation, or that has not been tried here, is marked not yet verified. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so every "you should hear" line below is what diroxide is built to say, not a report of what was heard. If your experience differs, that is a finding. [The accessibility statement](accessibility.md) says what has been checked.
 
@@ -132,6 +132,17 @@ These lines show what diroxide says for each key. The status line says the same 
 - Watch this folder, from the palette: "Watching in for new files. Escape stops." (The folder here is called in.) A file copied in slowly: nothing while it grows, then about 2 seconds after it stops, "Arrived: scan-004.pdf, 1.2 MB". Several within ten seconds: "Watching in: 3 arrived". Escape: "Stopped watching in: 3 arrived".
 - The status line shows "Waiting for scan-004.pdf to settle" but diroxide does not say it.
 - In a shell, `diro watch in`: "Watching in for new files. Ctrl+C stops."
+
+### Plugin lists
+
+A plugin's list of rows that are not files, such as the changed files of a git folder or the Sites list, opens inside a panel. [The panels](panels.md#plugin-lists) describes it. What you should hear:
+
+- The landing line puts its meaning first and the plugin's name last: "Changed files, 2 rows, left panel (Changed files)". The list's name, its count and the panel are inside the first 40 cells. The plugin's name closes the line, so a plugin cannot pass for diroxide.
+- Down and Up read a row as a folder's row is read, the name first and then the details: "b.txt, state Modified, lines 12". The title line names the list, "Changed files, left panel (Changed files)", and says the sort when there is one.
+- Space says "Marked" or "Unmarked". Enter runs the list's own command as a job and says its start line, with the plugin's name last.
+- A file key such as F5, F6, F7 or F8 says "This row is not a file." The same words answer a command that works on the folder beneath the list, such as Make folder.
+- A plugin can open a document of its own from a row, such as a diff. Closing that document with Escape says nothing, and your screen reader reads the row again.
+- Left, Backspace and Alt+Up leave the list: "Plugin list closed (Changed files)", and then the folder's line again, such as "work, 8 items, in D:\". Escape takes the list's filter off first, "Filter off", and leaves the list on the next press.
 
 ## Choosing a layout
 
@@ -307,6 +318,76 @@ Run this once with NVDA, once with JAWS, and then read the first 40 cells of eac
 
 Questions to answer: Was the meaning of every line inside the first 40 cells? Did the count after the filter pause help, or interrupt? Is 400 milliseconds too short? Did "Waiting for ... to settle" get read aloud even though diroxide does not say it? Was the compare verdict and its counts enough before the change list? Does "check terminal" on every Shift plus function key row help or only add noise? Did the label's color help when someone sighted was nearby, and did the row read the same without it? Which keys does your terminal not deliver?
 
+## The GUI
+
+This section is for the window, `diro --gui`. [The GUI](gui.md) says how to open it and what it holds. The rest of this guide is about the terminal, where a screen reader reads text on a screen and follows the cursor. The window works another way.
+
+### How the window talks to your screen reader
+
+- The window is read through the system's accessibility interface, not as text on a screen. UI Automation serves NVDA and JAWS on Windows, and AT-SPI serves Orca on Linux. Nothing has been heard on any of them yet. Tests and reports read the window's tree the way a screen reader does, with no screen reader running.
+- Each panel is a list, and each row is an option in it. The option's name has the name first and the details after it, as in the terminal. "Selected" is the option's state, so it is said once. The position is a property of the option, so your screen reader says "1 of 5" in its own way.
+- The focused row is the list's active descendant. Your screen reader follows the focus and reads the row when it moves. The window adds no announcement for a move, so Down says the row once and nothing else.
+- Messages go to a live region you cannot see. Normal messages are polite and high ones are assertive. Low messages are only shown in the status line and are never announced.
+- The start-up lines are held until your screen reader asks for the window, then said once as one announcement. On the one run measured, that came about two seconds after launch.
+- The terminal settings in the NVDA, JAWS and Orca sections below, and the `cursor_fallback` setting, are about the terminal. What the window needs from your screen reader's settings has not been worked out. Report what you find.
+- On macOS, VoiceOver reads a list's options as plain text, so "selected" and "unavailable" stay in the option's name there. VoiceOver has not been tried.
+
+### What you should hear in the window
+
+These lines come from the program's scripted walk of the window, which is the owner's ten-minute check done by a test. The walk's folder is called work and has a Backup folder in it. Where a line is cut at 40 characters, the cut is where a 40-cell display cuts it.
+
+- The window's title is the place first, "work - diroxide". The title line is "work, left panel, in " and the parent. The focus is on the first row of the left panel: "Backup, folder, modified today", and then the time.
+- Tab: "Right panel: Backup, 1 item". The focus is on that panel's first row: "report.pdf, PDF, 3 bytes, modified today". Tab again: "Left panel: work, 8 items".
+- Space on a row: "Selected budget.xlsx. 1 selected." After the third row: "3 selected."
+- Ctrl+D: "3 selected, 312 bytes. work, 8 items, on".
+- F5: a dialog named "Copy 3 items to Backup, 312 bytes? No is", with the focus on "No, the default". Press y: "Copy finished: 3 done." The focus goes back to the row.
+- F2: a dialog named "Rename report.pdf to", whose text input holds the name with the caret before the extension. Type, press Enter: "Renamed report.pdf to report-2026.pdf". The focus is on the renamed row: "report-2026.pdf, PDF, 2.1 KB, modified t".
+- F8: "Move 1 item to the trash, 2.1 KB? No is". The walk answers n, because its test folder has no trash. Ctrl+Z then takes back the rename: "Undid rename: 1 item is back".
+- Ctrl+Shift+P: a dialog named "Command palette" whose field is an editable combo box. Escape closes it.
+- Ctrl+Q with nothing running quits at once.
+
+The window's parts have names in the tree: "Left panel, work", "Sort the left panel", "Key bar", and on Windows the menu bar with its nine menus. A key bar button is named by its label with its key as its shortcut: "Rename", with F2.
+
+### What the window does not say
+
+- Low messages. "Top of the list" and "Bottom of the list", and "At the top already", appear in the status line and are not announced. Pressing Up on the first row is silent.
+- A running job's progress. The jobs line shows it and does not speak it. Ctrl+D says where the job is. A progress element that speaks at the progress interval comes in a later step.
+- A dialog's name may be said twice when it opens, once by the program's announcement and once by the dialog.
+- A confirmation is a list of two answers, "No, the default" and "Yes". Real buttons come in a later step.
+- The viewer and the quick view are not drawn in the window yet. Their keys reach the program, but the window does not draw the viewer's text or the quick view's preview.
+- A plugin list's rows do not take a click yet. Use the keys.
+- The helper window of the toolkit, class "Winit Thread Event Target", has no name and can show in a window list as a pane with no name.
+
+### A check for the GUI
+
+Run this once with NVDA and once with JAWS, then read the first 40 cells of each line on the Braille display. Every "you should hear" line is what the window is built to say, not a report of what was heard. `cargo xtask sample-folder FOLDER` writes the sample folder, with a Backup folder in it. Start the window on it:
+
+```bash
+diro --gui --portable FOLDER FOLDER/Backup
+```
+
+The first five things to try, in order:
+
+1. Press Alt. On Windows the menu bar should show, and your screen reader should say that it is a menu bar. Press Escape. The bar hides, and diroxide says nothing.
+2. Press F10. It does what Alt did. Press Escape.
+3. Press Alt+F. The File menu opens. Press Escape. On Linux and macOS, F9 opens a list named "Menu bar" with File first, and Alt+F opens the File menu as a list.
+4. Press Tab. You should hear "Right panel: Backup" and the count, once, and the focus should be that panel's first row. Press Tab again.
+5. Press Down five times. Each row is read once, name first, with the position said by your screen reader and not in the name.
+
+Then the rest of the walk:
+
+6. Press Space on three files. You hear "Selected report.pdf. 1 selected." for the first, and after the third, "3 selected." Is "selected" heard once after a marked row's name, or twice?
+7. Press Ctrl+D. You hear the count and the size of the selection, then the folder.
+8. Press F5. A dialog opens, named for the copy with its size. Where is the focus? It should be on "No, the default". Is the dialog's name said once or twice? Press y. If a name is taken, a list of choices opens next, as in the terminal.
+9. Press F2 on a file and type a few characters. Does your screen reader read each character as the caret moves? Press Escape to leave without renaming.
+10. Press Ctrl+Shift+P and type `sort`. Do the candidates read the command's name first? Press Escape.
+11. Press Up on the first row. Nothing should be said. Is the silence a problem?
+12. Copy `big.bin` to Backup. You hear "Copy started" and then no progress. Press Ctrl+D partway for the sentence. This is the known gap above.
+13. Press Ctrl+Q while the copy runs. You hear "1 job is not finished." and then "Quit and stop them? No is the default. y or n". Press n.
+14. Look in the system's window list, such as Alt+Tab or a screen reader's window list. Is there a pane with no name beside "diroxide"?
+
+Questions to answer: Did the menu bar show and read? Was every row read once, name first? Did Tab speak once? Was "selected" heard once? Was a dialog's name said twice? Did you miss spoken progress? Was the silence at the edge of a list a problem? Did a pane with no name show in the window list?
+
 ## Keys that may clash
 
 - The screen reader key. NVDA, JAWS and Orca use Insert, or Caps Lock if you choose it, as their own key. diroxide uses neither, so your screen reader's commands pass through to it.
@@ -321,6 +402,7 @@ Questions to answer: Was the meaning of every line inside the first 40 cells? Di
 ## See also
 
 - [The accessibility statement](accessibility.md)
+- [The GUI](gui.md)
 - [Terminals](terminals.md)
 - [The panels](panels.md)
 - [Archives](archives.md)

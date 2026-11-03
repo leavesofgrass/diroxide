@@ -118,9 +118,13 @@ pub struct Program {
     pub env: Vec<(String, OsString)>,
 }
 
-/// Starts a program with the terminal handed over and waits for it.
+/// Starts a program: with the terminal handed over, waiting for it to
+/// end, or, for a launcher that does not wait ([`Launcher::waits`]), in a
+/// window of its own.
 pub trait Launcher: Send + Sync {
-    /// Runs the program to its end; the exit code when there is one.
+    /// Runs the program to its end, with the exit code when there is one;
+    /// a launcher that does not wait returns once it has started, with no
+    /// code.
     fn run(&self, program: &Program) -> Result<Option<i32>, String>;
 
     /// The user's shell and the arguments that make it run one command
@@ -133,6 +137,17 @@ pub trait Launcher: Send + Sync {
     /// `$EDITOR`, then the platform's. The runtime checks the setting
     /// first (the owner's answer 74).
     fn editor(&self) -> OsString;
+
+    /// Whether [`Launcher::run`] waits for the program to end, the
+    /// terminal handed over: the terminal frontend's launcher does, and
+    /// the app hears [`AppEvent::ProgramEnded`]. A launcher that starts
+    /// the program and returns at once, as the GUI's does (its programs
+    /// run in windows of their own), says `false`: the handover hook is
+    /// not called, and the app hears [`AppEvent::ProgramStarted`] with
+    /// whether it started (lane A5).
+    fn waits(&self) -> bool {
+        true
+    }
 }
 
 /// Runs programs on this machine with the standard library.
@@ -1978,6 +1993,17 @@ impl Runtime {
                 return;
             }
         };
+        if !self.launcher.waits() {
+            // The program runs in a window of its own and diroxide stays:
+            // nothing is handed over, and nothing has ended yet.
+            let result = self.launcher.run(&program).map(|_| ());
+            self.queue.push_back(AppEvent::ProgramStarted {
+                kind: spawn.kind.clone(),
+                folder: spawn.folder.clone(),
+                result,
+            });
+            return;
+        }
         if let Some(hook) = self.hook.as_mut() {
             hook(Handover::Suspend);
         }
@@ -3028,6 +3054,81 @@ mod tests {
         let names: Vec<&str> = program.env.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.contains(&"DIRO_ACTIVE") && names.contains(&"DIRO_CURSOR"));
         assert!(names.contains(&"DIRO_LEVEL"));
+    }
+
+    /// A launcher that starts and does not wait, as the GUI's (lane A5).
+    #[derive(Default)]
+    struct Starter {
+        programs: Mutex<Vec<Program>>,
+    }
+
+    impl Launcher for Starter {
+        fn run(&self, program: &Program) -> Result<Option<i32>, String> {
+            lock(&self.programs).push(program.clone());
+            Ok(None)
+        }
+        fn shell(&self) -> (OsString, Vec<OsString>) {
+            (OsString::from("testshell"), vec![OsString::from("-c")])
+        }
+        fn editor(&self) -> OsString {
+            OsString::from("testeditor")
+        }
+        fn waits(&self) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn a_launcher_that_does_not_wait_says_started_and_hands_nothing_over() {
+        let starter = Arc::new(Starter::default());
+        let mut runtime = Runtime::with_local().with_launcher(starter.clone());
+        let handovers = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&handovers);
+        runtime.set_terminal_hook(Box::new(move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+        }));
+        let here = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        runtime.request(Request::Spawn(Box::new(Spawn {
+            kind: SpawnKind::Shell,
+            folder: here.clone(),
+            other: here.clone(),
+            cursor: None,
+            selection: Vec::new(),
+        })));
+        let events = runtime.poll();
+        assert!(
+            matches!(
+                events.as_slice(),
+                [AppEvent::ProgramStarted {
+                    kind: SpawnKind::Shell,
+                    result: Ok(()),
+                    ..
+                }]
+            ),
+            "{events:?}"
+        );
+        assert_eq!(handovers.load(Ordering::SeqCst), 0);
+        assert_eq!(lock(&starter.programs).len(), 1);
+        // A launcher that waits hands the terminal over and back.
+        let recorder = Arc::new(Recorder::default());
+        let mut runtime = Runtime::with_local().with_launcher(recorder);
+        let counted = Arc::clone(&handovers);
+        runtime.set_terminal_hook(Box::new(move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+        }));
+        runtime.request(Request::Spawn(Box::new(Spawn {
+            kind: SpawnKind::Shell,
+            folder: here.clone(),
+            other: here,
+            cursor: None,
+            selection: Vec::new(),
+        })));
+        let events = runtime.poll();
+        assert!(
+            matches!(events.as_slice(), [AppEvent::ProgramEnded { .. }]),
+            "{events:?}"
+        );
+        assert_eq!(handovers.load(Ordering::SeqCst), 2);
     }
 
     #[test]
