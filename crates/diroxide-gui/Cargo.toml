@@ -49,7 +49,10 @@ windows-sys = { workspace = true, features = ["Win32_System_Console", "Win32_Sys
 [dev-dependencies]
 accesskit_consumer.workspace = true
 masonry_testing.workspace = true
+serde.workspace = true
 tempfile.workspace = true
+# The reachability test reads crates/diroxide-app/keys/gui-unsafe.toml.
+toml.workspace = true
 
 # The harness reaches Parley, and so fontique with its system fonts,
 # whether or not the `gui` feature is on: the tests build without it too

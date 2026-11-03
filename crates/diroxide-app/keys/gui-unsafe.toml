@@ -1,0 +1,49 @@
+# The keys the window cannot be trusted with, as data, beside
+# terminal-unsafe.toml (the GUI alpha's foundation lane, G1; R26 section
+# 7). The GUI's tests read it (crates/diroxide-gui/tests/it/gui_keys.rs):
+# no default in the keymap's GUI column uses a key listed here, so every
+# command's GUI key can reach diroxide's window.
+#
+# kind = "system": the system keeps it before the window sees it, or acts
+#   on it itself.
+# kind = "reader": a screen reader keeps it as its own modifier.
+# kind = "dropped": the window drops it on purpose (a chord of the Windows
+#   key is the system's on Windows and Linux).
+#
+# "why" finishes the sentence said in words: "Alt+F4 cannot reach
+# diroxide's window: Windows closes the window with it."
+
+[[key]]
+keys = ["alt+f4"]
+kind = "system"
+why = "Windows closes the window with it, and the app's quit rule runs from the close"
+
+[[key]]
+keys = ["alt+space"]
+kind = "system"
+why = "it opens the window's system menu"
+
+[[key]]
+keys = ["alt+tab", "alt+shift+tab", "ctrl+alt+tab"]
+kind = "system"
+why = "it switches between windows"
+
+[[key]]
+keys = ["ctrl+escape"]
+kind = "system"
+why = "it opens the Start menu"
+
+[[key]]
+keys = ["ctrl+alt+delete"]
+kind = "system"
+why = "it is the system's secure attention key"
+
+[[key]]
+keys = ["insert"]
+kind = "reader"
+why = "it is the screen reader's key"
+
+[[key]]
+keys = ["meta+e", "meta+d", "meta+l", "meta+r", "meta+tab"]
+kind = "dropped"
+why = "a chord of the Windows key is the system's, and the window drops it"

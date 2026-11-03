@@ -8,6 +8,8 @@ mod dialogs;
 #[cfg(feature = "gui")]
 mod goldens;
 #[cfg(feature = "gui")]
+mod gui_keys;
+#[cfg(feature = "gui")]
 mod keybar_mouse;
 #[cfg(feature = "gui")]
 mod live_region;
