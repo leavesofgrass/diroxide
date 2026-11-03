@@ -513,7 +513,7 @@ impl App {
     }
 
     pub(super) fn open_settings(&mut self) -> Vec<Effect> {
-        let list = settings::settings_list(&self.settings);
+        let list = settings::settings_list_in(&self.settings, self.themes());
         self.open_dialog(
             Dialog::Choose {
                 list,
@@ -577,7 +577,9 @@ impl App {
             }
             SettingKind::SplitPresets => self.split_presets_list(),
             SettingKind::Theme => {
-                let mut rows: Vec<ListRow> = settings::theme_names()
+                // The built-in themes, then the owner's theme files.
+                let mut rows: Vec<ListRow> = self
+                    .theme_names()
                     .into_iter()
                     .map(|name| ListRow::new(name.clone(), name))
                     .collect();
@@ -685,14 +687,22 @@ impl App {
             key: key.to_owned(),
             value: value.clone(),
         });
-        let words = self.settings.value_words(key);
-        let message = match value {
-            Some(_) => crate::messages::setting_changed(info.name, &words),
-            None => crate::messages::setting_reset(info.name, &words),
+        // The look's settings say what they do (lane A6): the theme with
+        // its contrast verdict, the same line as Next theme's, and focus
+        // mode with what it does in the window.
+        let message = match self.look_setting_line(key) {
+            Some(line) => Message::info(line),
+            None => {
+                let words = self.settings.value_words(key);
+                match value {
+                    Some(_) => crate::messages::setting_changed(info.name, &words),
+                    None => crate::messages::setting_reset(info.name, &words),
+                }
+            }
         };
         let mut effects = vec![Effect::Redraw(Redraw::All), self.say(message)];
         if let Some(Purpose::Settings) = self.opens.last().map(|o| &o.purpose) {
-            let list = settings::settings_list(&self.settings);
+            let list = settings::settings_list_in(&self.settings, self.themes());
             if let Some(Dialog::Choose { list: shown, .. }) =
                 self.dialogs.last_mut().map(|(_, d)| d)
             {
@@ -732,24 +742,18 @@ impl App {
         self.apply_setting("layout", Some(toml::Value::String(next.to_owned())))
     }
 
-    /// Next theme: the next of the built-in themes, its contrast said.
+    /// Next theme: the next of the themes, the built-in ones and then the
+    /// owner's theme files, its contrast said. The setting's own line is
+    /// the theme's with its verdict (see `look_setting_line`), so Next
+    /// theme and the Settings list say the same words.
     pub(super) fn next_theme(&mut self) -> Vec<Effect> {
-        let names = settings::theme_names();
+        let names = self.theme_names();
         let at = names.iter().position(|n| *n == self.settings.theme);
         let next = names
             .get(at.map_or(0, |i| (i + 1) % names.len().max(1)))
             .cloned()
             .unwrap_or_default();
-        let mut effects = self.apply_setting("theme", Some(toml::Value::String(next.clone())));
-        // One line, not two: the theme's own line with its contrast
-        // replaces "Theme: galaxy-light".
-        if effects.iter().any(|e| matches!(e, Effect::Announce(_))) {
-            effects.retain(|e| !matches!(e, Effect::Announce(_)));
-            self.status_log.pop();
-        }
-        let line = settings::theme_line(&self.settings, None);
-        effects.push(self.say(Message::info(line)));
-        effects
+        self.apply_setting("theme", Some(toml::Value::String(next)))
     }
 
     pub(super) fn list_problems(&mut self) -> Vec<Effect> {

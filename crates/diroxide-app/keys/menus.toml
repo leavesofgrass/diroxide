@@ -285,6 +285,15 @@ access = "l"
 command = "app.next-theme"
 access = "t"
 
+# The window's look (lane A6): the bars fade at rest, and full screen.
+[[menu.item]]
+command = "view.focus-mode"
+access = "m"
+
+[[menu.item]]
+command = "view.full-screen"
+access = "u"
+
 [[menu.item]]
 command = "app.switch-bank"
 access = "b"

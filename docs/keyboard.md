@@ -162,6 +162,8 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Test keys. Says what each key you press sends and what it would run; Cancel ends it. (app.key-test)
 - Change layout. Moves between side by side, stacked and single panel. (app.layout)
 - Next theme. Switches to the next theme and says its contrast. (app.next-theme)
+- Focus mode. Turns focus mode on or off: in the window, the bars fade after three seconds with no key or mouse move. (view.focus-mode)
+- Full screen. Fills the screen with the window, or gives the room back; in a terminal, the terminal program does it. (view.full-screen)
 - Config problems. Lists what could not be read from the config files, and why. (app.problems)
 - Job history. Opens the Jobs list at the jobs that ran, with what failed in each and why. (jobs.history)
 - Volumes. Lists the drives, mounts, connected storages and devices, each its state first: Open, Mount, Unmount, Eject, Hide. (go.volumes)
@@ -269,6 +271,7 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - F9 or F10: Menus. Opens the menu bar. (app.menu)
 - Ctrl+Comma: Settings. Lists the settings; Help on a setting says what it does. (app.settings)
 - Escape: Cancel. Closes the menu or dialog, stops the job in front or the search, or else stops watching the folder or takes the filter off. (app.cancel)
+- F11: Full screen. Fills the screen with the window, or gives the room back; in a terminal, the terminal program does it. (view.full-screen)
 - Ctrl+Z: Undo. Reverses the last job: a rename, move, copy, new folder or trashing. (edit.undo)
 - Alt+F: File menu. Opens the File menu. (menu.file)
 - Alt+E: Edit menu. Opens the Edit menu. (menu.edit)
@@ -418,6 +421,7 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - Test keys. Says what each key you press sends and what it would run; Cancel ends it. (app.key-test)
 - Change layout. Moves between side by side, stacked and single panel. (app.layout)
 - Next theme. Switches to the next theme and says its contrast. (app.next-theme)
+- Focus mode. Turns focus mode on or off: in the window, the bars fade after three seconds with no key or mouse move. (view.focus-mode)
 - Config problems. Lists what could not be read from the config files, and why. (app.problems)
 - Job history. Opens the Jobs list at the jobs that ran, with what failed in each and why. (jobs.history)
 - Volumes. Lists the drives, mounts, connected storages and devices, each its state first: Open, Mount, Unmount, Eject, Hide. (go.volumes)
@@ -590,7 +594,6 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 - Ctrl+Tab: Next tab, coming later, in the GUI.
 - Ctrl+Shift+Tab: Previous tab, coming later, in the GUI.
 - Ctrl+Shift+E: Folder tree, coming later, in the GUI.
-- F11: Full screen, coming later, in the GUI.
 
 ## See also
 

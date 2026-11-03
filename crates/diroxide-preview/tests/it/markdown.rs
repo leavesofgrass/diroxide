@@ -284,6 +284,33 @@ fn markdown_is_known_by_its_extension() {
     assert!(!markdown::is_markdown("notes.txt") && !markdown::is_markdown("md"));
 }
 
+/// A link that begins while no row is open, as after a heading inside a
+/// list item, once looped the builder without end until the stack
+/// overflowed (CI's aborts of October 23 and November 3, 2026, found by
+/// a probe over 200,000 random texts): finishing the row ended the link,
+/// the link with no text wrote its target, the text opened a paragraph,
+/// and the paragraph finished the row first. The link waits for its row.
+#[test]
+fn a_link_after_a_heading_inside_an_item_reads_in_its_row() {
+    for text in [
+        "- #\n  [[w]]",
+        "- #\n  [x](y)",
+        "- # Title\n  [x](y)",
+        "1. ##\n   [[w|shown]]",
+        "- #\n  [](y)",
+    ] {
+        let view = markdown::read(text);
+        let rows: Vec<&str> = view.rows().iter().map(|r| r.text.as_str()).collect();
+        assert_eq!(view.links().len(), 1, "{text:?}: {rows:?}");
+        let link = &view.links()[0];
+        assert!(!link.text.is_empty(), "{text:?}: {link:?}");
+        assert!(
+            rows[link.row].contains(link.text.as_str()),
+            "{text:?}: {rows:?} {link:?}"
+        );
+    }
+}
+
 mod properties {
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -376,8 +403,9 @@ mod properties {
         #[test]
         fn any_text_reads_into_rows_that_hold(text in markdownish()) {
             // The app reads Markdown under the guard's thread with an 8 MiB
-            // stack; a test thread's default stack overflowed once on a
-            // deeply nested random text, so the read runs the same way here.
+            // stack, so the read runs the same way here. The overflows CI
+            // met in this test were the builder's link loop, found and
+            // fixed on Tuesday, November 3, 2026, never the depth.
             let rows = std::thread::Builder::new()
                 .stack_size(8 << 20)
                 .spawn(move || markdown::read(&text))

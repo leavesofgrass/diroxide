@@ -25,7 +25,7 @@ If you are new, begin with the [quick start](quickstart.md).
 
 - [Quick start](quickstart.md): starting, moving, marking, copying, renaming, deleting, undoing and quitting, and a first look at search, labels, compare, archives and the viewer.
 - [Installing diroxide](install.md): building from source (a Rust toolchain and a C compiler), the one file per platform, what the window needs and costs to build, a smaller or terminal-only build, and `cargo install diro` with the first beta.
-- [The GUI](gui.md): the window version of diroxide: opening it with `diro --gui`, the window in reading order, its keys and menus, what it says and when, its dialogs as they are now, and what it does not do yet.
+- [The GUI](gui.md): the window version of diroxide: opening it with `diro --gui`, how it draws with or without a graphics card, the window in reading order, its keys and menus, the viewer and the quick view, its dialogs, jobs and settings, what it says and when, focus mode and full screen, and what it does not do yet.
 - [Using diroxide with a screen reader](screen-readers.md): how diroxide talks to NVDA, JAWS, Orca and VoiceOver, what you should hear in the terminal and in the window, the settings to check, plugin lists, and the Braille display.
 - [Terminals](terminals.md): which terminal to use, the keys terminals keep, Windows Terminal's own keys and how to give them back, the key test, and `diro --inline`, `diro ls` and `diro search` for when the full screen fails.
 - [Troubleshooting](troubleshooting.md): common problems, and how to report a bug.
@@ -70,6 +70,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Every key](keyboard.md): the default keys for the terminal and the graphical interface (GUI), the keys a terminal may keep and the keys screen readers keep, generated from the keymap. Each key preset has its own sheet, linked from [customizing keys](customizing-keys.md).
 - [Customizing keys](customizing-keys.md): the Keys list, changing a key, the key test, the key presets, `diro keys` and `keymap.toml`.
 - [Settings and where the files live](settings.md): the config and state folders, the settings most people look for, themes, changing keys, menus and banks.
+- [Themes and colors](themes.md): the 24 themes with their contrast verdicts in words, the ten that fall short and what the window does for them, your own colors, Windows' High Contrast, and following the system's light or dark setting.
 - [Settings reference](settings-reference.md): every setting with its default, range and help, generated from the program's own list of settings.
 
 ### Coming in later alphas

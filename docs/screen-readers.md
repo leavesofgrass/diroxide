@@ -328,6 +328,10 @@ This section is for the window, `diro --gui`. [The GUI](gui.md) says how to open
 - Each panel is a list, and each row is an option in it. The option's name has the name first and the details after it, as in the terminal. "Selected" is the option's state, so it is said once. The position is a property of the option, so your screen reader says "1 of 5" in its own way.
 - The focused row is the list's active descendant. Your screen reader follows the focus and reads the row when it moves. The window adds no announcement for a move, so Down says the row once and nothing else.
 - Messages go to a live region you cannot see. Normal messages are polite and high ones are assertive. Low messages are only shown in the status line and are never announced.
+- A dialog is a named, modal part. Your screen reader says its name and the focused control as the focus moves in, and the program does not say them again. Only the top dialog is in the tree. Escape walks back down, and the last one returns the focus to the panel's row.
+- A running job's progress is a progress indicator named "Job progress" in the status bar. It moves only when the jobs line changes, which is every ten seconds at most in screen-reader mode. It is not a live region, so whether your screen reader speaks it is its own setting.
+- The viewer takes the place of the two panels while it is open, and the quick view is the other panel's list. Both are lists of rows, like a panel.
+- The window's colors are one of 24 themes. A theme chosen is said once, with its contrast verdict. The window draws with the graphics card or, where there is none, on the processor, and a screen reader reads the same tree either way. Focus mode and full screen fade the bars and say nothing.
 - The start-up lines are held until your screen reader asks for the window, then said once as one announcement. On the one run measured, that came about two seconds after launch.
 - The terminal settings in the NVDA, JAWS and Orca sections below, and the `cursor_fallback` setting, are about the terminal. What the window needs from your screen reader's settings has not been worked out. Report what you find.
 - On macOS, VoiceOver reads a list's options as plain text, so "selected" and "unavailable" stay in the option's name there. VoiceOver has not been tried.
@@ -340,23 +344,39 @@ These lines come from the program's scripted walk of the window, which is the ow
 - Tab: "Right panel: Backup, 1 item". The focus is on that panel's first row: "report.pdf, PDF, 3 bytes, modified today". Tab again: "Left panel: work, 8 items".
 - Space on a row: "Selected budget.xlsx. 1 selected." After the third row: "3 selected."
 - Ctrl+D: "3 selected, 312 bytes. work, 8 items, on".
-- F5: a dialog named "Copy 3 items to Backup, 312 bytes? No is", with the focus on "No, the default". Press y: "Copy finished: 3 done." The focus goes back to the row.
+- F5: a dialog named "Copy 3 items to Backup, 312 bytes? No is", with the focus on the button "No". Tab goes to the button "Yes", and then to a list named "Listing, 3 lines" when the question lists what it touches. Press y: "Copy finished: 3 done." The focus goes back to the row.
+- A name taken: a dialog named "Name taken: report.pdf", with the focus on "Skip this one". Its situation is read after the name.
 - F2: a dialog named "Rename report.pdf to", whose text input holds the name with the caret before the extension. Type, press Enter: "Renamed report.pdf to report-2026.pdf". The focus is on the renamed row: "report-2026.pdf, PDF, 2.1 KB, modified t".
 - F8: "Move 1 item to the trash, 2.1 KB? No is". The walk answers n, because its test folder has no trash. Ctrl+Z then takes back the rename: "Undid rename: 1 item is back".
 - Ctrl+Shift+P: a dialog named "Command palette" whose field is an editable combo box. Escape closes it.
-- Ctrl+Q with nothing running quits at once.
+- Ctrl+Q with nothing running quits at once. With a job running: "1 job is not finished.", then a dialog named "Quit and stop them? No is the default. y or n", with the focus on "No".
 
-The window's parts have names in the tree: "Left panel, work", "Sort the left panel", "Key bar", and on Windows the menu bar with its nine menus. A key bar button is named by its label with its key as its shortcut: "Rename", with F2.
+More lines, from the tests of the dialogs, the viewer and the themes. Where a line is cut at 40 characters, the cut is where a 40-cell display cuts it.
+
+- A password: a dialog named "Password for course.zip", with the focus on a password input. Tab goes to the check box "Show the password". Space turns it on: "Showing the password. Anyone who can see or hear your screen can read it." Alt+S turns it off: "Hidden."
+- A job running: the status bar has "Job progress", with a value such as "40 percent". The program does not say the percent. Ctrl+D says where the job is.
+- A job paused from the Jobs list: "Held: copy notes.txt to Backup". Its row reads "Held 1 of 1: copy notes.txt to Backup". After a quit that stopped it, the next start's Jobs list has "Interrupted: copy notes.txt to Backup", and Enter offers Retry and Forget.
+- F3: a list named "Viewer, big.txt", or "Viewer, rows.txt, hex" in hex mode, whose options are the rows on screen. The panels are not in the tree. Escape brings them back.
+- Shift+F3 on a file: the other panel's list is named "Right panel, Preview, notes.md". The focus stays on the file's row until Tab goes into the preview.
+- Change key in the Keys list: a text named "Press the new key now. Escape cancels." Press Ctrl+Shift+K: "Ctrl+Shift+K saved for Compare files."
+- Shell here: "Started a shell in work". F4: "Started the editor on notes.txt". With no terminal on Linux: "Could not start a shell in work: no terminal program was found. Set the TERMINAL variable to a terminal program, such as xterm."
+- Copy name: "Name copied: notes.txt". If another program holds the clipboard on Windows: "Could not copy to the clipboard: another program is using it. Try again in a moment."
+- Next theme: "Theme Galaxy Light, meets AA." A theme that falls short: "Theme One Light, below AA: 8 checks fall short." and then "In the window, 19 roles use the text color." With Windows' High Contrast on: "System high contrast colors in use."
+- With no graphics card, when the window opens: "Drawing on the processor: no graphics adapter was found."
+- A new server key, from the SFTP plugin: a dialog named "New server key (SFTP places)", with the focus on "Do not connect". Tab goes to a list named "Message, 11 lines", and Down reads the fingerprint one part a line: "Part 1 of 4: 2134 141b 8436 8a94".
+- A password for a server: "Password for alice at build.example (SFTP places)", then the check box "Show the password".
+- A saved site in Go to a place: "Site, build, saved, ada@build.example, by SFTP places".
+- The first start's list: "Optional components to get now".
+- Focus mode and F11 say nothing. The tree is the same before and after the bars fade.
+
+The window's parts have names in the tree: "Left panel, work", "Sort the left panel", "Key bar", and on Windows the menu bar with its nine menus. Also on Windows, the toolkit's helper window is named "diroxide background helper". A key bar button is named by its label with its key as its shortcut: "Rename", with F2.
 
 ### What the window does not say
 
 - Low messages. "Top of the list" and "Bottom of the list", and "At the top already", appear in the status line and are not announced. Pressing Up on the first row is silent.
-- A running job's progress. The jobs line shows it and does not speak it. Ctrl+D says where the job is. A progress element that speaks at the progress interval comes in a later step.
-- A dialog's name may be said twice when it opens, once by the program's announcement and once by the dialog.
-- A confirmation is a list of two answers, "No, the default" and "Yes". Real buttons come in a later step.
-- The viewer and the quick view are not drawn in the window yet. Their keys reach the program, but the window does not draw the viewer's text or the quick view's preview.
-- A plugin list's rows do not take a click yet. Use the keys.
-- The helper window of the toolkit, class "Winit Thread Event Target", has no name and can show in a window list as a pane with no name.
+- A running job's progress. The jobs line and the "Job progress" indicator show it, and the program does not speak it. Whether your screen reader speaks the indicator's changes is its own setting. Ctrl+D says where the job is.
+- The colors. A theme's colors, the bars fading in focus mode, and full screen say nothing. A theme chosen and a way of drawing other than the graphics card are each said once.
+- Dialogs have been read only in the tests' harness so far, not through UI Automation on a real window and not on a screen reader.
 
 ### A check for the GUI
 
@@ -378,15 +398,19 @@ Then the rest of the walk:
 
 6. Press Space on three files. You hear "Selected report.pdf. 1 selected." for the first, and after the third, "3 selected." Is "selected" heard once after a marked row's name, or twice?
 7. Press Ctrl+D. You hear the count and the size of the selection, then the folder.
-8. Press F5. A dialog opens, named for the copy with its size. Where is the focus? It should be on "No, the default". Is the dialog's name said once or twice? Press y. If a name is taken, a list of choices opens next, as in the terminal.
+8. Press F5. A dialog opens, named for the copy with its size. Where is the focus? It should be on the button "No". Is the dialog's name said once or twice? Press Tab: "Yes". Press Tab again: a list named "Listing" with its count, when the question lists what it touches. Press Shift+Tab back to "No", then press y. If a name is taken, a question opens next, named "Name taken" and the file, with the focus on "Skip this one".
 9. Press F2 on a file and type a few characters. Does your screen reader read each character as the caret moves? Press Escape to leave without renaming.
 10. Press Ctrl+Shift+P and type `sort`. Do the candidates read the command's name first? Press Escape.
 11. Press Up on the first row. Nothing should be said. Is the silence a problem?
-12. Copy `big.bin` to Backup. You hear "Copy started" and then no progress. Press Ctrl+D partway for the sentence. This is the known gap above.
-13. Press Ctrl+Q while the copy runs. You hear "1 job is not finished." and then "Quit and stop them? No is the default. y or n". Press n.
-14. Look in the system's window list, such as Alt+Tab or a screen reader's window list. Is there a pane with no name beside "diroxide"?
+12. Copy `big.bin` to Backup. You hear "Copy started". Find "Job progress" in the status bar. Does your screen reader speak its percent, and is that too often or too seldom? Press Ctrl+D partway for the sentence.
+13. Press Ctrl+Q while the copy runs. You hear "1 job is not finished." and then "Quit and stop them? No is the default. y or n", with the focus on "No". Press n.
+14. Press F3 on a text file. You hear "Viewer" and the file's name. Press Down: the next line is read. Press End, then Escape. Do you land on the file's row in the panel?
+15. Press Shift+F3 on a Markdown file. The focus stays on the file's row. Press Tab: you are in the preview. Press Tab again to come back, and Shift+F3 to turn the preview off.
+16. Press Ctrl+Comma, choose Theme, and choose One Light. You hear the theme and its verdict, "below AA", and then how many parts use the text color. Is it said once? Choose Galaxy again.
+17. Press F11. Wait four seconds without touching anything. The bars fade, and nothing should be said. Press a key: the bars return, and nothing should be said. Press F11 again.
+18. Look in the system's window list, such as Alt+Tab or a screen reader's window list. On Windows there should be a window named "diroxide background helper", and no pane with no name beside "diroxide".
 
-Questions to answer: Did the menu bar show and read? Was every row read once, name first? Did Tab speak once? Was "selected" heard once? Was a dialog's name said twice? Did you miss spoken progress? Was the silence at the edge of a list a problem? Did a pane with no name show in the window list?
+Questions to answer: Did the menu bar show and read? Was every row read once, name first? Did Tab speak once? Was "selected" heard once? Was a dialog's name said once, and was the focused button read after it? Were the buttons easy to find with Tab? Was "Job progress" spoken, and was that right? Was the silence at the edge of a list a problem? Did the viewer read one line at a time? Was a theme's verdict clear in the first 40 cells? Did anything speak when the bars faded? Did a pane with no name show in the window list?
 
 ## Keys that may clash
 
@@ -403,6 +427,7 @@ Questions to answer: Did the menu bar show and read? Was every row read once, na
 
 - [The accessibility statement](accessibility.md)
 - [The GUI](gui.md)
+- [Themes and colors](themes.md)
 - [Terminals](terminals.md)
 - [The panels](panels.md)
 - [Archives](archives.md)

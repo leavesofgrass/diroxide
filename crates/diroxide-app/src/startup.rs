@@ -3,8 +3,8 @@
 //! in the config files, the menus and banks, the session to restore, the
 //! interrupted jobs of the last session and the undo records of the
 //! finished ones (from the undo journal), the prompts' histories, the home
-//! folder, the labels, bookmarks and folder views (W3l), and the clock
-//! with the local offset.
+//! folder, the labels, bookmarks and folder views (W3l), the owner's
+//! theme files (lane A6), and the clock with the local offset.
 //!
 //! [`load`] does the reading (I/O), so the app's core stays free of it;
 //! tests build a [`Startup`] by hand or load one from a temporary state
@@ -12,6 +12,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::PathBuf;
 
 use diroxide_config::{Config, ConfigProblem, KeymapConfig, Layout, Paths, SessionState};
 use diroxide_core::{CommandId, Place, SystemClock, UtcOffset};
@@ -60,6 +61,14 @@ pub struct Startup {
     pub bookmarks: crate::bookmarks::Bookmarks,
     /// The folders' own views (`folder-views.toml`).
     pub views: crate::views::FolderViews,
+    /// The owner's theme files that loaded from the config's themes
+    /// folder, in file-name order (lane A6): the app finds them by name
+    /// beside the built-in themes. A file that did not load is already
+    /// among the problems, from the config's own checks.
+    pub user_themes: Vec<diroxide_theme::Theme>,
+    /// The config's themes folder, for a frontend that draws the themes
+    /// itself; `None` when nothing was read from disk.
+    pub themes_dir: Option<PathBuf>,
 }
 
 impl Default for Startup {
@@ -80,6 +89,8 @@ impl Default for Startup {
             labels: crate::labels::LabelStore::starter(),
             bookmarks: crate::bookmarks::Bookmarks::new(),
             views: crate::views::FolderViews::new(),
+            user_themes: Vec::new(),
+            themes_dir: None,
         }
     }
 }
@@ -234,6 +245,8 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     problems.extend(bookmarks.problems);
     let views = crate::views::load(paths);
     problems.extend(views.problems);
+    let themes_dir = paths.themes_dir();
+    let user_themes = user_themes(&themes_dir);
     Startup {
         problems,
         menus,
@@ -250,7 +263,22 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         labels: labels.value,
         bookmarks: bookmarks.value,
         views: views.value,
+        user_themes,
+        themes_dir: Some(themes_dir),
     }
+}
+
+/// The owner's theme files that load from `dir`, through the theme
+/// crate's loader; the ones that do not are left out here, since the
+/// config's checks already said why.
+fn user_themes(dir: &std::path::Path) -> Vec<diroxide_theme::Theme> {
+    let mut registry = diroxide_theme::Registry::builtin();
+    let report = registry.load_dir(dir);
+    report
+        .loaded
+        .iter()
+        .filter_map(|name| registry.get(name).cloned())
+        .collect()
 }
 
 #[cfg(test)]
@@ -320,5 +348,30 @@ mod tests {
         assert!(paths.config_file(Paths::KEYMAP_DEFAULTS).exists());
         let offset = local_offset().seconds();
         assert!(offset.abs() <= 14 * 3600);
+        assert!(startup.user_themes.is_empty());
+        assert_eq!(startup.themes_dir, Some(paths.themes_dir()));
+    }
+
+    #[test]
+    fn the_owners_theme_files_load_and_a_broken_one_is_said_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+        fs::create_dir_all(paths.themes_dir()).unwrap();
+        let good = "[theme]\nname = \"harbor\"\ninherits = \"galaxy\"\n";
+        fs::write(paths.themes_dir().join("harbor.toml"), good).unwrap();
+        fs::write(paths.themes_dir().join("broken.toml"), "[theme\n").unwrap();
+        let config = diroxide_config::load(&paths);
+        let startup = load(&paths, &config, Platform::current());
+        let names: Vec<&str> = startup.user_themes.iter().map(|t| t.name()).collect();
+        assert_eq!(names, ["harbor"]);
+        // The broken file is the config's problem, said once, not twice.
+        let broken: Vec<&str> = startup
+            .problems
+            .iter()
+            .map(|p| p.text.as_str())
+            .filter(|t| t.contains("broken.toml"))
+            .collect();
+        assert_eq!(broken.len(), 1, "{:?}", startup.problems);
+        assert!(broken[0].starts_with("Theme file broken.toml was not loaded"));
     }
 }

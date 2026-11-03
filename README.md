@@ -7,7 +7,7 @@
 
 diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, in the orthodox style of Worker and Directory Opus. Its command is `diro`. It is designed first for people who use a screen reader or a Braille display, and for anyone who works from the keyboard. Every row says what it is in its first 40 characters, status is always words, color never carries meaning alone, and every delete lists what it will remove and starts on No. It is written for Windows, Linux and macOS, with no X11 code.
 
-Status: alpha. This is alpha 2, version 0.1.0-alpha.2: a terminal file manager for local folders, archives and SFTP places, with plugins in any language, script commands and optional components. It has copy, move, rename, trash and undo; archives opened like folders; a viewer and a quick view; split and join; links and permissions; search with a filter language; labels and bookmarks; file compare; a list of keys you can change, with key presets; watching a folder; a transfer queue with retries, resume and a speed limit; the Volumes list and the trash browser; and command-line subcommands. The graphical interface (GUI) comes in a later alpha. [Known limits](docs/known-limits.md) lists what it does not do yet, and the [accessibility statement](docs/accessibility.md) says what has been checked by ear and what has not.
+Status: alpha. This is alpha 2, version 0.1.0-alpha.2: a terminal file manager for local folders, archives and SFTP places, with plugins in any language, script commands and optional components. It has copy, move, rename, trash and undo; archives opened like folders; a viewer and a quick view; split and join; links and permissions; search with a filter language; labels and bookmarks; file compare; a list of keys you can change, with key presets; watching a folder; a transfer queue with retries, resume and a speed limit; the Volumes list and the trash browser; and command-line subcommands. The graphical interface (GUI), a window version, is in the source tree for the next alpha. It opens with `diro --gui`, and `diro` by itself still opens the terminal; [the GUI guide](docs/gui.md) describes it. [Known limits](docs/known-limits.md) lists what it does not do yet, and the [accessibility statement](docs/accessibility.md) says what has been checked by ear and what has not.
 
 ## Get diro
 
@@ -34,14 +34,14 @@ Run `diro` in a terminal. These keys are the same on every platform.
 3. Space marks the row and moves down. A marked row says "selected".
 4. F5 copies the marked rows, or the focused row, to the other panel. It asks first, and the answer starts on No.
 5. F2 renames the focused entry.
-6. Ctrl+P opens the command palette, a list of every command: type part of a name and press Enter. In the GUI, which comes in a later alpha, Ctrl+Shift+P does the same.
+6. Ctrl+P opens the command palette, a list of every command: type part of a name and press Enter. In the window, `diro --gui`, Ctrl+Shift+P does the same.
 7. Ctrl+Q quits.
 
 Ctrl+Z undoes the last job. Every delete, move and overwrite lists what it will touch before it asks.
 
 ## The terminal
 
-In alpha 2 diroxide runs in the terminal; the GUI comes in the next alpha. Windows Terminal is the main target, and the classic console, Linux terminals and macOS Terminal are best effort. Terminals keep some keys for themselves, so the palette and the menus reach every command: see [Terminals](docs/terminals.md).
+In alpha 2 diroxide runs in the terminal, and that is still what `diro` opens. The window version, `diro --gui`, comes with the next alpha and is in this source tree: see [The GUI](docs/gui.md). Windows Terminal is the main target, and the classic console, Linux terminals and macOS Terminal are best effort. Terminals keep some keys for themselves, so the palette and the menus reach every command: see [Terminals](docs/terminals.md).
 
 ## Screen readers
 
@@ -58,6 +58,7 @@ Plugins run as separate programs in any language, talking to diroxide over a sma
 - [Archives](docs/archives.md), [the viewer](docs/viewer.md), [the quick view](docs/quick-view.md), [split and join](docs/split-join.md) and [links, permissions and times](docs/links-permissions.md).
 - [Search and the filter language](docs/search.md), [labels and bookmarks](docs/labels-bookmarks.md), [compare files](docs/compare.md) and [watching a folder](docs/watching.md).
 - [Every key](docs/keyboard.md), generated from the keymap, and [customizing keys](docs/customizing-keys.md).
+- [The GUI](docs/gui.md), the window version, and [themes and colors](docs/themes.md).
 - [Terminals](docs/terminals.md) and [troubleshooting](docs/troubleshooting.md).
 - [Known limits](docs/known-limits.md), [privacy](docs/privacy.md) and the [accessibility statement](docs/accessibility.md).
 - [The documentation index](docs/README.md) and the [changelog](CHANGELOG.md).
