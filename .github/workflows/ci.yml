@@ -108,3 +108,28 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  fuzz-check:
+    name: Fuzz targets compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      # The fuzz targets are built with a nightly compiler only at night
+      # (fuzz.yml); by day this check, with the pinned toolchain, catches a
+      # target that no longer compiles. Each fuzz folder starts from its
+      # workspace's lock, as fuzz.yml does (docs/dev/fuzzing.md).
+      - name: Start from the workspace locks
+        run: |
+          cp Cargo.lock fuzz/Cargo.lock
+          cp plugins/diro-sftp/Cargo.lock plugins/diro-sftp/fuzz/Cargo.lock
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            fuzz
+            plugins/diro-sftp/fuzz
+      - name: Check every fuzz target
+        run: |
+          cargo check --manifest-path fuzz/Cargo.toml --bins
+          cargo check --manifest-path plugins/diro-sftp/fuzz/Cargo.toml --bins

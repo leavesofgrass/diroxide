@@ -4,6 +4,12 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased
 
+### Lane F: the nightly fuzz workflow
+
+Written on Tuesday, November 3, 2026.
+
+- Every fuzz target builds again, and all seventeen run ten minutes each every night with AddressSanitizer (`.github/workflows/fuzz.yml`); on Windows the targets in `fuzz/` build with `--no-include-main-msvc`. `docs/dev/fuzzing.md` says how to run one and where a crash input goes.
+
 ### Lane Q2: Pause for waiting jobs, and the queue across restarts
 
 Written on Monday, November 2, 2026.
