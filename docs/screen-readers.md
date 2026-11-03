@@ -331,7 +331,7 @@ This section is for the window, `diro --gui`. [The GUI](gui.md) says how to open
 - A dialog is a named, modal part. Your screen reader says its name and the focused control as the focus moves in, and the program does not say them again. Only the top dialog is in the tree. Escape walks back down, and the last one returns the focus to the panel's row.
 - A running job's progress is a progress indicator named "Job progress" in the status bar. It moves only when the jobs line changes, which is every ten seconds at most in screen-reader mode. It is not a live region, so whether your screen reader speaks it is its own setting.
 - The viewer takes the place of the two panels while it is open, and the quick view is the other panel's list. Both are lists of rows, like a panel.
-- The window's colors are one of 24 themes. A theme chosen is said once, with its contrast verdict. The window draws with the graphics card or, where there is none, on the processor, and a screen reader reads the same tree either way. Focus mode and full screen fade the bars and say nothing.
+- The window's colors are one of 24 themes. A theme chosen is said once, with its contrast verdict. The window draws with the graphics card or, where there is none, on the processor, and a screen reader reads the same tree either way. Focus mode and full screen fade the bars. The fade says nothing, and turning either one on or off says so in a few words, such as "Full screen on."
 - The start-up lines are held until your screen reader asks for the window, then said once as one announcement. On the one run measured, that came about two seconds after launch.
 - The terminal settings in the NVDA, JAWS and Orca sections below, and the `cursor_fallback` setting, are about the terminal. What the window needs from your screen reader's settings has not been worked out. Report what you find.
 - On macOS, VoiceOver reads a list's options as plain text, so "selected" and "unavailable" stay in the option's name there. VoiceOver has not been tried.
@@ -367,7 +367,7 @@ More lines, from the tests of the dialogs, the viewer and the themes. Where a li
 - A password for a server: "Password for alice at build.example (SFTP places)", then the check box "Show the password".
 - A saved site in Go to a place: "Site, build, saved, ada@build.example, by SFTP places".
 - The first start's list: "Optional components to get now".
-- Focus mode and F11 say nothing. The tree is the same before and after the bars fade.
+- F11: "Full screen on.", and again "Full screen off." Focus mode, from the View menu (Alt+V, then M) or the palette: "Focus mode on: the bars fade after three seconds.", and "Focus mode off." The fade itself says nothing. The tree is the same before and after the bars fade.
 
 The window's parts have names in the tree: "Left panel, work", "Sort the left panel", "Key bar", and on Windows the menu bar with its nine menus. Also on Windows, the toolkit's helper window is named "diroxide background helper". A key bar button is named by its label with its key as its shortcut: "Rename", with F2.
 
@@ -375,7 +375,7 @@ The window's parts have names in the tree: "Left panel, work", "Sort the left pa
 
 - Low messages. "Top of the list" and "Bottom of the list", and "At the top already", appear in the status line and are not announced. Pressing Up on the first row is silent.
 - A running job's progress. The jobs line and the "Job progress" indicator show it, and the program does not speak it. Whether your screen reader speaks the indicator's changes is its own setting. Ctrl+D says where the job is.
-- The colors. A theme's colors, the bars fading in focus mode, and full screen say nothing. A theme chosen and a way of drawing other than the graphics card are each said once.
+- The colors. A theme's colors, and the bars fading in focus mode or in full screen, say nothing. A theme chosen, a way of drawing other than the graphics card, and turning full screen or focus mode on or off are each said once.
 - Dialogs have been read only in the tests' harness so far, not through UI Automation on a real window and not on a screen reader.
 
 ### A check for the GUI
@@ -407,10 +407,10 @@ Then the rest of the walk:
 14. Press F3 on a text file. You hear "Viewer" and the file's name. Press Down: the next line is read. Press End, then Escape. Do you land on the file's row in the panel?
 15. Press Shift+F3 on a Markdown file. The focus stays on the file's row. Press Tab: you are in the preview. Press Tab again to come back, and Shift+F3 to turn the preview off.
 16. Press Ctrl+Comma, choose Theme, and choose One Light. You hear the theme and its verdict, "below AA", and then how many parts use the text color. Is it said once? Choose Galaxy again.
-17. Press F11. Wait four seconds without touching anything. The bars fade, and nothing should be said. Press a key: the bars return, and nothing should be said. Press F11 again.
+17. Press F11. You should hear "Full screen on." once. Wait four seconds without touching anything. The bars fade, and nothing should be said. Press a key: the bars return, and nothing should be said. Press F11 again: "Full screen off." Then run Focus mode from the View menu (Alt+V, then M). You should hear "Focus mode on: the bars fade after three seconds." Wait four seconds: the bars fade, and nothing should be said. Run Focus mode again: "Focus mode off."
 18. Look in the system's window list, such as Alt+Tab or a screen reader's window list. On Windows there should be a window named "diroxide background helper", and no pane with no name beside "diroxide".
 
-Questions to answer: Did the menu bar show and read? Was every row read once, name first? Did Tab speak once? Was "selected" heard once? Was a dialog's name said once, and was the focused button read after it? Were the buttons easy to find with Tab? Was "Job progress" spoken, and was that right? Was the silence at the edge of a list a problem? Did the viewer read one line at a time? Was a theme's verdict clear in the first 40 cells? Did anything speak when the bars faded? Did a pane with no name show in the window list?
+Questions to answer: Did the menu bar show and read? Was every row read once, name first? Did Tab speak once? Was "selected" heard once? Was a dialog's name said once, and was the focused button read after it? Were the buttons easy to find with Tab? Was "Job progress" spoken, and was that right? Was the silence at the edge of a list a problem? Did the viewer read one line at a time? Was a theme's verdict clear in the first 40 cells? Did anything speak when the bars faded? Were "Full screen on." and "Focus mode on: the bars fade after three seconds." each said once, and clear in the first 40 cells? Did a pane with no name show in the window list?
 
 ## Keys that may clash
 

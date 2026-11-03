@@ -182,7 +182,7 @@ How the window reads a key:
 - The keypad's plus, minus, star and slash are told apart from the main row's.
 - A held key repeats only where a repeat means something: the arrows, Page Up, Page Down, Home and End, and in a field Backspace, Delete and typed characters. Any other repeat is dropped, so a held F8 cannot open a second question.
 - On macOS the GUI uses Command where the key lists say Ctrl, and a chord with Option is read by the key's place on the keyboard.
-- F11 and F12 reach diroxide. They are not the toolkit's debugging keys. F11 turns full screen on and off, as [focus mode and full screen](#focus-mode-and-full-screen) says.
+- F11 and F12 reach diroxide. They are not the toolkit's debugging keys. F11 is the key of the Full screen command, which turns full screen on and off, as [focus mode and full screen](#focus-mode-and-full-screen) says.
 
 ### Keys that cannot arrive
 
@@ -358,7 +358,7 @@ What this means for listening:
 - The lines said in one step are one announcement, in their order. The same line twice is said once. A job's start line is left out when more came after it in the same step, such as the result of a quick job, so "Copy finished: 1 done" is not preceded by "Copy started: 1 file to Backup". The announcement is as urgent as its most urgent line.
 - A dialog is said once, by itself, as [the dialogs](#the-dialogs) say.
 - A running job's progress is shown in the jobs line and the "Job progress" indicator and is not spoken by the program. Ctrl+D says where the job is.
-- A theme chosen is said once with its verdict. Drawing in a way other than the graphics card is said once. Focus mode and full screen say nothing.
+- A theme chosen is said once with its verdict. Drawing in a way other than the graphics card is said once. Full screen and focus mode say what they did in a few words, "Full screen on." and "Focus mode on: the bars fade after three seconds.", and the bars fading and coming back say nothing.
 - The program's start-up lines are held until a screen reader asks for the window, then said once, as one announcement: the interrupted jobs of the last session, a problem with a settings file, or on a first start the welcome, the key bar and the layout. On the one run measured, they arrived about two seconds after launch.
 - The first start's line about the key bar is "The key bar names the keys." In the terminal it is "The key bar on the last line names the keys."
 
@@ -391,15 +391,20 @@ The window carries its own fonts, Atkinson Hyperlegible Next and Atkinson Hyperl
 
 ## Focus mode and full screen
 
-Focus mode gives the panels the room. After 3 seconds with no key and no mouse move, the title line, the status bar and the key bar fade under a veil. Any key, or a mouse move, brings them back. The `focus_mode` setting ("Focus mode", in the Look group) turns it on. It is off by default.
+Focus mode gives the panels the room. After 3 seconds with no key and no mouse move, the title line, the status bar and the key bar fade under a veil. Any key, or a mouse move, brings them back. Full screen makes the window fill the screen, and while it does, the bars fade in the same way.
 
-F11 turns full screen on and off. While the window is full screen, the bars fade in the same way.
+Each is a command, in the View menu and in the command palette, and each says what it did.
 
+- Full screen is on F11, in the View menu as Full screen (Alt+V, then U) and in the palette. It says "Full screen on." or "Full screen off.". Full screen is a command like the others, so [customizing keys](customizing-keys.md) applies to its key.
+- Focus mode is in the View menu (Alt+V, then M) and in the palette. It has no key. It turns the `focus_mode` setting ("Focus mode", in the Look group of Settings) on or off and writes it, and says "Focus mode on: the bars fade after three seconds." or "Focus mode off.". The switch in the Settings list says the same words. The setting is off by default.
+- Both lines are polite, so a screen reader reads them when it is idle.
+- With a dialog open, both commands do nothing and the status line shows "Close this dialog first."
+- A window opened with `--background` never goes full screen.
 - The veil is paint only. The accessibility tree is the same before and after, and so is the viewer's, and nothing is said when the bars fade or come back. A screen reader reads the window as it always does.
 - The veil does not come down while a dialog is open.
-- F11 works when no dialog is open and the key test is not running. It is not a command yet, so it cannot be rebound.
-- A window opened with `--background` never goes full screen.
 - The panels' sort buttons and the native menu bar are not under the veil yet.
+
+The same two commands are in the terminal's menus and palette, and they only explain themselves there. Full screen says "Full screen is the window's; the terminal program may have its own." and changes nothing, because full screen in a terminal is the terminal program's, often on F11, and that key never reaches diroxide. Focus mode turns the setting on for the window and says "Focus mode on, for the window; the terminal keeps its bars."
 
 ## What the window does not do yet
 
@@ -408,7 +413,6 @@ These are not in the window yet. None of them is dated: each is to come in a lat
 - Icons.
 - A native menu bar on macOS. Its menus are the list.
 - Your own theme files. The window draws the 24 built-in themes. The terminal also reads the theme files in your `themes` folder.
-- A command for full screen or for focus mode. F11 and the setting are the ways.
 - A setting for the text size or the font.
 - Mouse support in the viewer.
 - Thumbnails, which the settings list as coming later.
