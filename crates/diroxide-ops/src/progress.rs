@@ -64,6 +64,15 @@ impl JobProgress {
         progress
     }
 
+    /// A waiting job that Pause holds in its place, said before it has
+    /// made any progress: "Copying is held in line" (lane A4, the words
+    /// lane Q2's app said on its own until core had the state).
+    pub fn held(kind: JobKind) -> Self {
+        let mut progress = Self::start(kind, 0, None);
+        progress.state = JobState::Held;
+        progress
+    }
+
     /// The share done, in whole percent: by bytes when their total is
     /// known, else by items.
     pub fn percent(&self) -> u64 {
@@ -79,13 +88,14 @@ impl JobProgress {
 
     /// The jobs line, the key fact first and inside 40 cells: "Copying 30
     /// percent, 2 minutes left", "Copying paused at 30 percent", "Copying
-    /// waits for an answer", "Copying waits its turn", "Copying waits for
-    /// build".
+    /// waits for an answer", "Copying waits its turn", "Copying is held in
+    /// line", "Copying waits for build".
     pub fn describe(&self) -> String {
         let word = self.kind.progress_word();
         let percent = self.percent();
         match self.state {
             JobState::Queued => format!("{word} waits its turn"),
+            JobState::Held => format!("{word} is {}", JobState::Held.word()),
             JobState::WaitingForConnection => match &self.waits_for {
                 Some(host) => format!("{word} waits for {host}"),
                 None => format!("{word} waits: no connection"),
@@ -281,6 +291,7 @@ mod tests {
         p.items_done = 3;
         let keys = [
             (JobState::Queued, "Moving to the trash waits its turn"),
+            (JobState::Held, "Moving to the trash is held"),
             (JobState::Counting, "Moving to the trash: counting"),
             (JobState::Running, "Moving to the trash 100 percent"),
             (JobState::Paused, "Moving to the trash paused"),
@@ -310,11 +321,26 @@ mod tests {
         assert_eq!(copy.describe(), "Copying waits: no connection");
         copy.waits_for = Some("build".to_owned());
         assert_eq!(copy.describe(), "Copying waits for build");
+        // A hold (lane A4): the job first, then the state's word.
+        assert_eq!(
+            JobProgress::held(JobKind::Copy).describe(),
+            "Copying is held in line"
+        );
+        assert_eq!(
+            JobProgress::held(JobKind::Trash).describe(),
+            "Moving to the trash is held in line"
+        );
         for kind in JobKind::ALL {
             let mut p = JobProgress::queued(*kind);
             assert!(p.describe().chars().count() <= 40, "{}", p.describe());
             p.state = JobState::WaitingForConnection;
             assert!(p.describe().chars().count() <= 40, "{}", p.describe());
+            let held = JobProgress::held(*kind).describe();
+            assert!(
+                within_cells(&held, kind.progress_word()),
+                "{held}: the job first"
+            );
+            assert!(held.ends_with("is held in line"), "{held}");
         }
     }
 
