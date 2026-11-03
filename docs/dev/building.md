@@ -185,7 +185,7 @@ The GUI workflow (`.github/workflows/gui.yml`) packs a real AppImage and runs th
 
 `cargo run --release -p xtask -- bench --gui` records, beside the bench's scenarios and never gated: the size of the `diro` it built, the time from the start of `diro --gui --background` to the window's first frame (the `--log` line "graphics: drawing with"), and the peak working set a second after it; `--cold-build` adds a cold release build of `diro` into `target/bench/cold-build`, a folder that must not exist yet and is left for `.claude/tools/safe-remove.ps1`. Each start is one window, off screen and never activated.
 
-The first numbers, on the owner's Windows 11 machine with a graphics card (an NVIDIA GeForce RTX 3060), on Tuesday, November 3, 2026, from `bench --only gui --cold-build`; the bench lane records the baseline on a quiet machine:
+The baseline, saved on a quiet machine later the same morning with the bench's scenarios, gave the same figures within 2 percent: 5 minutes 6 seconds, 44.1 MB, 1.19 seconds and 188.0 MB ("The alpha 3 baseline" in [the bench](bench.md)). The first numbers, on the owner's Windows 11 machine with a graphics card (an NVIDIA GeForce RTX 3060), on Tuesday, November 3, 2026, from `bench --only gui --cold-build`:
 
 - The cold release build of `diro`: 5 minutes 6 seconds. Earlier the same morning, with two other lanes building beside it, a cold debug build (`cargo build -p diro`, an empty target folder, no compiler cache) took 7 minutes 40 seconds and a cold release build 7 minutes 52 seconds; the `dist` build after the release one took 12 minutes 54 seconds.
 - The binary: 60.8 MB in the debug profile, 44.1 MB in the release profile, and 39.5 MB in the `dist` profile, which the release files use.
@@ -199,5 +199,6 @@ The first clean build of the workspace, its time and its target folder's size ar
 ## See also
 
 - [Docker](docker.md)
+- [The bench](bench.md)
 - [Architecture](architecture.md)
 - [ADR-0001: Workspace and dependencies](../adr/0001-workspace-and-dependencies.md)
