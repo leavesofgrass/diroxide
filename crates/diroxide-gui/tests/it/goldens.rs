@@ -32,9 +32,14 @@ pub fn dump(rig: &Rig, dir: &Path) -> String {
     let path = dir.display().to_string();
     let leaf = dir.file_name().unwrap().to_string_lossy().into_owned();
     let parent = dir.parent().unwrap().display().to_string();
+    // macOS's temporary folder is reached through a link, so a place the
+    // app read back may start with /private.
+    let (private_path, private_parent) = (format!("/private{path}"), format!("/private{parent}"));
     // The folder's separator differs by system too: written as a slash.
     let clean = |text: String| {
-        text.replace(&path, "<dir>")
+        text.replace(&private_path, "<dir>")
+            .replace(&path, "<dir>")
+            .replace(&private_parent, "<tmp>")
             .replace(&parent, "<tmp>")
             .replace(&leaf, "<dir>")
             .replace(std::path::MAIN_SEPARATOR, "/")
@@ -55,12 +60,26 @@ pub fn dump(rig: &Rig, dir: &Path) -> String {
         if node.role() == Role::TextRun {
             continue;
         }
-        let mut line = format!(
-            "{}{:?} {:?}",
-            "  ".repeat(depth),
-            node.role(),
-            clean(name_of(&node))
-        );
+        let mut name = clean(name_of(&node));
+        let mut selected = node.is_selected() == Some(true);
+        let mut unavailable = node.is_disabled();
+        if node.role() == Role::ListBoxOption && diroxide_gui::model::states_in_name() {
+            // On macOS an option keeps "selected" and "unavailable" in its
+            // name, since VoiceOver reads options as static text with no
+            // states (model::states_in_name). The dump writes them as the
+            // other systems' states, so one golden holds everywhere; the
+            // forty-row test asserts the macOS names apart.
+            for (word, flag) in [
+                (", selected", &mut selected),
+                (", unavailable", &mut unavailable),
+            ] {
+                if let Some(at) = name.find(word) {
+                    name.replace_range(at..at + word.len(), "");
+                    *flag = true;
+                }
+            }
+        }
+        let mut line = format!("{}{:?} {:?}", "  ".repeat(depth), node.role(), name);
         if node.is_text_input() {
             line.push_str(&format!(
                 " value={:?}",
@@ -70,10 +89,10 @@ pub fn dump(rig: &Rig, dir: &Path) -> String {
                 line.push_str(&format!(" caret={}", caret.to_global_usv_index()));
             }
         }
-        if node.is_selected() == Some(true) {
+        if selected {
             line.push_str(" selected");
         }
-        if node.is_disabled() {
+        if unavailable {
             line.push_str(" unavailable");
         }
         if let (Some(at), Some(size)) = (
@@ -136,6 +155,31 @@ fn spike_s2_a_forty_row_panel_dumps_to_its_golden() {
     rig.press("space");
     let text = dump(&rig, dir.path());
     assert!(text.contains("ListBoxOption \"file-000004.txt"), "{text}");
+    // The marked row as each system's screen reader gets it: a state on
+    // Windows and Linux, words in the name on macOS (which the dump
+    // writes as a state, so the golden is the same everywhere).
+    let marked = {
+        let state = rig.h.access_tree().state();
+        let mut stack = vec![state.root()];
+        let mut found = None;
+        while let Some(node) = stack.pop() {
+            if node.role() == Role::ListBoxOption && name_of(&node).starts_with("file-000004.txt") {
+                found = Some((name_of(&node), node.is_selected()));
+            }
+            stack.extend(node.children());
+        }
+        found.unwrap()
+    };
+    if diroxide_gui::model::states_in_name() {
+        assert!(
+            marked.0.starts_with("file-000004.txt, selected, "),
+            "{marked:?}"
+        );
+        assert_ne!(marked.1, Some(true), "{marked:?}");
+    } else {
+        assert!(!marked.0.contains("selected"), "{marked:?}");
+        assert_eq!(marked.1, Some(true), "{marked:?}");
+    }
     check("forty-rows", &text);
 }
 

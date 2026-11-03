@@ -163,7 +163,7 @@ impl Rig {
 
     /// Presses a key.
     pub fn press_key(&mut self, key: &Key) {
-        let event = keys::press(key, Platform::current());
+        let event = keys::press(&on_this_system(key), Platform::current());
         let _ = self.h.process_text_event(TextEvent::Keyboard(event));
         self.settle();
     }
@@ -463,7 +463,7 @@ impl Rig {
     /// repeat means something there (the arrows, typing in a field).
     pub fn press_repeat(&mut self, key: &str) {
         let key = Key::parse(key).unwrap_or_else(|e| panic!("{key}: {e}"));
-        let mut event = keys::press(&key, Platform::current());
+        let mut event = keys::press(&on_this_system(&key), Platform::current());
         event.repeat = true;
         let _ = self.h.process_text_event(TextEvent::Keyboard(event));
         self.settle();
@@ -478,6 +478,20 @@ impl Rig {
     pub fn panel_id(&self, side: Side) -> WidgetId {
         self.h.get_widget(frontend::panel_tag(side)).id()
     }
+}
+
+/// A key as the tests write it ("ctrl+shift+p", the Windows and Linux
+/// chord) as the window's keymap means it on this system: on macOS the
+/// GUI column's Control chords are Command chords
+/// (`Keymap::for_platform`), so the same test presses Command+Shift+P
+/// there, as a person on a Mac would.
+pub fn on_this_system(key: &Key) -> Key {
+    let mut key = *key;
+    if Platform::current() == Platform::MacOs && key.mods.ctrl {
+        key.mods.ctrl = false;
+        key.mods.meta = true;
+    }
+    key
 }
 
 /// A node's name as the platform adapters read it: a label's name is its
