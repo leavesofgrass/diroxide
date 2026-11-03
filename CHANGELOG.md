@@ -2,6 +2,19 @@
 
 Notable changes to diroxide, newest first. Agents write under a scratch heading with their id; the orchestrator regroups the entries by area before each alpha. Versions follow the alpha series in the plan; nothing is released until the owner says so.
 
+## Unreleased
+
+### Lane L: plugin lists inside a panel
+
+Written on Monday, November 2, 2026.
+
+- A list of rows that are not files, which a plugin opens with `lister/open`, now opens inside the panel the plugin names, over the panel's folder, instead of over both panels. The focus moves to that panel, and the list is said meaning first with the plugin's name last: "Changed files, 2 rows, left panel (Changed files)". The folder beneath keeps its rows, marks, history and watch, its own listings stay quiet while the list is up, and the list is never saved.
+- In a plugin list the panel's keys act on its rows: moving (more rows are asked for at the end), Space ("Marked", "Unmarked"), select all, none and invert, a letter to jump, Enter for the plugin's own command as a job, the plugin's action keys, the Sort commands over the list's columns, the filter field over every column, Ctrl+R, Ctrl+D, Say Other Panel and F1. The title line and the window title name the list.
+- Every file command refuses with "This row is not a file." before a file is looked for, and so does a command that works on the folder beneath, such as Make folder, a label or Select by kind.
+- Left, Backspace and Alt+Up leave the list; Escape leaves it when no job or list filter is there to cancel; Back and Forward only leave it, and act on the history at the next press. Leaving says "Plugin list closed (Changed files)", then the folder's own landing line, and tells the plugin with `lister/closed`.
+- A place opened in the panel closes the list: a plugin's `panel/set` quietly, so the Sites list's Connect still lands in the start folder; Go to a path, Home or a place list with the closing line.
+- `panel/get` and a command's context keep the folder beneath as the place, cursor and selection, and gain `list`: null, or the plugin list's plugin, id, title and count of rows (`active.list` and `other.list` in the context). `diro serve`'s `panel/changed` names a list that opens or closes. No method was added; the protocol reference is regenerated.
+
 ## 0.1.0-alpha.2
 
 Alpha 2 adds plugins in any language, script commands, optional components, SFTP places over the machine's OpenSSH client, a transfer queue with retries, resume and a speed limit, hooks, the Volumes list and the trash browser. It is the planned alpha.4 and alpha.5 as one. This entry was written on Friday, October 23, 2026.
