@@ -59,7 +59,17 @@ When this page was written, nothing in alpha 1 had been heard on a screen reader
 
 ## The graphical interface (GUI)
 
-The GUI comes in a later alpha. It will be built on the platform accessibility interfaces (UI Automation on Windows, AT-SPI on Linux and NSAccessibility on macOS), with each panel as a list box whose options are the rows. It will be checked with a UI Automation report and a listening check of its own, and this page will gain a section for it.
+The GUI, `diro --gui`, is in the source tree for the next alpha. It is built on the platform accessibility interfaces: UI Automation on Windows and AT-SPI on Linux. The macOS interface, NSAccessibility, has not been tried. Each panel is a list box whose options are the rows, and each dialog is a named, modal part whose keyboard focus is on a named control. [The GUI](gui.md) describes it, and [Using diroxide with a screen reader](screen-readers.md) has a listening check for it.
+
+What checks it so far:
+
+- Tests read the window's accessibility tree the way a screen reader does, with no screen reader and no window on a screen, on Windows, Linux and macOS. They cover the panels, the status lines, the key bar, the live region, the viewer, the quick view and every dialog the program can open, 77 of them.
+- A scripted walk of the window, the owner's ten-minute check done by a test, checks the lines it hears against the first 40 cells of a Braille line.
+- A UI Automation report on Windows and an AT-SPI report on Linux list what a real window gives a screen reader: names, roles, states, the menu bar, and every window of the process, which must have a name.
+- A test plants a password and checks that it is in no name, value, description, drawing or announcement while it is hidden.
+- A test checks that every one of the 24 themes draws no pair of colors below its floor: 4.5 to 1 for text, 7 to 1 in a high-contrast theme, and 3 to 1 for the focus marks.
+
+What has not been checked: the window has not been used with NVDA, JAWS, Orca or VoiceOver, or read on a Braille display. The dialogs have been read only in the tests' harness, because the UI Automation report cannot open a dialog without taking the foreground. macOS has not been tried.
 
 ## Tell us
 
@@ -68,6 +78,8 @@ If something is hard to use with your screen reader, display or eyes, that is a 
 ## See also
 
 - [Using diroxide with a screen reader](screen-readers.md)
+- [The GUI](gui.md)
+- [Themes and colors](themes.md)
 - [Terminals](terminals.md)
 - [Known limits](known-limits.md)
 - [Troubleshooting](troubleshooting.md)

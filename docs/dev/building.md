@@ -66,23 +66,31 @@ CARGO_HOME=D:/rust/cargo cargo install cargo-nextest --locked
 
 ## A slim `diro`
 
-`diro` has two default features, and both can be left out:
+`diro` has four default features (`default = ["fetch", "syntax-set", "gui", "tui"]` in `crates/diro/Cargo.toml`). Three can be left out, and the fourth is a name:
 
 - `syntax-set`: the viewer's syntax set, syntect with bat's grammars, about 3 MB of the binary. Without it the viewer says "Highlighting off: not in this build", and the commands that need no grammar keep working.
 - `fetch`: the optional-components downloader's HTTP client, whose `ring` compiles C. Without it the downloader uses `curl` or `wget` from PATH. (carta's stack growth still compiles a little C and assembly, so a C compiler is needed either way; see the inventory in `xtask/src/native.rs`.)
+- `gui`: the window, built on the vendored Masonry, Vello, wgpu and AccessKit stack (`docs/dev/vendoring.md`). Without it `diro --gui` says "This diro was built without the GUI; the terminal opens instead." The stack compiles no C. Drawing on the processor, for a machine with no graphics card, is part of it.
+- `tui`: a marker for the terminal frontend, which is always built. It leaves nothing out; it lets a command line name what a build holds, as in `--no-default-features --features tui`.
 
 The syntax set reaches the preview crate through each layer's own `syntax-set` feature: `diro` turns on the CLI's, the CLI the app's, the app the preview crate's. The root manifest declares `diroxide-preview` with `default-features = false`, and the app and the CLI leave the feature off by default, so only `diro`'s default turns it on. The app's and the terminal's tests turn it on through their dev-dependencies, since they read highlighted code.
 
-A build with neither:
+A build with none of the three, the smallest:
 
 ```bash
 cargo build --profile dist -p diro --no-default-features
 ```
 
-A build without the syntax set that keeps the downloader's client:
+A build without the syntax set and the window that keeps the downloader's client:
 
 ```bash
 cargo build --profile dist -p diro --no-default-features --features fetch
+```
+
+A build without the syntax set that keeps the window and the client:
+
+```bash
+cargo build --profile dist -p diro --no-default-features --features gui,fetch
 ```
 
 The check every agent runs after touching these features:
@@ -90,6 +98,8 @@ The check every agent runs after touching these features:
 ```bash
 cargo check -p diro --no-default-features
 ```
+
+The GUI crate builds its model without the `gui` feature too, and `.github/workflows/gui.yml` runs its tests with and without the feature.
 
 ## The tasks
 
