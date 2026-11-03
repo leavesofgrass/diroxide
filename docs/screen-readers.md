@@ -1,6 +1,6 @@
 # Using diroxide with a screen reader
 
-This guide is for people who use a screen reader such as NVDA, JAWS, Orca or VoiceOver, with or without a Braille display. It says how diroxide works with a screen reader, what you should hear for each key, the settings to check in NVDA and JAWS, how to read it on a 40-cell display, and a short check you can run yourself. Most of it is about the terminal. The window, `diro --gui`, has its own section, [The GUI](#the-gui), because a screen reader reads a window another way than it reads a terminal.
+This guide is for people who use a screen reader such as NVDA, JAWS, Orca or VoiceOver, with or without a Braille display. It says how diroxide works with a screen reader, what you should hear for each key, the settings to check in NVDA and JAWS, how to read it on a 40-cell display, and a short check you can run yourself. Most of it is about the terminal, which `diro --tui` opens. On a desktop a bare `diro` opens the window, which has its own section, [The GUI](#the-gui), because a screen reader reads a window another way than it reads a terminal. The terminal checks below start with `diro --tui` for that reason.
 
 What this guide says about diroxide comes from its design. A setting that comes from a screen reader's own documentation, or that has not been tried here, is marked not yet verified. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so every "you should hear" line below is what diroxide is built to say, not a report of what was heard. If your experience differs, that is a finding. [The accessibility statement](accessibility.md) says what has been checked.
 
@@ -239,7 +239,7 @@ If the display does not follow the row, or a screen reader talks too much on eve
 
 Run this once with NVDA and once with JAWS, in Windows Terminal and, if you like, the classic console. If you build from source, `cargo xtask sample-folder` followed by a folder name writes a folder to try it in, with a conflicting file, a large file and names with accents, Japanese and an emoji.
 
-1. Start `diro` on that folder. You should hear the title and the first row, not the whole screen.
+1. Start `diro --tui` on that folder. You should hear the title and the first row, not the whole screen.
 2. Press Down five times. Each row is spoken once, name first. The display shows the row from its first cell.
 3. Press Tab. You hear one message. Press Tab again.
 4. Press Space on three files. You hear "Selected report.pdf. 1 selected." each time. Press Up onto a marked row: is the word "selected" heard after the name?
@@ -295,7 +295,7 @@ Run this once with NVDA, once with JAWS, and then read the first 40 cells of eac
 1. In a shell, run `diro search` on the demo folder with `ext md`. You hear "Searching diro-demo for ext md", then "report.md, in diro-demo, 649 bytes", then "1 found." Run it again with `modified last week --explain`. You hear "Reads as: modified last week" and the real days. Run it with `size over`. You hear "Filter problem: size needs a number", then "Word 3. Try size over 10 MB.", and the exit code is 2.
 2. Run `diro search` with `--content crow --extension md`. You hear a row such as "report.md, line 7: The crow count rose again this quarter., 4 more, in diro-demo". Is the line number easy to find in the first 40 cells?
 3. Run `diro diff old.txt report.txt`. You hear "5 changes between old.txt and report.txt", the counts, "From old.txt to report.txt.", then five rows. Does the long line's window, "...in Portland opened early and the crows...", read well? Run it with `--format unified` and listen to "Same", "Added" and "Removed" rows and "9 same lines left out". Then run `diro watch out`, copy a file into `out` slowly, and listen for "Arrived:" about 2 seconds after the copy stops. Press Ctrl+C: "Stopped watching out: 1 arrived".
-4. Start `diro` on the demo folder. The title starts with the folder's name.
+4. Start `diro --tui` on the demo folder. The title starts with the folder's name.
 5. Press Ctrl+F. You hear "Search, Name or filter: every entry, 2 of 11". The dialog is a list of labeled settings. Type `*.md` and press Enter. You hear "Searching diro-demo for *.md", then "Done:" and a count. Press Down: the row starts with the name, then "in" and the folder, and ends with its position.
 6. Press Ctrl+F, Down to the "Contains text" row, type `crow` and press Enter. You hear "Searching diro-demo for *.md, containing crow" and a row "report.md, line 7: ...". Press F3. The viewer opens at that line: "At line 7 of". Press Escape: "Back in the results, report.md".
 7. Start a search that matches thousands of files in the tree from `search-tree`, and press Escape while it runs. You hear "Stopped at" and a count, or "Done:" if the walk was faster than your key. The cursor must not have moved while results arrived. Press Escape again: "Results closed. Search results opens them again."

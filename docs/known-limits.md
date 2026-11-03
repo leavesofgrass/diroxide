@@ -6,7 +6,7 @@ This page says what diroxide does not do yet, where it is limited on purpose or 
 
 Each item below is still to come. None of them is dated: a feature that is not in alpha 2 arrives in a later alpha.
 
-- Parts of the graphical interface (GUI). The window opens with `diro --gui`, and it shows the panels, takes every key and says what happens. `diro` by itself still opens the terminal, and the window leaves out icons, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
+- Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out icons, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
@@ -297,8 +297,8 @@ The table of keys each terminal can send is built from a key probe run by hand o
 
 Opening it:
 
-- `diro` by itself opens the terminal. Open the window with `diro --gui`, or set `frontend` to `gui`. The settings reference describes automatic as opening the GUI on a desktop, which is where it is going, and today automatic opens the terminal in every case.
-- The window needs a display. With a graphics card it draws with it, and without one it draws on the processor. Without a display, or when every way of drawing fails, one sentence says why and the terminal opens.
+- `diro` by itself opens the window on a desktop, which is a change from the earlier alphas, where it opened the terminal. Open the terminal with `diro --tui`, or set `frontend` to `terminal`. Over SSH, with no display, with a pipe or a file, and in a build made without the window, a bare `diro` still opens the terminal.
+- The window needs a display. With a graphics card it draws with it, and without one it draws on the processor. When every way of drawing fails, one sentence says why and the terminal opens. Without a display, a bare `diro` opens the terminal with no sentence, and `diro --gui` says why before the terminal opens.
 - Drawing on the processor has been tried on Windows, and on Linux in a virtual X11 display. It has not been tried on Wayland or macOS. It is slower than a graphics card on a big window, and the accessibility tree is the same either way.
 - A console that Windows opened for a shortcut can show for a moment before `diro` lets it go.
 - On Linux without Fontconfig only the two bundled Atkinson families draw. A character they lack, such as a Chinese or Japanese name or an emoji, is drawn as a missing glyph. The names a screen reader reads are the full names.

@@ -4,19 +4,21 @@ This guide covers the GUI, the window version of diroxide: how to open it, what 
 
 What this guide quotes is what the program says, taken from the program's code and tests. The tests read the window's accessibility tree the way a screen reader does, with no window on a screen, and a scripted walk of the window checks the lines it hears against the first 40 cells of a Braille line. None of it has been heard yet on NVDA, JAWS or a Braille display. If your experience differs, that is a finding.
 
-The window in this alpha takes every key and says what happens. It shows the two panels, the status lines and the key bar. It has dialogs with real buttons, the viewer and the quick view, 24 themes, a way to work without a graphics card, and focus mode. [What the window does not do yet](#what-the-window-does-not-do-yet) names what is still missing, and it is worth reading before you rely on the window. The terminal is still what `diro` opens when you type it with nothing else.
+The window in this alpha takes every key and says what happens. It shows the two panels, the status lines and the key bar. It has dialogs with real buttons, the viewer and the quick view, 24 themes, a way to work without a graphics card, and focus mode. [What the window does not do yet](#what-the-window-does-not-do-yet) names what is still missing, and it is worth reading before you rely on the window. On a desktop, typing `diro` with nothing else opens the window now, and `diro --tui` opens the terminal.
 
 ## Opening the GUI
 
-Type `diro --gui`. Folders work as they do for the terminal:
+On a desktop, type `diro`. The window opens. Folders work as they do for the terminal:
 
 ```bash
-diro --gui
+diro
 ```
 
 ```bash
-diro --gui LEFT RIGHT
+diro LEFT RIGHT
 ```
+
+`diro --gui` asks for the window outright. You need it only where automatic would choose the terminal, such as over SSH. `diro --tui` asks for the terminal.
 
 ### Which one opens
 
@@ -31,26 +33,26 @@ diro --gui LEFT RIGHT
 
 ### What automatic does today
 
-Today automatic opens the terminal, every time. The window is not the default yet. The last step of this alpha is to flip the default, and this guide will change when it does.
-
-The program's decision already holds the cases for that day. When the default flips, automatic opens the window on a desktop and keeps the terminal in four cases:
+Automatic opens the window on a desktop. It keeps the terminal in four cases:
 
 - over SSH, when `SSH_CONNECTION` or `SSH_TTY` is set;
 - with no display, which on Linux means neither `WAYLAND_DISPLAY` nor `DISPLAY` is set (Windows and macOS always have one);
 - when standard input or output is a pipe or a file;
 - in a build made without the window.
 
-The help text of the `frontend` setting already describes that future. Until the default flips, `diro --gui`, or the setting `frontend` set to `gui`, is how you get the window. [The settings reference](settings-reference.md#frontend) lists the values.
+In those four cases the terminal opens with no sentence first. A sentence comes only when you asked for the window and it cannot open, or when the window starts and then fails, as the next sections show.
+
+So `diro` typed in Windows Terminal, in a shell on a Linux or macOS desktop, or a double click on `diro.exe`, opens the window. This is a change from the earlier alphas, where a bare `diro` opened the terminal. To get the terminal, type `diro --tui` for one start, or set `frontend` to `terminal` and a bare `diro` opens the terminal from then on. The shell function that `diro init` prints, `dcd`, always asks for the terminal. [The settings reference](settings-reference.md#frontend) lists the values.
 
 ### The frontend setting
 
-`frontend` is in the Look group of Settings (Alt+T, then S) under the name "Opens in". It holds `auto`, `gui` or `terminal`. It is read when `diro` starts, so a change takes effect at the next start.
+`frontend` is in the Look group of Settings (Alt+T, then S) under the name "Opens in". It holds `auto`, `gui` or `terminal`, and `auto` is the default. It is read when `diro` starts, so a change takes effect at the next start. `--gui` beats the value `terminal`, and `--tui` beats the value `gui`.
 
 ### When the window cannot open
 
 A window that cannot open never ends the program with a crash. It says one sentence, with the cause first, and the terminal opens instead. There are three sentences to know.
 
-No display, or a `diro` built without the window, before the window is tried:
+No display, or a `diro` built without the window, before the window is tried. These two are said when you asked for the window, with `--gui` or the setting `gui`. Automatic chooses the terminal in those cases without a sentence.
 
 ```text
 There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead.
