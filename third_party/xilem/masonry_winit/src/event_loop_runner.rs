@@ -741,7 +741,9 @@ impl MasonryState {
                 // diroxide.patch: the whole frame drawn on the processor
                 // and presented through softbuffer.
                 if let Some(presenter) = self.presenters.get_mut(&handle_id) {
-                    crate::drawing::presented(presenter.present(frame, &window.handle));
+                    let started = Instant::now();
+                    let result = presenter.present(frame, &window.handle);
+                    crate::drawing::presented_since(started, result);
                 }
             }
             _ => {
@@ -896,6 +898,7 @@ impl MasonryState {
         road: Road,
         hybrid: &mut HybridRenderer,
     ) {
+        let started = Instant::now();
         let dev_id = surface.dev_id;
         let device = &render_cx.devices[dev_id].device;
         let queue = &render_cx.devices[dev_id].queue;
@@ -932,7 +935,7 @@ impl MasonryState {
             #[cfg(not(feature = "imaging_vello_hybrid"))]
             let _ = (hybrid, frame);
             Self::present_surface(surface, surface_texture, &window.handle, device, queue);
-            crate::drawing::presented(Ok(()));
+            crate::drawing::presented_since(started, Ok(()));
             return;
         }
         #[cfg(feature = "imaging_vello_hybrid")]
@@ -961,7 +964,7 @@ impl MasonryState {
             return;
         }
         Self::present_surface(surface, surface_texture, &window.handle, device, queue);
-        crate::drawing::presented(Ok(()));
+        crate::drawing::presented_since(started, Ok(()));
     }
 
     fn acquire_surface_texture(

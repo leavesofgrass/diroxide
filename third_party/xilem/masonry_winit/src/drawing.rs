@@ -87,17 +87,43 @@ static REPORT: OnceLock<DrawingReport> = OnceLock::new();
 /// The frames presented so far, on whatever road.
 static PRESENTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// The time spent drawing and presenting them, in microseconds.
+static PRESENT_MICROS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// The first frame that could not be presented, and why.
 static FIRST_FAILURE: OnceLock<String> = OnceLock::new();
 
-/// How many frames the windows have presented, and why the first that
-/// could not be presented failed, if one did: for an application's log,
-/// so a machine with no graphics card shows it really drew.
-pub fn frames_presented() -> (u64, Option<String>) {
-    (
-        PRESENTED.load(std::sync::atomic::Ordering::Relaxed),
-        FIRST_FAILURE.get().cloned(),
-    )
+/// The frames the windows presented, for an application's log, so a
+/// machine with no graphics card shows it really drew, and how long.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Frames {
+    /// How many were presented.
+    pub presented: u64,
+    /// The time spent drawing and presenting them.
+    pub time: std::time::Duration,
+    /// Why the first frame that could not be presented failed, if one did.
+    pub failure: Option<String>,
+}
+
+/// The frames presented so far.
+pub fn frames_presented() -> Frames {
+    Frames {
+        presented: PRESENTED.load(std::sync::atomic::Ordering::Relaxed),
+        time: std::time::Duration::from_micros(
+            PRESENT_MICROS.load(std::sync::atomic::Ordering::Relaxed),
+        ),
+        failure: FIRST_FAILURE.get().cloned(),
+    }
+}
+
+/// Counts a frame drawn and presented since `started`, or keeps why it
+/// could not be.
+pub(crate) fn presented_since(started: masonry_core::util::Instant, result: Result<(), String>) {
+    if result.is_ok() {
+        let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        PRESENT_MICROS.fetch_add(micros, std::sync::atomic::Ordering::Relaxed);
+    }
+    presented(result);
 }
 
 pub(crate) fn presented(result: Result<(), String>) {

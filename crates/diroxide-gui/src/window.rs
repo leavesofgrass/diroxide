@@ -701,9 +701,17 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     restore_hook();
     // The frames the window presented, for the log: a machine with no
     // graphics card shows it really drew.
-    let (frames, failure) = masonry_winit::app::frames_presented();
-    let mut lines = vec![format!("graphics: {frames} frames presented")];
-    if let Some(failure) = failure {
+    let frames = masonry_winit::app::frames_presented();
+    let mut lines = vec![if frames.presented > 0 {
+        let each = frames.time.as_secs_f64() * 1000.0 / frames.presented as f64;
+        format!(
+            "graphics: {} frames presented, {each:.1} ms each on average",
+            frames.presented
+        )
+    } else {
+        "graphics: 0 frames presented".to_owned()
+    }];
+    if let Some(failure) = frames.failure {
         lines.push(format!(
             "graphics: a frame could not be presented: {failure}"
         ));
