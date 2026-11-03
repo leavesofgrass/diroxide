@@ -27,6 +27,8 @@
 //! Explorer), and gives one back if the window cannot start.
 
 pub mod console;
+#[cfg(feature = "gui")]
+pub mod keys;
 mod platform;
 #[cfg(feature = "gui")]
 pub mod window;
