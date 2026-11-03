@@ -126,7 +126,11 @@ impl<R: Read> Read for GzStream<R> {
 }
 
 /// A decoder of the whole stream from its start, counting the compressed
-/// bytes it takes.
+/// bytes it takes. An xz stream passes the guard of its indexes first
+/// ([`crate::read_xz::check_indexes`]), each time a decoder is made, so
+/// `lzma-rust2` never sees a record count its index cannot hold, even
+/// when the file changed since it was opened; a stream the guard refuses
+/// gives the refusal in words at its first read.
 pub(crate) fn decoder(
     source: &Source,
     wrapper: Wrapper,
@@ -139,9 +143,20 @@ pub(crate) fn decoder(
     match wrapper {
         Wrapper::Plain => Box::new(counted),
         Wrapper::Gzip => Box::new(GzStream::new(counted, trailing)),
-        Wrapper::Xz { mem_limit_kb } => {
-            Box::new(crate::read_xz::Decoder::new(counted, mem_limit_kb))
-        }
+        Wrapper::Xz { mem_limit_kb } => match crate::read_xz::check_indexes(source, mem_limit_kb) {
+            Ok(()) => Box::new(crate::read_xz::Decoder::new(counted, mem_limit_kb)),
+            Err(error) => Box::new(Refused(error)),
+        },
+    }
+}
+
+/// A stream refused before its decoder read a byte: every read gives the
+/// refusal, in words.
+struct Refused(VfsError);
+
+impl Read for Refused {
+    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+        Err(to_io(self.0.clone()))
     }
 }
 
@@ -844,5 +859,56 @@ mod tests {
             .unwrap();
         assert_eq!(out, "kept");
         assert!(trailing.load(Ordering::Relaxed), "the garbage is noted");
+    }
+
+    /// What the first read of an xz stream path gives: its words when
+    /// refused.
+    fn first_read(bytes: &[u8]) -> Result<usize, String> {
+        let wrapper = Wrapper::Xz {
+            mem_limit_kb: crate::read_xz::mem_limit_kb(&Limits::strict()),
+        };
+        let source = Source::from_bytes(bytes.to_vec());
+        let mut stream = decoder(
+            &source,
+            wrapper,
+            Arc::new(AtomicU64::new(0)),
+            Arc::new(AtomicBool::new(false)),
+        );
+        let mut buf = [0u8; 512];
+        let single = SingleBackend::new(source.clone(), wrapper)
+            .read()
+            .read(&mut buf);
+        let first = stream.read(&mut buf);
+        assert_eq!(
+            single.as_ref().map_err(ToString::to_string),
+            first.as_ref().map_err(ToString::to_string),
+            "the single member reads as the tar stream does"
+        );
+        if first.is_err() {
+            assert!(
+                !holds_tar(&source, wrapper),
+                "a refused stream holds no tar"
+            );
+        }
+        first.map_err(|e| crate::guard::from_io(e).to_string())
+    }
+
+    #[test]
+    fn the_xz_stream_path_is_guarded_before_its_decoder() {
+        use crate::read_xz::tests::{FOUND, counted};
+        // The 25 bytes fuzzing found, and their shape with a footer.
+        assert_eq!(
+            first_read(&FOUND),
+            Err("it is damaged: its stream footer is damaged".to_owned())
+        );
+        assert_eq!(
+            first_read(&counted(31_650_202_408, 0)),
+            Err("it is damaged: its index is damaged".to_owned())
+        );
+        // A good stream decodes as before.
+        let mut writer =
+            lzma_rust2::XzWriter::new(Vec::new(), lzma_rust2::XzOptions::with_preset(0)).unwrap();
+        io::Write::write_all(&mut writer, b"plain words").unwrap();
+        assert_eq!(first_read(&writer.finish().unwrap()), Ok(11));
     }
 }
