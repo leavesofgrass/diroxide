@@ -257,7 +257,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 
 ## In the GUI
 
-The GUI arrives in a later alpha; these are its keys. On macOS the GUI uses Command where this list says Ctrl, and leaves Ctrl+F3 to Ctrl+F7 and Ctrl+Space to the system; the Sort list, the View menu and the palette sort there.
+These are the GUI's keys. On macOS the GUI uses Command where this list says Ctrl, and leaves Ctrl+F3 to Ctrl+F7 and Ctrl+Space to the system; the Sort list, the View menu and the palette sort there.
 
 ### Everywhere
 
