@@ -97,7 +97,44 @@ cargo check -p diro --no-default-features
 
 - `cargo xtask deps --check`: every dependency is inherited from the workspace and points the allowed way (see the architecture page).
 - `cargo xtask keyboard`: writes `docs/keyboard.md` from the keymap's defaults; `--check` fails when the page is out of date.
-- `cargo xtask regen`: will rebuild every generated file after a merge; today it lists what it will rebuild.
+- `cargo xtask regen`: writes every generated page and the icon files; `--check` fails when one is out of date.
+- `cargo xtask icons`: draws the icon files from the mark (see "The icon" below); `--check` compares them byte for byte.
+- `cargo xtask bench --gui`: the bench with the GUI's budgets (see "The GUI's budgets" below); `--only gui` measures them alone.
+
+## The icon
+
+`cargo xtask icons` draws every icon file from the approved mark, `assets/logo/diroxide-mark.svg`, with resvg and no font, the same bytes on every run: the mark's PNGs in `assets/logo/png/` at 16 to 512 pixels, and in `assets/logo/icons/` the Windows `.ico` (16, 20, 24, 32, 40, 48, 64 and 256 pixels), the macOS `.icns`, the compiled Windows resource `diroxide.res`, and the 64-pixel mark as plain RGBA for the window. `cargo xtask regen --check` compares them on x86_64; another processor may round a few pixels differently, so the check there may report the PNGs.
+
+- **Windows, the Microsoft toolchain:** `crates/diro/build.rs` gives the linker `diroxide.res` with `cargo:rustc-link-arg-bins`, so `diro.exe` carries the icon for Explorer, shortcuts and the taskbar, with no resource compiler and no C. The window loads the same icon group by its id, 1. A test in `crates/diro/tests/it/icon.rs` reads the group back from `diro.exe` by its id.
+- **Windows, the GNU toolchain, and Linux:** the program has no icon of its own; the window uses the 64-pixel mark compiled in.
+- **Linux desktops:** the AppImage installs the mark at every hicolor size and as the scalable `diroxide.svg`; Wayland takes the icon from the desktop file.
+- **macOS:** a bare program has no icon, and winit sets no window icon there; the `.icns` waits for an app bundle.
+
+After a change to the mark, run `cargo xtask icons` and commit what it writes.
+
+## The AppImage
+
+`packaging/appimage/build.sh BINARY TAG OUTDIR TOOLS` lays out the AppDir and packs it with the tools `packaging/appimage/fetch-tools.sh` downloads; with `none` for TOOLS it lays out the AppDir only. `AppRun` is a link to the program, so the program keeps the environment it was started with: the D-Bus session, the AT-SPI bus and the speech socket stay reachable. `diro.desktop` opens the GUI (`diro --gui`) and `diro-terminal.desktop` the terminal (`diro --tui`, in a terminal).
+
+`packaging/appimage/check.sh IMAGE` checks an AppImage or an AppDir in the GUI container: the layout, the GUI drawn under Xvfb, and the AT-SPI check against the program inside the image. With no tools at hand, on the owner's machine:
+
+```bash
+MSYS_NO_PATHCONV=1 DIRO_AGENT=g4 docker compose run --rm gui bash -c 'cargo build -p diro && sh packaging/appimage/build.sh /target/debug/diro check /target/appimage none && bash packaging/appimage/check.sh /target/appimage/diro.AppDir'
+```
+
+The GUI workflow (`.github/workflows/gui.yml`) packs a real AppImage and runs the same check on it.
+
+## The GUI's budgets
+
+`cargo run --release -p xtask -- bench --gui` records, beside the bench's scenarios and never gated: the size of the `diro` it built, the time from the start of `diro --gui --background` to the window's first frame (the `--log` line "graphics: drawing with"), and the peak working set a second after it; `--cold-build` adds a cold release build of `diro` into `target/bench/cold-build`, a folder that must not exist yet and is left for `.claude/tools/safe-remove.ps1`. Each start is one window, off screen and never activated.
+
+The first numbers, on the owner's Windows 11 machine with a graphics card (an NVIDIA GeForce RTX 3060), on Tuesday, November 3, 2026, with the machine shared by two other lanes' builds, so a quiet run will be faster; the bench lane records the baseline:
+
+- A cold build of `diro` (`cargo build -p diro`, an empty target folder, no compiler cache): 7 minutes 40 seconds for the debug profile, and 7 minutes 52 seconds for the release profile.
+- The `dist` build after the release one: 12 minutes 54 seconds.
+- The binary: 60.8 MB in the debug profile, 44.1 MB in the release profile, and 39.5 MB in the `dist` profile, which the release files use.
+- From the start to the first frame: 1.88 seconds, the median of three starts (2.53, 1.88 and 1.53 seconds), drawn on the graphics card by the release build.
+- The working set at the first frame: 189.7 MB, the median of the same three starts.
 
 ## Phase 0 measurements
 
