@@ -27,10 +27,24 @@ pub fn theme_line(settings: &Settings, paths: Option<&Paths>) -> String {
         Some(paths) => theme::registry(&paths.themes_dir(), Paths::SETTINGS).0,
         None => diroxide_theme::Registry::builtin(),
     };
-    let (chosen, _) = theme::resolve(&registry, &settings.theme, Paths::SETTINGS);
+    theme_line_in(settings, &registry)
+}
+
+/// The same line from themes already read: the built-in set and the
+/// owner's theme files, as the app holds them ([`crate::App::themes`]),
+/// so a theme file in the config's themes folder is found by its name.
+pub fn theme_line_in(settings: &Settings, themes: &diroxide_theme::Registry) -> String {
+    let (chosen, _) = theme::resolve(themes, &settings.theme, Paths::SETTINGS);
     let (overrides, _): (Vec<ColorOverride>, _) =
         theme::read_overrides(&settings.colors, Paths::SETTINGS);
     theme::chosen_line(chosen, &overrides)
+}
+
+/// The names of the themes in cycle order: the built-in ones first, then
+/// the owner's theme files by file name (a file with a built-in's name
+/// takes its place), as the theme chooser and Next theme list them.
+pub fn theme_names_in(themes: &diroxide_theme::Registry) -> Vec<String> {
+    themes.names().into_iter().map(str::to_owned).collect()
 }
 
 /// The value said in the Settings list, with "comes with" for a setting
@@ -79,7 +93,13 @@ pub const PLUGINS_ROW: &str = "\u{1}plugins";
 /// "Keys list, every command and its key", comes before the keys'
 /// settings; its id is [`KEYS_ROW`].
 pub fn settings_list(settings: &Settings) -> ListModel {
-    let line = theme_line(settings, None);
+    settings_list_in(settings, &diroxide_theme::Registry::builtin())
+}
+
+/// The Settings list with the theme's verdict from themes already read,
+/// the owner's theme files among them (see [`theme_line_in`]).
+pub fn settings_list_in(settings: &Settings, themes: &diroxide_theme::Registry) -> ListModel {
+    let line = theme_line_in(settings, themes);
     let verdict = line.split_once(", ").map_or("", |(_, v)| v).to_owned();
     let mut rows = Vec::with_capacity(SCHEMA.len() + 1);
     for info in &SCHEMA {

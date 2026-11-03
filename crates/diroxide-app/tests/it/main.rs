@@ -27,6 +27,8 @@ mod hooks;
 mod jobs;
 mod keys;
 mod labels;
+// Full screen, focus mode and the themes (lane A6).
+mod look;
 mod palette;
 // The queue's settings, messages and questions (lane A2).
 mod queue;

@@ -636,6 +636,16 @@ pub mod ids {
         /// The previous change in a compare.
         COMPARE_PREVIOUS = "compare.previous";
     }
+
+    // The window's look (lane A6, G3's contract requests 1 and 2).
+    ids! {
+        /// Turn focus mode on or off: in the window, the bars fade after
+        /// three seconds at rest. The `focus_mode` setting is kept in
+        /// step.
+        FOCUS_MODE = "view.focus-mode";
+        /// Full screen on or off, in the window; the terminal has none.
+        FULL_SCREEN = "view.full-screen";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -660,7 +670,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 226] = [
+pub static CATALOG: [CommandInfo; 228] = [
     command(
         ids::QUIT,
         "Quit",
@@ -780,6 +790,22 @@ pub static CATALOG: [CommandInfo; 226] = [
         Global,
         &[],
         &[],
+    ),
+    command(
+        ids::FOCUS_MODE,
+        "Focus mode",
+        "Turns focus mode on or off: in the window, the bars fade after three seconds with no key or mouse move.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FULL_SCREEN,
+        "Full screen",
+        "Fills the screen with the window, or gives the room back; in a terminal, the terminal program does it.",
+        Global,
+        &[],
+        &["f11"],
     ),
     command(
         ids::PROBLEMS,
