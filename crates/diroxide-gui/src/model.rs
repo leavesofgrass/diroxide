@@ -260,6 +260,233 @@ pub fn panel_view(app: &App, side: Side, top: usize, page: usize) -> PanelView {
     }
 }
 
+/// A list inside a dialog: its name, its window of rows and its focus.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ListView {
+    /// The list box's name.
+    pub name: String,
+    /// The first row in `rows`.
+    pub first: usize,
+    /// The window of rows that are nodes.
+    pub rows: Vec<RowView>,
+    /// The real number of rows.
+    pub total: usize,
+    /// The focused row, counted from the list's start.
+    pub focus: Option<usize>,
+}
+
+impl ListView {
+    /// A dialog's list from the app's list model: the rows around the
+    /// focus (three pages of `page` rows each way), named `name`.
+    pub fn of(list: &diroxide_core::ListModel, name: impl Into<String>, page: usize) -> Self {
+        let total = list.len();
+        let focus = list.focus_index();
+        let top = scroll_top(0, focus, page, total);
+        let range = window_range(top, page, total);
+        let in_name = states_in_name();
+        Self {
+            name: name.into(),
+            first: range.start,
+            rows: list.rows()[range]
+                .iter()
+                .map(|row| RowView::of(row, in_name))
+                .collect(),
+            total,
+            focus,
+        }
+    }
+
+    /// A list of plain lines (a confirmation's answers, a text to read),
+    /// the first focused.
+    pub fn lines(name: impl Into<String>, lines: &[String], focus: usize) -> Self {
+        let rows: Vec<RowView> = lines
+            .iter()
+            .enumerate()
+            .map(|(i, line)| RowView {
+                id: i.to_string(),
+                name: display_name(line).into_owned(),
+                text: display_name(line).into_owned(),
+                selected: false,
+                enabled: true,
+            })
+            .collect();
+        let total = rows.len();
+        Self {
+            name: name.into(),
+            first: 0,
+            rows,
+            total,
+            focus: (total > 0).then_some(focus.min(total - 1)),
+        }
+    }
+
+    /// The row at an absolute position, when it is in the window.
+    pub fn row(&self, index: usize) -> Option<&RowView> {
+        index.checked_sub(self.first).and_then(|i| self.rows.get(i))
+    }
+}
+
+/// A text field in a dialog, driven by the app's entry model.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FieldView {
+    /// The field's label, said first ("Rename report.pdf to").
+    pub label: String,
+    /// The text as shown: the typed text, or for a secret only its mask
+    /// (one asterisk a character, or nothing). The secret itself never
+    /// enters the view.
+    pub text: String,
+    /// The caret, in characters from the start.
+    pub cursor: usize,
+    /// A password field.
+    pub secret: bool,
+    /// A field with completion: a combo box whose list is the
+    /// candidates.
+    pub combo: bool,
+    /// The candidates, while their list is open.
+    pub candidates: Option<ListView>,
+    /// Whether the focus is in the candidates rather than the field.
+    pub in_list: bool,
+}
+
+/// What a dialog's focus is on: a text field, or a list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ControlView {
+    /// A text field, with its candidates.
+    Field(FieldView),
+    /// A list to choose from, or lines to read.
+    List(ListView),
+}
+
+/// The open dialog as the modal host shows it: one of the seven shapes
+/// as a name, lines to read and one control.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DialogView {
+    /// Which dialog: a new one is a new modal.
+    pub id: diroxide_core::DialogId,
+    /// The dialog's name, said when it opens: the question, the list's
+    /// title, the field's label.
+    pub title: String,
+    /// Lines to read before the control: a question's situation, the
+    /// paths a confirmation touches, a list's help.
+    pub lines: Vec<String>,
+    /// The control the focus is on.
+    pub control: ControlView,
+}
+
+impl DialogView {
+    /// Whether `other` is the same dialog in the same shape, so the
+    /// modal is changed in place rather than built again (and its focus
+    /// kept).
+    pub fn same_shape(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.lines == other.lines
+            && matches!(
+                (&self.control, &other.control),
+                (ControlView::Field(_), ControlView::Field(_))
+                    | (ControlView::List(_), ControlView::List(_))
+            )
+    }
+}
+
+/// The rows a dialog's list shows at a time, for its window.
+pub const DIALOG_PAGE: usize = 12;
+
+/// The top dialog as the modal host shows it, or `None`.
+pub fn dialog_view(app: &App) -> Option<DialogView> {
+    use diroxide_app::Dialog;
+    use diroxide_app::entry::CompletionSource;
+    let (id, dialog) = app.dialog()?;
+    let title = display_name(&dialog.title()).into_owned();
+    let silent = app.settings().secret_echo == diroxide_app::config::SecretEcho::Silent;
+    let (lines, control) = match dialog {
+        Dialog::Confirm { listing, .. } => (
+            listing.clone(),
+            // The answer starts on No; y, n, Enter and Escape answer it.
+            ControlView::List(ListView::lines(
+                "Answers",
+                &["No, the default".to_owned(), "Yes".to_owned()],
+                0,
+            )),
+        ),
+        Dialog::Prompt { label, text, .. } => (
+            Vec::new(),
+            ControlView::Field(FieldView {
+                label: label.clone(),
+                text: text.clone(),
+                cursor: text.chars().count(),
+                secret: false,
+                combo: false,
+                candidates: None,
+                in_list: false,
+            }),
+        ),
+        Dialog::Choose { list, .. } => {
+            let help = list.help();
+            let lines = if help.is_empty() {
+                Vec::new()
+            } else {
+                vec![help.to_owned()]
+            };
+            (
+                lines,
+                ControlView::List(ListView::of(list, list.title(), DIALOG_PAGE)),
+            )
+        }
+        Dialog::Read { title, lines } => (
+            Vec::new(),
+            ControlView::List(ListView::lines(title.clone(), lines, 0)),
+        ),
+        Dialog::Secret { request, .. } => (
+            Vec::new(),
+            ControlView::Field(FieldView {
+                label: request.title(),
+                text: dialog.masked_text(silent).unwrap_or_default(),
+                cursor: dialog
+                    .masked_text(silent)
+                    .map_or(0, |masked| masked.chars().count()),
+                secret: true,
+                combo: false,
+                candidates: None,
+                in_list: false,
+            }),
+        ),
+        Dialog::Question { lines, choices } => (
+            lines.clone(),
+            ControlView::List(ListView::of(choices, choices.title(), DIALOG_PAGE)),
+        ),
+        Dialog::Edit {
+            field,
+            candidates,
+            in_list,
+        } => (
+            Vec::new(),
+            ControlView::Field(FieldView {
+                label: field.label().to_owned(),
+                text: field.text().to_owned(),
+                cursor: field.cursor(),
+                secret: false,
+                combo: !matches!(
+                    field.source(),
+                    CompletionSource::None | CompletionSource::History
+                ),
+                candidates: candidates
+                    .as_ref()
+                    .map(|list| ListView::of(list, "Candidates", DIALOG_PAGE)),
+                in_list: *in_list,
+            }),
+        ),
+    };
+    Some(DialogView {
+        id,
+        title,
+        lines: lines
+            .iter()
+            .map(|line| display_name(line).into_owned())
+            .collect(),
+        control,
+    })
+}
+
 /// The three lines under the panels and above them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Lines {

@@ -116,6 +116,7 @@ struct Shown {
     lines: Lines,
     panels: [Option<PanelView>; 2],
     arranged: Option<(diroxide_app::config::Layout, Side)>,
+    dialog: Option<model::DialogView>,
 }
 
 /// The GUI's driver: the app, its runtime, and what the window shows.
@@ -255,7 +256,12 @@ impl Frontend {
         let announcer =
             NewWidget::new(Announcer::new(std::rc::Rc::clone(&full_passes)).with_pending(held))
                 .with_tag(ANNOUNCER);
-        NewWidget::new(Root::new(NewWidget::new(column), announcer, full_passes)).with_tag(ROOT)
+        let main = NewWidget::new(Region::new(
+            NewWidget::new(column),
+            Role::GenericContainer,
+            "",
+        ));
+        NewWidget::new(Root::new(main, announcer, full_passes)).with_tag(ROOT)
     }
 
     fn view(&mut self, side: Side) -> PanelView {
@@ -565,6 +571,13 @@ impl Frontend {
                 host.edit(panel_tag(side), |mut p| PanelBox::set_view(&mut p, view));
             }
         }
+        // The modal host: the top dialog, changed in place while it is the
+        // same dialog in the same shape, built again otherwise.
+        let dialog = model::dialog_view(&self.app);
+        if dialog != self.shown.dialog {
+            self.shown.dialog = dialog.clone();
+            host.edit(ROOT, |mut root| Root::set_dialog(&mut root, dialog));
+        }
         let say = std::mem::take(&mut self.to_say);
         let holding = host.edit(ANNOUNCER, |mut a| {
             if !say.is_empty() {
@@ -579,9 +592,15 @@ impl Frontend {
         self.place_focus(host);
     }
 
-    /// The widget the keyboard focus belongs on: the active panel's list
-    /// box.
-    fn focus_target(&self, host: &impl Host) -> Option<WidgetId> {
+    /// The widget the keyboard focus belongs on: the open dialog's field
+    /// or list, or the active panel's list box, whose active descendant
+    /// is the focused row, so closing a dialog returns there.
+    fn focus_target(&self, host: &mut impl Host) -> Option<WidgetId> {
+        if self.shown.dialog.is_some()
+            && let Some(id) = host.edit(ROOT, |mut root| Root::dialog_focus(&mut root))
+        {
+            return Some(id);
+        }
         host.id_of(panel_tag(self.app.active_side()))
     }
 

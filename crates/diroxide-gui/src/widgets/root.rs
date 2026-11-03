@@ -28,7 +28,9 @@ use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Size};
 use masonry::layout::{LayoutSize, LenReq, Length};
 
+use super::modal::Modal;
 use super::paint;
+use crate::model::DialogView;
 
 /// What the root tells the driver.
 #[derive(Clone, Debug, PartialEq)]
@@ -43,9 +45,9 @@ pub enum RootAction {
 /// The window's content.
 pub struct Root {
     probe: WidgetPod<FullPassProbe>,
-    main: WidgetPod<dyn Widget>,
+    main: WidgetPod<Region>,
     announcer: WidgetPod<dyn Widget>,
-    dialog: Option<WidgetPod<dyn Widget>>,
+    dialog: Option<WidgetPod<Modal>>,
     full_passes: Rc<Cell<u64>>,
 }
 
@@ -53,7 +55,7 @@ impl Root {
     /// The root over `main` with the live region `announcer`;
     /// `full_passes` is shared with the announcer.
     pub fn new(
-        main: NewWidget<impl Widget + ?Sized>,
+        main: NewWidget<Region>,
         announcer: NewWidget<impl Widget + ?Sized>,
         full_passes: Rc<Cell<u64>>,
     ) -> Self {
@@ -62,7 +64,7 @@ impl Root {
                 full_passes: Rc::clone(&full_passes),
             })
             .to_pod(),
-            main: main.erased().to_pod(),
+            main: main.to_pod(),
             announcer: announcer.erased().to_pod(),
             dialog: None,
             full_passes,
@@ -74,16 +76,27 @@ impl Root {
         self.full_passes.get()
     }
 
-    /// Shows `dialog` over the window, or closes the open one with `None`.
-    pub fn set_dialog(this: &mut WidgetMut<'_, Self>, dialog: Option<NewWidget<dyn Widget>>) {
+    /// Shows the app's top dialog over the window, changing the open one
+    /// in place when it is the same dialog in the same shape, or closes
+    /// it with `None`. While a dialog is open the window behind it is
+    /// disabled and hidden from screen readers.
+    pub fn set_dialog(this: &mut WidgetMut<'_, Self>, view: Option<DialogView>) {
+        if let (Some(view), Some(pod)) = (&view, this.widget.dialog.as_mut()) {
+            let mut modal = this.ctx.get_mut(pod);
+            if modal.widget.view().same_shape(view) {
+                Modal::set_view(&mut modal, view.clone());
+                return;
+            }
+        }
         if let Some(old) = this.widget.dialog.take() {
             this.ctx.remove_child(old);
         }
-        let open = dialog.is_some();
-        this.widget.dialog = dialog.map(NewWidget::to_pod);
+        let open = view.is_some();
+        this.widget.dialog = view.map(|view| NewWidget::new(Modal::new(view)).to_pod());
         {
             let mut main = this.ctx.get_mut(&mut this.widget.main);
             main.ctx.set_disabled(open);
+            Region::set_hidden(&mut main, open);
         }
         this.ctx.children_changed();
         this.ctx.request_layout();
@@ -94,11 +107,14 @@ impl Root {
     pub fn has_dialog(&self) -> bool {
         self.dialog.is_some()
     }
+}
 
-    /// The open dialog, to change it in place.
-    pub fn dialog_mut<'t>(this: &'t mut WidgetMut<'_, Self>) -> Option<WidgetMut<'t, dyn Widget>> {
-        let dialog = this.widget.dialog.as_mut()?;
-        Some(this.ctx.get_mut(dialog))
+impl Root {
+    /// The widget in the open dialog the keyboard focus belongs on.
+    pub fn dialog_focus(this: &mut WidgetMut<'_, Self>) -> Option<masonry::core::WidgetId> {
+        let pod = this.widget.dialog.as_mut()?;
+        let modal = this.ctx.get_mut(pod);
+        modal.widget.focus_id()
     }
 }
 
@@ -256,6 +272,7 @@ pub struct Region {
     child: WidgetPod<dyn Widget>,
     role: Role,
     label: String,
+    hidden: bool,
 }
 
 impl Region {
@@ -270,6 +287,16 @@ impl Region {
             child: child.erased().to_pod(),
             role,
             label: label.into(),
+            hidden: false,
+        }
+    }
+
+    /// Hides the region and everything in it from screen readers (while
+    /// a dialog is open over it), or shows it again.
+    pub fn set_hidden(this: &mut WidgetMut<'_, Self>, hidden: bool) {
+        if this.widget.hidden != hidden {
+            this.widget.hidden = hidden;
+            this.ctx.request_accessibility_update();
         }
     }
 
@@ -319,6 +346,9 @@ impl Widget for Region {
     ) {
         if !self.label.is_empty() {
             node.set_label(self.label.as_str());
+        }
+        if self.hidden {
+            node.set_hidden();
         }
     }
 

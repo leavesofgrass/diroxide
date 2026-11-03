@@ -212,11 +212,18 @@ pub fn name_of(node: &accesskit_consumer::NodeRef<'_>) -> String {
 }
 
 /// The app over `left` and `right`, as the tests build it: no config, no
-/// state folder, the local disk.
+/// state folder, the local disk, and no settle time on a dialog (the
+/// scripted keys come faster than a held key could).
 pub fn app_on(left: &Path, right: &Path) -> (App, Runtime) {
     let left = Place::parse(left.to_str().unwrap()).unwrap();
     let right = Place::parse(right.to_str().unwrap()).unwrap();
-    let app = App::new(AppOptions::new(left, right));
+    let mut options = AppOptions::new(left, right);
+    options.settings.dialog_settle_ms = 0;
+    // The window's keys: the keymap's GUI column, as diro builds it for
+    // the window.
+    options.keymap = diroxide_app::Keymap::defaults_for(diroxide_core::KeyColumn::Gui)
+        .for_platform(Platform::current());
+    let app = App::new(options);
     (app, Runtime::with_local())
 }
 

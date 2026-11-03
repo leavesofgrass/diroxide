@@ -1,0 +1,231 @@
+//! A list inside a dialog: one focusable AccessKit list box over the
+//! app's list model ([`ListView`]), with the same rules as a panel's
+//! (`super::panel`): options named by the row's label and details, the
+//! states as states, absolute positions, the real count, the focus as the
+//! active descendant, the clip flag cleared, a window of rows as nodes.
+//! The keys are the app's, through the window's root.
+//!
+//! Adapted from textweaver's `crates/textweaver-xilem/src/dialog.rs`,
+//! `ChoiceList` (the owner's own project).
+
+use std::collections::HashMap;
+
+use masonry::accesskit::{Action, Node, NodeId, Rect as NodeRect, Role};
+use masonry::core::{
+    AccessCtx, BrushIndex, ChildrenIds, LayoutCtx, MeasureCtx, NoAction, PaintCtx, PropertiesMut,
+    PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget, WidgetMut, render_text,
+};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Affine, Axis, Rect, Size, Stroke, Vec2};
+use masonry::layout::{LenReq, Length};
+use masonry::parley::Layout;
+
+use super::paint;
+use crate::model::{ListView, scroll_top};
+
+const ROW_HEIGHT: f64 = 28.0;
+const PAD: f64 = 8.0;
+/// The most rows a dialog's list asks room for.
+const MAX_ROWS: usize = 12;
+
+/// A dialog's list box.
+pub struct ChoiceBox {
+    view: ListView,
+    focused: bool,
+    top: usize,
+    visible: usize,
+    width: f64,
+    rows: HashMap<usize, (String, Layout<BrushIndex>)>,
+    ids: HashMap<String, NodeId>,
+}
+
+impl ChoiceBox {
+    /// A list showing `view`.
+    pub fn new(view: ListView) -> Self {
+        Self {
+            view,
+            focused: false,
+            top: 0,
+            visible: 1,
+            width: 0.0,
+            rows: HashMap::new(),
+            ids: HashMap::new(),
+        }
+    }
+
+    /// What the list shows.
+    pub fn view(&self) -> &ListView {
+        &self.view
+    }
+
+    /// Shows the list as the app has it now; another list (another name)
+    /// starts its node ids again.
+    pub fn set_view(this: &mut WidgetMut<'_, Self>, view: ListView) {
+        if this.widget.view == view {
+            return;
+        }
+        if this.widget.view.name != view.name {
+            this.widget.ids.clear();
+        }
+        this.widget.view = view;
+        this.ctx.request_layout();
+        this.ctx.request_render();
+    }
+
+    fn id_of(&mut self, row: &str) -> NodeId {
+        *self
+            .ids
+            .entry(row.to_owned())
+            .or_insert_with(AccessCtx::next_node_id)
+    }
+}
+
+impl Widget for ChoiceBox {
+    type Action = NoAction;
+
+    fn accepts_focus(&self) -> bool {
+        true
+    }
+
+    fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
+
+    fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
+        if let Update::FocusChanged(focused) = event {
+            self.focused = *focused;
+            ctx.request_render();
+        }
+    }
+
+    fn measure(
+        &mut self,
+        _ctx: &mut MeasureCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        axis: Axis,
+        len_req: LenReq,
+        _cross: Option<Length>,
+    ) -> Length {
+        match (axis, len_req) {
+            (Axis::Horizontal, LenReq::FitContent(space)) => space,
+            (Axis::Horizontal, _) => Length::px(480.0),
+            (Axis::Vertical, _) => {
+                let rows = self.view.total.clamp(1, MAX_ROWS) as f64;
+                Length::px(rows * ROW_HEIGHT)
+            }
+        }
+    }
+
+    fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
+        self.width = size.width;
+        self.visible = ((size.height / ROW_HEIGHT).floor() as usize).max(1);
+        self.top = scroll_top(self.top, self.view.focus, self.visible, self.view.total);
+        let last = (self.top + self.visible + 1).min(self.view.total);
+        let range = self.top..last;
+        self.rows.retain(|index, _| range.contains(index));
+        for index in range {
+            let Some(row) = self.view.row(index) else {
+                continue;
+            };
+            if self
+                .rows
+                .get(&index)
+                .is_none_or(|(text, _)| *text != row.text)
+            {
+                let text = row.text.clone();
+                let layout = paint::line_layout(ctx, &text, paint::TEXT_SIZE, false);
+                self.rows.insert(index, (text, layout));
+            }
+        }
+        ctx.set_clip_path(size.to_rect());
+    }
+
+    fn paint(
+        &mut self,
+        ctx: &mut PaintCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        painter: &mut Painter<'_>,
+    ) {
+        let size = ctx.content_box().size();
+        let last = (self.top + self.visible + 1).min(self.view.total);
+        for index in self.top..last {
+            let Some(row) = self.view.row(index) else {
+                continue;
+            };
+            let y = (index - self.top) as f64 * ROW_HEIGHT;
+            let bar = Rect::new(2.0, y + 1.0, size.width - 2.0, y + ROW_HEIGHT - 1.0);
+            let mut color = if !row.enabled {
+                paint::DIM
+            } else if row.selected {
+                paint::MARKED
+            } else {
+                paint::TEXT
+            };
+            if self.view.focus == Some(index) {
+                if self.focused {
+                    painter.fill(bar, paint::FOCUS_BAR).draw();
+                    color = paint::ON_FOCUS_BAR;
+                }
+                painter
+                    .stroke(bar.inset(-1.0), &Stroke::new(2.0), paint::RING)
+                    .draw();
+            }
+            if let Some((_, layout)) = self.rows.get(&index) {
+                let ty = y + (ROW_HEIGHT - f64::from(layout.height())) / 2.0;
+                render_text(
+                    painter,
+                    Affine::translate(Vec2::new(PAD, ty)),
+                    layout,
+                    &[color.into()],
+                    true,
+                );
+            }
+        }
+    }
+
+    fn accessibility_role(&self) -> Role {
+        Role::ListBox
+    }
+
+    fn accessibility(
+        &mut self,
+        ctx: &mut AccessCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        node: &mut Node,
+    ) {
+        node.set_label(self.view.name.as_str());
+        node.clear_clips_children();
+        node.set_size_of_set(self.view.total);
+        let in_name = crate::model::states_in_name();
+        let rows = self.view.rows.clone();
+        let mut children = Vec::with_capacity(rows.len());
+        for (offset, row) in rows.iter().enumerate() {
+            let index = self.view.first + offset;
+            let id = self.id_of(&row.id);
+            let mut option = Node::new(Role::ListBoxOption);
+            option.set_label(row.name.as_str());
+            if !in_name {
+                if row.selected {
+                    option.set_selected(true);
+                }
+                if !row.enabled {
+                    option.set_disabled();
+                }
+            }
+            option.set_position_in_set(index);
+            option.add_action(Action::Focus);
+            option.add_action(Action::ScrollIntoView);
+            let y = (index as f64 - self.top as f64) * ROW_HEIGHT;
+            option.set_bounds(NodeRect::new(0.0, y, self.width, y + ROW_HEIGHT));
+            ctx.tree_update().nodes.push((id, option));
+            children.push(id);
+        }
+        if let Some(row) = self.view.focus.and_then(|i| self.view.row(i)).cloned() {
+            let id = self.id_of(&row.id);
+            node.set_active_descendant(id);
+        }
+        node.set_children(children);
+    }
+
+    fn children_ids(&self) -> ChildrenIds {
+        ChildrenIds::new()
+    }
+}

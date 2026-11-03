@@ -3,6 +3,9 @@
 //! expects, and nothing announced twice.
 
 pub mod announcer;
+pub mod choice;
+pub mod field;
+pub mod modal;
 pub mod paint;
 pub mod panel;
 pub mod panels;
