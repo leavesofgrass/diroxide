@@ -4,6 +4,15 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased
 
+### Lane X: the archive readers' fuzz findings
+
+Written on Tuesday, November 3, 2026.
+
+- A 7z whose header gives its coders stream counts that add up past 64 bits is refused as damaged: "it is damaged: its header's stream counts are too large". A debug build stopped there with a panic, and a release build counted wrong. The 7z reader's other sums from the file stop at the largest number instead of wrapping.
+- Every xz decoder, for a tar.xz or a plain .xz, first checks the list of blocks at the end of each stream, each time a read starts: a count of blocks the list has no bytes for is "it is damaged: its index is damaged", and one whose memory passes the decoder's limit is refused with that limit. Before, 25 bytes could make the decoder ask for 506 GB. An xz of more than 100,000 streams is refused: "it uses more than 100,000 xz streams, which is not supported".
+- The check at open counts an xz's blocks against `archives.max_entries` before it keeps them, and keeps one number for a 7z header's sizes instead of a list.
+- The two inputs the fuzz run found are tests and seeds. The `archive_xz` and `archive_stream` targets decode an xz only after the checks the program makes, as the program does.
+
 ### Lane F: the nightly fuzz workflow
 
 Written on Tuesday, November 3, 2026.
