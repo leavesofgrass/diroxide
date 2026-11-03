@@ -788,7 +788,10 @@ impl JobTable {
     /// percent".
     pub fn line(&self) -> String {
         match self.running.as_slice() {
-            [] => "No jobs".to_owned(),
+            [] if self.interrupted.is_empty() => "No jobs".to_owned(),
+            // Interrupted jobs wait in the Jobs list for Retry or Forget; the
+            // line says so rather than "No jobs" (Q2's open issue).
+            [] => format!("No jobs running, {} interrupted", self.interrupted.len()),
             [only] => only.shown.clone(),
             many => {
                 let front = self
@@ -921,6 +924,16 @@ mod tests {
     fn the_jobs_line_says_what_runs() {
         let mut jobs = JobTable::new();
         assert_eq!(jobs.line(), "No jobs");
+        jobs.interrupted.push(InterruptedJob {
+            key: 1,
+            kind: JobKind::Copy,
+            what: "12 items to build".to_owned(),
+            started: false,
+            request: None,
+        });
+        assert_eq!(jobs.line(), "No jobs running, 1 interrupted");
+        assert!(within_cells(&jobs.line(), "No jobs running"));
+        jobs.interrupted.clear();
         jobs.start(JobId::new(1), "Copying 0 of 3");
         jobs.update(JobId::new(1), "Copying 1 of 3");
         assert_eq!(jobs.line(), "Copying 1 of 3");

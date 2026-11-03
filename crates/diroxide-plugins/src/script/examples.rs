@@ -595,20 +595,24 @@ fn a_search_stops_at_its_cap_and_says_so() {
         return;
     };
     let body = if cfg!(windows) {
-        "@echo off\r\nfor /l %%i in (1,1,6000) do @echo C:\\data\\r%%i.txt\r\n".to_owned()
+        "@echo off\r\nfor /l %%i in (1,1,600) do @echo C:\\data\\r%%i.txt\r\n".to_owned()
     } else {
-        "#!/bin/sh\ni=0\nwhile [ $i -lt 6000 ]; do printf '/data/r%s\\0' \"$i\"; i=$((i+1)); done\n"
+        "#!/bin/sh\ni=0\nwhile [ $i -lt 600 ]; do printf '/data/r%s\\0' \"$i\"; i=$((i+1)); done\n"
             .to_owned()
     };
-    let Some(command) = index_command(&mut bench, &body) else {
+    let Some(mut command) = index_command(&mut bench, &body) else {
         return;
     };
+    // cmd prints about a hundred lines a second to a pipe, so at the
+    // example's 5,000 the run reached the recipe's limit on a loaded machine
+    // and the cap lost the race to the timeout. The logic is the same at 500.
+    command.recipe.max_rows = 500;
     let (report, _) = search(&bench, &command, "r");
     assert!(report.capped);
-    assert_eq!(report.places.len(), 5000);
+    assert_eq!(report.places.len(), 500);
     assert_eq!(
         crate::script::words::first_shown(command.recipe.max_rows),
-        "First 5,000 shown, narrow the search."
+        "First 500 shown, narrow the search."
     );
 }
 

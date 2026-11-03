@@ -965,8 +965,9 @@ impl App {
     /// "Quit, shell stays where it was" to fit a Braille line).
     pub(super) fn ask_quit(&mut self, keep_shell: bool) -> Vec<Effect> {
         self.keep_shell = keep_shell;
-        // Running and waiting jobs alike: the queue is not kept across a
-        // restart (R25 N7), so a waiting job would be lost unasked.
+        // Running and waiting jobs alike: the queue is saved across a restart
+        // since alpha 3 (Q2), but a quit stops a running job the way Cancel
+        // does, so a copy cut by it starts over on Retry; the question stays.
         let jobs = if self.settings.confirm.quit_with_jobs {
             self.jobs.len() as u64
         } else {
