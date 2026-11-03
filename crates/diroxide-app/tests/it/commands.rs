@@ -765,3 +765,14 @@ fn the_palette_says_each_commands_key_beside_its_name() {
     );
     f.s.key("escape");
 }
+
+/// Lane A4 (G0's request 1): the GUI reads its own three settings through
+/// the app, as the terminal reads its own, without the config crate.
+#[test]
+fn the_guis_settings_are_read_through_the_app() {
+    use diroxide_app::config::{Frontend, Graphics, Menus, Settings};
+    let settings = Settings::default();
+    assert_eq!(settings.frontend, Frontend::Auto);
+    assert_eq!(settings.graphics, Graphics::Auto);
+    assert_eq!(settings.menus, Menus::Native);
+}

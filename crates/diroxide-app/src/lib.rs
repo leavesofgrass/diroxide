@@ -51,10 +51,13 @@ pub mod views;
 
 /// The configuration types a frontend reads through the app: the terminal
 /// crate may depend only on core, app and theme (`cargo xtask deps`), and
-/// draws from [`App::settings`].
+/// draws from [`App::settings`]. The GUI reads its own three settings
+/// here too: which frontend starts, how it draws, and whether its menus
+/// are native or lists (lane A4).
 pub mod config {
     pub use diroxide_config::{
-        KeymapConfig, Layout, Paths, ScreenReaderMode, SecretEcho, Settings, SingleLetters,
+        Frontend, Graphics, KeymapConfig, Layout, Menus, Paths, ScreenReaderMode, SecretEcho,
+        Settings, SingleLetters,
     };
 }
 
