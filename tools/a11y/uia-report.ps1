@@ -47,7 +47,11 @@ param(
     # The portable configuration folder diro writes into (beside the
     # program by default; --portable).
     [string] $Out = '',
-    [int] $SettleMs = 4000
+    [int] $SettleMs = 4000,
+    # Settings for this run, as config.toml lines ("auto_hide_menu =
+    # false" keeps the menu bar shown, so the report can read it), written
+    # to the portable configuration beside the program.
+    [string[]] $Settings = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -70,6 +74,11 @@ if (-not $Folder) {
 }
 $Folder = (Resolve-Path -LiteralPath $Folder).Path
 if (-not $Other) { $Other = $Folder }
+# The portable configuration beside the program holds this run's
+# settings (config.toml), and nothing else (it is the build folder's).
+$settingsFile = Join-Path (Split-Path -Parent $Exe) 'config\config.toml'
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $settingsFile) | Out-Null
+Set-Content -LiteralPath $settingsFile -Value ($Settings -join "`n") -Encoding ascii
 $Other = (Resolve-Path -LiteralPath $Other).Path
 
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase
@@ -391,6 +400,27 @@ public static class DiroUia
         catch (Exception ex) { return "(could not read: " + ex.Message + ")"; }
     }
 
+    /// The window's menu bar (not the system menu's): each menu with its
+    /// access key, read without opening a menu (opening one needs the
+    /// foreground).
+    public static List<string> MenuBar(AutomationElement window)
+    {
+        var lines = new List<string>();
+        var bars = window.FindAll(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuBar));
+        foreach (AutomationElement bar in bars)
+        {
+            var items = bar.FindAll(TreeScope.Children,
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuItem));
+            if (items.Count < 2) continue;
+            lines.Add("MenuBar " + Q(bar.Current.Name) + ", " + items.Count + " menus");
+            foreach (AutomationElement it in items)
+                lines.Add("  MenuItem " + Q(it.Current.Name) + " access key " + Q(it.Current.AccessKey));
+        }
+        if (lines.Count == 0) lines.Add("(no menu bar shown; with auto_hide_menu on it shows only while a key has it open)");
+        return lines;
+    }
+
     /// The list boxes and their options.
     public static List<string> Lists(AutomationElement window)
     {
@@ -423,6 +453,7 @@ Say "Made $date by tools/a11y/uia-report.ps1 on $([Environment]::OSVersion.Versi
 Say "Program: $Exe"
 Say "Left panel: $Folder"
 Say "Right panel: $Other"
+if ($Settings.Count -gt 0) { Say ("Settings for this run: " + ($Settings -join '; ')) }
 Say ''
 
 [DiroUia]::Listen()
@@ -462,6 +493,10 @@ Say ''
 Say '## The window, as UI Automation gives it'
 Say ''
 Fence ([DiroUia]::Tree($window)).ToArray()
+
+Say '## The menu bar'
+Say ''
+Fence ([DiroUia]::MenuBar($window)).ToArray()
 
 Say '## The list boxes and their options'
 Say ''
