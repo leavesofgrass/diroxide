@@ -894,8 +894,10 @@ impl Frontend {
         match action {
             PanelAction::Focused(side) => {
                 // A click or a screen reader put the focus on the other
-                // panel: it becomes the active one, as Tab makes it.
-                if side != self.app.active_side() && self.app.dialog().is_none() {
+                // panel: it becomes the active one, as Tab makes it (into
+                // the preview while the quick view shows there, and out
+                // of it again).
+                if side != self.focus_side() && self.app.dialog().is_none() {
                     self.command(host, Command::new(ids::SWITCH_PANEL), now);
                 }
             }
@@ -918,12 +920,16 @@ impl Frontend {
                 if self.app.dialog().is_some() {
                     return;
                 }
-                if side != self.app.active_side() {
+                if side != self.focus_side() {
                     let effects = self.app.dispatch(&Command::new(ids::SWITCH_PANEL));
                     self.carry(effects);
                 }
-                // The folder's row, or a plugin list's while one is up.
-                self.app.focus_shown_row(side, &id);
+                // The folder's row, or a plugin list's while one is up; a
+                // click in the preview goes into it, its rows moved by keys
+                // (the app has no call to move the region by a row's id).
+                if !model::shows_preview(&self.app, side) {
+                    self.app.focus_shown_row(side, &id);
+                }
                 self.after(now);
                 self.refresh(host);
             }
@@ -1322,7 +1328,17 @@ impl Frontend {
         if self.shown.viewing {
             return host.id_of(VIEWER);
         }
-        host.id_of(panel_tag(self.app.active_side()))
+        host.id_of(panel_tag(self.focus_side()))
+    }
+
+    /// The side whose list box has the focus: the active panel, or the
+    /// other one while the focus is in the quick view's preview there.
+    fn focus_side(&self) -> Side {
+        if self.app.in_preview() {
+            self.app.active_side().other()
+        } else {
+            self.app.active_side()
+        }
     }
 
     fn place_focus(&mut self, host: &mut impl Host) {

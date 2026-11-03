@@ -227,8 +227,60 @@ pub fn window_range(top: usize, page: usize, len: usize) -> Range<usize> {
     start.min(end)..end
 }
 
+/// Whether `side` shows the quick view's preview region: the other panel
+/// while the quick view is on, as in the terminal.
+pub fn shows_preview(app: &App, side: Side) -> bool {
+    app.quick_view_on() && side != app.active_side()
+}
+
+/// The preview region in the other panel's place (R27's commit 23): the
+/// same list box as a panel, named "Right panel, Preview, notes.md", its
+/// options the region's rows (a heading, a paragraph, a table's row) and
+/// its focus the region's; before anything is shown, the line that says
+/// how to go in ("Tab goes into the preview").
+fn preview_view(app: &App, side: Side, top: usize, page: usize) -> Option<PanelView> {
+    let quick = app.quick_view()?;
+    let list = quick.region();
+    let title = display_name(&quick.region_title()).into_owned();
+    let total = list.len();
+    let focus = list.focus_index();
+    let top = scroll_top(top, focus, page, total);
+    let range = window_range(top, page, total);
+    let in_name = states_in_name();
+    let rows = list.rows()[range.clone()]
+        .iter()
+        .map(|row| RowView::of(row, in_name))
+        .collect();
+    let mut hasher = DefaultHasher::new();
+    "preview".hash(&mut hasher);
+    title.hash(&mut hasher);
+    let empty = if list.empty_text().is_empty() {
+        app.preview_placeholder()
+    } else {
+        display_name(list.empty_text()).into_owned()
+    };
+    Some(PanelView {
+        side,
+        name: format!("{} panel, {title}", side_word(side)),
+        header: title,
+        generation: hasher.finish(),
+        total,
+        top,
+        first: range.start,
+        rows,
+        focus,
+        active: app.in_preview(),
+        empty,
+    })
+}
+
 /// A panel's view with the rows from `top` drawn and `page` rows visible.
 pub fn panel_view(app: &App, side: Side, top: usize, page: usize) -> PanelView {
+    if shows_preview(app, side)
+        && let Some(view) = preview_view(app, side, top, page)
+    {
+        return view;
+    }
     let panel = app.panel(side);
     let list = panel.shown_list();
     let total = list.len();
