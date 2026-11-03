@@ -144,7 +144,7 @@ hex_row = "narrow"
 wait_ms = 800
 ```
 
-Thumbnails are kept now and do nothing yet. The reference marks them as coming with a later alpha. Hiding the menu bar works on Windows in the window, and focus mode works in the window too ([the GUI](gui.md#focus-mode-and-full-screen) says how). Focus mode is also a command, in the View menu and the palette, and the command and the Settings switch say the same words, "Focus mode on: the bars fade after three seconds." and "Focus mode off." Full screen is a command too, on F11 in the window. The Settings list and the reference still mark focus mode as coming with a later alpha, though it works.
+Thumbnails are kept now and do nothing yet. The reference marks them as coming with a later alpha. Hiding the menu bar works on Windows in the window, and focus mode works in the window too ([the GUI](gui.md#focus-mode-and-full-screen) says how). Focus mode is also a command, in the View menu and the palette, and the command and the Settings switch say the same words, "Focus mode on: the bars fade after three seconds." and "Focus mode off." Full screen is a command too, on F11 in the window.
 
 ## Themes and colors
 
