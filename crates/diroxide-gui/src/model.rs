@@ -548,6 +548,19 @@ pub fn confirm_buttons(app: &App) -> Vec<PushView> {
     .collect()
 }
 
+/// The key that turns a secret's Show toggle, as the app reads it.
+pub const SHOW_KEY: &str = "Alt+S";
+
+/// A secret's Show toggle: "Show the password", on or off, with its key.
+pub fn show_toggle(request: &diroxide_core::SecretRequest, shown: bool) -> PushView {
+    PushView {
+        id: DialogFocus::Show,
+        label: format!("Show the {}", request.kind.word().to_lowercase()),
+        key: Some(SHOW_KEY.to_owned()),
+        toggled: Some(shown),
+    }
+}
+
 /// The top dialog as the modal host shows it, with the focus where it
 /// starts; see [`dialog_view_at`].
 pub fn dialog_view(app: &App) -> Option<DialogView> {
@@ -620,20 +633,27 @@ pub fn dialog_view_at(app: &App, local: &LocalFocus) -> Option<DialogView> {
                 ControlView::List(ListView::lines(title.clone(), lines, local.line)),
             )
         }
-        Dialog::Secret { request, .. } => (
-            Vec::new(),
-            ControlView::Field(FieldView {
-                label: request.title(),
-                text: dialog.masked_text(silent).unwrap_or_default(),
-                cursor: dialog
-                    .masked_text(silent)
-                    .map_or(0, |masked| masked.chars().count()),
-                secret: true,
-                combo: false,
-                candidates: None,
-                in_list: false,
-            }),
-        ),
+        Dialog::Secret { request, shown, .. } => {
+            // The Show toggle after the field: off by default, its key the
+            // app's (Alt+S). While it is on, the field shows the text and
+            // a screen reader reads it, as the app says when it is turned
+            // on; while it is off, only the mask reaches the field, the
+            // drawing and the tree.
+            buttons = vec![show_toggle(request, *shown)];
+            let shown_text = dialog.masked_text(silent).unwrap_or_default();
+            (
+                Vec::new(),
+                ControlView::Field(FieldView {
+                    label: request.title(),
+                    cursor: shown_text.chars().count(),
+                    text: shown_text,
+                    secret: !*shown,
+                    combo: false,
+                    candidates: None,
+                    in_list: false,
+                }),
+            )
+        }
         Dialog::Question { lines, choices } => {
             // The first line names the dialog ("Name taken: report.pdf");
             // the rest of the situation is drawn under it and read after

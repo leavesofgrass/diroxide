@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use diroxide_core::Side;
-use masonry::accesskit::{Live, Role};
+use masonry::accesskit::{Live, Role, Toggled};
 
 use crate::panel_list::list_synthetic;
 use crate::rig::{Rig, app_on, fixture, name_of};
@@ -89,6 +89,12 @@ pub fn dump(rig: &Rig, dir: &Path) -> String {
                 line.push_str(&format!(" caret={}", caret.to_global_usv_index()));
             }
         }
+        match node.toggled() {
+            Some(Toggled::True) => line.push_str(" on"),
+            Some(Toggled::False) => line.push_str(" off"),
+            Some(Toggled::Mixed) => line.push_str(" mixed"),
+            None => {}
+        }
         if selected {
             line.push_str(" selected");
         }
@@ -123,7 +129,7 @@ fn golden_path(name: &str) -> PathBuf {
 }
 
 /// Holds `text` against the golden `name`.
-fn check(name: &str, text: &str) {
+pub fn check(name: &str, text: &str) {
     let path = golden_path(name);
     let update = std::env::var_os("DIROXIDE_GOLDEN_UPDATE").is_some_and(|v| v == "1");
     match std::fs::read_to_string(&path) {
