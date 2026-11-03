@@ -1648,6 +1648,7 @@ dependencies = [
  "masonry",
  "masonry_testing",
  "masonry_winit",
+ "tempfile",
  "thiserror 2.0.21",
  "tracing",
  "windows-sys 0.61.2",

@@ -28,6 +28,10 @@
 
 pub mod console;
 #[cfg(feature = "gui")]
+pub mod fonts;
+#[cfg(feature = "gui")]
+pub mod frontend;
+#[cfg(feature = "gui")]
 pub mod keys;
 pub mod model;
 mod platform;
@@ -242,10 +246,14 @@ pub fn panel_grid(panel: &Panel) -> GridModel {
 /// - diroxide"). A screen reader says it when the window takes the focus.
 pub fn window_title(app: &App, program: &str) -> String {
     let panel = app.active_panel();
-    let place = panel.loading_place().unwrap_or(panel.place());
-    let leaf = diroxide_app::panel::place_leaf(place);
-    let leaf = diroxide_core::names::display_name(&leaf).into_owned();
-    format!("{leaf} - {program}")
+    // A plugin list over the place names the window, as in the terminal
+    // (lane L).
+    let shown = match panel.plugin_list() {
+        Some(list) => list.list().title().to_owned(),
+        None => diroxide_app::panel::place_leaf(panel.loading_place().unwrap_or(panel.place())),
+    };
+    let shown = diroxide_core::names::display_name(&shown).into_owned();
+    format!("{shown} - {program}")
 }
 
 /// Runs the GUI with the app and runtime `diro` built, until the window

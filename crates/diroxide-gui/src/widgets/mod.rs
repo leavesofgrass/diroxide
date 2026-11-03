@@ -5,3 +5,5 @@
 pub mod announcer;
 pub mod paint;
 pub mod panel;
+pub mod panels;
+pub mod root;
