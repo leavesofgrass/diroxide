@@ -730,10 +730,14 @@ pub fn dialog_view_at(app: &App, local: &LocalFocus) -> Option<DialogView> {
                 text: field.text().to_owned(),
                 cursor: field.cursor(),
                 secret: false,
-                combo: !matches!(
-                    field.source(),
-                    CompletionSource::None | CompletionSource::History
-                ),
+                // A field that completes, or that a list of candidates
+                // goes with (the Keys list, a typed confirmation's
+                // listing), is a combo box naming its list.
+                combo: candidates.is_some()
+                    || !matches!(
+                        field.source(),
+                        CompletionSource::None | CompletionSource::History
+                    ),
                 candidates: candidates
                     .as_ref()
                     .map(|list| ListView::of(list, "Candidates", DIALOG_PAGE)),

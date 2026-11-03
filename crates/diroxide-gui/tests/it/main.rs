@@ -20,6 +20,8 @@ mod jobs;
 #[cfg(feature = "gui")]
 mod keybar_mouse;
 #[cfg(feature = "gui")]
+mod keys;
+#[cfg(feature = "gui")]
 mod layouts;
 #[cfg(feature = "gui")]
 mod live_region;

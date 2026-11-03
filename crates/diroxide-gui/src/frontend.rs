@@ -483,6 +483,10 @@ impl Frontend {
     /// holds for Yes). True when the key was the window's.
     fn local_key(&mut self, key: &Key) -> bool {
         self.sync_local();
+        // Change key's prompt waits for any key, exactly as it came.
+        if self.app.capturing_key() {
+            return false;
+        }
         let Some(view) = model::dialog_view_at(&self.app, &self.local) else {
             return false;
         };
