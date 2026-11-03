@@ -1,8 +1,9 @@
 //! The fuzz finds of Tuesday, November 3, 2026, kept as tests so they
 //! stay fixed (docs/dev/fuzzing.md): each input as the nightly run's
 //! Linux container saved it, replayed through its target's body and
-//! opened through the provider, which must refuse it in words. The same
-//! inputs are seeds under `fixtures/archives/seeds/` (seeds.rs).
+//! opened through the provider, which must refuse it in words. The xz
+//! inputs are also seeds under `fixtures/archives/seeds/` (seeds.rs); the
+//! 7z one is not, since as a seed it slowed its target's runs eightfold.
 
 use diroxide_archive::fuzzing;
 

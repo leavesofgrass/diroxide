@@ -85,11 +85,9 @@ fn generated() -> Vec<(&'static str, String, Vec<u8>)> {
         "index-count-whole.xz".to_owned(),
         fuzz_finds::xz_index_count_whole(),
     ));
-    seeds.push((
-        "archive_7z",
-        "stream-counts.7z".to_owned(),
-        fuzz_finds::SEVENZ_COUNTS.to_vec(),
-    ));
+    // The 7z find is a test only (fuzz_finds.rs): as a seed, with or
+    // without its password, it held archive_7z to about 80 runs a second
+    // against 672 without it, in a minute's run on Linux.
     let mut joined = build::xz(b"first ", 0);
     joined.extend_from_slice(&[0; 4]);
     joined.extend_from_slice(&build::xz(b"second", 0));
