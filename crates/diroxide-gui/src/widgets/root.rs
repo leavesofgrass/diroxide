@@ -10,7 +10,7 @@
 //! - [`FullPassProbe`]: tells the live region when an accessibility pass
 //!   rebuilds every node (a screen reader asked for the tree).
 //! - [`Region`]: a part of the window with a role and a name (the status
-//!   bar), drawn with Masonry's box properties.
+//!   bar), filled with a theme role's band when it has one.
 //!
 //! Adapted from textweaver's `crates/textweaver-xilem/src/widgets.rs`
 //! (`Root`, `FullPassProbe`, `Region`; the owner's own project).
@@ -196,12 +196,26 @@ impl Widget for Root {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
         painter
-            .fill(ctx.content_box().size().to_rect(), paint::PAGE)
+            .fill(
+                ctx.content_box().size().to_rect(),
+                paint::color(palette.page),
+            )
             .draw();
+    }
+
+    fn property_changed(
+        &mut self,
+        ctx: &mut masonry::core::UpdateCtx<'_>,
+        property_type: std::any::TypeId,
+    ) {
+        if paint::is_colors(property_type) {
+            ctx.request_render();
+        }
     }
 
     fn accessibility_role(&self) -> Role {
@@ -285,6 +299,8 @@ pub struct Region {
     role: Role,
     label: String,
     hidden: bool,
+    /// The theme role whose band fills the region (the status bar's).
+    band: Option<diroxide_theme::PanelRole>,
 }
 
 impl Region {
@@ -300,7 +316,17 @@ impl Region {
             role,
             label: label.into(),
             hidden: false,
+            band: None,
         }
+    }
+
+    /// The same region filled with `band`'s background (the status bar
+    /// in the status line's band); its labels take the band's text color
+    /// from the driver.
+    #[must_use]
+    pub fn with_band(mut self, band: diroxide_theme::PanelRole) -> Self {
+        self.band = Some(band);
+        self
     }
 
     /// Hides the region and everything in it from screen readers (while
@@ -343,7 +369,23 @@ impl Widget for Region {
         ctx.derive_baselines(&self.child);
     }
 
-    fn paint(&mut self, _ctx: &mut PaintCtx<'_>, _props: &PropertiesRef<'_>, _p: &mut Painter<'_>) {
+    fn paint(&mut self, ctx: &mut PaintCtx<'_>, props: &PropertiesRef<'_>, p: &mut Painter<'_>) {
+        if let Some(band) = self.band {
+            let palette = paint::palette_of(props, ctx.property_cache());
+            let look = palette.look(band);
+            p.fill(ctx.content_box().size().to_rect(), paint::color(look.bg))
+                .draw();
+        }
+    }
+
+    fn property_changed(
+        &mut self,
+        ctx: &mut masonry::core::UpdateCtx<'_>,
+        property_type: std::any::TypeId,
+    ) {
+        if self.band.is_some() && paint::is_colors(property_type) {
+            ctx.request_render();
+        }
     }
 
     fn accessibility_role(&self) -> Role {

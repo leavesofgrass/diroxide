@@ -60,6 +60,16 @@
 //! - winit's helper window named, so a screen reader never meets a
 //!   nameless pane.
 //!
+//! The themes lane (G3) gave the window its colors and its other roads:
+//!
+//! - [`theme`]: the twenty-four themes mapped to what the window draws,
+//!   one look for every screen role, the owner's `[colors]` in place; a
+//!   role below the floor drawn in the text color, so every theme passes
+//!   the theme crate's checks on every pair the window draws; Windows
+//!   High Contrast honored with the system's own colors; the system's
+//!   light or dark appearance followed through the theme crate's `os`
+//!   module. A theme chosen is said with its verdict in words.
+//!
 //! On Windows `diro` stays a console program, so a shell waits for it and
 //! the terminal frontend keeps its console; [`console`] lets go of a
 //! console that only the window's start opened (a double-click in
@@ -76,6 +86,7 @@ pub mod menus;
 pub mod model;
 mod platform;
 pub mod spawn;
+pub mod theme;
 #[cfg(feature = "gui")]
 pub mod widgets;
 #[cfg(feature = "gui")]

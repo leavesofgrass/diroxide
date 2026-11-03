@@ -9,7 +9,7 @@
 //! - Its size is told to the driver ([`ViewerAction::Size`]): the columns
 //!   that fit (from the font's width) and the rows, which the app's
 //!   viewer wraps and pages by.
-//! - Token classes are drawn with the theme's token roles
+//! - Token classes are drawn with the palette's token roles
 //!   ([`super::paint::token_look`]): a role's color where it keeps its
 //!   contrast on the window's page, and its shape (bold keywords and
 //!   headings, underlined links) always, so a class never shows by color
@@ -18,7 +18,9 @@
 //! - Keys are the app's, through the window's root, in the viewer's own
 //!   layer; the prompts (jump, search) and the outline are dialogs.
 
-use std::collections::{BTreeMap, HashMap};
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use masonry::accesskit::{Action, Node, NodeId, Rect as NodeRect, Role};
 use masonry::core::{
@@ -33,6 +35,7 @@ use masonry::peniko::Color;
 
 use super::paint::{self, Run};
 use crate::model::ViewerView;
+use crate::theme::Palette;
 
 /// The row height in logical pixels.
 pub const ROW_HEIGHT: f64 = 26.0;
@@ -57,9 +60,8 @@ pub struct ViewerBox {
     /// Option node ids by row id, started again for another file or mode.
     ids: HashMap<String, NodeId>,
     generation: u64,
-    /// The theme and the owner's colors the token roles are drawn with.
-    theme: String,
-    colors: BTreeMap<String, String>,
+    /// The palette the rows' runs were laid out with.
+    palette: Option<Arc<Palette>>,
 }
 
 impl ViewerBox {
@@ -73,8 +75,7 @@ impl ViewerBox {
             told: (0, 0),
             rows: HashMap::new(),
             ids: HashMap::new(),
-            theme: diroxide_theme::DEFAULT_THEME.to_owned(),
-            colors: BTreeMap::new(),
+            palette: None,
         }
     }
 
@@ -99,22 +100,6 @@ impl ViewerBox {
         this.ctx.request_accessibility_update();
     }
 
-    /// Draws the token roles with the theme `theme` and the owner's
-    /// `[colors]`.
-    pub fn set_theme(
-        this: &mut WidgetMut<'_, Self>,
-        theme: String,
-        colors: BTreeMap<String, String>,
-    ) {
-        if this.widget.theme != theme || this.widget.colors != colors {
-            this.widget.theme = theme;
-            this.widget.colors = colors;
-            this.widget.rows.clear();
-            this.ctx.request_layout();
-            this.ctx.request_render();
-        }
-    }
-
     fn id_of(&mut self, row: &str) -> NodeId {
         *self
             .ids
@@ -124,22 +109,20 @@ impl ViewerBox {
 
     /// A row's runs and colors: brush 0 the row's own color, then one a
     /// token run, then the matches' underline.
-    fn row_runs(&self, index: usize, focused: bool) -> (Vec<Run>, Vec<Color>) {
+    fn row_runs(&self, palette: &Palette, index: usize, focused: bool) -> (Vec<Run>, Vec<Color>) {
         let Some(row) = self.view.rows.get(index) else {
-            return (Vec::new(), vec![paint::TEXT]);
+            return (Vec::new(), vec![paint::color(palette.text)]);
         };
         let base = if focused && self.focused {
-            paint::ON_FOCUS_BAR
+            palette.look(diroxide_theme::PanelRole::FocusedRow).fg
         } else {
-            paint::TEXT
+            palette.text
         };
-        let mut colors = vec![base];
+        let mut colors = vec![paint::color(base)];
         let mut runs = Vec::new();
         if !row.runs.is_empty() {
-            let registry = diroxide_theme::Registry::builtin();
-            let (theme, _) = registry.resolve(&self.theme);
             for (start, end, role) in &row.runs {
-                let look = paint::token_look(theme, &self.colors, *role);
+                let look = paint::token_look(palette, *role);
                 // On the focus bar the text keeps the bar's own color, and
                 // its shape.
                 let brush = if focused && self.focused {
@@ -179,6 +162,13 @@ impl Widget for ViewerBox {
 
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
 
+    fn property_changed(&mut self, ctx: &mut UpdateCtx<'_>, property_type: TypeId) {
+        if paint::is_colors(property_type) {
+            self.rows.clear();
+            ctx.request_layout();
+        }
+    }
+
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
         if let Update::FocusChanged(focused) = event {
             self.focused = *focused;
@@ -203,7 +193,16 @@ impl Widget for ViewerBox {
         }
     }
 
-    fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
+    fn layout(&mut self, ctx: &mut LayoutCtx<'_>, props: &PropertiesRef<'_>, size: Size) {
+        let palette = paint::palette_of(props, ctx.property_cache());
+        if self
+            .palette
+            .as_ref()
+            .is_none_or(|drawn| !Arc::ptr_eq(drawn, &palette))
+        {
+            self.rows.clear();
+            self.palette = Some(Arc::clone(&palette));
+        }
         self.width = size.width;
         // The columns that fit: the interface font's width of a typical
         // character, measured once a layout.
@@ -221,7 +220,7 @@ impl Widget for ViewerBox {
             if self.rows.get(&index).is_some_and(|(t, _, _)| *t == text) {
                 continue;
             }
-            let (runs, colors) = self.row_runs(index, focused);
+            let (runs, colors) = self.row_runs(&palette, index, focused);
             let layout = paint::runs_layout(ctx, &text, paint::TEXT_SIZE, &runs);
             self.rows.insert(index, (text, layout, colors));
         }
@@ -231,11 +230,14 @@ impl Widget for ViewerBox {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
         let size = ctx.content_box().size();
-        painter.fill(size.to_rect(), paint::PAGE).draw();
+        painter
+            .fill(size.to_rect(), paint::color(palette.page))
+            .draw();
         for index in 0..self.view.rows.len() {
             let y = index as f64 * ROW_HEIGHT;
             if y > size.height {
@@ -244,11 +246,10 @@ impl Widget for ViewerBox {
             let bar = Rect::new(2.0, y + 1.0, size.width - 2.0, y + ROW_HEIGHT - 1.0);
             if self.view.focus == Some(index) {
                 if self.focused {
-                    painter.fill(bar, paint::FOCUS_BAR).draw();
+                    let band = palette.look(diroxide_theme::PanelRole::FocusedRow);
+                    painter.fill(bar, paint::color(band.bg)).draw();
                 }
-                painter
-                    .stroke(bar.inset(-1.0), &Stroke::new(2.0), paint::RING)
-                    .draw();
+                paint::outline(painter, bar, &palette, self.focused);
             }
             if let Some((_, layout, colors)) = self.rows.get(&index) {
                 let ty = y + (ROW_HEIGHT - f64::from(layout.height())) / 2.0;
@@ -264,7 +265,11 @@ impl Widget for ViewerBox {
         }
         if self.focused {
             painter
-                .stroke(size.to_rect().inset(-1.5), &Stroke::new(3.0), paint::RING)
+                .stroke(
+                    size.to_rect().inset(-1.5),
+                    &Stroke::new(3.0),
+                    paint::color(palette.ring),
+                )
                 .draw();
         }
     }

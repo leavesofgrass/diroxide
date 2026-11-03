@@ -31,7 +31,6 @@ use masonry::imaging::Painter;
 use masonry::kurbo::{Affine, Axis, Point, Rect, Size, Stroke, Vec2};
 use masonry::layout::{LayoutSize, LenDef, LenReq, Length};
 use masonry::parley::Layout;
-use masonry::peniko::Color;
 use masonry::widgets::{Flex, Label};
 
 use super::choice::ChoiceBox;
@@ -55,7 +54,8 @@ const TITLE_SIZE: f32 = 19.0;
 
 /// The page behind a dialog, darkened, so the card stands out; the window
 /// behind is also hidden from screen readers.
-const VEIL: Color = Color::from_rgba8(0, 0, 0, 0xb0);
+/// How much of the window behind a dialog shows through the veil.
+const VEIL: f32 = 0.7;
 
 /// A dialog over the window.
 pub struct Modal {
@@ -339,21 +339,26 @@ impl Widget for Modal {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
+        let card = palette.look(diroxide_theme::PanelRole::Dialog);
         let size = ctx.content_box().size();
-        painter.fill(size.to_rect(), VEIL).draw();
-        painter.fill(self.card, paint::PAGE).draw();
+        // The window behind, veiled in its own page color.
         painter
-            .stroke(self.card, &Stroke::new(2.0), paint::RING)
+            .fill(size.to_rect(), paint::color(palette.page).with_alpha(VEIL))
+            .draw();
+        painter.fill(self.card, paint::color(card.bg)).draw();
+        painter
+            .stroke(self.card, &Stroke::new(2.0), paint::color(palette.ring))
             .draw();
         if let Some(title) = &self.title {
             render_text(
                 painter,
                 Affine::translate(Vec2::new(self.card.x0 + PAD, self.card.y0 + PAD)),
                 title,
-                &[paint::TEXT.into()],
+                &[paint::color(card.fg).into()],
                 true,
             );
         }

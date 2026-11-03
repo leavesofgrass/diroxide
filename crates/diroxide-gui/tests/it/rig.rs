@@ -56,6 +56,10 @@ impl Host for HostOf<'_> {
     fn set_window_label(&mut self, label: &str) {
         self.0.set_window_label(label);
     }
+
+    fn set_default_properties(&mut self, props: masonry::core::DefaultProperties) {
+        self.0.set_default_properties(std::sync::Arc::new(props));
+    }
 }
 
 /// The window's size in the tests, in physical pixels.

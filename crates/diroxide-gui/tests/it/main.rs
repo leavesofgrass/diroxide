@@ -46,6 +46,8 @@ mod secret;
 #[cfg(feature = "gui")]
 mod ten_minutes;
 #[cfg(feature = "gui")]
+mod themes;
+#[cfg(feature = "gui")]
 mod viewer;
 #[cfg(feature = "gui")]
 mod window_tree;

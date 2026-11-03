@@ -154,6 +154,12 @@ impl Widget for Field {
 
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
 
+    fn property_changed(&mut self, ctx: &mut UpdateCtx<'_>, property_type: std::any::TypeId) {
+        if paint::is_colors(property_type) {
+            ctx.request_render();
+        }
+    }
+
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
         if let Update::FocusChanged(focused) = event {
             self.focused = *focused;
@@ -210,15 +216,16 @@ impl Widget for Field {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
         let size = ctx.content_box().size();
         let frame = Rect::new(1.0, 1.0, size.width - 1.0, size.height - 1.0);
-        painter.fill(frame, paint::PAGE).draw();
+        painter.fill(frame, paint::color(palette.page)).draw();
         let ring = if self.focused { 3.0 } else { 1.0 };
         painter
-            .stroke(frame, &Stroke::new(ring), paint::RING)
+            .stroke(frame, &Stroke::new(ring), paint::color(palette.ring))
             .draw();
         let Some(text) = &self.text else {
             return;
@@ -228,7 +235,7 @@ impl Widget for Field {
             painter,
             Affine::translate(Vec2::new(PAD, y)),
             text,
-            &[paint::TEXT.into()],
+            &[paint::color(palette.text).into()],
             true,
         );
         // The caret: a bar two pixels wide, so it shows without color.
@@ -238,7 +245,10 @@ impl Widget for Field {
                 .as_ref()
                 .map_or(0.0, |l| f64::from(l.width()));
         painter
-            .fill(Rect::new(x, 6.0, x + 2.0, size.height - 6.0), paint::TEXT)
+            .fill(
+                Rect::new(x, 6.0, x + 2.0, size.height - 6.0),
+                paint::color(palette.text),
+            )
             .draw();
     }
 

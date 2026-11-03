@@ -101,6 +101,12 @@ impl Widget for PushButton {
 
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
 
+    fn property_changed(&mut self, ctx: &mut UpdateCtx<'_>, property_type: std::any::TypeId) {
+        if paint::is_colors(property_type) {
+            ctx.request_render();
+        }
+    }
+
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
         if let Update::FocusChanged(focused) = event {
             self.focused = *focused;
@@ -183,23 +189,32 @@ impl Widget for PushButton {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
+        let band = palette.look(diroxide_theme::PanelRole::FocusedRow);
+        let card = palette.look(diroxide_theme::PanelRole::Dialog);
         let size = ctx.content_box().size();
         let frame = Rect::new(1.0, 1.0, size.width - 1.0, size.height - 1.0);
         if self.focused {
-            painter.fill(frame, paint::FOCUS_BAR).draw();
+            painter.fill(frame, paint::color(band.bg)).draw();
         }
         let ring = if self.focused { 3.0 } else { 1.0 };
         painter
-            .stroke(frame, &Stroke::new(ring), paint::RING)
+            .stroke(frame, &Stroke::new(ring), paint::color(palette.ring))
             .draw();
-        let color = if self.focused {
-            paint::ON_FOCUS_BAR
-        } else {
-            paint::TEXT
-        };
+        if self.focused {
+            // The line inside the ring, so it shows on the band too.
+            painter
+                .stroke(
+                    frame.inset(-2.0),
+                    &Stroke::new(1.0),
+                    paint::color(palette.ring_inner),
+                )
+                .draw();
+        }
+        let color = paint::color(if self.focused { band.fg } else { card.fg });
         let mut x = PAD;
         if let Some(on) = self.view.toggled {
             // The toggle's box, with a cross when it is on: a shape, so

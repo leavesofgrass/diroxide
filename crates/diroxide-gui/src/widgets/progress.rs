@@ -72,6 +72,16 @@ impl Widget for JobProgressBar {
 
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
 
+    fn property_changed(
+        &mut self,
+        ctx: &mut masonry::core::UpdateCtx<'_>,
+        property_type: std::any::TypeId,
+    ) {
+        if paint::is_colors(property_type) {
+            ctx.request_render();
+        }
+    }
+
     fn measure(
         &mut self,
         _ctx: &mut MeasureCtx<'_>,
@@ -109,21 +119,23 @@ impl Widget for JobProgressBar {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
         let Some(percent) = self.percent else {
             return;
         };
+        let palette = paint::palette_of(props, ctx.property_cache());
+        let ink = paint::color(palette.look(diroxide_theme::PanelRole::StatusLine).fg);
         let height = ctx.content_box().size().height;
         let frame = Rect::new(PAD, 4.0, PAD + BAR_WIDTH, height - 4.0);
-        painter.stroke(frame, &Stroke::new(1.0), paint::RING).draw();
+        painter.stroke(frame, &Stroke::new(1.0), ink).draw();
         let filled = frame.inset(-2.0);
         let width = filled.width() * percent as f64 / 100.0;
         painter
             .fill(
                 Rect::new(filled.x0, filled.y0, filled.x0 + width, filled.y1),
-                paint::FOCUS_BAR,
+                ink,
             )
             .draw();
         if let Some(layout) = &self.layout {
@@ -132,7 +144,7 @@ impl Widget for JobProgressBar {
                 painter,
                 Affine::translate(Vec2::new(PAD * 2.0 + BAR_WIDTH, y)),
                 layout,
-                &[paint::TEXT.into()],
+                &[ink.into()],
                 true,
             );
         }

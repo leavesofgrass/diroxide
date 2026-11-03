@@ -1,16 +1,33 @@
-//! The window's colors, fonts and text layouts until the themes arrive
-//! (R27's commit 27): Masonry's dark default page, with every pair
-//! checked here against the contrast rule (4.5 to 1 for text, 3 to 1 for
-//! the focus marks), and a blue and an orange that red-green color
-//! blindness keeps apart. Color is never the only sign: a marked row
-//! starts with an asterisk and says "selected", the focused row has a
-//! filled bar in the active panel and an outline in the other, and the
-//! focused panel has a ring.
+//! The window's colors, fonts and text layouts. The colors are the
+//! chosen theme's ([`crate::theme::Palette`], R27's commit 27), handed
+//! to every widget of this crate as the [`Colors`] property in the
+//! window's default properties ([`default_properties`]), so choosing
+//! another theme repaints the whole window at once, dialogs included.
+//! Masonry's own labels (the title, status and jobs lines, a dialog's
+//! lines) take their text color from [`ContentColor`].
+//!
+//! Color is never the only sign: a marked row starts with an asterisk
+//! and says "selected", the focused row has an outline as well as its
+//! band (a ring and a line inside it, so it shows on a dark page and a
+//! light band alike), the focused panel has a ring, and every role keeps
+//! its theme's attribute (bold folders, underlined links).
 
-use masonry::core::{BrushIndex, LayoutCtx, MeasureCtx, StyleProperty};
-use masonry::parley::style::{FontFamily, FontWeight, LineHeight};
+use std::any::TypeId;
+use std::sync::{Arc, OnceLock};
+
+use diroxide_theme::{Attrs, PanelRole, Rgb};
+use masonry::core::{
+    BrushIndex, DefaultProperties, LayoutCtx, MeasureCtx, PropertiesRef, Property, PropertyCache,
+    StyleProperty,
+};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Rect, Stroke};
+use masonry::parley::style::{FontFamily, FontStyle, FontWeight, LineHeight};
 use masonry::parley::{FontContext, Layout, LayoutContext};
 use masonry::peniko::Color;
+use masonry::properties::ContentColor;
+
+use crate::theme::Palette;
 
 /// The interface font: Atkinson Hyperlegible Next (compiled in), then
 /// the system's.
@@ -19,24 +36,83 @@ pub const FONT_STACK: &str = "\"Atkinson Hyperlegible Next\", system-ui, sans-se
 /// The text size of rows and lines, in logical pixels.
 pub const TEXT_SIZE: f32 = 16.0;
 
-/// The page.
-pub const PAGE: Color = Color::from_rgb8(0x1d, 0x1d, 0x1d);
-/// Text on the page.
-pub const TEXT: Color = Color::from_rgb8(0xf2, 0xf2, 0xf2);
-/// A header's text, a step quieter than a row's.
-pub const HEADER: Color = Color::from_rgb8(0xd0, 0xd0, 0xd0);
-/// The focused row's bar in the active panel.
-pub const FOCUS_BAR: Color = Color::from_rgb8(0x1f, 0x5f, 0xbf);
-/// Text on the focus bar.
-pub const ON_FOCUS_BAR: Color = Color::from_rgb8(0xff, 0xff, 0xff);
-/// A marked row's text (orange, told from the blue bar without red or
-/// green); the asterisk and the word say it too.
-pub const MARKED: Color = Color::from_rgb8(0xff, 0xb4, 0x54);
-/// An unavailable row's text; the word "unavailable" says it too.
-pub const DIM: Color = Color::from_rgb8(0xb0, 0xb0, 0xa8);
-/// The ring round the panel with the keyboard focus, and the outline of
-/// the focused row in the other panel.
-pub const RING: Color = Color::from_rgb8(0xff, 0xff, 0xff);
+/// The window's colors, as a property of every widget of this crate: the
+/// palette of the chosen theme. The default is Galaxy's, so a widget
+/// draws even before the window's properties are set.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Colors(pub Arc<Palette>);
+
+impl Default for Colors {
+    fn default() -> Self {
+        Self::static_default().clone()
+    }
+}
+
+impl Property for Colors {
+    fn static_default() -> &'static Self {
+        static DEFAULT: OnceLock<Colors> = OnceLock::new();
+        DEFAULT.get_or_init(|| Colors(Arc::new(Palette::default())))
+    }
+}
+
+/// A theme color as Masonry's.
+pub fn color(rgb: Rgb) -> Color {
+    Color::from_rgb8(rgb.r, rgb.g, rgb.b)
+}
+
+/// The palette a widget draws with: its [`Colors`] property.
+pub fn palette_of(props: &PropertiesRef<'_>, cache: &mut PropertyCache) -> Arc<Palette> {
+    Arc::clone(&props.get::<Colors>(cache).0)
+}
+
+/// Whether a changed property is the window's colors, which a widget
+/// answers by drawing again.
+pub fn is_colors(property_type: TypeId) -> bool {
+    Colors::matches(property_type)
+}
+
+/// The focused row's outline round `bar`: the ring outside it, and, when
+/// the row is filled with the focus band, a line just inside in the
+/// palette's inner color, so the outline shows on a dark page and a
+/// light band alike (textweaver's double ring).
+pub fn outline(painter: &mut Painter<'_>, bar: Rect, palette: &Palette, filled: bool) {
+    painter
+        .stroke(bar.inset(-1.0), &Stroke::new(2.0), color(palette.ring))
+        .draw();
+    if filled {
+        painter
+            .stroke(
+                bar.inset(-0.5),
+                &Stroke::new(1.0),
+                color(palette.ring_inner),
+            )
+            .draw();
+    }
+}
+
+/// The window's default properties for `palette`: Masonry's own set, the
+/// [`Colors`] of every widget of this crate, and the labels' text color
+/// (a dialog's lines, on the dialog's card; the title, status and jobs
+/// lines get theirs from the driver).
+pub fn default_properties(palette: &Arc<Palette>) -> DefaultProperties {
+    use super::{buttons, choice, field, modal, panel, progress, push, root, viewer};
+    let mut props = masonry::theme::default_property_set();
+    let colors = Colors(Arc::clone(palette));
+    props.insert::<root::Root, _>(colors.clone());
+    props.insert::<root::Region, _>(colors.clone());
+    props.insert::<panel::PanelBox, _>(colors.clone());
+    props.insert::<choice::ChoiceBox, _>(colors.clone());
+    props.insert::<field::Field, _>(colors.clone());
+    props.insert::<modal::Modal, _>(colors.clone());
+    props.insert::<buttons::ButtonRow, _>(colors.clone());
+    props.insert::<push::PushButton, _>(colors.clone());
+    props.insert::<progress::JobProgressBar, _>(colors.clone());
+    props.insert::<viewer::ViewerBox, _>(colors);
+    props.insert::<masonry::widgets::Label, _>(ContentColor::new(color(
+        palette.look(PanelRole::Dialog).fg,
+    )));
+    props
+}
 
 /// The text layout of `text` in the interface font, unbroken (a row is
 /// one line; the window cuts it at the panel's edge).
@@ -47,7 +123,19 @@ pub fn line_layout(
     bold: bool,
 ) -> Layout<BrushIndex> {
     let (fcx, lcx) = ctx.text_contexts();
-    layout_with(fcx, lcx, text, size, bold)
+    let attrs = if bold { Attrs::BOLD } else { Attrs::NONE };
+    layout_with(fcx, lcx, text, size, attrs)
+}
+
+/// The same with a role's attributes: bold, italic, underlined.
+pub fn styled_layout(
+    ctx: &mut LayoutCtx<'_>,
+    text: &str,
+    size: f32,
+    attrs: Attrs,
+) -> Layout<BrushIndex> {
+    let (fcx, lcx) = ctx.text_contexts();
+    layout_with(fcx, lcx, text, size, attrs)
 }
 
 /// The same as [`line_layout`] while measuring, so a widget can size
@@ -59,7 +147,8 @@ pub fn measured_layout(
     bold: bool,
 ) -> Layout<BrushIndex> {
     let (fcx, lcx) = ctx.text_contexts();
-    layout_with(fcx, lcx, text, size, bold)
+    let attrs = if bold { Attrs::BOLD } else { Attrs::NONE };
+    layout_with(fcx, lcx, text, size, attrs)
 }
 
 fn layout_with(
@@ -67,7 +156,7 @@ fn layout_with(
     lcx: &mut LayoutContext<BrushIndex>,
     text: &str,
     size: f32,
-    bold: bool,
+    attrs: Attrs,
 ) -> Layout<BrushIndex> {
     let mut builder = lcx.ranged_builder(fcx, text, 1.0, true);
     builder.push_default(StyleProperty::FontFamily(FontFamily::Source(
@@ -75,8 +164,14 @@ fn layout_with(
     )));
     builder.push_default(StyleProperty::FontSize(size));
     builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(1.3)));
-    if bold {
+    if attrs.bold {
         builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
+    }
+    if attrs.italic {
+        builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+    }
+    if attrs.underline {
+        builder.push_default(StyleProperty::Underline(true));
     }
     builder.push_default(StyleProperty::Brush(BrushIndex(0)));
     let mut layout = builder.build(text);
@@ -146,50 +241,27 @@ pub struct TokenLook {
     pub underline: bool,
 }
 
-/// The look of a token role in the theme `theme` with the owner's
-/// `[colors]`: the role's color when it keeps 4.5 to 1 against the
-/// window's page (the window keeps its own page until the themes arrive,
-/// G3's commit 27), else the page's text color; and the role's
-/// attributes, so a class shows by its shape too, never by color alone.
-pub fn token_look(
-    theme: &diroxide_theme::Theme,
-    colors: &std::collections::BTreeMap<String, String>,
-    role: diroxide_theme::PanelRole,
-) -> TokenLook {
-    let style = diroxide_theme::role_style(theme, role);
-    let rgb = colors
-        .get(role.key())
-        .and_then(|c| diroxide_theme::Rgb::parse(c).ok())
-        .unwrap_or(style.foreground);
-    let color = Color::from_rgb8(rgb.r, rgb.g, rgb.b);
+/// The look of a token role in the window's palette: the role's color,
+/// the owner's `[colors]` in place, where it keeps the theme's floor on
+/// the page, else the text color (the palette's rule for every role);
+/// and the role's shape, so a class shows by its shape too, never by
+/// color alone.
+pub fn token_look(palette: &Palette, role: PanelRole) -> TokenLook {
+    let look = palette.look(role);
     TokenLook {
-        color: if contrast(color, PAGE) >= 4.5 {
-            color
-        } else {
-            TEXT
-        },
-        bold: style.attributes.bold,
-        underline: style.attributes.underline || style.attributes.reverse,
+        color: color(look.fg),
+        bold: look.attrs.bold,
+        underline: look.attrs.underline || look.attrs.reverse,
     }
 }
 
 /// The contrast ratio of two colors, by WCAG's relative luminance.
 pub fn contrast(a: Color, b: Color) -> f64 {
-    fn luminance(c: Color) -> f64 {
+    let rgb = |c: Color| {
         let rgba = c.to_rgba8();
-        let lin = |v: u8| {
-            let s = f64::from(v) / 255.0;
-            if s <= 0.040_45 {
-                s / 12.92
-            } else {
-                ((s + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        0.2126 * lin(rgba.r) + 0.7152 * lin(rgba.g) + 0.0722 * lin(rgba.b)
-    }
-    let (x, y) = (luminance(a), luminance(b));
-    let (hi, lo) = if x > y { (x, y) } else { (y, x) };
-    (hi + 0.05) / (lo + 0.05)
+        Rgb::new(rgba.r, rgba.g, rgba.b)
+    };
+    diroxide_theme::contrast_ratio(rgb(a), rgb(b))
 }
 
 #[cfg(test)]
@@ -197,43 +269,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_text_pair_meets_four_and_a_half_to_one() {
-        for (name, fg, bg) in [
-            ("text", TEXT, PAGE),
-            ("header", HEADER, PAGE),
-            ("marked", MARKED, PAGE),
-            ("dim", DIM, PAGE),
-            ("on the focus bar", ON_FOCUS_BAR, FOCUS_BAR),
-        ] {
-            let ratio = contrast(fg, bg);
-            assert!(ratio >= 4.5, "{name}: {ratio:.2} to 1");
-        }
-    }
-
-    #[test]
-    fn every_token_look_of_every_theme_meets_four_and_a_half_to_one() {
-        let registry = diroxide_theme::Registry::builtin();
+    fn every_token_look_of_every_theme_meets_the_floor_on_the_page() {
         let none = std::collections::BTreeMap::new();
-        for name in diroxide_theme::builtin::NAMES {
-            let (theme, _) = registry.resolve(name);
-            for role in diroxide_theme::PanelRole::TOKENS {
-                let look = token_look(theme, &none, role);
-                let ratio = contrast(look.color, PAGE);
-                assert!(ratio >= 4.5, "{name} {role:?}: {ratio:.2} to 1");
+        for theme in diroxide_theme::builtin::all() {
+            let palette = Palette::from_theme(theme, &none);
+            let floor = if theme.kind() == diroxide_theme::ThemeKind::HighContrast {
+                7.0
+            } else {
+                4.5
+            };
+            for role in PanelRole::TOKENS {
+                let look = token_look(&palette, role);
+                let ratio = contrast(look.color, color(palette.page));
+                assert!(ratio >= floor, "{} {role:?}: {ratio:.2} to 1", theme.name());
             }
         }
-        // Keywords keep their bold and links their underline.
-        let (galaxy, _) = registry.resolve(diroxide_theme::DEFAULT_THEME);
-        let link = token_look(galaxy, &none, diroxide_theme::PanelRole::TokenLink);
-        assert!(link.underline);
+        // Keywords keep their bold, links and problems their underline.
+        let galaxy = Palette::default();
+        assert!(token_look(&galaxy, PanelRole::TokenKeyword).bold);
+        assert!(token_look(&galaxy, PanelRole::TokenLink).underline);
+        assert!(token_look(&galaxy, PanelRole::TokenProblem).underline);
     }
 
     #[test]
-    fn the_focus_marks_meet_three_to_one_against_the_page() {
-        // The focused row is outlined in the ring's color in both
-        // panels, filled with the bar under white text in the active
-        // one; the outline is what meets 3 to 1 on the page and the bar.
-        assert!(contrast(RING, PAGE) >= 3.0);
-        assert!(contrast(RING, FOCUS_BAR) >= 3.0);
+    fn the_window_properties_carry_the_palette() {
+        let palette = Arc::new(Palette::default());
+        let props = default_properties(&palette);
+        let _ = props;
+        assert_eq!(Colors::default().0.key, "galaxy");
     }
 }

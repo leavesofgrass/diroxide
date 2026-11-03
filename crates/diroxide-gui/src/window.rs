@@ -11,6 +11,10 @@
 //!   ([`Frontend::next_deadline`]): the filter's pause, the quick view's
 //!   wait, the viewer's slices, the key test's end.
 //! - The fonts are compiled in and registered when the window starts.
+//! - The colors are the theme's from the first frame; the system's
+//!   appearance is read once at the start (while following it, and
+//!   elsewhere than Windows for its high contrast setting), and Windows'
+//!   high contrast mode on every step, so its colors apply at once.
 //! - A window that cannot start is a [`GuiError`], never a panic: no
 //!   display is the event loop's error, and the window runner's graphics
 //!   failure, a panic inside it that textweaver's patch names
@@ -324,6 +328,10 @@ impl Gui {
         let Some(frontend) = self.frontend.as_mut() else {
             return;
         };
+        // Windows' high contrast mode, read on every step: turned on or
+        // off, its colors apply with this step's refresh.
+        #[cfg(windows)]
+        frontend.set_system_colors(crate::platform::contrast::colors());
         step(frontend, ctx.render_root(self.window));
         let title = frontend.window_title();
         if title != self.title {
@@ -510,6 +518,17 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     let runtime = runtime.with_launcher(Arc::new(launcher));
     let mut frontend = Frontend::new(app, runtime, options.title.clone());
     frontend.set_starts(starts);
+    // The system's appearance: read while following it, and elsewhere
+    // than Windows (whose high contrast mode is read on every step) for
+    // its high contrast setting. A few milliseconds, at most half a
+    // second, and no window: the theme crate starts its small programs
+    // with no console.
+    if frontend.app().settings().follow_system_appearance || !cfg!(windows) {
+        frontend.set_appearance(diroxide_theme::os::probe());
+    }
+    #[cfg(windows)]
+    frontend.set_system_colors(crate::platform::contrast::colors());
+    let properties = frontend.window_properties();
     frontend.start();
     let title = frontend.window_title();
     let window = NewWindow::new_with_id(
@@ -538,12 +557,7 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     // by it if this returns an error.
     let restore_hook = hush_graphics_failure();
     let ran = catch_unwind(AssertUnwindSafe(|| {
-        masonry_winit::app::run_with(
-            event_loop,
-            vec![window],
-            gui,
-            masonry::theme::default_property_set(),
-        )
+        masonry_winit::app::run_with(event_loop, vec![window], gui, properties)
     }));
     restore_hook();
     match ran {

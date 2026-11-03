@@ -91,6 +91,16 @@ impl Widget for ButtonRow {
 
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
 
+    fn property_changed(
+        &mut self,
+        ctx: &mut masonry::core::UpdateCtx<'_>,
+        property_type: std::any::TypeId,
+    ) {
+        if paint::is_colors(property_type) {
+            ctx.request_render();
+        }
+    }
+
     fn on_pointer_event(
         &mut self,
         ctx: &mut EventCtx<'_>,
@@ -167,23 +177,26 @@ impl Widget for ButtonRow {
     fn paint(
         &mut self,
         ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
+        props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
+        let palette = paint::palette_of(props, ctx.property_cache());
+        let look = palette.look(diroxide_theme::PanelRole::KeyBar);
         let width = ctx.content_box().size().width;
         for (rect, layout) in self.rects.iter().zip(&self.layouts) {
             if rect.x1 > width {
                 break;
             }
+            painter.fill(*rect, paint::color(look.bg)).draw();
             painter
-                .stroke(*rect, &Stroke::new(1.0), paint::HEADER)
+                .stroke(*rect, &Stroke::new(1.0), paint::color(look.fg))
                 .draw();
             let y = rect.y0 + (rect.height() - f64::from(layout.height())) / 2.0;
             render_text(
                 painter,
                 Affine::translate(Vec2::new(rect.x0 + PAD, y)),
                 layout,
-                &[paint::TEXT.into()],
+                &[paint::color(look.fg).into()],
                 true,
             );
         }
