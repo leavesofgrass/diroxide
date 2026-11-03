@@ -1812,16 +1812,20 @@ impl Runtime {
             Q::MoveDown(job) => self.scheduler.shift(job, queue::Shift::Down).1,
             Q::MoveToFront(job) => self.scheduler.shift(job, queue::Shift::Front).1,
             Q::MoveToEnd(job) => self.scheduler.shift(job, queue::Shift::End).1,
-            Q::Pause(job) | Q::Resume(job) => {
+            // A job that waits its turn is held in its place, and let go
+            // in it (lane Q2); a started one pauses after its chunk.
+            Q::Pause(job) => self.scheduler.hold(job).unwrap_or_else(|| {
                 if let Some(control) = control(self, job) {
-                    if matches!(request, Q::Pause(_)) {
-                        control.pause();
-                    } else {
-                        control.resume();
-                    }
+                    control.pause();
                 }
                 queue::Granted::default()
-            }
+            }),
+            Q::Resume(job) => self.scheduler.release(job).unwrap_or_else(|| {
+                if let Some(control) = control(self, job) {
+                    control.resume();
+                }
+                queue::Granted::default()
+            }),
             Q::PauseQueue => self.scheduler.set_paused(true),
             Q::ResumeQueue => self.scheduler.set_paused(false),
             Q::PauseAll | Q::ResumeAll => {
@@ -1833,7 +1837,13 @@ impl Runtime {
                         running.control.resume();
                     }
                 }
-                self.scheduler.set_paused(pause)
+                // Every waiting job is held with the queue, and let go
+                // with it (lane Q2).
+                if pause {
+                    self.scheduler.hold_all()
+                } else {
+                    self.scheduler.release_all()
+                }
             }
             Q::SpeedLimit {
                 job: Some(job),

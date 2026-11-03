@@ -10,6 +10,8 @@
 //!   failed and Retry the failed items; then the queue as a whole: Pause
 //!   or Resume the queue, Pause all jobs, Resume all jobs. Every one of
 //!   those is in the palette too, so no new key chord is needed (R25 N6).
+//!   Pause on a job that waits its turn holds it in its place, "Held 2 of
+//!   5: copy 3 items to build", and Resume lets it go (lane Q2).
 //! - **Delete** cancels a waiting job without a question, and asks first
 //!   for a running one, starting on No.
 //! - The list follows the jobs while it is open: a row keeps its focus by
@@ -284,7 +286,15 @@ impl App {
         let title;
         if waiting {
             title = self.jobs.row_of(job).unwrap_or_default();
-            rows.push(ListRow::new("run-now", "Run now"));
+            // The likeliest first: Resume for a held job, Run now for one
+            // that waits its turn, with Pause beside it (lane Q2).
+            if self.jobs.is_held(job) {
+                rows.push(ListRow::new("resume", "Resume"));
+                rows.push(ListRow::new("run-now", "Run now"));
+            } else {
+                rows.push(ListRow::new("run-now", "Run now"));
+                rows.push(ListRow::new("pause", "Pause"));
+            }
             rows.push(ListRow::new("front", "Move to the front"));
             rows.push(ListRow::new("up", "Move up"));
             rows.push(ListRow::new("down", "Move down"));
@@ -466,8 +476,13 @@ impl App {
                 } else {
                     (QueueRequest::Resume(job), "Resuming")
                 };
+                // A waiting job is held or let go by the queue, which says
+                // "Held: ..." or "Back in line: ..." once it has (lane Q2).
+                let waiting = self.jobs.waits(job);
                 queue(self, request);
-                effects.push(self.say(Message::info(format!("{word} {name}"))));
+                if !waiting {
+                    effects.push(self.say(Message::info(format!("{word} {name}"))));
+                }
                 effects
             }
             "run-now" => {

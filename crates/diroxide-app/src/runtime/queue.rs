@@ -17,6 +17,10 @@
 //!   starts, [`QueueNote::Waits`] when a job waits its turn, and a
 //!   [`QueueNote::View`] with the order after any change, so the app's
 //!   jobs line and Jobs list say what the queue holds.
+//! - **Pause holds a waiting job** in its place (lane Q2):
+//!   [`QueueNote::Held`] and [`QueueNote::Released`] say it, and Pause
+//!   all jobs and Resume all jobs hold and let go every waiting one with
+//!   the queue.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -60,6 +64,15 @@ pub(super) struct Granted {
     pub answers: Vec<(AskId, Reply)>,
     /// What to tell the app, in order.
     pub notes: Vec<QueueNote>,
+}
+
+impl Granted {
+    /// Adds what another change granted, after this one's.
+    fn extend(&mut self, other: Granted) {
+        self.start.extend(other.start);
+        self.answers.extend(other.answers);
+        self.notes.extend(other.notes);
+    }
 }
 
 /// Whether an answer ends its job, so it is delivered at once.
@@ -226,10 +239,52 @@ impl Scheduler {
         }
     }
 
+    /// Holds a job that waits its turn in its place (lane Q2); `None`
+    /// when it does not wait (it started, or the queue never held it), so
+    /// the caller pauses its control instead.
+    pub(super) fn hold(&mut self, job: JobId) -> Option<Granted> {
+        let grants = self.queue.hold(job)?;
+        let mut granted = Granted {
+            notes: vec![QueueNote::Held(job)],
+            ..Granted::default()
+        };
+        granted.extend(self.grant(grants));
+        granted.notes.push(self.view());
+        Some(granted)
+    }
+
+    /// Lets a held job go in the place it kept; `None` when it is not
+    /// held.
+    pub(super) fn release(&mut self, job: JobId) -> Option<Granted> {
+        let grants = self.queue.release(job)?;
+        let mut granted = Granted {
+            notes: vec![QueueNote::Released(job)],
+            ..Granted::default()
+        };
+        granted.extend(self.grant(grants));
+        granted.notes.push(self.view());
+        Some(granted)
+    }
+
+    /// Pause all jobs: the queue paused, and every waiting job held.
+    pub(super) fn hold_all(&mut self) -> Granted {
+        self.queue.hold_all();
+        self.set_paused(true)
+    }
+
+    /// Resume all jobs: every held job let go, and the queue goes on.
+    pub(super) fn release_all(&mut self) -> Granted {
+        let grants = self.queue.release_all();
+        let mut granted = self.grant(grants);
+        granted.extend(self.set_paused(false));
+        granted
+    }
+
     /// The queue's order and state for the app.
     fn view(&self) -> QueueNote {
         QueueNote::View {
             waiting: self.queue.waiting(),
+            held: self.queue.held(),
             paused: self.queue.is_paused(),
         }
     }
@@ -323,6 +378,7 @@ mod tests {
         assert!(notes.contains(&QueueNote::Waits(JobId::new(3))));
         assert!(notes.contains(&QueueNote::View {
             waiting: vec![JobId::new(3)],
+            held: Vec::new(),
             paused: false
         }));
         // A question gives the slot back: job 3 starts; the answer waits.
@@ -358,6 +414,7 @@ mod tests {
             granted.notes,
             [QueueNote::View {
                 waiting: vec![JobId::new(4), JobId::new(3)],
+                held: Vec::new(),
                 paused: false
             }]
         );
@@ -373,5 +430,42 @@ mod tests {
             "the host is full"
         );
         assert_eq!(scheduler.queue.len(), 4);
+    }
+
+    #[test]
+    fn pause_holds_a_waiting_job_in_place_and_resume_lets_it_go() {
+        let mut scheduler = Scheduler::default();
+        for plan in plans(4) {
+            scheduler.submit(plan);
+        }
+        let granted = scheduler.hold(JobId::new(3)).expect("it waits");
+        assert_eq!(granted.notes[0], QueueNote::Held(JobId::new(3)));
+        assert_eq!(
+            granted.notes.last(),
+            Some(&QueueNote::View {
+                waiting: vec![JobId::new(3), JobId::new(4)],
+                held: vec![JobId::new(3)],
+                paused: false
+            })
+        );
+        assert!(scheduler.hold(JobId::new(1)).is_none(), "it runs");
+        assert!(scheduler.release(JobId::new(4)).is_none(), "not held");
+        // The held job is passed over: job 4 takes the free slot.
+        let granted = scheduler.finished(JobId::new(1));
+        assert_eq!(
+            granted.start.iter().map(|p| p.job).collect::<Vec<_>>(),
+            [JobId::new(4)]
+        );
+        // Resume: back in line, and it starts when a slot is free.
+        let granted = scheduler.release(JobId::new(3)).expect("held");
+        assert_eq!(granted.notes[0], QueueNote::Released(JobId::new(3)));
+        assert!(granted.start.is_empty(), "the host is full");
+        // Pause all holds it again with the queue; Resume all lets go.
+        scheduler.hold_all();
+        assert!(scheduler.queue.is_held(JobId::new(3)));
+        assert!(scheduler.finished(JobId::new(2)).start.is_empty());
+        let granted = scheduler.release_all();
+        assert_eq!(granted.start.len(), 1);
+        assert!(!scheduler.queue.is_paused());
     }
 }
