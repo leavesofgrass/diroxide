@@ -22,6 +22,7 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant is unmaintained (not a vulnerability): part of zbus 5, the D-Bus library under AccessKit's Linux AT-SPI support in the GUI. No maintained replacement yet. Move when AccessKit does." },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names is unmaintained (not a vulnerability): part of zbus 5, the D-Bus library under AccessKit's Linux AT-SPI support in the GUI. No maintained replacement yet. Move when AccessKit does." },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive is unmaintained (not a vulnerability): part of zbus 5, the D-Bus library under AccessKit's Linux AT-SPI support in the GUI. No maintained replacement yet. Move when AccessKit does." },
+    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained (not a vulnerability): a proc-macro that metal 0.33, wgpu's Metal backend on macOS under the GUI, uses at build time; no code of it runs in diro. textweaver ignores it too. Move when wgpu does." },
 ]
 
 [licenses]
