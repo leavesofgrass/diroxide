@@ -1,6 +1,6 @@
 # Quick start
 
-This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, which is what `diro` opens when you type it with nothing else. The window version, `diro --gui`, is in this source tree and comes with the next alpha: [the GUI](gui.md) covers it, and most of the keys here are the same in it. If you have not built diroxide yet, start with [installing diroxide](install.md).
+This guide takes you from a built program to copying, renaming and deleting a file, in about ten minutes. It uses the terminal, which `diro --tui` opens. On a desktop, `diro` alone opens the window instead: [the GUI](gui.md) covers it, and most of the keys here are the same in it. If you have not built diroxide yet, start with [installing diroxide](install.md).
 
 ## How keys are written
 
@@ -10,27 +10,29 @@ Every command can also be found by name in the command palette and in the menus,
 
 ## Start diroxide
 
-Run `diro` with no arguments to open the current folder in the left panel:
+Run `diro --tui` with no paths to open the current folder in the left panel, in the terminal:
 
 ```bash
-diro
+diro --tui
 ```
+
+On a desktop, `diro` without `--tui` opens the window. Over SSH, with no display, or when its input or output is a pipe or a file, `diro` opens the terminal by itself. To make a bare `diro` open the terminal on a desktop too, set `frontend` to `terminal` in Settings: [the GUI guide](gui.md#what-automatic-does-today) says how the choice is made.
 
 The right panel opens where it was when you last quit. The first time, it opens on the same folder as the left panel, so nothing unexpected is on screen.
 
 To open a folder in the left panel, give its path:
 
 ```bash
-diro D:\work
+diro --tui D:\work
 ```
 
 To open both panels, give two paths. Put quotes around any path with spaces in it:
 
 ```bash
-diro D:\work D:\backup
+diro --tui D:\work D:\backup
 ```
 
-On the very first start, the status line says "diroxide alpha 2. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", and then "Layout: side by side. Ctrl+P, Layout." The title line says where you are, the folder first: "Documents, left panel, in D:\work". Then comes the first row. You should hear the title and the first row, not the whole screen.
+On the very first start, the status line says "diroxide alpha 3. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", and then "Layout: side by side. Ctrl+P, Layout." The title line says where you are, the folder first: "Documents, left panel, in D:\work". Then comes the first row. You should hear the title and the first row, not the whole screen.
 
 If your build can offer optional components besides the example plugins, a list named "Optional components to get now" opens once at that first start. Nothing is chosen in it. Space marks a row, Enter asks once and starts the downloads you marked, and Escape skips the list: "Nothing downloaded. Tools, Manage optional components has them." A build made from source has nothing to offer, so you may never see it. [Optional components](components.md) describes the list and how to bring it back.
 
@@ -119,7 +121,7 @@ Most file managers can change your shell's folder when you quit. diroxide does i
 diro init bash
 ```
 
-`diro init` takes the name of your shell: bash, zsh, dash (or sh), fish, powershell (or pwsh) or cmd. It prints a function named `dcd`. Start diroxide with `dcd` instead of `diro`, and Ctrl+Q takes your shell to the active panel's folder. To quit and leave the shell where it was, use "Quit, shell stays where it was" from the File menu or the palette; it has no key of its own.
+`diro init` takes the name of your shell: bash, zsh, dash (or sh), fish, powershell (or pwsh) or cmd. It prints a function named `dcd`. Start diroxide with `dcd` instead of `diro`, and Ctrl+Q takes your shell to the active panel's folder. `dcd` always opens the terminal, even on a desktop where `diro` alone opens the window. To quit and leave the shell where it was, use "Quit, shell stays where it was" from the File menu or the palette; it has no key of its own.
 
 ## Where to go next
 

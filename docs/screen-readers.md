@@ -1,6 +1,6 @@
 # Using diroxide with a screen reader
 
-This guide is for people who use a screen reader such as NVDA, JAWS, Orca or VoiceOver, with or without a Braille display. It says how diroxide works with a screen reader, what you should hear for each key, the settings to check in NVDA and JAWS, how to read it on a 40-cell display, and a short check you can run yourself. Most of it is about the terminal. The window, `diro --gui`, has its own section, [The GUI](#the-gui), because a screen reader reads a window another way than it reads a terminal.
+This guide is for people who use a screen reader such as NVDA, JAWS, Orca or VoiceOver, with or without a Braille display. It says how diroxide works with a screen reader, what you should hear for each key, the settings to check in NVDA and JAWS, how to read it on a 40-cell display, and a short check you can run yourself. Most of it is about the terminal, which `diro --tui` opens. On a desktop a bare `diro` opens the window, which has its own section, [The GUI](#the-gui), because a screen reader reads a window another way than it reads a terminal. The terminal checks below start with `diro --tui` for that reason.
 
 What this guide says about diroxide comes from its design. A setting that comes from a screen reader's own documentation, or that has not been tried here, is marked not yet verified. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so every "you should hear" line below is what diroxide is built to say, not a report of what was heard. If your experience differs, that is a finding. [The accessibility statement](accessibility.md) says what has been checked.
 
@@ -38,7 +38,7 @@ The `quiet_screen` setting goes further and draws as little as possible, for a s
 
 These lines show what diroxide says for each key. The status line says the same words that a menu or the palette shows.
 
-- Starting: on the very first start the status line says "diroxide alpha 2. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", then "Layout: side by side. Ctrl+P, Layout." The alpha number is the build's own. The title line comes first, "dirocheck, left panel, in D:\", and then the first row. You do not hear the whole screen.
+- Starting: on the very first start the status line says "diroxide alpha 3. Shift+F1 for help. Ctrl+Q quits.", then "The key bar on the last line names the keys.", then "Layout: side by side. Ctrl+P, Layout." The alpha number is the build's own. The title line comes first, "dirocheck, left panel, in D:\", and then the first row. You do not hear the whole screen.
 - Down and Up: the cursor moves one row and your screen reader speaks the row: "Photos, folder, modified Tuesday". No message is written for a focus move, and the status line does not change. At the first or last row diroxide says "Top of the list" or "Bottom of the list".
 - Down in the side by side layout with the left panel active: your screen reader's current line is the whole screen line, which also holds the right panel's row, so it may read the left row and then the right. With the right panel active, the cursor sits near column 41 and a 40-cell display shows the left row first. This is why stacked is recommended.
 - Tab: one message and nothing else, "Right panel: dirocheck, 31 items". Chatter on Tab is the first thing to report.
@@ -239,7 +239,7 @@ If the display does not follow the row, or a screen reader talks too much on eve
 
 Run this once with NVDA and once with JAWS, in Windows Terminal and, if you like, the classic console. If you build from source, `cargo xtask sample-folder` followed by a folder name writes a folder to try it in, with a conflicting file, a large file and names with accents, Japanese and an emoji.
 
-1. Start `diro` on that folder. You should hear the title and the first row, not the whole screen.
+1. Start `diro --tui` on that folder. You should hear the title and the first row, not the whole screen.
 2. Press Down five times. Each row is spoken once, name first. The display shows the row from its first cell.
 3. Press Tab. You hear one message. Press Tab again.
 4. Press Space on three files. You hear "Selected report.pdf. 1 selected." each time. Press Up onto a marked row: is the word "selected" heard after the name?
@@ -295,7 +295,7 @@ Run this once with NVDA, once with JAWS, and then read the first 40 cells of eac
 1. In a shell, run `diro search` on the demo folder with `ext md`. You hear "Searching diro-demo for ext md", then "report.md, in diro-demo, 649 bytes", then "1 found." Run it again with `modified last week --explain`. You hear "Reads as: modified last week" and the real days. Run it with `size over`. You hear "Filter problem: size needs a number", then "Word 3. Try size over 10 MB.", and the exit code is 2.
 2. Run `diro search` with `--content crow --extension md`. You hear a row such as "report.md, line 7: The crow count rose again this quarter., 4 more, in diro-demo". Is the line number easy to find in the first 40 cells?
 3. Run `diro diff old.txt report.txt`. You hear "5 changes between old.txt and report.txt", the counts, "From old.txt to report.txt.", then five rows. Does the long line's window, "...in Portland opened early and the crows...", read well? Run it with `--format unified` and listen to "Same", "Added" and "Removed" rows and "9 same lines left out". Then run `diro watch out`, copy a file into `out` slowly, and listen for "Arrived:" about 2 seconds after the copy stops. Press Ctrl+C: "Stopped watching out: 1 arrived".
-4. Start `diro` on the demo folder. The title starts with the folder's name.
+4. Start `diro --tui` on the demo folder. The title starts with the folder's name.
 5. Press Ctrl+F. You hear "Search, Name or filter: every entry, 2 of 11". The dialog is a list of labeled settings. Type `*.md` and press Enter. You hear "Searching diro-demo for *.md", then "Done:" and a count. Press Down: the row starts with the name, then "in" and the folder, and ends with its position.
 6. Press Ctrl+F, Down to the "Contains text" row, type `crow` and press Enter. You hear "Searching diro-demo for *.md, containing crow" and a row "report.md, line 7: ...". Press F3. The viewer opens at that line: "At line 7 of". Press Escape: "Back in the results, report.md".
 7. Start a search that matches thousands of files in the tree from `search-tree`, and press Escape while it runs. You hear "Stopped at" and a count, or "Done:" if the walk was faster than your key. The cursor must not have moved while results arrived. Press Escape again: "Results closed. Search results opens them again."
@@ -320,7 +320,7 @@ Questions to answer: Was the meaning of every line inside the first 40 cells? Di
 
 ## The GUI
 
-This section is for the window, `diro --gui`. [The GUI](gui.md) says how to open it and what it holds. The rest of this guide is about the terminal, where a screen reader reads text on a screen and follows the cursor. The window works another way.
+This section is for the window, which `diro` opens on a desktop. [The GUI](gui.md) says how to open it and what it holds. The rest of this guide is about the terminal, where a screen reader reads text on a screen and follows the cursor. The window works another way.
 
 ### How the window talks to your screen reader
 
@@ -331,7 +331,7 @@ This section is for the window, `diro --gui`. [The GUI](gui.md) says how to open
 - A dialog is a named, modal part. Your screen reader says its name and the focused control as the focus moves in, and the program does not say them again. Only the top dialog is in the tree. Escape walks back down, and the last one returns the focus to the panel's row.
 - A running job's progress is a progress indicator named "Job progress" in the status bar. It moves only when the jobs line changes, which is every ten seconds at most in screen-reader mode. It is not a live region, so whether your screen reader speaks it is its own setting.
 - The viewer takes the place of the two panels while it is open, and the quick view is the other panel's list. Both are lists of rows, like a panel.
-- The window's colors are one of 24 themes. A theme chosen is said once, with its contrast verdict. The window draws with the graphics card or, where there is none, on the processor, and a screen reader reads the same tree either way. Focus mode and full screen fade the bars and say nothing.
+- The window's colors are one of 24 themes. A theme chosen is said once, with its contrast verdict. The window draws with the graphics card or, where there is none, on the processor, and a screen reader reads the same tree either way. Focus mode and full screen fade the bars. The fade says nothing, and turning either one on or off says so in a few words, such as "Full screen on."
 - The start-up lines are held until your screen reader asks for the window, then said once as one announcement. On the one run measured, that came about two seconds after launch.
 - The terminal settings in the NVDA, JAWS and Orca sections below, and the `cursor_fallback` setting, are about the terminal. What the window needs from your screen reader's settings has not been worked out. Report what you find.
 - On macOS, VoiceOver reads a list's options as plain text, so "selected" and "unavailable" stay in the option's name there. VoiceOver has not been tried.
@@ -367,7 +367,7 @@ More lines, from the tests of the dialogs, the viewer and the themes. Where a li
 - A password for a server: "Password for alice at build.example (SFTP places)", then the check box "Show the password".
 - A saved site in Go to a place: "Site, build, saved, ada@build.example, by SFTP places".
 - The first start's list: "Optional components to get now".
-- Focus mode and F11 say nothing. The tree is the same before and after the bars fade.
+- F11: "Full screen on.", and again "Full screen off." Focus mode, from the View menu (Alt+V, then M) or the palette: "Focus mode on: the bars fade after three seconds.", and "Focus mode off." The fade itself says nothing. The tree is the same before and after the bars fade.
 
 The window's parts have names in the tree: "Left panel, work", "Sort the left panel", "Key bar", and on Windows the menu bar with its nine menus. Also on Windows, the toolkit's helper window is named "diroxide background helper". A key bar button is named by its label with its key as its shortcut: "Rename", with F2.
 
@@ -375,7 +375,7 @@ The window's parts have names in the tree: "Left panel, work", "Sort the left pa
 
 - Low messages. "Top of the list" and "Bottom of the list", and "At the top already", appear in the status line and are not announced. Pressing Up on the first row is silent.
 - A running job's progress. The jobs line and the "Job progress" indicator show it, and the program does not speak it. Whether your screen reader speaks the indicator's changes is its own setting. Ctrl+D says where the job is.
-- The colors. A theme's colors, the bars fading in focus mode, and full screen say nothing. A theme chosen and a way of drawing other than the graphics card are each said once.
+- The colors. A theme's colors, and the bars fading in focus mode or in full screen, say nothing. A theme chosen, a way of drawing other than the graphics card, and turning full screen or focus mode on or off are each said once.
 - Dialogs have been read only in the tests' harness so far, not through UI Automation on a real window and not on a screen reader.
 
 ### A check for the GUI
@@ -407,10 +407,10 @@ Then the rest of the walk:
 14. Press F3 on a text file. You hear "Viewer" and the file's name. Press Down: the next line is read. Press End, then Escape. Do you land on the file's row in the panel?
 15. Press Shift+F3 on a Markdown file. The focus stays on the file's row. Press Tab: you are in the preview. Press Tab again to come back, and Shift+F3 to turn the preview off.
 16. Press Ctrl+Comma, choose Theme, and choose One Light. You hear the theme and its verdict, "below AA", and then how many parts use the text color. Is it said once? Choose Galaxy again.
-17. Press F11. Wait four seconds without touching anything. The bars fade, and nothing should be said. Press a key: the bars return, and nothing should be said. Press F11 again.
+17. Press F11. You should hear "Full screen on." once. Wait four seconds without touching anything. The bars fade, and nothing should be said. Press a key: the bars return, and nothing should be said. Press F11 again: "Full screen off." Then run Focus mode from the View menu (Alt+V, then M). You should hear "Focus mode on: the bars fade after three seconds." Wait four seconds: the bars fade, and nothing should be said. Run Focus mode again: "Focus mode off."
 18. Look in the system's window list, such as Alt+Tab or a screen reader's window list. On Windows there should be a window named "diroxide background helper", and no pane with no name beside "diroxide".
 
-Questions to answer: Did the menu bar show and read? Was every row read once, name first? Did Tab speak once? Was "selected" heard once? Was a dialog's name said once, and was the focused button read after it? Were the buttons easy to find with Tab? Was "Job progress" spoken, and was that right? Was the silence at the edge of a list a problem? Did the viewer read one line at a time? Was a theme's verdict clear in the first 40 cells? Did anything speak when the bars faded? Did a pane with no name show in the window list?
+Questions to answer: Did the menu bar show and read? Was every row read once, name first? Did Tab speak once? Was "selected" heard once? Was a dialog's name said once, and was the focused button read after it? Were the buttons easy to find with Tab? Was "Job progress" spoken, and was that right? Was the silence at the edge of a list a problem? Did the viewer read one line at a time? Was a theme's verdict clear in the first 40 cells? Did anything speak when the bars faded? Were "Full screen on." and "Focus mode on: the bars fade after three seconds." each said once, and clear in the first 40 cells? Did a pane with no name show in the window list?
 
 ## Keys that may clash
 

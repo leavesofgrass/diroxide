@@ -7,11 +7,11 @@
 
 diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, in the orthodox style of Worker and Directory Opus. Its command is `diro`. It is designed first for people who use a screen reader or a Braille display, and for anyone who works from the keyboard. Every row says what it is in its first 40 characters, status is always words, color never carries meaning alone, and every delete lists what it will remove and starts on No. It is written for Windows, Linux and macOS, with no X11 code.
 
-Status: alpha. This is alpha 2, version 0.1.0-alpha.2: a terminal file manager for local folders, archives and SFTP places, with plugins in any language, script commands and optional components. It has copy, move, rename, trash and undo; archives opened like folders; a viewer and a quick view; split and join; links and permissions; search with a filter language; labels and bookmarks; file compare; a list of keys you can change, with key presets; watching a folder; a transfer queue with retries, resume and a speed limit; the Volumes list and the trash browser; and command-line subcommands. The graphical interface (GUI), a window version, is in the source tree for the next alpha. It opens with `diro --gui`, and `diro` by itself still opens the terminal; [the GUI guide](docs/gui.md) describes it. [Known limits](docs/known-limits.md) lists what it does not do yet, and the [accessibility statement](docs/accessibility.md) says what has been checked by ear and what has not.
+Status: alpha. This is alpha 3, version 0.1.0-alpha.2: a file manager for local folders, archives and SFTP places, with a window on a desktop and a terminal everywhere else, plugins in any language, script commands and optional components. It has copy, move, rename, trash and undo; archives opened like folders; a viewer and a quick view; split and join; links and permissions; search with a filter language; labels and bookmarks; file compare; a list of keys you can change, with key presets; watching a folder; a transfer queue with retries, resume and a speed limit; the Volumes list and the trash browser; and command-line subcommands. The graphical interface (GUI) is the window. Typing `diro` on a desktop opens it, and `diro --tui` opens the terminal instead; [the GUI guide](docs/gui.md) describes the window. [Known limits](docs/known-limits.md) lists what it does not do yet, and the [accessibility statement](docs/accessibility.md) says what has been checked by ear and what has not.
 
 ## Get diro
 
-There are two ways in: one file for each platform, and `cargo install diro`. Alpha 1 has the files; the crate comes with the first beta.
+There are two ways in: one file for each platform, and `cargo install diro`. The releases have the files; the crate comes with the first beta.
 
 - Download the one file for your platform from the [releases page](https://github.com/leavesofgrass/diroxide/releases): `diro.exe` for Windows, one `diro` for macOS (Apple silicon and Intel in one file), and an AppImage for Linux. There is no archive to open and no installer. The builds are not code-signed, so each platform needs one first-run step. On Windows, SmartScreen warns first: choose More info, then Run anyway. On macOS, remove the quarantine mark once with `xattr -d com.apple.quarantine`, and make the file executable with `chmod +x`. On Linux, make the AppImage executable with `chmod +x`.
 - Or build from source. You need a Rust toolchain from rustup (the repository pins the version and rustup fetches it) and the linker Rust needs on your system. Clone the repository, `https://github.com/leavesofgrass/diroxide`, and in its folder run:
@@ -27,21 +27,21 @@ cargo build --release -p diro
 
 ## First steps
 
-Run `diro` in a terminal. These keys are the same on every platform.
+Run `diro --tui` in a terminal. On a desktop, `diro` alone opens the window, where most of these keys work the same. These keys are the same on every platform.
 
 1. Tab switches between the two panels. diroxide says the panel and its folder.
 2. The arrow keys move through the rows. Left goes to the parent folder, Right goes into the folder under the cursor, and Enter opens.
 3. Space marks the row and moves down. A marked row says "selected".
 4. F5 copies the marked rows, or the focused row, to the other panel. It asks first, and the answer starts on No.
 5. F2 renames the focused entry.
-6. Ctrl+P opens the command palette, a list of every command: type part of a name and press Enter. In the window, `diro --gui`, Ctrl+Shift+P does the same.
+6. Ctrl+P opens the command palette, a list of every command: type part of a name and press Enter. In the window, Ctrl+Shift+P does the same.
 7. Ctrl+Q quits.
 
 Ctrl+Z undoes the last job. Every delete, move and overwrite lists what it will touch before it asks.
 
 ## The terminal
 
-In alpha 2 diroxide runs in the terminal, and that is still what `diro` opens. The window version, `diro --gui`, comes with the next alpha and is in this source tree: see [The GUI](docs/gui.md). Windows Terminal is the main target, and the classic console, Linux terminals and macOS Terminal are best effort. Terminals keep some keys for themselves, so the palette and the menus reach every command: see [Terminals](docs/terminals.md).
+The terminal is `diro --tui`. It is also what `diro` opens over SSH, with no display, and when its input or output is a pipe or a file; on a desktop a bare `diro` opens the window. To make a bare `diro` open the terminal there too, set `frontend` to `terminal`: see [The GUI](docs/gui.md#what-automatic-does-today). Windows Terminal is the main target, and the classic console, Linux terminals and macOS Terminal are best effort. Terminals keep some keys for themselves, so the palette and the menus reach every command: see [Terminals](docs/terminals.md).
 
 ## Screen readers
 

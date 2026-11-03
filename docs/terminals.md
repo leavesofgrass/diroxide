@@ -1,6 +1,6 @@
 # Terminals
 
-In alpha 2 diroxide runs in a terminal. This guide says which terminals to use, what a terminal can and cannot send, the keys Windows Terminal keeps for itself and how to get around them, and what to do when the full screen does not work for you.
+diroxide runs in a terminal when you type `diro --tui`, and by itself over SSH, with no display or with a pipe. On a desktop a bare `diro` opens the window instead, and [the GUI](gui.md) covers that. This guide says which terminals to use, what a terminal can and cannot send, the keys Windows Terminal keeps for itself and how to get around them, and what to do when the full screen does not work for you.
 
 ## Which terminal
 
@@ -24,7 +24,7 @@ diroxide sets the terminal's title to the active place, so a screen reader that 
 Terminals were designed for text, so some keys never arrive, or arrive as another key. diroxide's terminal column avoids all of them, and the palette and the menus reach every command. [The keyboard page](keyboard.md) lists them with the reason for each.
 
 - Some keys are other keys in disguise: Ctrl+I is Tab, Ctrl+M is Enter, Ctrl+H is often Backspace, Ctrl+J is a line feed and Ctrl+[ is Escape. diroxide never binds them.
-- Shift+Enter, Ctrl+Enter, Ctrl+Tab and most Ctrl+Shift letters have no form a terminal can send. Ctrl+Space is not safe either. diroxide's terminal column does not use them. The window (`diro --gui`) uses some of them, such as Ctrl+Shift+P for the palette. [The GUI](gui.md) describes it.
+- Shift+Enter, Ctrl+Enter, Ctrl+Tab and most Ctrl+Shift letters have no form a terminal can send. Ctrl+Space is not safe either. diroxide's terminal column does not use them. The window, which `diro` opens on a desktop, uses some of them, such as Ctrl+Shift+P for the palette. [The GUI](gui.md) describes it.
 - F1, F10, F11 and F12 are often kept by the terminal for help, a menu or full screen. Help in the terminal is Shift+F1 or the question mark, and the menus are on F9.
 - The keypad's plus, minus, star and slash arrive as the main row's characters in a Windows terminal. A command never depends on a keypad-only key.
 - Alt arrives as an Escape prefix on Linux and macOS. On macOS Terminal, turn on "Use Option as Meta key" in the profile's keyboard settings. The function keys need Fn on a Mac or a laptop unless you change the system setting. The system owns Ctrl+F3 to Ctrl+F8 on a Mac, so the sort keys do not reach diroxide there; use the Sort submenu in the View menu or the palette. Mission Control keeps Control with the arrow keys, which diroxide uses for Folder to other panel and Next selected.

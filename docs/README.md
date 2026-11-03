@@ -25,7 +25,7 @@ If you are new, begin with the [quick start](quickstart.md).
 
 - [Quick start](quickstart.md): starting, moving, marking, copying, renaming, deleting, undoing and quitting, and a first look at search, labels, compare, archives and the viewer.
 - [Installing diroxide](install.md): building from source (a Rust toolchain and a C compiler), the one file per platform, what the window needs and costs to build, a smaller or terminal-only build, and `cargo install diro` with the first beta.
-- [The GUI](gui.md): the window version of diroxide: opening it with `diro --gui`, how it draws with or without a graphics card, the window in reading order, its keys and menus, the viewer and the quick view, its dialogs, jobs and settings, what it says and when, focus mode and full screen, and what it does not do yet.
+- [The GUI](gui.md): the window version of diroxide: how `diro` chooses between the window and the terminal, how it draws with or without a graphics card, the window in reading order, its keys and menus, the viewer and the quick view, its dialogs, jobs and settings, what it says and when, focus mode and full screen, and what it does not do yet.
 - [Using diroxide with a screen reader](screen-readers.md): how diroxide talks to NVDA, JAWS, Orca and VoiceOver, what you should hear in the terminal and in the window, the settings to check, plugin lists, and the Braille display.
 - [Terminals](terminals.md): which terminal to use, the keys terminals keep, Windows Terminal's own keys and how to give them back, the key test, and `diro --inline`, `diro ls` and `diro search` for when the full screen fails.
 - [Troubleshooting](troubleshooting.md): common problems, and how to report a bug.

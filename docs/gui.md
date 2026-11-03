@@ -4,19 +4,21 @@ This guide covers the GUI, the window version of diroxide: how to open it, what 
 
 What this guide quotes is what the program says, taken from the program's code and tests. The tests read the window's accessibility tree the way a screen reader does, with no window on a screen, and a scripted walk of the window checks the lines it hears against the first 40 cells of a Braille line. None of it has been heard yet on NVDA, JAWS or a Braille display. If your experience differs, that is a finding.
 
-The window in this alpha takes every key and says what happens. It shows the two panels, the status lines and the key bar. It has dialogs with real buttons, the viewer and the quick view, 24 themes, a way to work without a graphics card, and focus mode. [What the window does not do yet](#what-the-window-does-not-do-yet) names what is still missing, and it is worth reading before you rely on the window. The terminal is still what `diro` opens when you type it with nothing else.
+The window in this alpha takes every key and says what happens. It shows the two panels, the status lines and the key bar. It has dialogs with real buttons, the viewer and the quick view, 24 themes, a way to work without a graphics card, and focus mode. [What the window does not do yet](#what-the-window-does-not-do-yet) names what is still missing, and it is worth reading before you rely on the window. On a desktop, typing `diro` with nothing else opens the window now, and `diro --tui` opens the terminal.
 
 ## Opening the GUI
 
-Type `diro --gui`. Folders work as they do for the terminal:
+On a desktop, type `diro`. The window opens. Folders work as they do for the terminal:
 
 ```bash
-diro --gui
+diro
 ```
 
 ```bash
-diro --gui LEFT RIGHT
+diro LEFT RIGHT
 ```
+
+`diro --gui` asks for the window outright. You need it only where automatic would choose the terminal, such as over SSH. `diro --tui` asks for the terminal.
 
 ### Which one opens
 
@@ -31,26 +33,26 @@ diro --gui LEFT RIGHT
 
 ### What automatic does today
 
-Today automatic opens the terminal, every time. The window is not the default yet. The last step of this alpha is to flip the default, and this guide will change when it does.
-
-The program's decision already holds the cases for that day. When the default flips, automatic opens the window on a desktop and keeps the terminal in four cases:
+Automatic opens the window on a desktop. It keeps the terminal in four cases:
 
 - over SSH, when `SSH_CONNECTION` or `SSH_TTY` is set;
 - with no display, which on Linux means neither `WAYLAND_DISPLAY` nor `DISPLAY` is set (Windows and macOS always have one);
 - when standard input or output is a pipe or a file;
 - in a build made without the window.
 
-The help text of the `frontend` setting already describes that future. Until the default flips, `diro --gui`, or the setting `frontend` set to `gui`, is how you get the window. [The settings reference](settings-reference.md#frontend) lists the values.
+In those four cases the terminal opens with no sentence first. A sentence comes only when you asked for the window and it cannot open, or when the window starts and then fails, as the next sections show.
+
+So `diro` typed in Windows Terminal, in a shell on a Linux or macOS desktop, or a double click on `diro.exe`, opens the window. This is a change from the earlier alphas, where a bare `diro` opened the terminal. To get the terminal, type `diro --tui` for one start, or set `frontend` to `terminal` and a bare `diro` opens the terminal from then on. The shell function that `diro init` prints, `dcd`, always asks for the terminal. [The settings reference](settings-reference.md#frontend) lists the values.
 
 ### The frontend setting
 
-`frontend` is in the Look group of Settings (Alt+T, then S) under the name "Opens in". It holds `auto`, `gui` or `terminal`. It is read when `diro` starts, so a change takes effect at the next start.
+`frontend` is in the Look group of Settings (Alt+T, then S) under the name "Opens in". It holds `auto`, `gui` or `terminal`, and `auto` is the default. It is read when `diro` starts, so a change takes effect at the next start. `--gui` beats the value `terminal`, and `--tui` beats the value `gui`.
 
 ### When the window cannot open
 
 A window that cannot open never ends the program with a crash. It says one sentence, with the cause first, and the terminal opens instead. There are three sentences to know.
 
-No display, or a `diro` built without the window, before the window is tried:
+The first two are for no display, and for a `diro` built without the window. They are said before the window is tried, and only when you asked for the window with `--gui` or the setting `gui`. Automatic chooses the terminal in those cases without a sentence.
 
 ```text
 There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead.
@@ -180,7 +182,7 @@ How the window reads a key:
 - The keypad's plus, minus, star and slash are told apart from the main row's.
 - A held key repeats only where a repeat means something: the arrows, Page Up, Page Down, Home and End, and in a field Backspace, Delete and typed characters. Any other repeat is dropped, so a held F8 cannot open a second question.
 - On macOS the GUI uses Command where the key lists say Ctrl, and a chord with Option is read by the key's place on the keyboard.
-- F11 and F12 reach diroxide. They are not the toolkit's debugging keys. F11 turns full screen on and off, as [focus mode and full screen](#focus-mode-and-full-screen) says.
+- F11 and F12 reach diroxide. They are not the toolkit's debugging keys. F11 is the key of the Full screen command, which turns full screen on and off, as [focus mode and full screen](#focus-mode-and-full-screen) says.
 
 ### Keys that cannot arrive
 
@@ -356,7 +358,7 @@ What this means for listening:
 - The lines said in one step are one announcement, in their order. The same line twice is said once. A job's start line is left out when more came after it in the same step, such as the result of a quick job, so "Copy finished: 1 done" is not preceded by "Copy started: 1 file to Backup". The announcement is as urgent as its most urgent line.
 - A dialog is said once, by itself, as [the dialogs](#the-dialogs) say.
 - A running job's progress is shown in the jobs line and the "Job progress" indicator and is not spoken by the program. Ctrl+D says where the job is.
-- A theme chosen is said once with its verdict. Drawing in a way other than the graphics card is said once. Focus mode and full screen say nothing.
+- A theme chosen is said once with its verdict. Drawing in a way other than the graphics card is said once. Full screen and focus mode say what they did in a few words, "Full screen on." and "Focus mode on: the bars fade after three seconds.", and the bars fading and coming back say nothing.
 - The program's start-up lines are held until a screen reader asks for the window, then said once, as one announcement: the interrupted jobs of the last session, a problem with a settings file, or on a first start the welcome, the key bar and the layout. On the one run measured, they arrived about two seconds after launch.
 - The first start's line about the key bar is "The key bar names the keys." In the terminal it is "The key bar on the last line names the keys."
 
@@ -384,29 +386,34 @@ The window is drawn in one of 24 themes. The default is Galaxy, a dark page with
 - On Windows, High Contrast (Contrast themes) wins over every theme: while it is on, the window draws only with the system's own colors. Turning it on while the window is open is said: "System high contrast colors in use." When you turn it off, your theme comes back.
 - With the `follow_system_appearance` setting on, the window takes the light or dark partner of your theme to match the system's setting. It reads that setting once, when it starts.
 - The text is 16 pixels at your display's scale. There is no setting for the size or the font yet.
+- The window has an icon, the diroxide mark, and it changes nothing a screen reader reads. On Windows, Explorer shows it for `diro.exe` and for a shortcut to it, and the taskbar and the title bar show it while the window is open. On Linux, the AppImage carries the mark in every size a desktop's icon theme asks for, and in two menu entries: "diroxide", which opens the window, and "diroxide in a terminal", which opens the terminal in a terminal of its own. A build from source has no menu entry of its own; the two entry files are in the source, under `packaging/appimage`. macOS shows no icon in this alpha.
 
 The window carries its own fonts, Atkinson Hyperlegible Next and Atkinson Hyperlegible Mono, regular and bold, so nothing has to be installed. On Linux it also opens Fontconfig when it is there, to find the system's fonts. Without Fontconfig only the two Atkinson families draw, and a character they lack, such as a Chinese or Japanese name or an emoji, is drawn as a missing glyph. That affects only what is drawn. The names a screen reader reads are the full names. [Installing diroxide](install.md#what-the-gui-needs) has the rest.
 
 ## Focus mode and full screen
 
-Focus mode gives the panels the room. After 3 seconds with no key and no mouse move, the title line, the status bar and the key bar fade under a veil. Any key, or a mouse move, brings them back. The `focus_mode` setting ("Focus mode", in the Look group) turns it on. It is off by default.
+Focus mode gives the panels the room. After 3 seconds with no key and no mouse move, the title line, the status bar and the key bar fade under a veil. Any key, or a mouse move, brings them back. Full screen makes the window fill the screen, and while it does, the bars fade in the same way.
 
-F11 turns full screen on and off. While the window is full screen, the bars fade in the same way.
+Each is a command, in the View menu and in the command palette, and each says what it did.
 
+- Full screen is on F11, in the View menu as Full screen (Alt+V, then U) and in the palette. It says "Full screen on." or "Full screen off.". Full screen is a command like the others, so [customizing keys](customizing-keys.md) applies to its key.
+- Focus mode is in the View menu (Alt+V, then M) and in the palette. It has no key. It turns the `focus_mode` setting ("Focus mode", in the Look group of Settings) on or off and writes it, and says "Focus mode on: the bars fade after three seconds." or "Focus mode off.". The switch in the Settings list says the same words. The setting is off by default.
+- Both lines are polite, so a screen reader reads them when it is idle.
+- With a dialog open, both commands do nothing and the status line shows "Close this dialog first."
+- A window opened with `--background` never goes full screen.
 - The veil is paint only. The accessibility tree is the same before and after, and so is the viewer's, and nothing is said when the bars fade or come back. A screen reader reads the window as it always does.
 - The veil does not come down while a dialog is open.
-- F11 works when no dialog is open and the key test is not running. It is not a command yet, so it cannot be rebound.
-- A window opened with `--background` never goes full screen.
 - The panels' sort buttons and the native menu bar are not under the veil yet.
+
+The same two commands are in the terminal's menus and palette, and they only explain themselves there. Full screen says "Full screen is the window's; the terminal program may have its own." and changes nothing, because full screen in a terminal is the terminal program's, often on F11, and that key never reaches diroxide. Focus mode turns the setting on for the window and says "Focus mode on, for the window; the terminal keeps its bars."
 
 ## What the window does not do yet
 
-These are not in the window yet. None of them is dated: each is to come in a later step of this alpha or a later alpha.
+These are not in the window yet. None of them is dated: each is to come in a later alpha.
 
-- Icons.
+- An icon on macOS. The mark's smallest sizes, 16 to 24 pixels, have not been looked at by a sighted person.
 - A native menu bar on macOS. Its menus are the list.
-- Your own theme files. The window draws the 24 built-in themes. The terminal also reads the theme files in your `themes` folder.
-- A command for full screen or for focus mode. F11 and the setting are the ways.
+- Your own theme files in the window. It draws the 24 built-in themes, and Galaxy for a name it does not know, without saying that the name is unknown. The program finds the theme files in your `themes` folder by name, so Settings lists them, Next theme steps through them, the verdict is said, and the terminal draws them. [Themes and colors](themes.md#your-own-themes) has the details.
 - A setting for the text size or the font.
 - Mouse support in the viewer.
 - Thumbnails, which the settings list as coming later.

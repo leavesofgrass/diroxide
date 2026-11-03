@@ -1,12 +1,12 @@
 # Installing diroxide
 
-This guide says how to get diroxide running, what is available now, and what comes later. Alpha 1 has one download for each platform. `cargo install diro` comes with the first beta, and you can always build the program from its source.
+This guide says how to get diroxide running, what is available now, and what comes later. Each release has one download for each platform. `cargo install diro` comes with the first beta, and you can always build the program from its source.
 
 ## Two ways in, and where each stands
 
 diroxide will have two ways in, and only two.
 
-- One file for each platform, from the project's [releases page](https://github.com/leavesofgrass/diroxide/releases): `diro.exe` on Windows, one `diro` for macOS (Apple silicon and Intel in one universal file), and an AppImage on Linux. There is no archive to open and no installer. Each file comes with a line in a SHA256SUMS list and a provenance attestation, so you can check it. Alpha 1 has the Windows x86_64 file, the macOS universal file and the Linux x86_64 AppImage. The Windows ARM64 file and the Linux aarch64 AppImage come in a later alpha.
+- One file for each platform, from the project's [releases page](https://github.com/leavesofgrass/diroxide/releases): `diro.exe` on Windows, one `diro` for macOS (Apple silicon and Intel in one universal file), and an AppImage on Linux. There is no archive to open and no installer. Each file comes with a line in a SHA256SUMS list and a provenance attestation, so you can check it. The releases have the Windows x86_64 file, the macOS universal file and the Linux x86_64 AppImage. The Windows ARM64 file and the Linux aarch64 AppImage come in a later alpha.
 - `cargo install diro`, for anyone who builds from the published crate, and the way to any other shape of install on Linux. It comes with the first beta.
 
 Package manager entries, such as winget, Scoop, Homebrew and the AUR, come in a later alpha and point at the same files.
@@ -35,7 +35,7 @@ Get the source with git (`git clone https://github.com/leavesofgrass/diroxide`) 
 cargo build --release -p diro
 ```
 
-The first build takes a while. The program is `target/release/diro`, or `target\release\diro.exe` on Windows. Copy it to a folder on your PATH.
+The first build takes a while: 5 minutes 6 seconds on the computer measured below. The program is `target/release/diro`, or `target\release\diro.exe` on Windows. Copy it to a folder on your PATH.
 
 To have cargo install it into its own program folder instead:
 
@@ -55,14 +55,22 @@ The first line is the program's name and version, `diro 0.1.0-alpha.2`. The next
 
 The window, the GUI, is part of the same `diro` program, and the `gui` feature that builds it is one of `diro`'s default features. So the two commands above build it, and the release files hold it, because they are built with the default features. [The GUI](gui.md) says how to open it.
 
-The window brings in a graphics stack, and that has a cost in time and room. These are measurements from one test machine, of debug builds. Release builds have not been measured here.
+The window brings in a graphics stack, and that has a cost in time and room. These are measurements from one computer, a Windows 11 machine with a graphics card. They show the size of the cost and are not a promise for yours. The project's bench records them with `cargo xtask bench --gui` and never fails a build over them; [building, for contributors](dev/building.md#the-guis-budgets) has the method.
 
-- A cold debug build of `diro` took about five minutes with the window, against under three minutes without it.
-- The debug program grew from about 40 MB to about 56 MB.
-- The build folder grew from about 1.1 GB to about 2.0 GB.
+The build and the program, with the default features, measured on the finished window:
+
+- A cold release build of `diro`, the one `cargo build --release -p diro` makes, from an empty target folder and with no compiler cache, took 5 minutes 6 seconds.
+- The release program is 44.1 MB. The `dist` profile, which the release files use, makes 39.5 MB. The debug program is 60.8 MB.
+- From starting `diro --gui --background` to the window's first frame took 1.2 seconds, the middle of three starts (1.67, 1.20 and 1.16 seconds), drawn on the graphics card by the release build.
+- The program held about 189 MB of memory at the first frame, the middle of the same three starts.
+- Other builds running beside it slow a build down. With two other builds running, a cold debug build took 7 minutes 40 seconds, a cold release build 7 minutes 52 seconds, and the `dist` build after it 12 minutes 54 seconds.
+
+Early in the alpha, with the window half built, debug builds were measured on a test machine:
+
+- A cold debug build of `diro` took about five minutes with the window, against under three minutes without it. The debug program then grew from about 40 MB to about 56 MB, and the build folder from about 1.1 GB to about 2.0 GB.
 - The lock file gained about 260 packages. The stack compiles no C on Windows, macOS or Linux, so the window adds no need for a C compiler beyond the ones named above. `cargo xtask native --check` keeps that inventory.
 - A Linux build needs no Fontconfig package. Fontconfig is opened when the window starts and is never linked.
-- Drawing on the processor adds a few packages more (softbuffer and what it needs). The figures above were measured before it was added. It compiles no C and links no library.
+- Drawing on the processor adds a few packages more (softbuffer and what it needs). It compiles no C and links no library. The early figures above were measured before it was added.
 
 A build that you only use in the terminal can leave all of this out, as the next section shows.
 
@@ -76,7 +84,7 @@ cargo build --release -p diro --no-default-features
 
 That is the smallest build, and it does without three things.
 
-- The window. `diro --gui` says "This diro was built without the GUI; the terminal opens instead." and opens the terminal.
+- The window. A bare `diro` opens the terminal with no sentence, and `diro --gui` says "This diro was built without the GUI; the terminal opens instead." and opens the terminal.
 - The viewer's syntax set, which adds about 3 MB to the program. The viewer says "Highlighting off: not in this build" for every file, and the commands that need no grammar keep working, such as search, hex mode, the bracket jump and indentation.
 - The downloader's secure connection library. The downloader falls back to `curl` or `wget` on your PATH.
 
@@ -96,9 +104,11 @@ A smaller build still needs a C compiler, for carta. [Building, for contributors
 
 ## What the GUI needs
 
-The window needs a display, and it brings its own fonts. A graphics card is welcome and is not needed. When a display is missing, or every way of drawing fails, the program says so in one sentence and opens the terminal.
+On a desktop, `diro` opens the window, as every release file and every build with the default features does. `diro --tui` opens the terminal, and so does a bare `diro` over SSH, with no display, with a pipe or a file, and in a build made without the window. [The GUI](gui.md#what-automatic-does-today) has the whole rule, and the setting `frontend` set to `terminal` makes a bare `diro` open the terminal on a desktop too.
 
-- A display. Windows and macOS always have one. On Linux the window needs a Wayland or X11 display, and `diro` looks for `WAYLAND_DISPLAY` or `DISPLAY`. With neither, `diro --gui` says "There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead."
+The window needs a display, and it brings its own fonts. A graphics card is welcome and is not needed. When you ask for the window and a display is missing, or every way of drawing fails, the program says so in one sentence and opens the terminal.
+
+- A display. Windows and macOS always have one. On Linux the window needs a Wayland or X11 display, and `diro` looks for `WAYLAND_DISPLAY` or `DISPLAY`. With neither, a bare `diro` opens the terminal with no sentence, and `diro --gui` says "There is no display for the GUI (no WAYLAND_DISPLAY or DISPLAY); the terminal opens instead."
 - A graphics card, if you have one. The window draws with it when the adapter is a real one. `--graphics` names the interface to use: `vulkan`, `dx12` on Windows, `metal` on macOS or `gl`, and `auto` lets the program choose.
 - No graphics card is needed. With no graphics adapter, or only one that draws on the processor anyway, such as Windows' own software adapter or llvmpipe on Linux, the window draws on the processor itself and needs no graphics driver. `--graphics software` asks for it even where a card is there. The program opens the display system at run time and links none, so a build needs no extra package for it. The window says once, "Drawing on the processor: no graphics adapter was found.", and the accessibility tree is built the same for every way of drawing. It has been tried on Windows, and on Linux in a virtual X11 display. Wayland and macOS have not been tried. [The GUI](gui.md#how-the-window-draws) has the order of the ways.
 - When every way fails, the window does not open and the terminal opens instead, after a sentence that begins "Could not open the GUI: the window could not start its graphics". `diro --gui --log FILE` writes what each way did to FILE.
@@ -110,7 +120,7 @@ A screen reader reads the window through the system's own interface: UI Automati
 
 ## The first run of a downloaded file
 
-The builds are not code-signed, so each platform needs one step the first time. A program you built yourself needs none of this.
+The builds are not code-signed, so each platform needs one step the first time. A program you built yourself needs none of this. After the step, running the file opens the window on a desktop, and `diro --tui` opens the terminal.
 
 - Windows: SmartScreen warns when you first start `diro.exe`. Choose More info, then Run anyway. Put the file in a folder on your PATH.
 - macOS: the system quarantines a downloaded file. Remove the mark once, then make the file executable:
@@ -130,6 +140,8 @@ If you prefer, choose Open Anyway under Privacy and Security in System Settings 
 ```bash
 chmod +x diro.AppImage
 ```
+
+The AppImage holds the icon in every size and two menu entries: "diroxide", which opens the window, and "diroxide in a terminal", which opens the terminal in a terminal of its own.
 
 If your system cannot run AppImages, build from source, or install with `cargo install diro` once it is available.
 

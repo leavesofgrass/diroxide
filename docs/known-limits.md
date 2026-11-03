@@ -1,21 +1,21 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with the window's foundation. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrives with alpha 3. Where a limit has a workaround, the workaround comes first.
 
-## What is not in alpha 2
+## What is not in alpha 3
 
-Each item below is still to come. None of them is dated: a feature that is not in alpha 2 arrives in a later alpha.
+Each item below is still to come. None of them is dated: a feature that is not in alpha 3 arrives in a later alpha.
 
-- Parts of the graphical interface (GUI). The window opens with `diro --gui`, and it shows the panels, takes every key and says what happens. `diro` by itself still opens the terminal, and the window leaves out icons, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
+- Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out an icon on macOS, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
 - A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes in a later alpha.
-- Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 2, although copies keep dates.
+- Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 3, although copies keep dates.
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
 - Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands come in a later alpha.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
-- Download files for each platform come in a later alpha, first for Windows x86_64 and Linux x86_64 and then for the other platforms. `cargo install diro` comes with the first beta.
+- Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
 
 ## Plugins and script commands
@@ -293,12 +293,12 @@ The table of keys each terminal can send is built from a key probe run by hand o
 
 ## The GUI
 
-[The GUI](gui.md) describes the window. These are its limits so far in this alpha. None is dated: each is to come in a later step of the alpha or a later alpha.
+[The GUI](gui.md) describes the window. These are its limits in this alpha. None is dated: each is to come in a later alpha.
 
 Opening it:
 
-- `diro` by itself opens the terminal. Open the window with `diro --gui`, or set `frontend` to `gui`. The settings reference describes automatic as opening the GUI on a desktop, which is where it is going, and today automatic opens the terminal in every case.
-- The window needs a display. With a graphics card it draws with it, and without one it draws on the processor. Without a display, or when every way of drawing fails, one sentence says why and the terminal opens.
+- `diro` by itself opens the window on a desktop, which is a change from the earlier alphas, where it opened the terminal. Open the terminal with `diro --tui`, or set `frontend` to `terminal`. Over SSH, with no display, with a pipe or a file, and in a build made without the window, a bare `diro` still opens the terminal.
+- The window needs a display. With a graphics card it draws with it, and without one it draws on the processor. When every way of drawing fails, one sentence says why and the terminal opens. Without a display, a bare `diro` opens the terminal with no sentence, and `diro --gui` says why before the terminal opens.
 - Drawing on the processor has been tried on Windows, and on Linux in a virtual X11 display. It has not been tried on Wayland or macOS. It is slower than a graphics card on a big window, and the accessibility tree is the same either way.
 - A console that Windows opened for a shortcut can show for a moment before `diro` lets it go.
 - On Linux without Fontconfig only the two bundled Atkinson families draw. A character they lack, such as a Chinese or Japanese name or an emoji, is drawn as a missing glyph. The names a screen reader reads are the full names.
@@ -322,11 +322,11 @@ Dialogs, the viewer and the clipboard:
 
 Colors and bars:
 
-- The window draws the 24 built-in themes. Your own theme files are not read, and the terminal does read them.
+- The window draws the 24 built-in themes. It does not read your own theme files, and for a name it does not know it draws Galaxy and says nothing about it. The program finds your theme files by name, so Settings lists them, Next theme steps through them and the verdict is said, and the terminal draws them. `diro --theme NAME` says "Unknown theme: NAME. Galaxy is in use." before the terminal opens even when NAME is a theme file of yours, and the terminal then draws it.
 - Ten themes are below AA. The window draws the parts that fall short in the text color, and says how many. [Themes and colors](themes.md) names the ten. No italic face is built in, so a part that a theme draws in italics, such as the archive and hidden rows, may draw upright. Their words say what they are.
 - The system's light or dark setting is read once, when the window starts. Windows' High Contrast is read at every step.
-- Focus mode and full screen have no command. F11 and the `focus_mode` setting are the ways, and F11 cannot be rebound yet. The panels' sort buttons and the native menu bar are not under focus mode's veil. The Settings list and the reference still mark focus mode as coming later, though it works.
-- There is no setting for the text size or the font, and no icons. Thumbnails are a setting that the reference marks as coming later.
+- Full screen and focus mode are commands, in the View menu and the palette, and F11 is Full screen's key. The panels' sort buttons and the native menu bar are not under focus mode's veil. A window opened with `--background` never goes full screen. In a terminal, Full screen changes nothing and says so, because full screen there is the terminal program's. The Settings list and the reference still mark focus mode as coming with a later alpha, though it works.
+- There is no setting for the text size or the font. macOS shows no icon, and the mark's smallest sizes, 16 to 24 pixels, have not been looked at by a sighted person. Thumbnails are a setting that the reference marks as coming later.
 
 Menus and the mouse:
 

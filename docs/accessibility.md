@@ -59,7 +59,7 @@ When this page was written, nothing in alpha 1 had been heard on a screen reader
 
 ## The graphical interface (GUI)
 
-The GUI, `diro --gui`, is in the source tree for the next alpha. It is built on the platform accessibility interfaces: UI Automation on Windows and AT-SPI on Linux. The macOS interface, NSAccessibility, has not been tried. Each panel is a list box whose options are the rows, and each dialog is a named, modal part whose keyboard focus is on a named control. [The GUI](gui.md) describes it, and [Using diroxide with a screen reader](screen-readers.md) has a listening check for it.
+The GUI is the window that `diro` opens on a desktop in alpha 3. It is built on the platform accessibility interfaces: UI Automation on Windows and AT-SPI on Linux. The macOS interface, NSAccessibility, has not been tried. Each panel is a list box whose options are the rows, and each dialog is a named, modal part whose keyboard focus is on a named control. [The GUI](gui.md) describes it, and [Using diroxide with a screen reader](screen-readers.md) has a listening check for it.
 
 What checks it so far:
 
