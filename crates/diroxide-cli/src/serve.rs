@@ -31,9 +31,12 @@
 //!
 //! - `ui/announce`: every announcement, with its importance (`status`,
 //!   `info`, `warning`, `error`);
-//! - `panel/changed`: a panel whose folder, focus or selection changed,
-//!   with `changes` naming which, then its place, its cursor and its
-//!   selection.
+//! - `panel/changed`: a panel whose folder, focus, selection or plugin
+//!   list changed, with `changes` naming which (`folder`, `focus`,
+//!   `selection`, `list`), then its place, its cursor, its selection and
+//!   its list: null, or the plugin list shown over the place (lane L). The
+//!   place, the cursor and the selection stay the folder's beneath a list;
+//!   the list's own rows are heard through the announcements.
 
 use std::io::{BufRead, Write};
 
@@ -48,6 +51,7 @@ use diroxide_plugins::protocol::{
 };
 use diroxide_plugins::services::{attribute, clean_text};
 use diroxide_plugins::session::{Gate, Lifecycle};
+use diroxide_plugins::shapes::WireList;
 use serde_json::{Map, Value, json};
 
 use crate::CliError;
@@ -100,6 +104,8 @@ struct PanelState {
     cursor: Option<String>,
     selection: Vec<String>,
     active: bool,
+    /// The plugin list shown over the place (lane L).
+    list: Option<WireList>,
 }
 
 fn panel_state(app: &App, side: Side) -> PanelState {
@@ -110,7 +116,28 @@ fn panel_state(app: &App, side: Side) -> PanelState {
         cursor: list.focused().map(|r| r.id.clone()),
         selection: list.selected_ids().into_iter().map(str::to_owned).collect(),
         active: app.active_side() == side,
+        list: panel.plugin_list().map(|shown| shown.wire()),
     }
+}
+
+/// What changed in a panel between two states, by the event's words.
+fn changes(old: &PanelState, new: &PanelState) -> Vec<&'static str> {
+    let mut changes = Vec::new();
+    if old.place != new.place {
+        changes.push("folder");
+    }
+    if old.cursor != new.cursor || (new.active && !old.active) {
+        changes.push("focus");
+    }
+    if old.selection != new.selection {
+        changes.push("selection");
+    }
+    if old.list.as_ref().map(|l| (&l.plugin, &l.id))
+        != new.list.as_ref().map(|l| (&l.plugin, &l.id))
+    {
+        changes.push("list");
+    }
+    changes
 }
 
 struct Server<'a> {
@@ -171,16 +198,7 @@ impl Server<'_> {
     fn notify_changes(&mut self, before: Option<[PanelState; 2]>) -> Result<(), CliError> {
         if let (Some(before), Some(after)) = (before, self.panels()) {
             for (side, (old, new)) in Side::BOTH.into_iter().zip(before.iter().zip(after.iter())) {
-                let mut changes = Vec::new();
-                if old.place != new.place {
-                    changes.push("folder");
-                }
-                if old.cursor != new.cursor || (new.active && !old.active) {
-                    changes.push("focus");
-                }
-                if old.selection != new.selection {
-                    changes.push("selection");
-                }
+                let changes = changes(old, new);
                 if changes.is_empty() {
                     continue;
                 }
@@ -191,6 +209,7 @@ impl Server<'_> {
                 params.insert("place".into(), json!(new.place));
                 params.insert("cursor".into(), json!(new.cursor));
                 params.insert("selection".into(), json!(new.selection));
+                params.insert("list".into(), json!(new.list));
                 self.send(&Notification::new(PANEL_CHANGED, params))?;
             }
         }
@@ -348,6 +367,7 @@ impl Server<'_> {
             "selection": list.selected_ids(),
             "sort": panel.sort().describe(),
             "filter": panel.filter().map(|f| f.text().to_owned()),
+            "list": panel.plugin_list().map(|shown| shown.wire()),
         }))
     }
 
@@ -749,5 +769,33 @@ mod tests {
             count += 1;
         }
         assert!(count >= 5, "{count} dialogues");
+    }
+
+    #[test]
+    fn a_plugin_list_opening_or_closing_is_a_change() {
+        let folder = PanelState {
+            place: "D:/work".into(),
+            cursor: Some("notes.txt".into()),
+            selection: Vec::new(),
+            active: true,
+            list: None,
+        };
+        let mut listed = folder.clone();
+        listed.list = Some(WireList {
+            plugin: "changed-files".into(),
+            id: "changes".into(),
+            title: "Changed files (Changed files)".into(),
+            rows: 2,
+        });
+        assert_eq!(changes(&folder, &listed), ["list"]);
+        assert_eq!(changes(&listed, &folder), ["list"]);
+        let mut more = listed.clone();
+        if let Some(list) = more.list.as_mut() {
+            list.rows = 3;
+        }
+        assert!(
+            changes(&listed, &more).is_empty(),
+            "new rows are not a new list"
+        );
     }
 }
