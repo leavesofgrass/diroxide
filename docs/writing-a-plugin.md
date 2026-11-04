@@ -94,7 +94,7 @@ version = "0.1.0"
 description = "Counts the lines of the selected files and says the total."
 license = "Apache-2.0 OR MIT"
 protocol = 1
-min_host = "0.1.0-alpha.2"
+min_host = "0.1.0-alpha.3"
 
 [run]
 command = ["python3", "main.py"]
@@ -153,7 +153,7 @@ diroxide starts the program from `[run]` and talks to it over standard input and
 This is a real run of the line counter, with the lines diroxide sends marked `>` and the lines the plugin sends marked `<`. The plugin gets `initialize`, says what it can do, runs a command, announces a result, and shuts down:
 
 ```text
-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":1,"host":{"name":"diroxide","version":"0.1.0-alpha.2"},"plugin_id":"line-counter","locale":"en-US","settings":{}}}
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol":1,"host":{"name":"diroxide","version":"0.1.0-alpha.3"},"plugin_id":"line-counter","locale":"en-US","settings":{}}}
 < {"jsonrpc":"2.0","id":1,"result":{"protocol":1,"plugin":{"name":"line-counter","version":"0.1.0"},"plugin_capabilities":{"commands":["count_lines"]}}}
 > {"jsonrpc":"2.0","method":"initialized"}
 > {"jsonrpc":"2.0","id":2,"method":"command/run","params":{"command":"line-counter.count_lines","context":{"protocol":1,"selection":[{"name":"lines.txt","kind":"file","place":"D:/notes/lines.txt"}]}}}
@@ -300,7 +300,7 @@ version = "0.1.0"
 description = "Shows the first page of a PDF as text, through pdftotext."
 license = "Apache-2.0 OR MIT"
 protocol = 1
-min_host = "0.1.0-alpha.2"
+min_host = "0.1.0-alpha.3"
 
 [permissions.declared]
 network = "no network"
@@ -335,7 +335,7 @@ version = "0.1.0"
 description = "Converts Markdown files to Word documents, through pandoc."
 license = "Apache-2.0 OR MIT"
 protocol = 1
-min_host = "0.1.0-alpha.2"
+min_host = "0.1.0-alpha.3"
 
 [permissions.declared]
 network = "no network"

@@ -2,7 +2,9 @@
 
 Notable changes to diroxide, newest first. Agents write under a scratch heading with their id; the orchestrator regroups the entries by area before each alpha. Versions follow the alpha series in the plan; nothing is released until the owner says so.
 
-## Unreleased
+## 0.1.0-alpha.3
+
+Alpha 3 adds the GUI: the same `diro` opens a window on a desktop, with each panel one list a screen reader reads name first, the dialogs as real controls, the twenty-four themes with their contrast verdicts said, native menus on Windows, focus mode and full screen, drawing on the processor where there is no graphics driver, and the icons from the mark; beside it, plugin lists inside a panel, Pause for waiting jobs and the queue kept across restarts, the nightly fuzz workflow and the two archive bugs it found, the Markdown reader's link loop fixed, and the bench baseline. It is the planned alpha.6. This entry was written on Tuesday, November 3, 2026.
 
 ### The orchestrator: the Markdown reader's link loop
 

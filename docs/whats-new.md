@@ -2,9 +2,9 @@
 
 This page says in plain words what each alpha added. [The changelog](../CHANGELOG.md) has the full list, by area, and [known limits](known-limits.md) says what is still missing.
 
-## Unreleased
+## Alpha 3
 
-The changes since alpha 2 that the next alpha, alpha 3, will carry. None of this is released yet, and more is coming before it is.
+What alpha 3 added, released on Tuesday, November 3, 2026.
 
 The GUI, a window version of diroxide.
 
