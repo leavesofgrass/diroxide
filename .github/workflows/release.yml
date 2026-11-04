@@ -12,10 +12,20 @@
 # components job packs it and the example plugins with cargo xtask
 # components --assets, and the list it writes, with every file's size and
 # SHA-256, is the one each diro build embeds. Each component is published
-# under its own tag, <id>-<version> (diro-examples-0.1.0,
-# diro-sftp-0.1.0-alpha.1), where the program looks for it; a file
+# under its own tag, <id>-<version> (diro-examples-0.1.1,
+# diro-sftp-0.1.0-alpha.3), where the program looks for it; a file
 # already published there is never replaced by different bytes, since
 # older diro builds pin it: change the component's version instead.
+#
+# Which commit each job reads: the plugin and program jobs build the tag
+# (inputs.tag, or the pushed tag), while the components job and the
+# publish job read the commit the run is on (the tag itself on a tag
+# push; the branch a run was dispatched from). So when a component's
+# version has to move after the tag, as the examples pack's did at alpha
+# 3 (its plugins' min_host moved with the bump, the pack's bytes changed,
+# and the published 0.1.0 pack could not be replaced), the version moves
+# on main and the run is dispatched again for the same tag: the program
+# comes from the tag with the new list, the components from main.
 name: Release
 
 on:
@@ -120,9 +130,11 @@ jobs:
     needs: [plugins]
     runs-on: ubuntu-22.04
     steps:
+      # The components' definitions and sources from the commit the run is
+      # on, not the tag (see the top of this file).
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.ref }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -299,9 +311,11 @@ jobs:
     needs: [windows, macos, linux, components]
     runs-on: ubuntu-22.04
     steps:
+      # The commit the run is on, where the component tags are made and
+      # whose changelog gives the notes (see the top of this file).
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.ref }}
       - uses: actions/download-artifact@v4
         with:
           pattern: diro-*

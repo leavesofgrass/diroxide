@@ -31,7 +31,7 @@ format = 1
 id = "diro-examples"
 title = "Example plugins"
 kind = "data"
-version = "0.1.0"
+version = "0.1.1"
 license = "Apache-2.0 OR MIT"
 credit = "The diroxide project"
 features = ["examples"]
@@ -39,7 +39,7 @@ min_diro = "0.1.0-alpha.3"
 action = "unpack"
 
 [[component.file]]
-name = "diro-examples-0.1.0.zip"
+name = "diro-examples-0.1.1.zip"
 target = "any"
 pack = [
   { from = "packaging/components/diro-examples", as = "" },

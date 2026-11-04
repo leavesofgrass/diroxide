@@ -502,7 +502,9 @@ mod tests {
                 events.push(e.clone());
             })
             .unwrap();
-        assert_eq!(outcome.fetched, ["diro-examples-0.1.0.zip"]);
+        // The pack's file as the list names it, so a new pack version
+        // leaves this alone.
+        assert_eq!(outcome.fetched, [pack.files[0].name.as_str()]);
         assert!(outcome.left_out.is_empty(), "{:?}", outcome.left_out);
         let target = host_target();
         assert_eq!(pack.status_in(&components, target), Status::Installed);

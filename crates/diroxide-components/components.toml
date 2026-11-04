@@ -9,7 +9,7 @@ generated_by = "cargo xtask components"
 id = "diro-examples"
 title = "Example plugins"
 kind = "data"
-version = "0.1.0"
+version = "0.1.1"
 license = "Apache-2.0 OR MIT"
 credit = "The diroxide project"
 features = ["examples"]
@@ -18,7 +18,7 @@ action = "unpack"
 unpacked_size = 120235
 
 [[component.file]]
-name = "diro-examples-0.1.0.zip"
+name = "diro-examples-0.1.1.zip"
 size = 123981
 sha256 = "89740b194e3a3e7f61f18ec70a8d15320927c34e62b9cdbd662168db9bf83055"
 target = "any"

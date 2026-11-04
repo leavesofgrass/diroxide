@@ -6,6 +6,8 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 Alpha 3 adds the GUI: the same `diro` opens a window on a desktop, with each panel one list a screen reader reads name first, the dialogs as real controls, the twenty-four themes with their contrast verdicts said, native menus on Windows, focus mode and full screen, drawing on the processor where there is no graphics driver, and the icons from the mark; beside it, plugin lists inside a panel, Pause for waiting jobs and the queue kept across restarts, the nightly fuzz workflow and the two archive bugs it found, the Markdown reader's link loop fixed, and the bench baseline. It is the planned alpha.6. This entry was written on Tuesday, November 3, 2026.
 
+The example plugins pack is published as `diro-examples-0.1.1`: its plugins ask for host 0.1.0-alpha.3, so the pack's bytes changed, and a file published under a component's tag is never replaced. The release workflow's components and publish jobs now take the components' definitions from the commit the run is on, so a dispatched run can republish a tag's program with a component's new version.
+
 ### The orchestrator: the Markdown reader's link loop
 
 Written on Tuesday, November 3, 2026.

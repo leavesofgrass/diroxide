@@ -168,7 +168,7 @@ diro components remove diro-examples
 Lists every path it will remove, one a line, then "Removes 28 files." and the question "Remove Example plugins? y or n". It starts on No. A yes removes those files and nothing else: "Removed: Example plugins." A file you put in the component's folder stays, and the count line says "Yours stay." The list is printed first and the removal works from that list.
 
 ```bash
-diro components install diro-examples D:\components\diro-examples-0.1.0
+diro components install diro-examples D:\components\diro-examples-0.1.1
 ```
 
 Installs from a folder or a zip file you already have, with no network. See below.
@@ -254,7 +254,7 @@ Run it from that `plugins` folder, or give the full path to the one you want. It
 diroxide tries these addresses for each file, in order:
 
 1. Your own source, if you set one (below).
-2. The file's address in the list, or, when it has none, the project's public releases. Each component is published under its own tag there, its id and its version, such as `diro-examples-0.1.0` and `diro-sftp-0.1.0-alpha.3`.
+2. The file's address in the list, or, when it has none, the project's public releases. Each component is published under its own tag there, its id and its version, such as `diro-examples-0.1.1` and `diro-sftp-0.1.0-alpha.3`.
 
 It fetches with a small client built into diroxide. If that client cannot reach the server at all, because there is no answer, no connection or a TLS problem, diroxide tries `curl` and then `wget` from your PATH. A server's answer, such as "not found", is final and is not retried with another program. A build of diroxide made without the built-in client uses `curl` and then `wget` alone. When none of them is there you hear "Not downloaded: curl was not found." and "Install curl, or install from a file."
 
@@ -275,7 +275,7 @@ The setting `components_source` names where you keep your own copy of the compon
 components_source = "D:/components"
 ```
 
-- A folder: files are read from `FOLDER/ID-VERSION/FILENAME`, for example `D:/components/diro-examples-0.1.0/diro-examples-0.1.0.zip`. A `components.toml` at the top of the folder may add components.
+- A folder: files are read from `FOLDER/ID-VERSION/FILENAME`, for example `D:/components/diro-examples-0.1.1/diro-examples-0.1.1.zip`. A `components.toml` at the top of the folder may add components.
 - A repository written `owner/name`: its release downloads are used the same way.
 - The question says "From your own components source." and never says the address.
 - No token is sent today. A private source that needs a sign-in, such as a private repository reached through the GitHub CLI, is not built yet. When it is, the token will go only to that source, never as a command-line argument.
