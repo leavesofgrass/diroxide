@@ -573,7 +573,12 @@ mod tests {
                 .find(|f| f.name == pin.name)
                 .expect("the built file");
             assert!(pin.matches_bytes(&file.bytes), "{}", pin.name);
-            assert_eq!(file.release, "diro-sftp-0.1.0-alpha.2");
+            // The plugin is versioned with the host, so its release tag
+            // follows the workspace version and a bump leaves this alone.
+            assert_eq!(
+                file.release,
+                format!("diro-sftp-{}", env!("CARGO_PKG_VERSION"))
+            );
             let mut zip = zip::ZipArchive::new(Cursor::new(file.bytes.clone())).unwrap();
             let names: Vec<String> = (0..zip.len())
                 .map(|i| zip.by_index(i).unwrap().name().unwrap().into_owned())
