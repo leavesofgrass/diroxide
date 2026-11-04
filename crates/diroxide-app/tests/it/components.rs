@@ -205,13 +205,17 @@ fn get_example_plugins_asks_first_and_fetches_nothing_before_a_yes() {
     else {
         panic!("the ask-first question");
     };
-    assert!(
-        question
-            .text
-            .starts_with("Getting example plugins needs Example plugins 0.1.0. Download it now? No is the default."),
-        "{}",
-        question.text
+    // The pack's version as the embedded list names it, so a new pack
+    // version leaves this alone.
+    let version = diroxide_components::Manifest::embedded()
+        .get("diro-examples")
+        .expect("the examples pack is listed")
+        .version
+        .clone();
+    let expected = format!(
+        "Getting example plugins needs Example plugins {version}. Download it now? No is the default."
     );
+    assert!(question.text.starts_with(&expected), "{}", question.text);
     assert!(listing[0].starts_with("Size "), "{listing:?}");
     assert!(
         listing[0].contains("license Apache-2.0 OR MIT"),

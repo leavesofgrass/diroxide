@@ -92,7 +92,7 @@ Enter on one says why, and then offers the example plugins:
 Eject needs the Volume actions plugin.
 ```
 
-If the example plugins pack is not on this computer, the question that follows starts on No: "Getting example plugins needs Example plugins 0.1.0. Download it now? No is the default. y or n". If the pack is already here, you hear "Already installed: Example plugins. Manage plugins lists them." Either way, the plugin still has to be turned on. To do that:
+If the example plugins pack is not on this computer, the question that follows starts on No: "Getting example plugins needs Example plugins 0.1.1. Download it now? No is the default. y or n". If the pack is already here, you hear "Already installed: Example plugins. Manage plugins lists them." Either way, the plugin still has to be turned on. To do that:
 
 1. Get the pack, if you have not: Alt+P, then G.
 2. Open Manage plugins: Alt+P, then M. Choose Volume actions, press Enter, and choose Enable. The question starts on No. [Plugins](plugins.md) shows what it asks.

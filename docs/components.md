@@ -126,7 +126,7 @@ diro components download diro-examples
 Says what it is, the size and the license, and asks. It starts on No:
 
 ```text
-Example plugins 0.1.0, diro-examples.
+Example plugins 0.1.1, diro-examples.
 Size 124 KB, license Apache-2.0 OR MIT.
 Download it now? y or n
 ```
@@ -137,10 +137,10 @@ Answer n and you hear "Not downloaded." and the exit code is 1. Answer y, or add
 Downloading diro-examples, 124 KB.
 Checking the files.
 Unpacking the files.
-Ready: diro-examples 0.1.0.
+Ready: diro-examples 0.1.1.
 ```
 
-If it is already there: "Already installed: diro-examples 0.1.0."
+If it is already there: "Already installed: diro-examples 0.1.1."
 
 `--source FOLDER` uses a folder as the components source for this one run, instead of the setting. This is how you download with no network and no public address:
 
@@ -192,9 +192,9 @@ Enter on a row opens a list named for the component, with what can be done now:
 - "Verify the files" and "Remove", when something is installed. Verify says "Checking the files." and then "Files check out: Example plugins." or, with a problem, a list that names each file. Remove lists every path it will take away, then "Removes 28 files. Yours stay.", and asks "Remove Example plugins? No is the default. y or n". A no says "Nothing was removed."
 - "Install from a zip file" and "Install from a folder", always. Each opens a field, "Install Example plugins from a folder", where you type a place on this computer. The install runs as a job, "Installing Example plugins".
 
-In the program, the question puts the first line and the question together, and lists the size and the license under them. The Example plugins question reads "Getting example plugins needs Example plugins 0.1.0. Download it now? No is the default. y or n", and under it "Size 124 KB, license Apache-2.0 OR MIT."
+In the program, the question puts the first line and the question together, and lists the size and the license under them. The Example plugins question reads "Getting example plugins needs Example plugins 0.1.1. Download it now? No is the default. y or n", and under it "Size 124 KB, license Apache-2.0 OR MIT."
 
-The Plugins menu has Get example plugins (Alt+P, then G), which asks for the pack with that question. If the pack is already installed, it says "Already installed: Example plugins. Manage plugins lists them." After a yes, you hear "Ready: diro-examples 0.1.0.", and Manage plugins lists the examples, each "not enabled".
+The Plugins menu has Get example plugins (Alt+P, then G), which asks for the pack with that question. If the pack is already installed, it says "Already installed: Example plugins. Manage plugins lists them." After a yes, you hear "Ready: diro-examples 0.1.1.", and Manage plugins lists the examples, each "not enabled".
 
 A download runs as a job. The jobs line shows its progress in words, a tenth at a time and never more often than the progress interval. Escape stops it: "Download: cancelling", and the next try goes on from the bytes already there.
 
@@ -227,7 +227,7 @@ The list opens only over an empty screen, so it never covers a dialog that is op
 
 A computer with no network, or a download that keeps failing, can still get a component. Use Install from a zip file or Install from a folder in the Manage list, or `diro components install ID PATH`.
 
-diroxide looks in the folder or the zip for each file the component is pinned to, by its name, or by its size and hash. It checks each against the same pins. A file that is not one of the component's files is left out with the reason: "Left out a.txt: not one of the component's files." Success is "Ready: diro-examples 0.1.0." A folder or a zip that holds none of its files says "Not downloaded: it was not found in" and the name, and installs nothing.
+diroxide looks in the folder or the zip for each file the component is pinned to, by its name, or by its size and hash. It checks each against the same pins. A file that is not one of the component's files is left out with the reason: "Left out a.txt: not one of the component's files." Success is "Ready: diro-examples 0.1.1." A folder or a zip that holds none of its files says "Not downloaded: it was not found in" and the name, and installs nothing.
 
 When a component is an archive, diroxide unpacks it itself, with strict rules:
 

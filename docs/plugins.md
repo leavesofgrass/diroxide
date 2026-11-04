@@ -298,7 +298,7 @@ The values are kept in `settings.toml` in the plugin's folder of the state folde
 
 ### Get example plugins
 
-Plugins menu, G. If the example plugins are not here yet, it asks first, as [optional components](components.md) describes. If they are, it says "Already installed: Example plugins. Manage plugins lists them." Nothing in the pack is turned on. After a yes and "Ready: diro-examples 0.1.0.", Manage plugins lists the examples, each "not enabled".
+Plugins menu, G. If the example plugins are not here yet, it asks first, as [optional components](components.md) describes. If they are, it says "Already installed: Example plugins. Manage plugins lists them." Nothing in the pack is turned on. After a yes and "Ready: diro-examples 0.1.1.", Manage plugins lists the examples, each "not enabled".
 
 ## What you hear
 
