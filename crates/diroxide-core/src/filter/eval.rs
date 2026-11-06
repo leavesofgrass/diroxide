@@ -11,6 +11,7 @@
 //! types next, content last. The strict and-or rule makes the reordering
 //! safe, and a content test reads only files that passed the rest.
 
+use std::borrow::Cow;
 use std::fmt;
 
 use regex::Regex;
@@ -185,6 +186,16 @@ pub trait Lookup {
     fn content(&self, entry: &Entry, query: &ContentQuery) -> Truth {
         let _ = (entry, query);
         Truth::Unknown(Unknown::ContentNotRead)
+    }
+
+    /// The entry's file-type group by name ("images"), or `None` when it
+    /// is in no group; [`Unknown::TypeNotChecked`] while its type is still
+    /// being checked. The default answers from the built-in extension
+    /// table ([`group_of`]), as `group:` did before alpha.7; the app's
+    /// lookup answers from the type model's groups (`filetypes.toml`,
+    /// R28 4.3), its own groups among them.
+    fn group(&self, entry: &Entry) -> Result<Option<Cow<'_, str>>, Unknown> {
+        Ok(group_of(entry).map(|group| Cow::Borrowed(group.name)))
     }
 }
 
@@ -643,8 +654,12 @@ fn text_truth(text: &TextMatch, entry: &Entry, lookup: &dyn Lookup) -> Truth {
             Some(name) => text.hit(name),
             None => Truth::Unknown(Unknown::TypeNotChecked),
         },
-        // By extension, from the built-in table, until the type model.
-        Field::Group => text.hit(group_of(entry).map_or("", |group| group.name)),
+        // From the lookup: the type model's groups in the app, the
+        // built-in extension table by default.
+        Field::Group => match lookup.group(entry) {
+            Ok(group) => text.hit(group.as_deref().unwrap_or("")),
+            Err(unknown) => Truth::Unknown(unknown),
+        },
         Field::Label => {
             let any = entry
                 .labels
