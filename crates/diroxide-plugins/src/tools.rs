@@ -9,7 +9,10 @@
 //!   declares "any program", which its consent text says.
 //! - **An argument list, never a shell line,** no console window, the whole
 //!   tree killed on cancel, on the time limit, or when the output passes
-//!   its cap.
+//!   its cap. The run itself is the tools registry's one runner
+//!   (`diroxide_tools::run_limited`, alpha 4's commit 18), which was this
+//!   module's own until then; this module reads the request, words the
+//!   answer and keeps the plugin's limits.
 //! - **The environment** is diroxide's (inherited, `NO_COLOR=1` and the
 //!   rest, `DIRO_*` removed) plus a short allow-list of names the plugin
 //!   may set ([`ENV_ALLOWED`]).
@@ -21,16 +24,18 @@
 //!   host makes, and answers at once.
 
 use std::ffi::OsString;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 use diroxide_core::{Place, PlaceKind};
 use diroxide_tools::process::{ProcessSpec, Stream};
-use diroxide_tools::{ToolRegistry, ToolStatus, which};
+use diroxide_tools::{
+    Caps, Cut, Limited, RunFailure, Streaming, ToolRegistry, ToolStatus, run_limited, version_line,
+    which,
+};
+use diroxide_vfs::ToolStream;
 use serde_json::{Value, json};
 
 use crate::base64;
@@ -38,7 +43,6 @@ use crate::manifest::{Permissions, is_interpreter};
 use crate::places::plugin_place;
 use crate::protocol::{ErrorKind, Params, RpcError};
 use crate::router::CancelFlag;
-use crate::services::clean_text;
 use crate::spool::Spool;
 
 /// The environment variables a plugin may set for a tool.
@@ -187,85 +191,20 @@ impl Encoding {
 /// Sends one streamed chunk: the stream's name and its bytes.
 pub(crate) type Emit = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
 
-/// Where a streamed record ends (`split`): at one byte (`lines`, a line
-/// feed; `nul`, a NUL), or, for `cr` (alpha 4's contract step, R29 2.1),
-/// at a line feed or a carriage return, so a progress line a program
-/// rewrites in place (git's `clone --progress`) arrives as each rewrite;
-/// the empty record between a CR and its LF is dropped.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Separator {
-    Byte(u8),
-    CarriageReturn,
-}
-
-impl Separator {
-    fn find(self, bytes: &[u8]) -> Option<usize> {
-        match self {
-            Separator::Byte(separator) => bytes.iter().position(|b| *b == separator),
-            Separator::CarriageReturn => bytes.iter().position(|b| *b == b'\n' || *b == b'\r'),
-        }
+/// The stream's name on the wire.
+fn stream_name(stream: ToolStream) -> &'static str {
+    match stream {
+        ToolStream::Stdout => "stdout",
+        ToolStream::Stderr => "stderr",
     }
 }
 
-struct Pump {
-    bytes: Vec<u8>,
-}
-
-/// Reads one stream until it ends, keeping what fits under the shared cap
-/// and streaming records when asked.
-fn pump(
-    mut reader: impl Read,
-    name: &'static str,
-    budget: Arc<AtomicU64>,
-    over: Arc<AtomicBool>,
-    stream: Option<(Emit, Separator)>,
-) -> Pump {
-    let mut kept = Vec::new();
-    let mut pending = Vec::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let n = match reader.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => n,
-        };
-        let chunk = &buffer[..n];
-        let allowed = budget
-            .try_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
-                Some(left.saturating_sub(n as u64))
-            })
-            .unwrap_or(0)
-            .min(n as u64) as usize;
-        if allowed < n {
-            over.store(true, Ordering::SeqCst);
-        }
-        let chunk = &chunk[..allowed];
-        match &stream {
-            Some((emit, separator)) => {
-                pending.extend_from_slice(chunk);
-                while let Some(at) = separator.find(&pending) {
-                    let record: Vec<u8> = pending.drain(..=at).collect();
-                    let record = &record[..record.len() - 1];
-                    if *separator == Separator::CarriageReturn && record.is_empty() {
-                        continue;
-                    }
-                    emit(name, record);
-                }
-            }
-            None => kept.extend_from_slice(chunk),
-        }
-        if over.load(Ordering::SeqCst) {
-            break;
-        }
-    }
-    if let Some((emit, _)) = &stream
-        && !pending.is_empty()
-    {
-        emit(name, &pending);
-    }
-    Pump { bytes: kept }
-}
-
-/// Runs a tool for `tools/run`. `emit` sends streamed records.
+/// Runs a tool for `tools/run`. `emit` sends streamed records, each cut
+/// by `split`: at one byte (`lines`, a line feed; `nul`, a NUL), or, for
+/// `cr` (alpha 4's contract step, R29 2.1), at a line feed or a carriage
+/// return, so a progress line a program rewrites in place (git's `clone
+/// --progress`) arrives as each rewrite; the empty record between a CR
+/// and its LF is dropped.
 pub(crate) fn run(
     params: &Params,
     permissions: &Permissions,
@@ -290,10 +229,10 @@ pub(crate) fn run(
     if streamed.iter().any(|s| s != "stdout" && s != "stderr") {
         return Err(invalid("stream lists stdout and stderr only"));
     }
-    let separator = match params.get("split").and_then(Value::as_str) {
-        None | Some("lines") => Separator::Byte(b'\n'),
-        Some("nul") => Separator::Byte(0),
-        Some("cr") => Separator::CarriageReturn,
+    let cut = match params.get("split").and_then(Value::as_str) {
+        None | Some("lines") => Cut::Byte(b'\n'),
+        Some("nul") => Cut::Byte(0),
+        Some("cr") => Cut::CarriageReturn,
         Some(other) => {
             return Err(invalid(format!("split {other} is not lines, nul or cr")));
         }
@@ -329,14 +268,7 @@ pub(crate) fn run(
             .ok_or_else(|| RpcError::new(ErrorKind::NotFound, format!("{name} was not found")))?,
     )
     .args(&args)
-    .diroxide_environment()
-    .stdin(if input.is_some() {
-        Stream::Piped
-    } else {
-        Stream::Null
-    })
-    .stdout(Stream::Piped)
-    .stderr(Stream::Piped);
+    .diroxide_environment();
     if let Some(cwd) = cwd {
         spec = spec.cwd(cwd);
     }
@@ -354,101 +286,43 @@ pub(crate) fn run(
             spec = spec.env(key, value);
         }
     }
-    let mut child = spec
-        .spawn()
-        .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
-    if let (Some(mut input), Some(mut stdin)) = (input, child.take_stdin()) {
-        thread::Builder::new()
-            .name("tool-stdin".to_owned())
-            .spawn(move || {
-                let _ = std::io::copy(&mut input, &mut stdin);
-                let _ = stdin.flush();
-            })
-            .map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))?;
+    let mut limited = Limited::new(Some(timeout), Caps::shared(cap));
+    if let Some(input) = input {
+        limited = limited.with_input(input);
     }
-    let budget = Arc::new(AtomicU64::new(cap));
-    let over = Arc::new(AtomicBool::new(false));
-    let start_pump = |reader: Option<Box<dyn Read + Send>>, label: &'static str| {
-        let budget = Arc::clone(&budget);
-        let over = Arc::clone(&over);
-        let stream = emit
-            .clone()
-            .filter(|_| streamed.iter().any(|s| s == label))
-            .map(|emit| (emit, separator));
-        reader.and_then(|reader| {
-            thread::Builder::new()
-                .name(format!("tool-{label}"))
-                .spawn(move || pump(reader, label, budget, over, stream))
-                .ok()
-        })
-    };
-    let stdout = start_pump(
-        child
-            .take_stdout()
-            .map(|r| Box::new(r) as Box<dyn Read + Send>),
-        "stdout",
-    );
-    let stderr = start_pump(
-        child
-            .take_stderr()
-            .map(|r| Box::new(r) as Box<dyn Read + Send>),
-        "stderr",
-    );
-    let started = Instant::now();
-    let ending = loop {
-        if let Ok(Some(status)) = child.try_wait() {
-            // A child it left behind must not hold the pipes open.
-            let _ = child.start_kill();
-            break Ok(status.code());
-        }
-        if cancel.is_cancelled() {
-            let _ = child.kill_tree();
-            break Err(RpcError::new(ErrorKind::RequestCancelled, "cancelled"));
-        }
-        if started.elapsed() >= timeout {
-            let _ = child.kill_tree();
-            break Err(RpcError::new(
+    if let Some(emit) = emit.filter(|_| !streamed.is_empty()) {
+        limited = limited.streaming(Streaming {
+            stdout: streamed.iter().any(|s| s == "stdout"),
+            stderr: streamed.iter().any(|s| s == "stderr"),
+            cut,
+            emit: Arc::new(move |stream, bytes| emit(stream_name(stream), bytes)),
+        });
+    }
+    let done =
+        run_limited(spec, limited, &|| cancel.is_cancelled()).map_err(|failure| match failure {
+            RunFailure::Start(error) => RpcError::new(ErrorKind::Failed, error.to_string()),
+            RunFailure::Cancelled => RpcError::new(ErrorKind::RequestCancelled, "cancelled"),
+            RunFailure::TimedOut(limit) => RpcError::new(
                 ErrorKind::TimedOut,
                 format!(
                     "{name} did not finish in {}",
-                    crate::lines::duration_words(timeout)
+                    crate::lines::duration_words(limit)
                 ),
-            ));
-        }
-        if over.load(Ordering::SeqCst) {
-            let _ = child.kill_tree();
-            break Ok(None);
-        }
-        thread::sleep(Duration::from_millis(10));
-    };
-    let collected = Mutex::new((Vec::new(), Vec::new()));
-    for (handle, index) in [(stdout, 0), (stderr, 1)] {
-        if let Some(handle) = handle
-            && let Ok(pump) = handle.join()
-        {
-            let mut out = collected.lock().unwrap_or_else(PoisonError::into_inner);
-            if index == 0 {
-                out.0 = pump.bytes;
-            } else {
-                out.1 = pump.bytes;
-            }
-        }
-    }
-    let exit_code = ending?;
-    let (out, err) = collected
-        .into_inner()
-        .unwrap_or_else(PoisonError::into_inner);
+            ),
+        })?;
     Ok(json!({
-        "exit_code": exit_code,
-        "stdout": Encoding::of(&out, encoding),
-        "stderr": Encoding::of(&err, encoding),
+        "exit_code": done.status,
+        "stdout": Encoding::of(&done.stdout, encoding),
+        "stderr": Encoding::of(&done.stderr, encoding),
         "encoding": if encoding == Encoding::Base64 { "base64" } else { "text" },
-        "truncated": over.load(Ordering::SeqCst),
+        "truncated": done.stopped_at_cap,
     }))
 }
 
 /// `tools/find`: whether a tool is found, where, and, for a known tool,
-/// its version line.
+/// its version line: the registry's (standard output, then standard
+/// error, first non-empty line, 80 cells), so Poppler's `pdfinfo -v`,
+/// which writes only to standard error, has one too.
 pub(crate) fn find(params: &Params, tools: &ToolBox) -> Result<Value, RpcError> {
     let name = params
         .get("tool")
@@ -468,31 +342,6 @@ pub(crate) fn find(params: &Params, tools: &ToolBox) -> Result<Value, RpcError> 
         .filter(|spec| !spec.version_args.is_empty())
         .and_then(|spec| version_line(&path, spec.version_args));
     Ok(json!({"found": true, "path": path.display().to_string(), "version": version}))
-}
-
-fn version_line(path: &std::path::Path, args: &[&str]) -> Option<String> {
-    let mut child = ProcessSpec::new(path)
-        .args(args)
-        .diroxide_environment()
-        .stdin(Stream::Null)
-        .stdout(Stream::Piped)
-        .stderr(Stream::Null)
-        .spawn()
-        .ok()?;
-    let mut out = child.take_stdout()?;
-    let reader = thread::spawn(move || {
-        let mut text = Vec::new();
-        let _ = (&mut out).take(64 * 1024).read_to_end(&mut text);
-        text
-    });
-    if child.wait_timeout(Duration::from_secs(2)).ok()?.is_none() {
-        let _ = child.kill_tree();
-    }
-    let text = reader.join().ok()?;
-    String::from_utf8_lossy(&text)
-        .lines()
-        .map(|line| clean_text(line, 80))
-        .find(|line| !line.is_empty())
 }
 
 /// `tools/launch`: a program started detached; answers at once.
@@ -530,6 +379,9 @@ pub(crate) fn launch(
 pub(crate) mod tests {
     use std::env;
     use std::io::Write;
+    use std::sync::Mutex;
+    use std::thread;
+    use std::time::Instant;
 
     use super::*;
 

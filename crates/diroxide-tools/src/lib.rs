@@ -22,24 +22,28 @@
 //!
 //! Every child diroxide starts, a plugin, a script command or a tool,
 //! goes through the process helper ([`process`]): no shell, no console
-//! window, and a tree that is killed as a whole.
+//! window, and a tree that is killed as a whole. Every run under limits
+//! goes through the one runner ([`run`]), which was the plugin host's:
+//! the host, the manifest recipes, the registry and the version reader
+//! all call it.
 
 use std::collections::HashMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
 use diroxide_config::ToolsConfig;
 use diroxide_core::Explain;
-use diroxide_vfs::OpContext;
+use diroxide_core::format::human_size;
+use diroxide_vfs::{OpContext, RunLimits};
 use thiserror::Error;
 
 pub mod lookup;
 pub mod process;
 pub mod report;
+pub mod run;
 pub mod table;
 pub mod version;
 
@@ -48,6 +52,7 @@ pub use process::{ProcessError, ProcessHandle, ProcessSpec, Stream, Tie};
 pub use report::{
     FoundBy, LOOKUP_ORDER, LookupStep, NextStep, ToolKind, ToolReport, ToolState, ToolsReport,
 };
+pub use run::{AtCap, Caps, Cut, Emit, Finished, Limited, RunFailure, Streaming, run_limited};
 pub use table::{BUILTIN, CARTA_VERSION};
 pub use version::{version_line, version_number};
 
@@ -175,6 +180,23 @@ pub enum ToolError {
         /// The system's words.
         message: String,
     },
+    /// The tool ran past its time limit and was stopped, with every child
+    /// it started.
+    #[error("{tool} took longer than {seconds} seconds and was stopped")]
+    TimedOut {
+        /// The tool's name.
+        tool: String,
+        /// The limit, in whole seconds.
+        seconds: u64,
+    },
+    /// The tool wrote more than its output cap and was stopped.
+    #[error("{tool} wrote more than {limit} and was stopped")]
+    TooMuchOutput {
+        /// The tool's name.
+        tool: String,
+        /// The cap in words: "16.8 MB".
+        limit: String,
+    },
 }
 
 impl Explain for ToolError {
@@ -185,7 +207,9 @@ impl Explain for ToolError {
             ToolError::Unknown(_)
             | ToolError::BuiltIn(_)
             | ToolError::Cancelled
-            | ToolError::Start { .. } => String::new(),
+            | ToolError::Start { .. }
+            | ToolError::TimedOut { .. }
+            | ToolError::TooMuchOutput { .. } => String::new(),
         }
     }
 }
@@ -455,9 +479,12 @@ impl ToolRegistry {
         }
     }
 
-    /// Runs a tool with an argument list, no shell, no console window,
-    /// standard input closed, output captured. Phase 0 checks for
-    /// cancellation only before starting.
+    /// Runs a tool with an argument list through the one runner
+    /// ([`run_limited`]): no shell, no console window, diroxide's
+    /// environment, standard input closed, output captured, under the
+    /// plugin host's default limits ([`RunLimits::DEFAULT`], a minute and
+    /// 16 MiB), and stopped with its children when the context is
+    /// cancelled.
     pub fn run(
         &self,
         id: &str,
@@ -475,18 +502,44 @@ impl ToolRegistry {
         if ctx.cancel.is_cancelled() {
             return Err(ToolError::Cancelled);
         }
-        let mut command = Command::new(&path);
-        command.args(args).stdin(Stdio::null());
-        hide_console(&mut command);
-        let output = command.output().map_err(|e| ToolError::Start {
-            tool: spec.name.to_owned(),
-            message: e.to_string(),
-        })?;
-        Ok(ToolOutput {
-            code: output.status.code(),
-            stdout: output.stdout,
-            stderr: output.stderr,
-        })
+        let limits = RunLimits::DEFAULT;
+        let process = ProcessSpec::new(path)
+            .args(args.iter().cloned())
+            .diroxide_environment();
+        let limited = Limited::new(
+            Some(limits.timeout),
+            Caps::shared(limits.max_output_bytes as u64),
+        );
+        let tool = spec.name.to_owned();
+        match run_limited(process, limited, &|| ctx.cancel.is_cancelled()) {
+            Ok(done) if done.stopped_at_cap => Err(ToolError::TooMuchOutput {
+                tool,
+                limit: human_size(limits.max_output_bytes as u64),
+            }),
+            Ok(done) => Ok(ToolOutput {
+                code: done.status,
+                stdout: done.stdout,
+                stderr: done.stderr,
+            }),
+            Err(RunFailure::Cancelled) => Err(ToolError::Cancelled),
+            Err(RunFailure::TimedOut(limit)) => Err(ToolError::TimedOut {
+                tool,
+                seconds: limit.as_secs(),
+            }),
+            Err(RunFailure::Start(error)) => Err(ToolError::Start {
+                tool,
+                message: system_words(&error),
+            }),
+        }
+    }
+}
+
+/// The system's own words in a process error, without the program's name
+/// the error puts first.
+fn system_words(error: &ProcessError) -> String {
+    match error {
+        ProcessError::Start { message, .. } => message.clone(),
+        other => other.to_string(),
     }
 }
 
@@ -510,16 +563,6 @@ fn same_name(a: &str, b: &str) -> bool {
         a == b
     }
 }
-
-#[cfg(windows)]
-fn hide_console(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn hide_console(_command: &mut Command) {}
 
 #[cfg(test)]
 mod tests {

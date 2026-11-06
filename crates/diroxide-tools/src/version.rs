@@ -16,14 +16,13 @@
 //! Q16-HDRI x64", "5.4.0.20240606" from "tesseract v5.4.0.20240606",
 //! "9.0.2" from BtbN's "ffmpeg version n9.0.2-17-g2a571b6068-20260930".
 
-use std::io::Read;
 use std::path::Path;
-use std::thread;
 use std::time::Duration;
 
 use diroxide_core::names::{CharClass, classify};
 
-use crate::process::{ProcessSpec, Stream};
+use crate::process::ProcessSpec;
+use crate::run::{Caps, Limited, run_limited};
 
 /// How long a version command may run.
 pub const VERSION_TIMEOUT: Duration = Duration::from_secs(2);
@@ -42,45 +41,16 @@ const VERSION_OUTPUT_CAP: u64 = 64 * 1024;
 pub fn version_line(program: &Path, args: &[&str]) -> Option<String> {
     let mut spec = ProcessSpec::new(program)
         .args(args.iter().copied())
-        .diroxide_environment()
-        .stdin(Stream::Null)
-        .stdout(Stream::Piped)
-        .stderr(Stream::Piped);
+        .diroxide_environment();
     if let Some(folder) = program.parent().filter(|folder| folder.is_absolute()) {
         spec = spec.cwd(folder);
     }
-    let mut child = spec.spawn().ok()?;
-    let read = |stream: Option<Box<dyn Read + Send>>| {
-        stream.map(|stream| {
-            thread::spawn(move || {
-                let mut kept = Vec::new();
-                let _ = stream.take(VERSION_OUTPUT_CAP).read_to_end(&mut kept);
-                kept
-            })
-        })
-    };
-    let out = read(
-        child
-            .take_stdout()
-            .map(|s| Box::new(s) as Box<dyn Read + Send>),
+    let limited = Limited::new(
+        Some(VERSION_TIMEOUT),
+        Caps::each(VERSION_OUTPUT_CAP, VERSION_OUTPUT_CAP),
     );
-    let err = read(
-        child
-            .take_stderr()
-            .map(|s| Box::new(s) as Box<dyn Read + Send>),
-    );
-    let ended = child.wait_timeout(VERSION_TIMEOUT).ok().flatten().is_some();
-    // A child it left behind must not hold the pipes open; a command past
-    // its time is stopped with every child.
-    let _ = child.kill_tree();
-    if !ended {
-        return None;
-    }
-    let collect = |handle: Option<thread::JoinHandle<Vec<u8>>>| {
-        handle.and_then(|h| h.join().ok()).unwrap_or_default()
-    };
-    let (out, err) = (collect(out), collect(err));
-    first_line(&out, &err)
+    let done = run_limited(spec, limited, &|| false).ok()?;
+    first_line(&done.stdout, &done.stderr)
 }
 
 /// The version line of a command's output: the first non-empty line of
@@ -332,7 +302,7 @@ mod tests {
     #[test]
     fn slow_helper() {
         if std::env::args().any(|arg| arg == "mode=sleep") {
-            thread::sleep(Duration::from_secs(60));
+            std::thread::sleep(Duration::from_secs(60));
             std::process::exit(0);
         }
     }

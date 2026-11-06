@@ -15,15 +15,13 @@
 
 use std::ffi::OsString;
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::thread;
 use std::time::Duration;
 
 use diroxide_core::format::human_size;
-use diroxide_tools::process::{ProcessSpec, Stream};
+use diroxide_tools::process::ProcessSpec;
+use diroxide_tools::{Caps, Limited, RunFailure, run_limited};
 use toml::Value;
 
 use crate::lines;
@@ -170,8 +168,14 @@ struct Captured {
     timed_out: bool,
 }
 
-/// Runs a program with an argument list (no shell, no console window, a
-/// tree), keeping at most `cap` bytes of its output.
+/// The most of a recipe's standard error kept, for its last line.
+const MAX_ERROR_BYTES: u64 = 64 * 1024;
+
+/// Runs a program with an argument list through the tools registry's one
+/// runner (no shell, no console window, a tree, alpha 4's commit 18),
+/// keeping at most `cap` bytes of its standard output and 64 KiB of its
+/// standard error; past either cap the rest is dropped and the program
+/// left to finish, so a preview shows its first page and says it was cut.
 fn run_captured(
     program: &Path,
     args: &[OsString],
@@ -182,66 +186,26 @@ fn run_captured(
     let spec = ProcessSpec::new(program)
         .args(args.iter().cloned())
         .cwd(cwd)
-        .diroxide_environment()
-        .stdin(Stream::Null)
-        .stdout(Stream::Piped)
-        .stderr(Stream::Piped);
-    let mut child = spec.spawn().map_err(|e| e.to_string())?;
-    let (out_send, out_receive) = mpsc::channel();
-    if let Some(stdout) = child.take_stdout() {
-        let _ = thread::Builder::new()
-            .name("recipe-stdout".to_owned())
-            .spawn(move || {
-                let mut kept = Vec::new();
-                let mut stream = stdout;
-                let mut buffer = [0u8; 16 * 1024];
-                let mut cut = false;
-                loop {
-                    match stream.read(&mut buffer) {
-                        Ok(0) | Err(_) => break,
-                        Ok(n) => {
-                            let room = cap.saturating_sub(kept.len());
-                            kept.extend_from_slice(&buffer[..n.min(room)]);
-                            cut |= n > room;
-                        }
-                    }
-                }
-                let _ = out_send.send((kept, cut));
-            });
+        .diroxide_environment();
+    let limited = Limited::new(limit, Caps::each(cap as u64, MAX_ERROR_BYTES));
+    match run_limited(spec, limited, &|| false) {
+        Ok(done) => Ok(Captured {
+            code: done.status,
+            stdout: done.stdout,
+            cut: done.stdout_cut,
+            stderr: String::from_utf8_lossy(&done.stderr).into_owned(),
+            timed_out: false,
+        }),
+        Err(RunFailure::TimedOut(_)) => Ok(Captured {
+            code: None,
+            stdout: Vec::new(),
+            cut: false,
+            stderr: String::new(),
+            timed_out: true,
+        }),
+        Err(RunFailure::Start(error)) => Err(error.to_string()),
+        Err(RunFailure::Cancelled) => Err("it was cancelled".to_owned()),
     }
-    let (err_send, err_receive) = mpsc::channel();
-    if let Some(stderr) = child.take_stderr() {
-        let _ = thread::Builder::new()
-            .name("recipe-stderr".to_owned())
-            .spawn(move || {
-                let mut kept = Vec::new();
-                let _ = stderr.take(64 * 1024).read_to_end(&mut kept);
-                let _ = err_send.send(String::from_utf8_lossy(&kept).into_owned());
-            });
-    }
-    let (code, timed_out) = match limit {
-        Some(limit) => match child.wait_timeout(limit).map_err(|e| e.to_string())? {
-            Some(status) => (status.code(), false),
-            None => {
-                let _ = child.kill_tree();
-                (None, true)
-            }
-        },
-        None => (child.wait().map_err(|e| e.to_string())?.code(), false),
-    };
-    let (stdout, cut) = out_receive
-        .recv_timeout(Duration::from_secs(2))
-        .unwrap_or_default();
-    let stderr = err_receive
-        .recv_timeout(Duration::from_secs(2))
-        .unwrap_or_default();
-    Ok(Captured {
-        code,
-        stdout,
-        cut,
-        stderr,
-        timed_out,
-    })
 }
 
 /// Text from a tool, with escape sequences and control characters
