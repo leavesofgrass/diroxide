@@ -363,6 +363,21 @@ pub struct Detection {
     pub stage: Stage,
 }
 
+/// The retro pack: the old formats (Amiga and tracker music, PowerPacker,
+/// the IFF family, old office files), read only while `filetypes.retro`
+/// is on (R28 4.3).
+pub const RETRO_TABLE: &str = include_str!("../data/filetypes-retro.toml");
+
+/// The setting's line in words, for Settings and the Groups list:
+/// "Retro types: off" (16 cells).
+pub const fn retro_line(on: bool) -> &'static str {
+    if on {
+        "Retro types: on"
+    } else {
+        "Retro types: off"
+    }
+}
+
 /// The file types, in checking order, their tree and their groups.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeRegistry {
@@ -370,6 +385,52 @@ pub struct TypeRegistry {
     group_patterns: Vec<Vec<NamePattern>>,
     tree: TypeTree,
     problems: Vec<String>,
+    /// Whether the retro pack is read.
+    retro: bool,
+    /// The owner's retro types, kept aside while the pack is off.
+    held: Vec<FileType>,
+}
+
+/// The types read from a table, and what in it could not be used.
+fn read_table(text: &str, what: &str) -> (Vec<FileType>, Vec<TypeGroup>, Vec<String>) {
+    let config = match FileTypesConfig::from_toml(text) {
+        Ok(config) => config,
+        Err(error) => {
+            return (
+                Vec::new(),
+                Vec::new(),
+                vec![format!("{what} not read: {error}")],
+            );
+        }
+    };
+    let mut problems = Vec::new();
+    let types = config
+        .types
+        .iter()
+        .map(|c| {
+            let (own, found) = FileType::from_config(c);
+            problems.extend(found);
+            own
+        })
+        .collect();
+    let groups = config
+        .groups
+        .iter()
+        .map(|g| TypeGroup {
+            yours: false,
+            ..TypeGroup::from_config(g)
+        })
+        .collect();
+    (types, groups, problems)
+}
+
+/// The types with a repeated id left out after the first.
+fn first_of_each(types: Vec<FileType>) -> Vec<FileType> {
+    let mut seen = std::collections::HashSet::new();
+    types
+        .into_iter()
+        .filter(|t| seen.insert(t.id.clone()))
+        .collect()
 }
 
 impl TypeRegistry {
@@ -384,35 +445,60 @@ impl TypeRegistry {
 
     /// The shipped table, read.
     fn shipped() -> Self {
-        let config = match FileTypesConfig::from_toml(SHIPPED_TABLE) {
-            Ok(config) => config,
-            Err(error) => {
-                let mut fallback = Self::fallback();
-                fallback
-                    .problems
-                    .push(format!("Shipped file types not read: {error}"));
-                return fallback;
-            }
-        };
-        let mut problems = Vec::new();
-        let types = config
-            .types
-            .iter()
-            .map(|c| {
-                let (own, found) = FileType::from_config(c);
-                problems.extend(found);
-                own
-            })
-            .collect();
-        let groups = config
-            .groups
-            .iter()
-            .map(|g| TypeGroup {
-                yours: false,
-                ..TypeGroup::from_config(g)
-            })
-            .collect();
+        let (types, groups, problems) = read_table(SHIPPED_TABLE, "Shipped file types");
+        if types.is_empty() {
+            let mut fallback = Self::fallback();
+            fallback.problems.extend(problems);
+            return fallback;
+        }
         Self::from_parts(types, groups, problems)
+    }
+
+    /// The retro pack's types, read once.
+    fn retro_pack() -> &'static (Vec<FileType>, Vec<String>) {
+        static RETRO: OnceLock<(Vec<FileType>, Vec<String>)> = OnceLock::new();
+        RETRO.get_or_init(|| {
+            let (types, _, problems) = read_table(RETRO_TABLE, "Retro file types");
+            (types, problems)
+        })
+    }
+
+    /// Whether the retro pack is read.
+    pub fn retro(&self) -> bool {
+        self.retro
+    }
+
+    /// The same registry with the retro pack on or off (the setting
+    /// `filetypes.retro`, off by default). On, the pack's types join after
+    /// the others, and the owner's own types marked `retro` come back;
+    /// off, every retro type leaves, and the owner's are kept aside.
+    pub fn with_retro(self, on: bool) -> Self {
+        if on == self.retro {
+            return self;
+        }
+        let mut problems = self.problems;
+        let mut held = self.held;
+        let types = if on {
+            let (pack, found) = Self::retro_pack();
+            for problem in found {
+                if !problems.contains(problem) {
+                    problems.push(problem.clone());
+                }
+            }
+            let mut types = std::mem::take(&mut held);
+            types.extend(self.tree.types().iter().cloned());
+            types.extend(pack.iter().cloned());
+            first_of_each(types)
+        } else {
+            let (retro, rest): (Vec<FileType>, Vec<FileType>) =
+                self.tree.types().iter().cloned().partition(|t| t.retro);
+            held = retro.into_iter().filter(|t| t.yours).collect();
+            rest
+        };
+        let mut registry = Self::from_parts(types, self.groups, problems);
+        registry.retro = on;
+        registry.held = held;
+        registry
     }
 
     /// Phase 0's twelve types over core's seven groups: what is left when
@@ -509,26 +595,33 @@ impl TypeRegistry {
             group_patterns,
             tree,
             problems,
+            retro: false,
+            held: Vec::new(),
         }
     }
 
     /// The same registry with the user's types added before the built-in
-    /// ones; a user type with a built-in id replaces it. The file's
+    /// ones; a user type with a built-in id replaces it. A user type
+    /// marked `retro` waits aside while the retro pack is off. The file's
     /// groups replace the built-in groups of the same id and add the
     /// rest. What could not be used is said in
     /// [`TypeRegistry::problems`].
     pub fn with_config(self, config: &FileTypesConfig) -> Self {
+        let retro = self.retro;
+        let mut held = self.held;
         let mut problems = self.problems;
-        let mut types: Vec<FileType> = config
-            .types
-            .iter()
-            .map(|c| {
-                let (mut own, found) = FileType::from_config(c);
-                own.yours = true;
-                problems.extend(found);
-                own
-            })
-            .collect();
+        let mut types: Vec<FileType> = Vec::new();
+        for c in &config.types {
+            let (mut own, found) = FileType::from_config(c);
+            own.yours = true;
+            problems.extend(found);
+            if own.retro && !retro {
+                held.retain(|h| h.id != own.id);
+                held.push(own);
+            } else {
+                types.push(own);
+            }
+        }
         let mut builtin = self.tree.types().to_vec();
         builtin.retain(|b| !types.iter().any(|own| own.id == b.id));
         types.append(&mut builtin);
@@ -540,7 +633,10 @@ impl TypeRegistry {
                 None => groups.push(own),
             }
         }
-        Self::from_parts(types, groups, problems)
+        let mut registry = Self::from_parts(first_of_each(types), groups, problems);
+        registry.retro = retro;
+        registry.held = held;
+        registry
     }
 
     /// What could not be used from the types' files, each line meaning
