@@ -208,15 +208,18 @@ mod tests {
         assert!(!fits(&spec, &[], &inside), "no provider claims it");
     }
 
+    /// The marker is the test's own, not `.git`: a temporary folder
+    /// inside a git checkout (the build's own folder) has `.git` above it.
     #[test]
     fn a_marker_is_found_in_the_folder_or_above_it() {
+        const MARKER: &str = "diro-test-marker";
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path().join("repo");
         let deep = repo.join("src").join("app");
         std::fs::create_dir_all(&deep).unwrap();
-        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        std::fs::create_dir_all(repo.join(MARKER)).unwrap();
         let place = |p: &Path| Place::parse(&p.display().to_string()).unwrap();
-        let git = [spec(None, Some(".git"))];
+        let git = [spec(None, Some(MARKER))];
         assert!(matches(&git, &[], &place(&repo)));
         assert!(matches(&git, &[], &place(&deep)));
         assert!(!matches(&git, &[], &place(dir.path())));
@@ -227,7 +230,7 @@ mod tests {
         ));
         assert!(!matches(&[spec(Some("sftp"), None)], &[], &place(&repo)));
         assert!(!matches(
-            &[spec(Some("sftp"), Some(".git"))],
+            &[spec(Some("sftp"), Some(MARKER))],
             &[],
             &place(&repo)
         ));
