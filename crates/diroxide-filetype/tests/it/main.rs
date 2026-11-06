@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod containers;
+mod shipped;
 
 use diroxide_config::FileTypesConfig;
 use diroxide_filetype::TypeRegistry;

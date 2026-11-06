@@ -1,0 +1,1876 @@
+# The file types diroxide knows, and their groups: the shipped table,
+# embedded in the program. The owner's own filetypes.toml has the same
+# shape and is read after this one; a type or group with an id from here
+# replaces it. Detection tests a file's first 64 bytes against `magic`
+# (hexadecimal pairs, ?? for any byte), then `when` (one filter
+# expression; `content` is the first bytes as text), then the name
+# (`extensions`, `patterns`). A child (`parent`) always beats its parent;
+# otherwise the higher `priority` wins. A signature of fewer than three
+# fixed bytes counts only with the name or the condition as well.
+#
+# Groups are what Select by group and `group:` name; a type is in one
+# group, and a group's `patterns` add files by their names alone.
+
+[[group]]
+id = "images"
+name = "Images"
+about = "Pictures and photos: PNG, JPEG, GIF, WebP, camera raw files and the like."
+
+[[group]]
+id = "music"
+name = "Music"
+about = "Sound and music: MP3, FLAC, Ogg, WAV and the like."
+
+[[group]]
+id = "video"
+name = "Video"
+about = "Video: MP4, Matroska, WebM, QuickTime and the like."
+
+[[group]]
+id = "documents"
+name = "Documents"
+about = "Documents, sheets, slides and e-books: PDF, Word, OpenDocument, EPUB."
+
+[[group]]
+id = "archives"
+name = "Archives"
+about = "Archives and disk images: zip, 7z, tar and its compressed forms, ISO."
+
+[[group]]
+id = "code"
+name = "Code"
+about = "Source code, scripts and settings files: Rust, C, Python, HTML, JSON, TOML."
+
+[[group]]
+id = "text"
+name = "Text"
+about = "Plain text, notes and logs: TXT, Markdown, CSV, INI and the like."
+
+[[group]]
+id = "screenshots"
+name = "Screenshots"
+about = "Screen pictures by their names: Windows, macOS, iOS, Android, GNOME and KDE."
+patterns = [
+    # Windows, Win and Print Screen.
+    're:^Screenshot \(\d+\)\.png$',
+    # macOS, older and newer, 12 or 24 hours; the space before AM or PM is a narrow no-break space on macOS 14 and later.
+    're:^Screen ?shot \d{4}-\d{2}-\d{2} at \d{1,2}\.\d{2}\.\d{2}(?:\s?[AP]M)?(?: \(\d+\))?\.png$',
+    # iOS, a weak sign: a PNG named like a camera file.
+    're:^IMG_\d{4}\.PNG$',
+    # Android, stock and Samsung.
+    're:^Screenshot_\d{8}[-_]\d{6}(?:_[\w.]+)?\.(?:png|jpe?g)$',
+    # GNOME.
+    're:^Screenshot from \d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}\.png$',
+    # KDE Spectacle.
+    're:^Screenshot_\d{8}_\d{6}\.png$',
+]
+
+[[type]]
+id = "text"
+name = "text file"
+short = "text"
+mime = "text/plain"
+group = "text"
+extensions = ["txt", "text", "log", "nfo"]
+
+[[type]]
+id = "markdown"
+name = "Markdown text"
+short = "Markdown"
+mime = "text/markdown"
+group = "text"
+extensions = ["md", "markdown"]
+
+[[type]]
+id = "rst"
+name = "reStructuredText"
+short = "RST"
+mime = "text/x-rst"
+group = "text"
+extensions = ["rst"]
+
+[[type]]
+id = "csv"
+name = "CSV table"
+short = "CSV"
+mime = "text/csv"
+group = "text"
+extensions = ["csv"]
+
+[[type]]
+id = "tsv"
+name = "tab-separated table"
+short = "TSV"
+mime = "text/tab-separated-values"
+group = "text"
+extensions = ["tsv"]
+
+[[type]]
+id = "ini"
+name = "settings file"
+short = "INI"
+mime = "text/x-ini"
+group = "text"
+extensions = ["ini", "cfg", "conf"]
+
+[[type]]
+id = "org"
+name = "Org text"
+short = "Org"
+mime = "text/x-org"
+group = "text"
+extensions = ["org"]
+
+[[type]]
+id = "tex"
+name = "TeX document"
+short = "TeX"
+mime = "text/x-tex"
+group = "text"
+extensions = ["tex"]
+
+[[type]]
+id = "asciidoc"
+name = "AsciiDoc text"
+short = "AsciiDoc"
+mime = "text/x-asciidoc"
+group = "text"
+extensions = ["adoc", "asciidoc"]
+
+[[type]]
+id = "subrip"
+name = "SubRip subtitles"
+short = "SRT"
+mime = "application/x-subrip"
+group = "text"
+extensions = ["srt"]
+
+[[type]]
+id = "webvtt"
+name = "WebVTT subtitles"
+short = "VTT"
+mime = "text/vtt"
+group = "text"
+extensions = ["vtt"]
+magic = [
+    { at = 0, hex = "57 45 42 56 54 54" }, # WEBVTT
+    { at = 0, hex = "EF BB BF 57 45 42 56 54 54" }, # ...WEBVTT
+]
+
+[[type]]
+id = "diff"
+name = "patch"
+short = "diff"
+mime = "text/x-diff"
+group = "text"
+extensions = ["diff", "patch"]
+
+[[type]]
+id = "calendar"
+name = "calendar"
+short = "iCalendar"
+mime = "text/calendar"
+group = "text"
+extensions = ["ics", "ifb"]
+magic = [
+    { at = 0, hex = "42 45 47 49 4E 3A 56 43 41 4C 45 4E 44 41 52" }, # BEGIN:VCALENDAR
+]
+
+[[type]]
+id = "vcard"
+name = "contact card"
+short = "vCard"
+mime = "text/vcard"
+group = "text"
+extensions = ["vcf", "vcard"]
+magic = [
+    { at = 0, hex = "42 45 47 49 4E 3A 56 43 41 52 44" }, # BEGIN:VCARD
+]
+
+[[type]]
+id = "script"
+name = "script"
+short = "script"
+mime = "text/x-script"
+group = "code"
+priority = -1
+when = 'content:re:"^#!"'
+
+[[type]]
+id = "rust"
+name = "Rust source"
+short = "Rust"
+mime = "text/x-rust"
+group = "code"
+extensions = ["rs"]
+
+[[type]]
+id = "c"
+name = "C source"
+short = "C"
+mime = "text/x-csrc"
+group = "code"
+extensions = ["c", "h"]
+
+[[type]]
+id = "cpp"
+name = "C++ source"
+short = "C++"
+mime = "text/x-c++src"
+group = "code"
+extensions = ["cc", "cpp", "cxx", "hpp", "hh", "hxx"]
+
+[[type]]
+id = "csharp"
+name = "C# source"
+short = "C#"
+mime = "text/x-csharp"
+group = "code"
+extensions = ["cs"]
+
+[[type]]
+id = "java"
+name = "Java source"
+short = "Java"
+mime = "text/x-java"
+group = "code"
+extensions = ["java"]
+
+[[type]]
+id = "kotlin"
+name = "Kotlin source"
+short = "Kotlin"
+mime = "text/x-kotlin"
+group = "code"
+extensions = ["kt", "kts"]
+
+[[type]]
+id = "go"
+name = "Go source"
+short = "Go"
+mime = "text/x-go"
+group = "code"
+extensions = ["go"]
+
+[[type]]
+id = "python"
+name = "Python script"
+short = "Python"
+mime = "text/x-python"
+group = "code"
+extensions = ["py", "pyw"]
+when = 'content:re:"^#![^\n]*python"'
+
+[[type]]
+id = "ruby"
+name = "Ruby script"
+short = "Ruby"
+mime = "text/x-ruby"
+group = "code"
+extensions = ["rb"]
+when = 'content:re:"^#![^\n]*ruby"'
+
+[[type]]
+id = "javascript"
+name = "JavaScript"
+short = "JS"
+mime = "text/javascript"
+group = "code"
+extensions = ["js", "mjs", "cjs", "jsx"]
+when = 'content:re:"^#![^\n]*node"'
+
+[[type]]
+id = "typescript"
+name = "TypeScript"
+short = "TS"
+mime = "text/x-typescript"
+group = "code"
+extensions = ["ts", "tsx", "cts"]
+
+[[type]]
+id = "php"
+name = "PHP script"
+short = "PHP"
+mime = "application/x-httpd-php"
+group = "code"
+extensions = ["php"]
+when = 'content:re:"^<\?php"'
+
+[[type]]
+id = "perl"
+name = "Perl script"
+short = "Perl"
+mime = "text/x-perl"
+group = "code"
+extensions = ["pl", "pm"]
+when = 'content:re:"^#![^\n]*perl"'
+
+[[type]]
+id = "lua"
+name = "Lua script"
+short = "Lua"
+mime = "text/x-lua"
+group = "code"
+extensions = ["lua"]
+when = 'content:re:"^#![^\n]*lua"'
+
+[[type]]
+id = "swift"
+name = "Swift source"
+short = "Swift"
+mime = "text/x-swift"
+group = "code"
+extensions = ["swift"]
+
+[[type]]
+id = "haskell"
+name = "Haskell source"
+short = "Haskell"
+mime = "text/x-haskell"
+group = "code"
+extensions = ["hs"]
+
+[[type]]
+id = "ocaml"
+name = "OCaml source"
+short = "OCaml"
+mime = "text/x-ocaml"
+group = "code"
+extensions = ["ml", "mli"]
+
+[[type]]
+id = "scala"
+name = "Scala source"
+short = "Scala"
+mime = "text/x-scala"
+group = "code"
+extensions = ["scala"]
+
+[[type]]
+id = "lisp"
+name = "Lisp source"
+short = "Lisp"
+mime = "text/x-lisp"
+group = "code"
+extensions = ["el", "lisp"]
+
+[[type]]
+id = "clojure"
+name = "Clojure source"
+short = "Clojure"
+mime = "text/x-clojure"
+group = "code"
+extensions = ["clj", "cljs"]
+
+[[type]]
+id = "shell"
+name = "shell script"
+short = "shell"
+mime = "application/x-sh"
+group = "code"
+extensions = ["sh", "bash", "zsh", "fish"]
+when = 'content:re:"^#![^\n]*\b(?:sh|bash|zsh|dash|ksh|fish)\b"'
+
+[[type]]
+id = "powershell"
+name = "PowerShell script"
+short = "PowerShell"
+mime = "application/x-powershell"
+group = "code"
+extensions = ["ps1", "psm1", "psd1"]
+
+[[type]]
+id = "batch"
+name = "batch file"
+short = "batch"
+mime = "text/x-msdos-batch"
+group = "code"
+extensions = ["bat", "cmd"]
+
+[[type]]
+id = "sql"
+name = "SQL script"
+short = "SQL"
+mime = "application/sql"
+group = "code"
+extensions = ["sql"]
+
+[[type]]
+id = "html"
+name = "web page"
+short = "HTML"
+mime = "text/html"
+group = "code"
+extensions = ["html", "htm", "xhtml"]
+when = 'content:re:"(?i)^\s*<!doctype html"'
+
+[[type]]
+id = "css"
+name = "style sheet"
+short = "CSS"
+mime = "text/css"
+group = "code"
+extensions = ["css"]
+
+[[type]]
+id = "sass"
+name = "style sheet source"
+short = "Sass"
+mime = "text/x-scss"
+group = "code"
+extensions = ["scss", "sass", "less"]
+
+[[type]]
+id = "xml"
+name = "XML file"
+short = "XML"
+mime = "application/xml"
+group = "code"
+priority = -1
+extensions = ["xml"]
+magic = [
+    { at = 0, hex = "3C 3F 78 6D 6C" }, # <?xml
+    { at = 0, hex = "EF BB BF 3C 3F 78 6D 6C" }, # ...<?xml
+]
+
+[[type]]
+id = "json"
+name = "JSON file"
+short = "JSON"
+mime = "application/json"
+group = "code"
+extensions = ["json"]
+
+[[type]]
+id = "yaml"
+name = "YAML file"
+short = "YAML"
+mime = "application/yaml"
+group = "code"
+extensions = ["yaml", "yml"]
+
+[[type]]
+id = "toml"
+name = "TOML file"
+short = "TOML"
+mime = "application/toml"
+group = "code"
+extensions = ["toml"]
+
+[[type]]
+id = "asm"
+name = "assembly source"
+short = "asm"
+mime = "text/x-asm"
+group = "code"
+extensions = ["asm", "s"]
+
+[[type]]
+id = "vim"
+name = "Vim script"
+short = "Vim"
+mime = "text/x-vim"
+group = "code"
+extensions = ["vim"]
+
+[[type]]
+id = "makefile"
+name = "makefile"
+short = "make"
+mime = "text/x-makefile"
+group = "code"
+extensions = ["mk"]
+patterns = ["Makefile, makefile, GNUmakefile"]
+
+[[type]]
+id = "dockerfile"
+name = "Dockerfile"
+short = "Docker"
+mime = "text/x-dockerfile"
+group = "code"
+extensions = ["dockerfile"]
+patterns = ["Dockerfile, Dockerfile.*, Containerfile"]
+
+[[type]]
+id = "wasm"
+name = "WebAssembly module"
+short = "Wasm"
+mime = "application/wasm"
+group = "code"
+extensions = ["wasm"]
+magic = [
+    { at = 0, hex = "00 61 73 6D" }, # .asm
+]
+
+[[type]]
+id = "pdf"
+name = "PDF document"
+short = "PDF"
+mime = "application/pdf"
+group = "documents"
+extensions = ["pdf"]
+magic = [
+    { at = 0, hex = "25 50 44 46 2D" }, # %PDF-
+]
+
+[[type]]
+id = "ole"
+name = "Microsoft compound file"
+short = "OLE"
+mime = "application/x-ole-storage"
+priority = -1
+magic = [
+    { at = 0, hex = "D0 CF 11 E0 A1 B1 1A E1" }, # ........
+]
+
+[[type]]
+id = "doc"
+name = "Word 97 document"
+short = "DOC"
+mime = "application/msword"
+group = "documents"
+parent = "ole"
+extensions = ["doc", "dot"]
+
+[[type]]
+id = "xls"
+name = "Excel 97 workbook"
+short = "XLS"
+mime = "application/vnd.ms-excel"
+group = "documents"
+parent = "ole"
+extensions = ["xls", "xlt"]
+
+[[type]]
+id = "ppt"
+name = "PowerPoint 97 presentation"
+short = "PPT"
+mime = "application/vnd.ms-powerpoint"
+group = "documents"
+parent = "ole"
+extensions = ["ppt", "pps", "pot"]
+
+[[type]]
+id = "msi"
+name = "Windows installer"
+short = "MSI"
+mime = "application/x-msi"
+parent = "ole"
+extensions = ["msi", "msp"]
+
+[[type]]
+id = "msg"
+name = "Outlook message"
+short = "MSG"
+mime = "application/vnd.ms-outlook"
+parent = "ole"
+extensions = ["msg"]
+
+[[type]]
+id = "ooxml"
+name = "Office Open XML file"
+short = "OOXML"
+mime = "application/zip"
+group = "documents"
+parent = "zip"
+priority = -1
+magic = [
+    { at = 30, hex = "5B 43 6F 6E 74 65 6E 74 5F 54 79 70 65 73 5D 2E 78 6D 6C" }, # [Content_Types].xml
+    { at = 30, hex = "5F 72 65 6C 73 2F" }, # _rels/
+    { at = 30, hex = "64 6F 63 50 72 6F 70 73 2F" }, # docProps/
+]
+
+[[type]]
+id = "docx"
+name = "Word document"
+short = "DOCX"
+mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+group = "documents"
+parent = "zip"
+extensions = ["docx", "docm", "dotx"]
+magic = [
+    { at = 30, hex = "77 6F 72 64 2F" }, # word/
+]
+
+[[type]]
+id = "xlsx"
+name = "Excel workbook"
+short = "XLSX"
+mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+group = "documents"
+parent = "zip"
+extensions = ["xlsx", "xlsm", "xltx"]
+magic = [
+    { at = 30, hex = "78 6C 2F" }, # xl/
+]
+
+[[type]]
+id = "pptx"
+name = "PowerPoint presentation"
+short = "PPTX"
+mime = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+group = "documents"
+parent = "zip"
+extensions = ["pptx", "pptm", "ppsx"]
+magic = [
+    { at = 30, hex = "70 70 74 2F" }, # ppt/
+]
+
+[[type]]
+id = "xps"
+name = "XPS document"
+short = "XPS"
+mime = "application/vnd.ms-xpsdocument"
+group = "documents"
+parent = "zip"
+extensions = ["xps", "oxps"]
+
+[[type]]
+id = "opendocument"
+name = "OpenDocument file"
+short = "ODF"
+mime = "application/zip"
+group = "documents"
+parent = "zip"
+priority = -1
+magic = [
+    { at = 30, hex = "6D 69 6D 65 74 79 70 65 61 70 70 6C 69 63 61 74 69 6F 6E 2F 76 6E 64 2E 6F 61 73 69 73 2E 6F 70 65 6E" }, # mimetypeapplication/vnd.oasis.open
+]
+
+[[type]]
+id = "odt"
+name = "OpenDocument text"
+short = "ODT"
+mime = "application/vnd.oasis.opendocument.text"
+group = "documents"
+parent = "zip"
+extensions = ["odt", "ott"]
+
+[[type]]
+id = "ods"
+name = "OpenDocument spreadsheet"
+short = "ODS"
+mime = "application/vnd.oasis.opendocument.spreadsheet"
+group = "documents"
+parent = "zip"
+extensions = ["ods", "ots"]
+
+[[type]]
+id = "odp"
+name = "OpenDocument presentation"
+short = "ODP"
+mime = "application/vnd.oasis.opendocument.presentation"
+group = "documents"
+parent = "zip"
+extensions = ["odp", "otp"]
+
+[[type]]
+id = "odg"
+name = "OpenDocument drawing"
+short = "ODG"
+mime = "application/vnd.oasis.opendocument.graphics"
+group = "documents"
+parent = "zip"
+extensions = ["odg", "otg"]
+
+[[type]]
+id = "epub"
+name = "EPUB book"
+short = "EPUB"
+mime = "application/epub+zip"
+group = "documents"
+parent = "zip"
+extensions = ["epub"]
+magic = [
+    { at = 30, hex = "6D 69 6D 65 74 79 70 65 61 70 70 6C 69 63 61 74 69 6F 6E 2F 65 70 75 62 2B 7A 69 70" }, # mimetypeapplication/epub+zip
+    { at = 30, hex = "4D 45 54 41 2D 49 4E 46 2F 63 6F 6E 74 61 69 6E 65 72 2E 78 6D 6C" }, # META-INF/container.xml
+]
+
+[[type]]
+id = "pages"
+name = "Pages document"
+short = "Pages"
+mime = "application/vnd.apple.pages"
+group = "documents"
+parent = "zip"
+extensions = ["pages"]
+
+[[type]]
+id = "numbers"
+name = "Numbers spreadsheet"
+short = "Numbers"
+mime = "application/vnd.apple.numbers"
+group = "documents"
+parent = "zip"
+extensions = ["numbers"]
+
+[[type]]
+id = "keynote"
+name = "Keynote presentation"
+short = "Keynote"
+mime = "application/vnd.apple.keynote"
+group = "documents"
+parent = "zip"
+extensions = ["key"]
+
+[[type]]
+id = "cbz"
+name = "comic book archive"
+short = "CBZ"
+mime = "application/vnd.comicbook+zip"
+group = "documents"
+parent = "zip"
+extensions = ["cbz"]
+
+[[type]]
+id = "rtf"
+name = "rich text document"
+short = "RTF"
+mime = "application/rtf"
+group = "documents"
+extensions = ["rtf"]
+magic = [
+    { at = 0, hex = "7B 5C 72 74 66" }, # {.rtf
+]
+
+[[type]]
+id = "djvu"
+name = "DjVu document"
+short = "DjVu"
+mime = "image/vnd.djvu"
+group = "documents"
+extensions = ["djvu", "djv"]
+magic = [
+    { at = 0, hex = "41 54 26 54 46 4F 52 4D" }, # AT&TFORM
+]
+
+[[type]]
+id = "mobi"
+name = "Mobipocket book"
+short = "MOBI"
+mime = "application/x-mobipocket-ebook"
+group = "documents"
+extensions = ["mobi", "azw", "azw3"]
+
+[[type]]
+id = "postscript"
+name = "PostScript document"
+short = "PS"
+mime = "application/postscript"
+group = "documents"
+extensions = ["ps", "eps"]
+magic = [
+    { at = 0, hex = "25 21 50 53" }, # %!PS
+    { at = 0, hex = "C5 D0 D3 C6" }, # ....
+]
+
+[[type]]
+id = "chm"
+name = "compiled help file"
+short = "CHM"
+mime = "application/vnd.ms-htmlhelp"
+group = "documents"
+extensions = ["chm"]
+magic = [
+    { at = 0, hex = "49 54 53 46" }, # ITSF
+]
+
+[[type]]
+id = "cbr"
+name = "comic book archive"
+short = "CBR"
+mime = "application/vnd.comicbook-rar"
+group = "documents"
+parent = "rar"
+extensions = ["cbr"]
+
+[[type]]
+id = "png"
+name = "PNG image"
+short = "PNG"
+mime = "image/png"
+group = "images"
+extensions = ["png"]
+magic = [
+    { at = 0, hex = "89 50 4E 47 0D 0A 1A 0A" }, # .PNG....
+]
+
+[[type]]
+id = "jpeg"
+name = "JPEG image"
+short = "JPEG"
+mime = "image/jpeg"
+group = "images"
+extensions = ["jpg", "jpeg", "jpe", "jfif"]
+magic = [
+    { at = 0, hex = "FF D8 FF" }, # ...
+]
+
+[[type]]
+id = "gif"
+name = "GIF image"
+short = "GIF"
+mime = "image/gif"
+group = "images"
+extensions = ["gif"]
+magic = [
+    { at = 0, hex = "47 49 46 38 ?? 61" }, # GIF8?a
+]
+
+[[type]]
+id = "webp"
+name = "WebP image"
+short = "WebP"
+mime = "image/webp"
+group = "images"
+extensions = ["webp"]
+magic = [
+    { at = 0, hex = "52 49 46 46 ?? ?? ?? ?? 57 45 42 50" }, # RIFF????WEBP
+]
+
+[[type]]
+id = "bmp"
+name = "bitmap image"
+short = "BMP"
+mime = "image/bmp"
+group = "images"
+extensions = ["bmp", "dib"]
+magic = [
+    { at = 0, hex = "42 4D" }, # BM
+]
+
+[[type]]
+id = "tiff"
+name = "TIFF image"
+short = "TIFF"
+mime = "image/tiff"
+group = "images"
+extensions = ["tif", "tiff"]
+magic = [
+    { at = 0, hex = "49 49 2A 00" }, # II*.
+    { at = 0, hex = "4D 4D 00 2A" }, # MM.*
+]
+
+[[type]]
+id = "camera-raw"
+name = "camera raw image"
+short = "raw"
+mime = "image/x-dcraw"
+group = "images"
+parent = "tiff"
+extensions = ["cr2", "nef", "nrw", "arw", "srf", "sr2", "dng", "pef", "raw"]
+
+[[type]]
+id = "orf"
+name = "Olympus raw image"
+short = "ORF"
+mime = "image/x-olympus-orf"
+group = "images"
+extensions = ["orf"]
+magic = [
+    { at = 0, hex = "49 49 52 4F" }, # IIRO
+    { at = 0, hex = "49 49 52 53" }, # IIRS
+    { at = 0, hex = "4D 4D 4F 52" }, # MMOR
+]
+
+[[type]]
+id = "rw2"
+name = "Panasonic raw image"
+short = "RW2"
+mime = "image/x-panasonic-rw2"
+group = "images"
+extensions = ["rw2"]
+magic = [
+    { at = 0, hex = "49 49 55 00" }, # IIU.
+]
+
+[[type]]
+id = "ico"
+name = "icon"
+short = "ICO"
+mime = "image/vnd.microsoft.icon"
+group = "images"
+extensions = ["ico"]
+magic = [
+    { at = 0, hex = "00 00 01 00" }, # ....
+]
+
+[[type]]
+id = "svg"
+name = "SVG drawing"
+short = "SVG"
+mime = "image/svg+xml"
+group = "images"
+extensions = ["svg"]
+when = 'content:"<svg"'
+
+[[type]]
+id = "svgz"
+name = "compressed SVG drawing"
+short = "SVGZ"
+mime = "image/svg+xml"
+group = "images"
+parent = "gzip"
+extensions = ["svgz"]
+
+[[type]]
+id = "heic"
+name = "HEIF image"
+short = "HEIC"
+mime = "image/heic"
+group = "images"
+parent = "iso-media"
+extensions = ["heic", "heif", "hif"]
+magic = [
+    { at = 4, hex = "66 74 79 70 68 65 69 63" }, # ftypheic
+    { at = 4, hex = "66 74 79 70 68 65 69 78" }, # ftypheix
+    { at = 4, hex = "66 74 79 70 68 65 69 6D" }, # ftypheim
+    { at = 4, hex = "66 74 79 70 68 65 69 73" }, # ftypheis
+    { at = 4, hex = "66 74 79 70 68 65 76 63" }, # ftyphevc
+    { at = 4, hex = "66 74 79 70 6D 69 66 31" }, # ftypmif1
+    { at = 4, hex = "66 74 79 70 6D 73 66 31" }, # ftypmsf1
+]
+
+[[type]]
+id = "avif"
+name = "AVIF image"
+short = "AVIF"
+mime = "image/avif"
+group = "images"
+parent = "iso-media"
+extensions = ["avif"]
+magic = [
+    { at = 4, hex = "66 74 79 70 61 76 69 66" }, # ftypavif
+    { at = 4, hex = "66 74 79 70 61 76 69 73" }, # ftypavis
+]
+
+[[type]]
+id = "cr3"
+name = "Canon raw image"
+short = "CR3"
+mime = "image/x-canon-cr3"
+group = "images"
+parent = "iso-media"
+extensions = ["cr3"]
+magic = [
+    { at = 4, hex = "66 74 79 70 63 72 78 20" }, # ftypcrx 
+]
+
+[[type]]
+id = "jxl"
+name = "JPEG XL image"
+short = "JXL"
+mime = "image/jxl"
+group = "images"
+extensions = ["jxl"]
+magic = [
+    { at = 0, hex = "FF 0A" }, # ..
+    { at = 0, hex = "00 00 00 0C 4A 58 4C 20 0D 0A 87 0A" }, # ....JXL ....
+]
+
+[[type]]
+id = "jp2"
+name = "JPEG 2000 image"
+short = "JP2"
+mime = "image/jp2"
+group = "images"
+extensions = ["jp2", "j2k", "jpf", "jpx"]
+magic = [
+    { at = 0, hex = "00 00 00 0C 6A 50 20 20 0D 0A 87 0A" }, # ....jP  ....
+    { at = 0, hex = "FF 4F FF 51" }, # .O.Q
+]
+
+[[type]]
+id = "psd"
+name = "Photoshop image"
+short = "PSD"
+mime = "image/vnd.adobe.photoshop"
+group = "images"
+extensions = ["psd", "psb"]
+magic = [
+    { at = 0, hex = "38 42 50 53" }, # 8BPS
+]
+
+[[type]]
+id = "xcf"
+name = "GIMP image"
+short = "XCF"
+mime = "image/x-xcf"
+group = "images"
+extensions = ["xcf"]
+magic = [
+    { at = 0, hex = "67 69 6D 70 20 78 63 66" }, # gimp xcf
+]
+
+[[type]]
+id = "tga"
+name = "Targa image"
+short = "TGA"
+mime = "image/x-tga"
+group = "images"
+extensions = ["tga"]
+
+[[type]]
+id = "mp3"
+name = "MP3 audio"
+short = "MP3"
+mime = "audio/mpeg"
+group = "music"
+extensions = ["mp3"]
+magic = [
+    { at = 0, hex = "49 44 33" }, # ID3
+    { at = 0, hex = "FF FB" }, # ..
+    { at = 0, hex = "FF F3" }, # ..
+    { at = 0, hex = "FF F2" }, # ..
+]
+
+[[type]]
+id = "flac"
+name = "FLAC audio"
+short = "FLAC"
+mime = "audio/flac"
+group = "music"
+extensions = ["flac"]
+magic = [
+    { at = 0, hex = "66 4C 61 43" }, # fLaC
+]
+
+[[type]]
+id = "ogg"
+name = "Ogg audio"
+short = "Ogg"
+mime = "audio/ogg"
+group = "music"
+extensions = ["ogg", "oga", "spx"]
+magic = [
+    { at = 0, hex = "4F 67 67 53" }, # OggS
+]
+
+[[type]]
+id = "opus"
+name = "Opus audio"
+short = "Opus"
+mime = "audio/opus"
+group = "music"
+parent = "ogg"
+extensions = ["opus"]
+magic = [
+    { at = 28, hex = "4F 70 75 73 48 65 61 64" }, # OpusHead
+]
+
+[[type]]
+id = "wav"
+name = "WAV audio"
+short = "WAV"
+mime = "audio/wav"
+group = "music"
+extensions = ["wav", "wave"]
+magic = [
+    { at = 0, hex = "52 49 46 46 ?? ?? ?? ?? 57 41 56 45" }, # RIFF????WAVE
+]
+
+[[type]]
+id = "aiff"
+name = "AIFF audio"
+short = "AIFF"
+mime = "audio/aiff"
+group = "music"
+extensions = ["aif", "aiff", "aifc"]
+magic = [
+    { at = 0, hex = "46 4F 52 4D ?? ?? ?? ?? 41 49 46 46" }, # FORM????AIFF
+    { at = 0, hex = "46 4F 52 4D ?? ?? ?? ?? 41 49 46 43" }, # FORM????AIFC
+]
+
+[[type]]
+id = "m4a"
+name = "MPEG-4 audio"
+short = "M4A"
+mime = "audio/mp4"
+group = "music"
+parent = "iso-media"
+extensions = ["m4a", "m4b", "alac"]
+magic = [
+    { at = 4, hex = "66 74 79 70 4D 34 41 20" }, # ftypM4A 
+    { at = 4, hex = "66 74 79 70 4D 34 42 20" }, # ftypM4B 
+    { at = 4, hex = "66 74 79 70 4D 34 50 20" }, # ftypM4P 
+]
+
+[[type]]
+id = "aac"
+name = "AAC audio"
+short = "AAC"
+mime = "audio/aac"
+group = "music"
+extensions = ["aac"]
+magic = [
+    { at = 0, hex = "FF F1" }, # ..
+    { at = 0, hex = "FF F9" }, # ..
+]
+
+[[type]]
+id = "wma"
+name = "Windows Media audio"
+short = "WMA"
+mime = "audio/x-ms-wma"
+group = "music"
+parent = "asf"
+extensions = ["wma"]
+
+[[type]]
+id = "midi"
+name = "MIDI music"
+short = "MIDI"
+mime = "audio/midi"
+group = "music"
+extensions = ["mid", "midi"]
+magic = [
+    { at = 0, hex = "4D 54 68 64" }, # MThd
+]
+
+[[type]]
+id = "ape"
+name = "Monkey's Audio"
+short = "APE"
+mime = "audio/x-ape"
+group = "music"
+extensions = ["ape"]
+magic = [
+    { at = 0, hex = "4D 41 43 20" }, # MAC 
+]
+
+[[type]]
+id = "wavpack"
+name = "WavPack audio"
+short = "WV"
+mime = "audio/x-wavpack"
+group = "music"
+extensions = ["wv"]
+magic = [
+    { at = 0, hex = "77 76 70 6B" }, # wvpk
+]
+
+[[type]]
+id = "mka"
+name = "Matroska audio"
+short = "MKA"
+mime = "audio/x-matroska"
+group = "music"
+parent = "mkv"
+extensions = ["mka"]
+
+[[type]]
+id = "amr"
+name = "AMR audio"
+short = "AMR"
+mime = "audio/amr"
+group = "music"
+extensions = ["amr"]
+magic = [
+    { at = 0, hex = "23 21 41 4D 52" }, # #!AMR
+]
+
+[[type]]
+id = "m3u"
+name = "playlist"
+short = "M3U"
+mime = "audio/x-mpegurl"
+group = "music"
+extensions = ["m3u", "m3u8"]
+magic = [
+    { at = 0, hex = "23 45 58 54 4D 33 55" }, # #EXTM3U
+]
+
+[[type]]
+id = "iso-media"
+name = "ISO media file"
+short = "MP4"
+mime = "video/mp4"
+group = "video"
+priority = -1
+magic = [
+    { at = 4, hex = "66 74 79 70" }, # ftyp
+]
+
+[[type]]
+id = "mp4"
+name = "MPEG-4 video"
+short = "MP4"
+mime = "video/mp4"
+group = "video"
+parent = "iso-media"
+extensions = ["mp4", "m4v"]
+magic = [
+    { at = 4, hex = "66 74 79 70 69 73 6F 6D" }, # ftypisom
+    { at = 4, hex = "66 74 79 70 69 73 6F 32" }, # ftypiso2
+    { at = 4, hex = "66 74 79 70 69 73 6F 34" }, # ftypiso4
+    { at = 4, hex = "66 74 79 70 69 73 6F 35" }, # ftypiso5
+    { at = 4, hex = "66 74 79 70 69 73 6F 36" }, # ftypiso6
+    { at = 4, hex = "66 74 79 70 6D 70 34 31" }, # ftypmp41
+    { at = 4, hex = "66 74 79 70 6D 70 34 32" }, # ftypmp42
+    { at = 4, hex = "66 74 79 70 61 76 63 31" }, # ftypavc1
+    { at = 4, hex = "66 74 79 70 64 61 73 68" }, # ftypdash
+    { at = 4, hex = "66 74 79 70 4D 34 56 20" }, # ftypM4V 
+]
+
+[[type]]
+id = "3gp"
+name = "3GPP video"
+short = "3GP"
+mime = "video/3gpp"
+group = "video"
+parent = "iso-media"
+extensions = ["3gp", "3g2"]
+magic = [
+    { at = 4, hex = "66 74 79 70 33 67 70" }, # ftyp3gp
+    { at = 4, hex = "66 74 79 70 33 67 32" }, # ftyp3g2
+]
+
+[[type]]
+id = "mov"
+name = "QuickTime video"
+short = "MOV"
+mime = "video/quicktime"
+group = "video"
+extensions = ["mov", "qt"]
+magic = [
+    { at = 4, hex = "66 74 79 70 71 74 20 20" }, # ftypqt  
+    { at = 4, hex = "6D 6F 6F 76" }, # moov
+    { at = 4, hex = "6D 64 61 74" }, # mdat
+    { at = 4, hex = "77 69 64 65" }, # wide
+    { at = 4, hex = "70 6E 6F 74" }, # pnot
+]
+
+[[type]]
+id = "avi"
+name = "AVI video"
+short = "AVI"
+mime = "video/x-msvideo"
+group = "video"
+extensions = ["avi"]
+magic = [
+    { at = 0, hex = "52 49 46 46 ?? ?? ?? ?? 41 56 49 20" }, # RIFF????AVI 
+]
+
+[[type]]
+id = "mkv"
+name = "Matroska video"
+short = "MKV"
+mime = "video/x-matroska"
+group = "video"
+extensions = ["mkv", "mk3d"]
+magic = [
+    { at = 0, hex = "1A 45 DF A3" }, # .E..
+]
+
+[[type]]
+id = "webm"
+name = "WebM video"
+short = "WebM"
+mime = "video/webm"
+group = "video"
+parent = "mkv"
+extensions = ["webm"]
+when = 'content:"webm"'
+
+[[type]]
+id = "mpeg"
+name = "MPEG video"
+short = "MPEG"
+mime = "video/mpeg"
+group = "video"
+extensions = ["mpg", "mpeg", "mpe", "m2v", "vob"]
+magic = [
+    { at = 0, hex = "00 00 01 BA" }, # ....
+    { at = 0, hex = "00 00 01 B3" }, # ....
+]
+
+[[type]]
+id = "mpeg-ts"
+name = "MPEG transport stream"
+short = "M2TS"
+mime = "video/mp2t"
+group = "video"
+extensions = ["mts", "m2ts"]
+
+[[type]]
+id = "flv"
+name = "Flash video"
+short = "FLV"
+mime = "video/x-flv"
+group = "video"
+extensions = ["flv"]
+magic = [
+    { at = 0, hex = "46 4C 56 01" }, # FLV.
+]
+
+[[type]]
+id = "asf"
+name = "Windows Media file"
+short = "ASF"
+mime = "video/x-ms-asf"
+group = "video"
+extensions = ["asf"]
+magic = [
+    { at = 0, hex = "30 26 B2 75 8E 66 CF 11" }, # 0&.u.f..
+]
+
+[[type]]
+id = "wmv"
+name = "Windows Media video"
+short = "WMV"
+mime = "video/x-ms-wmv"
+group = "video"
+parent = "asf"
+extensions = ["wmv"]
+
+[[type]]
+id = "ogv"
+name = "Ogg video"
+short = "OGV"
+mime = "video/ogg"
+group = "video"
+parent = "ogg"
+extensions = ["ogv"]
+magic = [
+    { at = 28, hex = "80 74 68 65 6F 72 61" }, # .theora
+]
+
+[[type]]
+id = "zip"
+name = "zip archive"
+short = "zip"
+mime = "application/zip"
+group = "archives"
+extensions = ["zip", "zipx"]
+magic = [
+    { at = 0, hex = "50 4B 03 04" }, # PK..
+    { at = 0, hex = "50 4B 05 06" }, # PK..
+    { at = 0, hex = "50 4B 07 08" }, # PK..
+]
+
+[[type]]
+id = "jar"
+name = "Java archive"
+short = "JAR"
+mime = "application/java-archive"
+group = "archives"
+parent = "zip"
+priority = -1
+extensions = ["jar", "war", "ear"]
+magic = [
+    { at = 30, hex = "4D 45 54 41 2D 49 4E 46 2F FE CA 00 00" }, # META-INF/....
+    { at = 30, hex = "4D 45 54 41 2D 49 4E 46 2F 4D 41 4E 49 46 45 53 54 2E 4D 46" }, # META-INF/MANIFEST.MF
+]
+
+[[type]]
+id = "apk"
+name = "Android package"
+short = "APK"
+mime = "application/vnd.android.package-archive"
+group = "archives"
+parent = "zip"
+extensions = ["apk"]
+magic = [
+    { at = 30, hex = "41 6E 64 72 6F 69 64 4D 61 6E 69 66 65 73 74 2E 78 6D 6C" }, # AndroidManifest.xml
+]
+
+[[type]]
+id = "7z"
+name = "7z archive"
+short = "7z"
+mime = "application/x-7z-compressed"
+group = "archives"
+extensions = ["7z"]
+magic = [
+    { at = 0, hex = "37 7A BC AF 27 1C" }, # 7z..'.
+]
+
+[[type]]
+id = "rar"
+name = "RAR archive"
+short = "RAR"
+mime = "application/vnd.rar"
+group = "archives"
+extensions = ["rar"]
+magic = [
+    { at = 0, hex = "52 61 72 21 1A 07" }, # Rar!..
+]
+
+[[type]]
+id = "gzip"
+name = "gzip file"
+short = "gzip"
+mime = "application/gzip"
+group = "archives"
+extensions = ["gz"]
+magic = [
+    { at = 0, hex = "1F 8B 08" }, # ...
+]
+
+[[type]]
+id = "tar-gz"
+name = "gzipped tar archive"
+short = "tar.gz"
+mime = "application/x-compressed-tar"
+group = "archives"
+parent = "gzip"
+extensions = ["tgz"]
+patterns = ["*.tar.gz"]
+
+[[type]]
+id = "bzip2"
+name = "bzip2 file"
+short = "bzip2"
+mime = "application/x-bzip2"
+group = "archives"
+extensions = ["bz2"]
+magic = [
+    { at = 0, hex = "42 5A 68" }, # BZh
+]
+
+[[type]]
+id = "tar-bz2"
+name = "bzip2 tar archive"
+short = "tar.bz2"
+mime = "application/x-bzip2-compressed-tar"
+group = "archives"
+parent = "bzip2"
+extensions = ["tbz2", "tbz"]
+patterns = ["*.tar.bz2"]
+
+[[type]]
+id = "xz"
+name = "xz file"
+short = "xz"
+mime = "application/x-xz"
+group = "archives"
+extensions = ["xz"]
+magic = [
+    { at = 0, hex = "FD 37 7A 58 5A 00" }, # .7zXZ.
+]
+
+[[type]]
+id = "tar-xz"
+name = "xz tar archive"
+short = "tar.xz"
+mime = "application/x-xz-compressed-tar"
+group = "archives"
+parent = "xz"
+extensions = ["txz"]
+patterns = ["*.tar.xz"]
+
+[[type]]
+id = "zstd"
+name = "Zstandard file"
+short = "zstd"
+mime = "application/zstd"
+group = "archives"
+extensions = ["zst"]
+magic = [
+    { at = 0, hex = "28 B5 2F FD" }, # (./.
+]
+
+[[type]]
+id = "tar-zst"
+name = "Zstandard tar archive"
+short = "tar.zst"
+mime = "application/x-zstd-compressed-tar"
+group = "archives"
+parent = "zstd"
+extensions = ["tzst"]
+patterns = ["*.tar.zst"]
+
+[[type]]
+id = "lzip"
+name = "lzip file"
+short = "lzip"
+mime = "application/x-lzip"
+group = "archives"
+extensions = ["lz"]
+magic = [
+    { at = 0, hex = "4C 5A 49 50" }, # LZIP
+]
+
+[[type]]
+id = "lzma"
+name = "LZMA file"
+short = "LZMA"
+mime = "application/x-lzma"
+group = "archives"
+extensions = ["lzma"]
+
+[[type]]
+id = "lz4"
+name = "LZ4 file"
+short = "LZ4"
+mime = "application/x-lz4"
+group = "archives"
+extensions = ["lz4"]
+magic = [
+    { at = 0, hex = "04 22 4D 18" }, # ."M.
+]
+
+[[type]]
+id = "tar"
+name = "tar archive"
+short = "tar"
+mime = "application/x-tar"
+group = "archives"
+extensions = ["tar"]
+
+[[type]]
+id = "cab"
+name = "Cabinet archive"
+short = "CAB"
+mime = "application/vnd.ms-cab-compressed"
+group = "archives"
+extensions = ["cab"]
+magic = [
+    { at = 0, hex = "4D 53 43 46 00 00 00 00" }, # MSCF....
+]
+
+[[type]]
+id = "arj"
+name = "ARJ archive"
+short = "ARJ"
+mime = "application/x-arj"
+group = "archives"
+extensions = ["arj"]
+magic = [
+    { at = 0, hex = "60 EA" }, # `.
+]
+
+[[type]]
+id = "lzh"
+name = "LHA archive"
+short = "LZH"
+mime = "application/x-lzh-compressed"
+group = "archives"
+extensions = ["lzh", "lha"]
+magic = [
+    { at = 2, hex = "2D 6C 68 ?? 2D" }, # -lh?-
+]
+
+[[type]]
+id = "cpio"
+name = "cpio archive"
+short = "cpio"
+mime = "application/x-cpio"
+group = "archives"
+extensions = ["cpio"]
+magic = [
+    { at = 0, hex = "30 37 30 37 30 31" }, # 070701
+    { at = 0, hex = "30 37 30 37 30 32" }, # 070702
+    { at = 0, hex = "30 37 30 37 30 37" }, # 070707
+    { at = 0, hex = "C7 71" }, # .q
+]
+
+[[type]]
+id = "compress"
+name = "compressed file"
+short = "Z"
+mime = "application/x-compress"
+group = "archives"
+extensions = ["z"]
+magic = [
+    { at = 0, hex = "1F 9D" }, # ..
+]
+
+[[type]]
+id = "ar"
+name = "ar archive"
+short = "ar"
+mime = "application/x-archive"
+group = "archives"
+extensions = ["a", "ar"]
+magic = [
+    { at = 0, hex = "21 3C 61 72 63 68 3E 0A" }, # !<arch>.
+]
+
+[[type]]
+id = "deb"
+name = "Debian package"
+short = "deb"
+mime = "application/vnd.debian.binary-package"
+group = "archives"
+parent = "ar"
+extensions = ["deb"]
+magic = [
+    { at = 8, hex = "64 65 62 69 61 6E 2D 62 69 6E 61 72 79" }, # debian-binary
+]
+
+[[type]]
+id = "rpm"
+name = "RPM package"
+short = "RPM"
+mime = "application/x-rpm"
+group = "archives"
+extensions = ["rpm"]
+magic = [
+    { at = 0, hex = "ED AB EE DB" }, # ....
+]
+
+[[type]]
+id = "iso"
+name = "ISO disk image"
+short = "ISO"
+mime = "application/x-iso9660-image"
+group = "archives"
+extensions = ["iso"]
+
+[[type]]
+id = "dmg"
+name = "Apple disk image"
+short = "DMG"
+mime = "application/x-apple-diskimage"
+group = "archives"
+extensions = ["dmg"]
+
+[[type]]
+id = "vhd"
+name = "virtual hard disk"
+short = "VHD"
+mime = "application/x-vhd"
+group = "archives"
+extensions = ["vhd"]
+magic = [
+    { at = 0, hex = "63 6F 6E 65 63 74 69 78" }, # conectix
+]
+
+[[type]]
+id = "vhdx"
+name = "virtual hard disk"
+short = "VHDX"
+mime = "application/x-vhdx"
+group = "archives"
+extensions = ["vhdx"]
+magic = [
+    { at = 0, hex = "76 68 64 78 66 69 6C 65" }, # vhdxfile
+]
+
+[[type]]
+id = "vmdk"
+name = "VMware disk image"
+short = "VMDK"
+mime = "application/x-vmdk"
+group = "archives"
+extensions = ["vmdk"]
+magic = [
+    { at = 0, hex = "4B 44 4D 56" }, # KDMV
+    { at = 0, hex = "23 20 44 69 73 6B 20 44 65 73 63 72 69 70 74 6F 72 46 69 6C 65" }, # # Disk DescriptorFile
+]
+
+[[type]]
+id = "vdi"
+name = "VirtualBox disk image"
+short = "VDI"
+mime = "application/x-virtualbox-vdi"
+group = "archives"
+extensions = ["vdi"]
+
+[[type]]
+id = "qcow2"
+name = "QEMU disk image"
+short = "QCOW2"
+mime = "application/x-qemu-disk"
+group = "archives"
+extensions = ["qcow2", "qcow"]
+magic = [
+    { at = 0, hex = "51 46 49 FB" }, # QFI.
+]
+
+[[type]]
+id = "squashfs"
+name = "SquashFS image"
+short = "SquashFS"
+mime = "application/vnd.squashfs"
+group = "archives"
+extensions = ["squashfs", "sqfs", "snap"]
+magic = [
+    { at = 0, hex = "68 73 71 73" }, # hsqs
+    { at = 0, hex = "73 71 73 68" }, # sqsh
+]
+
+[[type]]
+id = "wim"
+name = "Windows image"
+short = "WIM"
+mime = "application/x-ms-wim"
+group = "archives"
+extensions = ["wim", "esd"]
+magic = [
+    { at = 0, hex = "4D 53 57 49 4D 00 00 00" }, # MSWIM...
+]
+
+[[type]]
+id = "exe"
+name = "Windows program"
+short = "EXE"
+mime = "application/vnd.microsoft.portable-executable"
+extensions = ["exe", "dll", "scr", "ocx", "cpl", "efi"]
+magic = [
+    { at = 0, hex = "4D 5A" }, # MZ
+]
+
+[[type]]
+id = "elf"
+name = "Linux program"
+short = "ELF"
+mime = "application/x-elf"
+extensions = ["elf", "so", "o", "ko"]
+magic = [
+    { at = 0, hex = "7F 45 4C 46" }, # .ELF
+]
+
+[[type]]
+id = "mach-o"
+name = "macOS program"
+short = "Mach-O"
+mime = "application/x-mach-binary"
+extensions = ["dylib"]
+magic = [
+    { at = 0, hex = "CF FA ED FE" }, # ....
+    { at = 0, hex = "CE FA ED FE" }, # ....
+    { at = 0, hex = "FE ED FA CE" }, # ....
+    { at = 0, hex = "FE ED FA CF" }, # ....
+]
+
+[[type]]
+id = "java-class"
+name = "Java class file"
+short = "class"
+mime = "application/java-vm"
+extensions = ["class"]
+magic = [
+    { at = 0, hex = "CA FE BA BE" }, # ....
+]
+
+[[type]]
+id = "sqlite"
+name = "SQLite database"
+short = "SQLite"
+mime = "application/vnd.sqlite3"
+extensions = ["sqlite", "sqlite3", "db"]
+magic = [
+    { at = 0, hex = "53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00" }, # SQLite format 3.
+]
+
+[[type]]
+id = "ttf"
+name = "TrueType font"
+short = "TTF"
+mime = "font/ttf"
+extensions = ["ttf"]
+magic = [
+    { at = 0, hex = "00 01 00 00 00" }, # .....
+    { at = 0, hex = "74 72 75 65" }, # true
+]
+
+[[type]]
+id = "otf"
+name = "OpenType font"
+short = "OTF"
+mime = "font/otf"
+extensions = ["otf"]
+magic = [
+    { at = 0, hex = "4F 54 54 4F" }, # OTTO
+]
+
+[[type]]
+id = "ttc"
+name = "font collection"
+short = "TTC"
+mime = "font/collection"
+extensions = ["ttc"]
+magic = [
+    { at = 0, hex = "74 74 63 66" }, # ttcf
+]
+
+[[type]]
+id = "woff"
+name = "web font"
+short = "WOFF"
+mime = "font/woff"
+extensions = ["woff"]
+magic = [
+    { at = 0, hex = "77 4F 46 46" }, # wOFF
+]
+
+[[type]]
+id = "woff2"
+name = "web font"
+short = "WOFF2"
+mime = "font/woff2"
+extensions = ["woff2"]
+magic = [
+    { at = 0, hex = "77 4F 46 32" }, # wOF2
+]
+
+[[type]]
+id = "torrent"
+name = "torrent file"
+short = "torrent"
+mime = "application/x-bittorrent"
+extensions = ["torrent"]
+magic = [
+    { at = 0, hex = "64 38 3A 61 6E 6E 6F 75 6E 63 65" }, # d8:announce
+]
+
+[[type]]
+id = "pem"
+name = "certificate or key"
+short = "PEM"
+mime = "application/x-pem-file"
+priority = -1
+extensions = ["pem", "crt"]
+magic = [
+    { at = 0, hex = "2D 2D 2D 2D 2D 42 45 47 49 4E 20" }, # -----BEGIN 
+]
+
+[[type]]
+id = "openpgp"
+name = "OpenPGP file"
+short = "PGP"
+mime = "application/pgp-encrypted"
+extensions = ["gpg", "pgp", "asc"]
+magic = [
+    { at = 0, hex = "2D 2D 2D 2D 2D 42 45 47 49 4E 20 50 47 50" }, # -----BEGIN PGP
+]
+
+[[type]]
+id = "age"
+name = "age encrypted file"
+short = "age"
+mime = "application/x-age-encrypted"
+extensions = ["age"]
+magic = [
+    { at = 0, hex = "61 67 65 2D 65 6E 63 72 79 70 74 69 6F 6E 2E 6F 72 67 2F 76 31" }, # age-encryption.org/v1
+    { at = 0, hex = "2D 2D 2D 2D 2D 42 45 47 49 4E 20 41 47 45 20 45 4E 43 52 59 50 54 45 44 20 46 49 4C 45 2D 2D 2D 2D 2D" }, # -----BEGIN AGE ENCRYPTED FILE-----
+]
+
+[[type]]
+id = "lnk"
+name = "Windows shortcut"
+short = "shortcut"
+mime = "application/x-ms-shortcut"
+extensions = ["lnk"]
+magic = [
+    { at = 0, hex = "4C 00 00 00 01 14 02 00" }, # L.......
+]
+
+[[type]]
+id = "desktop"
+name = "desktop entry"
+short = "desktop"
+mime = "application/x-desktop"
+extensions = ["desktop"]
+magic = [
+    { at = 0, hex = "5B 44 65 73 6B 74 6F 70 20 45 6E 74 72 79 5D" }, # [Desktop Entry]
+]
+
+[[type]]
+id = "eml"
+name = "email message"
+short = "EML"
+mime = "message/rfc822"
+extensions = ["eml"]

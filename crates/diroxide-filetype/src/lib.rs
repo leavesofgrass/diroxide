@@ -11,6 +11,11 @@
 //! view, preview, convert, and the user's own), each a command, a tool or
 //! a plugin call, never a shell string.
 //!
+//! The shipped table, `data/filetypes.toml`, is embedded: about 180 types
+//! with their media types, and the groups (the seven of core's table and
+//! the screenshots group, R29 5.6). Core's extension table stays the
+//! fallback for a file no type takes and for a table that would not read.
+//!
 //! The flat call of phase 0, [`TypeRegistry::detect`], runs on the tree
 //! too: the name and whatever first bytes the caller has.
 
@@ -21,13 +26,19 @@ pub use tree::{
     TreeError, TypeStage, TypeTree, skips_content,
 };
 
+use std::sync::OnceLock;
+
 use diroxide_config::{FileTypeConfig, FileTypesConfig, GroupConfig};
-use diroxide_core::filter::GROUPS;
+use diroxide_core::filter::{GROUPS, Unknown, group_of_extension};
 use diroxide_core::{Clock, CommandId, Entry, EntryKind, SystemClock, UtcOffset};
 use diroxide_tools::{ToolRegistry, ToolStatus};
 
 /// How many bytes from the start of a file detection reads.
 pub const HEAD_BYTES: usize = 64;
+
+/// The shipped table: the types diroxide knows and their groups, in
+/// `filetypes.toml`'s own shape.
+pub const SHIPPED_TABLE: &str = include_str!("../data/filetypes.toml");
 
 /// Bytes at an offset that mark a type.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -206,7 +217,7 @@ impl FileType {
                 .map(|(_, mime)| (*mime).to_owned()),
             group: extensions
                 .first()
-                .and_then(|ext| diroxide_core::filter::group_of_extension(ext))
+                .and_then(|ext| group_of_extension(ext))
                 .map(|g| g.name.to_owned()),
             signatures: magic
                 .iter()
@@ -355,16 +366,53 @@ pub struct Detection {
 /// The file types, in checking order, their tree and their groups.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeRegistry {
-    types: Vec<FileType>,
     groups: Vec<TypeGroup>,
+    group_patterns: Vec<Vec<NamePattern>>,
     tree: TypeTree,
     problems: Vec<String>,
 }
 
 impl TypeRegistry {
-    /// The built-in types.
+    /// The built-in types and groups: the shipped table
+    /// ([`SHIPPED_TABLE`]), read once. Should it ever not read whole, the
+    /// fallback ([`TypeRegistry::fallback`]) stands in, and
+    /// [`TypeRegistry::problems`] says why.
     pub fn builtin() -> Self {
-        Self::fallback()
+        static SHIPPED: OnceLock<TypeRegistry> = OnceLock::new();
+        SHIPPED.get_or_init(Self::shipped).clone()
+    }
+
+    /// The shipped table, read.
+    fn shipped() -> Self {
+        let config = match FileTypesConfig::from_toml(SHIPPED_TABLE) {
+            Ok(config) => config,
+            Err(error) => {
+                let mut fallback = Self::fallback();
+                fallback
+                    .problems
+                    .push(format!("Shipped file types not read: {error}"));
+                return fallback;
+            }
+        };
+        let mut problems = Vec::new();
+        let types = config
+            .types
+            .iter()
+            .map(|c| {
+                let (own, found) = FileType::from_config(c);
+                problems.extend(found);
+                own
+            })
+            .collect();
+        let groups = config
+            .groups
+            .iter()
+            .map(|g| TypeGroup {
+                yours: false,
+                ..TypeGroup::from_config(g)
+            })
+            .collect();
+        Self::from_parts(types, groups, problems)
     }
 
     /// Phase 0's twelve types over core's seven groups: what is left when
@@ -440,9 +488,25 @@ impl TypeRegistry {
                 }
             }
         };
+        let group_patterns = groups
+            .iter()
+            .map(|g| {
+                g.patterns
+                    .iter()
+                    .filter_map(|p| match NamePattern::parse(p) {
+                        Ok(pattern) => Some(pattern),
+                        Err(error) => {
+                            problems
+                                .push(format!("File group {}: pattern left out: {error}.", g.id));
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
         Self {
-            types: tree.types().to_vec(),
             groups,
+            group_patterns,
             tree,
             problems,
         }
@@ -465,7 +529,7 @@ impl TypeRegistry {
                 own
             })
             .collect();
-        let mut builtin = self.types;
+        let mut builtin = self.tree.types().to_vec();
         builtin.retain(|b| !types.iter().any(|own| own.id == b.id));
         types.append(&mut builtin);
         let mut groups = self.groups;
@@ -494,7 +558,108 @@ impl TypeRegistry {
     /// The group a type belongs to, by the type's id.
     pub fn group_of(&self, type_id: &str) -> Option<&TypeGroup> {
         let id = self.get(type_id)?.group.as_deref()?;
+        self.group(id)
+    }
+
+    /// A group by id.
+    pub fn group(&self, id: &str) -> Option<&TypeGroup> {
         self.groups.iter().find(|g| g.id == id)
+    }
+
+    /// The groups an entry is in, its type's group first: the group of
+    /// the type its [`Entry::type_index`] names, or else of the type its
+    /// name gives, or else core's extension table's (the fallback for a
+    /// file no type takes); then every group whose name patterns take
+    /// its name (a screenshot is in Images and in Screenshots). Folders
+    /// and plugin items are in none. [`Unknown::TypeNotChecked`] while
+    /// the name says nothing and the type is not checked yet.
+    pub fn groups_of(&self, entry: &Entry, clock: &dyn Clock) -> Result<Vec<&TypeGroup>, Unknown> {
+        if entry.is_folder_like() || matches!(entry.kind, EntryKind::Folder | EntryKind::Item) {
+            return Ok(Vec::new());
+        }
+        let mut pending = false;
+        let file_type = match self.by_index(entry.type_index) {
+            Some(file_type) => Some(file_type),
+            None => match self.by_name(entry, clock) {
+                Ok(found) => self.tree.types().get(found.index),
+                Err(special) => {
+                    pending = special == Special::Pending && entry.type_name.is_none();
+                    None
+                }
+            },
+        };
+        let mut groups: Vec<&TypeGroup> = Vec::new();
+        let by_type = file_type
+            .and_then(|t| t.group.as_deref())
+            .and_then(|id| self.group(id));
+        let by_extension = || {
+            entry
+                .extension()
+                .and_then(group_of_extension)
+                .and_then(|g| self.group(g.name))
+        };
+        if let Some(group) = by_type.or_else(|| file_type.is_none().then(by_extension).flatten()) {
+            groups.push(group);
+        }
+        for (group, patterns) in self.groups.iter().zip(&self.group_patterns) {
+            if patterns.iter().any(|p| p.is_match(&entry.name))
+                && !groups.iter().any(|g| g.id == group.id)
+            {
+                groups.push(group);
+            }
+        }
+        if groups.is_empty() && pending {
+            return Err(Unknown::TypeNotChecked);
+        }
+        Ok(groups)
+    }
+
+    /// The one group `group:` and `Lookup::group` answer for an entry:
+    /// the first of [`TypeRegistry::groups_of`].
+    pub fn group_for(
+        &self,
+        entry: &Entry,
+        clock: &dyn Clock,
+    ) -> Result<Option<&TypeGroup>, Unknown> {
+        self.groups_of(entry, clock)
+            .map(|groups| groups.first().copied())
+    }
+
+    /// The groups' ids, in the Groups list's order, the owner's own among
+    /// them: the values `group:` completes to.
+    pub fn group_names(&self) -> Vec<String> {
+        self.groups.iter().map(|g| g.id.clone()).collect()
+    }
+
+    /// The Groups list's summary: "Groups: 8 built in, 2 yours".
+    pub fn groups_line(&self) -> String {
+        let yours = self.groups.iter().filter(|g| g.yours).count();
+        let built_in = self.groups.len() - yours;
+        if yours == 0 {
+            format!("Groups: {built_in} built in")
+        } else {
+            format!("Groups: {built_in} built in, {yours} yours")
+        }
+    }
+
+    /// The line when an entry's name and its contents disagree: "Name
+    /// says PNG; contents say JPEG". `None` when they agree, when the
+    /// contents only refine the name (a zip that is a Word document) or
+    /// the name refines the contents (a camera's raw file that is TIFF
+    /// inside), and when the name gave nothing.
+    pub fn disagreement(&self, by_name: &Found, checked: &Found) -> Option<String> {
+        let related = by_name.index == checked.index
+            || self.tree.is_ancestor(by_name.index, checked.index)
+            || self.tree.is_ancestor(checked.index, by_name.index);
+        if related || checked.stage == TypeStage::Name {
+            return None;
+        }
+        let name = self.tree.types().get(by_name.index)?;
+        let contents = self.tree.types().get(checked.index)?;
+        Some(format!(
+            "Name says {}; contents say {}",
+            name.short, contents.short
+        ))
     }
 
     /// The types as the type model's tree (alpha.7).
@@ -504,12 +669,12 @@ impl TypeRegistry {
 
     /// Every type, in checking order.
     pub fn types(&self) -> &[FileType] {
-        &self.types
+        self.tree.types()
     }
 
     /// A type by id.
     pub fn get(&self, id: &str) -> Option<&FileType> {
-        self.types.iter().find(|t| t.id == id)
+        self.tree.types().iter().find(|t| t.id == id)
     }
 
     /// The entry's type with whatever its probe holds: the background
@@ -531,7 +696,7 @@ impl TypeRegistry {
     pub fn by_index(&self, index: u16) -> Option<&FileType> {
         usize::from(index)
             .checked_sub(1)
-            .and_then(|i| self.types.get(i))
+            .and_then(|i| self.tree.types().get(i))
     }
 
     /// The [`Entry::type_index`] for a type found here: its place plus
@@ -614,13 +779,16 @@ mod tests {
             (by_name.type_id.as_str(), by_name.stage),
             ("pdf", Stage::Extension)
         );
-        let by_magic = types.detect("noextension", b"\x89PNG\r\n").unwrap();
+        let png: &[u8] = b"\x89PNG\r\n\x1a\n\x00\x00";
+        let by_magic = types.detect("noextension", png).unwrap();
         assert_eq!(
             (by_magic.type_id.as_str(), by_magic.stage),
             ("png", Stage::Magic)
         );
-        let both = types.detect("photo.png", b"\x89PNG\r\n").unwrap();
+        let both = types.detect("photo.png", png).unwrap();
         assert_eq!(both.stage, Stage::Magic, "the signature is the hit");
+        let cut = types.detect("photo.png", b"\x89PNG").unwrap();
+        assert_eq!(cut.stage, Stage::Extension, "a head too short to tell");
         let liar = types.detect("photo.png", b"\xFF\xD8\xFF\xE0").unwrap();
         assert_eq!(liar.type_id, "jpeg", "the bytes beat the name");
         assert!(types.detect("mystery", b"nothing").is_none());
