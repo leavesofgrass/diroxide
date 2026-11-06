@@ -583,7 +583,7 @@ fn open_with_lists_the_programs_and_starts_one_through_the_runtime() {
         said,
         [
             "Finding programs for report.pdf",
-            "Open report.pdf with:, Default program, Reader, 1 of 4"
+            "Open report.pdf with: Default program, Reader, 1 of 4"
         ]
     );
     let (title, rows) = dialog_rows(&s.app);
