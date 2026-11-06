@@ -13,6 +13,8 @@
 //! call that takes paths uses `--literal-pathspecs`, so a name with `*` or
 //! `[` is that name and nothing else.
 
+pub mod blame;
+pub mod log;
 pub mod progress;
 pub mod refs;
 pub mod status;

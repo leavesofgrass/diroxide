@@ -20,6 +20,8 @@
 
 mod branch;
 mod commit;
+mod diff;
+mod history;
 mod remote;
 mod tree;
 
@@ -41,12 +43,18 @@ use crate::repo::Repo;
 /// The commands this build answers (plugin-local ids).
 pub const IDS: &[&str] = &[
     "status",
+    "diff",
+    "diff_head",
     "stage",
     "unstage",
     "stage_all",
     "ignore",
     "discard",
     "commit",
+    "log",
+    "file_log",
+    "commit_files",
+    "blame",
     "branches",
     "switch",
     "branch_new",
@@ -63,7 +71,7 @@ pub const IDS: &[&str] = &[
 ];
 
 /// The lists this build opens.
-pub const LISTERS: &[&str] = &["status", "branches", "stashes"];
+pub const LISTERS: &[&str] = &["status", "log", "commit", "branches", "stashes"];
 
 /// How many opened lists keep their rows: a list shown in both panels,
 /// and the ones before, still answer.
@@ -106,6 +114,22 @@ pub enum View {
     Status {
         /// The repository's top.
         root: PathBuf,
+    },
+    /// The commits that changed a folder or a file.
+    Log {
+        /// The repository's top.
+        root: PathBuf,
+        /// The path from the top, empty for the whole folder.
+        path: String,
+        /// The words for what was logged.
+        what: String,
+    },
+    /// What one commit changed.
+    Commit {
+        /// The repository's top.
+        root: PathBuf,
+        /// The commit's full hash.
+        hash: String,
     },
     /// The local branches.
     Branches {
@@ -438,7 +462,13 @@ fn dispatch(ctx: &Ctx<'_>, command: &str) -> Result<Value, GitError> {
         "stage_all" => tree::stage_all(ctx),
         "ignore" => tree::ignore(ctx),
         "discard" => tree::discard(ctx),
+        "diff" => diff::diff(ctx, false),
+        "diff_head" => diff::diff(ctx, true),
         "commit" => commit::commit(ctx),
+        "log" => history::log(ctx, false),
+        "file_log" => history::log(ctx, true),
+        "commit_files" => history::commit_files(ctx),
+        "blame" => history::blame(ctx),
         "branches" => branch::branches(ctx),
         "switch" => branch::switch(ctx),
         "branch_new" => branch::new_branch(ctx),
@@ -495,6 +525,8 @@ fn build(plugin: &Plugin, host: Host<'_>, view: &View) -> Result<Vec<Row>, GitEr
     };
     match view {
         View::Status { root } => Ok(tree::status_rows(host, &repo(root)?)?.1),
+        View::Log { root, path, .. } => history::log_rows(host, &repo(root)?, path),
+        View::Commit { root, hash } => history::commit_rows(host, &repo(root)?, hash),
         View::Branches { root } => branch::branch_rows(host, &repo(root)?),
         View::Stashes { root } => branch::stash_rows(host, &repo(root)?),
     }

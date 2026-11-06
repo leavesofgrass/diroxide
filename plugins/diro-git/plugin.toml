@@ -61,6 +61,21 @@ places = "local"
 needs = ["git"]
 
 [[command]]
+id = "diff"
+name = "Git: show the changes"
+description = "Compares the file with its staged or last committed text, the verdict first."
+selection = "one"
+needs = ["git"]
+
+[[command]]
+id = "diff_head"
+name = "Git: compare with the last commit"
+description = "Compares the file in the folder with its text in the last commit."
+selection = "one"
+places = "local"
+needs = ["git"]
+
+[[command]]
 id = "stage"
 name = "Git: stage"
 description = "Adds the marked files' changes to the next commit."
@@ -98,6 +113,39 @@ id = "commit"
 name = "Git: commit"
 description = "Commits what is staged, with your message, the staged files listed first."
 selection = "none"
+places = "local"
+needs = ["git"]
+
+# ---- History ----
+
+[[command]]
+id = "log"
+name = "Git: log of this folder"
+description = "Lists the commits that changed this folder, the date and subject first."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "file_log"
+name = "Git: log of this file"
+description = "Lists the commits that changed the file, the date and subject first."
+selection = "one"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "commit_files"
+name = "Git: files of this commit"
+description = "Lists what the commit changed; Enter shows a file's changes."
+selection = "one"
+needs = ["git"]
+
+[[command]]
+id = "blame"
+name = "Git: who changed a line"
+description = "Says who last changed a line of the file, and when."
+selection = "one"
 places = "local"
 needs = ["git"]
 
@@ -207,6 +255,7 @@ needs = ["git"]
 [[lister]]
 id = "status"
 name = "Changed files"
+activate = "diff"
 
 [[lister.columns]]
 id = "state"
@@ -229,6 +278,50 @@ selection = "any"
 key = "alt+u"
 command = "unstage"
 selection = "any"
+
+[[lister]]
+id = "log"
+name = "Log"
+activate = "commit_files"
+
+[[lister.columns]]
+id = "date"
+header = "Date"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "subject"
+header = "Subject"
+kind = "text"
+
+[[lister.columns]]
+id = "author"
+header = "Author"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "hash"
+header = "Commit"
+kind = "text"
+
+[[lister]]
+id = "commit"
+name = "Files of a commit"
+activate = "diff"
+
+[[lister.columns]]
+id = "state"
+header = "State"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "path"
+header = "Path"
+kind = "text"
+sorts = true
 
 [[lister]]
 id = "branches"

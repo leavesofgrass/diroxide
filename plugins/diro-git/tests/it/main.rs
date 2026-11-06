@@ -8,6 +8,7 @@
 
 mod branches;
 mod commit;
+mod history;
 mod remote;
 mod status;
 mod support;
