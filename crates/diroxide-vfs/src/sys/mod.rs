@@ -21,6 +21,23 @@
 // file; the crate's lib.rs re-exports its four public names. Each system's
 // reader is compiled where it runs and in the tests everywhere, so its
 // parsing is tested on every system.
+// Extended items (R30's commit 48): the local provider's
+// `ExtendedAttributes` over Windows streams (`streams.rs`, where the one
+// path with a colon is built) and Unix extended attributes (`xattr.rs`).
+mod extended;
+#[cfg(windows)]
+mod streams;
+#[cfg(unix)]
+mod xattr;
+#[cfg(windows)]
+pub(crate) use streams::{
+    extended_list, extended_on, extended_read, extended_remove, extended_write,
+};
+#[cfg(unix)]
+pub(crate) use xattr::{
+    extended_list, extended_on, extended_read, extended_remove, extended_write,
+};
+
 #[cfg(any(test, target_os = "macos"))]
 mod mac_apps;
 pub mod open_with;

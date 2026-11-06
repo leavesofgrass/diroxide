@@ -201,6 +201,9 @@ pub(crate) fn capabilities_for(facts: &VolumeFacts, rule: NameRule) -> Capabilit
     // An unfinished file is kept and reopened at its end wherever the place
     // takes changes: a network share that drops comes back to it (R25 2.5).
     capabilities.resume = writable;
+    // Streams on NTFS and ReFS, extended attributes on Linux and macOS
+    // file systems other than FAT and the disc formats.
+    capabilities.extended_attributes = sys::extended_on(fs);
     capabilities
 }
 
