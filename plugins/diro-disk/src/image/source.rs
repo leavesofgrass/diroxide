@@ -217,15 +217,20 @@ impl<R: Read + Seek + Send> Backing for ReaderBacking<R> {
         let room = usize::try_from(self.len - offset).unwrap_or(usize::MAX);
         let n = buffer.len().min(room);
         let mut reader = self.reader.lock().unwrap_or_else(PoisonError::into_inner);
-        reader.seek(SeekFrom::Start(offset))?;
-        let mut done = 0;
-        while done < n {
-            match reader.read(&mut buffer[done..n])? {
-                0 => break,
-                got => done += got,
+        // A container crate that panics on a hostile image stops this read,
+        // not the plugin.
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            reader.seek(SeekFrom::Start(offset))?;
+            let mut done = 0;
+            while done < n {
+                match reader.read(&mut buffer[done..n])? {
+                    0 => break,
+                    got => done += got,
+                }
             }
-        }
-        Ok(done)
+            Ok(done)
+        }))
+        .unwrap_or_else(|_| Err(io::Error::other("the container's reader stopped on it")))
     }
 }
 

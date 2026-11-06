@@ -147,6 +147,17 @@ impl HostIo {
     }
 }
 
+/// Runs a reader crate's work so that a panic inside the crate (a hostile
+/// image can reach code its authors thought unreachable; the fuzz seeds
+/// found one in `ntfs`) becomes "its NTFS is damaged: its reader stopped
+/// on it" instead of taking the plugin's worker thread with it.
+pub fn guarded<T>(what: &str, f: impl FnOnce() -> Result<T, DiskError>) -> Result<T, DiskError> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(result) => result,
+        Err(_) => Err(DiskError::damaged(what, "its reader stopped on it")),
+    }
+}
+
 /// Text with its first letter made lowercase, for a cause after a colon.
 pub fn lowercase_first(text: &str) -> String {
     let mut chars = text.chars();

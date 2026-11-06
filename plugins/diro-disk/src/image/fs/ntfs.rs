@@ -23,7 +23,7 @@ use ntfs::{Ntfs, NtfsAttributeType, NtfsReadSeek};
 
 use crate::error::DiskError;
 use crate::image::fs::{Facts, FileSystem, Node, NodeKind};
-use crate::image::source::{Backing, Source};
+use crate::image::source::{Backing, Source, read_vec};
 use crate::lines;
 
 /// The first record number a user's file may have.
@@ -49,6 +49,23 @@ fn from_ntfs(error: &ntfs::NtfsError) -> DiskError {
 
 /// Opens an NTFS volume.
 pub fn open(backing: Arc<dyn Backing>, limits: &Limits) -> Result<Box<dyn FileSystem>, DiskError> {
+    // The crate reaches a panic on a boot sector it cannot read whole (the
+    // fuzz seeds found it); the checks it would make come first here.
+    let boot = read_vec(backing.as_ref(), 0, 512).map_err(|e| DiskError::from_io(&e))?;
+    let sector = u16::from_le_bytes([
+        boot.get(11).copied().unwrap_or(0),
+        boot.get(12).copied().unwrap_or(0),
+    ]);
+    if boot.len() < 512
+        || boot.get(3..11) != Some(b"NTFS    ")
+        || !matches!(sector, 512 | 1024 | 2048 | 4096)
+        || backing.len() < 64 * 1024
+    {
+        return Err(DiskError::damaged(
+            "NTFS",
+            "its boot sector is missing or short",
+        ));
+    }
     let mut source = Source::new(backing);
     let ntfs = Ntfs::new(&mut source).map_err(|e| from_ntfs(&e))?;
     let label = ntfs

@@ -70,6 +70,17 @@ pub fn disk_of(
     limits: &Limits,
     siblings: Siblings<'_>,
 ) -> Result<Arc<dyn Backing>, DiskError> {
+    crate::error::guarded(container.words(), || {
+        open_container(container, file, limits, siblings)
+    })
+}
+
+fn open_container(
+    container: Container,
+    file: Arc<dyn Backing>,
+    limits: &Limits,
+    siblings: Siblings<'_>,
+) -> Result<Arc<dyn Backing>, DiskError> {
     match container {
         Container::Raw => Ok(file),
         Container::VhdFixed => vhd_fixed(file),

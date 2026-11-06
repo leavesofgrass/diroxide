@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use diroxide_vfs::archive::limits::Limits;
 
-use crate::error::DiskError;
+use crate::error::{DiskError, guarded};
 use crate::host::Stamp;
 use crate::image::container::Siblings;
 use crate::image::fs::FileSystem;
@@ -74,19 +74,30 @@ impl Volume {
         &self,
         f: impl FnOnce(&mut Tree) -> Result<T, DiskError>,
     ) -> Result<T, DiskError> {
+        let what = self.content.words();
         let mut opened = self.tree.lock().unwrap_or_else(PoisonError::into_inner);
         if matches!(*opened, Opened::Not) {
-            *opened = match fs::open(self.content, Arc::clone(&self.backing), &self.limits) {
+            let backing = Arc::clone(&self.backing);
+            let limits = self.limits;
+            let content = self.content;
+            *opened = match guarded(what, || fs::open(content, backing, &limits)) {
                 Ok(fs) => Opened::Open(Tree::new(fs, self.limits)),
                 Err(DiskError::Cancelled) => return Err(DiskError::Cancelled),
                 Err(error) => Opened::Failed(error),
             };
         }
-        match &mut *opened {
-            Opened::Open(tree) => f(tree),
-            Opened::Failed(error) => Err(error.clone()),
-            Opened::Not => Err(DiskError::Cancelled),
+        let result = match &mut *opened {
+            Opened::Open(tree) => guarded(what, || f(tree)),
+            Opened::Failed(error) => return Err(error.clone()),
+            Opened::Not => return Err(DiskError::Cancelled),
+        };
+        // A reader that stopped on the image is not asked again.
+        if let Err(error @ DiskError::Damaged(why)) = &result
+            && why.ends_with("its reader stopped on it")
+        {
+            *opened = Opened::Failed(error.clone());
         }
+        result
     }
 
     /// The file system's words, when it opens: "ext4", "FAT32".
