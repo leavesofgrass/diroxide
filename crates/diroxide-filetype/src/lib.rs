@@ -247,7 +247,7 @@ impl FileType {
                         Ok(command) => ActionTarget::Command(command),
                         Err(_) => {
                             problems.push(format!(
-                                "File type {id}: action {} left out: \"{command}\" is not a command id.",
+                                "File type {id}: action {} left out. \"{command}\" is not a command id.",
                                 action.name
                             ));
                             return None;
@@ -265,7 +265,7 @@ impl FileType {
                     }
                 } else {
                     problems.push(format!(
-                        "File type {id}: action {} left out: it names no command, tool or plugin.",
+                        "File type {id}: action {} left out. It names no command, tool or plugin.",
                         action.name
                     ));
                     return None;
@@ -282,7 +282,7 @@ impl FileType {
             .filter_map(|m| match Signature::parse(m.at, &m.hex) {
                 Ok(signature) => Some(signature),
                 Err(error) => {
-                    problems.push(format!("File type {id}: signature left out: {error}."));
+                    problems.push(format!("File type {id}: signature left out. {error}."));
                     None
                 }
             })
@@ -294,7 +294,7 @@ impl FileType {
                 Ok(condition) => Some(condition),
                 Err(error) => {
                     problems.push(format!(
-                        "File type {id}: condition left out: {}",
+                        "File type {id}: condition left out. {}",
                         error.line()
                     ));
                     None
@@ -306,7 +306,7 @@ impl FileType {
             .filter(|p| match NamePattern::parse(p) {
                 Ok(_) => true,
                 Err(error) => {
-                    problems.push(format!("File type {id}: pattern left out: {error}."));
+                    problems.push(format!("File type {id}: pattern left out. {error}."));
                     false
                 }
             })
@@ -569,7 +569,7 @@ impl TypeRegistry {
                             type_id.clone()
                         }
                     };
-                    problems.push(format!("File type {id} left out: {error}"));
+                    problems.push(format!("File type {id} left out. {error}"));
                     types.retain(|t| t.id != id);
                 }
             }
@@ -583,7 +583,7 @@ impl TypeRegistry {
                         Ok(pattern) => Some(pattern),
                         Err(error) => {
                             problems
-                                .push(format!("File group {}: pattern left out: {error}.", g.id));
+                                .push(format!("File group {}: pattern left out. {error}.", g.id));
                             None
                         }
                     })
@@ -640,8 +640,8 @@ impl TypeRegistry {
     }
 
     /// What could not be used from the types' files, each line meaning
-    /// first: "File type ebook left out: Type ebook names the parent
-    /// books, which no type has."
+    /// first, the first sentence inside a Braille line: "File type ebook
+    /// left out. Type ebook names the parent books, which no type has."
     pub fn problems(&self) -> &[String] {
         &self.problems
     }
@@ -961,10 +961,12 @@ name = "Nothing"
         assert_eq!(problems.len(), 5, "{problems:?}");
         assert_eq!(
             problems[0],
-            "File type half: action Nothing left out: it names no command, tool or plugin."
+            "File type half: action Nothing left out. It names no command, tool or plugin."
         );
         for line in problems {
             assert!(line.starts_with("File type "), "{line}");
+            let first = line.split(". ").next().unwrap_or_default();
+            assert!(first.chars().count() <= 40, "{first}");
         }
         assert!(
             problems
