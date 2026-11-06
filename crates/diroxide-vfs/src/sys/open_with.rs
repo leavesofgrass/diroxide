@@ -203,6 +203,15 @@ impl OpenWithList {
     }
 }
 
+/// What "Choose another program" says on a system with no dialog of its
+/// own.
+#[cfg(any(test, not(windows)))]
+const NO_DIALOG: &str = "No Open with dialog on this system.";
+
+/// What starting a row by its class says off Windows.
+#[cfg(any(test, not(windows)))]
+const CLASS_IS_WINDOWS: &str = "Starting by class is for Windows.";
+
 /// The programs this system lists for a file, read without a shell and
 /// without opening it: by its extension on Windows, by its media type
 /// (the type registry's `mime`) on Linux and the BSDs, by both on macOS.
@@ -241,7 +250,7 @@ pub fn choose_another_program(file: &Path) -> std::io::Result<()> {
         let _ = file;
         Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "This system has no Open with dialog of its own.",
+            NO_DIALOG,
         ))
     }
 }
@@ -256,7 +265,7 @@ fn start_by_class(class: &str, file: &Path) -> std::io::Result<()> {
         let _ = (class, file);
         Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "Starting a program by its class is for Windows.",
+            CLASS_IS_WINDOWS,
         ))
     }
 }
@@ -301,8 +310,18 @@ mod tests {
             OpenWithList::title("report.pdf").as_str(),
             OpenWithList::DEFAULT_PROGRAM,
             OpenWithList::CHOOSE_ANOTHER,
+            NO_DIALOG,
+            CLASS_IS_WINDOWS,
         ] {
             assert!(line.chars().count() <= 40, "{line}");
         }
+        assert_eq!(list.unread_line(), None);
+        let unread = OpenWithList {
+            unread: 3,
+            ..OpenWithList::default()
+        };
+        let line = unread.unread_line().unwrap();
+        assert_eq!(line, "3 programs not listed: binary Info.plist");
+        assert_eq!(line.chars().count(), 40);
     }
 }
