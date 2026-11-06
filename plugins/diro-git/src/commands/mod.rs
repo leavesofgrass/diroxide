@@ -18,6 +18,7 @@
 //! cleans a row's words for the screen and a path with two spaces in a
 //! row would not survive that.
 
+mod branch;
 mod tree;
 
 use std::collections::VecDeque;
@@ -36,10 +37,26 @@ use crate::plugin::Plugin;
 use crate::repo::Repo;
 
 /// The commands this build answers (plugin-local ids).
-pub const IDS: &[&str] = &["status", "stage", "unstage", "stage_all", "ignore"];
+pub const IDS: &[&str] = &[
+    "status",
+    "stage",
+    "unstage",
+    "stage_all",
+    "ignore",
+    "discard",
+    "branches",
+    "switch",
+    "branch_new",
+    "branch_rename",
+    "stashes",
+    "stash_push",
+    "stash_pop",
+    "stash_drop",
+    "stash_show",
+];
 
 /// The lists this build opens.
-pub const LISTERS: &[&str] = &["status"];
+pub const LISTERS: &[&str] = &["status", "branches", "stashes"];
 
 /// How many opened lists keep their rows: a list shown in both panels,
 /// and the ones before, still answer.
@@ -80,6 +97,16 @@ pub struct Row {
 pub enum View {
     /// The repository's changed files.
     Status {
+        /// The repository's top.
+        root: PathBuf,
+    },
+    /// The local branches.
+    Branches {
+        /// The repository's top.
+        root: PathBuf,
+    },
+    /// The stashes.
+    Stashes {
         /// The repository's top.
         root: PathBuf,
     },
@@ -403,6 +430,16 @@ fn dispatch(ctx: &Ctx<'_>, command: &str) -> Result<Value, GitError> {
         "unstage" => tree::unstage(ctx),
         "stage_all" => tree::stage_all(ctx),
         "ignore" => tree::ignore(ctx),
+        "discard" => tree::discard(ctx),
+        "branches" => branch::branches(ctx),
+        "switch" => branch::switch(ctx),
+        "branch_new" => branch::new_branch(ctx),
+        "branch_rename" => branch::rename(ctx),
+        "stashes" => branch::stashes(ctx),
+        "stash_push" => branch::stash_push(ctx),
+        "stash_pop" => branch::stash_pop(ctx),
+        "stash_drop" => branch::stash_drop(ctx),
+        "stash_show" => branch::stash_show(ctx),
         other => Err(GitError::Host(diroxide_plugins::protocol::RpcError::new(
             diroxide_plugins::protocol::ErrorKind::MethodNotFound,
             format!("no command {other}"),
@@ -446,6 +483,8 @@ fn build(plugin: &Plugin, host: Host<'_>, view: &View) -> Result<Vec<Row>, GitEr
     };
     match view {
         View::Status { root } => Ok(tree::status_rows(host, &repo(root)?)?.1),
+        View::Branches { root } => branch::branch_rows(host, &repo(root)?),
+        View::Stashes { root } => branch::stash_rows(host, &repo(root)?),
     }
 }
 

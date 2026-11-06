@@ -1,9 +1,16 @@
 //! The working tree's commands (R29 2.4): the status list, stage, unstage,
-//! stage all, and Add to .gitignore.
+//! stage all, Add to .gitignore, and Discard, which keeps what it drops.
 //!
 //! Paths always come after `--` with literal pathspecs, from the
-//! repository's top.
+//! repository's top. Discard is `git stash push --keep-index -m "diroxide
+//! discard TIME" -- PATHS` on tracked files only (spike GS5): the files go
+//! back to what is staged, staged work stays, untracked files are never
+//! touched (that would be `git clean`, which does not exist here), and the
+//! stash brings it all back.
 
+use std::time::SystemTime;
+
+use diroxide_core::{Timestamp, UtcOffset};
 use serde_json::Value;
 
 use super::{Ctx, Row, RowData, Target, View, git_refused, place_of};
@@ -257,9 +264,74 @@ pub fn ignore(ctx: &Ctx<'_>) -> Result<Value, GitError> {
 /// What Add to .gitignore says when the owner kept the file.
 pub const KEPT_GITIGNORE: &str = "Kept .gitignore as it was";
 
+/// The time a discard's stash is named with, from the clock, in UTC:
+/// "2026-11-06 14:30 UTC".
+pub fn stash_time(now: SystemTime) -> String {
+    let c = Timestamp::from_system_time(now).to_civil(UtcOffset::UTC);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02} UTC",
+        c.year, c.month, c.day, c.hour, c.minute
+    )
+}
+
+/// Git: discard changes: the marked tracked files put back as staged,
+/// after a question that lists them and starts on No; what they held goes
+/// to a stash.
+pub fn discard(ctx: &Ctx<'_>) -> Result<Value, GitError> {
+    let (repo, paths, _) = ctx.target_paths()?;
+    let paths = paths_or_nothing(paths)?;
+    let status = read_status(ctx.host, &repo, &paths)?;
+    let untracked = status
+        .changes
+        .iter()
+        .filter(|c| matches!(c.kind, status::Kind::Untracked))
+        .count();
+    let changed: Vec<&Change> = status
+        .changes
+        .iter()
+        .filter(|c| c.in_tree() && !c.not_unicode)
+        .collect();
+    if changed.is_empty() {
+        return Err(GitError::refused(lines::NOTHING_CHANGED, None));
+    }
+    let rows: Vec<String> = changed
+        .iter()
+        .map(|c| lines::change_row(&c.word(), &c.path, c.from.as_deref()))
+        .collect();
+    let title = lines::discard_title(changed.len());
+    let question = lines::discard_lines(&rows, untracked);
+    // A no, like Escape, leaves everything as it was: the host says
+    // "cancelled".
+    if ctx.host.confirm(&title, &question, true)? != Some(true) {
+        return Err(GitError::Cancelled);
+    }
+    let message = lines::discard_message(&stash_time(SystemTime::now()));
+    let targets: Vec<String> = changed.iter().map(|c| c.path.clone()).collect();
+    let out = git::run(
+        ctx.host.peer,
+        Some(ctx.host.cancel),
+        &Run::new(
+            &repo.root,
+            &["stash", "push", "--keep-index", "-m", &message],
+        )
+        .with_paths(&targets),
+    )?;
+    if !out.ok() {
+        return Err(git_refused("Could not discard", &out.reason()));
+    }
+    let done = ctx.done(
+        Some(&repo),
+        &lines::discarded(changed.len(), 0),
+        changed.len(),
+    );
+    refresh(ctx, &repo)?;
+    Ok(done)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, UNIX_EPOCH};
 
     #[test]
     fn a_pattern_is_anchored_and_escaped() {
@@ -269,5 +341,11 @@ mod tests {
         assert_eq!(pattern("a[1]*.txt", false), "/a\\[1\\]\\*.txt");
         assert_eq!(pattern("#notes", false), "/\\#notes");
         assert_eq!(pattern("trail ", false), "/trail\\ ");
+    }
+
+    #[test]
+    fn the_stash_time_comes_from_the_clock() {
+        let time = UNIX_EPOCH + Duration::from_secs(1_793_974_970);
+        assert_eq!(stash_time(time), "2026-11-06 14:22 UTC");
     }
 }

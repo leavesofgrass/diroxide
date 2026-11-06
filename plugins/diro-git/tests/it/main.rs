@@ -6,6 +6,7 @@
 // Test helpers may unwrap: a failure is the test's failure.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod branches;
 mod status;
 mod support;
 mod tree;

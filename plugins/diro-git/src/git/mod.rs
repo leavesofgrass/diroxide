@@ -14,6 +14,7 @@
 //! `[` is that name and nothing else.
 
 pub mod progress;
+pub mod refs;
 pub mod status;
 pub mod trust;
 pub mod version;

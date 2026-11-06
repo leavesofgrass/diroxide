@@ -87,6 +87,79 @@ description = "Adds the marked files to the repository's .gitignore, after a que
 places = "local"
 needs = ["git"]
 
+[[command]]
+id = "discard"
+name = "Git: discard changes"
+description = "Puts the marked files back as staged, after a question; the changes go to a stash."
+needs = ["git"]
+
+# ---- Branches and stashes ----
+
+[[command]]
+id = "branches"
+name = "Git: branches"
+description = "Lists the local branches, each with where it stands."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "switch"
+name = "Git: switch to this branch"
+description = "Switches to the branch; git refuses when your changes would be lost."
+selection = "one"
+needs = ["git"]
+
+[[command]]
+id = "branch_new"
+name = "Git: new branch"
+description = "Makes a branch here and switches to it."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "branch_rename"
+name = "Git: rename branch"
+description = "Renames the branch on the row, or the current one."
+needs = ["git"]
+
+[[command]]
+id = "stashes"
+name = "Git: stashes"
+description = "Lists the stashes, the newest first."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "stash_push"
+name = "Git: stash changes"
+description = "Puts the changes away in a stash and leaves the files as committed."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "stash_pop"
+name = "Git: pop stash"
+description = "Brings back the stash on the row, or the newest, and removes it."
+needs = ["git"]
+
+[[command]]
+id = "stash_drop"
+name = "Git: drop stash"
+description = "Removes the stash on the row, after a question that starts on No."
+selection = "one"
+needs = ["git"]
+
+[[command]]
+id = "stash_show"
+name = "Git: show a stash"
+description = "Shows the stash's changes as a document."
+selection = "one"
+needs = ["git"]
+
 # ---- Lists ----
 
 [[lister]]
@@ -114,3 +187,40 @@ selection = "any"
 key = "alt+u"
 command = "unstage"
 selection = "any"
+
+[[lister]]
+id = "branches"
+name = "Branches"
+activate = "switch"
+
+[[lister.columns]]
+id = "standing"
+header = "Upstream"
+kind = "text"
+
+[[lister.columns]]
+id = "date"
+header = "Last commit"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "subject"
+header = "Subject"
+kind = "text"
+
+[[lister]]
+id = "stashes"
+name = "Stashes"
+activate = "stash_show"
+
+[[lister.columns]]
+id = "branch"
+header = "Branch"
+kind = "text"
+
+[[lister.columns]]
+id = "date"
+header = "Date"
+kind = "text"
+sorts = true
