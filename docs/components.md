@@ -175,6 +175,28 @@ Installs from a folder or a zip file you already have, with no network. See belo
 
 An unknown id says "Could not find the component nothing. Run diro components list for the ids." and exits with 1.
 
+### What diro finds: diro doctor
+
+```bash
+diro doctor
+```
+
+Says what this diro has and finds, one fact a line, the name first: the program, the screen reader mode, the terminal, the folders, each helper program, each component, each plugin, and the startup problems. A helper program's line says its version and where it was found; one not found is followed by the command that installs it on your system, or a sentence where there is none:
+
+```text
+Tools: 13 of 22 found
+ImageMagick: not found
+Install: winget install ImageMagick.ImageMagick
+pandoc: 3.9.0.2, on PATH
+7-Zip: 24.08, in Program Files
+FFmpeg: turned off in tools.toml
+carta: 0.0.13, built in
+Components: 0 of 1 installed
+Example plugins: not installed
+```
+
+A program is looked for in `tools.toml` first, then in the installed components, then on PATH, then in the folders its installer uses, and the line says which. diroxide never runs the install command. A folder in your home folder is said from `~`; `--paths` says it in full. `diro doctor --check pandoc ffmpeg` exits with 1 when one of those is missing, and `--check` alone checks the programs your conversion recipes use. Otherwise the exit code is 0.
+
 ## Manage optional components
 
 In the program, Manage optional components is in the Tools menu (Alt+T, then O) and in the command palette. It opens a list named "Optional components", one row for each component, the title first and the state after it:
