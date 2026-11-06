@@ -14,6 +14,7 @@
 pub mod fs;
 pub mod sniff;
 pub mod source;
+pub mod table;
 pub mod tree;
 
 use std::sync::{Arc, Mutex, PoisonError};
@@ -91,7 +92,12 @@ impl Volume {
         if self.content.is_locked() {
             return Some(self.content.words().to_owned());
         }
-        self.with_tree(|tree| Ok(tree.facts().words)).ok()
+        match self.with_tree(|tree| Ok(tree.facts().words)) {
+            Ok(words) => Some(words),
+            Err(DiskError::Cancelled) => None,
+            Err(_) if self.content == Content::Unknown => None,
+            Err(_) => Some(self.content.words().to_owned()),
+        }
     }
 
     /// The file system's label, when it opens and has one.
@@ -264,11 +270,22 @@ impl Image {
     pub fn volume(&self, partition: Option<u32>) -> Result<&Volume, DiskError> {
         match (&self.layout, partition) {
             (Layout::Single(volume), None) => Ok(volume),
-            (Layout::Table { partitions, .. }, Some(number)) => partitions
-                .iter()
-                .find(|p| p.number == number)
-                .map(|p| &p.volume)
-                .ok_or(DiskError::NotFound),
+            (Layout::Table { partitions, .. }, Some(number)) => {
+                let partition = partitions
+                    .iter()
+                    .find(|p| p.number == number)
+                    .ok_or(DiskError::NotFound)?;
+                if partition.volume.content == Content::Unknown {
+                    // Swap, a BIOS boot area, an empty slot: no files, in
+                    // the table's words.
+                    let what = partition.kind.as_deref().unwrap_or("no file system");
+                    return Err(DiskError::Needs {
+                        cause: cause::no_files(what),
+                        hint: String::new(),
+                    });
+                }
+                Ok(&partition.volume)
+            }
             _ => Err(DiskError::NotFound),
         }
     }
@@ -345,6 +362,25 @@ fn layout_of(
     limits: &Limits,
 ) -> Result<Layout, DiskError> {
     match content {
+        Content::Gpt | Content::Mbr => {
+            let table = table::read(disk.as_ref(), content == Content::Gpt)?;
+            let mut partitions = Vec::with_capacity(table.entries.len());
+            for entry in table.entries {
+                let backing: Arc<dyn Backing> =
+                    Arc::new(Slice::new(Arc::clone(&disk), entry.start, entry.len));
+                partitions.push(Partition {
+                    number: entry.number,
+                    name: entry.name,
+                    kind: entry.kind,
+                    start: entry.start,
+                    volume: Volume::new(backing, *limits)?,
+                });
+            }
+            Ok(Layout::Table {
+                scheme: table.scheme,
+                partitions,
+            })
+        }
         Content::Unknown => Err(DiskError::Needs {
             cause: cause::NOT_AN_IMAGE.to_owned(),
             hint: String::new(),
