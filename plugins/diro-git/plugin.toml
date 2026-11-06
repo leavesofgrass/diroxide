@@ -1,0 +1,45 @@
+# The git plugin, the git half (R29 part 2; alpha 4): the title line
+# ("main, no upstream, 2 changed here"), the Git column, and git's
+# commands under the Plugins menu, every one through the git program with
+# an argument list. Before any automatic status it reads the repository's
+# own configuration and asks once about one that runs a program (the
+# trust scan, answer 123).
+#
+# The contract step (P4) made this skeleton: it describes nothing and
+# leaves every cell pending. The git lane (commits 98 to 107) builds it.
+
+[plugin]
+id = "git"
+name = "Git"
+version = "0.1.0-alpha.3"
+description = "Shows git's state in the panels and runs git's commands, starting on No."
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+protocol = 1
+min_host = "0.1.0-alpha.3"
+
+[run]
+command = ["./diro-git"]
+start = "on_demand"
+concurrency = 16
+idle_timeout = "5m"
+
+[run.windows]
+command = ["./diro-git.exe"]
+
+[permissions]
+panel = "read"
+tools = ["git"]
+
+[permissions.declared]
+network = "git's own remotes, when you fetch, pull or push"
+files = "only through git"
+programs = "git only"
+
+[[place_info]]
+marker = ".git"
+
+[[column]]
+id = "git"
+header = "Git"
+kind = "text"

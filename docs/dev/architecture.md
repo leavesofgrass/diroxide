@@ -44,6 +44,8 @@ Plan section 5.1 counts sixteen crates with `diroxide-cli` as "the diro binary".
 The plugin boundary is the language boundary (plan section 5.8, item 3; ADR-0001). Anything that needs C, assembly, another language or a license the main binary cannot carry is a plugin: a separate program in a workspace of its own under `plugins/`, which the root manifest's `exclude` keeps out, so `cargo build --workspace` and `cargo install diro` never see it. Pure Rust is a goal, not a rule (answer 46): a crate that carries C may enter the main workspace only through the inventory in `xtask/src/native.rs`, with its reason, and `cargo xtask native --check` fails on any other `cc`, `cmake` or `cxx` build dependency. The inventory today: `ring`, for the `fetch` feature, and `psm` and `stacker`, carta's stack growth for the quick view's readers (ADR-0001).
 
 - `plugins/diro-sftp`: the SFTP provider plugin (Owner: W3c). Depends on core and vfs by path; russh and russh-sftp join its own manifest in the plan's alpha.5. Built with `cargo build --manifest-path plugins/diro-sftp/Cargo.toml`.
+- `plugins/diro-disk`: the disk-image places plugin, reading half (alpha 4; owner: the disk lane). Depends on core, plugins and vfs by path, the last for the container rules of `diroxide_vfs::archive`; claims its images through the registry's claim route. Built with `cargo build --manifest-path plugins/diro-disk/Cargo.toml`.
+- `plugins/diro-git`: the git plugin, the git half (alpha 4; owner: the git lane). Depends on core, plugins and vfs by path; runs the git program through the host's `tools/run`, never a git library (answer 45). Built with `cargo build --manifest-path plugins/diro-git/Cargo.toml`.
 
 ## Rules every crate keeps
 

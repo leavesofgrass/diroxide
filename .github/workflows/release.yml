@@ -8,8 +8,10 @@
 # files. Plain logs, no color, so they read well in a screen reader.
 #
 # The optional components come first (plan section 5.14; R25 commit 87):
-# the SFTP plugin is built for each computer from its own workspace, the
-# components job packs it and the example plugins with cargo xtask
+# the plugins (SFTP, and since alpha 4 the disk-image and git plugins,
+# each published under its own tag too) are built for each computer from
+# their own workspaces, the
+# components job packs them and the example plugins with cargo xtask
 # components --assets, and the list it writes, with every file's size and
 # SHA-256, is the one each diro build embeds. Each component is published
 # under its own tag, <id>-<version> (diro-examples-0.1.1,
@@ -51,12 +53,14 @@ env:
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  # The SFTP plugin's program for each computer the list names (question
-  # N13): Windows x86_64, Linux x86_64 on Ubuntu 22.04 for an older glibc,
-  # and one universal macOS file. Any other computer hears "No build for
-  # this computer." and the cargo install line.
+  # The plugins' programs for each computer the list names (question
+  # N13): the SFTP plugin, and since alpha 4 the disk-image and git
+  # plugins, each from its own workspace: Windows x86_64, Linux x86_64 on
+  # Ubuntu 22.04 for an older glibc, and one universal macOS file. Any
+  # other computer hears "No build for this computer." and the cargo
+  # install line.
   plugins:
-    name: SFTP plugin, ${{ matrix.name }}
+    name: Plugins, ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -84,37 +88,42 @@ jobs:
           fi
       - uses: Swatinem/rust-cache@v2
         with:
-          key: release-sftp-${{ matrix.target }}
-          workspaces: plugins/diro-sftp -> target
-      - name: Build diro-sftp with the release profile, from its own workspace
+          key: release-plugins-${{ matrix.target }}
+          workspaces: |
+            plugins/diro-sftp -> target
+            plugins/diro-disk -> target
+            plugins/diro-git -> target
+      - name: Build each plugin with the release profile, from its own workspace
         shell: bash
         run: |
           set -euo pipefail
           out="plugin-assets/${{ matrix.target }}"
           mkdir -p "$out"
-          build() {
-            cargo build --release --locked --manifest-path plugins/diro-sftp/Cargo.toml --bin diro-sftp "$@"
-          }
-          case "${{ matrix.target }}" in
-            universal-apple-darwin)
-              build --target aarch64-apple-darwin
-              build --target x86_64-apple-darwin
-              lipo -create -output "$out/diro-sftp" \
-                plugins/diro-sftp/target/aarch64-apple-darwin/release/diro-sftp \
-                plugins/diro-sftp/target/x86_64-apple-darwin/release/diro-sftp
-              codesign --force --sign - "$out/diro-sftp"
-              codesign --verify --verbose=2 "$out/diro-sftp"
-              lipo -info "$out/diro-sftp"
-              ;;
-            x86_64-pc-windows-msvc)
-              build --target x86_64-pc-windows-msvc
-              cp plugins/diro-sftp/target/x86_64-pc-windows-msvc/release/diro-sftp.exe "$out/"
-              ;;
-            *)
-              build --target "${{ matrix.target }}"
-              cp "plugins/diro-sftp/target/${{ matrix.target }}/release/diro-sftp" "$out/"
-              ;;
-          esac
+          for plugin in diro-sftp diro-disk diro-git; do
+            build() {
+              cargo build --release --locked --manifest-path "plugins/$plugin/Cargo.toml" --bin "$plugin" "$@"
+            }
+            case "${{ matrix.target }}" in
+              universal-apple-darwin)
+                build --target aarch64-apple-darwin
+                build --target x86_64-apple-darwin
+                lipo -create -output "$out/$plugin" \
+                  "plugins/$plugin/target/aarch64-apple-darwin/release/$plugin" \
+                  "plugins/$plugin/target/x86_64-apple-darwin/release/$plugin"
+                codesign --force --sign - "$out/$plugin"
+                codesign --verify --verbose=2 "$out/$plugin"
+                lipo -info "$out/$plugin"
+                ;;
+              x86_64-pc-windows-msvc)
+                build --target x86_64-pc-windows-msvc
+                cp "plugins/$plugin/target/x86_64-pc-windows-msvc/release/$plugin.exe" "$out/"
+                ;;
+              *)
+                build --target "${{ matrix.target }}"
+                cp "plugins/$plugin/target/${{ matrix.target }}/release/$plugin" "$out/"
+                ;;
+            esac
+          done
           ls -lR plugin-assets
       - uses: actions/upload-artifact@v4
         with:

@@ -93,3 +93,89 @@ pack = [
   { from = "plugins/diro-sftp/plugin.toml", as = "" },
   { asset = "universal-apple-darwin/diro-sftp", as = "" },
 ]
+
+# The disk-image places plugin, reading half (alpha 4; R29 1.9), and the
+# git plugin (alpha 4; R29 2.7): built by the release workflow for each
+# computer below, from their own workspaces in plugins/diro-disk and
+# plugins/diro-git, as the SFTP plugin is, and handed to cargo xtask
+# components as --assets FOLDER. Without the assets each is left out of
+# the list. 7-Zip and qemu-img are optional for the disk plugin, so it
+# needs no tool; the git plugin needs git.
+[[component]]
+id = "diro-disk"
+title = "Disk image places plugin"
+kind = "plugin"
+version = "0.1.0-alpha.3"
+license = "Apache-2.0 OR MIT"
+credit = "The diroxide project"
+features = ["iso", "disk"]
+protocol = 1
+min_diro = "0.1.0-alpha.3"
+action = "unpack"
+
+[[component.file]]
+name = "diro-disk-0.1.0-alpha.3-x86_64-pc-windows-msvc.zip"
+target = "x86_64-pc-windows-msvc"
+exec = "diro-disk.exe"
+pack = [
+  { from = "plugins/diro-disk/plugin.toml", as = "" },
+  { asset = "x86_64-pc-windows-msvc/diro-disk.exe", as = "" },
+]
+
+[[component.file]]
+name = "diro-disk-0.1.0-alpha.3-x86_64-unknown-linux-gnu.zip"
+target = "x86_64-unknown-linux-gnu"
+exec = "diro-disk"
+pack = [
+  { from = "plugins/diro-disk/plugin.toml", as = "" },
+  { asset = "x86_64-unknown-linux-gnu/diro-disk", as = "" },
+]
+
+[[component.file]]
+name = "diro-disk-0.1.0-alpha.3-universal-apple-darwin.zip"
+target = "universal-apple-darwin"
+exec = "diro-disk"
+pack = [
+  { from = "plugins/diro-disk/plugin.toml", as = "" },
+  { asset = "universal-apple-darwin/diro-disk", as = "" },
+]
+
+[[component]]
+id = "diro-git"
+title = "Git places plugin"
+kind = "plugin"
+version = "0.1.0-alpha.3"
+license = "Apache-2.0 OR MIT"
+credit = "The diroxide project"
+features = ["git"]
+needs_tools = ["git"]
+protocol = 1
+min_diro = "0.1.0-alpha.3"
+action = "unpack"
+
+[[component.file]]
+name = "diro-git-0.1.0-alpha.3-x86_64-pc-windows-msvc.zip"
+target = "x86_64-pc-windows-msvc"
+exec = "diro-git.exe"
+pack = [
+  { from = "plugins/diro-git/plugin.toml", as = "" },
+  { asset = "x86_64-pc-windows-msvc/diro-git.exe", as = "" },
+]
+
+[[component.file]]
+name = "diro-git-0.1.0-alpha.3-x86_64-unknown-linux-gnu.zip"
+target = "x86_64-unknown-linux-gnu"
+exec = "diro-git"
+pack = [
+  { from = "plugins/diro-git/plugin.toml", as = "" },
+  { asset = "x86_64-unknown-linux-gnu/diro-git", as = "" },
+]
+
+[[component.file]]
+name = "diro-git-0.1.0-alpha.3-universal-apple-darwin.zip"
+target = "universal-apple-darwin"
+exec = "diro-git"
+pack = [
+  { from = "plugins/diro-git/plugin.toml", as = "" },
+  { asset = "universal-apple-darwin/diro-git", as = "" },
+]
