@@ -142,6 +142,7 @@ RUN apt-get update \
       tesseract-ocr \
       libimage-exiftool-perl \
       gnupg \
+      gpgv \
       age \
       minisign \
       dosfstools \
