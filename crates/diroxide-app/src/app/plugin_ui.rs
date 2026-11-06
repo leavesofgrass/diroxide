@@ -176,6 +176,9 @@ pub(super) struct Description {
 /// is "...".
 const DESCRIPTION_CHARS: usize = 40;
 
+/// The most folders whose words are kept at once.
+const MAX_DESCRIBED: usize = 1000;
+
 /// What a plugin dialog is for.
 #[derive(Clone, Debug)]
 pub(super) enum Wants {
@@ -1819,6 +1822,15 @@ impl App {
         }
         match described {
             Described::Words { plugin, name, text } => {
+                // A long session keeps at most so many folders' words: past
+                // them, only the folders shown now are kept.
+                if self.plugins.described.len() >= MAX_DESCRIBED {
+                    let shown = [
+                        self.panel(Side::Left).place().clone(),
+                        self.panel(Side::Right).place().clone(),
+                    ];
+                    self.plugins.described.retain(|p, _| shown.contains(p));
+                }
                 self.plugins
                     .described
                     .insert(place.clone(), Description { plugin, name, text });
