@@ -5,8 +5,10 @@
 # own configuration and asks once about one that runs a program (the
 # trust scan, answer 123).
 #
-# The contract step (P4) made this skeleton: it describes nothing and
-# leaves every cell pending. The git lane (commits 98 to 107) builds it.
+# The commands have no keys of their own (plan section 5.16: the owner's
+# key rules keep the common keys for the file manager); bind any of them
+# in keymap.toml or the key editor. Inside the lists, Enter does the
+# obvious thing and two Alt keys stage and unstage.
 
 [plugin]
 id = "git"
