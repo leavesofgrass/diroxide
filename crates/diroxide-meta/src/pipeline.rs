@@ -118,11 +118,18 @@ impl Pipeline {
     }
 
     /// Every key a reader names, with its cost class and the reader's id,
-    /// in the readers' order: what the column chooser lists.
+    /// in the readers' order, then the extended items' keys
+    /// ([`EXTENDED_KEYS`], background, id [`EXTENDED`]): what the column
+    /// chooser lists.
     pub fn keys(&self) -> Vec<(&'static str, Cost, &'static str)> {
         self.readers
             .iter()
             .flat_map(|r| r.keys().iter().map(move |k| (*k, r.cost(), r.id())))
+            .chain(
+                EXTENDED_KEYS
+                    .iter()
+                    .map(|k| (*k, Cost::Background, EXTENDED)),
+            )
             .collect()
     }
 
@@ -132,6 +139,30 @@ impl Pipeline {
             .iter()
             .find(|r| r.keys().contains(&key))
             .map(|r| r.cost())
+            .or_else(|| EXTENDED_KEYS.contains(&key).then_some(Cost::Background))
+    }
+
+    /// Every field of one file for the details view and Say Details: the
+    /// readers of each class in `classes`, then the extended items and
+    /// the origin row (an outcome with the id [`EXTENDED`]). The on-demand
+    /// class belongs in `classes` only when the person asked.
+    pub fn details(
+        &self,
+        provider: &dyn Provider,
+        request: &ReadRequest<'_>,
+        classes: &[Cost],
+        limits: &ReadLimits,
+        ctx: &OpContext,
+    ) -> Vec<Outcome> {
+        let mut outcomes = Vec::new();
+        for class in classes {
+            outcomes.extend(self.read(provider, request, *class, limits, ctx));
+        }
+        outcomes.push((
+            EXTENDED,
+            crate::origin::extended_fields(provider, request.place, ctx),
+        ));
+        outcomes
     }
 
     /// The fields of one file from every reader of `cost` that accepts
@@ -241,11 +272,15 @@ impl Pipeline {
             }
         }
         for (id, result) in outcomes {
-            if let Err(error) = result
-                && self
-                    .readers
+            let names_key = if *id == EXTENDED {
+                EXTENDED_KEYS.contains(&key)
+            } else {
+                self.readers
                     .iter()
                     .any(|r| r.id() == *id && r.keys().contains(&key))
+            };
+            if let Err(error) = result
+                && names_key
             {
                 return Cell::from_error(error);
             }
@@ -253,6 +288,14 @@ impl Pipeline {
         Cell::NotAvailable
     }
 }
+
+/// The id of the extended items' outcome in [`Pipeline::details`].
+pub const EXTENDED: &str = "extended";
+
+/// The keys of the extended items ([`crate::origin::extended_fields`]):
+/// the streams or attributes, the origin row, and the tags and comment
+/// other programs keep in the file system.
+pub const EXTENDED_KEYS: [&str; 4] = ["file.extended", "file.origin", "file.tags", "file.comment"];
 
 #[cfg(test)]
 mod tests {
@@ -379,7 +422,10 @@ mod tests {
         let pipeline = Pipeline::new().with(Arc::new(Bytes));
         assert_eq!(pipeline.ids(), ["bytes"]);
         assert_eq!(pipeline.cost_of("text.bytes"), Some(Cost::Background));
-        assert_eq!(pipeline.keys(), [("text.bytes", Cost::Background, "bytes")]);
+        let keys = pipeline.keys();
+        assert_eq!(keys[0], ("text.bytes", Cost::Background, "bytes"));
+        assert_eq!(keys[2], ("file.origin", Cost::Background, EXTENDED));
+        assert_eq!(pipeline.cost_of("file.origin"), Some(Cost::Background));
         let provider = LocalProvider::new();
         let ctx = OpContext::new();
         let limits = ReadLimits::default();
@@ -414,6 +460,22 @@ mod tests {
         cancelled.cancel.cancel();
         let got = pipeline.read(&provider, &request, Cost::Background, &limits, &cancelled);
         assert!(got[0].1.is_err());
+        // The details: the classes asked for, then the extended items.
+        let got = pipeline.details(
+            &provider,
+            &request,
+            &[Cost::Fast, Cost::Background],
+            &limits,
+            &ctx,
+        );
+        let ids: Vec<&str> = got.iter().map(|(id, _)| *id).collect();
+        assert_eq!(ids, ["bytes", EXTENDED]);
+        assert!(got[1].1.is_ok());
+        let failed: Vec<Outcome> = vec![(EXTENDED, Err(MetaError::TooSlow))];
+        assert_eq!(
+            pipeline.cell("file.origin", &failed).words(),
+            "unreadable: it took too long to read"
+        );
     }
 
     #[test]
