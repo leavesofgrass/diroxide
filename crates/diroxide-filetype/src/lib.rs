@@ -4,29 +4,41 @@
 //! one order: a signature in its first bytes, then an extended condition,
 //! then its name; among the types hit, a child beats its parent and
 //! otherwise the higher priority wins (the corrected plan 5.6). A row
-//! shows the name's type at once and "type pending" only where the name
-//! says nothing, until a background check reads the first bytes. Types
-//! and their groups come built in and from `filetypes.toml`; each type has
-//! actions (open, view, preview, convert, and the user's own), each a
-//! command, a tool or a plugin call, never a shell string.
+//! shows the name's type at once ([`TypeRegistry::by_name`]) and "type
+//! pending" only where the name says nothing, until a background check
+//! reads the first bytes ([`TypeRegistry::check`]). Types and their groups
+//! come built in and from `filetypes.toml`; each type has actions (open,
+//! view, preview, convert, and the user's own), each a command, a tool or
+//! a plugin call, never a shell string.
 //!
-//! Phase 0's flat registry ([`TypeRegistry::detect`]: the extension, then
-//! the first bytes) stays until the type model's lane (alpha 4, commit
-//! 24) moves it onto the tree.
+//! The shipped table, `data/filetypes.toml`, is embedded: about 180 types
+//! with their media types, and the groups (the seven of core's table and
+//! the screenshots group, R29 5.6). Core's extension table stays the
+//! fallback for a file no type takes and for a table that would not read.
+//!
+//! The flat call of phase 0, [`TypeRegistry::detect`], runs on the tree
+//! too: the name and whatever first bytes the caller has.
 
 pub mod tree;
 
 pub use tree::{
-    Condition, Found, Probe, Signature, SignatureError, Special, TreeError, TypeStage, TypeTree,
+    Condition, Found, MIN_FIXED_BYTES, NamePattern, Probe, Signature, SignatureError, Special,
+    TreeError, TypeStage, TypeTree, skips_content,
 };
 
+use std::sync::OnceLock;
+
 use diroxide_config::{FileTypeConfig, FileTypesConfig, GroupConfig};
-use diroxide_core::filter::GROUPS;
-use diroxide_core::{CommandId, Entry, EntryKind};
+use diroxide_core::filter::{GROUPS, Unknown, group_of_extension};
+use diroxide_core::{Clock, CommandId, Entry, EntryKind, SystemClock, UtcOffset};
 use diroxide_tools::{ToolRegistry, ToolStatus};
 
 /// How many bytes from the start of a file detection reads.
 pub const HEAD_BYTES: usize = 64;
+
+/// The shipped table: the types diroxide knows and their groups, in
+/// `filetypes.toml`'s own shape.
+pub const SHIPPED_TABLE: &str = include_str!("../data/filetypes.toml");
 
 /// Bytes at an offset that mark a type.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -87,9 +99,11 @@ pub struct FileType {
     pub parent: Option<String>,
     /// Extensions, lowercase, without the dot.
     pub extensions: Vec<String>,
-    /// Magic byte signatures.
+    /// Magic bytes of phase 0's flat registry: the fixed signatures, kept
+    /// for callers that read them. Detection reads [`FileType::signatures`].
     pub magic: Vec<Magic>,
-    /// Higher is checked first.
+    /// Among the types that match, the higher number wins; a child always
+    /// beats its parent, whatever the numbers.
     pub priority: i32,
     /// The actions; the first is the default.
     pub actions: Vec<TypeAction>,
@@ -98,15 +112,18 @@ pub struct FileType {
     pub mime: Option<String>,
     /// The group it belongs to, by id: `images` (alpha.7).
     pub group: Option<String>,
-    /// The type model's signatures, `??` allowed (alpha.7); the built-in
-    /// table's `magic` as signatures, and the config's `magic`.
+    /// The type model's signatures, `??` allowed (alpha.7).
     pub signatures: Vec<Signature>,
     /// Its extended condition (alpha.7).
     pub when: Option<Condition>,
-    /// Name patterns, globs (alpha.7).
+    /// Name patterns (alpha.7): globs, comma lists of globs, or `re:` and
+    /// a regular expression ([`NamePattern`]).
     pub patterns: Vec<String>,
     /// Whether it belongs to the retro pack (alpha.7).
     pub retro: bool,
+    /// Whether it comes from the owner's own `filetypes.toml` rather than
+    /// the shipped table: Settings says "yours" beside it.
+    pub yours: bool,
 }
 
 /// A group of file types: what Select by group, `group:`, actions,
@@ -119,8 +136,11 @@ pub struct TypeGroup {
     pub name: String,
     /// What it holds, in one sentence.
     pub about: String,
-    /// Name patterns that put a file in it whatever its type.
+    /// Name patterns that put a file in it whatever its type
+    /// ([`NamePattern`]): the screenshots group's names on each system.
     pub patterns: Vec<String>,
+    /// Whether it comes from the owner's own `filetypes.toml`.
+    pub yours: bool,
 }
 
 impl TypeGroup {
@@ -130,6 +150,7 @@ impl TypeGroup {
             name: config.name.clone(),
             about: config.about.clone(),
             patterns: config.patterns.clone(),
+            yours: true,
         }
     }
 
@@ -148,14 +169,15 @@ impl TypeGroup {
                     name,
                     about: g.description.to_owned(),
                     patterns: Vec::new(),
+                    yours: false,
                 }
             })
             .collect()
     }
 }
 
-/// The media types of the built-in types, by id.
-const BUILTIN_MIME: [(&str, &str); 7] = [
+/// The media types of the fallback types, by id.
+const FALLBACK_MIME: [(&str, &str); 7] = [
     ("text", "text/plain"),
     ("pdf", "application/pdf"),
     ("png", "image/png"),
@@ -166,7 +188,8 @@ const BUILTIN_MIME: [(&str, &str); 7] = [
 ];
 
 impl FileType {
-    fn new(
+    /// A type of the fallback table, with fixed signatures.
+    pub(crate) fn new(
         id: &str,
         name: &str,
         short: &str,
@@ -188,16 +211,14 @@ impl FileType {
                 .collect(),
             priority: 0,
             actions: Vec::new(),
-            mime: BUILTIN_MIME
+            mime: FALLBACK_MIME
                 .iter()
                 .find(|(type_id, _)| *type_id == id)
                 .map(|(_, mime)| (*mime).to_owned()),
             group: extensions
                 .first()
-                .and_then(|ext| diroxide_core::filter::group_of_extension(ext))
+                .and_then(|ext| group_of_extension(ext))
                 .map(|g| g.name.to_owned()),
-            // The table's tar magic sits past the type model's 64 bytes;
-            // the type model's lane moves it into a container test.
             signatures: magic
                 .iter()
                 .filter(|(offset, bytes)| offset + bytes.len() <= HEAD_BYTES)
@@ -206,26 +227,48 @@ impl FileType {
             when: None,
             patterns: Vec::new(),
             retro: false,
+            yours: false,
         }
     }
 
-    fn from_config(config: &FileTypeConfig) -> Self {
+    /// A type read from a `[[type]]` table, and what in it could not be
+    /// used, each said meaning first: a signature, a condition, a name
+    /// pattern or an action that does not read is left out, and the rest
+    /// of the type is kept.
+    pub fn from_config(config: &FileTypeConfig) -> (Self, Vec<String>) {
+        let id = &config.id;
+        let mut problems = Vec::new();
         let actions = config
             .actions
             .iter()
             .filter_map(|action| {
                 let target = if let Some(command) = &action.command {
-                    ActionTarget::Command(CommandId::new(command.clone()).ok()?)
+                    match CommandId::new(command.clone()) {
+                        Ok(command) => ActionTarget::Command(command),
+                        Err(_) => {
+                            problems.push(format!(
+                                "File type {id}: action {} left out. \"{command}\" is not a command id.",
+                                action.name
+                            ));
+                            return None;
+                        }
+                    }
                 } else if let Some(tool) = &action.tool {
                     ActionTarget::Tool {
                         tool: tool.clone(),
                         args: action.args.clone(),
                     }
-                } else {
+                } else if let Some(plugin) = &action.plugin {
                     ActionTarget::Plugin {
-                        plugin: action.plugin.clone()?,
+                        plugin: plugin.clone(),
                         command: action.args.first().cloned().unwrap_or_default(),
                     }
+                } else {
+                    problems.push(format!(
+                        "File type {id}: action {} left out. It names no command, tool or plugin.",
+                        action.name
+                    ));
+                    return None;
                 };
                 Some(TypeAction {
                     name: action.name.clone(),
@@ -233,41 +276,81 @@ impl FileType {
                 })
             })
             .collect();
-        // Naive: a signature or a condition that does not read is left
-        // out; the type model's lane says why, in words, when the file
-        // loads.
-        Self {
+        let signatures = config
+            .magic
+            .iter()
+            .filter_map(|m| match Signature::parse(m.at, &m.hex) {
+                Ok(signature) => Some(signature),
+                Err(error) => {
+                    problems.push(format!("File type {id}: signature left out. {error}."));
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let when = config
+            .when
+            .as_deref()
+            .and_then(|text| match Condition::parse(text) {
+                Ok(condition) => Some(condition),
+                Err(error) => {
+                    problems.push(format!(
+                        "File type {id}: condition left out. {}",
+                        error.line()
+                    ));
+                    None
+                }
+            });
+        let patterns = config
+            .patterns
+            .iter()
+            .filter(|p| match NamePattern::parse(p) {
+                Ok(_) => true,
+                Err(error) => {
+                    problems.push(format!("File type {id}: pattern left out. {error}."));
+                    false
+                }
+            })
+            .cloned()
+            .collect();
+        let magic = signatures
+            .iter()
+            .filter(|s| s.bytes.iter().all(Option::is_some))
+            .map(|s| Magic {
+                offset: s.at,
+                bytes: s.bytes.iter().flatten().copied().collect(),
+            })
+            .collect();
+        let file_type = Self {
             id: config.id.clone(),
             name: config.name.clone(),
             short: config.short.clone(),
             parent: config.parent.clone(),
-            extensions: config.extensions.iter().map(|e| e.to_lowercase()).collect(),
-            magic: Vec::new(),
+            extensions: config
+                .extensions
+                .iter()
+                .map(|e| e.trim_start_matches('.').to_lowercase())
+                .collect(),
+            magic,
             priority: config.priority,
             actions,
             mime: config.mime.clone(),
             group: config.group.clone(),
-            signatures: config
-                .magic
-                .iter()
-                .filter_map(|m| Signature::parse(m.at, &m.hex).ok())
-                .collect(),
-            when: config
-                .when
-                .as_deref()
-                .and_then(|w| Condition::parse(w).ok()),
-            patterns: config.patterns.clone(),
+            signatures,
+            when,
+            patterns,
             retro: config.retro,
-        }
+            yours: false,
+        };
+        (file_type, problems)
     }
 }
 
-/// How a type was found.
+/// How a type was found, in phase 0's words.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Stage {
-    /// By the name's extension.
+    /// By the name: its extension or a name pattern.
     Extension,
-    /// By magic bytes.
+    /// By the contents: a signature or a condition.
     Magic,
 }
 
@@ -280,16 +363,195 @@ pub struct Detection {
     pub stage: Stage,
 }
 
-/// The file types, user types first, and their groups.
+/// The retro pack: the old formats (Amiga and tracker music, PowerPacker,
+/// the IFF family, old office files), read only while `filetypes.retro`
+/// is on (R28 4.3).
+pub const RETRO_TABLE: &str = include_str!("../data/filetypes-retro.toml");
+
+/// The setting's line in words, for Settings and the Groups list:
+/// "Retro types: off" (16 cells).
+pub const fn retro_line(on: bool) -> &'static str {
+    if on {
+        "Retro types: on"
+    } else {
+        "Retro types: off"
+    }
+}
+
+/// The folders of the setting `check.skip`: a file in one of them, or in
+/// a folder below one, is typed by its name alone, its first bytes never
+/// read (a slow share, say). Folders are compared with `\` and `/` alike,
+/// a trailing separator ignored, and case ignored, so `D:\Share` covers
+/// `d:/share/2026`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CheckSkip {
+    folders: Vec<String>,
+}
+
+impl CheckSkip {
+    /// The setting's folders, as written; empty ones are ignored.
+    pub fn new(folders: &[String]) -> Self {
+        Self {
+            folders: folders
+                .iter()
+                .map(|f| Self::normal(f))
+                .filter(|f| !f.is_empty())
+                .collect(),
+        }
+    }
+
+    /// A folder written one way: slashes forward, no trailing slash but
+    /// for a root, lowercase.
+    fn normal(folder: &str) -> String {
+        let forward = folder.trim().replace('\\', "/").to_lowercase();
+        let trimmed = forward.trim_end_matches('/');
+        if trimmed.is_empty() && forward.starts_with('/') {
+            "/".to_owned()
+        } else if trimmed.ends_with(':') {
+            format!("{trimmed}/")
+        } else {
+            trimmed.to_owned()
+        }
+    }
+
+    /// Whether the files in this folder are typed by name alone.
+    pub fn covers(&self, folder: &str) -> bool {
+        let folder = Self::normal(folder);
+        self.folders.iter().any(|skip| {
+            folder == *skip
+                || folder
+                    .strip_prefix(skip.as_str())
+                    .is_some_and(|rest| skip.ends_with('/') || rest.starts_with('/'))
+        })
+    }
+}
+
+/// The file types, in checking order, their tree and their groups.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeRegistry {
-    types: Vec<FileType>,
     groups: Vec<TypeGroup>,
+    group_patterns: Vec<Vec<NamePattern>>,
+    tree: TypeTree,
+    problems: Vec<String>,
+    /// Whether the retro pack is read.
+    retro: bool,
+    /// The owner's retro types, kept aside while the pack is off.
+    held: Vec<FileType>,
+}
+
+/// The types read from a table, and what in it could not be used.
+fn read_table(text: &str, what: &str) -> (Vec<FileType>, Vec<TypeGroup>, Vec<String>) {
+    let config = match FileTypesConfig::from_toml(text) {
+        Ok(config) => config,
+        Err(error) => {
+            return (
+                Vec::new(),
+                Vec::new(),
+                vec![format!("{what} not read: {error}")],
+            );
+        }
+    };
+    let mut problems = Vec::new();
+    let types = config
+        .types
+        .iter()
+        .map(|c| {
+            let (own, found) = FileType::from_config(c);
+            problems.extend(found);
+            own
+        })
+        .collect();
+    let groups = config
+        .groups
+        .iter()
+        .map(|g| TypeGroup {
+            yours: false,
+            ..TypeGroup::from_config(g)
+        })
+        .collect();
+    (types, groups, problems)
+}
+
+/// The types with a repeated id left out after the first.
+fn first_of_each(types: Vec<FileType>) -> Vec<FileType> {
+    let mut seen = std::collections::HashSet::new();
+    types
+        .into_iter()
+        .filter(|t| seen.insert(t.id.clone()))
+        .collect()
 }
 
 impl TypeRegistry {
-    /// The built-in types.
+    /// The built-in types and groups: the shipped table
+    /// ([`SHIPPED_TABLE`]), read once. Should it ever not read whole, the
+    /// fallback ([`TypeRegistry::fallback`]) stands in, and
+    /// [`TypeRegistry::problems`] says why.
     pub fn builtin() -> Self {
+        static SHIPPED: OnceLock<TypeRegistry> = OnceLock::new();
+        SHIPPED.get_or_init(Self::shipped).clone()
+    }
+
+    /// The shipped table, read.
+    fn shipped() -> Self {
+        let (types, groups, problems) = read_table(SHIPPED_TABLE, "Shipped file types");
+        if types.is_empty() {
+            let mut fallback = Self::fallback();
+            fallback.problems.extend(problems);
+            return fallback;
+        }
+        Self::from_parts(types, groups, problems)
+    }
+
+    /// The retro pack's types, read once.
+    fn retro_pack() -> &'static (Vec<FileType>, Vec<String>) {
+        static RETRO: OnceLock<(Vec<FileType>, Vec<String>)> = OnceLock::new();
+        RETRO.get_or_init(|| {
+            let (types, _, problems) = read_table(RETRO_TABLE, "Retro file types");
+            (types, problems)
+        })
+    }
+
+    /// Whether the retro pack is read.
+    pub fn retro(&self) -> bool {
+        self.retro
+    }
+
+    /// The same registry with the retro pack on or off (the setting
+    /// `filetypes.retro`, off by default). On, the pack's types join after
+    /// the others, and the owner's own types marked `retro` come back;
+    /// off, every retro type leaves, and the owner's are kept aside.
+    pub fn with_retro(self, on: bool) -> Self {
+        if on == self.retro {
+            return self;
+        }
+        let mut problems = self.problems;
+        let mut held = self.held;
+        let types = if on {
+            let (pack, found) = Self::retro_pack();
+            for problem in found {
+                if !problems.contains(problem) {
+                    problems.push(problem.clone());
+                }
+            }
+            let mut types = std::mem::take(&mut held);
+            types.extend(self.tree.types().iter().cloned());
+            types.extend(pack.iter().cloned());
+            first_of_each(types)
+        } else {
+            let (retro, rest): (Vec<FileType>, Vec<FileType>) =
+                self.tree.types().iter().cloned().partition(|t| t.retro);
+            held = retro.into_iter().filter(|t| t.yours).collect();
+            rest
+        };
+        let mut registry = Self::from_parts(types, self.groups, problems);
+        registry.retro = on;
+        registry.held = held;
+        registry
+    }
+
+    /// Phase 0's twelve types over core's seven groups: what is left when
+    /// the shipped table cannot be read.
+    pub fn fallback() -> Self {
         let types = vec![
             FileType::new(
                 "text",
@@ -330,38 +592,109 @@ impl TypeRegistry {
                 &["xz", "txz"],
                 &[(0, b"\xFD7zXZ\x00")],
             ),
-            FileType::new("tar", "tar archive", "tar", &["tar"], &[(257, b"ustar")]),
+            // tar's `ustar` sits at 257, past the first 64 bytes: the name
+            // says tar, and "Open as archive" reads the bytes itself.
+            FileType::new("tar", "tar archive", "tar", &["tar"], &[]),
             FileType::new("mp3", "MP3 audio", "MP3", &["mp3"], &[(0, b"ID3")]),
             FileType::new("html", "web page", "HTML", &["html", "htm"], &[]),
         ];
+        Self::from_parts(types, TypeGroup::builtin(), Vec::new())
+    }
+
+    /// A registry of these types, in this order (sorted, stably, by
+    /// priority, higher first), with these groups. A type the tree cannot
+    /// take (its parent is no type, or it is its own ancestor) is left out
+    /// and said in [`TypeRegistry::problems`].
+    fn from_parts(mut types: Vec<FileType>, groups: Vec<TypeGroup>, problems: Vec<String>) -> Self {
+        types.sort_by_key(|t| std::cmp::Reverse(t.priority));
+        let mut problems = problems;
+        let tree = loop {
+            match TypeTree::new(types.clone()) {
+                Ok(tree) => break tree,
+                Err(error) => {
+                    let id = match &error {
+                        TreeError::UnknownParent { type_id, .. } | TreeError::Cycle { type_id } => {
+                            type_id.clone()
+                        }
+                    };
+                    problems.push(format!("File type {id} left out. {error}"));
+                    types.retain(|t| t.id != id);
+                }
+            }
+        };
+        let group_patterns = groups
+            .iter()
+            .map(|g| {
+                g.patterns
+                    .iter()
+                    .filter_map(|p| match NamePattern::parse(p) {
+                        Ok(pattern) => Some(pattern),
+                        Err(error) => {
+                            problems
+                                .push(format!("File group {}: pattern left out. {error}.", g.id));
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
         Self {
-            types,
-            groups: TypeGroup::builtin(),
+            groups,
+            group_patterns,
+            tree,
+            problems,
+            retro: false,
+            held: Vec::new(),
         }
     }
 
     /// The same registry with the user's types added before the built-in
-    /// ones; a user type with a built-in id replaces it. The file's
+    /// ones; a user type with a built-in id replaces it. A user type
+    /// marked `retro` waits aside while the retro pack is off. The file's
     /// groups replace the built-in groups of the same id and add the
-    /// rest.
-    pub fn with_config(mut self, config: &FileTypesConfig) -> Self {
-        let mut types: Vec<FileType> = config.types.iter().map(FileType::from_config).collect();
-        self.types
-            .retain(|builtin| !types.iter().any(|own| own.id == builtin.id));
-        types.append(&mut self.types);
-        types.sort_by_key(|t| std::cmp::Reverse(t.priority));
-        self.types = types;
-        for own in &config.groups {
-            let own = TypeGroup::from_config(own);
-            match self.groups.iter_mut().find(|g| g.id == own.id) {
-                Some(builtin) => *builtin = own,
-                None => self.groups.push(own),
+    /// rest. What could not be used is said in
+    /// [`TypeRegistry::problems`].
+    pub fn with_config(self, config: &FileTypesConfig) -> Self {
+        let retro = self.retro;
+        let mut held = self.held;
+        let mut problems = self.problems;
+        let mut types: Vec<FileType> = Vec::new();
+        for c in &config.types {
+            let (mut own, found) = FileType::from_config(c);
+            own.yours = true;
+            problems.extend(found);
+            if own.retro && !retro {
+                held.retain(|h| h.id != own.id);
+                held.push(own);
+            } else {
+                types.push(own);
             }
         }
-        self
+        let mut builtin = self.tree.types().to_vec();
+        builtin.retain(|b| !types.iter().any(|own| own.id == b.id));
+        types.append(&mut builtin);
+        let mut groups = self.groups;
+        for own in &config.groups {
+            let own = TypeGroup::from_config(own);
+            match groups.iter_mut().find(|g| g.id == own.id) {
+                Some(builtin) => *builtin = own,
+                None => groups.push(own),
+            }
+        }
+        let mut registry = Self::from_parts(first_of_each(types), groups, problems);
+        registry.retro = retro;
+        registry.held = held;
+        registry
     }
 
-    /// The groups, the built-in seven first, in the Groups list's order.
+    /// What could not be used from the types' files, each line meaning
+    /// first, the first sentence inside a Braille line: "File type ebook
+    /// left out. Type ebook names the parent books, which no type has."
+    pub fn problems(&self) -> &[String] {
+        &self.problems
+    }
+
+    /// The groups, the built-in ones first, in the Groups list's order.
     pub fn groups(&self) -> &[TypeGroup] {
         &self.groups
     }
@@ -369,47 +702,174 @@ impl TypeRegistry {
     /// The group a type belongs to, by the type's id.
     pub fn group_of(&self, type_id: &str) -> Option<&TypeGroup> {
         let id = self.get(type_id)?.group.as_deref()?;
+        self.group(id)
+    }
+
+    /// A group by id.
+    pub fn group(&self, id: &str) -> Option<&TypeGroup> {
         self.groups.iter().find(|g| g.id == id)
     }
 
-    /// The types as the type model's tree (alpha.7), or why they do not
-    /// make one.
+    /// The groups an entry is in, its type's group first: the group of
+    /// the type its [`Entry::type_index`] names, or else of the type its
+    /// name gives, or else core's extension table's (the fallback for a
+    /// file no type takes); then every group whose name patterns take
+    /// its name (a screenshot is in Images and in Screenshots). Folders
+    /// and plugin items are in none. [`Unknown::TypeNotChecked`] while
+    /// the name says nothing and the type is not checked yet.
+    pub fn groups_of(&self, entry: &Entry, clock: &dyn Clock) -> Result<Vec<&TypeGroup>, Unknown> {
+        if entry.is_folder_like() || matches!(entry.kind, EntryKind::Folder | EntryKind::Item) {
+            return Ok(Vec::new());
+        }
+        let mut pending = false;
+        let file_type = match self.by_index(entry.type_index) {
+            Some(file_type) => Some(file_type),
+            None => match self.by_name(entry, clock) {
+                Ok(found) => self.tree.types().get(found.index),
+                Err(special) => {
+                    pending = special == Special::Pending && entry.type_name.is_none();
+                    None
+                }
+            },
+        };
+        let mut groups: Vec<&TypeGroup> = Vec::new();
+        let by_type = file_type
+            .and_then(|t| t.group.as_deref())
+            .and_then(|id| self.group(id));
+        let by_extension = || {
+            entry
+                .extension()
+                .and_then(group_of_extension)
+                .and_then(|g| self.group(g.name))
+        };
+        if let Some(group) = by_type.or_else(|| file_type.is_none().then(by_extension).flatten()) {
+            groups.push(group);
+        }
+        for (group, patterns) in self.groups.iter().zip(&self.group_patterns) {
+            if patterns.iter().any(|p| p.is_match(&entry.name))
+                && !groups.iter().any(|g| g.id == group.id)
+            {
+                groups.push(group);
+            }
+        }
+        if groups.is_empty() && pending {
+            return Err(Unknown::TypeNotChecked);
+        }
+        Ok(groups)
+    }
+
+    /// The one group `group:` and `Lookup::group` answer for an entry:
+    /// the first of [`TypeRegistry::groups_of`].
+    pub fn group_for(
+        &self,
+        entry: &Entry,
+        clock: &dyn Clock,
+    ) -> Result<Option<&TypeGroup>, Unknown> {
+        self.groups_of(entry, clock)
+            .map(|groups| groups.first().copied())
+    }
+
+    /// The groups' ids, in the Groups list's order, the owner's own among
+    /// them: the values `group:` completes to.
+    pub fn group_names(&self) -> Vec<String> {
+        self.groups.iter().map(|g| g.id.clone()).collect()
+    }
+
+    /// The Groups list's summary: "Groups: 8 built in, 2 yours".
+    pub fn groups_line(&self) -> String {
+        let yours = self.groups.iter().filter(|g| g.yours).count();
+        let built_in = self.groups.len() - yours;
+        if yours == 0 {
+            format!("Groups: {built_in} built in")
+        } else {
+            format!("Groups: {built_in} built in, {yours} yours")
+        }
+    }
+
+    /// The line when an entry's name and its contents disagree: "Name
+    /// says PNG; contents say JPEG". `None` when they agree, when the
+    /// contents only refine the name (a zip that is a Word document) or
+    /// the name refines the contents (a camera's raw file that is TIFF
+    /// inside), and when the name gave nothing.
+    pub fn disagreement(&self, by_name: &Found, checked: &Found) -> Option<String> {
+        let related = by_name.index == checked.index
+            || self.tree.is_ancestor(by_name.index, checked.index)
+            || self.tree.is_ancestor(checked.index, by_name.index);
+        if related || checked.stage == TypeStage::Name {
+            return None;
+        }
+        let name = self.tree.types().get(by_name.index)?;
+        let contents = self.tree.types().get(checked.index)?;
+        Some(format!(
+            "Name says {}; contents say {}",
+            name.short, contents.short
+        ))
+    }
+
+    /// The types as the type model's tree (alpha.7).
     pub fn tree(&self) -> Result<TypeTree, TreeError> {
-        TypeTree::new(self.types.clone())
+        Ok(self.tree.clone())
     }
 
     /// Every type, in checking order.
     pub fn types(&self) -> &[FileType] {
-        &self.types
+        self.tree.types()
     }
 
     /// A type by id.
     pub fn get(&self, id: &str) -> Option<&FileType> {
-        self.types.iter().find(|t| t.id == id)
+        self.tree.types().iter().find(|t| t.id == id)
+    }
+
+    /// The entry's type with whatever its probe holds: the background
+    /// check's call, with the first bytes read (at most [`HEAD_BYTES`]
+    /// are looked at) or `None` while they are not.
+    pub fn check(&self, probe: &Probe<'_>, clock: &dyn Clock) -> Result<Found, Special> {
+        self.tree.detect(probe, clock)
+    }
+
+    /// The entry's type by its name and kind alone, what a row shows at
+    /// once: [`Special::Pending`] where the name says nothing and the
+    /// contents are still to be read.
+    pub fn by_name(&self, entry: &Entry, clock: &dyn Clock) -> Result<Found, Special> {
+        self.check(&Probe::new(entry, None), clock)
+    }
+
+    /// The type an [`Entry::type_index`] names: its place in this
+    /// registry plus one, 0 for none.
+    pub fn by_index(&self, index: u16) -> Option<&FileType> {
+        usize::from(index)
+            .checked_sub(1)
+            .and_then(|i| self.tree.types().get(i))
+    }
+
+    /// The [`Entry::type_index`] for a type found here: its place plus
+    /// one, or 0 past what two bytes hold.
+    pub fn index_of(found: &Found) -> u16 {
+        u16::try_from(found.index + 1).unwrap_or(0)
     }
 
     /// Detects a type from a name and the first bytes of the file (empty
-    /// when not read yet): the extension first, then magic.
+    /// when not read yet), on the tree: the bytes' stages first, then the
+    /// name.
     pub fn detect(&self, name: &str, head: &[u8]) -> Option<Detection> {
-        let lower = name.to_lowercase();
-        if let Some((_, ext)) = lower.rsplit_once('.')
-            && let Some(found) = self
-                .types
-                .iter()
-                .find(|t| t.extensions.iter().any(|e| e == ext))
-        {
-            return Some(Detection {
-                type_id: found.id.clone(),
-                stage: Stage::Extension,
-            });
-        }
-        self.types
-            .iter()
-            .find(|t| t.magic.iter().any(|m| m.matches(head)))
-            .map(|found| Detection {
-                type_id: found.id.clone(),
-                stage: Stage::Magic,
-            })
+        let entry = Entry::new(name, EntryKind::File);
+        let probe = Probe {
+            entry: &entry,
+            head: (!head.is_empty()).then_some(head),
+            skip_content: false,
+        };
+        let found = self
+            .tree
+            .detect(&probe, &SystemClock::new(UtcOffset::UTC))
+            .ok()?;
+        Some(Detection {
+            stage: match found.stage {
+                TypeStage::Name => Stage::Extension,
+                TypeStage::Signature | TypeStage::Condition => Stage::Magic,
+            },
+            type_id: found.type_id,
+        })
     }
 
     /// The short type name for an entry's row: the detected type, "folder"
@@ -435,7 +895,14 @@ impl TypeRegistry {
 
 #[cfg(test)]
 mod tests {
+    use diroxide_core::{FixedClock, Timestamp};
+
     use super::*;
+
+    fn clock() -> FixedClock {
+        let now = Timestamp::from_civil(2026, 11, 6, 4, 0, 0, UtcOffset::UTC).unwrap();
+        FixedClock::new(now, UtcOffset::UTC)
+    }
 
     #[test]
     fn built_in_types_carry_their_media_types() {
@@ -446,23 +913,36 @@ mod tests {
         );
     }
 
+    /// The flat call on the tree: the contents decide where they speak,
+    /// the name where they do not.
     #[test]
-    fn extension_first_then_magic() {
+    fn detect_runs_on_the_tree() {
         let types = TypeRegistry::builtin();
         let by_name = types.detect("Report.PDF", &[]).unwrap();
         assert_eq!(
             (by_name.type_id.as_str(), by_name.stage),
             ("pdf", Stage::Extension)
         );
-        let by_magic = types.detect("noextension", b"\x89PNG\r\n").unwrap();
+        let png: &[u8] = b"\x89PNG\r\n\x1a\n\x00\x00";
+        let by_magic = types.detect("noextension", png).unwrap();
         assert_eq!(
             (by_magic.type_id.as_str(), by_magic.stage),
             ("png", Stage::Magic)
         );
+        let both = types.detect("photo.png", png).unwrap();
+        assert_eq!(both.stage, Stage::Magic, "the signature is the hit");
+        let cut = types.detect("photo.png", b"\x89PNG").unwrap();
+        assert_eq!(cut.stage, Stage::Extension, "a head too short to tell");
+        let liar = types.detect("photo.png", b"\xFF\xD8\xFF\xE0").unwrap();
+        assert_eq!(liar.type_id, "jpeg", "the bytes beat the name");
         assert!(types.detect("mystery", b"nothing").is_none());
+        assert_eq!(types.detect("backup.tar", &[]).unwrap().type_id, "tar");
         let mut tar_head = vec![0u8; 262];
         tar_head[257..].copy_from_slice(b"ustar");
-        assert_eq!(types.detect("x", &tar_head).unwrap().type_id, "tar");
+        assert!(
+            types.detect("x", &tar_head).is_none(),
+            "only the first 64 bytes are read"
+        );
     }
 
     #[test]
@@ -479,6 +959,7 @@ mod tests {
         };
         let types = TypeRegistry::builtin().with_config(&config);
         assert_eq!(types.get("text").unwrap().short, "notes");
+        assert!(types.get("text").unwrap().yours);
         assert_eq!(types.types().iter().filter(|t| t.id == "text").count(), 1);
         let entry = Entry::new("a.txt", EntryKind::File);
         assert_eq!(types.short_name(&entry).as_deref(), Some("notes"));
@@ -488,6 +969,106 @@ mod tests {
                 .as_deref(),
             Some("folder")
         );
+    }
+
+    /// What a user's file gets wrong is said, meaning first, and the rest
+    /// is used.
+    #[test]
+    fn a_user_type_that_does_not_read_is_said() {
+        let config = FileTypesConfig::from_toml(
+            r#"
+[[type]]
+id = "orphan"
+name = "orphan"
+short = "orphan"
+parent = "nothing"
+extensions = ["orph"]
+
+[[type]]
+id = "half"
+name = "half right"
+short = "half"
+extensions = ["half"]
+magic = [{ at = 0, hex = "ZZ" }, { at = 0, hex = "48 41 4C 46" }]
+when = "size >"
+patterns = ["[a"]
+
+[[type.actions]]
+name = "Nothing"
+"#,
+        )
+        .unwrap();
+        let types = TypeRegistry::builtin().with_config(&config);
+        assert!(types.get("orphan").is_none());
+        let half = types.get("half").unwrap();
+        assert_eq!(half.signatures.len(), 1);
+        assert!(half.when.is_none());
+        assert!(half.patterns.is_empty());
+        assert!(half.actions.is_empty());
+        let problems = types.problems();
+        assert_eq!(problems.len(), 5, "{problems:?}");
+        assert_eq!(
+            problems[0],
+            "File type half: action Nothing left out. It names no command, tool or plugin."
+        );
+        for line in problems {
+            assert!(line.starts_with("File type "), "{line}");
+            let first = line.split(". ").next().unwrap_or_default();
+            assert!(first.chars().count() <= 40, "{first}");
+        }
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.starts_with("File type orphan left out"))
+        );
+    }
+
+    /// The background check's calls: the name's type at once, the
+    /// contents' type after, and the two-byte index both ways.
+    #[test]
+    fn by_name_check_and_the_index() {
+        let types = TypeRegistry::builtin();
+        let clock = clock();
+        let report = Entry::new("report.pdf", EntryKind::File).with_size(900);
+        let found = types.by_name(&report, &clock).unwrap();
+        assert_eq!(
+            (found.type_id.as_str(), found.stage),
+            ("pdf", TypeStage::Name)
+        );
+        let index = TypeRegistry::index_of(&found);
+        assert_eq!(types.by_index(index).unwrap().id, "pdf");
+        assert!(types.by_index(0).is_none());
+        let mystery = Entry::new("mystery", EntryKind::File).with_size(900);
+        assert_eq!(types.by_name(&mystery, &clock), Err(Special::Pending));
+        let head: &[u8] = b"%PDF-1.7\n";
+        let checked = types.check(&Probe::new(&mystery, Some(head)), &clock);
+        assert_eq!(checked.unwrap().stage, TypeStage::Signature);
+        let skipped = Probe::new(&mystery, Some(head)).skipping(true);
+        assert_eq!(types.check(&skipped, &clock), Err(Special::Unknown));
+    }
+
+    /// `check.skip`: a folder and everything below it, slashes, case and
+    /// a trailing separator aside; a sibling that shares a prefix is not
+    /// below it.
+    #[test]
+    fn check_skip_covers_a_folder_and_below() {
+        let skip = CheckSkip::new(&[
+            r"\\nas\Share\".to_owned(),
+            "/mnt/slow".to_owned(),
+            "E:".to_owned(),
+            "  ".to_owned(),
+        ]);
+        assert!(skip.covers(r"\\NAS\share"));
+        assert!(skip.covers("//nas/share/2026/photos"));
+        assert!(skip.covers("/mnt/slow/"));
+        assert!(skip.covers("/mnt/slow/a/b"));
+        assert!(!skip.covers("/mnt/slower"));
+        assert!(!skip.covers("/mnt"));
+        assert!(skip.covers(r"E:\"));
+        assert!(skip.covers(r"e:\Backups\old"));
+        assert!(!skip.covers(r"D:\Backups"));
+        assert!(!CheckSkip::new(&[]).covers("/"));
+        assert!(CheckSkip::new(&["/".to_owned()]).covers("/home/ada"));
     }
 
     #[test]

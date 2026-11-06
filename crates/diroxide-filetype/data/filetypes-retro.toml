@@ -1,0 +1,452 @@
+# The retro pack: the old formats, Amiga and tracker music, PowerPacker,
+# the IFF family, old office files and the like. Embedded, and read only
+# while the setting filetypes.retro is on. Same shape as filetypes.toml.
+
+[[type]]
+id = "mod"
+name = "ProTracker module"
+short = "MOD"
+mime = "audio/x-mod"
+group = "music"
+extensions = ["mod"]
+retro = true
+
+[[type]]
+id = "s3m"
+name = "Scream Tracker module"
+short = "S3M"
+mime = "audio/x-s3m"
+group = "music"
+extensions = ["s3m"]
+magic = [
+    { at = 44, hex = "53 43 52 4D" }, # SCRM
+]
+retro = true
+
+[[type]]
+id = "xm"
+name = "FastTracker module"
+short = "XM"
+mime = "audio/x-xm"
+group = "music"
+extensions = ["xm"]
+magic = [
+    { at = 0, hex = "45 78 74 65 6E 64 65 64 20 4D 6F 64 75 6C 65 3A 20" }, # Extended Module: 
+]
+retro = true
+
+[[type]]
+id = "it"
+name = "Impulse Tracker module"
+short = "IT"
+mime = "audio/x-it"
+group = "music"
+extensions = ["it"]
+magic = [
+    { at = 0, hex = "49 4D 50 4D" }, # IMPM
+]
+retro = true
+
+[[type]]
+id = "med"
+name = "OctaMED module"
+short = "MED"
+mime = "audio/x-med"
+group = "music"
+extensions = ["med", "mmd0", "mmd1", "mmd2", "mmd3"]
+magic = [
+    { at = 0, hex = "4D 4D 44" }, # MMD
+]
+retro = true
+
+[[type]]
+id = "mtm"
+name = "MultiTracker module"
+short = "MTM"
+mime = "audio/x-mtm"
+group = "music"
+extensions = ["mtm"]
+magic = [
+    { at = 0, hex = "4D 54 4D" }, # MTM
+]
+retro = true
+
+[[type]]
+id = "669"
+name = "Composer 669 module"
+short = "669"
+mime = "audio/x-669"
+group = "music"
+extensions = ["669"]
+magic = [
+    { at = 0, hex = "69 66" }, # if
+    { at = 0, hex = "4A 4E" }, # JN
+]
+retro = true
+
+[[type]]
+id = "okt"
+name = "Oktalyzer module"
+short = "OKT"
+mime = "audio/x-okt"
+group = "music"
+extensions = ["okt", "okta"]
+magic = [
+    { at = 0, hex = "4F 4B 54 41 53 4F 4E 47" }, # OKTASONG
+]
+retro = true
+
+[[type]]
+id = "ahx"
+name = "AHX module"
+short = "AHX"
+mime = "audio/x-ahx"
+group = "music"
+extensions = ["ahx", "thx"]
+magic = [
+    { at = 0, hex = "54 48 58" }, # THX
+]
+retro = true
+
+[[type]]
+id = "sid"
+name = "C64 music"
+short = "SID"
+mime = "audio/prs.sid"
+group = "music"
+extensions = ["sid", "psid"]
+magic = [
+    { at = 0, hex = "50 53 49 44" }, # PSID
+    { at = 0, hex = "52 53 49 44" }, # RSID
+]
+retro = true
+
+[[type]]
+id = "iff"
+name = "IFF file"
+short = "IFF"
+mime = "application/x-iff"
+priority = -1
+extensions = ["iff"]
+magic = [
+    { at = 0, hex = "46 4F 52 4D" }, # FORM
+]
+retro = true
+
+[[type]]
+id = "ilbm"
+name = "Amiga picture"
+short = "ILBM"
+mime = "image/x-ilbm"
+group = "images"
+parent = "iff"
+extensions = ["ilbm", "lbm"]
+magic = [
+    { at = 0, hex = "46 4F 52 4D ?? ?? ?? ?? 49 4C 42 4D" }, # FORM????ILBM
+    { at = 0, hex = "46 4F 52 4D ?? ?? ?? ?? 50 42 4D 20" }, # FORM????PBM 
+]
+retro = true
+
+[[type]]
+id = "8svx"
+name = "Amiga sound"
+short = "8SVX"
+mime = "audio/x-8svx"
+group = "music"
+parent = "iff"
+extensions = ["8svx", "svx"]
+magic = [
+    { at = 0, hex = "46 4F 52 4D ?? ?? ?? ?? 38 53 56 58" }, # FORM????8SVX
+]
+retro = true
+
+[[type]]
+id = "anim"
+name = "Amiga animation"
+short = "ANIM"
+mime = "video/x-anim"
+group = "video"
+parent = "iff"
+extensions = ["anim"]
+magic = [
+    { at = 0, hex = "46 4F 52 4D ?? ?? ?? ?? 41 4E 49 4D" }, # FORM????ANIM
+]
+retro = true
+
+[[type]]
+id = "smus"
+name = "Amiga score"
+short = "SMUS"
+mime = "audio/x-smus"
+group = "music"
+parent = "iff"
+extensions = ["smus"]
+magic = [
+    { at = 0, hex = "46 4F 52 4D ?? ?? ?? ?? 53 4D 55 53" }, # FORM????SMUS
+]
+retro = true
+
+[[type]]
+id = "powerpacker"
+name = "PowerPacker file"
+short = "PP20"
+mime = "application/x-powerpacker"
+group = "archives"
+extensions = ["pp"]
+magic = [
+    { at = 0, hex = "50 50 32 30" }, # PP20
+]
+retro = true
+
+[[type]]
+id = "xpk"
+name = "XPK packed file"
+short = "XPK"
+mime = "application/x-xpk"
+group = "archives"
+extensions = ["xpk"]
+magic = [
+    { at = 0, hex = "58 50 4B 46" }, # XPKF
+]
+retro = true
+
+[[type]]
+id = "amiga-program"
+name = "Amiga program"
+short = "Amiga"
+mime = "application/x-amiga-executable"
+magic = [
+    { at = 0, hex = "00 00 03 F3" }, # ....
+]
+retro = true
+
+[[type]]
+id = "adf"
+name = "Amiga disk image"
+short = "ADF"
+mime = "application/x-amiga-disk-format"
+group = "archives"
+extensions = ["adf"]
+magic = [
+    { at = 0, hex = "44 4F 53 00" }, # DOS.
+    { at = 0, hex = "44 4F 53 01" }, # DOS.
+]
+retro = true
+
+[[type]]
+id = "dms"
+name = "DiskMasher image"
+short = "DMS"
+mime = "application/x-dms"
+group = "archives"
+extensions = ["dms"]
+magic = [
+    { at = 0, hex = "44 4D 53 21" }, # DMS!
+]
+retro = true
+
+[[type]]
+id = "amigaguide"
+name = "AmigaGuide document"
+short = "guide"
+mime = "text/x-amigaguide"
+group = "documents"
+extensions = ["guide"]
+when = 'content:re:"(?i)^@database"'
+retro = true
+
+[[type]]
+id = "zoo"
+name = "Zoo archive"
+short = "ZOO"
+mime = "application/x-zoo"
+group = "archives"
+extensions = ["zoo"]
+magic = [
+    { at = 20, hex = "DC A7 C4 FD" }, # ....
+]
+retro = true
+
+[[type]]
+id = "arc"
+name = "ARC archive"
+short = "ARC"
+mime = "application/x-arc"
+group = "archives"
+extensions = ["arc"]
+magic = [
+    { at = 0, hex = "1A" }, # .
+]
+retro = true
+
+[[type]]
+id = "d64"
+name = "C64 disk image"
+short = "D64"
+mime = "application/x-d64"
+group = "archives"
+extensions = ["d64"]
+retro = true
+
+[[type]]
+id = "t64"
+name = "C64 tape image"
+short = "T64"
+mime = "application/x-t64"
+group = "archives"
+extensions = ["t64"]
+magic = [
+    { at = 0, hex = "43 36 34 20 74 61 70 65" }, # C64 tape
+    { at = 0, hex = "43 36 34 53" }, # C64S
+]
+retro = true
+
+[[type]]
+id = "tzx"
+name = "ZX Spectrum tape"
+short = "TZX"
+mime = "application/x-spectrum-tzx"
+group = "archives"
+extensions = ["tzx"]
+magic = [
+    { at = 0, hex = "5A 58 54 61 70 65 21 1A" }, # ZXTape!.
+]
+retro = true
+
+[[type]]
+id = "fig"
+name = "Xfig drawing"
+short = "FIG"
+mime = "application/x-xfig"
+group = "images"
+extensions = ["fig"]
+magic = [
+    { at = 0, hex = "23 46 49 47" }, # #FIG
+]
+retro = true
+
+[[type]]
+id = "mathematica"
+name = "Mathematica notebook"
+short = "Mathematica"
+mime = "application/mathematica"
+group = "documents"
+extensions = ["nb", "ma"]
+retro = true
+
+[[type]]
+id = "scilab"
+name = "Scilab script"
+short = "Scilab"
+mime = "application/x-scilab"
+group = "code"
+extensions = ["sci", "sce"]
+retro = true
+
+[[type]]
+id = "gnuplot"
+name = "Gnuplot script"
+short = "Gnuplot"
+mime = "text/x-gnuplot"
+group = "code"
+extensions = ["gp", "gnuplot", "plt"]
+retro = true
+
+[[type]]
+id = "abiword"
+name = "AbiWord document"
+short = "ABW"
+mime = "application/x-abiword"
+group = "documents"
+extensions = ["abw", "zabw"]
+retro = true
+
+[[type]]
+id = "wordperfect"
+name = "WordPerfect document"
+short = "WPD"
+mime = "application/vnd.wordperfect"
+group = "documents"
+extensions = ["wpd", "wp", "wp5", "wp6"]
+magic = [
+    { at = 0, hex = "FF 57 50 43" }, # .WPC
+]
+retro = true
+
+[[type]]
+id = "lotus"
+name = "Lotus 1-2-3 sheet"
+short = "WK1"
+mime = "application/vnd.lotus-1-2-3"
+group = "documents"
+extensions = ["wk1", "wk3", "wk4", "wks", "123"]
+retro = true
+
+[[type]]
+id = "dbase"
+name = "dBase table"
+short = "DBF"
+mime = "application/x-dbf"
+group = "documents"
+extensions = ["dbf"]
+retro = true
+
+[[type]]
+id = "sxw"
+name = "OpenOffice.org 1 text"
+short = "SXW"
+mime = "application/vnd.sun.xml.writer"
+group = "documents"
+parent = "zip"
+extensions = ["sxw"]
+retro = true
+
+[[type]]
+id = "sxc"
+name = "OpenOffice.org 1 spreadsheet"
+short = "SXC"
+mime = "application/vnd.sun.xml.calc"
+group = "documents"
+parent = "zip"
+extensions = ["sxc"]
+retro = true
+
+[[type]]
+id = "sxi"
+name = "OpenOffice.org 1 presentation"
+short = "SXI"
+mime = "application/vnd.sun.xml.impress"
+group = "documents"
+parent = "zip"
+extensions = ["sxi"]
+retro = true
+
+[[type]]
+id = "sdw"
+name = "StarOffice text"
+short = "SDW"
+mime = "application/vnd.stardivision.writer"
+group = "documents"
+parent = "ole"
+extensions = ["sdw"]
+retro = true
+
+[[type]]
+id = "sdc"
+name = "StarOffice spreadsheet"
+short = "SDC"
+mime = "application/vnd.stardivision.calc"
+group = "documents"
+parent = "ole"
+extensions = ["sdc"]
+retro = true
+
+[[type]]
+id = "sdd"
+name = "StarOffice presentation"
+short = "SDD"
+mime = "application/vnd.stardivision.impress"
+group = "documents"
+parent = "ole"
+extensions = ["sdd"]
+retro = true

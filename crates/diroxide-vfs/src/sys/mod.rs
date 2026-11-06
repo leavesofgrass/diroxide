@@ -17,12 +17,25 @@
 //! same signatures, so the provider above calls them without `cfg`.
 #![allow(unsafe_code)]
 
+// Open with (R30's commits 26 to 28): the programs the system lists for a
+// file; the crate's lib.rs re-exports its four public names. Each system's
+// reader is compiled where it runs and in the tests everywhere, so its
+// parsing is tested on every system.
+#[cfg(any(test, target_os = "macos"))]
+mod mac_apps;
+pub mod open_with;
 #[cfg(windows)]
 mod owner_pipe;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
 mod windows;
+#[cfg(any(test, windows))]
+mod windows_command;
+#[cfg(windows)]
+mod windows_open_with;
+#[cfg(any(test, all(unix, not(target_os = "macos"))))]
+mod xdg_apps;
 
 #[cfg(windows)]
 pub use owner_pipe::{OwnerPipe, PipeStream, plain_pipe_name};
