@@ -33,7 +33,11 @@ publish = false
 # (through `carta`), the converter's stack growth (alpha.2's contract
 # step, Friday, October 16, 2026); `wayland-backend` (through winit) and
 # `android-activity` (Android only), both under the GUI's window runner
-# (the GUI alpha's contract step, Monday, November 2, 2026).
+# (the GUI alpha's contract step, Monday, November 2, 2026); `blake3`
+# (through diroxide-meta, build-only with `pure`, answer 45) and
+# `pkg-config`, counted as a native tool since alpha 4's contract step
+# (Thursday, November 5, 2026), for five crates under the GUI that load
+# their library at run time.
 [workspace.dependencies]
 # The workspace's own crates.
 diroxide-core = { path = "crates/diroxide-core", version = "0.1.0-alpha.3" }
