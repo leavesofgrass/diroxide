@@ -8,10 +8,11 @@
 //! A tool is looked for in one order ([`LOOKUP_ORDER`]): its path in
 //! `tools.toml`, then an installed component, then PATH, then the folders
 //! its installers use; the line says where it was found ([`FoundBy`]).
-//! The contract step of alpha 4 (P4) fixes these types;
-//! [`ToolRegistry::report`](crate::ToolRegistry::report) is naive (no
-//! versions read, `tools.toml` and PATH only) until the registry's lane
-//! (commits 17 to 20) fills it.
+//! The contract step of alpha 4 (P4) made these types; the registry's
+//! lane (commit 17) gave [`ToolRegistry::report`](crate::ToolRegistry::report)
+//! the whole lookup and the versions, and the two states a real lookup
+//! meets: a `tools.toml` path with no program at it, and a program whose
+//! version command said nothing.
 
 /// One step of the lookup, in the order of answer 124 (textweaver's).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -91,22 +92,42 @@ pub enum ToolKind {
     BuiltIn,
 }
 
+/// What to do about a tool that is not found, as its own line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NextStep {
+    /// A command that installs it from this system's packages, said after
+    /// "Install:": `winget install JohnMacFarlane.Pandoc`.
+    Command(String),
+    /// A sentence that says where to get it: "Install pandoc from
+    /// pandoc.org or your package manager."
+    Words(String),
+}
+
 /// A tool's state, for its line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ToolState {
-    /// Found: its version's first line when read, and where.
+    /// Found: its version when it has a version command, and where.
     Found {
-        /// The version, cleaned to one short line, when it was read.
+        /// The version number ("7.1.2-35"), or `None` for a program with
+        /// no version command (the system opener on Windows).
         version: Option<String>,
+        /// Where it was found.
+        by: FoundBy,
+    },
+    /// Found, but its version command said nothing it could be read from,
+    /// or did not finish in time.
+    VersionNotRead {
         /// Where it was found.
         by: FoundBy,
     },
     /// Not found anywhere the lookup looks.
     NotFound {
-        /// The next step: a package command for this system, or where to
-        /// get it.
-        install: Option<String>,
+        /// The next step, when there is one.
+        install: Option<NextStep>,
     },
+    /// `tools.toml` gives a path with no program at it; nothing else is
+    /// looked in, since the owner chose that path.
+    PathMissing,
     /// Turned off in `tools.toml`.
     TurnedOff,
 }
@@ -125,32 +146,46 @@ pub struct ToolReport {
 impl ToolReport {
     /// Whether it can be used.
     pub fn found(&self) -> bool {
-        matches!(self.state, ToolState::Found { .. })
+        matches!(
+            self.state,
+            ToolState::Found { .. } | ToolState::VersionNotRead { .. }
+        )
     }
 
     /// Its line, the name first: "ImageMagick: 7.1.2-35, on PATH",
-    /// "ImageMagick: version not read, on PATH", "pandoc: not found",
-    /// "FFmpeg: turned off in tools.toml".
+    /// "the system opener: found, on PATH", "ImageMagick: version not
+    /// read, on PATH", "pandoc: not found", "pandoc: not at its
+    /// tools.toml path", "FFmpeg: turned off in tools.toml".
     pub fn line(&self) -> String {
         match &self.state {
             ToolState::Found { version, by } => format!(
                 "{}: {}, {}",
                 self.name,
-                version.as_deref().unwrap_or("version not read"),
+                version.as_deref().unwrap_or("found"),
                 by.words()
             ),
+            ToolState::VersionNotRead { by } => {
+                format!("{}: version not read, {}", self.name, by.words())
+            }
             ToolState::NotFound { .. } => format!("{}: not found", self.name),
+            ToolState::PathMissing => format!("{}: not at its tools.toml path", self.name),
             ToolState::TurnedOff => format!("{}: turned off in tools.toml", self.name),
         }
     }
 
-    /// The next step for a tool not found, as its own line: "Install:
-    /// winget install JohnMacFarlane.Pandoc".
+    /// The next step, as its own line: "Install: winget install
+    /// JohnMacFarlane.Pandoc" for a tool not found, or its sentence when
+    /// no command is known; "Check its path in tools.toml." for a path
+    /// with no program at it.
     pub fn install_line(&self) -> Option<String> {
         match &self.state {
             ToolState::NotFound {
-                install: Some(install),
-            } => Some(format!("Install: {install}")),
+                install: Some(NextStep::Command(command)),
+            } => Some(format!("Install: {command}")),
+            ToolState::NotFound {
+                install: Some(NextStep::Words(words)),
+            } => Some(words.clone()),
+            ToolState::PathMissing => Some("Check its path in tools.toml.".to_owned()),
             _ => None,
         }
     }
@@ -209,7 +244,9 @@ mod tests {
                 tool(
                     "pandoc",
                     ToolState::NotFound {
-                        install: Some("winget install JohnMacFarlane.Pandoc".to_owned()),
+                        install: Some(NextStep::Command(
+                            "winget install JohnMacFarlane.Pandoc".to_owned(),
+                        )),
                     },
                 ),
                 tool(
@@ -251,5 +288,63 @@ mod tests {
                 "the folders its installers use"
             ]
         );
+    }
+
+    /// The registry's lane's states (commit 17): a program with no
+    /// version command, one whose version did not read, a path in
+    /// tools.toml with nothing at it, and the sentence when no package
+    /// command is known; each line at 40 cells with the name first.
+    #[test]
+    fn the_lookups_other_states_say_the_tool_first() {
+        let report = ToolsReport {
+            tools: vec![
+                tool(
+                    "the system opener",
+                    ToolState::Found {
+                        version: None,
+                        by: FoundBy::Path,
+                    },
+                ),
+                tool(
+                    "Tesseract",
+                    ToolState::VersionNotRead {
+                        by: FoundBy::InstallFolder("Program Files".to_owned()),
+                    },
+                ),
+                tool("pandoc", ToolState::PathMissing),
+                tool(
+                    "xorriso",
+                    ToolState::NotFound {
+                        install: Some(NextStep::Words(
+                            "Install xorriso from your package manager.".to_owned(),
+                        )),
+                    },
+                ),
+            ],
+        };
+        let lines = report.lines();
+        assert_eq!(
+            lines,
+            [
+                "Tools: 2 of 4 found",
+                "the system opener: found, on PATH",
+                "Tesseract: version not read, in Program Files",
+                "pandoc: not at its tools.toml path",
+                "Check its path in tools.toml.",
+                "xorriso: not found",
+                "Install xorriso from your package manager.",
+            ]
+        );
+        for line in [&lines[0], &lines[1], &lines[3], &lines[4], &lines[5]] {
+            assert!(line.chars().count() <= 40, "{line}");
+        }
+        assert!(diroxide_core::format::within_cells(
+            &lines[2],
+            "Tesseract: version not read"
+        ));
+        assert!(diroxide_core::format::within_cells(
+            &lines[6],
+            "Install xorriso from your package"
+        ));
     }
 }

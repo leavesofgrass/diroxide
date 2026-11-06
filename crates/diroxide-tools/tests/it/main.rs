@@ -1,5 +1,10 @@
 //! Integration tests of the tools registry's contract.
 
+// Test helpers may unwrap: a failure is the test's failure.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod lookup;
+
 use diroxide_tools::{BUILTIN, ToolRegistry};
 
 #[test]
