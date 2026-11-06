@@ -153,13 +153,17 @@ pub fn names_skipped(n: usize) -> String {
 }
 
 /// Loops and names left out of one listing, said once after it: "Skipped
-/// a loop in the image", "3 names skipped", or both.
+/// a loop in the image", "3 names skipped", or both in one short line, "3
+/// names and a loop skipped".
 pub fn listing_notes(loops: usize, names: usize) -> Option<String> {
     match (loops, names) {
         (0, 0) => None,
         (_, 0) => Some(LOOP_SKIPPED.to_owned()),
         (0, n) => Some(names_skipped(n)),
-        (_, n) => Some(format!("{}; {LOOP_SKIPPED}", names_skipped(n))),
+        (_, n) => Some(format!(
+            "{} and a loop skipped",
+            count(n as u64, "name", "names")
+        )),
     }
 }
 
@@ -391,8 +395,9 @@ mod tests {
         assert_eq!(listing_notes(1, 0).as_deref(), Some(LOOP_SKIPPED));
         assert_eq!(
             listing_notes(1, 3).as_deref(),
-            Some("3 names skipped; Skipped a loop in the image")
+            Some("3 names and a loop skipped")
         );
+        fits(&listing_notes(2, 999_999).unwrap_or_default());
     }
 
     #[test]
