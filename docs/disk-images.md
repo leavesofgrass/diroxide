@@ -2,7 +2,7 @@
 
 This guide covers disk images: opening an ISO, a raw disk or a virtual disk like a folder, its partitions, copying files out, what the plugin reads itself and what it hands to 7-Zip, the limits that protect you, and what it does not do.
 
-Disk images are the disk image plugin's (its id is `disk`, its name "Disk images"), an optional component. Get it from Manage optional components. Without it, Enter on `fedora.iso` says "Could not open fedora.iso: it needs the disk image plugin or 7-Zip. Get it from Manage optional components, then try again."
+Disk images are read by the disk image plugin (its id is `disk`, its name "Disk images"), an optional component. Get it from Manage optional components. Without it, Enter on `fedora.iso` says "Could not open fedora.iso: it needs the disk image plugin or 7-Zip. Get it from Manage optional components, then try again."
 
 What this guide says about the spoken lines comes from their design and from the tests that check each sentence at 40 cells. Nothing here had been heard on a screen reader when it was written; if your experience differs, that is a finding.
 
@@ -15,7 +15,7 @@ What the plugin opens is decided by the bytes, never the name:
 - **Containers:** VHD (fixed and dynamic), VHDX, VDI (fixed and dynamic), VMDK (a sparse extent, or a descriptor whose flat extents sit beside it) and QCOW2 (version 2 and 3, compressed clusters included). A differencing VHD or VHDX, and a QCOW2 with a backing file, need their parent; see "7-Zip and qemu-img" below.
 - **Partition tables:** MBR, with its logical partitions, and GPT.
 - **File systems:** ISO 9660 with Joliet and Rock Ridge, FAT12, FAT16 and FAT32 with long names, ext2, ext3 and ext4, NTFS, and squashfs compressed with gzip or LZ4.
-- **Through 7-Zip, when it is installed:** UDF, exFAT, HFS+, APFS, squashfs compressed with xz or zstd, a compressed NTFS file, and anything a built-in reader refuses.
+- **Through 7-Zip, when it is installed:** UDF, exFAT, HFS+, APFS, squashfs compressed with xz or zstd, and anything a built-in reader refuses. An image on a local drive goes to 7-Zip as it is; a partition, or an image inside a container, an archive or on an SFTP site, is copied into the plugin's folder in the spool first.
 
 A hybrid ISO, one that also carries a partition table so it boots from a stick, opens as the ISO.
 
@@ -69,7 +69,7 @@ The archive limits of `config.toml` apply to images too, by their defaults:
 - Writing to an image, making one, and formatting are the plugin's writing half, in a later alpha.
 - Open as raw disk image, which would show a hybrid ISO's partitions, is not built.
 - An encrypted image or archive through 7-Zip is not asked a password.
-- ext4 images made by `mke2fs` are not among the plugin's test images yet; ext2 is.
+- ext4 images made by `mke2fs` are not among the plugin's test images yet; small ext2 and ext4 volumes written by the tests are.
 
 ## See also
 
