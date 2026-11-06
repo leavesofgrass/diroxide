@@ -13,9 +13,18 @@ publish.workspace = true
 carta.workspace = true
 diroxide-core.workspace = true
 diroxide-filetype.workspace = true
+# The image words and the ffprobe reader implement its Reader trait
+# (alpha 4, R30 commit 12's joint), so meta never depends on previews.
+diroxide-meta.workspace = true
 diroxide-vfs.workspace = true
 # The viewer's decoder (W2d), textweaver's encoding module.
 encoding_rs.workspace = true
+# The image words (alpha 4, R30 commit 33): headers through image's
+# decoders and png's text chunks, Exif through kamadak-exif; no pixel is
+# decoded for the words, and the pixel guard stands in front of a decode.
+image.workspace = true
+kamadak-exif.workspace = true
+png.workspace = true
 pulldown-cmark.workspace = true
 # carta's HTML fragments read into the quick view's rows (path A, W2e).
 scraper.workspace = true

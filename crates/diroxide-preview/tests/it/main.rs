@@ -6,6 +6,7 @@
 mod carta;
 mod carta_paths;
 mod encoding;
+mod images;
 mod markdown;
 mod text;
 

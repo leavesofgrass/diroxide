@@ -15,22 +15,26 @@
 //! uses; [`highlight`], syntect as a tokenizer into the token classes,
 //! with its caps, its worker and its deadline, the symbols and the
 //! validity lines. The quick view's [`doc`] modules (W2e): the row-based
-//! document view the quick view moves through, and its readers. Wave 5
-//! (W5b) adds the image, audio, video, document and archive previewers.
+//! document view the quick view moves through, and its readers. Alpha 4
+//! (R30 commits 33 to 40) adds the typed previewers in front of the text
+//! previewer: [`images`], pictures in words from their headers alone.
 
 pub mod classes;
 pub mod doc;
 pub mod encoding;
+pub mod fuzzing;
 pub mod hex;
 pub mod highlight;
+pub mod images;
+pub mod words;
 
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use diroxide_core::format::human_size;
 use diroxide_core::{DetailGroup, DetailRow, Entry, EntryKind, Explain, Place};
 use diroxide_filetype::FileType;
-use diroxide_vfs::{OpContext, Registry, VfsError};
+use diroxide_vfs::{OpContext, ReadSeek, Registry, VfsError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -40,6 +44,7 @@ pub use classes::{ClassRun, TokenClass};
 pub const MAX_PREVIEW_BYTES: usize = 64 * 1024;
 
 /// What kind of preview this is.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PreviewKind {
@@ -51,6 +56,8 @@ pub enum PreviewKind {
     Folder,
     /// Only the details line.
     Details,
+    /// A picture in words: the sentence, then its rows ([`images`]).
+    Image,
 }
 
 /// A preview: a details line, then lines to read.
@@ -137,13 +144,19 @@ pub enum PreviewError {
     /// No previewer takes this entry.
     #[error("there is no preview for this kind of file")]
     NoPreviewer,
+    /// The file is past what a preview reads where its place cannot be
+    /// read at random.
+    #[error("it is too large to preview here")]
+    TooLarge,
 }
 
 impl Explain for PreviewError {
     fn next_step(&self) -> String {
         match self {
             PreviewError::Vfs(inner) => inner.next_step(),
-            PreviewError::Superseded | PreviewError::NoPreviewer => String::new(),
+            PreviewError::Superseded | PreviewError::NoPreviewer | PreviewError::TooLarge => {
+                String::new()
+            }
         }
     }
 }
@@ -152,6 +165,12 @@ impl Explain for PreviewError {
 pub trait Previewer: Send + Sync {
     /// The previewer's name, for Settings.
     fn name(&self) -> &str;
+
+    /// The previewer's version: part of a cached preview's key, raised
+    /// when what it says about a file changes.
+    fn version(&self) -> u32 {
+        1
+    }
 
     /// Whether it takes this entry.
     fn accepts(&self, request: &PreviewRequest, file_type: Option<&FileType>) -> bool;
@@ -252,6 +271,56 @@ pub fn hex_lines(bytes: &[u8], start_offset: u64) -> Vec<String> {
     hex::hex_rows(bytes, start_offset, layout)
 }
 
+/// Opens an entry for random access: its provider's seekable read, or,
+/// where the provider has none, at most `cap` bytes read into memory
+/// ([`PreviewError::TooLarge`] past them).
+pub fn open_source(
+    request: &PreviewRequest,
+    registry: &Registry,
+    ctx: &OpContext,
+    cap: u64,
+) -> Result<Box<dyn ReadSeek>, PreviewError> {
+    let provider = registry.resolve(&request.place)?;
+    match provider.open_seekable(&request.place, ctx) {
+        Ok(source) => Ok(source),
+        Err(VfsError::Unsupported { .. }) => {
+            let reader = provider.read(&request.place, ctx)?;
+            let mut bytes = Vec::new();
+            reader
+                .take(cap.saturating_add(1))
+                .read_to_end(&mut bytes)
+                .map_err(VfsError::from)?;
+            ctx.check()?;
+            if bytes.len() as u64 > cap {
+                return Err(PreviewError::TooLarge);
+            }
+            Ok(Box::new(Cursor::new(bytes)))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// A preview that is its rows: the summary, then every row in the order
+/// of facts, the entry's own first, each said as a line ("Dimensions:
+/// 1920 by 1080").
+pub(crate) fn details_preview(
+    kind: PreviewKind,
+    summary: String,
+    base: Vec<DetailRow>,
+    more: impl IntoIterator<Item = DetailRow>,
+) -> Preview {
+    let mut details = base;
+    details.extend(more);
+    diroxide_core::details::order_rows(&mut details);
+    Preview {
+        kind,
+        summary,
+        lines: details.iter().map(DetailRow::spoken).collect(),
+        details,
+        runs: Vec::new(),
+    }
+}
+
 fn read_head(
     request: &PreviewRequest,
     registry: &Registry,
@@ -346,10 +415,15 @@ pub struct Previews {
 }
 
 impl Previews {
-    /// The built-in previewers: text, then hex.
+    /// The built-in previewers: the typed ones first, then text, then
+    /// hex.
     pub fn builtin() -> Self {
         Self {
-            previewers: vec![Box::new(TextPreviewer), Box::new(HexPreviewer)],
+            previewers: vec![
+                Box::new(images::ImagePreviewer::default()),
+                Box::new(TextPreviewer),
+                Box::new(HexPreviewer),
+            ],
         }
     }
 
