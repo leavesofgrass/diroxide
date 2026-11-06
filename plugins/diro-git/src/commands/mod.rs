@@ -19,6 +19,7 @@
 //! row would not survive that.
 
 mod branch;
+mod commit;
 mod remote;
 mod tree;
 
@@ -45,6 +46,7 @@ pub const IDS: &[&str] = &[
     "stage_all",
     "ignore",
     "discard",
+    "commit",
     "branches",
     "switch",
     "branch_new",
@@ -436,6 +438,7 @@ fn dispatch(ctx: &Ctx<'_>, command: &str) -> Result<Value, GitError> {
         "stage_all" => tree::stage_all(ctx),
         "ignore" => tree::ignore(ctx),
         "discard" => tree::discard(ctx),
+        "commit" => commit::commit(ctx),
         "branches" => branch::branches(ctx),
         "switch" => branch::switch(ctx),
         "branch_new" => branch::new_branch(ctx),

@@ -40,7 +40,7 @@ tools = ["git"]
 [permissions.declared]
 network = "git's own remotes, when you fetch, pull or push"
 files = "your repositories through git; .gitignore through diroxide"
-programs = "git only"
+programs = "git only; a commit runs the repository's hooks, as in a terminal"
 
 [[place_info]]
 marker = ".git"
@@ -91,6 +91,14 @@ needs = ["git"]
 id = "discard"
 name = "Git: discard changes"
 description = "Puts the marked files back as staged, after a question; the changes go to a stash."
+needs = ["git"]
+
+[[command]]
+id = "commit"
+name = "Git: commit"
+description = "Commits what is staged, with your message, the staged files listed first."
+selection = "none"
+places = "local"
 needs = ["git"]
 
 # ---- Branches and stashes ----
