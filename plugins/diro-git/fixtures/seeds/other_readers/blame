@@ -1,0 +1,8 @@
+f2e5e546b7deda3d5dc87bf4d3ef37e9add9bd57 1 1 1
+author Ada Example
+author-mail <ada@example.invalid>
+author-time 1760032800
+author-tz -0700
+summary Fix the parser
+filename hello.txt
+	the line

@@ -1,0 +1,53 @@
+# The git plugin's fuzz targets (R30 commit 106), a workspace of its own:
+# libFuzzer is C++, so it never enters the plugin's own build. Run on a
+# nightly toolchain, from plugins/diro-git:
+#
+#   cargo fuzz run status_v2 fuzz/corpus/status_v2 fixtures/seeds/status_v2
+#
+# Each target's body is a plain function in diro_git::fuzzing, which the
+# plugin's own tests replay on every seed and on cut and bent copies of
+# them (tests/it/fuzz.rs).
+
+[workspace]
+
+[package]
+name = "diro-git-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+diro-git = { path = ".." }
+
+[[bin]]
+name = "status_v2"
+path = "fuzz_targets/status_v2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "log_record"
+path = "fuzz_targets/log_record.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "config_scan"
+path = "fuzz_targets/config_scan.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "other_readers"
+path = "fuzz_targets/other_readers.rs"
+test = false
+doc = false
+bench = false

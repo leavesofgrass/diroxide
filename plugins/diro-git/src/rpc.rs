@@ -17,7 +17,11 @@
 //!
 //! Carried whole from the SFTP plugin's `rpc.rs` by alpha 4's contract
 //! step (P4), so the plugins share one way of speaking to the host; a
-//! change to one is a change to all three.
+//! change to one is a change to all three. The git lane added two things
+//! the others may take when they need them: a cancelled or timed-out call
+//! sends `$/cancel_request` for its own id, so the host stops the program
+//! it runs for it, and [`Peer::call_streaming`] hands a streamed
+//! `tools/run`'s `tools/output` records to the waiting call.
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
@@ -74,11 +78,22 @@ impl Cancel {
     }
 }
 
+/// Where a streamed tool's records go while its `tools/run` waits: the
+/// stream's name (`stdout` or `stderr`) and the record as the host sent
+/// it (base64 when the run asked for base64).
+pub type OutputSink = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
 /// The plugin's connection to the host: it writes lines and waits for the
 /// answers to the plugin's own requests.
+///
+/// The git plugin's copy adds two things to the SFTP plugin's (alpha 4's
+/// git lane): a cancelled call tells the host with `$/cancel_request`, so
+/// the program the host runs for it stops too, and a call may take the
+/// `tools/output` records of its streamed run ([`Peer::call_streaming`]).
 pub struct Peer {
     out: Mutex<Box<dyn Write + Send>>,
     pending: Mutex<HashMap<i64, Sender<Response>>>,
+    outputs: Mutex<HashMap<i64, OutputSink>>,
     next: AtomicI64,
     closed: AtomicBool,
 }
@@ -97,6 +112,7 @@ impl Peer {
         Self {
             out: Mutex::new(out),
             pending: Mutex::new(HashMap::new()),
+            outputs: Mutex::new(HashMap::new()),
             next: AtomicI64::new(1),
             closed: AtomicBool::new(false),
         }
@@ -127,6 +143,31 @@ impl Peer {
         cancel: Option<&Cancel>,
         timeout: Duration,
     ) -> Result<Value, RpcError> {
+        self.call_inner(method, params, cancel, timeout, None)
+    }
+
+    /// Calls the host as [`Peer::call`] does, and hands each `tools/output`
+    /// record the host sends for this call to `sink` while it waits: a
+    /// streamed `tools/run`, such as `git clone --progress`.
+    pub fn call_streaming(
+        &self,
+        method: &str,
+        params: Params,
+        cancel: Option<&Cancel>,
+        timeout: Duration,
+        sink: OutputSink,
+    ) -> Result<Value, RpcError> {
+        self.call_inner(method, params, cancel, timeout, Some(sink))
+    }
+
+    fn call_inner(
+        &self,
+        method: &str,
+        params: Params,
+        cancel: Option<&Cancel>,
+        timeout: Duration,
+        sink: Option<OutputSink>,
+    ) -> Result<Value, RpcError> {
         if self.closed.load(Ordering::SeqCst) {
             return Err(gone());
         }
@@ -136,12 +177,33 @@ impl Peer {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(id, tx);
+        if let Some(sink) = sink {
+            self.outputs
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(id, sink);
+        }
         self.send(&Request::new(Id::Number(id), method, params));
         let answer = wait(&rx, cancel, timeout);
         self.pending
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .remove(&id);
+        self.outputs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&id);
+        if let Err(error) = &answer
+            && (error.code == ErrorKind::RequestCancelled.code()
+                || error.code == ErrorKind::TimedOut.code())
+        {
+            // The host's own work for the call stops too: a tool it runs
+            // is killed with its tree (the protocol's cancel goes either
+            // way).
+            let mut cancel = Params::new();
+            cancel.insert("id".into(), json!(id));
+            self.notify(CANCEL_REQUEST, cancel);
+        }
         let response = answer?;
         match (response.result, response.error) {
             (_, Some(error)) => Err(error),
@@ -172,6 +234,31 @@ impl Peer {
         if let Some(waiting) = waiting {
             let _ = waiting.send(response);
         }
+    }
+
+    /// Hands a `tools/output` notification to the call that streams it;
+    /// false when no call of the plugin waits for that id (the record is
+    /// dropped).
+    pub fn deliver_output(&self, params: &Params) -> bool {
+        let Some(id) = params.get("id").and_then(Value::as_i64) else {
+            return false;
+        };
+        let sink = self
+            .outputs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&id)
+            .cloned();
+        let Some(sink) = sink else {
+            return false;
+        };
+        let stream = params
+            .get("stream")
+            .and_then(Value::as_str)
+            .unwrap_or("stdout");
+        let chunk = params.get("chunk").and_then(Value::as_str).unwrap_or("");
+        sink(stream, chunk);
+        true
     }
 
     /// Ends every wait: the host is gone.
@@ -670,6 +757,92 @@ mod tests {
                 .unwrap_err()
                 .code,
             ErrorKind::PluginUnavailable.code()
+        );
+    }
+
+    /// A cancelled call tells the host, so the program it runs stops; a
+    /// streamed call gets its `tools/output` records while it waits, and
+    /// a record for no waiting call is dropped.
+    #[test]
+    fn a_cancel_reaches_the_host_and_streamed_records_reach_the_call() {
+        let out = Collected::default();
+        let peer = Arc::new(Peer::new(Box::new(out.clone())));
+        let cancel = Cancel::new();
+        let caller = {
+            let peer = Arc::clone(&peer);
+            let cancel = cancel.clone();
+            thread::spawn(move || {
+                peer.call(
+                    "tools/run",
+                    Params::new(),
+                    Some(&cancel),
+                    Duration::from_secs(5),
+                )
+            })
+        };
+        for _ in 0..200 {
+            if !out.lines().is_empty() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        cancel.cancel();
+        assert_eq!(caller.join().unwrap().unwrap_err().code, -32800);
+        let sent = out.lines();
+        let id = sent[0]["id"].as_i64().unwrap();
+        assert_eq!(sent[1]["method"], CANCEL_REQUEST);
+        assert_eq!(sent[1]["params"]["id"], id);
+
+        let records = Arc::new(Mutex::new(Vec::new()));
+        let sink: OutputSink = {
+            let records = Arc::clone(&records);
+            Arc::new(move |stream: &str, chunk: &str| {
+                records.lock().unwrap().push(format!("{stream}:{chunk}"));
+            })
+        };
+        let caller = {
+            let peer = Arc::clone(&peer);
+            thread::spawn(move || {
+                peer.call_streaming(
+                    "tools/run",
+                    Params::new(),
+                    None,
+                    Duration::from_secs(5),
+                    sink,
+                )
+            })
+        };
+        let mut id = None;
+        for _ in 0..200 {
+            id = out
+                .lines()
+                .iter()
+                .filter(|l| l["method"] == "tools/run")
+                .nth(1)
+                .and_then(|l| l["id"].as_i64());
+            if id.is_some() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let id = id.unwrap();
+        let record = |chunk: &str| {
+            json!({"id": id, "stream": "stderr", "chunk": chunk})
+                .as_object()
+                .cloned()
+                .unwrap()
+        };
+        assert!(peer.deliver_output(&record("Receiving objects:  45%")));
+        assert!(peer.deliver_output(&record("Receiving objects: 100%")));
+        peer.deliver(Response::success(Id::Number(id), json!({"exit_code": 0})));
+        assert_eq!(caller.join().unwrap().unwrap()["exit_code"], 0);
+        assert!(!peer.deliver_output(&record("late")));
+        assert_eq!(
+            *records.lock().unwrap(),
+            [
+                "stderr:Receiving objects:  45%",
+                "stderr:Receiving objects: 100%"
+            ]
         );
     }
 

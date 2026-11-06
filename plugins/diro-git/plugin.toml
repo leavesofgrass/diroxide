@@ -5,8 +5,10 @@
 # own configuration and asks once about one that runs a program (the
 # trust scan, answer 123).
 #
-# The contract step (P4) made this skeleton: it describes nothing and
-# leaves every cell pending. The git lane (commits 98 to 107) builds it.
+# The commands have no keys of their own (plan section 5.16: the owner's
+# key rules keep the common keys for the file manager); bind any of them
+# in keymap.toml or the key editor. Inside the lists, Enter does the
+# obvious thing and two Alt keys stage and unstage.
 
 [plugin]
 id = "git"
@@ -27,14 +29,18 @@ idle_timeout = "5m"
 [run.windows]
 command = ["./diro-git.exe"]
 
+# fs = "write" is for two things only (R29 2.4, Q10): Add to .gitignore
+# writes that file through diroxide, and a cancelled clone's folder goes
+# to the trash through diroxide's delete, with its listing.
 [permissions]
+fs = "write"
 panel = "read"
 tools = ["git"]
 
 [permissions.declared]
-network = "git's own remotes, when you fetch, pull or push"
-files = "only through git"
-programs = "git only"
+network = "git's own remotes, when you fetch, pull, push or clone"
+files = "your repositories through git; .gitignore through diroxide"
+programs = "git only; a commit runs the repository's hooks, as in a terminal"
 
 [[place_info]]
 marker = ".git"
@@ -43,3 +49,339 @@ marker = ".git"
 id = "git"
 header = "Git"
 kind = "text"
+
+# ---- Status, staging and the working tree ----
+
+[[command]]
+id = "status"
+name = "Git: status"
+description = "Lists the repository's changed files, the state first."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "diff"
+name = "Git: show the changes"
+description = "Compares the file with its staged or last committed text, the verdict first."
+selection = "one"
+needs = ["git"]
+
+[[command]]
+id = "diff_head"
+name = "Git: compare with the last commit"
+description = "Compares the file in the folder with its text in the last commit."
+selection = "one"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "stage"
+name = "Git: stage"
+description = "Adds the marked files' changes to the next commit."
+needs = ["git"]
+
+[[command]]
+id = "unstage"
+name = "Git: unstage"
+description = "Takes the marked files out of the next commit and keeps their changes."
+needs = ["git"]
+
+[[command]]
+id = "stage_all"
+name = "Git: stage all changes here"
+description = "Adds every change in this folder and below to the next commit."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "ignore"
+name = "Git: add to .gitignore"
+description = "Adds the marked files to the repository's .gitignore, after a question."
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "discard"
+name = "Git: discard changes"
+description = "Puts the marked files back as staged, after a question; the changes go to a stash."
+needs = ["git"]
+
+[[command]]
+id = "commit"
+name = "Git: commit"
+description = "Commits what is staged, with your message, the staged files listed first."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+# ---- History ----
+
+[[command]]
+id = "log"
+name = "Git: log of this folder"
+description = "Lists the commits that changed this folder, the date and subject first."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "file_log"
+name = "Git: log of this file"
+description = "Lists the commits that changed the file, the date and subject first."
+selection = "one"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "commit_files"
+name = "Git: files of this commit"
+description = "Lists what the commit changed; Enter shows a file's changes."
+selection = "one"
+needs = ["git"]
+
+[[command]]
+id = "blame"
+name = "Git: who changed a line"
+description = "Says who last changed a line of the file, and when."
+selection = "one"
+places = "local"
+needs = ["git"]
+
+# ---- Branches and stashes ----
+
+[[command]]
+id = "branches"
+name = "Git: branches"
+description = "Lists the local branches, each with where it stands."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "switch"
+name = "Git: switch to this branch"
+description = "Switches to the branch; git refuses when your changes would be lost."
+selection = "one"
+needs = ["git"]
+
+[[command]]
+id = "branch_new"
+name = "Git: new branch"
+description = "Makes a branch here and switches to it."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "branch_rename"
+name = "Git: rename branch"
+description = "Renames the branch on the row, or the current one."
+needs = ["git"]
+
+[[command]]
+id = "stashes"
+name = "Git: stashes"
+description = "Lists the stashes, the newest first."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "stash_push"
+name = "Git: stash changes"
+description = "Puts the changes away in a stash and leaves the files as committed."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "stash_pop"
+name = "Git: pop stash"
+description = "Brings back the stash on the row, or the newest, and removes it."
+needs = ["git"]
+
+[[command]]
+id = "stash_drop"
+name = "Git: drop stash"
+description = "Removes the stash on the row, after a question that starts on No."
+selection = "one"
+needs = ["git"]
+
+[[command]]
+id = "stash_show"
+name = "Git: show a stash"
+description = "Shows the stash's changes as a document."
+selection = "one"
+needs = ["git"]
+
+# ---- Remotes ----
+
+[[command]]
+id = "fetch"
+name = "Git: fetch"
+description = "Gets the remote's new commits without changing your files."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "pull"
+name = "Git: pull"
+description = "Brings in the upstream's commits, fast-forward only."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "push"
+name = "Git: push"
+description = "Sends this branch's commits to its upstream, never forced."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "push_lease"
+name = "Git: replace remote history"
+description = "Makes the upstream what this branch is, after two questions that name it."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+# ---- New repositories ----
+
+[[command]]
+id = "clone"
+name = "Git: clone into this panel"
+description = "Copies a repository into a new folder here, with its progress."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "init"
+name = "Git: make this folder a repository"
+description = "Makes a repository here, with a .gitignore and a first commit if you want them."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "trust"
+name = "Git: trust this repository"
+description = "Asks again whether git status may run here, when the repository's config runs a program."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+# ---- Lists ----
+
+[[lister]]
+id = "status"
+name = "Changed files"
+activate = "diff"
+
+[[lister.columns]]
+id = "state"
+header = "State"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "path"
+header = "Path"
+kind = "text"
+sorts = true
+
+[[lister.action]]
+key = "alt+s"
+command = "stage"
+selection = "any"
+
+[[lister.action]]
+key = "alt+u"
+command = "unstage"
+selection = "any"
+
+[[lister]]
+id = "log"
+name = "Log"
+activate = "commit_files"
+
+[[lister.columns]]
+id = "date"
+header = "Date"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "subject"
+header = "Subject"
+kind = "text"
+
+[[lister.columns]]
+id = "author"
+header = "Author"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "hash"
+header = "Commit"
+kind = "text"
+
+[[lister]]
+id = "commit"
+name = "Files of a commit"
+activate = "diff"
+
+[[lister.columns]]
+id = "state"
+header = "State"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "path"
+header = "Path"
+kind = "text"
+sorts = true
+
+[[lister]]
+id = "branches"
+name = "Branches"
+activate = "switch"
+
+[[lister.columns]]
+id = "standing"
+header = "Upstream"
+kind = "text"
+
+[[lister.columns]]
+id = "date"
+header = "Last commit"
+kind = "text"
+sorts = true
+
+[[lister.columns]]
+id = "subject"
+header = "Subject"
+kind = "text"
+
+[[lister]]
+id = "stashes"
+name = "Stashes"
+activate = "stash_show"
+
+[[lister.columns]]
+id = "branch"
+header = "Branch"
+kind = "text"
+
+[[lister.columns]]
+id = "date"
+header = "Date"
+kind = "text"
+sorts = true

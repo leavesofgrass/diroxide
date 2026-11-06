@@ -1,0 +1,3 @@
+# The fuzz seeds are git's own bytes (NULs, carriage returns, bytes that
+# are not UTF-8): never converted.
+* -text
