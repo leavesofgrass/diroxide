@@ -48,6 +48,7 @@ pub mod guard;
 pub mod html;
 pub mod markdown;
 pub mod package;
+pub mod sheet;
 pub mod svg;
 #[cfg(test)]
 mod tests;
@@ -69,6 +70,7 @@ use crate::highlight::{Language, Symbol, SymbolKind};
 pub use build::DocBuilder;
 pub use carta::CartaFormat;
 pub use guard::Guard;
+pub use sheet::SheetFormat;
 
 /// Why a document could not be read as its format. The quick view then
 /// shows its text: "Could not read notes.org: not valid Org." then
@@ -117,6 +119,8 @@ pub enum Reader {
     Carta(CartaFormat),
     /// An SVG drawing (alpha 4).
     Svg,
+    /// A spreadsheet, through `calamine` (alpha 4).
+    Sheet(SheetFormat),
     /// Plain text and code, or hex for bytes that are not text.
     Text,
 }
@@ -125,7 +129,11 @@ impl Reader {
     /// Whether the reader reads a zip package through the container read
     /// path ([`read_seekable`]) rather than the first bytes.
     pub fn is_package(self) -> bool {
-        matches!(self, Reader::Carta(format) if format.is_package())
+        match self {
+            Reader::Carta(format) => format.is_package(),
+            Reader::Sheet(_) => true,
+            _ => false,
+        }
     }
 
     /// The reader a file name says, by its extension.
@@ -140,6 +148,8 @@ impl Reader {
             Reader::Carta(format)
         } else if ext == "svg" {
             Reader::Svg
+        } else if let Some(format) = SheetFormat::from_name(name) {
+            Reader::Sheet(format)
         } else {
             Reader::Text
         }
@@ -152,9 +162,12 @@ impl Reader {
         match file_type.map(|t| t.id.as_str()) {
             Some("markdown") => Reader::Markdown,
             Some("svg") => Reader::Svg,
-            Some(id) => {
-                CartaFormat::from_type(id).map_or_else(|| Self::for_name(name), Reader::Carta)
-            }
+            Some(id) => match SheetFormat::from_type(id) {
+                Some(format) => Reader::Sheet(format),
+                None => {
+                    CartaFormat::from_type(id).map_or_else(|| Self::for_name(name), Reader::Carta)
+                }
+            },
             None => Self::for_name(name),
         }
     }
@@ -204,6 +217,12 @@ pub fn read_as(
             .run(move || markdown::read(&decode(&bytes, None).text)),
         Reader::Carta(format) => options.guard.run(move || carta::read(format, &bytes))?,
         Reader::Svg => options.guard.run(move || svg::read(&bytes))?,
+        Reader::Sheet(format) => {
+            let caps = package::ContainerCaps::default();
+            options
+                .guard
+                .run(move || sheet::read(format, bytes, &caps))?
+        }
         Reader::Text => Ok(text::read(name, &bytes, options.hex_row)),
     }
 }
@@ -224,6 +243,27 @@ pub fn read_seekable(
             package::read_seekable_with(source, options, caps, format.name(), move |bytes, caps| {
                 carta::read_package(format, &bytes, caps.max_table_rows)
             })
+        }
+        Reader::Sheet(format) => {
+            // A workbook is refused past its own cap before it is loaded.
+            let caps = package::ContainerCaps {
+                max_container: caps.max_container.min(caps.max_sheet_bytes),
+                ..*caps
+            };
+            if format.is_package() {
+                package::read_seekable_with(
+                    source,
+                    options,
+                    &caps,
+                    format.name(),
+                    move |bytes, caps| sheet::read(format, bytes, caps),
+                )
+            } else {
+                let bytes = package::read_all(source, &caps)?;
+                options
+                    .guard
+                    .run(move || sheet::read(format, bytes, &caps))?
+            }
         }
         other => {
             let bytes = package::read_all(source, caps)?;
@@ -590,6 +630,10 @@ pub struct DocView {
     links: Vec<DocLink>,
     code_blocks: Vec<CodeBlock>,
     notes: Vec<String>,
+    /// What the announcement says after the kind when the reader knows
+    /// better than the counts: "3 sheets, 1,204 rows" (alpha 4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    said: Option<String>,
 }
 
 impl Default for DocView {
@@ -610,6 +654,7 @@ impl DocView {
             links: Vec::new(),
             code_blocks: Vec::new(),
             notes: Vec::new(),
+            said: None,
         }
     }
 
@@ -664,6 +709,25 @@ impl DocView {
     /// read."
     pub fn notes(&self) -> &[String] {
         &self.notes
+    }
+
+    /// Sets what the announcement says after the kind, in place of the
+    /// counts: "3 sheets, 1,204 rows".
+    pub fn set_summary_words(&mut self, words: impl Into<String>) {
+        self.said = Some(words.into());
+    }
+
+    /// Adds a paragraph row after the last row, a block of its own: what
+    /// a reader says after a table it cut ("and 4,200 more rows").
+    pub fn push_paragraph(&mut self, text: &str) {
+        let block = self.rows.last().map_or(0, |r| r.block + 1);
+        self.rows.push(DocRow {
+            kind: RowKind::Paragraph,
+            text: build::collapse(text),
+            block,
+            continued: false,
+            runs: Vec::new(),
+        });
     }
 
     /// Adds a note in the reader's own words, once.
@@ -837,6 +901,9 @@ impl DocView {
     /// "12 headings" for a document with headings, else its rows ("1,204
     /// lines"), or "empty".
     pub fn summary_words(&self) -> String {
+        if let Some(said) = &self.said {
+            return said.clone();
+        }
         if self.rows.is_empty() {
             return "empty".to_owned();
         }

@@ -281,6 +281,24 @@ fn bytes_to_html(format: CartaFormat, input: &[u8]) -> Result<(String, Option<St
     }
 }
 
+/// Reads delimited text cut to the container caps first (10,000 rows, 200
+/// columns), so carta never holds more; what was cut is said after the
+/// table, and the announcement says the rows of the whole file.
+fn read_delimited(format: CartaFormat, text: &str, separator: u8) -> Result<DocView, DocError> {
+    let caps = super::package::ContainerCaps::default();
+    let cut = super::sheet::cut_delimited(text, separator, caps.max_table_rows, caps.max_columns);
+    let (fragment, _, _) = to_html(format, &cut.text)?;
+    let mut view = html::read_fragment(&fragment, DocKind::Carta(format.name().to_owned()));
+    if cut.more_rows > 0 {
+        view.push_paragraph(&html::more_rows(cut.more_rows));
+    }
+    if cut.more_columns > 0 {
+        view.push_paragraph(&super::sheet::more_columns(cut.more_columns));
+    }
+    view.set_summary_words(crate::words::count_words(cut.rows as u64, "row", "rows"));
+    Ok(view)
+}
+
 /// Reads a package format's bytes (DOCX, EPUB, ODT), already checked by
 /// the container read path, into a view, each table cut at
 /// `max_table_rows`. Unguarded: the container read path runs it under
@@ -307,6 +325,13 @@ pub fn read_package(
 /// view reads through [`super::read`], which runs this under the guard.
 pub fn read(format: CartaFormat, bytes: &[u8]) -> Result<DocView, DocError> {
     let text = decode(bytes, None).text;
+    if let Some(separator) = match format {
+        CartaFormat::Csv => Some(b','),
+        CartaFormat::Tsv => Some(b'\t'),
+        _ => None,
+    } {
+        return read_delimited(format, &text, separator);
+    }
     let (fragment, title, skipped) = to_html(format, &text)?;
     let mut view = html::read_fragment(&fragment, DocKind::Carta(format.name().to_owned()));
     if let Some(title) = title {

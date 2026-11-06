@@ -4,7 +4,7 @@
 //! source with caps of its own ([`ContainerCaps`]): 64 MiB for the
 //! container, 50,000 members, 32 MiB for one unpacked XML part, 64 MiB
 //! for any other part, 256 MiB unpacked in all, the nesting cut at 256
-//! levels, 10,000 table rows. Every reader runs under the same guard as
+//! levels, 10,000 table rows; a sheet also 200 columns and a 50 MB file. Every reader runs under the same guard as
 //! the quick view's (a thread, a catch, a deadline).
 //!
 //! Before any reader sees the package, [`check`] walks it: too many
@@ -41,6 +41,10 @@ pub struct ContainerCaps {
     pub max_nesting: usize,
     /// The most rows of one table or sheet.
     pub max_table_rows: usize,
+    /// The most columns of one sheet or delimited table.
+    pub max_columns: usize,
+    /// The largest spreadsheet or delimited file loaded (50 MB).
+    pub max_sheet_bytes: u64,
 }
 
 impl Default for ContainerCaps {
@@ -53,6 +57,8 @@ impl Default for ContainerCaps {
             max_total: 256 * 1024 * 1024,
             max_nesting: MAX_NESTING,
             max_table_rows: 10_000,
+            max_columns: 200,
+            max_sheet_bytes: 50_000_000,
         }
     }
 }
