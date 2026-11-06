@@ -61,6 +61,7 @@ pub use runner::{
 /// The kill-on-close job object of Windows, for the process helper.
 #[cfg(windows)]
 pub use sys::KillOnCloseJob;
+pub use sys::open_with::{OpenWithApp, OpenWithList, choose_another_program, open_with_list};
 /// The owner-only named pipe of Windows, for the SFTP plugin's askpass
 /// endpoint (plan answer 101).
 #[cfg(windows)]

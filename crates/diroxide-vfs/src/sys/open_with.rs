@@ -1,17 +1,17 @@
 //! Open with: the programs the system lists for a file, read without a
 //! shell (R28 4.3; R30's commits 26 to 28).
 //!
-//! - **Linux and the BSDs** ([`super::xdg_apps`]): `mimeapps.list` in the
+//! - **Linux and the BSDs** (`xdg_apps`): `mimeapps.list` in the
 //!   config and data folders, the `mimeinfo.cache` files, and each
 //!   program's `.desktop` file; its `Exec` line becomes an argument list.
-//! - **Windows** (`super::windows`): per extension, `OpenWithList` and
+//! - **Windows** (`windows_open_with`, `windows_command`): per extension, `OpenWithList` and
 //!   `OpenWithProgids` under the user's `FileExts` key and the classes,
 //!   and `Applications\NAME\shell\open\command`, the user's hive before the
 //!   machine's; the command becomes an argument list with the file where
 //!   `%1` is. A handler with no command (a Store app) is started through
 //!   the system by its class. "Choose another program" hands the file to
 //!   the system's own dialog, started and never waited for.
-//! - **macOS** ([`super::mac_apps`]): the application folders' bundles,
+//! - **macOS** (`mac_apps`): the application folders' bundles,
 //!   each `Info.plist` read for the document types it declares, started
 //!   with `open -a`.
 //!
@@ -21,17 +21,6 @@
 
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
-
-/// The first row of an Open with list, the system's own choice.
-pub const DEFAULT_PROGRAM: &str = "Default program";
-
-/// The last row on systems with their own Open with dialog.
-pub const CHOOSE_ANOTHER: &str = "Choose another program";
-
-/// The list's title for a file: "Open report.pdf with:".
-pub fn title(name: &str) -> String {
-    format!("Open {name} with:")
-}
 
 /// One piece of an argument.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -132,6 +121,26 @@ pub struct OpenWithApp {
     pub default: bool,
 }
 
+impl OpenWithApp {
+    /// Starts it on one file, never waited for: its command with the file
+    /// in its place, or the system's handler for its class.
+    pub fn start(&self, file: &Path) -> std::io::Result<()> {
+        match &self.launch {
+            Launch::Command(command) => {
+                let (program, args) = command.for_file(file.as_os_str());
+                std::process::Command::new(program)
+                    .args(args)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .map(drop)
+            }
+            Launch::Class(class) => start_by_class(class, file),
+        }
+    }
+}
+
 /// The programs for one file, in the system's order, the default first
 /// when the system names one.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -144,6 +153,17 @@ pub struct OpenWithList {
 }
 
 impl OpenWithList {
+    /// The first row of an Open with list, the system's own choice.
+    pub const DEFAULT_PROGRAM: &str = "Default program";
+
+    /// The last row on systems with their own Open with dialog.
+    pub const CHOOSE_ANOTHER: &str = "Choose another program";
+
+    /// The list's title for a file: "Open report.pdf with:".
+    pub fn title(name: &str) -> String {
+        format!("Open {name} with:")
+    }
+
     /// Adds a program unless one with the same id or the same command is
     /// in already; a later default marks the one in.
     pub fn push(&mut self, app: OpenWithApp) {
@@ -174,11 +194,16 @@ impl OpenWithList {
 /// (the type registry's `mime`) on Linux and the BSDs, by both on macOS.
 /// An empty list where the system says nothing.
 pub fn open_with_list(file: &Path, mime: Option<&str>) -> OpenWithList {
+    #[cfg(windows)]
+    {
+        let _ = mime;
+        super::windows_open_with::open_with_list(file)
+    }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         super::xdg_apps::open_with_list(file, mime)
     }
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
     {
         let _ = (file, mime);
         OpenWithList::default()
@@ -189,37 +214,33 @@ pub fn open_with_list(file: &Path, mime: Option<&str>) -> OpenWithList {
 /// program"), started and never waited for. Windows only; elsewhere it
 /// says the system has none.
 pub fn choose_another_program(file: &Path) -> std::io::Result<()> {
-    let _ = file;
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "This system has no Open with dialog of its own.",
-    ))
-}
-
-/// Starts a listed program on one file, never waited for: its command
-/// with the file in its place, or the system's handler for its class.
-pub fn launch(app: &OpenWithApp, file: &Path) -> std::io::Result<()> {
-    match &app.launch {
-        Launch::Command(command) => {
-            let (program, args) = command.for_file(file.as_os_str());
-            std::process::Command::new(program)
-                .args(args)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-                .map(drop)
-        }
-        Launch::Class(class) => start_by_class(class, file),
+    #[cfg(windows)]
+    {
+        super::windows_open_with::choose_another_program(file)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = file;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "This system has no Open with dialog of its own.",
+        ))
     }
 }
 
 fn start_by_class(class: &str, file: &Path) -> std::io::Result<()> {
-    let _ = (class, file);
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "Starting a program by its class is for Windows.",
-    ))
+    #[cfg(windows)]
+    {
+        super::windows_open_with::start_by_class(class, file)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (class, file);
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Starting a program by its class is for Windows.",
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -257,11 +278,11 @@ mod tests {
         assert_eq!(list.apps.len(), 2);
         assert_eq!(list.apps[0].name, "Notepad");
         assert!(list.apps[0].default);
-        assert_eq!(title("report.pdf"), "Open report.pdf with:");
+        assert_eq!(OpenWithList::title("report.pdf"), "Open report.pdf with:");
         for line in [
-            title("report.pdf").as_str(),
-            DEFAULT_PROGRAM,
-            CHOOSE_ANOTHER,
+            OpenWithList::title("report.pdf").as_str(),
+            OpenWithList::DEFAULT_PROGRAM,
+            OpenWithList::CHOOSE_ANOTHER,
         ] {
             assert!(line.chars().count() <= 40, "{line}");
         }
