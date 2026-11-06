@@ -26,6 +26,8 @@
 //!   command text form the banks and `diro serve` share (W4b).
 //! - `diro components list|download|verify|remove|install`: optional
 //!   components, asked for before anything is fetched (W4c).
+//! - `diro doctor [--check [TOOL...]]`: what this diro has and finds,
+//!   one fact a line, the name first (alpha 4's lane K).
 //! - `diro --version`, `diro --help`.
 //!
 //! Every argument must be valid Unicode: a name that is not is refused
@@ -169,6 +171,7 @@ pub fn help_text() -> String {
         "diro run COMMAND [NAME=VALUE...]  run one command headless and say what it says",
         "diro components list      list the optional components: title, state, size, license",
         "diro components download ID  say its size and license, ask, then download it",
+        "diro doctor               say the tools, components and plugins diro finds",
         "diro --version            print the version",
         "diro --help               print this help",
         "",
@@ -508,12 +511,17 @@ mod tests {
 
     /// Alpha 4's route stubs (the contract step): each command parses,
     /// says it is not built yet and exits 1; `watch` with a task takes the
-    /// task's route and without one stays the say-each-file mode.
+    /// task's route and without one stays the say-each-file mode. `diro
+    /// doctor` left the list when the registry's lane built it (its tests
+    /// are in `cmd/doctor.rs`, on fake folders and tools only).
     #[test]
     fn the_alpha_four_routes_say_they_are_not_built_yet() {
+        assert!(matches!(
+            parse(args(&["doctor", "--check", "pandoc"])),
+            Ok(Invocation::Doctor(_))
+        ));
         for (line, words) in [
-            (&["doctor"][..], "diro doctor"),
-            (&["convert", "a.md", "--to", "docx"], "diro convert"),
+            (&["convert", "a.md", "--to", "docx"][..], "diro convert"),
             (&["info", "a.jpg"], "diro info"),
             (&["sum", "--check", "SHA256SUMS"], "diro sum"),
             (&["watch", "--task", "scans", "--once"], "diro watch --task"),

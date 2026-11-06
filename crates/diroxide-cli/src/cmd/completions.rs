@@ -356,6 +356,7 @@ pub fn command() -> Command {
                 ),
         )
         .subcommand(components_command())
+        .subcommand(doctor_command())
         .subcommand(no_help(
             Command::new("serve")
                 .about("Serve the app over JSON-RPC on standard input and output")
@@ -559,6 +560,28 @@ fn components_command() -> Command {
                 .arg(named("id", "The component"))
                 .arg(named("path", "The zip file or folder").value_hint(ValueHint::AnyPath)),
         )
+}
+
+/// `diro doctor` as `cmd/doctor.rs` reads it (alpha 4's lane K), for
+/// completion only.
+fn doctor_command() -> Command {
+    Command::new("doctor")
+        .about("Say the tools, components and plugins diro finds")
+        .arg(
+            Arg::new("check")
+                .long("check")
+                .value_name("TOOL")
+                .num_args(0..)
+                .help("Exit 1 when a needed tool is missing: these, or your recipes' tools"),
+        )
+        .arg(flag(
+            "paths",
+            "Say the folders in full, home folder included",
+        ))
+        .arg(flag(
+            "portable",
+            "Use the settings and components beside the program",
+        ))
 }
 
 /// `diro archive` as clap describes it, for completion only; keep in step
