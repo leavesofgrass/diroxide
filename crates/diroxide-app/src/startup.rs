@@ -76,6 +76,9 @@ pub struct Startup {
     /// The owner's `tools.toml`: where a tool action's program is, or
     /// that it is turned off (lane TA).
     pub tools: diroxide_config::ToolsConfig,
+    /// The programs of the installed helper components, for the app's
+    /// tools registry (K's request 3).
+    pub helper_programs: Vec<PathBuf>,
 }
 
 impl Default for Startup {
@@ -100,6 +103,7 @@ impl Default for Startup {
             themes_dir: None,
             type_slots: crate::typing::TypeSlots::default(),
             tools: diroxide_config::ToolsConfig::default(),
+            helper_programs: Vec::new(),
         }
     }
 }
@@ -284,6 +288,8 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         themes_dir: Some(themes_dir),
         type_slots,
         tools: config.tools.clone(),
+        helper_programs: diroxide_components::Manifest::embedded()
+            .helper_programs(&paths.components_dir(), diroxide_components::host_target()),
     }
 }
 

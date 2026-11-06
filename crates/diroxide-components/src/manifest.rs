@@ -29,7 +29,9 @@ use std::collections::BTreeSet;
 
 use serde::Deserialize;
 
-use crate::component::{Action, Component, Kind, Origin};
+use std::path::{Path, PathBuf};
+
+use crate::component::{Action, Component, Kind, Origin, Status};
 use crate::error::ComponentError;
 use crate::pin::{ANY_TARGET, FilePin, is_plain_name};
 
@@ -357,6 +359,31 @@ impl Manifest {
     /// The component with this id.
     pub fn get(&self, id: &str) -> Option<&Component> {
         self.components.iter().find(|c| c.id == id)
+    }
+
+    /// The programs of the installed helper components, for the tools
+    /// registry's component step (`ToolRegistry::with_components`): each
+    /// file with an `exec`, in its component's folder under
+    /// `components_dir`, for `target`. `diro doctor` and the app's tools
+    /// registries ask the same (K's request 3).
+    pub fn helper_programs(&self, components_dir: &Path, target: &str) -> Vec<PathBuf> {
+        self.components
+            .iter()
+            .filter(|c| c.kind == Kind::Helper)
+            .filter(|c| matches!(c.status_in(components_dir, target), Status::Installed))
+            .flat_map(|c| {
+                let dir = c.dir_in(components_dir);
+                c.files_for(target)
+                    .into_iter()
+                    .filter_map(|file| file.exec.clone())
+                    .map(move |exec| {
+                        exec.split('/')
+                            .filter(|part| !part.is_empty())
+                            .fold(dir.clone(), |path, part| path.join(part))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
     /// Adds the components of a source's list. A component with an id this
@@ -689,12 +716,24 @@ sha256 = "{}"
         assert_eq!(m.refused[0].reason, "its id is listed twice");
     }
 
+    /// K's request 3: a components folder with nothing installed gives no
+    /// helper program.
+    #[test]
+    fn helper_programs_are_only_the_installed_helpers() {
+        let manifest = Manifest::embedded();
+        let empty = Path::new(env!("CARGO_MANIFEST_DIR")).join("no-components-here");
+        assert!(
+            manifest
+                .helper_programs(&empty, crate::pin::host_target())
+                .is_empty()
+        );
+    }
+
     /// The fixture lists, which are also the fuzz target's seeds: each
     /// says on its first line what reading it gives.
     #[test]
     fn the_fixture_lists_say_what_they_expect() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/components/manifests");
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/components/manifests");
         let mut seen = 0;
         for item in std::fs::read_dir(&dir).unwrap() {
             let path = item.unwrap().path();

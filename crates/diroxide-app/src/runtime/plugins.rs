@@ -326,9 +326,18 @@ fn roots(paths: &Paths) -> Roots {
     }
 }
 
+/// The programs of the installed helper components, for a tools
+/// registry's component step (K's request 3).
+pub(crate) fn installed_helpers(paths: &Paths) -> Vec<PathBuf> {
+    diroxide_components::Manifest::embedded()
+        .helper_programs(&paths.components_dir(), diroxide_components::host_target())
+}
+
 fn tools_of(paths: Option<&Paths>) -> ToolRegistry {
     match paths {
-        Some(paths) => ToolRegistry::builtin().with_overrides(diroxide_config::load(paths).tools),
+        Some(paths) => ToolRegistry::builtin()
+            .with_overrides(diroxide_config::load(paths).tools)
+            .with_components(installed_helpers(paths)),
         None => ToolRegistry::builtin(),
     }
 }

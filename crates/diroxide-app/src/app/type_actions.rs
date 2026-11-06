@@ -124,10 +124,13 @@ impl App {
         })
     }
 
-    /// The tools registry this app asks for a tool action's program,
-    /// with the owner's `tools.toml`.
+    /// The tools registry this app asks for a tool's program: the
+    /// owner's `tools.toml`, then the installed helper components, then
+    /// PATH and the known folders (K's request 3).
     pub(super) fn tool_registry(&self) -> ToolRegistry {
-        ToolRegistry::builtin().with_overrides(self.tool_overrides.clone())
+        ToolRegistry::builtin()
+            .with_overrides(self.tool_overrides.clone())
+            .with_components(self.helper_programs.clone())
     }
 
     /// The focused file and its place, or what is said instead.

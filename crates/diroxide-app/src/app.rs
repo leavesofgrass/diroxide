@@ -994,6 +994,8 @@ pub struct App {
     running_typed: bool,
     /// The owner's `tools.toml`, for a tool action's program (lane TA).
     tool_overrides: diroxide_config::ToolsConfig,
+    /// The installed helper components' programs (K's request 3).
+    helper_programs: Vec<std::path::PathBuf>,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1326,6 +1328,7 @@ impl App {
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,
+            helper_programs: startup.helper_programs,
         };
         app.apply_session();
         for side in Side::BOTH {

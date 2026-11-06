@@ -623,7 +623,7 @@ impl App {
             return vec![self.say(Message::info(text))];
         }
         if self.preview.tools.is_none() {
-            self.preview.tools = Some(ToolRegistry::builtin());
+            self.preview.tools = Some(self.tool_registry());
         }
         let (Some(view), Some(tools)) = (self.preview.view.as_ref(), self.preview.tools.as_ref())
         else {
