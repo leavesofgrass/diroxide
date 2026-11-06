@@ -53,6 +53,8 @@ mod select;
 // Selection on the filter language (W3a).
 mod selecting;
 mod split_join;
+// The background type check (alpha 4, lane TA).
+mod type_checks;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -469,6 +471,17 @@ pub enum AppEvent {
         /// Its free space and size, when it answered.
         space: Option<diroxide_vfs::SpaceInfo>,
     },
+    /// A batch of a panel's files typed by their first bytes (alpha 4,
+    /// lane TA), answering [`Request::CheckTypes`].
+    TypesChecked {
+        /// The panel.
+        side: Side,
+        /// The entries they were asked for; answers for older ones are
+        /// dropped.
+        listing: u64,
+        /// What each file is.
+        answers: Vec<crate::typing::TypeAnswer>,
+    },
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -867,7 +880,8 @@ pub struct App {
     active: Side,
     keymap: Keymap,
     settings: Settings,
-    types: TypeRegistry,
+    /// The file types, shared with the background check (lane TA).
+    types: Arc<TypeRegistry>,
     clock: Arc<dyn Clock>,
     ids: IdSource,
     dialogs: Vec<(DialogId, Dialog)>,
@@ -960,6 +974,8 @@ pub struct App {
     volumes: volumes_ui::VolumesState,
     /// Full screen and the themes found by name (lane A6).
     look: look::LookState,
+    /// What each panel's type check was asked (lane TA).
+    type_checks: type_checks::TypeChecks,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1218,6 +1234,8 @@ impl App {
             settings.screen_reader_mode,
             diroxide_config::ScreenReaderMode::Off
         );
+        // The retro pack is read only while its setting is on.
+        let retro = settings.filetypes.retro;
         let mut app = Self {
             panels: [
                 Panel::new(Side::Left, options.left, &settings),
@@ -1226,7 +1244,7 @@ impl App {
             active: Side::Left,
             keymap,
             settings,
-            types: options.types,
+            types: Arc::new(options.types.with_retro(retro)),
             clock: options.clock,
             ids: IdSource::new(),
             dialogs: Vec::new(),
@@ -1286,6 +1304,7 @@ impl App {
             trash: trash_ui::TrashState::default(),
             volumes: volumes_ui::VolumesState::default(),
             look: look::LookState::new(&startup.user_themes, startup.themes_dir.clone()),
+            type_checks: type_checks::TypeChecks::default(),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1711,6 +1730,7 @@ impl App {
         effects.extend(self.plugin_queue_next());
         effects.extend(self.jobs_queue_next());
         self.follow_cursor();
+        self.follow_type_checks();
         self.mark_requests(effects)
     }
 
@@ -1852,6 +1872,11 @@ impl App {
                 }
                 Vec::new()
             }
+            AppEvent::TypesChecked {
+                side,
+                listing,
+                answers,
+            } => self.types_checked(side, listing, answers),
         }
     }
 
@@ -1862,6 +1887,7 @@ impl App {
         effects.extend(self.plugin_queue_next());
         effects.extend(self.jobs_queue_next());
         self.follow_cursor();
+        self.follow_type_checks();
         self.mark_requests(effects)
     }
 

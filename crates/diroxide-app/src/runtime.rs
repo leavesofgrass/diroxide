@@ -61,6 +61,8 @@ mod queue;
 mod saved_queue;
 // Free space asked with a short limit (lane A3, R25 commit 90).
 mod space;
+// The readers of the background type check (lane TA).
+mod typing;
 
 pub(crate) use space::{question_lines, room_words};
 
@@ -525,6 +527,9 @@ pub struct Runtime {
     /// computer's, for tests that never list the owner's drives (lane
     /// A3).
     local_volumes: Option<Vec<diroxide_vfs::LocalPlace>>,
+    /// Each panel's type check, counted, so a newer one stops the
+    /// readers of the one before (lane TA).
+    type_readers: typing::TypeReaders,
 }
 
 impl fmt::Debug for Runtime {
@@ -614,6 +619,7 @@ impl Runtime {
             space_limit: space::SPACE_LIMIT,
             trash,
             local_volumes: None,
+            type_readers: typing::TypeReaders::default(),
         }
     }
 
@@ -1718,6 +1724,33 @@ impl Runtime {
                     let result = filter_contents(&registry, place, *filter, hidden, &clock);
                     shared.send(AppEvent::FilterContents { request, result });
                 });
+            }
+            Request::CheckTypes {
+                side,
+                listing,
+                folder,
+                items,
+                urgent,
+                types,
+                clock,
+            } => {
+                let job = typing::TypeJob {
+                    side,
+                    listing,
+                    generation: self.type_readers.next(side),
+                    current: self.type_readers.current(side),
+                    folder,
+                    items,
+                    next: AtomicUsize::new(0),
+                    urgent,
+                    types,
+                    clock: clock.0,
+                    registry: Arc::clone(&self.registry),
+                };
+                self.worker(move |shared| typing::run(shared, &job));
+            }
+            Request::StopTypes(side) => {
+                self.type_readers.next(side);
             }
         }
     }

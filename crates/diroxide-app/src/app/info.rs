@@ -326,14 +326,29 @@ impl App {
         // The item information list (plan commit 66): the preview's detail
         // rows first, the type and the size in words with the exact bytes,
         // then the name and what the panel knows.
-        let file_type = self
-            .types
-            .detect(&entry.name, &[])
-            .and_then(|d| self.types.get(&d.type_id));
+        // The type the background check settled on, else the name's (lane
+        // TA).
+        let file_type = self.types.by_index(entry.type_index).or_else(|| {
+            self.types
+                .detect(&entry.name, &[])
+                .and_then(|d| self.types.get(&d.type_id))
+        });
         let mut lines: Vec<String> = diroxide_preview::detail_rows(entry, file_type)
             .into_iter()
             .map(|row| format!("{}: {}", row.label, row.value))
             .collect();
+        // The file's groups, its type's first ("File group: Images,
+        // Screenshots"), and the line when its name and its first bytes
+        // disagree, said here on request (R28 4.3).
+        if let Ok(groups) = self.types.groups_of(entry, clock)
+            && !groups.is_empty()
+        {
+            let names: Vec<&str> = groups.iter().map(|g| g.name.as_str()).collect();
+            lines.push(format!("File group: {}", names.join(", ")));
+        }
+        if let Some(line) = panel.disagreement(&entry.name) {
+            lines.push(line.to_owned());
+        }
         let archive = entry.kind == diroxide_core::EntryKind::Archive;
         lines.push(format!("Name: {name}"));
         if entry.needs_care {
@@ -728,6 +743,15 @@ impl App {
                     diroxide_config::ScreenReaderMode::Off
                 );
             }
+            // The file types (lane TA): the retro pack joins or leaves,
+            // or a folder is typed by name alone from now on; the rows
+            // are typed again and checked again.
+            "filetypes.retro" => {
+                let retro = self.settings.filetypes.retro;
+                self.types = std::sync::Arc::new(self.types.as_ref().clone().with_retro(retro));
+                self.retype_panels();
+            }
+            "check.skip" => self.retype_panels(),
             _ => {}
         }
     }

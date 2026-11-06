@@ -46,6 +46,8 @@ pub mod startup;
 pub mod state;
 // Watch this folder (W3t).
 pub mod tracker;
+// File types in the app: the background check (alpha 4, lane TA).
+pub mod typing;
 pub mod viewer;
 pub mod views;
 

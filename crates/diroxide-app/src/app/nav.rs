@@ -764,7 +764,13 @@ impl App {
                 )
             }
             _ => {
-                let text = format!("Opening {}", entry.display_name());
+                let mut text = format!("Opening {}", entry.display_name());
+                // A warning when its name and first bytes disagree (lane
+                // TA): "Opening photo.png. Name says PNG; contents say
+                // JPEG."
+                if let Some(line) = self.focused_disagreement() {
+                    text = format!("{text}. {line}.");
+                }
                 vec![self.say(Message::info(text)), Effect::OpenExternally(place)]
             }
         }
