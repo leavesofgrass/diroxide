@@ -9,6 +9,7 @@ use crate::reader::{ReadRequest, Reader};
 
 pub mod archive;
 pub mod audio;
+pub mod document;
 pub mod text;
 
 /// The crate's readers in the pipeline's order: the fast ones first.
@@ -17,6 +18,10 @@ pub(crate) fn builtin() -> Vec<Arc<dyn Reader>> {
         Arc::new(audio::AudioTags),
         Arc::new(audio::AudioProperties),
         Arc::new(archive::ZipFacts),
+        Arc::new(document::PdfProperties),
+        Arc::new(document::OfficeProperties),
+        Arc::new(document::OpenDocumentProperties),
+        Arc::new(document::EpubProperties),
         Arc::new(text::TextFacts),
     ]
 }

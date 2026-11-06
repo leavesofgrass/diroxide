@@ -76,14 +76,19 @@ fn digits(text: &str, at: usize, len: usize) -> Option<u32> {
 }
 
 /// A PDF date (`D:YYYYMMDDHHmmSSOHH'mm'`, every part after the year
-/// optional) in words: "2026-11-06 08:00". The zone is left as written
-/// in the file and not said.
+/// optional) in words: "2026-11-06 08:00", or as much as it gives:
+/// "2026-11", "2026". The zone is left as written in the file and not
+/// said.
 pub fn pdf_date_words(text: &str) -> Option<String> {
     let text = text.trim();
     let text = text.strip_prefix("D:").unwrap_or(text);
     let year = digits(text, 0, 4)?;
-    let month = digits(text, 4, 2).unwrap_or(1);
-    let day = digits(text, 6, 2).unwrap_or(1);
+    let Some(month) = digits(text, 4, 2) else {
+        return date_words(year, 1, 1, None).map(|_| format!("{year:04}"));
+    };
+    let Some(day) = digits(text, 6, 2) else {
+        return date_words(year, month, 1, None).map(|_| format!("{year:04}-{month:02}"));
+    };
     let time = match (digits(text, 8, 2), digits(text, 10, 2)) {
         (Some(hour), Some(minute)) => Some((hour, minute)),
         (Some(hour), None) => Some((hour, 0)),
@@ -166,7 +171,8 @@ mod tests {
             pdf_date_words("D:20261106080000-08'00'").as_deref(),
             Some("2026-11-06 08:00")
         );
-        assert_eq!(pdf_date_words("D:2026").as_deref(), Some("2026-01-01"));
+        assert_eq!(pdf_date_words("D:2026").as_deref(), Some("2026"));
+        assert_eq!(pdf_date_words("D:202611").as_deref(), Some("2026-11"));
         assert_eq!(pdf_date_words("D:20261399").as_deref(), None);
         assert_eq!(pdf_date_words("yesterday"), None);
         assert_eq!(
