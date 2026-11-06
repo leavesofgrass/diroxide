@@ -17,12 +17,21 @@
 //! same signatures, so the provider above calls them without `cfg`.
 #![allow(unsafe_code)]
 
+// Open with (R30's commits 26 to 28): the programs the system lists for a
+// file. Public through `diroxide_vfs::open_with` once the crate's lib.rs
+// re-exports the module (TL's contract request); until then only its
+// tests reach it, which is what the dead-code allowances are for.
+#[allow(dead_code, reason = "public once lib.rs re-exports it")]
+pub mod open_with;
 #[cfg(windows)]
 mod owner_pipe;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
 mod windows;
+#[cfg(any(test, all(unix, not(target_os = "macos"))))]
+#[allow(dead_code, reason = "reached through open_with once re-exported")]
+mod xdg_apps;
 
 #[cfg(windows)]
 pub use owner_pipe::{OwnerPipe, PipeStream, plain_pipe_name};
