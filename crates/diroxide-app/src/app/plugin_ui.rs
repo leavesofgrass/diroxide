@@ -1992,7 +1992,9 @@ impl App {
             if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.last_mut() {
                 list.focus_id(&form::field_row(field));
             }
-            let line = format!("{why} {}", state.row_words(field));
+            // The field first, then why: "Author: Use letters and spaces
+            // only".
+            let line = format!("{}: {why}", state.label(field));
             return vec![Effect::Redraw(Redraw::All), self.say(Message::info(line))];
         }
         let effects = self.close_top();

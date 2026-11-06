@@ -471,3 +471,55 @@ fn a_plugins_words_reach_the_title_line_and_a_slow_one_never_blocks() {
     assert_eq!(*launcher.launches.lock().unwrap(), 0);
     assert!(s.app.title_line().starts_with("repo, left panel, in "));
 }
+
+/// A value that does not fit its pattern stops the answer, the field
+/// named first; Delete removes a line of a multiline field; a form whose
+/// default button is Cancel starts there, and Enter on it cancels.
+#[test]
+fn a_forms_pattern_and_lines_and_cancel_button_say_what_they_do() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let form = json!({"title": "Branch", "fields": [
+        {"id": "name", "label": "Name", "kind": "text", "default": "Main 2",
+         "pattern": "[a-z]+", "pattern_message": "Use small letters only"},
+        {"id": "notes", "label": "Notes", "kind": "multiline"}
+    ], "default_button": "Create"});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("ask", Act::Call("ui/form", form))]),
+    );
+    s.run_command(Command::new(id("line-counter.ask")));
+    assert_eq!(rows(&s)[0], "Create");
+    assert_eq!(s.key("enter"), ["Name: Use small letters only"]);
+    assert!(s.dialog().is_some(), "the form stays open");
+    // Notes: add a line, then Delete removes it.
+    s.key("down");
+    s.key("enter");
+    s.key("enter");
+    s.type_text("draft");
+    s.key("enter");
+    assert_eq!(rows(&s), ["Line 1: draft", "Add a line"]);
+    assert_eq!(s.key("delete"), ["Line 1 removed. Add a line, 1 of 1"]);
+    s.key("escape");
+    assert_eq!(rows(&s)[2], "Notes: empty");
+    s.key("escape");
+
+    let form = json!({"title": "Discard changes", "fields": [
+        {"id": "why", "label": "Why", "kind": "text"}
+    ], "default_button": "Cancel"});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("ask", Act::Call("ui/form", form))]),
+    );
+    let said = s.run_command(Command::new(id("line-counter.ask")));
+    assert!(
+        said.contains(&"Discard changes (Line counter). Cancel, 1 of 3".to_owned()),
+        "{said:?}"
+    );
+    assert_eq!(rows(&s), ["Cancel", "Why: empty", "OK"]);
+    let said = s.key("enter");
+    assert!(
+        said.contains(&r#"Host said {"cancelled":true}. By Line counter."#.to_owned()),
+        "{said:?}"
+    );
+}
