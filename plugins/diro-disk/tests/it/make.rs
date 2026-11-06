@@ -186,3 +186,115 @@ pub mod guid {
         0xc7,
     ];
 }
+
+/// A small ext2 volume written by hand (no tool makes one on every
+/// system, and the development image has no `mke2fs`): 1 KiB blocks, one
+/// group, 32 inodes, block maps, file types in folder entries. It holds
+/// `docs/inner.txt`, `hello.txt`, a fast link `link` to `hello.txt`, and
+/// the label "home".
+pub fn ext2() -> Vec<u8> {
+    const BLOCK: usize = 1024;
+    let mut img = vec![0u8; 1024 * BLOCK];
+    let put16 =
+        |img: &mut Vec<u8>, at: usize, v: u16| img[at..at + 2].copy_from_slice(&v.to_le_bytes());
+    let put32 =
+        |img: &mut Vec<u8>, at: usize, v: u32| img[at..at + 4].copy_from_slice(&v.to_le_bytes());
+    // Superblock at 1024.
+    let sb = 1024;
+    put32(&mut img, sb, 32); // inodes
+    put32(&mut img, sb + 0x4, 1024); // blocks
+    put32(&mut img, sb + 0xc, 1024 - 13); // free blocks
+    put32(&mut img, sb + 0x10, 32 - 15); // free inodes
+    put32(&mut img, sb + 0x14, 1); // first data block
+    put32(&mut img, sb + 0x20, 8192); // blocks per group
+    put32(&mut img, sb + 0x24, 8192); // clusters per group
+    put32(&mut img, sb + 0x28, 32); // inodes per group
+    put16(&mut img, sb + 0x38, 0xef53);
+    put16(&mut img, sb + 0x3a, 1); // clean
+    put16(&mut img, sb + 0x3c, 1);
+    put32(&mut img, sb + 0x4c, 1); // dynamic revision
+    put32(&mut img, sb + 0x54, 11); // first inode
+    put16(&mut img, sb + 0x58, 128); // inode size
+    put32(&mut img, sb + 0x60, 0x2); // file type in folder entries
+    img[sb + 0x68..sb + 0x78].copy_from_slice(&[7u8; 16]);
+    img[sb + 0x78..sb + 0x7c].copy_from_slice(b"home");
+    // Group descriptor at block 2.
+    let gd = 2 * BLOCK;
+    put32(&mut img, gd, 3); // block bitmap
+    put32(&mut img, gd + 4, 4); // inode bitmap
+    put32(&mut img, gd + 8, 5); // inode table
+    put16(&mut img, gd + 12, 1024 - 13);
+    put16(&mut img, gd + 14, 32 - 15);
+    put16(&mut img, gd + 16, 2);
+    // Bitmaps: blocks 1 to 12 used (bit 0 is block 1), inodes 1 to 15.
+    for b in 0..12 {
+        img[3 * BLOCK + b / 8] |= 1 << (b % 8);
+    }
+    for b in 1023..8192 {
+        // Blocks past the volume are marked used, as mke2fs does.
+        img[3 * BLOCK + b / 8] |= 1 << (b % 8);
+    }
+    for i in 0..15 {
+        img[4 * BLOCK + i / 8] |= 1 << (i % 8);
+    }
+    for i in 32..(BLOCK * 8) {
+        img[4 * BLOCK + i / 8] |= 1 << (i % 8);
+    }
+    let inode = |n: usize| 5 * BLOCK + (n - 1) * 128;
+    let file = |img: &mut Vec<u8>, n: usize, mode: u16, size: u32, links: u16, block: u32| {
+        let at = inode(n);
+        put16(img, at, mode);
+        put32(img, at + 4, size);
+        put32(img, at + 0x10, 1_700_000_000); // modified
+        put16(img, at + 0x1a, links);
+        put32(img, at + 0x1c, if block == 0 { 0 } else { 2 });
+        if block != 0 {
+            put32(img, at + 0x28, block);
+        }
+    };
+    file(&mut img, 2, 0o040_755, 1024, 3, 9); // root
+    file(&mut img, 12, 0o040_755, 1024, 2, 10); // docs
+    file(&mut img, 13, 0o100_644, 13, 1, 11); // hello.txt
+    file(&mut img, 15, 0o100_600, 6, 1, 12); // docs/inner.txt
+    // A fast link: the target in the block pointers.
+    file(&mut img, 14, 0o120_777, 9, 1, 0);
+    let link = inode(14) + 0x28;
+    img[link..link + 9].copy_from_slice(b"hello.txt");
+    // Folder entries.
+    let entries = |img: &mut Vec<u8>, block: usize, list: &[(u32, &[u8], u8)]| {
+        let mut at = block * BLOCK;
+        for (i, (ino, name, kind)) in list.iter().enumerate() {
+            let len = (8 + name.len()).next_multiple_of(4);
+            let rec = if i + 1 == list.len() {
+                block * BLOCK + BLOCK - at
+            } else {
+                len
+            };
+            img[at..at + 4].copy_from_slice(&ino.to_le_bytes());
+            img[at + 4..at + 6].copy_from_slice(&(rec as u16).to_le_bytes());
+            img[at + 6] = name.len() as u8;
+            img[at + 7] = *kind;
+            img[at + 8..at + 8 + name.len()].copy_from_slice(name);
+            at += rec;
+        }
+    };
+    entries(
+        &mut img,
+        9,
+        &[
+            (2, b".", 2),
+            (2, b"..", 2),
+            (12, b"docs", 2),
+            (13, b"hello.txt", 1),
+            (14, b"link", 7),
+        ],
+    );
+    entries(
+        &mut img,
+        10,
+        &[(12, b".", 2), (2, b"..", 2), (15, b"inner.txt", 1)],
+    );
+    img[11 * BLOCK..11 * BLOCK + 13].copy_from_slice(b"Hello, world.");
+    img[12 * BLOCK..12 * BLOCK + 6].copy_from_slice(b"inside");
+    img
+}

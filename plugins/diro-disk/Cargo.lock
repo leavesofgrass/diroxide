@@ -324,6 +324,7 @@ dependencies = [
  "diroxide-core",
  "diroxide-plugins",
  "diroxide-vfs",
+ "ext4-view",
  "fatfs",
  "gptman",
  "hadris-io",
@@ -484,6 +485,16 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys",
+]
+
+[[package]]
+name = "ext4-view"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ecf6379b7cfeace5e109ccc51955afc05f5f7f2466ae0cf2697bda46afd01e6"
+dependencies = [
+ "bitflags 2.13.2",
+ "crc",
 ]
 
 [[package]]

@@ -16,8 +16,10 @@ use crate::image::sniff::Content;
 use crate::image::source::Backing;
 use crate::lines::cause;
 
+pub mod ext;
 pub mod fat;
 pub mod iso;
+pub mod pinned;
 
 /// What a node is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,6 +137,7 @@ pub fn open(
     match content {
         Content::Iso => iso::open(backing, limits),
         Content::Fat => fat::open(backing, limits),
+        Content::Ext => ext::open(backing, limits),
         Content::BitLocker => Err(locked("BitLocker")),
         Content::Luks => Err(locked("LUKS")),
         Content::Gpt | Content::Mbr => Err(DiskError::uses("a partition table inside a partition")),
