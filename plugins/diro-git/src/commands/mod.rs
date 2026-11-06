@@ -573,6 +573,9 @@ pub fn git_refused(verb: &str, reason: &str) -> GitError {
     if needs_sign_in(reason) {
         return GitError::refused(lines::SIGN_IN, Some(lines::SIGN_IN_HINT));
     }
+    if reason.contains("dubious ownership") {
+        return GitError::refused(lines::DUBIOUS, Some(lines::SAFE_DIRECTORY_HINT));
+    }
     GitError::refused(format!("{verb}: {reason}"), None)
 }
 

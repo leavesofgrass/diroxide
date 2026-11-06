@@ -224,7 +224,11 @@ pub fn describe(plugin: &Plugin, host: Host<'_>, params: &Params) -> Result<Valu
         Err(GitError::TooOld(v)) => return Ok(json!({"text": lines::too_old(v)})),
         Err(other) => return Err(other),
     }
-    let scan = scan(plugin, host, &repo)?;
+    let scan = match scan(plugin, host, &repo) {
+        Ok(scan) => scan,
+        Err(refused @ GitError::Refused { .. }) => return Ok(refused_title(&refused)),
+        Err(other) => return Err(other),
+    };
     let trusted = match trust_of(plugin, &repo, &scan) {
         Trust::Clean | Trust::Yes => true,
         Trust::No => false,
@@ -235,9 +239,40 @@ pub fn describe(plugin: &Plugin, host: Host<'_>, params: &Params) -> Result<Valu
     if !trusted {
         return Ok(json!({"text": lines::NOT_TRUSTED}));
     }
-    let kept = folder_status(plugin, host, &repo, &folder, TITLE_FRESH)?;
+    let kept = match folder_status(plugin, host, &repo, &folder, TITLE_FRESH) {
+        Ok(kept) => kept,
+        Err(refused @ GitError::Refused { .. }) => return Ok(refused_title(&refused)),
+        Err(other) => return Err(other),
+    };
     let relative = repo.relative(&folder).unwrap_or_default();
     Ok(json!({"text": title_of(&repo, &relative, &kept)}))
+}
+
+/// Whether git refused a repository for its owner: a folder owned by
+/// another user, or on a drive with no owners, which git calls "dubious
+/// ownership" until the owner names it in `safe.directory`.
+pub fn is_dubious(error: &GitError) -> bool {
+    matches!(error, GitError::Refused { cause, .. } if cause.contains("dubious ownership"))
+}
+
+/// The title line when git refused the folder: the words for a dubious
+/// owner, or no words for anything else (a folder inside `.git`, which has
+/// no working tree).
+fn refused_title(error: &GitError) -> Value {
+    if is_dubious(error) {
+        json!({"text": lines::DUBIOUS})
+    } else {
+        json!({})
+    }
+}
+
+/// The column's cell when git refused the folder.
+fn refused_cell(error: &GitError) -> &'static str {
+    if is_dubious(error) {
+        lines::DUBIOUS
+    } else {
+        lines::NOT_CHECKED
+    }
 }
 
 /// The Git column's cell for one place inside the folder.
@@ -316,11 +351,25 @@ pub fn column(plugin: &Plugin, host: Host<'_>, params: &Params) -> Result<Value,
         Err(GitError::TooOld(v)) => return Ok(json!({"values": same(&lines::too_old(v))})),
         Err(other) => return Err(other),
     }
-    let scan = scan(plugin, host, &repo)?;
+    let scan = match scan(plugin, host, &repo) {
+        Ok(scan) => scan,
+        Err(refused @ GitError::Refused { .. }) => {
+            return Ok(json!({"values": same(refused_cell(&refused))}));
+        }
+        Err(other) => return Err(other),
+    };
     if !matches!(trust_of(plugin, &repo, &scan), Trust::Clean | Trust::Yes) {
         return Ok(json!({"values": same(lines::NOT_CHECKED)}));
     }
-    let kept = folder_status(plugin, host, &repo, &folder, COLUMN_FRESH)?;
+    // A refusal is said in the cells: an error would read "unavailable:
+    // plugin stopped", which it is not.
+    let kept = match folder_status(plugin, host, &repo, &folder, COLUMN_FRESH) {
+        Ok(kept) => kept,
+        Err(refused @ GitError::Refused { .. }) => {
+            return Ok(json!({"values": same(refused_cell(&refused))}));
+        }
+        Err(other) => return Err(other),
+    };
     let mut values = BTreeMap::new();
     let mut unlisted = Vec::new();
     let mut waiting = Vec::new();

@@ -16,6 +16,7 @@ In a folder inside a repository, the title line says the branch and its state af
 - "Detached at a1b2c3d, 3 changed": no branch is checked out.
 - "Merge in progress, 2 conflicts": a merge, rebase, cherry-pick, revert or bisect is under way.
 - "main, no commits yet, 2 changed": a new repository.
+- "git refuses it: dubious ownership": git does not trust the folder's owner (another user's folder, or a drive with no owners). If it is yours, run `git config --global --add safe.directory` with its path, in a terminal; the commands say the same.
 
 "Here" means this folder and below, not the whole repository; the status list counts the whole repository. When the words would pass 33 characters, "here" is left off, so the branch and its state stay inside one Braille line.
 

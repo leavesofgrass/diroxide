@@ -172,3 +172,41 @@ fn git_too_old_or_missing_is_said_in_words() {
         ]
     );
 }
+
+#[test]
+fn a_repository_git_refuses_is_said_in_words_never_as_a_stopped_plugin() {
+    let (git, mut host) = host();
+    let repo = git.repo("refused");
+    // git refuses a folder whose owner it does not trust (another user's,
+    // or on a drive with no owners) until it is named in safe.directory.
+    host.fake = Some(Box::new(|args: &[String]| {
+        args.iter().any(|a| a == "status").then(|| {
+            json!({"exit_code": 128, "stdout": "",
+                "stderr": diroxide_plugins::base64::encode(
+                    b"fatal: detected dubious ownership in repository at 'D:/x'\n"),
+                "encoding": "base64", "truncated": false})
+        })
+    }));
+    assert_eq!(host.describe(&repo).as_deref(), Some(lines::DUBIOUS));
+    assert_eq!(
+        host.column(&repo, &["hello.txt", "notes.txt"]),
+        [lines::DUBIOUS, lines::DUBIOUS]
+    );
+    host.command("status", &repo, &[]).unwrap();
+    assert_eq!(
+        host.seen.said,
+        [
+            (
+                "Git refuses it: dubious ownership".to_owned(),
+                "warning".to_owned()
+            ),
+            (lines::SAFE_DIRECTORY_HINT.to_owned(), "info".to_owned())
+        ]
+    );
+    // A folder inside .git has no working tree: no words, and the column
+    // says it was not checked.
+    host.fake = None;
+    let inside = repo.join(".git").join("refs");
+    assert_eq!(host.describe(&inside), None);
+    assert_eq!(host.column(&inside, &["heads"]), [lines::NOT_CHECKED]);
+}

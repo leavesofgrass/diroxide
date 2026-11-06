@@ -31,6 +31,14 @@ pub fn too_old(version: Version) -> String {
 /// A command's cause outside any repository.
 pub const NOT_A_REPOSITORY: &str = "this folder is not in a git repository";
 
+/// The title line, the column and a command's cause when git refuses a
+/// repository for its owner (33).
+pub const DUBIOUS: &str = "git refuses it: dubious ownership";
+
+/// The next step for it.
+pub const SAFE_DIRECTORY_HINT: &str =
+    "If it is yours, run git config --global --add safe.directory with its path, in a terminal.";
+
 // ---- the trust scan (answer 123) ----
 
 /// The title line of a repository whose configuration runs a program and
@@ -761,6 +769,7 @@ mod tests {
     fn every_fixed_line_fits_40_cells_with_its_meaning_first() {
         for line in [
             GIT_NOT_FOUND,
+            DUBIOUS,
             NOT_TRUSTED,
             TRUST_TITLE,
             NOTHING_TO_TRUST,
