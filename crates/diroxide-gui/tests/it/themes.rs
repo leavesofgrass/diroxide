@@ -4,15 +4,17 @@
 //! high contrast colors win while that mode is on, and following the
 //! system's appearance takes the theme's light or dark partner. The
 //! owner's theme files in the config's themes folder are drawn as the
-//! terminal draws them (R30's commit 16). Drawn with Vello's CPU renderer
-//! in the harness, no graphics card.
+//! terminal draws them (R30's commit 16), and a name no theme has is said
+//! at the start. Drawn with Vello's CPU renderer in the harness, no
+//! graphics card.
 
 #![allow(clippy::unwrap_used)]
 
 use std::path::PathBuf;
 
 use diroxide_app::config::Paths;
-use diroxide_gui::theme::{NIGHT_SKY, Palette};
+use diroxide_core::format::{BRAILLE_CELLS, within_cells};
+use diroxide_gui::theme::{NIGHT_SKY, Palette, unknown_theme_line};
 use diroxide_theme::os::OsScheme;
 use diroxide_theme::{Registry, Rgb, Theme};
 
@@ -191,4 +193,43 @@ fn a_theme_file_in_the_config_folder_is_drawn_by_the_window() {
     // The Settings list closed, the page is Harbor's again.
     rig.press("escape");
     assert_eq!(page_drawn(&mut rig), HARBOR_PAGE);
+}
+
+#[test]
+fn an_unknown_theme_is_said_once_at_the_start_and_galaxy_drawn() {
+    let dir = fixture(&["notes.txt"], &[]);
+    // `diro --theme no-such` and a setting naming no theme both reach the
+    // window as the setting.
+    let (app, runtime) = app_with(dir.path(), dir.path(), |options| {
+        options.settings.theme = "no-such".to_owned();
+    });
+    let mut rig = Rig::new(app, runtime);
+    assert_eq!(rig.f.palette().key, "galaxy");
+    assert_eq!(page_drawn(&mut rig), page_of("galaxy"));
+    let sentence = unknown_theme_line("no-such", "Galaxy");
+    assert_eq!(sentence, "Unknown theme no-such. Galaxy is in use.");
+    assert!(sentence.chars().count() <= BRAILLE_CELLS, "{sentence}");
+    assert!(within_cells(&sentence, "Unknown theme no-such."));
+    let said: Vec<String> = rig
+        .spoken()
+        .into_iter()
+        .filter(|l| l.contains("Unknown theme"))
+        .collect();
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].contains(&sentence), "{said:?}");
+    // Said once: a later step says nothing more of it.
+    rig.refresh();
+    rig.run("app.next-theme");
+    let again = rig
+        .spoken()
+        .iter()
+        .filter(|l| l.contains("Unknown theme"))
+        .count();
+    assert_eq!(again, 1);
+    // A built-in name is known, and nothing is said.
+    let (app, runtime) = app_with(dir.path(), dir.path(), |options| {
+        options.settings.theme = "nord".to_owned();
+    });
+    let rig = Rig::new(app, runtime);
+    assert!(!rig.spoken().join(" ").contains("Unknown theme"));
 }

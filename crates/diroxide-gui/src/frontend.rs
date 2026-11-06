@@ -503,7 +503,8 @@ impl Frontend {
     /// changed: the default properties of every widget, and the three
     /// lines' text colors (the title line on the page, the status and
     /// jobs lines on the status bar's band). A theme chosen after the
-    /// first is said with its verdict.
+    /// first is said with its verdict; at the first, a theme name the app
+    /// does not know is said ([`Self::unknown_theme`]).
     fn sync_colors(&mut self, host: &mut impl Host) {
         let choice = self.colors_choice();
         if self.shown.colors.as_ref() == Some(&choice) {
@@ -524,13 +525,29 @@ impl Frontend {
             palette.key != self.palette.key || palette.fell_back() != self.palette.fell_back();
         self.palette = palette;
         self.shown.colors = Some(choice);
-        if !first
-            && changed
-            && let Some(line) = self.colors_line()
-        {
+        if first {
+            if let Some(line) = self.unknown_theme() {
+                let effects = self.app.handle(AppEvent::Problem(Message::warning(line)));
+                self.carry(effects);
+            }
+        } else if changed && let Some(line) = self.colors_line() {
             let effects = self.app.handle(AppEvent::Problem(Message::info(line)));
             self.carry(effects);
         }
+    }
+
+    /// What the window says at its start when `--theme` or the theme
+    /// setting names a theme that is neither built in nor one of the
+    /// owner's theme files ([`App::themes`]): "Unknown theme no-such.
+    /// Galaxy is in use.", with the theme drawn in its place. Nothing
+    /// while the system's high contrast colors are drawn, since no theme
+    /// is.
+    fn unknown_theme(&self) -> Option<String> {
+        let name = &self.app.settings().theme;
+        if self.app.themes().get(name).is_some() || self.palette.key == "system" {
+            return None;
+        }
+        Some(crate::theme::unknown_theme_line(name, &self.palette.name))
     }
 
     /// What is said when the window's colors change: the theme and its

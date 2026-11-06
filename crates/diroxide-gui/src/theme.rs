@@ -7,7 +7,7 @@
 //!   built-in set and the owner's theme files from the config's themes
 //!   folder (R30's commit 16), so a theme file is drawn by the window as
 //!   the terminal draws it. A name none of them has is drawn as the
-//!   default.
+//!   default and said once in words ([`unknown_theme_line`]).
 //! - Every role keeps its theme's colors and its attribute (bold,
 //!   underline, italic), with the owner's `[colors]` overrides in place.
 //! - A role whose text fails the theme's floor on its background (4.5 to
@@ -471,6 +471,14 @@ pub fn drawn_theme(saved: &str, follow: bool, scheme: OsScheme, themes: &Registr
     follow_os(themes.facts(saved), scheme).unwrap_or_else(|| saved.to_owned())
 }
 
+/// What the window says once, at the start, when `--theme` or the theme
+/// setting names a theme that is neither built in nor one of the owner's
+/// theme files: the name first, then the theme drawn in its place.
+/// "Unknown theme no-such. Galaxy is in use."
+pub fn unknown_theme_line(name: &str, drawn: &str) -> String {
+    format!("Unknown theme {name}. {drawn} is in use.")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -618,6 +626,19 @@ mod tests {
             drawn_theme("harbor", true, OsScheme::Light, &themes),
             "harbor"
         );
+    }
+
+    #[test]
+    fn the_unknown_theme_line_says_the_name_first_in_40_cells() {
+        let line = unknown_theme_line("no-such", "Galaxy");
+        assert_eq!(line, "Unknown theme no-such. Galaxy is in use.");
+        assert!(line.chars().count() <= diroxide_core::format::BRAILLE_CELLS);
+        // A longer drawn name still keeps the unknown name first.
+        let line = unknown_theme_line("no-such", "Galaxy Light");
+        assert!(diroxide_core::format::within_cells(
+            &line,
+            "Unknown theme no-such."
+        ));
     }
 
     #[test]
