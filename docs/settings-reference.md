@@ -99,6 +99,22 @@ Hidden volumes. Volumes left out of the Volumes list, by device or place, as its
 - Holds: a list of names.
 - Default: `[]`.
 
+### filetypes.retro
+
+Retro file types. Knows the old formats too: Amiga and tracker music, PowerPacker and the like. Off, they read as unknown files.
+
+- Holds: true or false.
+- Default: `false`.
+- Comes with a later alpha.
+
+### check.skip
+
+Folders typed by name only. Folders where diroxide never reads a file's first bytes to find its type, such as a slow share. Files there are typed by their names.
+
+- Holds: a list of names.
+- Default: `[]`.
+- Comes with a later alpha.
+
 ## Keys
 
 ### single_letters
@@ -516,6 +532,14 @@ Quick view line numbers. Starts each line of plain text and code in the quick vi
 
 - Holds: true or false.
 - Default: `false`.
+
+### quick_view.max_document_mb
+
+Quick view documents up to. The largest Word, EPUB or spreadsheet file the quick view opens whole. Past it, the quick view says the file's size and shows nothing more.
+
+- Holds: a number of MB, 1 to 1024.
+- Default: `64`.
+- Comes with a later alpha.
 
 ## Archives and split
 

@@ -332,7 +332,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 104] = [
+pub const SCHEMA: [SettingInfo; 107] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -749,7 +749,8 @@ pub const SCHEMA: [SettingInfo; 104] = [
         kind: K::Flag,
         default: "false",
         help: "Shows pictures as small images in the GUI's thumbnail mode. The words stay.",
-        arrives: Some("alpha.7"),
+        // The grid moved to the plan's alpha.8 (answer 112).
+        arrives: Some("alpha.8"),
     },
     SettingInfo {
         key: "auto_hide_menu",
@@ -971,6 +972,39 @@ pub const SCHEMA: [SettingInfo; 104] = [
         default: "false",
         help: "Starts each line of plain text and code in the quick view with its number.",
         arrives: None,
+    },
+    // Alpha.7's documents and file types (alpha 4's contract step, R28
+    // 2.3 and 4.3).
+    SettingInfo {
+        key: "quick_view.max_document_mb",
+        name: "Quick view documents up to",
+        group: G::Viewer,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1024,
+            unit: "MB",
+        },
+        default: "64",
+        help: "The largest Word, EPUB or spreadsheet file the quick view opens whole. Past it, the quick view says the file's size and shows nothing more.",
+        arrives: Some("alpha.7"),
+    },
+    SettingInfo {
+        key: "filetypes.retro",
+        name: "Retro file types",
+        group: G::Panels,
+        kind: K::Flag,
+        default: "false",
+        help: "Knows the old formats too: Amiga and tracker music, PowerPacker and the like. Off, they read as unknown files.",
+        arrives: Some("alpha.7"),
+    },
+    SettingInfo {
+        key: "check.skip",
+        name: "Folders typed by name only",
+        group: G::Panels,
+        kind: K::Names,
+        default: "[]",
+        help: "Folders where diroxide never reads a file's first bytes to find its type, such as a slow share. Files there are typed by their names.",
+        arrives: Some("alpha.7"),
     },
     // The archive limits (alpha.2, W2a; research/archives.md section 6,
     // R7's starting numbers, plan question 11 of R20).

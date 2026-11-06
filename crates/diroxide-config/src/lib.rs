@@ -31,14 +31,15 @@ pub mod schema;
 pub mod session;
 pub mod settings;
 pub mod store;
+pub mod tasks;
 pub mod theme;
 
 pub use columns::ColumnKind;
 pub use error::ConfigError;
 pub use files::{
     ActionConfig, BankConfig, BanksConfig, ButtonConfig, ConversionsConfig, FileTypeConfig,
-    FileTypesConfig, KeyOverride, KeymapConfig, MenuConfig, MenuItemConfig, MenusConfig,
-    RecipeConfig, ToolOverride, ToolsConfig, key_text_for_file,
+    FileTypesConfig, GroupConfig, KeyOverride, KeymapConfig, MagicConfig, MenuConfig,
+    MenuItemConfig, MenusConfig, RecipeConfig, ToolOverride, ToolsConfig, key_text_for_file,
 };
 pub use paths::Paths;
 pub use presets::{
@@ -53,6 +54,10 @@ pub use settings::{
     SecretEcho, Settings, SingleLetters, SpeedLimitScope, ViewerSettings, WeekStart,
 };
 pub use store::{ConfigProblem, Loaded, problems_line, write_atomic, write_reference};
+pub use tasks::{
+    Announce, CatchUp, OnlineOnly, RunConfig, SayConfig, TaskConfig, TaskConflicts, TaskKind,
+    TriggerConfig, TriggerKind,
+};
 
 use std::path::Path;
 

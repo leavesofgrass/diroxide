@@ -356,6 +356,38 @@ pub struct ActionConfig {
     pub args: Vec<String>,
     /// A plugin to call.
     pub plugin: Option<String>,
+    /// Which slot it fills (alpha.7, R28 4.3): `enter`, `view`,
+    /// `preview`, `convert`, or `user0` to `user9`; none for a named
+    /// action listed by "Actions for NAME".
+    pub slot: Option<String>,
+}
+
+/// A signature of a file type (alpha.7, R28 4.3): bytes at a position in
+/// the first 64, written as hexadecimal pairs with `??` for any byte
+/// (`at = 0, hex = "FF D8 FF"`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct MagicConfig {
+    /// Where the bytes start, 0 to 63.
+    pub at: usize,
+    /// The bytes, hexadecimal pairs and `??`, spaces between them allowed.
+    pub hex: String,
+}
+
+/// A group of file types in `filetypes.toml` (alpha.7, R28 4.3): what
+/// Select by group, `group:`, actions, recipes and theme words name.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct GroupConfig {
+    /// A stable id, as typed in `group:`: `images`.
+    pub id: String,
+    /// The name as said and listed: "Images".
+    pub name: String,
+    /// What the group holds, in one sentence.
+    pub about: String,
+    /// Name patterns that put a file in the group whatever its type: the
+    /// `screenshots` group's names on each system (R29 5.6).
+    pub patterns: Vec<String>,
 }
 
 /// One file type in `filetypes.toml`.
@@ -374,21 +406,36 @@ pub struct FileTypeConfig {
     pub extensions: Vec<String>,
     /// Name patterns (globs).
     pub patterns: Vec<String>,
-    /// Higher priorities are checked first.
+    /// Among the types that match, the higher number wins; a child always
+    /// beats its parent, whatever the numbers (the corrected plan 5.6).
     pub priority: i32,
     /// The actions, the first being the default.
     pub actions: Vec<ActionConfig>,
     /// The media type, such as `application/pdf`.
     pub mime: Option<String>,
+    /// The group it belongs to, by id: `images` (one group a type).
+    pub group: Option<String>,
+    /// Its signatures, tested first: any one matching is a hit.
+    pub magic: Vec<MagicConfig>,
+    /// Its extended condition, tested second: one filter expression over
+    /// the entry and its first 64 bytes (`content:re:"^#!"`).
+    pub when: Option<String>,
+    /// Whether it belongs to the retro pack, read only while
+    /// `filetypes.retro` is on.
+    pub retro: bool,
 }
 
-/// `filetypes.toml`: user file types, added to the built-in ones.
+/// `filetypes.toml`: user file types and groups, added to the built-in
+/// ones.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FileTypesConfig {
     /// The types, as `[[type]]` tables.
     #[serde(rename = "type")]
     pub types: Vec<FileTypeConfig>,
+    /// The groups, as `[[group]]` tables (alpha.7).
+    #[serde(rename = "group")]
+    pub groups: Vec<GroupConfig>,
 }
 
 impl FileTypesConfig {
@@ -441,16 +488,37 @@ impl BanksConfig {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct RecipeConfig {
+    /// A stable id, plain (letters, digits, `-` and `_`): `image-to-jpeg`
+    /// (alpha.7). A plugin's `[[converter]]` and a user's `[[recipe]]`
+    /// become one recipe shape (R28 5.3).
+    pub id: String,
     /// The recipe's name, as listed: "PNG to JPEG".
     pub name: String,
+    /// What it does, in one sentence, meaning first: "Makes a JPEG copy
+    /// of each picture, quality 90."
+    pub about: String,
     /// The extensions it takes, lowercase, without the dot.
     pub from: Vec<String>,
+    /// A group whose files it takes: `images`.
+    pub from_group: Option<String>,
+    /// File type ids it takes: `png`.
+    pub from_type: Vec<String>,
     /// The extension it makes.
     pub to: String,
-    /// The tool id that runs it.
+    /// The tool id that runs it; `carta` for the built-in converter.
     pub tool: String,
-    /// The arguments, with `{input}` and `{output}` placeholders.
+    /// The arguments, with `{input}`, `{typed_input}`, `{output}` and
+    /// `{stem}` placeholders, each one whole, never a shell string. A
+    /// plugin's converter writes the same list as `argv`.
+    #[serde(alias = "argv")]
     pub args: Vec<String>,
+    /// How long one file may take, as written: `10m`, `90s`.
+    pub timeout: Option<String>,
+    /// The largest input it takes, as written: `500 MB`.
+    pub max_input: Option<String>,
+    /// An FFmpeg encoder the recipe needs, such as `libmp3lame`: the
+    /// recipe is offered only when the installed FFmpeg has it.
+    pub needs_encoder: Option<String>,
 }
 
 /// `conversions.toml`: the user's conversion recipes.
@@ -640,5 +708,73 @@ x = 1
         )
         .unwrap();
         assert_eq!(recipes.recipes[0].to, "jpg");
+    }
+
+    /// R28's examples of alpha.7 read: a type with its group, signature,
+    /// condition and slot; a group; a recipe in the one shape, `argv`
+    /// taken for `args` as a plugin's converter writes it.
+    #[test]
+    fn alpha_seven_types_groups_and_recipes_parse() {
+        let types = FileTypesConfig::from_toml(
+            r#"
+[[type]]
+id = "jpeg"
+name = "JPEG image"
+short = "JPEG"
+group = "images"
+parent = "pictures"
+priority = 10
+mime = "image/jpeg"
+extensions = ["jpg", "jpeg", "jpe"]
+magic = [{ at = 0, hex = "FF D8 FF" }]
+
+[[type.actions]]
+slot = "enter"
+name = "Open"
+command = "file.open"
+
+[[type]]
+id = "shell-script"
+name = "shell script"
+short = "script"
+group = "code"
+priority = 5
+when = 'content:re:"^#!"'
+
+[[group]]
+id = "images"
+name = "Images"
+about = "Pictures and photos: PNG, JPEG, GIF, WebP and the like."
+"#,
+        )
+        .unwrap();
+        let jpeg = &types.types[0];
+        assert_eq!(jpeg.group.as_deref(), Some("images"));
+        assert_eq!(jpeg.magic[0].hex, "FF D8 FF");
+        assert_eq!(jpeg.actions[0].slot.as_deref(), Some("enter"));
+        assert_eq!(types.types[1].when.as_deref(), Some("content:re:\"^#!\""));
+        assert!(!types.types[1].retro);
+        assert_eq!(types.groups[0].name, "Images");
+        let recipes = ConversionsConfig::from_toml(
+            r#"
+[[recipe]]
+id = "image-to-jpeg"
+name = "Image to JPEG"
+about = "Makes a JPEG copy of each picture, quality 90."
+from-group = "images"
+to = "jpg"
+tool = "magick"
+argv = ["{typed_input}", "-quality", "90", "{output}"]
+timeout = "10m"
+max-input = "500 MB"
+"#,
+        )
+        .unwrap();
+        let recipe = &recipes.recipes[0];
+        assert_eq!(recipe.id, "image-to-jpeg");
+        assert_eq!(recipe.from_group.as_deref(), Some("images"));
+        assert_eq!(recipe.args.len(), 4);
+        assert_eq!(recipe.max_input.as_deref(), Some("500 MB"));
+        assert_eq!(recipe.needs_encoder, None);
     }
 }
