@@ -1,9 +1,10 @@
 //! Documents as rows (alpha 4, R30 commits 34 and 37): the previewer for
 //! every format the quick view's readers ([`crate::doc`]) read, chosen by
-//! the file's checked type before its name ([`Reader::for_type`]). It
-//! reads at most [`DocPreviewer::max_bytes`] of the file, runs the reader
-//! under the guard, and when the reader cannot read it shows the text,
-//! with why. The rows travel in [`Preview::document`], so the quick view
+//! the file's checked type before its name ([`Reader::for_type`]). A
+//! package (DOCX, EPUB, ODT) is read through the container read path
+//! with its caps ([`DocPreviewer::caps`]); any other format from its
+//! first [`DocPreviewer::max_bytes`]. The reader runs under the guard,
+//! and when it cannot read the file the text is shown, with why. The rows travel in [`Preview::document`], so the quick view
 //! moves by heading, table and link.
 //!
 //! The summary says the format first, then the document's own title,
@@ -16,6 +17,7 @@ use diroxide_core::{DetailGroup, DetailRow, EntryKind};
 use diroxide_filetype::FileType;
 use diroxide_vfs::{OpContext, Registry, VfsError};
 
+use crate::doc::package::ContainerCaps;
 use crate::doc::{self, DocError, DocView, ReadOptions, Reader, svg};
 use crate::{Preview, PreviewError, PreviewKind, PreviewRequest, Previewer};
 
@@ -27,8 +29,10 @@ pub const DEFAULT_MAX_BYTES: u64 = 1024 * 1024;
 pub struct DocPreviewer {
     /// How documents are read: the guard and its deadline.
     pub options: ReadOptions,
-    /// The most bytes of a file read.
+    /// The most bytes of a file that is not a package read.
     pub max_bytes: u64,
+    /// The container read path's caps, for packages.
+    pub caps: ContainerCaps,
 }
 
 impl Default for DocPreviewer {
@@ -36,6 +40,7 @@ impl Default for DocPreviewer {
         Self {
             options: ReadOptions::default(),
             max_bytes: DEFAULT_MAX_BYTES,
+            caps: ContainerCaps::default(),
         }
     }
 }
@@ -116,6 +121,28 @@ impl Previewer for DocPreviewer {
         registry: &Registry,
         ctx: &OpContext,
     ) -> Result<Preview, PreviewError> {
+        let name = &request.entry.name;
+        let base = crate::detail_rows(&request.entry, file_type);
+        let reader = Reader::for_type(file_type, name);
+        if reader.is_package() {
+            let mut source = crate::open_source(request, registry, ctx, self.caps.max_container)?;
+            ctx.check()?;
+            let word = file_type.map_or_else(|| "Document".to_owned(), |t| t.short.clone());
+            return Ok(
+                match doc::read_seekable(reader, name, source.as_mut(), &self.options, &self.caps) {
+                    Ok(view) => {
+                        let line = summary(&format_word(file_type, &view), &view);
+                        document_preview(line, view, base, None, request.max_lines)
+                    }
+                    Err(error) => crate::details_preview(
+                        PreviewKind::Document,
+                        format!("{word}, unreadable: {error}"),
+                        base,
+                        std::iter::empty(),
+                    ),
+                },
+            );
+        }
         let provider = registry.resolve(&request.place)?;
         let mut bytes = Vec::new();
         provider
@@ -124,9 +151,6 @@ impl Previewer for DocPreviewer {
             .read_to_end(&mut bytes)
             .map_err(VfsError::from)?;
         ctx.check()?;
-        let name = &request.entry.name;
-        let base = crate::detail_rows(&request.entry, file_type);
-        let reader = Reader::for_type(file_type, name);
         if reader == Reader::Svg {
             let read = self.options.guard.run({
                 let bytes = bytes.clone();

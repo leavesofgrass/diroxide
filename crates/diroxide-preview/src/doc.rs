@@ -122,6 +122,12 @@ pub enum Reader {
 }
 
 impl Reader {
+    /// Whether the reader reads a zip package through the container read
+    /// path ([`read_seekable`]) rather than the first bytes.
+    pub fn is_package(self) -> bool {
+        matches!(self, Reader::Carta(format) if format.is_package())
+    }
+
     /// The reader a file name says, by its extension.
     pub fn for_name(name: &str) -> Self {
         let ext = name
@@ -145,10 +151,11 @@ impl Reader {
     pub fn for_type(file_type: Option<&FileType>, name: &str) -> Self {
         match file_type.map(|t| t.id.as_str()) {
             Some("markdown") => Reader::Markdown,
-            Some("org") => Reader::Carta(CartaFormat::Org),
-            Some("rst") => Reader::Carta(CartaFormat::Rst),
             Some("svg") => Reader::Svg,
-            _ => Self::for_name(name),
+            Some(id) => {
+                CartaFormat::from_type(id).map_or_else(|| Self::for_name(name), Reader::Carta)
+            }
+            None => Self::for_name(name),
         }
     }
 }
@@ -198,6 +205,30 @@ pub fn read_as(
         Reader::Carta(format) => options.guard.run(move || carta::read(format, &bytes))?,
         Reader::Svg => options.guard.run(move || svg::read(&bytes))?,
         Reader::Text => Ok(text::read(name, &bytes, options.hex_row)),
+    }
+}
+
+/// Reads a document through a seekable source by its reader: a package
+/// (DOCX, EPUB, ODT) through the container read path with its caps, and
+/// every other format from its first `caps.max_container` bytes, as
+/// [`read_as`] does.
+pub fn read_seekable(
+    reader: Reader,
+    name: &str,
+    source: &mut dyn diroxide_vfs::ReadSeek,
+    options: &ReadOptions,
+    caps: &package::ContainerCaps,
+) -> Result<DocView, DocError> {
+    match reader {
+        Reader::Carta(format) if format.is_package() => {
+            package::read_seekable_with(source, options, caps, format.name(), move |bytes, caps| {
+                carta::read_package(format, &bytes, caps.max_table_rows)
+            })
+        }
+        other => {
+            let bytes = package::read_all(source, caps)?;
+            read_as(other, name, bytes, options)
+        }
     }
 }
 

@@ -45,6 +45,13 @@ const INLINE: &[&str] = &[
 
 /// Reads an HTML fragment into a view of a kind.
 pub fn read_fragment(html: &str, kind: DocKind) -> DocView {
+    read_fragment_with(html, kind, usize::MAX)
+}
+
+/// Reads an HTML fragment into a view of a kind, each table cut at
+/// `max_rows` rows and the rest said after it: "and 4,200 more rows"
+/// (alpha 4's container caps).
+pub fn read_fragment_with(html: &str, kind: DocKind, max_rows: usize) -> DocView {
     let fragment = Html::parse_fragment(html);
     let mut walker = Walker {
         b: DocView::builder(kind),
@@ -52,9 +59,19 @@ pub fn read_fragment(html: &str, kind: DocKind) -> DocView {
         depth: 0,
         in_cell: 0,
         quotes: 0,
+        max_rows: max_rows.max(1),
     };
     walker.children(fragment.root_element());
     walker.b.finish()
+}
+
+/// What follows a table cut at its cap: "and 4,200 more rows".
+pub fn more_rows(n: usize) -> String {
+    if n == 1 {
+        "and 1 more row".to_owned()
+    } else {
+        format!("and {} more rows", diroxide_core::format::grouped(n as u64))
+    }
 }
 
 /// Whether an element is hidden. Carried from textweaver's HTML loader.
@@ -94,6 +111,8 @@ struct Walker {
     depth: usize,
     in_cell: usize,
     quotes: usize,
+    /// The most rows of one table.
+    max_rows: usize,
 }
 
 impl Walker {
@@ -347,6 +366,8 @@ impl Walker {
         }
         self.b.start_table();
         let mut first = true;
+        let mut written = 0usize;
+        let mut left = 0usize;
         for (row, in_head) in rows(el) {
             let cells: Vec<ElementRef<'_>> = row
                 .child_elements()
@@ -355,6 +376,11 @@ impl Walker {
             if cells.is_empty() {
                 continue;
             }
+            if written >= self.max_rows {
+                left += 1;
+                continue;
+            }
+            written += 1;
             let header = first && (in_head || cells.iter().all(|c| c.value().name() == "th"));
             first = false;
             self.b.start_table_row(header);
@@ -368,5 +394,10 @@ impl Walker {
             self.b.end_table_row();
         }
         self.b.end_table();
+        if left > 0 {
+            self.b.paragraph();
+            self.b.text(&more_rows(left));
+            self.b.end();
+        }
     }
 }
