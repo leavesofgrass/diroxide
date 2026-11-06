@@ -24,6 +24,7 @@
 //! Nothing is cached on disk in this alpha (decision 6); a cache, when
 //! the columns keep one, is in memory.
 
+pub mod checksum;
 pub mod clean;
 pub mod field;
 pub mod fuzzing;

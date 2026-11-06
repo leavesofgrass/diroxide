@@ -47,11 +47,49 @@ pub fn file_bytes(bytes: &[u8]) -> usize {
     fields
 }
 
-/// A checksum list's text (`SHA256SUMS`, a BSD tagged list, `.sfv`): any
-/// bytes, read as text. The stub counts its lines until the checksum
-/// engine's parser takes its place.
+/// A checksum list's text (`SHA256SUMS`, a BSD tagged list, a one-file
+/// list, `.sfv`): any bytes, read under each kind of list name. No name
+/// taken may be absolute or leave the list's folder, and a GNU list
+/// written from what was read reads back with the same names: either
+/// failing is a panic the fuzzer reports. The number of entries taken.
 pub fn checksum_list(bytes: &[u8]) -> usize {
-    String::from_utf8_lossy(bytes).lines().count()
+    use crate::checksum::Digest;
+    use crate::checksum::list::{ListForm, parse_list, write_list};
+
+    let mut taken = 0;
+    for list_name in [
+        "SHA256SUMS",
+        "list.sfv",
+        "report.pdf.sha256",
+        "checksums.txt",
+    ] {
+        let list = parse_list(bytes, list_name);
+        for entry in &list.entries {
+            assert!(!entry.name.starts_with('/'), "{:?}", entry.name);
+            assert!(!entry.name.contains('\\'), "{:?}", entry.name);
+            assert!(!entry.parts().contains(&".."), "{:?}", entry.name);
+            assert!(!entry.parts().is_empty(), "{:?}", entry.name);
+        }
+        let written: Vec<(String, Digest)> = list
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                let algorithm = *entry.candidates().first()?;
+                let bytes = (0..entry.hex.len() / 2)
+                    .map(|i| u8::from_str_radix(entry.hex.get(2 * i..2 * i + 2)?, 16).ok())
+                    .collect::<Option<Vec<u8>>>()?;
+                Some((entry.name.clone(), Digest { algorithm, bytes }))
+            })
+            .collect();
+        if let Ok(text) = write_list(&written, ListForm::Gnu) {
+            let again = parse_list(text.as_bytes(), "SHA256SUMS");
+            let before: Vec<&str> = written.iter().map(|(name, _)| name.as_str()).collect();
+            let after: Vec<&str> = again.entries.iter().map(|e| e.name.as_str()).collect();
+            assert_eq!(before, after);
+        }
+        taken += list.entries.len();
+    }
+    taken
 }
 
 #[cfg(test)]
@@ -62,6 +100,13 @@ mod tests {
     fn the_entry_points_take_any_bytes() {
         assert!(file_bytes(&[0xFF; 16]) > 0);
         assert!(file_bytes(b"") > 0);
-        assert_eq!(checksum_list(b"ab12  a.txt\n\xFF\xFE\n"), 2);
+        assert_eq!(checksum_list(b"ab12  a.txt\n\xFF\xFE\n"), 0);
+        let line = format!(
+            "{}  a.txt\n\\{}  b\\nc\n{}  ../x\n",
+            "a".repeat(64),
+            "b".repeat(64),
+            "c".repeat(64)
+        );
+        assert_eq!(checksum_list(line.as_bytes()), 6);
     }
 }
