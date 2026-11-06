@@ -142,7 +142,7 @@ pack = [
 
 [[component]]
 id = "diro-git"
-title = "Git places plugin"
+title = "Git plugin"
 kind = "plugin"
 version = "0.1.0-alpha.3"
 license = "Apache-2.0 OR MIT"

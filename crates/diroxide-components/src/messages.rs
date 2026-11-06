@@ -35,13 +35,14 @@ pub const NO_BUILD: &str = "No build for this computer.";
 
 /// The feature a key names, in words, for "X needs ...": `examples` is
 /// "Getting example plugins", `sftp` "Opening SFTP places", `disk`
-/// "Opening a disk image", `rar` "Reading a RAR file". An unknown key is
-/// "This feature".
+/// "Opening a disk image", `git` "Git in the panels", `rar` "Reading a
+/// RAR file". An unknown key is "This feature".
 pub fn feature_words(feature: &str) -> &'static str {
     match feature {
         "examples" => "Getting example plugins",
         "sftp" => "Opening SFTP places",
         "disk" => "Opening a disk image",
+        "git" => "Git in the panels",
         "rar" => "Reading a RAR file",
         "iso" => "Reading an ISO image",
         "previews" => "This preview",
