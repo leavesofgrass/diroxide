@@ -378,6 +378,54 @@ pub const fn retro_line(on: bool) -> &'static str {
     }
 }
 
+/// The folders of the setting `check.skip`: a file in one of them, or in
+/// a folder below one, is typed by its name alone, its first bytes never
+/// read (a slow share, say). Folders are compared with `\` and `/` alike,
+/// a trailing separator ignored, and case ignored, so `D:\Share` covers
+/// `d:/share/2026`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CheckSkip {
+    folders: Vec<String>,
+}
+
+impl CheckSkip {
+    /// The setting's folders, as written; empty ones are ignored.
+    pub fn new(folders: &[String]) -> Self {
+        Self {
+            folders: folders
+                .iter()
+                .map(|f| Self::normal(f))
+                .filter(|f| !f.is_empty())
+                .collect(),
+        }
+    }
+
+    /// A folder written one way: slashes forward, no trailing slash but
+    /// for a root, lowercase.
+    fn normal(folder: &str) -> String {
+        let forward = folder.trim().replace('\\', "/").to_lowercase();
+        let trimmed = forward.trim_end_matches('/');
+        if trimmed.is_empty() && forward.starts_with('/') {
+            "/".to_owned()
+        } else if trimmed.ends_with(':') {
+            format!("{trimmed}/")
+        } else {
+            trimmed.to_owned()
+        }
+    }
+
+    /// Whether the files in this folder are typed by name alone.
+    pub fn covers(&self, folder: &str) -> bool {
+        let folder = Self::normal(folder);
+        self.folders.iter().any(|skip| {
+            folder == *skip
+                || folder
+                    .strip_prefix(skip.as_str())
+                    .is_some_and(|rest| skip.ends_with('/') || rest.starts_with('/'))
+        })
+    }
+}
+
 /// The file types, in checking order, their tree and their groups.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeRegistry {
@@ -997,6 +1045,30 @@ name = "Nothing"
         assert_eq!(checked.unwrap().stage, TypeStage::Signature);
         let skipped = Probe::new(&mystery, Some(head)).skipping(true);
         assert_eq!(types.check(&skipped, &clock), Err(Special::Unknown));
+    }
+
+    /// `check.skip`: a folder and everything below it, slashes, case and
+    /// a trailing separator aside; a sibling that shares a prefix is not
+    /// below it.
+    #[test]
+    fn check_skip_covers_a_folder_and_below() {
+        let skip = CheckSkip::new(&[
+            r"\\nas\Share\".to_owned(),
+            "/mnt/slow".to_owned(),
+            "E:".to_owned(),
+            "  ".to_owned(),
+        ]);
+        assert!(skip.covers(r"\\NAS\share"));
+        assert!(skip.covers("//nas/share/2026/photos"));
+        assert!(skip.covers("/mnt/slow/"));
+        assert!(skip.covers("/mnt/slow/a/b"));
+        assert!(!skip.covers("/mnt/slower"));
+        assert!(!skip.covers("/mnt"));
+        assert!(skip.covers(r"E:\"));
+        assert!(skip.covers(r"e:\Backups\old"));
+        assert!(!skip.covers(r"D:\Backups"));
+        assert!(!CheckSkip::new(&[]).covers("/"));
+        assert!(CheckSkip::new(&["/".to_owned()]).covers("/home/ada"));
     }
 
     #[test]
