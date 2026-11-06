@@ -475,10 +475,14 @@ dependencies = [
  "mbrman",
  "ntfs",
  "proptest",
+ "qcow2-core",
  "serde",
  "serde_json",
  "sha2 0.11.1",
  "tempfile",
+ "vhd",
+ "vhdx-core",
+ "vmdk-core",
 ]
 
 [[package]]
@@ -1051,6 +1055,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest 0.10.7",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1323,6 +1337,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "qcow2-core"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba72c65e070afb15cd7c1fcc0264d9cbc5edbdae452d9b65ad7a2815f694e8fb"
+dependencies = [
+ "flate2",
+ "thiserror",
+]
+
+[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1465,6 +1489,12 @@ dependencies = [
  "tempfile",
  "wait-timeout",
 ]
+
+[[package]]
+name = "safe-read"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "736a7e46a222ed0f1f8724f0aa0d6a2e86d676cda2b35bcdd4d4e31f7b508f65"
 
 [[package]]
 name = "same-file"
@@ -1881,10 +1911,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "vhd"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5596fc97f0653c8588af6d4eb379de3daa35f9b3ae81b326704e8dde3d32f43b"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
+name = "vhdx-core"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4c7136e2f91e025a113cebc69a67a22852f77091f630f5b8c8d9595bb985122"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "virtue"
 version = "0.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "051eb1abcf10076295e815102942cc58f9d5e3b4560e46e53c21e8ff6f3af7b1"
+
+[[package]]
+name = "vmdk-core"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8677c2cd1ebb83ebc1df314a6e0e60450e23a83b61d0f7c11e067706848625cb"
+dependencies = [
+ "flate2",
+ "md-5",
+ "safe-read",
+ "sha2 0.10.9",
+ "thiserror",
+]
 
 [[package]]
 name = "wait-timeout"

@@ -265,11 +265,46 @@ impl Images {
             }
         };
         let file: Arc<dyn Backing> = Arc::new(Cached::new(file));
-        let image = Image::open(file, &name, stamp, &self.limits)?;
+        let siblings = |sibling: &str| self.sibling(peer, container, sibling, depth);
+        let image = Image::open(file, &name, stamp, &self.limits, &siblings)?;
         Ok(Open {
             image,
             checked: Mutex::new(Instant::now()),
         })
+    }
+
+    /// A file beside an image, by its plain name (a VMDK's flat extent):
+    /// through the outer image when the image is inside one, else through
+    /// the host.
+    fn sibling(
+        &self,
+        peer: &Arc<Peer>,
+        container: &Place,
+        name: &str,
+        depth: usize,
+    ) -> Result<Arc<dyn Backing>, DiskError> {
+        match container.archive() {
+            Some((outer, inner)) if claimed(outer) => {
+                let outer_open = self.get_at_depth(peer, outer, depth + 1)?;
+                let folder = inner.rsplit_once('/').map_or("", |(folder, _)| folder);
+                let path = if folder.is_empty() {
+                    name.to_owned()
+                } else {
+                    format!("{folder}/{name}")
+                };
+                Ok(Arc::new(Inside::new(outer_open, &path)?))
+            }
+            _ => {
+                let place = container
+                    .parent()
+                    .and_then(|folder| folder.join(name).ok())
+                    .ok_or(DiskError::NotFound)?
+                    .to_string();
+                let stamp = host::stat(peer, &place)?;
+                let file = HostFile::new(Arc::clone(peer), place, stamp.size);
+                Ok(Arc::new(Cached::new(Arc::new(file))))
+            }
+        }
     }
 
     /// Opens an image from bytes the caller has, for the tests and the

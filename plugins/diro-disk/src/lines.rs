@@ -109,11 +109,11 @@ pub fn opened(image: &str, layout: &str, partitions: Option<usize>, size: u64) -
     }
 }
 
-/// The sparse guard's line, both figures: "Sparse image claims 2.2 TB,
-/// holds 1.1 GB".
+/// The sparse guard's line, both figures: "Sparse: claims 2.2 TB, holds
+/// 1.1 GB". The longest two sizes still fit 40 cells.
 pub fn sparse(claimed: u64, held: u64) -> String {
     format!(
-        "Sparse image claims {}, holds {}",
+        "Sparse: claims {}, holds {}",
         human_size(claimed),
         human_size(held)
     )
@@ -363,7 +363,7 @@ mod tests {
             ),
             (
                 sparse(2_199_023_255_552, 1_073_741_824),
-                "Sparse image claims 2.2 TB, holds 1.1 GB",
+                "Sparse: claims 2.2 TB, holds 1.1 GB",
             ),
             (nested_too_deep(4), "Nested too deep: 4 levels allowed"),
             (names_skipped(3), "3 names skipped"),
@@ -385,6 +385,8 @@ mod tests {
         ] {
             fits(line);
         }
+        // The longest sizes still fit.
+        fits(&sparse(999_900_000_000_000, 999_900_000));
         assert_eq!(listing_notes(0, 0), None);
         assert_eq!(listing_notes(1, 0).as_deref(), Some(LOOP_SKIPPED));
         assert_eq!(

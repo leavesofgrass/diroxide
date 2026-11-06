@@ -11,6 +11,7 @@
 //! - **A volume opens when first used**, so an image of eight partitions
 //!   reads one table and eight boot sectors to list its root.
 
+pub mod container;
 pub mod fs;
 pub mod sniff;
 pub mod source;
@@ -23,6 +24,7 @@ use diroxide_vfs::archive::limits::Limits;
 
 use crate::error::DiskError;
 use crate::host::Stamp;
+use crate::image::container::Siblings;
 use crate::image::fs::FileSystem;
 use crate::image::sniff::{Container, Content};
 use crate::image::source::{Backing, Slice, read_vec};
@@ -217,13 +219,14 @@ impl Image {
         name: &str,
         stamp: Stamp,
         limits: &Limits,
+        siblings: Siblings<'_>,
     ) -> Result<Self, DiskError> {
         let head = read_vec(file.as_ref(), 0, 4096).map_err(|e| DiskError::from_io(&e))?;
         let tail_at = file.len().saturating_sub(512);
         let tail = read_vec(file.as_ref(), tail_at, 512).map_err(|e| DiskError::from_io(&e))?;
         let container = sniff::container(&head, &tail);
         let held = file.len();
-        let disk = disk_of(container, file, limits)?;
+        let disk = container::disk_of(container, file, limits, siblings)?;
         let claimed = disk.len();
         let content = sniff::content(disk.as_ref()).map_err(|e| DiskError::from_io(&e))?;
         let layout = layout_of(content, disk, limits)?;
@@ -336,22 +339,6 @@ impl Image {
     pub fn sparse_line(&self) -> Option<String> {
         (self.container.is_sparse() && self.claimed > self.held)
             .then(|| lines::sparse(self.claimed, self.held))
-    }
-}
-
-/// The disk inside a container.
-fn disk_of(
-    container: Container,
-    file: Arc<dyn Backing>,
-    _limits: &Limits,
-) -> Result<Arc<dyn Backing>, DiskError> {
-    match container {
-        Container::Raw => Ok(file),
-        Container::VhdFixed => {
-            let len = file.len().saturating_sub(512);
-            Ok(Arc::new(Slice::new(file, 0, len)))
-        }
-        other => Err(DiskError::needs_7zip(other.words())),
     }
 }
 

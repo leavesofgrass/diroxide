@@ -52,6 +52,12 @@ ntfs = "0.4.0"
 # LZ4 (R30 commit 92); its default xz and zstd would bring C, so those
 # images go to 7-Zip.
 backhand = { version = "0.25.5", default-features = false, features = ["gzip", "lz4"] }
+# The virtual-disk containers (R30 commit 93), each read only and pure
+# Rust; fixed VHD and VDI are read by the plugin itself (container.rs).
+vhd = "0.1.1"
+vhdx-core = { version = "0.4.1", default-features = false }
+vmdk-core = { version = "0.8.4", default-features = false }
+qcow2-core = { version = "0.3.4", default-features = false }
 
 [dev-dependencies]
 # The host's own settings, for the provider contract list run through the

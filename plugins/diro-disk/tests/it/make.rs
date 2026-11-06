@@ -100,6 +100,7 @@ pub fn opened(bytes: Vec<u8>, name: &str) -> (Image, Arc<Counted>) {
         name,
         stamp,
         &Limits::default(),
+        &|_| Err(diro_disk::error::DiskError::NotFound),
     )
     .unwrap();
     (image, counted)
@@ -296,5 +297,96 @@ pub fn ext2() -> Vec<u8> {
     );
     img[11 * BLOCK..11 * BLOCK + 13].copy_from_slice(b"Hello, world.");
     img[12 * BLOCK..12 * BLOCK + 6].copy_from_slice(b"inside");
+    img
+}
+
+/// Two tebibytes, what each sparse bomb claims.
+pub const TWO_TIB: u64 = 2 << 40;
+
+/// A QCOW2 that claims 2 TiB and holds `disk` in its first clusters:
+/// version 2, 64 KiB clusters, one L2 table.
+pub fn qcow2_bomb(disk: &[u8]) -> Vec<u8> {
+    const CLUSTER: usize = 64 * 1024;
+    let clusters = disk.len().div_ceil(CLUSTER);
+    let mut img = vec![0u8; (3 + clusters) * CLUSTER];
+    img[..4].copy_from_slice(b"QFI\xfb");
+    img[4..8].copy_from_slice(&2u32.to_be_bytes());
+    img[20..24].copy_from_slice(&16u32.to_be_bytes());
+    img[24..32].copy_from_slice(&TWO_TIB.to_be_bytes());
+    img[36..40].copy_from_slice(&4096u32.to_be_bytes()); // L1 entries
+    img[40..48].copy_from_slice(&(CLUSTER as u64).to_be_bytes()); // L1 offset
+    // L1 entry 0 points at the L2 table in cluster 2.
+    let l1 = CLUSTER;
+    img[l1..l1 + 8].copy_from_slice(&((2 * CLUSTER) as u64 | 1 << 63).to_be_bytes());
+    for i in 0..clusters {
+        let data = (3 + i) * CLUSTER;
+        let l2 = 2 * CLUSTER + i * 8;
+        img[l2..l2 + 8].copy_from_slice(&(data as u64 | 1 << 63).to_be_bytes());
+        let from = i * CLUSTER;
+        let to = (from + CLUSTER).min(disk.len());
+        img[data..data + (to - from)].copy_from_slice(&disk[from..to]);
+    }
+    img
+}
+
+/// A dynamic VDI that claims 2 TiB with 1 MiB blocks (a block map of
+/// 8 MiB) and holds `disk` in its first blocks.
+pub fn vdi_bomb(disk: &[u8]) -> Vec<u8> {
+    const BLOCK: usize = 1024 * 1024;
+    let blocks = (TWO_TIB / BLOCK as u64) as usize;
+    let map_at = 512usize;
+    let data_at = (map_at + blocks * 4).next_multiple_of(BLOCK);
+    let used = disk.len().div_ceil(BLOCK);
+    let mut img = vec![0u8; data_at + used * BLOCK];
+    img[..40].copy_from_slice(b"<<< Oracle VM VirtualBox Disk Image >>>\n");
+    img[64..68].copy_from_slice(&[0x7f, 0x10, 0xda, 0xbe]);
+    img[68..72].copy_from_slice(&0x0001_0001u32.to_le_bytes());
+    img[72..76].copy_from_slice(&400u32.to_le_bytes());
+    img[76..80].copy_from_slice(&1u32.to_le_bytes());
+    img[340..344].copy_from_slice(&(map_at as u32).to_le_bytes());
+    img[344..348].copy_from_slice(&(data_at as u32).to_le_bytes());
+    img[368..376].copy_from_slice(&TWO_TIB.to_le_bytes());
+    img[376..380].copy_from_slice(&(BLOCK as u32).to_le_bytes());
+    img[384..388].copy_from_slice(&(blocks as u32).to_le_bytes());
+    img[388..392].copy_from_slice(&(used as u32).to_le_bytes());
+    for i in 0..blocks {
+        let slot = if i < used { i as u32 } else { u32::MAX };
+        img[map_at + i * 4..map_at + i * 4 + 4].copy_from_slice(&slot.to_le_bytes());
+    }
+    img[data_at..data_at + disk.len()].copy_from_slice(disk);
+    img
+}
+
+/// A dynamic VHD that claims 2 TiB with 2 MiB blocks (a table of 4 MiB),
+/// nothing allocated.
+pub fn vhd_bomb() -> Vec<u8> {
+    let entries = (TWO_TIB / (2 << 20)) as usize;
+    let table_at = 512 + 1024;
+    let mut img = vec![0u8; table_at + entries * 4 + 512];
+    let mut footer = vec![0u8; 512];
+    footer[..8].copy_from_slice(b"conectix");
+    footer[8..12].copy_from_slice(&2u32.to_be_bytes());
+    footer[12..16].copy_from_slice(&0x0001_0000u32.to_be_bytes());
+    footer[16..24].copy_from_slice(&512u64.to_be_bytes());
+    footer[40..48].copy_from_slice(&TWO_TIB.to_be_bytes());
+    footer[48..56].copy_from_slice(&TWO_TIB.to_be_bytes());
+    footer[60..64].copy_from_slice(&3u32.to_be_bytes());
+    let sum = !footer.iter().map(|b| u32::from(*b)).sum::<u32>();
+    footer[64..68].copy_from_slice(&sum.to_be_bytes());
+    let header = &mut img[512..512 + 1024];
+    header[..8].copy_from_slice(b"cxsparse");
+    header[8..16].copy_from_slice(&u64::MAX.to_be_bytes());
+    header[16..24].copy_from_slice(&(table_at as u64).to_be_bytes());
+    header[24..28].copy_from_slice(&0x0001_0000u32.to_be_bytes());
+    header[28..32].copy_from_slice(&(entries as u32).to_be_bytes());
+    header[32..36].copy_from_slice(&(2u32 << 20).to_be_bytes());
+    let sum = !header.iter().map(|b| u32::from(*b)).sum::<u32>();
+    header[36..40].copy_from_slice(&sum.to_be_bytes());
+    for i in 0..entries {
+        img[table_at + i * 4..table_at + i * 4 + 4].copy_from_slice(&u32::MAX.to_be_bytes());
+    }
+    let end = img.len() - 512;
+    img[..512].copy_from_slice(&footer);
+    img[end..].copy_from_slice(&footer);
     img
 }
