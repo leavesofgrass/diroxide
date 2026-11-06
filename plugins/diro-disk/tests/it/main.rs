@@ -1,9 +1,27 @@
 //! The disk-image plugin through the host's own checks: its manifest, the
-//! conformance suite against the built program, and the claim the host
-//! takes from it.
+//! conformance suite against the built program, the claim the host takes
+//! from it, and every reader driven through the real host as the app
+//! drives it (`PluginProvider` over the plugin's program, the image's
+//! bytes through the host's `fs/read`).
 
 // Test helpers may unwrap: a failure is the test's failure.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod containers;
+mod ext;
+mod fat;
+mod fixture;
+mod fixtures;
+mod fuzz;
+mod images;
+mod iso;
+mod make;
+mod nesting;
+mod ntfs;
+mod qemu;
+mod sevenzip;
+mod squashfs;
+mod tables;
 
 use std::path::{Path, PathBuf};
 
@@ -11,13 +29,13 @@ use diroxide_plugins::Manifest;
 use diroxide_plugins::conformance::{Group, Verdict, run};
 
 /// The built plugin program.
-fn plugin_exe() -> PathBuf {
+pub fn plugin_exe() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_diro-disk"))
 }
 
 /// The plugin's own manifest with its program replaced by `exe`, in a
 /// folder of its own under `root`.
-fn plugin_folder(root: &Path, exe: &Path) -> PathBuf {
+pub fn plugin_folder(root: &Path, exe: &Path) -> PathBuf {
     let manifest =
         std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("plugin.toml")).unwrap();
     let command = format!("['{}']", exe.display());
@@ -32,7 +50,7 @@ fn plugin_folder(root: &Path, exe: &Path) -> PathBuf {
 
 /// A folder for the test under the build's target folder, never the
 /// system's temporary folder.
-fn scratch() -> tempfile::TempDir {
+pub fn scratch() -> tempfile::TempDir {
     let exe = std::env::current_exe().unwrap();
     let base = exe
         .parent()
@@ -71,6 +89,13 @@ fn the_manifest_reads_claims_the_disk_images_and_keeps_the_40_cell_rule() {
             "{claimed}"
         );
     }
+    // The plugin's own list of what it reads inside itself is the
+    // manifest's claim, one for one.
+    let mut ours: Vec<&str> = diro_disk::provider::CLAIMED.to_vec();
+    ours.sort_unstable();
+    let mut theirs: Vec<&str> = provider.extensions.iter().map(String::as_str).collect();
+    theirs.sort_unstable();
+    assert_eq!(ours, theirs);
     assert_eq!(provider.wants, ["7z", "qemu-img"]);
     assert!(!provider.methods.contains("write_begin"), "read only");
 }

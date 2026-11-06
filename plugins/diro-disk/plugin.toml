@@ -48,3 +48,11 @@ methods = ["connect", "list", "stat", "read", "volumes"]
 lease = "listers"
 extensions = [".iso", ".vhd", ".vhdx", ".vdi", ".vmdk", ".qcow2", ".squashfs", ".sfs", ".img", ".raw", ".bin", ".dd"]
 wants = ["7z", "qemu-img"]
+
+# The title line's words for a place in an image ("Partition 2, in
+# disk.img", "home, in partition 2 of disk.img"), answered by
+# place/describe. The host matches place_info by scheme, and a place in
+# an image is an archive place with none, so it asks only once it matches
+# claimed places too (a contract request of the disk lane).
+[[place_info]]
+scheme = "disk"

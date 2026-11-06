@@ -31,8 +31,53 @@ diroxide-plugins = { path = "../../crates/diroxide-plugins", version = "0.1.0-al
 diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.3" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.146"
+# ISO 9660 with Joliet and Rock Ridge (R30 commit 88): G5a's spike DS2
+# found it right where isomage overflowed its stack, allocated by a
+# claimed size and lost long names. Its std feature brings chrono with
+# the clock, whose iana-time-zone has a build script that compiles C only
+# for Haiku, a system diroxide does not build for.
+hadris-iso = { version = "2.5.0", default-features = false, features = ["std", "sync", "joliet"] }
+# Its error type, named in the plugin's error mapping (already in the tree).
+hadris-io = { version = "2.5.0", default-features = false }
+# FAT12, FAT16 and FAT32 with long names (R30 commit 89), behind a
+# wrapper that refuses every write; without chrono, so its times are its
+# own plain fields.
+fatfs = { version = "0.3.6", default-features = false, features = ["std", "alloc"] }
+# ext2, ext3 and ext4, read only by design, over positional reads (R30
+# commit 90).
+ext4-view = "1.0.0"
+# NTFS, read only, no unsafe (R30 commit 91).
+ntfs = "0.4.0"
+# squashfs with the pure-Rust codecs only, gzip (flate2 over zlib-rs) and
+# LZ4 (R30 commit 92); its default xz and zstd would bring C, so those
+# images go to 7-Zip.
+backhand = { version = "0.25.5", default-features = false, features = ["gzip", "lz4"] }
+# The virtual-disk containers (R30 commit 93), each read only and pure
+# Rust; fixed VHD and VDI are read by the plugin itself (container.rs).
+vhd = "0.1.1"
+vhdx-core = { version = "0.4.1", default-features = false }
+vmdk-core = { version = "0.8.4", default-features = false }
+qcow2-core = { version = "0.3.4", default-features = false }
 
 [dev-dependencies]
+# The host's own settings, for the provider contract list run through the
+# real host (already under diroxide-plugins; no new crate).
+diroxide-config = { path = "../../crates/diroxide-config", version = "0.1.0-alpha.3" }
+# The partition tables written by other hands, for the cross-check of
+# the plugin's own reader (R29 1.3); tests only, pure Rust.
+gptman = { version = "3.1.1", default-features = false }
+# The ISOs the tests write, Joliet and Rock Ridge both (R29 1.10).
+hadris-iso = { version = "2.5.0", default-features = false, features = ["std", "sync", "joliet", "write"] }
+# The committed fixtures, gzipped and checked by their SHA-256 (R29
+# 1.10); pure Rust.
+flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
+sha2 = "0.11.1"
+mbrman = "0.6.1"
+# The real archive provider and a zip writer, for the nesting test
+# (bundle.zip!disk.iso!EFI through the zip, as the app reads it); tests
+# only, pure Rust, already in the main workspace's lock.
+diroxide-archive = { path = "../../crates/diroxide-archive", version = "0.1.0-alpha.3" }
+zip = { version = "=9.0.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 proptest = "1.11.0"
 tempfile = "3.27.0"
 
