@@ -310,7 +310,10 @@ fn not_text(shared: &Shared, entry: &Entry, head: &[u8]) -> Option<String> {
     binary_kind(head)?;
     let found = shared.types.detect(&entry.name, head)?;
     let file_type = shared.types.get(&found.type_id)?;
-    if matches!(file_type.id.as_str(), "text" | "html") {
+    // A type in the text or code group is shown, as text or hex, however
+    // its bytes look (lane TL's note): a Markdown file with a stray NUL
+    // is still a Markdown file.
+    if matches!(file_type.group.as_deref(), Some("text" | "code")) {
         return None;
     }
     Some(diroxide_preview::details(entry, Some(file_type)))
