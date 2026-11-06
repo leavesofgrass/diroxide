@@ -160,7 +160,7 @@ pub(crate) fn pdf_fields(bytes: &[u8]) -> Result<Vec<Field>, MetaError> {
         DetailGroup::Technical,
     );
     let encrypted = if meta.encrypted && meta.page_count == 0 {
-        "yes, its properties are locked"
+        "yes, properties locked"
     } else {
         yes_no(meta.encrypted)
     };

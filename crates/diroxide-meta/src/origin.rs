@@ -404,11 +404,11 @@ pub fn removal_question(name: &str) -> String {
 /// this system.
 pub fn removal_warning() -> &'static str {
     if cfg!(windows) {
-        "Windows will stop warning when you open it."
+        "Windows stops warning when you open it."
     } else if cfg!(target_vendor = "apple") {
-        "macOS will stop warning when you open it."
+        "macOS stops warning when you open it."
     } else {
-        "It will no longer say where it came from."
+        "It will no longer say where it is from."
     }
 }
 
@@ -559,7 +559,7 @@ mod tests {
             no_mark_words("setup.exe"),
         ];
         for line in &lines {
-            assert!(line.chars().count() <= 48, "{line}");
+            assert!(line.chars().count() <= 40, "{line}");
         }
         assert_eq!(lines[0], "Remove the internet mark from setup.exe?");
         assert_eq!(lines[2], "Removed the internet mark from setup.exe");

@@ -196,7 +196,7 @@ pub(crate) fn photo_fields(parts: &ImageParts) -> Vec<Field> {
         add(
             "image.thumbnail",
             "Stored thumbnail",
-            Some("yes, it may show the uncropped picture".to_owned()),
+            Some("yes, maybe uncropped".to_owned()),
             DetailGroup::Technical,
             true,
         );
@@ -205,7 +205,7 @@ pub(crate) fn photo_fields(parts: &ImageParts) -> Vec<Field> {
         add(
             "image.xmp",
             "XMP data",
-            Some("yes, it can hold names and places".to_owned()),
+            Some("yes, may hold names, places".to_owned()),
             DetailGroup::Technical,
             true,
         );
@@ -214,7 +214,7 @@ pub(crate) fn photo_fields(parts: &ImageParts) -> Vec<Field> {
         add(
             "image.iptc",
             "IPTC data",
-            Some("yes, it can hold names and places".to_owned()),
+            Some("yes, may hold names, places".to_owned()),
             DetailGroup::Technical,
             true,
         );
@@ -223,7 +223,7 @@ pub(crate) fn photo_fields(parts: &ImageParts) -> Vec<Field> {
         add(
             "image.more_pictures",
             "More pictures inside",
-            Some("yes, with their own details".to_owned()),
+            Some("yes".to_owned()),
             DetailGroup::Technical,
             true,
         );
@@ -270,13 +270,12 @@ mod tests {
                 "Camera serial: SN12345 (private)",
                 "Author: Ada Example (private)",
                 "Comment: a private note (private)",
-                "Stored thumbnail: yes, it may show the uncropped picture (private)",
+                "Stored thumbnail: yes, maybe uncropped (private)",
             ]
         );
         for field in &fields {
-            assert!(field.line().chars().count() <= 56, "{}", field.line());
+            assert!(field.line().chars().count() <= 40, "{}", field.line());
         }
-        assert!(fields[..6].iter().all(|f| f.line().chars().count() <= 40));
     }
 
     #[test]

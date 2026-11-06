@@ -212,7 +212,7 @@ mod tests {
             Field::new(
                 "image.thumbnail",
                 "Stored thumbnail",
-                "yes, it may show the uncropped picture",
+                "yes, maybe uncropped",
                 DetailGroup::Technical,
             )
             .private(),
@@ -225,7 +225,7 @@ mod tests {
                 "Location: 45.50 north, 122.69 west",
                 "Camera serial: SN12345",
                 "Author: Ada Example",
-                "Stored thumbnail: yes, it may show the uncropped picture",
+                "Stored thumbnail: yes, maybe uncropped",
                 "Its stored thumbnail may show the uncropped picture: crop first, then strip.",
                 "A strip leaves the picture itself and the file's name.",
             ]
