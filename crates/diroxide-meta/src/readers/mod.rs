@@ -7,11 +7,18 @@ use std::sync::Arc;
 
 use crate::reader::{ReadRequest, Reader};
 
+pub mod archive;
+pub mod audio;
 pub mod text;
 
-/// The crate's readers in the pipeline's order.
+/// The crate's readers in the pipeline's order: the fast ones first.
 pub(crate) fn builtin() -> Vec<Arc<dyn Reader>> {
-    vec![Arc::new(text::TextFacts)]
+    vec![
+        Arc::new(audio::AudioTags),
+        Arc::new(audio::AudioProperties),
+        Arc::new(archive::ZipFacts),
+        Arc::new(text::TextFacts),
+    ]
 }
 
 /// Whether a request is for one of `types`, or, when the type is not
