@@ -187,6 +187,26 @@ impl Encoding {
 /// Sends one streamed chunk: the stream's name and its bytes.
 pub(crate) type Emit = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
 
+/// Where a streamed record ends (`split`): at one byte (`lines`, a line
+/// feed; `nul`, a NUL), or, for `cr` (alpha 4's contract step, R29 2.1),
+/// at a line feed or a carriage return, so a progress line a program
+/// rewrites in place (git's `clone --progress`) arrives as each rewrite;
+/// the empty record between a CR and its LF is dropped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Separator {
+    Byte(u8),
+    CarriageReturn,
+}
+
+impl Separator {
+    fn find(self, bytes: &[u8]) -> Option<usize> {
+        match self {
+            Separator::Byte(separator) => bytes.iter().position(|b| *b == separator),
+            Separator::CarriageReturn => bytes.iter().position(|b| *b == b'\n' || *b == b'\r'),
+        }
+    }
+}
+
 struct Pump {
     bytes: Vec<u8>,
 }
@@ -198,7 +218,7 @@ fn pump(
     name: &'static str,
     budget: Arc<AtomicU64>,
     over: Arc<AtomicBool>,
-    stream: Option<(Emit, u8)>,
+    stream: Option<(Emit, Separator)>,
 ) -> Pump {
     let mut kept = Vec::new();
     let mut pending = Vec::new();
@@ -222,9 +242,13 @@ fn pump(
         match &stream {
             Some((emit, separator)) => {
                 pending.extend_from_slice(chunk);
-                while let Some(at) = pending.iter().position(|b| b == separator) {
+                while let Some(at) = separator.find(&pending) {
                     let record: Vec<u8> = pending.drain(..=at).collect();
-                    emit(name, &record[..record.len() - 1]);
+                    let record = &record[..record.len() - 1];
+                    if *separator == Separator::CarriageReturn && record.is_empty() {
+                        continue;
+                    }
+                    emit(name, record);
                 }
             }
             None => kept.extend_from_slice(chunk),
@@ -267,9 +291,12 @@ pub(crate) fn run(
         return Err(invalid("stream lists stdout and stderr only"));
     }
     let separator = match params.get("split").and_then(Value::as_str) {
-        None | Some("lines") => b'\n',
-        Some("nul") => 0,
-        Some(other) => return Err(invalid(format!("split {other} is not lines or nul"))),
+        None | Some("lines") => Separator::Byte(b'\n'),
+        Some("nul") => Separator::Byte(0),
+        Some("cr") => Separator::CarriageReturn,
+        Some(other) => {
+            return Err(invalid(format!("split {other} is not lines, nul or cr")));
+        }
     };
     let timeout = params
         .get("timeout_ms")
@@ -553,6 +580,16 @@ pub(crate) mod tests {
             "bytes" => {
                 out.write_all(b"name-\xff\xfe\0next\0").unwrap();
             }
+            // git's clone --progress: a line rewritten with carriage
+            // returns, then ended with CR LF, on standard error.
+            "progress" => {
+                let mut err = std::io::stderr();
+                err.write_all(
+                    b"Receiving objects:  50% (1/2)\rReceiving objects: 100% (2/2)\r\ndone.\n",
+                )
+                .unwrap();
+                err.flush().unwrap();
+            }
             _ => {}
         }
         out.flush().unwrap();
@@ -797,6 +834,49 @@ pub(crate) mod tests {
                 .any(|(s, r)| s == "stdout" && r.ends_with(b"name-\xff\xfe"))
         );
         assert!(records.iter().any(|(_, r)| r == b"next"));
+    }
+
+    /// `split = "cr"` (alpha 4's contract step, R29 2.1): each rewrite of
+    /// a progress line is a record, and a CR LF ending makes no empty one;
+    /// an unknown split is refused in words.
+    #[test]
+    fn cr_records_each_rewrite_of_a_progress_line() {
+        let (_folder, tools) = fake_tool_folder();
+        let records = Arc::new(Mutex::new(Vec::new()));
+        let seen = Arc::clone(&records);
+        let emit: Emit = Arc::new(move |stream: &str, chunk: &[u8]| {
+            seen.lock().unwrap().push((
+                stream.to_owned(),
+                String::from_utf8_lossy(chunk).into_owned(),
+            ));
+        });
+        run(
+            &params(json!({"tool": FAKE, "args": fake_args("progress", &[]),
+                "stream": ["stderr"], "split": "cr"})),
+            &permissions(&[FAKE]),
+            &tools,
+            None,
+            &CancelFlag::default(),
+            Some(emit),
+        )
+        .unwrap();
+        let records = records.lock().unwrap();
+        let progress: Vec<&str> = records
+            .iter()
+            .filter(|(s, _)| s == "stderr")
+            .map(|(_, r)| r.as_str())
+            .filter(|r| r.starts_with("Receiving") || *r == "done.")
+            .collect();
+        assert_eq!(
+            progress,
+            [
+                "Receiving objects:  50% (1/2)",
+                "Receiving objects: 100% (2/2)",
+                "done."
+            ]
+        );
+        let refused = run_fake(&tools, "progress", json!({"split": "tabs"})).unwrap_err();
+        assert_eq!(refused.message, "split tabs is not lines, nul or cr");
     }
 
     #[test]

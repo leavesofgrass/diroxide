@@ -207,6 +207,37 @@ impl ColumnValue {
             sort: None,
         }
     }
+
+    /// The value of a cell the plugin cannot answer: "unavailable: plugin
+    /// stopped".
+    pub fn unavailable() -> Self {
+        Self {
+            text: lines::column_unavailable(),
+            sort: None,
+        }
+    }
+}
+
+/// A column an enabled plugin declares (`[[column]]`), as file panels
+/// offer it (alpha.7): its key `PLUGIN.COLUMN` names it in the columns
+/// setting.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PluginColumn {
+    /// The plugin's id.
+    pub plugin: String,
+    /// The column's id in its manifest.
+    pub column: String,
+    /// Its header in words.
+    pub header: String,
+    /// How many places it takes in a batch, at most 500.
+    pub batch: usize,
+}
+
+impl PluginColumn {
+    /// Its key in the columns setting: `git.git`.
+    pub fn key(&self) -> String {
+        format!("{}.{}", self.plugin, self.column)
+    }
 }
 
 /// `column/format`'s parameters: a column, a folder and its places.

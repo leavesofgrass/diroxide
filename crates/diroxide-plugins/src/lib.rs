@@ -87,7 +87,10 @@ pub mod testing;
 pub mod tools;
 pub mod transport;
 
-pub use ask::{Answer, Question, QuestionKind, TextDocument};
+pub use ask::{
+    Answer, DiffDocuments, DiffSide, FieldValue, Form, FormAnswer, FormField, Question,
+    QuestionKind, TextDocument,
+};
 pub use error::PluginError;
 pub use host::{Host, HostEvent, HostServices, Launcher, PluginInfo};
 pub use manifest::{CommandSpec, Manifest, ManifestReport, Problem, Severity};

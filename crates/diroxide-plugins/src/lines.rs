@@ -81,6 +81,12 @@ pub fn pending() -> String {
     "pending".to_owned()
 }
 
+/// A plugin column's cell when the plugin cannot answer (it stopped,
+/// crashed or timed out): "unavailable: plugin stopped" (R28 3.2).
+pub fn column_unavailable() -> String {
+    "unavailable: plugin stopped".to_owned()
+}
+
 /// A provider's lost connection when the plugin gave no reason.
 pub fn connection_lost() -> String {
     "Connection lost".to_owned()

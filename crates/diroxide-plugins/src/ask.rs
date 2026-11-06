@@ -23,9 +23,11 @@
 //!   timeout: the supervisor pauses a request's timer while the host
 //!   serves one of the plugin's requests.
 //!
-//! `ui/form` and `ui/show_diff` are shapes only in this alpha ([`Form`],
-//! [`DiffDocuments`]): fixed so they are decided once, served when the
-//! git plugin arrives.
+//! `ui/form` and `ui/show_diff` have their final shapes ([`Form`] with
+//! [`FormAnswer`], [`DiffDocuments`]) and the app's side
+//! ([`crate::HostServices::form`] and [`crate::HostServices::show_diff`])
+//! since alpha 4's contract step; the host answers them "not served"
+//! until the host-pieces lane serves them for the git plugin.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -867,6 +869,114 @@ pub struct DiffSide {
     pub text: String,
 }
 
+/// The value the owner gave one field of a form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FieldValue {
+    /// A `text`, `multiline` or `path` field's text.
+    Text(String),
+    /// A `choice` field's choice.
+    Choice(String),
+    /// A `checkbox` field.
+    Checked(bool),
+    /// A `secret` field: it goes to the plugin and nowhere else, never to
+    /// a log, a history or the screen.
+    Secret(Secret),
+}
+
+/// The owner's answer to a form (`ui/form`): every field's value by its
+/// id, or Escape.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FormAnswer {
+    /// The default button, or Enter on the last field.
+    Submitted(Vec<(String, FieldValue)>),
+    /// Escape, or the Cancel button.
+    Cancelled,
+}
+
+impl FormAnswer {
+    /// The answer on the wire: `{"cancelled": true}`, or `{"values":
+    /// {"id": value}}` with a secret's text in its field alone.
+    pub fn to_value(&self) -> Value {
+        match self {
+            FormAnswer::Cancelled => json!({"cancelled": true}),
+            FormAnswer::Submitted(values) => {
+                let mut map = serde_json::Map::new();
+                for (id, value) in values {
+                    let value = match value {
+                        FieldValue::Text(text) | FieldValue::Choice(text) => json!(text),
+                        FieldValue::Checked(checked) => json!(checked),
+                        FieldValue::Secret(secret) => json!(secret.expose()),
+                    };
+                    map.insert(id.clone(), value);
+                }
+                json!({"values": map})
+            }
+        }
+    }
+}
+
+/// The field kinds a form may hold.
+pub const FIELD_KINDS: [&str; 6] = ["text", "multiline", "choice", "checkbox", "path", "secret"];
+
+/// Reads `ui/form`'s parameters into a form, its title ending with the
+/// plugin's name as a question's does (alpha 4's contract step: the shape
+/// the app's side, [`crate::HostServices::form`], receives). Every label
+/// and the summary are cleaned; a field of an unknown kind, a choice with
+/// no choices, two fields with one id or a focus on no field is refused.
+pub fn read_form(params: &Params, plugin: &str) -> Result<Form, RpcError> {
+    let invalid = |why: String| RpcError::new(ErrorKind::InvalidParams, why);
+    let mut form: Form = serde_json::from_value(Value::Object(params.clone()))
+        .map_err(|e| invalid(format!("the form cannot be read: {e}")))?;
+    form.title = lines::dialog_title(&clean_text(&form.title, MAX_ANNOUNCE_CHARS), plugin);
+    form.summary = form
+        .summary
+        .map(|s| clean_text(&s, MAX_ANNOUNCE_CHARS))
+        .filter(|s| !s.is_empty());
+    let mut ids = HashSet::new();
+    for field in &mut form.fields {
+        field.label = clean_text(&field.label, MAX_ANNOUNCE_CHARS);
+        if !FIELD_KINDS.contains(&field.kind.as_str()) {
+            return Err(invalid(format!(
+                "field {} has the kind {}, which is not one of {}",
+                field.id,
+                field.kind,
+                FIELD_KINDS.join(", ")
+            )));
+        }
+        if field.kind == "choice" && field.choices.is_empty() {
+            return Err(invalid(format!("field {} has no choices", field.id)));
+        }
+        if !ids.insert(field.id.clone()) {
+            return Err(invalid(format!("two fields have the id {}", field.id)));
+        }
+    }
+    if let Some(focus) = &form.focus
+        && !ids.contains(focus)
+    {
+        return Err(invalid(format!(
+            "the focus {focus} is no field of the form"
+        )));
+    }
+    Ok(form)
+}
+
+/// Reads `ui/show_diff`'s parameters: two documents and a title ending
+/// with the plugin's name (the shape [`crate::HostServices::show_diff`]
+/// receives).
+pub fn read_diff(params: &Params, plugin: &str) -> Result<DiffDocuments, RpcError> {
+    let mut diff: DiffDocuments =
+        serde_json::from_value(Value::Object(params.clone())).map_err(|e| {
+            RpcError::new(
+                ErrorKind::InvalidParams,
+                format!("the documents cannot be read: {e}"),
+            )
+        })?;
+    diff.title = lines::document_title(&clean_text(&diff.title, MAX_ANNOUNCE_CHARS), plugin);
+    diff.old.title = clean_text(&diff.old.title, MAX_ANNOUNCE_CHARS);
+    diff.new.title = clean_text(&diff.new.title, MAX_ANNOUNCE_CHARS);
+    Ok(diff)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -877,6 +987,84 @@ mod tests {
 
     fn ask(value: Value) -> Result<(Question, Option<CompletionWanted>), RpcError> {
         read_question(&params(value), "sftp", "SFTP places")
+    }
+
+    /// `ui/form`'s shape (alpha 4's contract step): the git plugin's
+    /// commit dialog reads, attributed; a wrong field is refused in words;
+    /// a secret's text goes in its field alone and never in a debug line.
+    #[test]
+    fn a_form_reads_attributed_and_its_answer_carries_a_secret_once() {
+        let form = read_form(
+            &params(json!({"title": "Commit", "summary": "2 files staged",
+                "fields": [
+                    {"id": "message", "label": "Message", "kind": "multiline"},
+                    {"id": "sign", "label": "Sign off", "kind": "checkbox", "default": false},
+                    {"id": "key", "label": "Key passphrase", "kind": "secret"}
+                ],
+                "focus": "message", "default_button": "Commit"})),
+            "Git",
+        )
+        .unwrap();
+        assert_eq!(form.title, "Commit (Git)");
+        assert_eq!(form.fields.len(), 3);
+        let refused = |fields: Value, focus: Option<&str>| {
+            let mut p = json!({"title": "x", "fields": fields});
+            if let Some(focus) = focus {
+                p["focus"] = json!(focus);
+            }
+            read_form(&params(p), "Git").unwrap_err().message
+        };
+        assert_eq!(
+            refused(json!([{"id": "a", "label": "A", "kind": "slider"}]), None),
+            "field a has the kind slider, which is not one of text, multiline, choice, checkbox, path, secret"
+        );
+        assert_eq!(
+            refused(
+                json!([{"id": "b", "label": "Branch", "kind": "choice"}]),
+                None
+            ),
+            "field b has no choices"
+        );
+        assert_eq!(
+            refused(
+                json!([{"id": "a", "label": "A", "kind": "text"}, {"id": "a", "label": "B", "kind": "text"}]),
+                None
+            ),
+            "two fields have the id a"
+        );
+        assert_eq!(
+            refused(
+                json!([{"id": "a", "label": "A", "kind": "text"}]),
+                Some("z")
+            ),
+            "the focus z is no field of the form"
+        );
+        let answer = FormAnswer::Submitted(vec![
+            (
+                "message".to_owned(),
+                FieldValue::Text("Fix the title".to_owned()),
+            ),
+            ("sign".to_owned(), FieldValue::Checked(true)),
+            (
+                "key".to_owned(),
+                FieldValue::Secret(Secret::new("canary-5e1d-not-a-key".to_owned())),
+            ),
+        ]);
+        assert_eq!(
+            answer.to_value(),
+            json!({"values": {"message": "Fix the title", "sign": true, "key": "canary-5e1d-not-a-key"}})
+        );
+        assert!(!format!("{answer:?}").contains("canary"));
+        assert_eq!(FormAnswer::Cancelled.to_value(), json!({"cancelled": true}));
+        let diff = read_diff(
+            &params(json!({"title": "hello.txt",
+                "old": {"title": "HEAD", "text": "a\n"},
+                "new": {"title": "working tree", "text": "b\n"}})),
+            "Git",
+        )
+        .unwrap();
+        assert_eq!(diff.title, "hello.txt (Git)");
+        assert_eq!(diff.new.title, "working tree");
     }
 
     #[test]
