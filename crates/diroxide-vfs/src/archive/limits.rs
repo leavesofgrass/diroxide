@@ -14,10 +14,10 @@
 //! is `spool_disk_gib`, and `max_nesting` is itself. The defaults match
 //! the schema's; the app's mapping is a straight copy with the units.
 
-/// A mebibyte, in bytes.
-pub(crate) const MIB: u64 = 1 << 20;
-/// A gibibyte, in bytes.
-pub(crate) const GIB: u64 = 1 << 30;
+/// A mebibyte, in bytes: the unit the `[archives]` keys in MiB use.
+pub const MIB: u64 = 1 << 20;
+/// A gibibyte, in bytes: the unit the `[archives]` keys in GiB use.
+pub const GIB: u64 = 1 << 30;
 
 /// Limits that keep a hostile archive from filling the disk or memory
 /// (research/archives.md section 6). Each becomes a key of the

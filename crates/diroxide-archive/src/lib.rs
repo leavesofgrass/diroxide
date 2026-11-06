@@ -26,8 +26,10 @@ pub mod fuzzing;
 pub mod guard;
 pub mod index;
 pub mod job;
-pub mod limits;
-pub mod names;
+// The limits and the member-name rules live in diroxide-vfs since alpha
+// 4's contract step (P4), so the disk-image plugin takes them without the
+// job engine; their paths here are unchanged.
+pub use diroxide_vfs::archive::{limits, names};
 pub mod pack;
 mod pipe;
 pub mod provider;

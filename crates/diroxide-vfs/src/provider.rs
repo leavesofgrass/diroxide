@@ -506,6 +506,13 @@ pub trait Provider: Send + Sync + fmt::Debug {
     fn as_resumable(&self) -> Option<&dyn ResumableWrite> {
         None
     }
+
+    /// The extended attributes or streams, when this provider reads them;
+    /// a place says whether it can with
+    /// [`Capabilities::extended_attributes`](crate::Capabilities::extended_attributes).
+    fn as_extended(&self) -> Option<&dyn crate::ExtendedAttributes> {
+        None
+    }
 }
 
 #[cfg(test)]
