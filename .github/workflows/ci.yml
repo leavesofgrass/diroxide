@@ -139,12 +139,15 @@ jobs:
         run: |
           cp Cargo.lock fuzz/Cargo.lock
           cp plugins/diro-sftp/Cargo.lock plugins/diro-sftp/fuzz/Cargo.lock
+          cp plugins/diro-disk/Cargo.lock plugins/diro-disk/fuzz/Cargo.lock
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             fuzz
             plugins/diro-sftp/fuzz
+            plugins/diro-disk/fuzz
       - name: Check every fuzz target
         run: |
           cargo check --manifest-path fuzz/Cargo.toml --bins
           cargo check --manifest-path plugins/diro-sftp/fuzz/Cargo.toml --bins
+          cargo check --manifest-path plugins/diro-disk/fuzz/Cargo.toml --bins
