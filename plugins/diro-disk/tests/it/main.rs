@@ -12,6 +12,7 @@ mod ext;
 mod fat;
 mod fixture;
 mod fixtures;
+mod fuzz;
 mod images;
 mod iso;
 mod make;

@@ -21,6 +21,7 @@
 //!   ([`lines`]); the host adds the plugin's name last.
 
 pub mod error;
+pub mod fuzzing;
 pub mod host;
 pub mod image;
 pub mod lines;

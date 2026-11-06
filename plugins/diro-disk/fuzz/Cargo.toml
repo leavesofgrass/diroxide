@@ -1,0 +1,88 @@
+# The disk-image plugin's fuzz targets (R30 commit 96), a workspace of its
+# own: libFuzzer is C++, so it never enters the plugin's own build. Run on
+# a nightly toolchain, from plugins/diro-disk:
+#
+#   cargo fuzz run iso
+#
+# Each target's body is a plain function in diro_disk::fuzzing, which the
+# plugin's own tests replay on every fixture image and on cut and bent
+# copies of them (tests/it/fuzz.rs).
+
+[workspace]
+
+[package]
+name = "diro-disk-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+diro-disk = { path = ".." }
+
+[[bin]]
+name = "partition_table"
+path = "fuzz_targets/partition_table.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "iso"
+path = "fuzz_targets/iso.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fat"
+path = "fuzz_targets/fat.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ext"
+path = "fuzz_targets/ext.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ntfs"
+path = "fuzz_targets/ntfs.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "squashfs"
+path = "fuzz_targets/squashfs.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "container_header"
+path = "fuzz_targets/container_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "seven_listing"
+path = "fuzz_targets/seven_listing.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "image"
+path = "fuzz_targets/image.rs"
+test = false
+doc = false
+bench = false
