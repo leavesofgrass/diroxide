@@ -47,6 +47,9 @@ diroxide-ops = { path = "crates/diroxide-ops", version = "0.1.0-alpha.3" }
 diroxide-search = { path = "crates/diroxide-search", version = "0.1.0-alpha.3" }
 diroxide-diff = { path = "crates/diroxide-diff", version = "0.1.0-alpha.3" }
 diroxide-filetype = { path = "crates/diroxide-filetype", version = "0.1.0-alpha.3" }
+# Metadata: fields by cost class, checksums and the strip (alpha 4's
+# contract step).
+diroxide-meta = { path = "crates/diroxide-meta", version = "0.1.0-alpha.3" }
 diroxide-config = { path = "crates/diroxide-config", version = "0.1.0-alpha.3" }
 diroxide-plugins = { path = "crates/diroxide-plugins", version = "0.1.0-alpha.3" }
 diroxide-tools = { path = "crates/diroxide-tools", version = "0.1.0-alpha.3" }
