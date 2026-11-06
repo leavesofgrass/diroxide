@@ -172,3 +172,12 @@ path = "fuzz_targets/meta_checksum_list.rs"
 test = false
 doc = false
 bench = false
+
+# The strip into a copy (the metadata lane, R30 commit 50): a copy read
+# again holds nothing the strip takes out.
+[[bin]]
+name = "meta_strip"
+path = "fuzz_targets/meta_strip.rs"
+test = false
+doc = false
+bench = false

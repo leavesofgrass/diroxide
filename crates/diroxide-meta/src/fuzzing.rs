@@ -20,8 +20,31 @@ const LIMITS: ReadLimits = ReadLimits {
 };
 
 /// One file's contents through every reader of the crate, whatever the
-/// file's name or type would say: the number of fields they gave.
+/// file's name or type would say, and through the Exif reader and the
+/// internet mark's readers as a block of their own: the number of fields
+/// and facts they gave.
 pub fn file_bytes(bytes: &[u8]) -> usize {
+    let mut found = usize::from(crate::exif::parse(bytes).is_some());
+    found += usize::from(crate::origin::InternetMark::from_zone_identifier(bytes).is_some());
+    found += usize::from(crate::origin::InternetMark::from_quarantine(bytes).is_some());
+    found + readers_on(bytes)
+}
+
+/// A picture's bytes through the strip: when it is written, its copy is
+/// read again, and nothing the strip takes out may still be in it.
+pub fn strip(bytes: &[u8]) -> usize {
+    match crate::strip::strip_bytes(bytes.to_vec()) {
+        Ok(stripped) => {
+            if let Ok(left) = crate::strip::left_in_copy(&stripped.bytes) {
+                assert!(left.still.is_empty(), "{:?}", left.still);
+            }
+            stripped.bytes.len()
+        }
+        Err(_) => 0,
+    }
+}
+
+fn readers_on(bytes: &[u8]) -> usize {
     let place = Place::parse(if cfg!(windows) {
         "C:\\fuzz\\input"
     } else {
@@ -100,6 +123,8 @@ mod tests {
     fn the_entry_points_take_any_bytes() {
         assert!(file_bytes(&[0xFF; 16]) > 0);
         assert!(file_bytes(b"") > 0);
+        assert_eq!(strip(b"not a picture"), 0);
+        assert!(strip(&crate::image::tests::jpeg(&[(0xFE, b"note".to_vec())])) > 0);
         assert_eq!(checksum_list(b"ab12  a.txt\n\xFF\xFE\n"), 0);
         let line = format!(
             "{}  a.txt\n\\{}  b\\nc\n{}  ../x\n",
