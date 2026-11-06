@@ -234,6 +234,43 @@ pub struct Recorder {
     pub opened: Mutex<Vec<PathBuf>>,
     /// The web and mail addresses opened.
     pub addresses: Mutex<Vec<String>>,
+    /// The programs Open with started, by name, and the files (lane TA).
+    pub started_with: Mutex<Vec<(String, PathBuf)>>,
+    /// The files handed to the system's Open with dialog (lane TA).
+    pub chosen_another: Mutex<Vec<PathBuf>>,
+}
+
+/// Open with's two programs in tests: Reader, the default, and Writer.
+pub fn open_with_programs() -> diroxide_app::typing::OpenWithRows {
+    let row = |name: &str, default: bool| diroxide_app::typing::OpenWithRow {
+        name: name.to_owned(),
+        id: name.to_lowercase(),
+        default,
+    };
+    diroxide_app::typing::OpenWithRows {
+        rows: vec![row("Reader", true), row("Writer", false)],
+        choose_another: true,
+        unread: None,
+    }
+}
+
+impl diroxide_app::OpenWithPrograms for Recorder {
+    fn list(&self, _file: &Path, _mime: Option<&str>) -> diroxide_app::typing::OpenWithRows {
+        open_with_programs()
+    }
+
+    fn start(&self, id: &str, file: &Path, _mime: Option<&str>) -> Result<(), String> {
+        self.started_with
+            .lock()
+            .unwrap()
+            .push((id.to_owned(), file.to_owned()));
+        Ok(())
+    }
+
+    fn choose_another(&self, file: &Path) -> Result<(), String> {
+        self.chosen_another.lock().unwrap().push(file.to_owned());
+        Ok(())
+    }
 }
 
 impl Launcher for Recorder {
@@ -363,6 +400,7 @@ impl Session {
         let mut runtime = Runtime::new(Arc::new(registry))
             .with_launcher(setup.recorder.clone())
             .with_opener(setup.recorder.clone())
+            .with_open_with(setup.recorder.clone())
             .with_components_offline();
         if let Some(paths) = paths {
             runtime = runtime.with_paths(paths.clone());

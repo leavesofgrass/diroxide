@@ -545,6 +545,10 @@ pub struct ToolOverride {
     pub path: Option<String>,
     /// Never use this tool.
     pub disabled: bool,
+    /// The owner needs this tool: `diro doctor --check` with no tool
+    /// named checks it, beside the programs the recipes run (K's request
+    /// 1, built by lane TA).
+    pub needed: bool,
 }
 
 /// `tools.toml`: one table per tool id.

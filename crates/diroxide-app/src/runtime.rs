@@ -61,6 +61,8 @@ mod queue;
 mod saved_queue;
 // Free space asked with a short limit (lane A3, R25 commit 90).
 mod space;
+// The readers of the background type check (lane TA).
+mod typing;
 
 pub(crate) use space::{question_lines, room_words};
 
@@ -100,6 +102,50 @@ impl Opener for SystemOpener {
 
     fn open_address(&self, address: &str) -> Result<(), String> {
         opener::open(address).map_err(|e| e.to_string())
+    }
+}
+
+/// Lists and starts the programs that open a file, for Open with (alpha
+/// 4, lane TA): the system's lists and its own dialog in the real
+/// runtime; a recorder in tests, which never starts a program. Nothing is
+/// ever run through a shell.
+pub trait OpenWithPrograms: Send + Sync {
+    /// The programs the system lists for a file (by its media type on
+    /// Linux and the BSDs, by its extension on Windows), the default
+    /// first.
+    fn list(&self, file: &Path, mime: Option<&str>) -> crate::typing::OpenWithRows;
+
+    /// Starts the program with this id on the file, never waited for; the
+    /// error in lowercase words.
+    fn start(&self, id: &str, file: &Path, mime: Option<&str>) -> Result<(), String>;
+
+    /// Hands the file to the system's own Open with dialog, never waited
+    /// for; the error in words ("No Open with dialog on this system.").
+    fn choose_another(&self, file: &Path) -> Result<(), String>;
+}
+
+/// The system's Open with lists: the registry on Windows, the desktop
+/// files on Linux and the BSDs, the application bundles on macOS.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemOpenWith;
+
+impl OpenWithPrograms for SystemOpenWith {
+    fn list(&self, file: &Path, mime: Option<&str>) -> crate::typing::OpenWithRows {
+        crate::typing::OpenWithRows::of(&diroxide_vfs::open_with_list(file, mime).default_first())
+    }
+
+    fn start(&self, id: &str, file: &Path, mime: Option<&str>) -> Result<(), String> {
+        let list = diroxide_vfs::open_with_list(file, mime);
+        let app = list
+            .apps
+            .iter()
+            .find(|app| app.id == id)
+            .ok_or_else(|| "the system no longer lists that program".to_owned())?;
+        app.start(file).map_err(|e| e.to_string())
+    }
+
+    fn choose_another(&self, file: &Path) -> Result<(), String> {
+        diroxide_vfs::choose_another_program(file).map_err(|e| e.to_string())
     }
 }
 
@@ -525,6 +571,12 @@ pub struct Runtime {
     /// computer's, for tests that never list the owner's drives (lane
     /// A3).
     local_volumes: Option<Vec<diroxide_vfs::LocalPlace>>,
+    /// Each panel's type check, counted, so a newer one stops the
+    /// readers of the one before (lane TA).
+    type_readers: typing::TypeReaders,
+    /// Open with's lists and starts (lane TA): the system's, or a
+    /// recorder in tests.
+    open_with: Arc<dyn OpenWithPrograms>,
 }
 
 impl fmt::Debug for Runtime {
@@ -614,6 +666,8 @@ impl Runtime {
             space_limit: space::SPACE_LIMIT,
             trash,
             local_volumes: None,
+            type_readers: typing::TypeReaders::default(),
+            open_with: Arc::new(SystemOpenWith),
         }
     }
 
@@ -846,6 +900,13 @@ impl Runtime {
     /// The same runtime with another opener (a recorder in tests).
     pub fn with_opener(mut self, opener: Arc<dyn Opener>) -> Self {
         self.opener = opener;
+        self
+    }
+
+    /// The same runtime with other Open with lists and starts (a recorder
+    /// in tests, which never starts a program).
+    pub fn with_open_with(mut self, programs: Arc<dyn OpenWithPrograms>) -> Self {
+        self.open_with = programs;
         self
     }
 
@@ -1717,6 +1778,87 @@ impl Runtime {
                 self.worker(move |shared| {
                     let result = filter_contents(&registry, place, *filter, hidden, &clock);
                     shared.send(AppEvent::FilterContents { request, result });
+                });
+            }
+            Request::CheckTypes {
+                side,
+                listing,
+                folder,
+                items,
+                urgent,
+                types,
+                clock,
+            } => {
+                let job = typing::TypeJob {
+                    side,
+                    listing,
+                    generation: self.type_readers.next(side),
+                    current: self.type_readers.current(side),
+                    folder,
+                    items,
+                    next: AtomicUsize::new(0),
+                    urgent,
+                    types,
+                    clock: clock.0,
+                    registry: Arc::clone(&self.registry),
+                };
+                self.worker(move |shared| typing::run(shared, &job));
+            }
+            Request::StopTypes(side) => {
+                self.type_readers.next(side);
+            }
+            Request::ListOpenWith { place, mime } => {
+                let programs = Arc::clone(&self.open_with);
+                self.worker(move |shared| {
+                    let list = match place.local_path() {
+                        Some(path) => programs.list(Path::new(path), mime.as_deref()),
+                        None => crate::typing::OpenWithRows::default(),
+                    };
+                    shared.send(AppEvent::OpenWithListed {
+                        place,
+                        list: Box::new(list),
+                    });
+                });
+            }
+            Request::StartWith {
+                place,
+                program,
+                mime,
+            } => {
+                let programs = Arc::clone(&self.open_with);
+                self.worker(move |shared| {
+                    let name = place
+                        .name()
+                        .map_or_else(|| place.to_string(), str::to_owned);
+                    let name = diroxide_core::names::display_name(&name).into_owned();
+                    let object = format!("{name} with {}", program.name);
+                    let cause = match (limits::opener_refusal(&place), place.local_path()) {
+                        (Some(refusal), _) => Some(refusal.to_lowercase()),
+                        (None, None) => {
+                            Some("only files on this computer open in other programs".to_owned())
+                        }
+                        (None, Some(path)) => programs
+                            .start(&program.id, Path::new(path), mime.as_deref())
+                            .err(),
+                    };
+                    if let Some(cause) = cause {
+                        let line = Message::could_not("open", &object, &cause, "");
+                        shared.send(AppEvent::Problem(line));
+                    }
+                });
+            }
+            Request::ChooseAnother(place) => {
+                let programs = Arc::clone(&self.open_with);
+                self.worker(move |shared| {
+                    let said = match place.local_path() {
+                        Some(path) => programs.choose_another(Path::new(path)).err(),
+                        None => {
+                            Some("No Open with dialog for a place off this computer.".to_owned())
+                        }
+                    };
+                    if let Some(said) = said {
+                        shared.send(AppEvent::Problem(Message::info(said)));
+                    }
                 });
             }
         }

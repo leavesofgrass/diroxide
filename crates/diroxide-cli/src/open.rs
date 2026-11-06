@@ -555,7 +555,10 @@ pub fn build_for(
     let mut app_options = AppOptions::new(left, right);
     app_options.settings = settings;
     app_options.keymap = keymap;
-    app_options.types = TypeRegistry::builtin().with_config(&config.filetypes);
+    // The retro pack, read only while its setting is on (lane TL's note).
+    app_options.types = TypeRegistry::builtin()
+        .with_config(&config.filetypes)
+        .with_retro(app_options.settings.filetypes.retro);
     app_options.clock = std::sync::Arc::new(diroxide_app::startup::local_clock());
     app_options.startup = startup;
     let app = App::new(app_options);

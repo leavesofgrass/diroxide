@@ -59,6 +59,9 @@ mod split_join;
 mod trash;
 // Streamed listings reach the panel (lane A2).
 mod streaming;
+// File types in the app: the background check, typed actions, groups,
+// Open with and the encoding chooser (alpha 4, lane TA).
+mod types;
 mod viewer;
 mod views;
 // The Volumes list (lane A3).

@@ -745,29 +745,48 @@ impl App {
                 Message::from_error("open", &entry.display_name(), &VfsError::NameNotUnicode);
             return vec![self.say(message)];
         }
+        // The type's own Enter action, when it has one (lane TA).
+        if let Some(effects) = self.typed_slot(crate::typing::Slot::Enter) {
+            return effects;
+        }
         match entry.kind {
             EntryKind::Archive => self.open(side, place.into_archive(), None),
             _ if entry.is_container() => self.open(side, place, None),
-            _ if is_program(&entry) => {
-                let name = entry.display_name().into_owned();
-                let question =
-                    crate::dialog::with_default_no(Message::question(&format!("Run {name}")));
-                let listing =
-                    vec![diroxide_core::names::spell_out(&place.to_string()).into_owned()];
-                self.open_dialog(
-                    crate::dialog::Dialog::Confirm {
-                        question,
-                        listing,
-                        on_yes: diroxide_core::Command::new(ids::ENTER),
-                    },
-                    Purpose::RunProgram(place),
-                )
-            }
-            _ => {
-                let text = format!("Opening {}", entry.display_name());
-                vec![self.say(Message::info(text)), Effect::OpenExternally(place)]
-            }
+            _ => self.open_by_system(),
         }
+    }
+
+    /// The focused file opened with the system's program for it, a
+    /// program asked about first: Enter's default, and the Actions list's
+    /// Open.
+    pub(super) fn open_by_system(&mut self) -> Vec<Effect> {
+        let panel = self.active_panel();
+        let (Some(entry), Some(place)) = (panel.focused_entry().cloned(), panel.focused_place())
+        else {
+            let empty = panel.list().empty_text().to_owned();
+            return vec![self.say(Message::status(empty))];
+        };
+        if is_program(&entry) {
+            let name = entry.display_name().into_owned();
+            let question =
+                crate::dialog::with_default_no(Message::question(&format!("Run {name}")));
+            let listing = vec![diroxide_core::names::spell_out(&place.to_string()).into_owned()];
+            return self.open_dialog(
+                crate::dialog::Dialog::Confirm {
+                    question,
+                    listing,
+                    on_yes: diroxide_core::Command::new(ids::ENTER),
+                },
+                Purpose::RunProgram(place),
+            );
+        }
+        let mut text = format!("Opening {}", entry.display_name());
+        // A warning when its name and first bytes disagree (lane TA):
+        // "Opening photo.png. Name says PNG; contents say JPEG."
+        if let Some(line) = self.focused_disagreement() {
+            text = format!("{text}. {line}.");
+        }
+        vec![self.say(Message::info(text)), Effect::OpenExternally(place)]
     }
 
     pub(super) fn into(&mut self) -> Vec<Effect> {

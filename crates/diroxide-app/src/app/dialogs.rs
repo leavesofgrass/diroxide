@@ -61,6 +61,12 @@ impl App {
                 Importance::High,
                 MessageKind::Question,
             ),
+            // A title that ends in a colon leads into its rows, so no comma
+            // follows it (lane TA): "Open report.pdf with: Default
+            // program, 1 of 4".
+            Dialog::Choose { list, .. } if list.title().ends_with(':') => {
+                Message::info(format!("{} {}", list.title(), list.announce_focus()))
+            }
             Dialog::Choose { list, .. } => {
                 Message::info(format!("{}, {}", list.title(), list.announce_focus()))
             }

@@ -586,6 +586,54 @@ pub enum Request {
         /// The app's clock, for the date words.
         clock: SharedClock,
     },
+    /// Type a panel's files by their first bytes, off the input thread
+    /// (alpha 4, lane TA): the items in their order, the first `urgent`
+    /// of them the rows on screen. A newer check of the same panel stops
+    /// this one's readers. Answered in batches as
+    /// [`AppEvent::TypesChecked`](crate::AppEvent::TypesChecked).
+    CheckTypes {
+        /// The panel.
+        side: Side,
+        /// The panel's entries the items belong to
+        /// ([`crate::Panel::entries_generation`]).
+        listing: u64,
+        /// The panel's folder.
+        folder: Place,
+        /// The files, nearest the focus first.
+        items: Vec<crate::typing::TypeItem>,
+        /// How many of the first items are on screen: their answers come
+        /// back first, in a small batch.
+        urgent: usize,
+        /// The app's types, so the answers' indexes are the app's.
+        types: std::sync::Arc<diroxide_filetype::TypeRegistry>,
+        /// The app's clock, for a type's condition.
+        clock: SharedClock,
+    },
+    /// Stop a panel's type check: the panel left the folder, or nothing
+    /// in it is left to read.
+    StopTypes(Side),
+    /// List the programs the system has for a file, for Open with (lane
+    /// TA); answered as
+    /// [`AppEvent::OpenWithListed`](crate::AppEvent::OpenWithListed).
+    ListOpenWith {
+        /// The file.
+        place: Place,
+        /// Its media type, from its type.
+        mime: Option<String>,
+    },
+    /// Start one of Open with's programs on a file, never waited for; a
+    /// failure comes back as a problem in words.
+    StartWith {
+        /// The file.
+        place: Place,
+        /// The program, as Open with listed it.
+        program: crate::typing::OpenWithRow,
+        /// The file's media type, as the list was read with.
+        mime: Option<String>,
+    },
+    /// Hand a file to the system's own Open with dialog ("Choose another
+    /// program").
+    ChooseAnother(Place),
 }
 
 #[cfg(test)]

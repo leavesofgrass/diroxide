@@ -1288,3 +1288,84 @@ fn a_value_with_an_open_bracket_reads_back_quoted() {
         round_trips(text);
     }
 }
+
+/// The groups of the type model (alpha 4, lane TL's requests, built by
+/// lane TA): `group is` takes the owner's own groups when the filter is
+/// read with them, a word that is none of them says the nearest one or
+/// the list, `group:` completes them, and `group is` asks the lookup's
+/// `in_group`, so an entry in two groups matches both.
+#[test]
+fn groups_of_the_owners_file_read_complete_and_match_through_in_group() {
+    let groups: Vec<String> = ["images", "music", "text", "screenshots"]
+        .map(str::to_owned)
+        .to_vec();
+    let options = FilterOptions::default();
+    let shots = Filter::parse_with_groups("group:Screenshot", &options, &groups).unwrap();
+    assert_eq!(shots.sentence(), "group is screenshots");
+    let error = Filter::parse_with_groups("group screnshots", &options, &groups).unwrap_err();
+    assert_eq!(
+        error.problem(),
+        &Problem::UnknownGroupOf {
+            word: "screnshots".into(),
+            nearest: Some("screenshots".into()),
+            groups: groups.clone(),
+        }
+    );
+    assert_eq!(
+        error.sentences(),
+        "Filter problem: unknown group 'screnshots'. Word 2. Did you mean screenshots?"
+    );
+    let error = Filter::parse_with_groups("group zz", &options, &groups).unwrap_err();
+    assert_eq!(
+        error.next_step(),
+        "Word 2. Groups: images, music, text, screenshots."
+    );
+    assert!(
+        Filter::parse("group:screenshots").is_err(),
+        "without a list only the built-in groups read"
+    );
+
+    let context = CompletionContext {
+        groups: &groups,
+        ..CompletionContext::default()
+    };
+    let offered: Vec<String> = complete("group:scr", 9, &options, &context)
+        .candidates
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert_eq!(offered, ["screenshots"]);
+
+    use crate::entry::Entry;
+
+    struct Shots;
+    impl Lookup for Shots {
+        fn in_group(&self, entry: &Entry, group: &str) -> Result<bool, Unknown> {
+            let own = self.group(entry)?;
+            Ok(own.is_some_and(|g| g == group)
+                || (group == "screenshots" && entry.name.starts_with("Screenshot")))
+        }
+    }
+    let shot = Entry::new("Screenshot (3).png", EntryKind::File);
+    let photo = Entry::new("crow.png", EntryKind::File);
+    let images = Filter::parse_with_groups("group:images", &options, &groups).unwrap();
+    let clock = written();
+    for (filter, entry, lookup, want) in [
+        (&shots, &shot, &Shots as &dyn Lookup, true),
+        (&images, &shot, &Shots, true),
+        (&shots, &photo, &Shots, false),
+        (&images, &photo, &NoLookup, true),
+        (&shots, &shot, &NoLookup, false),
+    ] {
+        assert_eq!(
+            filter.evaluator(&clock).test(entry, lookup).is_yes(),
+            want,
+            "{} on {}",
+            filter.text(),
+            entry.name
+        );
+    }
+    let not_shots =
+        Filter::parse_with_groups("group is not screenshots", &options, &groups).unwrap();
+    assert!(!not_shots.evaluator(&clock).test(&shot, &Shots).is_yes());
+}

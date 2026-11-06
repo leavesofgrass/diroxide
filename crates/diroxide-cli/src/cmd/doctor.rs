@@ -19,7 +19,7 @@ use std::io::{self, IsTerminal, Write};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use diroxide_components::manifest::Manifest;
-use diroxide_components::{Kind, Status, host_target, sha256_hex};
+use diroxide_components::{Status, host_target, sha256_hex};
 use diroxide_config::{Config, Paths, ScreenReaderMode, problems_line};
 use diroxide_plugins::script::installed;
 use diroxide_plugins::script::interpreter::Lookup;
@@ -183,11 +183,7 @@ pub fn run(args: &DoctorArgs, out: &mut dyn Write) -> Result<i32, CliError> {
     let target = host_target().to_owned();
     let tools = ToolRegistry::builtin()
         .with_overrides(config.tools.clone())
-        .with_components(helper_programs(
-            &components,
-            &paths.components_dir(),
-            &target,
-        ));
+        .with_components(components.helper_programs(&paths.components_dir(), &target));
     let plugins = plugin_lines(&paths, &tools);
     let env = Env {
         paths,
@@ -213,29 +209,6 @@ fn home_folder() -> Option<PathBuf> {
     std::env::var_os(name)
         .map(PathBuf::from)
         .filter(|home| home.is_absolute())
-}
-
-/// The programs of the installed helper components, for the registry's
-/// component step: each file with an `exec`, in its component's folder.
-pub fn helper_programs(manifest: &Manifest, components_dir: &Path, target: &str) -> Vec<PathBuf> {
-    manifest
-        .components
-        .iter()
-        .filter(|c| c.kind == Kind::Helper)
-        .filter(|c| matches!(c.status_in(components_dir, target), Status::Installed))
-        .flat_map(|c| {
-            let dir = c.dir_in(components_dir);
-            c.files_for(target)
-                .into_iter()
-                .filter_map(|file| file.exec.clone())
-                .map(move |exec| {
-                    exec.split('/')
-                        .filter(|part| !part.is_empty())
-                        .fold(dir.clone(), |path, part| path.join(part))
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect()
 }
 
 /// The plugins' lines: the count, then `diro plugin list`'s line for each
@@ -440,12 +413,20 @@ fn startup_line(config: &Config) -> String {
 }
 
 /// The needed tools' line, and whether one is missing: the tools named,
-/// or the tools the owner's recipes run.
+/// or the tools the owner's recipes run and those `tools.toml` marks
+/// `needed`.
 fn needed_line(named: &[String], env: &Env, report: &ToolsReport) -> (String, bool) {
     let mut needed: Vec<String> = named.to_vec();
     if needed.is_empty() {
-        for recipe in &env.config.conversions.recipes {
-            let tool = recipe.tool.trim();
+        let marked = env
+            .config
+            .tools
+            .tools
+            .iter()
+            .filter(|(_, own)| own.needed)
+            .map(|(id, _)| id.as_str());
+        let recipes = env.config.conversions.recipes.iter().map(|r| r.tool.trim());
+        for tool in recipes.chain(marked) {
             let built_in = BUILTIN
                 .iter()
                 .any(|spec| spec.id == tool && spec.kind == ToolKind::BuiltIn);
@@ -712,6 +693,16 @@ mod tests {
         let (code, lines) = run_lines(&check(&[]), &bench.env(recipes));
         assert_eq!(code, 1);
         assert_eq!(lines.last().unwrap(), "Needed tools missing: ImageMagick");
+        // A tool tools.toml marks needed is checked with none named (K's
+        // request 1).
+        let marked = Config {
+            tools: ToolsConfig::from_toml("[ffmpeg]\nneeded = true\n\n[pandoc]\nneeded = true\n")
+                .unwrap(),
+            ..Config::default()
+        };
+        let (code, lines) = run_lines(&check(&[]), &bench.env(marked));
+        assert_eq!(code, 1);
+        assert_eq!(lines.last().unwrap(), "Needed tools missing: FFmpeg");
         // Without --check, a missing tool never changes the exit code.
         let (code, _) = run_lines(&DoctorArgs::default(), &bench.env(Config::default()));
         assert_eq!(code, 0);
@@ -737,6 +728,7 @@ mod tests {
             ToolOverride {
                 path: None,
                 disabled: true,
+                needed: false,
             },
         );
         config.problems.push(diroxide_config::ConfigProblem::new(

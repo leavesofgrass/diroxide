@@ -46,6 +46,8 @@ pub mod startup;
 pub mod state;
 // Watch this folder (W3t).
 pub mod tracker;
+// File types in the app: the background check (alpha 4, lane TA).
+pub mod typing;
 pub mod viewer;
 pub mod views;
 
@@ -68,5 +70,5 @@ pub use jobs::JobTable;
 pub use keymap::{Binding, Keymap, Lookup};
 pub use panel::{Column, Panel};
 pub use request::{AskId, Question, Reply, Request, Spawn, SpawnKind};
-pub use runtime::{Handover, Launcher, Opener, Program, Runtime};
+pub use runtime::{Handover, Launcher, OpenWithPrograms, Opener, Program, Runtime, SystemOpenWith};
 pub use startup::Startup;

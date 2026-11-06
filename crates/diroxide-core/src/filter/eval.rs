@@ -197,6 +197,17 @@ pub trait Lookup {
     fn group(&self, entry: &Entry) -> Result<Option<Cow<'_, str>>, Unknown> {
         Ok(group_of(entry).map(|group| Cow::Borrowed(group.name)))
     }
+
+    /// Whether the entry is in the group with this name, which `group is`
+    /// and `group is not` ask (alpha 4). The default asks
+    /// [`Lookup::group`], so an entry is in its one group; the app's
+    /// lookup also counts the groups whose name patterns take the entry,
+    /// so a screenshot matches both `group:images` and
+    /// `group:screenshots`.
+    fn in_group(&self, entry: &Entry, group: &str) -> Result<bool, Unknown> {
+        self.group(entry)
+            .map(|own| own.is_some_and(|own| own.eq_ignore_ascii_case(group)))
+    }
 }
 
 /// A lookup that knows nothing beyond the entry.
@@ -256,6 +267,9 @@ struct TextMatch {
     negate: bool,
     regex: Option<Regex>,
     folders_only: bool,
+    /// The group of `group is` and `group is not`, asked of the lookup's
+    /// [`Lookup::in_group`].
+    group: Option<String>,
 }
 
 impl TextMatch {
@@ -376,11 +390,17 @@ fn compile_text(test: &TextTest) -> Result<TextMatch, PatternError> {
         }
         TextOp::Regex => Some(compile_regex(&value, case)?),
     };
+    // `group is NAME` asks the lookup whether the entry is in that group,
+    // so an entry in two groups (a screenshot is in images and in
+    // screenshots) matches both.
+    let group = (test.field == Field::Group && matches!(test.op, TextOp::Is | TextOp::IsNot))
+        .then(|| value.clone());
     Ok(TextMatch {
         field: test.field,
         negate: test.op == TextOp::IsNot,
         regex,
         folders_only,
+        group,
     })
 }
 
@@ -656,9 +676,15 @@ fn text_truth(text: &TextMatch, entry: &Entry, lookup: &dyn Lookup) -> Truth {
         },
         // From the lookup: the type model's groups in the app, the
         // built-in extension table by default.
-        Field::Group => match lookup.group(entry) {
-            Ok(group) => text.hit(group.as_deref().unwrap_or("")),
-            Err(unknown) => Truth::Unknown(unknown),
+        Field::Group => match &text.group {
+            Some(group) => match lookup.in_group(entry, group) {
+                Ok(inside) => Truth::of(inside != text.negate),
+                Err(unknown) => Truth::Unknown(unknown),
+            },
+            None => match lookup.group(entry) {
+                Ok(group) => text.hit(group.as_deref().unwrap_or("")),
+                Err(unknown) => Truth::Unknown(unknown),
+            },
         },
         Field::Label => {
             let any = entry

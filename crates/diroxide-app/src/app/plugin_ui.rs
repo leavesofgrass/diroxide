@@ -1754,7 +1754,7 @@ impl App {
             .filter(|item| {
                 item.manifest.as_ref().is_some_and(|m| {
                     m.place_info.iter().any(|spec| {
-                        place.is_none_or(|p| crate::plugins::describe::scheme_fits(spec, p))
+                        place.is_none_or(|p| crate::plugins::describe::fits(spec, &m.providers, p))
                     })
                 })
             })

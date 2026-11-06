@@ -7,7 +7,7 @@
 use std::io;
 
 use diroxide_core::names::classify;
-use diroxide_preview::encoding::{Choice, choose, choose_head};
+use diroxide_preview::encoding::{Choice, Encoding, choose, choose_head};
 
 use super::source::{BLOCK, ViewerSource};
 
@@ -74,6 +74,15 @@ impl Newline {
     }
 }
 
+/// How lines end in an encoding.
+fn newline_of(encoding: &'static Encoding) -> Newline {
+    match encoding.name() {
+        "UTF-16LE" => Newline::Utf16Le,
+        "UTF-16BE" => Newline::Utf16Be,
+        _ => Newline::Byte,
+    }
+}
+
 /// The file's text form: its encoding, how it was chosen, and its line
 /// ends.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,12 +100,18 @@ impl TextForm {
         } else {
             choose(head, None)
         };
-        let newline = match choice.encoding.name() {
-            "UTF-16LE" => Newline::Utf16Le,
-            "UTF-16BE" => Newline::Utf16Be,
-            _ => Newline::Byte,
-        };
+        let newline = newline_of(choice.encoding);
         Self { choice, newline }
+    }
+
+    /// The form of an encoding the owner chose for a file that starts with
+    /// `head` (lane TA): its own byte-order mark skipped, its line ends.
+    pub(crate) fn chosen(encoding: &'static Encoding, head: &[u8]) -> Self {
+        let choice = Choice::by_you(encoding, head);
+        Self {
+            choice,
+            newline: newline_of(encoding),
+        }
     }
 
     /// The first byte of the first line: after the byte-order mark.

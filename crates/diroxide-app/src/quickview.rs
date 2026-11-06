@@ -58,6 +58,7 @@ use diroxide_filetype::TypeRegistry;
 use diroxide_preview::LatestOnly;
 use diroxide_preview::doc::text::{HEX_ROW, HEX_ROW_SCREEN_READER};
 use diroxide_preview::doc::{self, DocKind, DocView, Guard, ReadOptions, SHOWING_THE_TEXT};
+use diroxide_preview::encoding::{Choice, Encoding};
 use diroxide_preview::highlight::{Caps, Job, Session};
 use diroxide_vfs::{CancelToken, Registry, WatchEvent};
 
@@ -156,6 +157,8 @@ enum Reason {
     Moved,
     /// It changed on disk.
     Changed,
+    /// The owner chose an encoding for it (lane TA).
+    Encoding,
 }
 
 /// A render waiting for its time.
@@ -204,6 +207,11 @@ pub struct Shown {
     pub size: Option<u64>,
     /// Whether the cap stopped the read short of its end.
     pub capped: bool,
+    /// What the automatic choice found for its text, for the encoding
+    /// chooser's first row (lane TA); `None` when it is not text.
+    pub automatic: Option<Choice>,
+    /// The encoding the owner chose for it, when one was (lane TA).
+    pub encoding: Option<&'static Encoding>,
 }
 
 /// The quick view. See the module documentation.
@@ -221,6 +229,9 @@ pub struct QuickView {
     renders: u64,
     region: Region,
     siblings: Vec<(Place, Entry)>,
+    /// The encoding the owner chose for one file, for this session (lane
+    /// TA): its renders read the bytes in it.
+    encoding: Option<(Place, &'static Encoding)>,
 }
 
 impl QuickView {
@@ -247,6 +258,7 @@ impl QuickView {
             renders: 0,
             region: Region::default(),
             siblings: Vec::new(),
+            encoding: None,
         }
     }
 
@@ -536,12 +548,18 @@ impl QuickView {
             reason: target.reason,
             cancel: cancel.clone(),
         });
+        let encoding = self
+            .encoding
+            .as_ref()
+            .filter(|(place, _)| *place == target.place)
+            .map(|(_, encoding)| *encoding);
         let request = Request {
             generation,
             place: target.place,
             entry: target.entry,
             refresh: target.reason == Reason::Changed,
             cancel,
+            encoding,
         };
         match self.worker.send(request) {
             Some(answer) => self.take(answer),
@@ -575,18 +593,33 @@ impl QuickView {
         let name = display_name(&answer.entry.name).into_owned();
         let size = answer.entry.size;
         let mut said = Vec::new();
+        let encoding = self
+            .encoding
+            .as_ref()
+            .filter(|(place, _)| *place == answer.place)
+            .map(|(_, encoding)| *encoding);
+        let mut automatic = None;
         let (showing, capped) = match answer.rendered {
             Rendered::Document {
                 view,
                 error,
                 capped,
+                choice,
             } => {
+                automatic = choice;
                 if let Some(error) = &error {
                     said.push(Message::from_error("read", &name, error));
                     said.push(Message::info(SHOWING_THE_TEXT));
                 } else {
                     said.push(Message::info(match flight.reason {
                         Reason::Changed => format!("Preview updated: {name} changed"),
+                        Reason::Encoding => match (encoding, choice) {
+                            (Some(chosen), _) => {
+                                Choice::by_you(chosen, b"").line().unwrap_or_default()
+                            }
+                            (None, Some(choice)) => choice.automatic_line(),
+                            (None, None) => view.preview_line(&name),
+                        },
                         Reason::Moved if capped => self.capped_line(&name, size),
                         Reason::Moved => view.preview_line(&name),
                     }));
@@ -613,10 +646,41 @@ impl QuickView {
             showing,
             size,
             capped,
+            automatic,
+            encoding,
         });
         self.rebuild_region(same && flight.reason == Reason::Changed);
         self.start_colors(size);
         said
+    }
+
+    /// Shows the file shown again in an encoding the owner chose from the
+    /// encoding list, or by the automatic choice again (`None`), at once:
+    /// "Encoding Windows-1252, chosen by you" (36 cells). The choice holds
+    /// for this file for the session.
+    pub fn choose_encoding(
+        &mut self,
+        encoding: Option<&'static Encoding>,
+        now: Instant,
+    ) -> Vec<Message> {
+        let Some(shown) = self.shown.as_ref() else {
+            return vec![Message::status("Nothing shown to read again")];
+        };
+        let place = shown.place.clone();
+        let name = place.name().unwrap_or_default().to_owned();
+        let mut entry = Entry::new(name, diroxide_core::EntryKind::File);
+        entry.size = shown.size;
+        self.encoding = encoding.map(|e| (place.clone(), e));
+        self.cancel_in_flight();
+        self.in_flight = None;
+        self.target = Some(Target {
+            place,
+            entry,
+            since: now,
+            now: true,
+            reason: Reason::Encoding,
+        });
+        self.tick(now)
     }
 
     /// "Preview: big.log, first 1 MiB of 2.0 GB", the cap in the unit the

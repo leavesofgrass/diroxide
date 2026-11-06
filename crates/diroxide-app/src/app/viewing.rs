@@ -259,6 +259,10 @@ impl App {
     /// F3: the focused file in the viewer, its bytes read from its place
     /// on a worker.
     pub(super) fn view_file(&mut self) -> Vec<Effect> {
+        // The type's own View action, when it has one (lane TA).
+        if let Some(effects) = self.typed_slot(crate::typing::Slot::View) {
+            return effects;
+        }
         let side = self.active;
         let panel = self.panel(side);
         let (Some(entry), Some(place)) = (panel.focused_entry(), panel.focused_place()) else {

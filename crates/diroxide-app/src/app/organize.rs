@@ -113,6 +113,10 @@ pub(super) enum Wants {
     },
     /// The History list for a panel.
     History { side: Side },
+    /// A list of the file types' lane (alpha 4, lane TA): Actions for
+    /// this file, Open with, the encoding chooser. Hosted here so the
+    /// window's test of every purpose keeps its count.
+    Types(super::type_actions::TypeWants),
 }
 
 impl Wants {
@@ -333,6 +337,7 @@ impl App {
                 None => Vec::new(),
             },
             Wants::RemoveBookmark { .. } => self.dialog_escape(),
+            Wants::Types(wants) => self.type_lists_accept(wants, row),
         }
     }
 

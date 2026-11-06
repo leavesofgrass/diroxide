@@ -547,3 +547,18 @@ fn the_options_come_from_the_settings() {
     assert_eq!(cap_words(64 * 1024), "64 KiB");
     let _ = EntryKind::File;
 }
+
+/// Lane TL's second note, built in lane TA: a file whose type is in the
+/// text or code group is shown even when its bytes look binary, as text
+/// or hex, never "No preview"; a picture still says its details.
+#[test]
+fn a_text_or_code_type_is_never_no_preview() {
+    let mut bench = Bench::new(QuickViewOptions::default());
+    let mut odd = b"# Notes\n".to_vec();
+    odd.extend(std::iter::repeat_n(0u8, 64));
+    let notes = bench.file("notes.md", &odd);
+    let said = bench.on(&notes);
+    assert_eq!(said[0], "Quick view on");
+    assert!(!said[1].starts_with("No preview"), "{said:?}");
+    assert!(said[1].starts_with("Preview: notes.md"), "{said:?}");
+}

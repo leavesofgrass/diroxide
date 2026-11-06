@@ -242,7 +242,7 @@ impl App {
                 .clone()
                 .unwrap_or_else(Registry::with_local);
             let mut view = QuickView::new(registry, options);
-            view.set_types(self.types.clone());
+            view.set_types(self.types.as_ref().clone());
             let session = self
                 .highlighter
                 .get_or_insert_with(crate::viewer::highlight::Session::new)
@@ -623,7 +623,7 @@ impl App {
             return vec![self.say(Message::info(text))];
         }
         if self.preview.tools.is_none() {
-            self.preview.tools = Some(ToolRegistry::builtin());
+            self.preview.tools = Some(self.tool_registry());
         }
         let (Some(view), Some(tools)) = (self.preview.view.as_ref(), self.preview.tools.as_ref())
         else {

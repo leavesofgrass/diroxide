@@ -39,6 +39,12 @@ command = "file.details"
 access = "d"
 
 [[menu.item]]
+command = "file.actions"
+
+[[menu.item]]
+command = "file.open-with"
+
+[[menu.item]]
 command = "file.context-menu"
 access = "c"
 
@@ -341,6 +347,9 @@ bar = false
 command = "preview.leave"
 
 [[menu.item]]
+command = "viewer.encoding"
+
+[[menu.item]]
 command = "preview.next-heading"
 
 [[menu.item]]
@@ -438,6 +447,9 @@ command = "viewer.previous-match"
 
 [[menu.item]]
 command = "viewer.hex"
+
+[[menu.item]]
+command = "viewer.encoding"
 
 [[menu.item]]
 command = "viewer.byte"
@@ -785,6 +797,9 @@ access = "r"
 # Selection on the filter language (W3a).
 [[menu.item]]
 command = "select.by-kind"
+
+[[menu.item]]
+command = "select.groups"
 access = "k"
 
 [[menu.item]]

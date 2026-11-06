@@ -111,9 +111,9 @@ impl ComponentRuntime {
             Some(fetcher) => Arc::clone(fetcher),
             None => {
                 let tools = match paths {
-                    Some(paths) => {
-                        ToolRegistry::builtin().with_overrides(diroxide_config::load(paths).tools)
-                    }
+                    Some(paths) => ToolRegistry::builtin()
+                        .with_overrides(diroxide_config::load(paths).tools)
+                        .with_components(super::plugins::installed_helpers(paths)),
                     None => ToolRegistry::builtin(),
                 };
                 Arc::new(StandardFetcher::from_tools(&tools))

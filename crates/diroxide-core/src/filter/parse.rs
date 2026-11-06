@@ -138,10 +138,23 @@ fn check_text(field: Field, op: TextOp, value: &str, case: NameCase) -> Result<(
 }
 
 /// A value as the tree keeps it: a group by its own name, which must be
-/// one of the built-in groups.
-fn canonical(field: Field, op: TextOp, value: String) -> Result<String, Problem> {
+/// one of the built-in groups, or of `groups` when the filter was read
+/// with a list of its own ([`super::Filter::parse_with_groups`]).
+fn canonical(
+    field: Field,
+    op: TextOp,
+    value: String,
+    groups: Option<&[String]>,
+) -> Result<String, Problem> {
     if field != Field::Group || !matches!(op, TextOp::Is | TextOp::IsNot) {
         return Ok(value);
+    }
+    if let Some(groups) = groups {
+        return group_in(groups, &value).ok_or_else(|| Problem::UnknownGroupOf {
+            nearest: nearest(&value, groups.iter().map(String::as_str)).map(str::to_owned),
+            word: value,
+            groups: groups.to_vec(),
+        });
     }
     match group_named(&value) {
         Some(group) => Ok(group.name.to_owned()),
@@ -150,6 +163,20 @@ fn canonical(field: Field, op: TextOp, value: String) -> Result<String, Problem>
             word: value,
         }),
     }
+}
+
+/// A group of a list by its name, case aside, and a plural or a singular
+/// as the built-in names are read ("image" is images): its name as the
+/// list writes it.
+fn group_in(groups: &[String], word: &str) -> Option<String> {
+    let lower = word.trim().to_lowercase();
+    let plural = format!("{lower}s");
+    let singular = lower.strip_suffix('s').unwrap_or(&lower);
+    let find = |wanted: &str| groups.iter().find(|g| g.to_lowercase() == wanted);
+    find(&lower)
+        .or_else(|| find(&plural))
+        .or_else(|| find(singular))
+        .cloned()
 }
 
 fn wrap(negate: bool, expr: Expr) -> Expr {
@@ -259,6 +286,8 @@ pub(crate) struct Parser<'a> {
     options: &'a FilterOptions,
     expected: Vec<Expected>,
     end: usize,
+    /// The groups `group is` takes, when not only the built-in ones.
+    groups: Option<&'a [String]>,
 }
 
 impl<'a> Parser<'a> {
@@ -269,7 +298,14 @@ impl<'a> Parser<'a> {
             options,
             expected: Vec::new(),
             end: text.len(),
+            groups: None,
         })
+    }
+
+    /// The same parser, `group is` taking these groups.
+    pub(crate) fn with_groups(mut self, groups: &'a [String]) -> Self {
+        self.groups = Some(groups);
+        self
     }
 
     /// Reads the whole text.
@@ -852,7 +888,7 @@ impl<'a> Parser<'a> {
         if let Err(problem) = check_text(field, op, &value, case) {
             return Err(FilterError::new(problem, at.word(), at.span(), Vec::new()));
         }
-        let value = canonical(field, op, value).map_err(|problem| {
+        let value = canonical(field, op, value, self.groups).map_err(|problem| {
             FilterError::new(problem, at.word(), at.span(), vec![Expected::Value(field)])
         })?;
         Ok(Expr::Test {
@@ -1663,6 +1699,15 @@ fn looks_like_unit(word: &str) -> bool {
 /// Reads a filter into its tree.
 pub(crate) fn parse(text: &str, options: &FilterOptions) -> Result<Expr, FilterError> {
     Parser::new(text, options)?.run()
+}
+
+/// Reads a filter into its tree, `group is` taking these groups.
+pub(crate) fn parse_with_groups(
+    text: &str,
+    options: &FilterOptions,
+    groups: &[String],
+) -> Result<Expr, FilterError> {
+    Parser::new(text, options)?.with_groups(groups).run()
 }
 
 /// What could come at the end of the text: the expected-next list Tab

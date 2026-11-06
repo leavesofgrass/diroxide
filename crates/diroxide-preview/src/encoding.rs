@@ -27,7 +27,8 @@
 //! by [`binary_kind`], so the text loaders can refuse them instead of
 //! reading them aloud as garbage (the September 2026 audit, finding D3).
 
-use encoding_rs::{Encoding, UTF_8, UTF_16BE, UTF_16LE, WINDOWS_1252};
+pub use encoding_rs::Encoding;
+use encoding_rs::{UTF_8, UTF_16BE, UTF_16LE, WINDOWS_1252};
 
 /// Text decoded from bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -251,6 +252,10 @@ pub enum Chosen {
     /// Not UTF-8 and nothing declared: Windows-1252, where every byte
     /// decodes.
     NotUtf8,
+    /// Chosen by the owner from the encoding list, for this file and this
+    /// session (alpha 4, R28 4.3): said as "Encoding Windows-1252, chosen
+    /// by you".
+    ByYou,
 }
 
 /// The encoding [`decode`] would use for a file that starts with given
@@ -290,6 +295,16 @@ impl Choice {
     pub fn line(&self) -> Option<String> {
         let how = match self.chosen {
             Chosen::Utf8 => return None,
+            Chosen::ByYou => {
+                // UTF-16 by its byte order, in the WHATWG name, so the line
+                // fits a Braille line: "Encoding UTF-16LE, chosen by you".
+                let name = if self.encoding == UTF_16LE || self.encoding == UTF_16BE {
+                    self.encoding.name()
+                } else {
+                    self.name()
+                };
+                return Some(format!("Encoding {name}, chosen by you"));
+            }
             Chosen::ByteOrderMark => "byte-order mark",
             Chosen::Declared => "declared",
             Chosen::Detected => "no byte-order mark",
@@ -297,6 +312,82 @@ impl Choice {
         };
         Some(format!("Encoding: {} ({how})", self.name()))
     }
+}
+
+impl Choice {
+    /// The encoding the owner chose for a file that starts with :
+    /// a byte-order mark of that encoding is skipped, any other byte is
+    /// read as the encoding says.
+    pub fn by_you(encoding: &'static Encoding, head: &[u8]) -> Self {
+        let bom_len = match Encoding::for_bom(head) {
+            Some((found, len)) if found == encoding => len,
+            _ => 0,
+        };
+        Self {
+            encoding,
+            chosen: Chosen::ByYou,
+            bom_len,
+        }
+    }
+
+    /// The encoding chooser's first row, what the automatic choice found,
+    /// meaning first: "Automatic: UTF-8 (byte-order mark)", "Automatic:
+    /// UTF-8".
+    pub fn automatic_line(&self) -> String {
+        let how = match self.chosen {
+            Chosen::ByteOrderMark => " (byte-order mark)",
+            Chosen::Declared => " (declared)",
+            Chosen::Detected => " (no byte-order mark)",
+            Chosen::NotUtf8 => " (not UTF-8)",
+            Chosen::Utf8 | Chosen::ByYou => "",
+        };
+        format!("Automatic: {}{how}", self.name())
+    }
+}
+
+/// The encodings the encoding chooser lists after its automatic row (R28
+/// 4.3): grouped by language, the best-known name first, each its WHATWG
+/// label and its row's words, meaning first and inside 40 cells. In this
+/// set ISO-8859-1 is read as Windows-1252, as browsers read it, and the
+/// DOS pages are IBM866 alone (others would need `oem_cp`).
+pub const ENCODING_LIST: [(&str, &str); 29] = [
+    ("UTF-8", "Unicode (UTF-8)"),
+    ("UTF-16LE", "Unicode (UTF-16, little endian)"),
+    ("UTF-16BE", "Unicode (UTF-16, big endian)"),
+    ("windows-1252", "Western European (Windows-1252)"),
+    ("macintosh", "Western European (Mac Roman)"),
+    ("windows-1250", "Central European (Windows-1250)"),
+    ("ISO-8859-2", "Central European (ISO-8859-2)"),
+    ("windows-1251", "Cyrillic (Windows-1251)"),
+    ("KOI8-R", "Cyrillic (KOI8-R)"),
+    ("KOI8-U", "Cyrillic (KOI8-U)"),
+    ("IBM866", "Cyrillic (IBM866, DOS)"),
+    ("windows-1253", "Greek (Windows-1253)"),
+    ("ISO-8859-7", "Greek (ISO-8859-7)"),
+    ("windows-1254", "Turkish (Windows-1254)"),
+    ("windows-1255", "Hebrew (Windows-1255)"),
+    ("ISO-8859-8", "Hebrew (ISO-8859-8)"),
+    ("windows-1256", "Arabic (Windows-1256)"),
+    ("ISO-8859-6", "Arabic (ISO-8859-6)"),
+    ("windows-1257", "Baltic (Windows-1257)"),
+    ("ISO-8859-13", "Baltic (ISO-8859-13)"),
+    ("windows-1258", "Vietnamese (Windows-1258)"),
+    ("windows-874", "Thai (Windows-874)"),
+    ("Shift_JIS", "Japanese (Shift_JIS)"),
+    ("EUC-JP", "Japanese (EUC-JP)"),
+    ("ISO-2022-JP", "Japanese (ISO-2022-JP)"),
+    ("GBK", "Chinese, simplified (GBK)"),
+    ("gb18030", "Chinese, simplified (GB18030)"),
+    ("Big5", "Chinese, traditional (Big5)"),
+    ("EUC-KR", "Korean (EUC-KR)"),
+];
+
+/// An encoding of [`ENCODING_LIST`] by its label.
+pub fn listed(label: &str) -> Option<&'static Encoding> {
+    ENCODING_LIST
+        .iter()
+        .find(|(l, _)| l.eq_ignore_ascii_case(label))
+        .and_then(|(l, _)| Encoding::for_label(l.as_bytes()))
 }
 
 /// An encoding's name as said: "UTF-16" for both byte orders, the
@@ -307,9 +398,27 @@ pub fn spoken_name(encoding: &'static Encoding) -> &'static str {
     } else if encoding == WINDOWS_1252 {
         "Windows-1252"
     } else {
-        encoding.name()
+        // The other Windows code pages capitalized the same way (lane TA,
+        // the encoding chooser's "Encoding Windows-1251, chosen by you").
+        WINDOWS_NAMES
+            .iter()
+            .find(|(name, _)| *name == encoding.name())
+            .map_or(encoding.name(), |(_, spoken)| *spoken)
     }
 }
+
+/// The Windows code pages of the WHATWG set, as said.
+const WINDOWS_NAMES: [(&str, &str); 9] = [
+    ("windows-874", "Windows-874"),
+    ("windows-1250", "Windows-1250"),
+    ("windows-1251", "Windows-1251"),
+    ("windows-1253", "Windows-1253"),
+    ("windows-1254", "Windows-1254"),
+    ("windows-1255", "Windows-1255"),
+    ("windows-1256", "Windows-1256"),
+    ("windows-1257", "Windows-1257"),
+    ("windows-1258", "Windows-1258"),
+];
 
 /// The encoding [`decode`] uses for these bytes, the whole of a file, in
 /// its order: a byte-order mark, then the `declared` label, then UTF-16
@@ -374,6 +483,45 @@ fn choose_from(head: &[u8], declared: Option<&str>, more_follows: bool) -> Choic
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Lane TA, commit 32: the encoding chooser's rows and lines, each
+    /// inside 40 cells, meaning first; every listed label is an encoding
+    /// of the WHATWG set; a choice by the owner skips that encoding's own
+    /// byte-order mark only.
+    #[test]
+    fn the_chooser_lists_encodings_and_says_the_owners_choice() {
+        for (label, words) in ENCODING_LIST {
+            assert!(listed(label).is_some(), "{label}");
+            assert!(words.chars().count() <= 40, "{words}");
+        }
+        assert_eq!(
+            listed("WINDOWS-1251").map(Encoding::name),
+            Some("windows-1251")
+        );
+        let auto = choose(b"\xef\xbb\xbfcaf\xc3\xa9", None);
+        assert_eq!(auto.automatic_line(), "Automatic: UTF-8 (byte-order mark)");
+        assert_eq!(choose(b"plain", None).automatic_line(), "Automatic: UTF-8");
+        let mine = Choice::by_you(WINDOWS_1252, b"caf\xe9");
+        assert_eq!(
+            mine.line().as_deref(),
+            Some("Encoding Windows-1252, chosen by you")
+        );
+        assert_eq!(mine.bom_len, 0);
+        let le = Choice::by_you(UTF_16LE, b"\xff\xfeh\x00");
+        assert_eq!((le.bom_len, le.chosen), (2, Chosen::ByYou));
+        assert_eq!(
+            le.line().as_deref(),
+            Some("Encoding UTF-16LE, chosen by you")
+        );
+        assert_eq!(Choice::by_you(UTF_8, b"\xff\xfeh\x00").bom_len, 0);
+        for line in [
+            "Encoding Windows-1252, chosen by you",
+            "Automatic: UTF-8 (byte-order mark)",
+            "Western European (Windows-1252)",
+        ] {
+            assert!(line.chars().count() <= 40, "{line}");
+        }
+    }
 
     #[test]
     fn utf16_without_a_bom_is_recognized() {

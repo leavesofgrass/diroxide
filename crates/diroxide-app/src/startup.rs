@@ -69,6 +69,16 @@ pub struct Startup {
     /// The config's themes folder, for a frontend that draws the themes
     /// itself; `None` when nothing was read from disk.
     pub themes_dir: Option<PathBuf>,
+    /// The slots of the owner's type actions in `filetypes.toml` (lane
+    /// TA): which action Enter, View, Preview, Convert and the user
+    /// actions run.
+    pub type_slots: crate::typing::TypeSlots,
+    /// The owner's `tools.toml`: where a tool action's program is, or
+    /// that it is turned off (lane TA).
+    pub tools: diroxide_config::ToolsConfig,
+    /// The programs of the installed helper components, for the app's
+    /// tools registry (K's request 3).
+    pub helper_programs: Vec<PathBuf>,
 }
 
 impl Default for Startup {
@@ -91,6 +101,9 @@ impl Default for Startup {
             views: crate::views::FolderViews::new(),
             user_themes: Vec::new(),
             themes_dir: None,
+            type_slots: crate::typing::TypeSlots::default(),
+            tools: diroxide_config::ToolsConfig::default(),
+            helper_programs: Vec::new(),
         }
     }
 }
@@ -247,6 +260,14 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     problems.extend(views.problems);
     let themes_dir = paths.themes_dir();
     let user_themes = user_themes(&themes_dir);
+    // The file types' problems join the startup line (lane TA): a type,
+    // a group or an action of `filetypes.toml` that could not be used,
+    // each meaning first.
+    let types = diroxide_filetype::TypeRegistry::builtin().with_config(&config.filetypes);
+    let type_slots = crate::typing::TypeSlots::from_config(&config.filetypes);
+    for line in types.problems().iter().chain(type_slots.problems()) {
+        problems.push(ConfigProblem::new(Paths::FILETYPES, line.clone()));
+    }
     Startup {
         problems,
         menus,
@@ -265,6 +286,10 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         views: views.value,
         user_themes,
         themes_dir: Some(themes_dir),
+        type_slots,
+        tools: config.tools.clone(),
+        helper_programs: diroxide_components::Manifest::embedded()
+            .helper_programs(&paths.components_dir(), diroxide_components::host_target()),
     }
 }
 

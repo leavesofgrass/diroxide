@@ -26,21 +26,23 @@
 //!
 //! Wave 1 (W1d) owns this module.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 use diroxide_config::{ColumnKind, Settings};
-use diroxide_core::filter::{ContentQuery, Filter, Lookup, Tally, Truth, Unknown};
+use diroxide_core::filter::{ContentQuery, Filter, Lookup, NoLookup, Tally, Truth, Unknown};
 use diroxide_core::format::human_size;
 use diroxide_core::names::display_name;
 use diroxide_core::{
     Clock, Entry, EntryKind, ListModel, ListRow, Move, Pattern, Place, RequestId, RowsReplaced,
     Side, SortSpec,
 };
-use diroxide_filetype::TypeRegistry;
+use diroxide_filetype::{CheckSkip, Probe, Special, TypeRegistry, TypeStage, skips_content};
 use diroxide_vfs::Capabilities;
 
 use crate::plugins::lister::PanelList;
+use crate::typing::{TypeAnswer, TypeItem};
 
 /// A detail said after an entry's name: the Phase 0 set, kept for its
 /// callers. The panel itself uses the configuration crate's
@@ -132,6 +134,27 @@ pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> Lis
         }
     }
     ListRow::new(entry.name.clone(), entry.display_name()).with_details(details)
+}
+
+/// Types an entry by its name and kind alone, what a row shows at once:
+/// its type's short name and the type's index ([`Entry::type_index`]),
+/// "type pending" where the name says nothing and the first bytes are
+/// still to be read, and nothing (the row says its kind, "file") where no
+/// type takes it. `name_only` is a place whose contents are never read.
+pub fn type_by_name(entry: &mut Entry, types: &TypeRegistry, name_only: bool, clock: &dyn Clock) {
+    if entry.kind == EntryKind::Folder {
+        entry.type_name = Some("folder".to_owned());
+        return;
+    }
+    let probe = Probe::new(entry, None).skipping(name_only);
+    match types.check(&probe, clock) {
+        Ok(found) => {
+            entry.type_index = TypeRegistry::index_of(&found);
+            entry.type_name = types.by_index(entry.type_index).map(|t| t.short.clone());
+        }
+        Err(Special::Pending) => entry.type_name = Some(TYPE_PENDING.to_owned()),
+        Err(Special::Folder | Special::Unknown) => {}
+    }
 }
 
 /// An entry's labels as its row says them, the names first and their
@@ -270,9 +293,32 @@ struct PanelLookup<'a> {
     selected: &'a HashSet<&'a str>,
     bookmarks: Option<&'a crate::bookmarks::Bookmarks>,
     content: Option<&'a ContentAnswers>,
+    /// The type model's groups, the owner's own among them (lane TA);
+    /// without it `group:` answers from core's extension table.
+    types: Option<(&'a TypeRegistry, &'a dyn Clock)>,
 }
 
 impl Lookup for PanelLookup<'_> {
+    fn group(&self, entry: &Entry) -> Result<Option<Cow<'_, str>>, Unknown> {
+        match self.types {
+            Some((types, clock)) => types
+                .group_for(entry, clock)
+                .map(|group| group.map(|g| Cow::Owned(g.id.clone()))),
+            None => NoLookup
+                .group(entry)
+                .map(|g| g.map(|g| g.into_owned().into())),
+        }
+    }
+
+    fn in_group(&self, entry: &Entry, group: &str) -> Result<bool, Unknown> {
+        match self.types {
+            Some((types, clock)) => types
+                .groups_of(entry, clock)
+                .map(|groups| groups.iter().any(|g| g.id.eq_ignore_ascii_case(group))),
+            None => NoLookup.in_group(entry, group),
+        }
+    }
+
     fn path(&self, entry: &Entry) -> Option<String> {
         self.place.join(&entry.name).ok().map(|p| p.to_string())
     }
@@ -326,7 +372,60 @@ pub struct Panel {
     listed: bool,
     /// A plugin's list shown over the place (lane L).
     plugin_list: Option<Box<PanelList>>,
+    /// The file types' background check (alpha 4, lane TA): which entries
+    /// of the listing had their first bytes read, one bit each, beside
+    /// [`Panel::all_entries`].
+    checked: Bits,
+    /// The place [`Panel::all_entries`] belong to, so a refresh of the
+    /// same place keeps the types already checked.
+    typed_place: Option<Place>,
+    /// Counts each replacement of the entries: an answer of the type
+    /// check for an older set is dropped.
+    entries_generation: u64,
+    /// The folders whose files are typed by name alone (`check.skip`).
+    check_skip: CheckSkip,
+    /// "Name says PNG; contents say JPEG", by entry name: said on request,
+    /// in the details and when the file is opened.
+    disagreements: HashMap<String, String>,
+    /// The file types the filter's `group:` asks, the owner's groups
+    /// among them (lane TA).
+    types: Option<std::sync::Arc<TypeRegistry>>,
 }
+
+/// One bit for each entry of a listing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Bits {
+    words: Vec<u64>,
+}
+
+impl Bits {
+    fn with_len(len: usize) -> Self {
+        Self {
+            words: vec![0; len.div_ceil(64)],
+        }
+    }
+
+    fn get(&self, index: usize) -> bool {
+        self.words
+            .get(index / 64)
+            .is_some_and(|word| word & (1 << (index % 64)) != 0)
+    }
+
+    fn set(&mut self, index: usize) {
+        if let Some(word) = self.words.get_mut(index / 64) {
+            *word |= 1 << (index % 64);
+        }
+    }
+
+    /// The bytes the marks take.
+    fn bytes(&self) -> usize {
+        self.words.len() * 8
+    }
+}
+
+/// The words a row says for a file whose name says nothing until its
+/// first bytes are read: "type pending" (12 cells).
+pub const TYPE_PENDING: &str = Special::Pending.words();
 
 impl Panel {
     /// A panel showing `place`, not yet listed.
@@ -353,6 +452,12 @@ impl Panel {
             watching: Watching::Unknown,
             listed: false,
             plugin_list: None,
+            checked: Bits::default(),
+            typed_place: None,
+            entries_generation: 0,
+            check_skip: CheckSkip::new(&settings.check.skip),
+            disagreements: HashMap::new(),
+            types: None,
         }
     }
 
@@ -810,9 +915,36 @@ impl Panel {
         types: &TypeRegistry,
         clock: &dyn Clock,
     ) -> RowsReplaced {
-        for entry in &mut entries {
-            if entry.type_name.is_none() {
-                entry.type_name = types.short_name(entry);
+        // A refresh of the same place keeps the types its unchanged files
+        // were checked as, so a watched folder is not read again.
+        let old = std::mem::take(&mut self.all_entries);
+        let old_checked = std::mem::take(&mut self.checked);
+        let same_place = self.typed_place.as_ref() == Some(&self.place);
+        if !same_place {
+            self.disagreements.clear();
+        }
+        let mut checked = Bits::with_len(entries.len());
+        let carried: HashMap<&str, &Entry> = if same_place {
+            old.iter()
+                .enumerate()
+                .filter(|(i, _)| old_checked.get(*i))
+                .map(|(_, e)| (e.name.as_str(), e))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+        let reads = self.reads_contents();
+        for (i, entry) in entries.iter_mut().enumerate() {
+            if let Some(before) = carried.get(entry.name.as_str())
+                && before.size == entry.size
+                && before.modified == entry.modified
+                && before.kind == entry.kind
+            {
+                entry.type_index = before.type_index;
+                entry.type_name = before.type_name.clone();
+                checked.set(i);
+            } else if entry.type_name.is_none() {
+                type_by_name(entry, types, !reads, clock);
             }
             // A folder's size counted here stays with it (W3a).
             if entry.kind == EntryKind::Folder
@@ -826,8 +958,190 @@ impl Panel {
                 entry.needs_care = diroxide_vfs::names::needs_care(&entry.name);
             }
         }
+        if same_place {
+            let names: HashSet<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+            self.disagreements
+                .retain(|name, _| names.contains(name.as_str()));
+        }
+        drop(carried);
         self.all_entries = entries;
+        self.checked = checked;
+        self.typed_place = Some(self.place.clone());
+        self.entries_generation += 1;
         self.refresh(clock)
+    }
+
+    /// The file types the filter's `group:` asks: the type model's
+    /// groups, the owner's own among them, and the groups whose name
+    /// patterns take a file (a screenshot is in images and screenshots).
+    /// Without them, `group:` answers from core's extension table.
+    pub fn set_types(&mut self, types: std::sync::Arc<TypeRegistry>) {
+        self.types = Some(types);
+    }
+
+    /// The folders whose files are typed by name alone, from the setting
+    /// `check.skip`.
+    pub fn set_check_skip(&mut self, skip: CheckSkip) {
+        self.check_skip = skip;
+    }
+
+    /// Types every entry again by its name, as a new listing would be,
+    /// after the types or `check.skip` changed; the check then reads
+    /// them again.
+    pub fn retype(&mut self, types: &TypeRegistry, clock: &dyn Clock) {
+        let mut entries = std::mem::take(&mut self.all_entries);
+        for entry in &mut entries {
+            entry.type_name = None;
+            entry.type_index = 0;
+        }
+        self.typed_place = None;
+        self.set_entries_counted(entries, types, clock);
+    }
+
+    /// Whether the files of this place may have their first bytes read
+    /// for their types: a folder on this computer that `check.skip` does
+    /// not name. Archives, plugins' places and remote sites are typed by
+    /// name alone (R28 4.3: network places default to the name stages).
+    pub fn reads_contents(&self) -> bool {
+        self.place.kind() == diroxide_core::PlaceKind::Local
+            && !self.check_skip.covers(&self.place.to_string())
+    }
+
+    /// Counts each time the entries were replaced; an answer of the type
+    /// check carries the count it was asked under.
+    pub fn entries_generation(&self) -> u64 {
+        self.entries_generation
+    }
+
+    /// The files whose first bytes are still to be read for their types,
+    /// nearest the focus first: the focused row, then the rows below and
+    /// above it in turn, so the rows on screen come before the rest; then
+    /// the entries hidden or filtered out. Empty where the place is typed
+    /// by name alone.
+    pub fn type_queue(&self) -> Vec<TypeItem> {
+        if !self.reads_contents() {
+            return Vec::new();
+        }
+        let wanted = |i: usize, entry: &Entry| {
+            !self.checked.get(i)
+                && matches!(entry.kind, EntryKind::File | EntryKind::Archive)
+                && !skips_content(entry)
+        };
+        let index_of: HashMap<&str, usize> = self
+            .all_entries
+            .iter()
+            .enumerate()
+            .filter(|(i, e)| wanted(*i, e))
+            .map(|(i, e)| (e.name.as_str(), i))
+            .collect();
+        if index_of.is_empty() {
+            return Vec::new();
+        }
+        let mut queue = Vec::with_capacity(index_of.len());
+        let mut taken = HashSet::new();
+        let shown = self.entries.len();
+        let focus = self.list.focus_index().unwrap_or(0).min(shown);
+        let mut take = |row: usize| {
+            if let Some(entry) = self.entries.get(row)
+                && let Some(&i) = index_of.get(entry.name.as_str())
+                && taken.insert(i)
+            {
+                queue.push(TypeItem::of(i, entry));
+            }
+        };
+        for step in 0..shown {
+            if let Some(below) = focus.checked_add(step) {
+                take(below);
+            }
+            if step > 0
+                && let Some(above) = focus.checked_sub(step)
+            {
+                take(above);
+            }
+            if focus + step >= shown && focus < step {
+                break;
+            }
+        }
+        for (i, entry) in self.all_entries.iter().enumerate() {
+            if index_of.get(entry.name.as_str()) == Some(&i) && !taken.contains(&i) {
+                queue.push(TypeItem::of(i, entry));
+            }
+        }
+        queue
+    }
+
+    /// Takes what the type check found for files of this listing (the
+    /// answers of an older one are left to the caller to drop): each
+    /// file's type and its row's words, and the line when its name and
+    /// its contents disagree. Returns whether a row's words changed, after
+    /// which the rows are made again, the focus and the marks kept by id.
+    pub fn apply_type_answers(
+        &mut self,
+        answers: Vec<TypeAnswer>,
+        types: &TypeRegistry,
+        clock: &dyn Clock,
+    ) -> bool {
+        let mut changed = false;
+        for answer in answers {
+            let i = answer.index as usize;
+            let Some(entry) = self.all_entries.get_mut(i) else {
+                continue;
+            };
+            if entry.name != answer.name {
+                continue;
+            }
+            self.checked.set(i);
+            let (index, name) = match answer.found {
+                Ok((index, _)) => (index, types.by_index(index).map(|t| t.short.clone())),
+                Err(_) => (0, None),
+            };
+            // The row's type so far is its name's: only a different type
+            // from the contents can disagree, so the common case costs
+            // nothing more.
+            if let Ok((index, stage)) = answer.found
+                && entry.type_index != 0
+                && entry.type_index != index
+                && let (Some(named), Some(checked)) =
+                    (types.by_index(entry.type_index), types.by_index(index))
+            {
+                let found =
+                    |t: &diroxide_filetype::FileType, at: u16, stage| diroxide_filetype::Found {
+                        type_id: t.id.clone(),
+                        stage,
+                        index: usize::from(at).saturating_sub(1),
+                    };
+                let by_name = found(named, entry.type_index, TypeStage::Name);
+                if let Some(line) = types.disagreement(&by_name, &found(checked, index, stage)) {
+                    self.disagreements.insert(entry.name.clone(), line);
+                }
+            }
+            if entry.type_index != index || entry.type_name != name {
+                entry.type_index = index;
+                entry.type_name = name;
+                changed = true;
+            }
+        }
+        if changed {
+            self.refresh(clock);
+        }
+        changed
+    }
+
+    /// The line when an entry's name and its first bytes disagree: "Name
+    /// says PNG; contents say JPEG". `None` when they agree or the entry
+    /// was not checked.
+    pub fn disagreement(&self, name: &str) -> Option<&str> {
+        self.disagreements.get(name).map(String::as_str)
+    }
+
+    /// How many of the listing's entries had their first bytes read for
+    /// their types, and the bytes the marks of that take (one bit an
+    /// entry).
+    pub fn checked_count(&self) -> (usize, usize) {
+        let count = (0..self.all_entries.len())
+            .filter(|i| self.checked.get(*i))
+            .count();
+        (count, self.checked.bytes())
     }
 
     /// Shows or hides hidden entries.
@@ -968,6 +1282,7 @@ impl Panel {
             selected: &selected,
             bookmarks,
             content: None,
+            types: self.types.as_deref().map(|t| (t, clock)),
         };
         let evaluator = filter.evaluator(clock);
         self.entries
@@ -1032,6 +1347,7 @@ impl Panel {
                     selected: &selected,
                     bookmarks: filter.bookmarks.as_ref(),
                     content: filter.content.as_ref(),
+                    types: self.types.as_deref().map(|t| (t, clock)),
                 };
                 let evaluator = filter.filter.evaluator(clock);
                 self.all_entries
@@ -1308,5 +1624,175 @@ mod tests {
             searched.as_millis() < 30 * slack,
             "type-ahead took {searched:?}"
         );
+    }
+
+    fn short_of(types: &TypeRegistry, id: &str) -> String {
+        types.get(id).unwrap().short.clone()
+    }
+
+    fn answer(panel: &Panel, types: &TypeRegistry, name: &str, head: &[u8]) -> TypeAnswer {
+        let index = panel
+            .all_entries()
+            .iter()
+            .position(|e| e.name == name)
+            .unwrap();
+        let item = TypeItem::of(index, &panel.all_entries()[index]);
+        crate::typing::check_item(types, &item, Some(head), &clock())
+    }
+
+    /// Lane TA, commit 29: a row says its name's type at once and "type
+    /// pending" only where the name says nothing; the check reads from
+    /// the focus out, the rows on screen first; its answers change the
+    /// rows and keep the line where name and contents disagree; a refresh
+    /// of the same folder keeps what was checked.
+    #[test]
+    fn the_type_check_reads_from_the_focus_out_and_keeps_its_answers() {
+        let clock = clock();
+        let types = TypeRegistry::builtin();
+        let mut panel = panel();
+        let fresh = || {
+            let mut entries: Vec<Entry> = (0..10)
+                .map(|i| Entry::new(format!("a{i}"), EntryKind::File).with_size(10))
+                .collect();
+            entries.push(Entry::new("empty", EntryKind::File).with_size(0));
+            entries.push(Entry::new("photo.png", EntryKind::File).with_size(10));
+            entries
+        };
+        panel.set_entries(fresh(), &types, &clock);
+        let spoken: Vec<String> = panel.list().rows().iter().map(|r| r.spoken()).collect();
+        assert_eq!(spoken[0], "a0, type pending, 10 bytes");
+        assert_eq!(
+            spoken[10], "empty, file, 0 bytes",
+            "an empty file is never read"
+        );
+        assert_eq!(spoken[11], "photo.png, PNG, 10 bytes");
+        assert!(within_forty(TYPE_PENDING));
+
+        panel.list_mut().focus_id("a5");
+        let order: Vec<String> = panel.type_queue().into_iter().map(|i| i.name).collect();
+        assert_eq!(
+            order,
+            [
+                "a5",
+                "a6",
+                "a4",
+                "a7",
+                "a3",
+                "a8",
+                "a2",
+                "a9",
+                "a1",
+                "a0",
+                "photo.png"
+            ]
+        );
+
+        let script = answer(&panel, &types, "a5", b"#!/bin/sh\necho hello\n");
+        let jpeg = answer(&panel, &types, "photo.png", b"\xFF\xD8\xFF\xE0\0\x10JFIF\0");
+        let generation = panel.entries_generation();
+        assert!(panel.apply_type_answers(vec![script, jpeg], &types, &clock));
+        assert_eq!(
+            panel.entries_generation(),
+            generation,
+            "answers keep the listing"
+        );
+        let row = |panel: &Panel, name: &str| {
+            panel
+                .list()
+                .rows()
+                .iter()
+                .find(|r| r.id == name)
+                .unwrap()
+                .spoken()
+        };
+        let shell = short_of(&types, "shell");
+        assert_eq!(row(&panel, "a5"), format!("a5, {shell}, 10 bytes"));
+        assert_eq!(row(&panel, "photo.png"), "photo.png, JPEG, 10 bytes");
+        assert_eq!(
+            panel.disagreement("photo.png"),
+            Some("Name says PNG; contents say JPEG")
+        );
+        assert_eq!(panel.disagreement("a5"), None, "the name gave nothing");
+        assert_eq!(panel.list().focused().unwrap().id, "a5");
+        let left: Vec<String> = panel.type_queue().into_iter().map(|i| i.name).collect();
+        assert_eq!(left.len(), 9);
+        assert!(!left.contains(&"photo.png".to_owned()));
+
+        // A refresh of the same folder keeps the checked types of the
+        // files that did not change; a changed file is checked again.
+        let mut again = fresh();
+        again[0] = Entry::new("a0", EntryKind::File).with_size(11);
+        panel.set_entries(again, &types, &clock);
+        assert_eq!(row(&panel, "photo.png"), "photo.png, JPEG, 10 bytes");
+        assert_eq!(row(&panel, "a5"), format!("a5, {shell}, 10 bytes"));
+        assert!(panel.disagreement("photo.png").is_some());
+        assert_eq!(panel.checked_count().0, 2);
+        assert_eq!(panel.type_queue().len(), 9);
+        let stale = answer(&panel, &types, "a1", b"plain");
+        let renamed = TypeAnswer {
+            name: "gone".to_owned(),
+            ..stale
+        };
+        assert!(!panel.apply_type_answers(vec![renamed], &types, &clock));
+    }
+
+    /// Lane TA, commit 29: a place whose contents are never read (an
+    /// archive, a folder of `check.skip`) types by name alone, with no
+    /// "type pending" and nothing to read.
+    #[test]
+    fn a_place_typed_by_name_alone_has_nothing_pending() {
+        let clock = clock();
+        let types = TypeRegistry::builtin();
+        let mut panel = panel();
+        panel.set_check_skip(CheckSkip::new(&["/home".to_owned()]));
+        assert!(!panel.reads_contents());
+        panel.set_entries(
+            vec![Entry::new("data", EntryKind::File).with_size(5)],
+            &types,
+            &clock,
+        );
+        assert_eq!(panel.list().rows()[0].spoken(), "data, file, 5 bytes");
+        assert!(panel.type_queue().is_empty());
+        panel.set_check_skip(CheckSkip::default());
+        panel.retype(&types, &clock);
+        assert_eq!(
+            panel.list().rows()[0].spoken(),
+            "data, type pending, 5 bytes"
+        );
+        assert_eq!(panel.type_queue().len(), 1);
+    }
+
+    /// Lane TA, commit 29: at 100,000 entries a checked type costs the
+    /// entry's two-byte index and one bit of the panel's marks; the
+    /// answers that agree with the names change no row.
+    #[test]
+    fn a_hundred_thousand_checked_entries_cost_two_bytes_each() {
+        let clock = clock();
+        let types = TypeRegistry::builtin();
+        let entries: Vec<Entry> = (0..100_000u64)
+            .map(|i| Entry::new(format!("file{i}.txt"), EntryKind::File).with_size(i + 1))
+            .collect();
+        let mut panel = panel();
+        panel.set_entries(entries, &types, &clock);
+        let text = panel.all_entries()[0].type_index;
+        assert_ne!(text, 0);
+        assert_eq!(size_of_val(&text), 2);
+        let answers: Vec<TypeAnswer> = panel
+            .type_queue()
+            .into_iter()
+            .map(|item| TypeAnswer {
+                index: item.index,
+                name: item.name,
+                found: Ok((text, TypeStage::Name)),
+            })
+            .collect();
+        assert_eq!(answers.len(), 100_000);
+        assert!(!panel.apply_type_answers(answers, &types, &clock));
+        assert_eq!(panel.checked_count(), (100_000, 12_504));
+        assert!(panel.type_queue().is_empty());
+    }
+
+    fn within_forty(line: &str) -> bool {
+        line.chars().count() <= diroxide_core::format::BRAILLE_CELLS
     }
 }

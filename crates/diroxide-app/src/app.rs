@@ -53,6 +53,12 @@ mod select;
 // Selection on the filter language (W3a).
 mod selecting;
 mod split_join;
+// Typed actions and the lists of file types (alpha 4, lane TA).
+mod type_actions;
+// The Groups list, Open with and the theme words (alpha 4, lane TA).
+mod type_lists;
+// The background type check (alpha 4, lane TA).
+mod type_checks;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -469,6 +475,24 @@ pub enum AppEvent {
         /// Its free space and size, when it answered.
         space: Option<diroxide_vfs::SpaceInfo>,
     },
+    /// A batch of a panel's files typed by their first bytes (alpha 4,
+    /// lane TA), answering [`Request::CheckTypes`].
+    TypesChecked {
+        /// The panel.
+        side: Side,
+        /// The entries they were asked for; answers for older ones are
+        /// dropped.
+        listing: u64,
+        /// What each file is.
+        answers: Vec<crate::typing::TypeAnswer>,
+    },
+    /// The programs the system has for a file, for Open with (lane TA).
+    OpenWithListed {
+        /// The file.
+        place: Place,
+        /// The programs.
+        list: Box<crate::typing::OpenWithRows>,
+    },
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -867,7 +891,8 @@ pub struct App {
     active: Side,
     keymap: Keymap,
     settings: Settings,
-    types: TypeRegistry,
+    /// The file types, shared with the background check (lane TA).
+    types: Arc<TypeRegistry>,
     clock: Arc<dyn Clock>,
     ids: IdSource,
     dialogs: Vec<(DialogId, Dialog)>,
@@ -960,6 +985,17 @@ pub struct App {
     volumes: volumes_ui::VolumesState,
     /// Full screen and the themes found by name (lane A6).
     look: look::LookState,
+    /// What each panel's type check was asked (lane TA).
+    type_checks: type_checks::TypeChecks,
+    /// The slots of the owner's type actions (lane TA).
+    type_slots: crate::typing::TypeSlots,
+    /// A typed action's command is running: Enter and View run their
+    /// built-in ones inside it, never the typed action again.
+    running_typed: bool,
+    /// The owner's `tools.toml`, for a tool action's program (lane TA).
+    tool_overrides: diroxide_config::ToolsConfig,
+    /// The installed helper components' programs (K's request 3).
+    helper_programs: Vec<std::path::PathBuf>,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1218,6 +1254,8 @@ impl App {
             settings.screen_reader_mode,
             diroxide_config::ScreenReaderMode::Off
         );
+        // The retro pack is read only while its setting is on.
+        let retro = settings.filetypes.retro;
         let mut app = Self {
             panels: [
                 Panel::new(Side::Left, options.left, &settings),
@@ -1226,7 +1264,7 @@ impl App {
             active: Side::Left,
             keymap,
             settings,
-            types: options.types,
+            types: Arc::new(options.types.with_retro(retro)),
             clock: options.clock,
             ids: IdSource::new(),
             dialogs: Vec::new(),
@@ -1286,10 +1324,19 @@ impl App {
             trash: trash_ui::TrashState::default(),
             volumes: volumes_ui::VolumesState::default(),
             look: look::LookState::new(&startup.user_themes, startup.themes_dir.clone()),
+            type_checks: type_checks::TypeChecks::default(),
+            type_slots: startup.type_slots,
+            running_typed: false,
+            tool_overrides: startup.tools,
+            helper_programs: startup.helper_programs,
         };
         app.apply_session();
         for side in Side::BOTH {
             app.set_panel_help(side);
+        }
+        // The filter's `group:` asks the type model's groups (lane TA).
+        for panel in &mut app.panels {
+            panel.set_types(Arc::clone(&app.types));
         }
         app
     }
@@ -1587,7 +1634,13 @@ impl App {
                     tail.push_str(&format!(", sorted by {}", sort.key.word()));
                 }
             }
-            let side_words = format!("{} panel", self.active.word());
+            // A plugin's words about a place inside a container it claims
+            // follow the panel too (PD's request 6): "EFI, in disk.iso, left
+            // panel, ISO 9660, 3 files (Disk images)".
+            let side_words = match self.place_words(place) {
+                Some(words) => format!("{} panel, {words}", self.active.word()),
+                None => format!("{} panel", self.active.word()),
+            };
             return self.archive_title_line(place, &side_words, &tail, cells);
         }
         let mut head = format!(
@@ -1711,6 +1764,7 @@ impl App {
         effects.extend(self.plugin_queue_next());
         effects.extend(self.jobs_queue_next());
         self.follow_cursor();
+        self.follow_type_checks();
         self.mark_requests(effects)
     }
 
@@ -1852,6 +1906,12 @@ impl App {
                 }
                 Vec::new()
             }
+            AppEvent::TypesChecked {
+                side,
+                listing,
+                answers,
+            } => self.types_checked(side, listing, answers),
+            AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
         }
     }
 
@@ -1862,6 +1922,7 @@ impl App {
         effects.extend(self.plugin_queue_next());
         effects.extend(self.jobs_queue_next());
         self.follow_cursor();
+        self.follow_type_checks();
         self.mark_requests(effects)
     }
 
@@ -1939,6 +2000,13 @@ impl App {
         }
         // The Volumes list (lane A3).
         if let Some(effects) = self.volumes_dispatch(command) {
+            return effects;
+        }
+        // Typed actions and the lists of file types (lane TA).
+        if let Some(effects) = self.type_actions_dispatch(command) {
+            return effects;
+        }
+        if let Some(effects) = self.type_lists_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {
