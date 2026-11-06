@@ -470,7 +470,8 @@ impl Frontend {
     /// in this session) the theme the system's setting gives; the owner's
     /// `[colors]`; and the system's high contrast colors, which win.
     /// Elsewhere than Windows, the system's high contrast setting chooses
-    /// the built-in high-contrast theme.
+    /// the built-in high-contrast theme. The themes are the app's
+    /// ([`App::themes`]), the owner's theme files among them.
     pub fn colors_choice(&self) -> Choice {
         let settings = self.app.settings();
         let chosen = settings.theme != self.start_theme;
@@ -481,6 +482,7 @@ impl Frontend {
                 &settings.theme,
                 settings.follow_system_appearance && !chosen,
                 self.appearance,
+                self.app.themes(),
             )
         };
         Choice {
@@ -493,7 +495,7 @@ impl Frontend {
     /// The window's default properties with the colors as they stand, for
     /// the window's start.
     pub fn window_properties(&mut self) -> DefaultProperties {
-        self.palette = Arc::new(Palette::of(&self.colors_choice()));
+        self.palette = Arc::new(Palette::of(&self.colors_choice(), self.app.themes()));
         paint::default_properties(&self.palette)
     }
 
@@ -501,14 +503,15 @@ impl Frontend {
     /// changed: the default properties of every widget, and the three
     /// lines' text colors (the title line on the page, the status and
     /// jobs lines on the status bar's band). A theme chosen after the
-    /// first is said with its verdict.
+    /// first is said with its verdict; at the first, a theme name the app
+    /// does not know is said ([`Self::unknown_theme`]).
     fn sync_colors(&mut self, host: &mut impl Host) {
         let choice = self.colors_choice();
         if self.shown.colors.as_ref() == Some(&choice) {
             return;
         }
         let first = self.shown.colors.is_none();
-        let palette = Arc::new(Palette::of(&choice));
+        let palette = Arc::new(Palette::of(&choice, self.app.themes()));
         host.set_default_properties(paint::default_properties(&palette));
         let text = paint::color(palette.text);
         let status = paint::color(palette.look(PanelRole::StatusLine).fg);
@@ -522,13 +525,29 @@ impl Frontend {
             palette.key != self.palette.key || palette.fell_back() != self.palette.fell_back();
         self.palette = palette;
         self.shown.colors = Some(choice);
-        if !first
-            && changed
-            && let Some(line) = self.colors_line()
-        {
+        if first {
+            if let Some(line) = self.unknown_theme() {
+                let effects = self.app.handle(AppEvent::Problem(Message::warning(line)));
+                self.carry(effects);
+            }
+        } else if changed && let Some(line) = self.colors_line() {
             let effects = self.app.handle(AppEvent::Problem(Message::info(line)));
             self.carry(effects);
         }
+    }
+
+    /// What the window says at its start when `--theme` or the theme
+    /// setting names a theme that is neither built in nor one of the
+    /// owner's theme files ([`App::themes`]): "Unknown theme no-such.
+    /// Galaxy is in use.", with the theme drawn in its place. Nothing
+    /// while the system's high contrast colors are drawn, since no theme
+    /// is.
+    fn unknown_theme(&self) -> Option<String> {
+        let name = &self.app.settings().theme;
+        if self.app.themes().get(name).is_some() || self.palette.key == "system" {
+            return None;
+        }
+        Some(crate::theme::unknown_theme_line(name, &self.palette.name))
     }
 
     /// What is said when the window's colors change: the theme and its
@@ -545,7 +564,9 @@ impl Frontend {
         if let Some(choice) = &self.shown.colors {
             settings.theme = choice.theme.clone();
         }
-        let verdict = diroxide_app::settings::theme_line(&settings, None);
+        // The verdict of the theme drawn, found among the app's themes,
+        // so an owner's theme file is said by its own name.
+        let verdict = diroxide_app::settings::theme_line_in(&settings, self.app.themes());
         let said = self
             .to_say
             .iter()

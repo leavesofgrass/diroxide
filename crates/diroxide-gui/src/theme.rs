@@ -3,6 +3,11 @@
 //! [`Look`] for every screen role ([`PanelRole`]), as the terminal maps
 //! them in `crates/diroxide-tui/src/style.rs`.
 //!
+//! - The themes are the ones the app finds by name (`App::themes`): the
+//!   built-in set and the owner's theme files from the config's themes
+//!   folder (R30's commit 16), so a theme file is drawn by the window as
+//!   the terminal draws it. A name none of them has is drawn as the
+//!   default and said once in words ([`unknown_theme_line`]).
 //! - Every role keeps its theme's colors and its attribute (bold,
 //!   underline, italic), with the owner's `[colors]` overrides in place.
 //! - A role whose text fails the theme's floor on its background (4.5 to
@@ -198,14 +203,14 @@ fn indicator(candidates: &[Rgb], against: &[Rgb]) -> Rgb {
 
 impl Palette {
     /// The palette for a choice: the system's high contrast colors while
-    /// that mode is on, else the theme with that name (the default when
-    /// no theme has it) and the owner's colors.
-    pub fn of(choice: &Choice) -> Self {
+    /// that mode is on, else the theme with that name among `themes` (the
+    /// app's, `App::themes`: the built-in set and the owner's theme
+    /// files; the default when none has it) and the owner's colors.
+    pub fn of(choice: &Choice, themes: &Registry) -> Self {
         if let Some(system) = &choice.system {
             return Self::from_system(system);
         }
-        let registry = Registry::builtin();
-        let (theme, _) = registry.resolve(&choice.theme);
+        let (theme, _) = themes.resolve(&choice.theme);
         Self::from_theme(theme, &choice.colors)
     }
 
@@ -457,13 +462,21 @@ impl Palette {
 /// system's appearance, the one the system's light, dark or high
 /// contrast setting gives (the theme crate's [`follow_os`]: the saved
 /// theme when it already matches, else its light or dark partner, else
-/// Galaxy, Galaxy Light or High contrast).
-pub fn drawn_theme(saved: &str, follow: bool, scheme: OsScheme) -> String {
+/// Galaxy, Galaxy Light or High contrast). `themes` are the app's, so an
+/// owner's theme file keeps its own kind and partner.
+pub fn drawn_theme(saved: &str, follow: bool, scheme: OsScheme, themes: &Registry) -> String {
     if !follow {
         return saved.to_owned();
     }
-    let registry = Registry::builtin();
-    follow_os(registry.facts(saved), scheme).unwrap_or_else(|| saved.to_owned())
+    follow_os(themes.facts(saved), scheme).unwrap_or_else(|| saved.to_owned())
+}
+
+/// What the window says once, at the start, when `--theme` or the theme
+/// setting names a theme that is neither built in nor one of the owner's
+/// theme files: the name first, then the theme drawn in its place.
+/// "Unknown theme no-such. Galaxy is in use."
+pub fn unknown_theme_line(name: &str, drawn: &str) -> String {
+    format!("Unknown theme {name}. {drawn} is in use.")
 }
 
 #[cfg(test)]
@@ -554,7 +567,7 @@ mod tests {
             colors: BTreeMap::new(),
             system: Some(NIGHT_SKY),
         };
-        let p = Palette::of(&choice);
+        let p = Palette::of(&choice, &Registry::builtin());
         assert_eq!(p.key, "system");
         assert_eq!(p.page, NIGHT_SKY.window);
         assert_eq!(p.text, NIGHT_SKY.window_text);
@@ -570,18 +583,62 @@ mod tests {
 
     #[test]
     fn following_the_system_stays_in_the_pair_or_takes_galaxy() {
-        assert_eq!(drawn_theme("nord", false, OsScheme::Light), "nord");
-        assert_eq!(drawn_theme("galaxy", true, OsScheme::Light), "galaxy-light");
+        let themes = Registry::builtin();
+        let drawn = |saved: &str, follow: bool, scheme: OsScheme| {
+            drawn_theme(saved, follow, scheme, &themes)
+        };
+        assert_eq!(drawn("nord", false, OsScheme::Light), "nord");
+        assert_eq!(drawn("galaxy", true, OsScheme::Light), "galaxy-light");
         assert_eq!(
-            drawn_theme("solarized-dark", true, OsScheme::Light),
+            drawn("solarized-dark", true, OsScheme::Light),
             "solarized-light"
         );
-        assert_eq!(drawn_theme("galaxy", true, OsScheme::Dark), "galaxy");
+        assert_eq!(drawn("galaxy", true, OsScheme::Dark), "galaxy");
         assert_eq!(
-            drawn_theme("galaxy", true, OsScheme::HighContrast),
+            drawn("galaxy", true, OsScheme::HighContrast),
             "high-contrast"
         );
-        assert_eq!(drawn_theme("nord", true, OsScheme::Unknown), "nord");
+        assert_eq!(drawn("nord", true, OsScheme::Unknown), "nord");
+    }
+
+    /// A theme of the owner's, added to the app's themes, is drawn by
+    /// name and keeps its own kind when the system's appearance is
+    /// followed: a light theme file stays itself in light mode.
+    #[test]
+    fn an_owners_theme_is_found_by_name_and_followed_by_its_kind() {
+        let mut themes = Registry::builtin();
+        let mut harbor = diroxide_theme::builtin::get("galaxy-light")
+            .cloned()
+            .unwrap();
+        harbor.meta.name = "harbor".to_owned();
+        harbor.meta.display_name = "Harbor".to_owned();
+        themes.add(harbor);
+        let choice = Choice {
+            theme: "harbor".into(),
+            colors: BTreeMap::new(),
+            system: None,
+        };
+        let p = Palette::of(&choice, &themes);
+        assert_eq!((p.key.as_str(), p.name.as_str()), ("harbor", "Harbor"));
+        // Not among the built-in themes: Galaxy.
+        assert_eq!(Palette::of(&choice, &Registry::builtin()).key, "galaxy");
+        assert_eq!(
+            drawn_theme("harbor", true, OsScheme::Light, &themes),
+            "harbor"
+        );
+    }
+
+    #[test]
+    fn the_unknown_theme_line_says_the_name_first_in_40_cells() {
+        let line = unknown_theme_line("no-such", "Galaxy");
+        assert_eq!(line, "Unknown theme no-such. Galaxy is in use.");
+        assert!(line.chars().count() <= diroxide_core::format::BRAILLE_CELLS);
+        // A longer drawn name still keeps the unknown name first.
+        let line = unknown_theme_line("no-such", "Galaxy Light");
+        assert!(diroxide_core::format::within_cells(
+            &line,
+            "Unknown theme no-such."
+        ));
     }
 
     #[test]
