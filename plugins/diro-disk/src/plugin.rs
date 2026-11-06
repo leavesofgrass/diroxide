@@ -1,12 +1,9 @@
-//! The plugin's answers to the host: `initialize`, and the provider
-//! methods of the `disk` scheme.
-//!
-//! A skeleton from alpha 4's contract step (P4): an image connects and
-//! lists as empty, and a name in it is not found, so the shapes are fixed
-//! and the conformance suite passes until the disk lane (commits 86 to
-//! 97) reads the images.
+//! The plugin's answers to the host: `initialize`, the provider methods
+//! of the `disk` scheme, `place/describe` for the title line, and
+//! `provider/disconnect`, which closes an image when its last lease ends.
 
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, PoisonError};
 
 use diroxide_plugins::protocol::{ErrorKind, PROTOCOL, Params, RpcError, methods};
 use diroxide_plugins::session::{
@@ -14,6 +11,11 @@ use diroxide_plugins::session::{
 };
 use serde_json::{Value, json};
 
+use crate::error::DiskError;
+use crate::host::Serving;
+use crate::image::Layout;
+use crate::lines;
+use crate::provider::{self, At, Call, Images};
 use crate::rpc::{Cancel, Handler, Peer, WORKERS};
 
 /// The scheme this plugin's provider is known by.
@@ -28,26 +30,87 @@ pub const NAME: &str = "Disk images";
 pub const PROVIDER_METHODS: &[&str] = &["connect", "list", "stat", "read", "volumes"];
 
 /// The plugin.
-#[derive(Debug, Default)]
-pub struct Plugin;
+#[derive(Default)]
+pub struct Plugin {
+    images: Images,
+}
+
+impl std::fmt::Debug for Plugin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Plugin")
+            .field("open_images", &self.images.len())
+            .finish()
+    }
+}
 
 impl Plugin {
     /// A plugin that has not been initialized.
     pub fn new() -> Arc<Self> {
-        Arc::new(Self)
+        Arc::new(Self::default())
+    }
+
+    /// The open images, for the tests.
+    pub fn images(&self) -> &Images {
+        &self.images
+    }
+
+    fn provider(
+        &self,
+        peer: &Arc<Peer>,
+        method: &str,
+        params: &Params,
+        cancel: &Cancel,
+    ) -> Result<Value, DiskError> {
+        let call = Call {
+            peer,
+            params,
+            cancel,
+            images: &self.images,
+        };
+        match method {
+            methods::PROVIDER_CONNECT => provider::connect::connect(&call),
+            methods::PROVIDER_LIST => provider::list::list(&call),
+            methods::PROVIDER_STAT => provider::stat::stat(&call),
+            methods::PROVIDER_READ => provider::read::read(&call),
+            methods::PROVIDER_VOLUMES => provider::volumes::volumes(&call),
+            methods::PLACE_DESCRIBE => describe(&call),
+            _ => Err(DiskError::Host(RpcError::new(
+                ErrorKind::MethodNotFound,
+                format!("no method {method}"),
+            ))),
+        }
     }
 }
 
-/// The answer to a name the skeleton cannot read yet.
-fn not_read() -> RpcError {
-    RpcError::new(
-        ErrorKind::NotFound,
-        "this disk image reader is not built yet",
-    )
+/// `place/describe`: the title line's words for a place in an image:
+/// "Partition 2, in disk.img", "EFI, in fedora.iso", "home, in partition
+/// 2 of disk.img".
+fn describe(call: &Call<'_>) -> Result<Value, DiskError> {
+    let at = call.at("place")?;
+    let image = at.image_name();
+    let open = call.images.get(call.peer, &at.container)?;
+    let inner = open.image.inner(&at.inner)?;
+    let text = match (&open.image.layout, inner.partition, inner.names.last()) {
+        (_, None, None) => open.image.details_line(),
+        (Layout::Table { .. }, Some(number), None) => lines::partition_title(number, &image),
+        (Layout::Table { .. }, Some(number), Some(name)) => {
+            lines::folder_title(name, &format!("partition {number} of {image}"))
+        }
+        (_, _, Some(name)) => lines::folder_title(name, &image),
+        (Layout::Single(_), Some(_), None) => return Err(DiskError::NotFound),
+    };
+    Ok(json!({"text": text}))
 }
 
 impl Handler for Plugin {
-    fn initialize(&self, _params: &InitializeParams) -> InitializeResult {
+    fn initialize(&self, params: &InitializeParams) -> InitializeResult {
+        if !params.dirs.spool.is_empty() {
+            *self
+                .images
+                .spool
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner) = Some(PathBuf::from(&params.dirs.spool));
+        }
         InitializeResult {
             protocol: PROTOCOL,
             plugin: Who {
@@ -59,8 +122,9 @@ impl Handler for Plugin {
                     scheme: SCHEME.to_owned(),
                     methods: PROVIDER_METHODS.iter().map(|m| (*m).to_owned()).collect(),
                 }],
+                place_info: true,
                 concurrency: u32::try_from(WORKERS).ok(),
-                transfer: vec!["inline".to_owned()],
+                transfer: vec!["inline".to_owned(), "file".to_owned()],
                 ..PluginCapabilities::default()
             },
             warnings: Vec::new(),
@@ -69,25 +133,32 @@ impl Handler for Plugin {
 
     fn request(
         &self,
-        _peer: &Arc<Peer>,
+        peer: &Arc<Peer>,
         method: &str,
         params: Params,
         cancel: &Cancel,
     ) -> Result<Value, RpcError> {
         cancel.check()?;
-        let _ = params;
-        match method {
-            methods::PROVIDER_CONNECT => Ok(json!({
-                "display_name": NAME,
-                "capabilities": {"writable": false, "links": true, "attributes": true}
-            })),
-            methods::PROVIDER_LIST => Ok(json!({"entries": [], "complete": true})),
-            methods::PROVIDER_STAT | methods::PROVIDER_READ => Err(not_read()),
-            methods::PROVIDER_VOLUMES => Ok(json!({"volumes": []})),
-            _ => Err(RpcError::new(
-                ErrorKind::MethodNotFound,
-                format!("no method {method}"),
-            )),
+        let _serving = Serving::start(cancel);
+        self.provider(peer, method, &params, cancel)
+            .map_err(|e| e.to_rpc())
+    }
+
+    fn notification(&self, _peer: &Arc<Peer>, method: &str, params: Params) {
+        if method == methods::PROVIDER_DISCONNECT {
+            let place = params
+                .get("authority")
+                .or_else(|| params.get("place"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            match At::parse(place) {
+                Ok(at) => self.images.close(&at.container.to_string()),
+                Err(_) => self.images.close(place),
+            }
         }
+    }
+
+    fn shutdown(&self) {
+        self.images.close_all();
     }
 }

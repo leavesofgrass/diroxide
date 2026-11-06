@@ -161,6 +161,7 @@ dependencies = [
 name = "diro-disk"
 version = "0.1.0-alpha.3"
 dependencies = [
+ "diroxide-config",
  "diroxide-core",
  "diroxide-plugins",
  "diroxide-vfs",
