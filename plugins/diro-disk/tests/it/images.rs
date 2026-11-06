@@ -46,3 +46,26 @@ fn an_image_that_changes_is_opened_again() {
     assert_eq!(error, diroxide_vfs::VfsError::Changed);
     assert_eq!(f.names(&root), ["TWO.TXT"]);
 }
+
+#[test]
+fn more_images_than_stay_open_still_read_when_one_comes_back() {
+    let f = Fixture::new();
+    let floppy = crate::make::fat_volume(
+        fatfs::FatType::Fat12,
+        2880,
+        b"MANY       ",
+        &[],
+        &[("A.TXT", b"a")],
+    );
+    let roots: Vec<_> = (0..20)
+        .map(|i| f.image(&format!("many-{i}.img"), &floppy))
+        .collect();
+    for root in &roots {
+        assert_eq!(f.names(root), ["A.TXT"]);
+    }
+    // The first was closed to keep sixteen open; it opens again.
+    assert_eq!(
+        f.read(&crate::fixture::at(&roots[0], &["A.TXT"])).unwrap(),
+        b"a"
+    );
+}

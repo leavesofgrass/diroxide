@@ -66,6 +66,9 @@ pub const CLAIMED: &[&str] = &[
     ".dd",
 ];
 
+/// The most images kept open at once; the oldest idle one closes first.
+pub const MAX_OPEN: usize = 16;
+
 /// How often an open image's file is checked for a change.
 pub const CHECK_EVERY: Duration = Duration::from_secs(2);
 
@@ -153,6 +156,8 @@ pub struct Open {
     pub spool: Option<Arc<Spool>>,
     /// Held while a partition is handed to 7-Zip, so it is handed once.
     falling_back: Mutex<()>,
+    /// When it was opened, for closing the oldest idle ones.
+    opened_at: Mutex<Instant>,
     /// The image file's own place, for 7-Zip when it is on a local drive.
     pub place: Place,
 }
@@ -230,10 +235,23 @@ impl Images {
             return Ok(open);
         }
         let open = Arc::new(self.open_now(peer, container, depth)?);
-        self.open
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(key, Arc::clone(&open));
+        let mut images = self.open.lock().unwrap_or_else(PoisonError::into_inner);
+        images.insert(key, Arc::clone(&open));
+        // At most MAX_OPEN images stay open: the ones no request holds are
+        // closed, those opened first going first, with their spool files.
+        while images.len() > MAX_OPEN {
+            let idle = images
+                .iter()
+                .filter(|(_, o)| Arc::strong_count(o) == 1)
+                .min_by_key(|(_, o)| *o.opened_at.lock().unwrap_or_else(PoisonError::into_inner))
+                .map(|(k, _)| k.clone());
+            match idle {
+                Some(oldest) => {
+                    images.remove(&oldest);
+                }
+                None => break,
+            }
+        }
         Ok(open)
     }
 
@@ -312,6 +330,7 @@ impl Images {
             checked: Mutex::new(Instant::now()),
             spool,
             falling_back: Mutex::new(()),
+            opened_at: Mutex::new(Instant::now()),
             place: container.clone(),
         })
     }
@@ -500,6 +519,7 @@ impl Images {
             checked: Mutex::new(Instant::now()),
             spool: self.new_spool(),
             falling_back: Mutex::new(()),
+            opened_at: Mutex::new(Instant::now()),
             place: container.clone(),
         });
         self.open
