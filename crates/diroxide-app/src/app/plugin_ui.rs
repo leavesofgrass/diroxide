@@ -21,6 +21,11 @@
 //! - Escape closes a plugin's dialog with "cancelled" for the plugin and
 //!   returns the focus; in a running command it cancels the job. In a
 //!   form's field it goes back to the form, the field as it was.
+//! - A plugin's words about a folder (`place/describe`, the same lane)
+//!   follow the panel in the title line, its name last: asked off the
+//!   input thread when a panel lands in a folder its `[[place_info]]`
+//!   matches, kept for the folder until it is listed again or the plugin
+//!   fails or is turned off ([`crate::plugins::describe`]).
 //! - A plugin's two documents (`ui/show_diff`, the same lane) open the
 //!   compare screens, compared on the plugin's worker under the app's
 //!   compare options (`comparing`).
@@ -143,7 +148,33 @@ pub(super) struct PluginState {
     searches: HashMap<u64, (String, bool)>,
     /// The log asked for, by item id.
     log_wanted: Option<String>,
+    /// Plugins' words about folders for the title line, by folder, kept
+    /// until the folder is listed again or the plugin fails or is turned
+    /// off (`place/describe`, alpha 4's host-pieces lane).
+    described: HashMap<Place, Description>,
+    /// Each side's describe on its way: its number and its folder.
+    describing: [Option<(u64, Place)>; 2],
+    /// The folder each side last landed in, so the same folder listed
+    /// again (a reload, a watch, a job's end) asks again.
+    landed: [Option<Place>; 2],
+    /// The last describe's number.
+    describes: u64,
 }
+
+/// A plugin's words about a folder, for the title line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Description {
+    /// The plugin's id.
+    plugin: String,
+    /// Its name, said after its words.
+    name: String,
+    /// The words: "main, no upstream, 2 changed here".
+    text: String,
+}
+
+/// The most characters of a plugin's words the title line keeps; the rest
+/// is "...".
+const DESCRIPTION_CHARS: usize = 40;
 
 /// What a plugin dialog is for.
 #[derive(Clone, Debug)]
@@ -688,6 +719,12 @@ impl App {
             } => self.lister_rows_came(&plugin, &lister, rows, refresh),
             PluginEvent::ListerNoRows { plugin, lister } => self.lister_no_rows(&plugin, &lister),
             PluginEvent::Note(message) => vec![self.say(message)],
+            PluginEvent::Described {
+                request,
+                side,
+                place,
+                described,
+            } => self.place_described(request, side, place, described),
         }
     }
 
@@ -695,6 +732,19 @@ impl App {
     /// plugins list made again, a command waiting for its enable run.
     fn catalog_found(&mut self, catalog: Catalog) -> Vec<Effect> {
         self.plugins.catalog = catalog;
+        // A disabled or changed plugin's words leave the title line.
+        let describers = self.describers(None);
+        self.plugins
+            .described
+            .retain(|_, d| describers.contains(&d.plugin));
+        // The folders shown now, which may have been listed before the
+        // catalog came, are described once it is here.
+        for side in Side::BOTH {
+            let place = self.panel(side).place().clone();
+            if !self.plugins.described.contains_key(&place) {
+                self.ask_describers(side, place);
+            }
+        }
         self.bind_plugin_keys();
         self.plugins.scanned = true;
         let mut effects = Vec::new();
@@ -1684,6 +1734,132 @@ impl App {
         effects
     }
 
+    // ---- A plugin's words for the title line (`place/describe`) ----
+
+    /// The enabled process plugins whose `[[place_info]]` may match a
+    /// folder by its scheme (any folder when `None`), in the catalog's
+    /// order; the marker is looked for off the input thread.
+    fn describers(&self, place: Option<&Place>) -> Vec<String> {
+        if self.plugins.catalog.off {
+            return Vec::new();
+        }
+        self.plugins
+            .catalog
+            .items
+            .iter()
+            .filter(|item| item.contributes() && item.is_process())
+            .filter(|item| {
+                item.manifest.as_ref().is_some_and(|m| {
+                    m.place_info.iter().any(|spec| {
+                        place.is_none_or(|p| crate::plugins::describe::scheme_fits(spec, p))
+                    })
+                })
+            })
+            .map(|item| item.id.clone())
+            .collect()
+    }
+
+    /// A panel landed in a folder (the listing hook in `nav.rs`): the
+    /// plugins that may describe it are asked off the input thread, once a
+    /// folder; the same folder listed again (a reload, a watch, a job's
+    /// end) asks again, the old words kept until the answer. A plugin whose
+    /// manifest declares no `[[place_info]]` is never asked.
+    pub(super) fn describe_landed(&mut self, side: Side) {
+        let place = self.panel(side).place().clone();
+        let at = side.index();
+        let again = self.plugins.landed[at].as_ref() == Some(&place);
+        self.plugins.landed[at] = Some(place.clone());
+        if !again && self.plugins.described.contains_key(&place) {
+            return;
+        }
+        self.ask_describers(side, place);
+    }
+
+    /// Asks the plugins that may describe a side's folder, unless a
+    /// describe of that folder is on its way.
+    fn ask_describers(&mut self, side: Side, place: Place) {
+        let at = side.index();
+        if self.plugins.describing[at]
+            .as_ref()
+            .is_some_and(|(_, p)| *p == place)
+        {
+            return;
+        }
+        let plugins = self.describers(Some(&place));
+        if plugins.is_empty() {
+            return;
+        }
+        self.plugins.describes += 1;
+        let request = self.plugins.describes;
+        self.plugins.describing[at] = Some((request, place.clone()));
+        self.request(Request::Plugins(Box::new(PluginRequest::Describe {
+            request,
+            side,
+            place,
+            plugins,
+        })));
+    }
+
+    /// What the plugins said about a folder: their words kept for the
+    /// folder, nothing said aloud; a failure leaves the title as it was.
+    fn place_described(
+        &mut self,
+        request: u64,
+        side: Side,
+        place: Place,
+        described: crate::plugins::describe::Described,
+    ) -> Vec<Effect> {
+        use crate::plugins::describe::Described;
+        let at = side.index();
+        if self.plugins.describing[at]
+            .as_ref()
+            .is_some_and(|(r, _)| *r == request)
+        {
+            self.plugins.describing[at] = None;
+        }
+        match described {
+            Described::Words { plugin, name, text } => {
+                self.plugins
+                    .described
+                    .insert(place.clone(), Description { plugin, name, text });
+            }
+            Described::Nothing => {
+                self.plugins.described.remove(&place);
+            }
+            Described::Failed => {}
+        }
+        let shown = self.active_panel();
+        if shown.loading_place().unwrap_or(shown.place()) == &place {
+            vec![Effect::Redraw(Redraw::TitleLine)]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// A plugin's words about a folder as the title line says them, its
+    /// name last (answer 90): "main, no upstream, 2 changed here (Git)".
+    pub(super) fn place_words(&self, place: &Place) -> Option<String> {
+        let found = self.plugins.described.get(place)?;
+        let text = if found.text.chars().count() > DESCRIPTION_CHARS {
+            let kept: String = found.text.chars().take(DESCRIPTION_CHARS).collect();
+            format!("{}...", kept.trim_end())
+        } else {
+            found.text.clone()
+        };
+        Some(format!("{text} ({})", found.name))
+    }
+
+    /// A plugin failed or was turned off: its words leave the title line.
+    fn forget_descriptions(&mut self, plugin: &str) -> Vec<Effect> {
+        let before = self.plugins.described.len();
+        self.plugins.described.retain(|_, d| d.plugin != plugin);
+        if self.plugins.described.len() == before {
+            Vec::new()
+        } else {
+            vec![Effect::Redraw(Redraw::TitleLine)]
+        }
+    }
+
     // ---- A plugin's form (`ui/form`) ----
 
     /// Opens a plugin's form, the focus on its focus field: "Commit (Git).
@@ -2085,18 +2261,22 @@ impl App {
             HostEvent::StartFailed { plugin, message }
             | HostEvent::TimedOut { plugin, message }
             | HostEvent::Crashed { plugin, message } => {
+                let mut effects = self.forget_descriptions(&plugin);
                 if self.failure_said_lately(&plugin) {
-                    return Vec::new();
+                    return effects;
                 }
                 self.note_failure_said(&plugin);
-                vec![self.say(message)]
+                effects.push(self.say(message));
+                effects
             }
             HostEvent::TurnedOff { plugin, message } => {
+                let mut effects = self.forget_descriptions(&plugin);
                 self.plugins
                     .off
                     .insert(plugin.clone(), message.text.clone());
                 self.note_failure_said(&plugin);
-                vec![self.say(message)]
+                effects.push(self.say(message));
+                effects
             }
             HostEvent::Flooded { plugin, message } => {
                 self.note_failure_said(&plugin);

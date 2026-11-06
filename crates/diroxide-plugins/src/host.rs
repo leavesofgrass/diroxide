@@ -1234,8 +1234,8 @@ impl Host {
     /// `None` when it gives none. The app calls it off the input thread
     /// when a panel enters a folder the plugin's `[[place_info]]` matches,
     /// keeps the old title until the answer, and keeps the answer until
-    /// `folder_changed` (the host-pieces lane; alpha 4's contract step
-    /// fixes this shape).
+    /// the folder is listed again or the plugin fails (alpha 4's contract
+    /// step fixed this shape; its host-pieces lane calls it).
     pub fn describe_place(
         &self,
         plugin: &str,

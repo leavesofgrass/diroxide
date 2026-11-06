@@ -58,6 +58,7 @@ use serde_json::{Value, json};
 use super::{Shared, Work, lock};
 use crate::app::AppEvent;
 use crate::plugins::catalog::{self, Catalog, Item, Roots, Runs};
+use crate::plugins::describe::{self, Describer};
 use crate::plugins::{
     Call, CallId, Finished, Outcome, PluginEvent, PluginRequest, Reply, RunRequest,
 };
@@ -714,6 +715,45 @@ impl PluginRuntime {
                 if let Some(host) = self.hosts.get(&plugin) {
                     host.host.lister_closed(&plugin, &lister);
                 }
+            }
+            // The title line's words (alpha 4, lane HP): asked on a thread
+            // of their own, never the input thread, and not counted as
+            // work in flight, so a slow plugin never holds anything up.
+            PluginRequest::Describe {
+                request,
+                side,
+                place,
+                plugins,
+            } => {
+                let describers: Vec<Describer> = plugins
+                    .iter()
+                    .filter_map(|id| {
+                        let host = self.hosts.get(id)?;
+                        let manifest = host.item.manifest.as_ref()?;
+                        (!manifest.place_info.is_empty()).then(|| Describer {
+                            id: id.clone(),
+                            name: manifest.name.clone(),
+                            host: Arc::clone(&host.host),
+                            specs: manifest.place_info.clone(),
+                        })
+                    })
+                    .collect();
+                let shared = Arc::clone(shared);
+                let ask = move || {
+                    let described = describe::ask(&describers, &place);
+                    send(
+                        &shared,
+                        PluginEvent::Described {
+                            request,
+                            side,
+                            place,
+                            described,
+                        },
+                    );
+                };
+                let _ = thread::Builder::new()
+                    .name("plugin-describe".to_owned())
+                    .spawn(ask);
             }
         }
     }

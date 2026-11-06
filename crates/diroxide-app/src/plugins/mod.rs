@@ -14,6 +14,8 @@
 //!   row a field, its label first and its value after.
 //! - [`diff`]: a plugin's two documents (`ui/show_diff`) compared on the
 //!   plugin's worker for the compare screens.
+//! - [`describe`]: a plugin's words about a folder for the title line
+//!   (`place/describe`), asked off the input thread.
 //! - [`lister`]: a plugin's lister of item rows, sorted and filtered by its
 //!   columns.
 //! - [`settings`] and [`log`]: a plugin's settings under its name, kept in
@@ -33,6 +35,7 @@
 
 pub mod ask;
 pub mod catalog;
+pub mod describe;
 pub mod diff;
 pub mod form;
 pub mod lister;
@@ -40,7 +43,7 @@ pub mod log;
 pub mod registry;
 pub mod settings;
 
-use diroxide_core::{CommandId, Entry, JobId, JobRequest, Message};
+use diroxide_core::{CommandId, Entry, JobId, JobRequest, Message, Place, Side};
 use diroxide_ops::JobReport;
 use diroxide_plugins::ask::{Answer, Form, FormAnswer, Question, TextDocument};
 use diroxide_plugins::host::HostEvent;
@@ -226,6 +229,19 @@ pub enum PluginRequest {
         /// The lister's id.
         lister: String,
     },
+    /// Asks the enabled plugins whose `[[place_info]]` may match a folder
+    /// for the title line's words (`place/describe`), off the input
+    /// thread; answered with [`PluginEvent::Described`].
+    Describe {
+        /// The app's number for the request, so a late answer is known.
+        request: u64,
+        /// The panel that landed in the folder.
+        side: Side,
+        /// The folder.
+        place: Place,
+        /// The plugins that may describe it, in the catalog's order.
+        plugins: Vec<String>,
+    },
 }
 
 /// How a plugin command ended.
@@ -343,4 +359,15 @@ pub enum PluginEvent {
     /// A sentence of the runtime's about plugins: "Enabled: Line
     /// counter.", "Could not save the consent: ...".
     Note(Message),
+    /// What the plugins said about a folder for the title line.
+    Described {
+        /// The app's number for the request.
+        request: u64,
+        /// The panel that asked.
+        side: Side,
+        /// The folder.
+        place: Place,
+        /// The words, nothing, or a failure.
+        described: describe::Described,
+    },
 }

@@ -370,3 +370,104 @@ fn a_plugins_diff_reads_in_r18s_order() {
     assert!(said.contains(&report.to_owned()), "{said:?}");
     assert_eq!(rows(&s), ["Byte 8 differs"]);
 }
+
+/// The marker the describe tests' folders carry: not `.git`, since the
+/// test folders may sit inside this repository.
+const MARKER: &str = "diro-test-repo";
+
+/// Waits for the host's own events, then takes them.
+fn later(s: &mut Session, ms: u64) -> Vec<String> {
+    std::thread::sleep(std::time::Duration::from_millis(ms));
+    let events = s.runtime.poll();
+    let effects: Vec<_> = events
+        .into_iter()
+        .flat_map(|event| s.app.handle(event))
+        .collect();
+    s.run(effects)
+}
+
+/// R30's commit 23: a fake plugin's words reach the title line after the
+/// panel, its name last; inside the folder too, the marker found above;
+/// a slow plugin never blocks the panel, the old title kept until its
+/// answer; a plugin that gives no words adds none; a folder no
+/// `[[place_info]]` matches, and a plugin that declares none, never start
+/// the plugin.
+#[test]
+fn a_plugins_words_reach_the_title_line_and_a_slow_one_never_blocks() {
+    let manifest = format!("{MANIFEST}\n[[place_info]]\nmarker = \"{MARKER}\"\n");
+    let w = world(&manifest);
+    enable(&w.paths);
+    for name in ["repo", "slow", "quiet"] {
+        let folder = w.work.join(name);
+        std::fs::create_dir_all(folder.join("src")).unwrap();
+        std::fs::write(folder.join(MARKER), b"").unwrap();
+    }
+    let launcher = TestLauncher::with(&[]);
+    let mut s = session(&w, std::sync::Arc::clone(&launcher));
+    later(&mut s, 200);
+    assert_eq!(
+        *launcher.launches.lock().unwrap(),
+        0,
+        "no marker in the work folder: the plugin is never started"
+    );
+    assert!(s.app.title_line().starts_with("work, left panel, in "));
+
+    s.focus("repo");
+    s.key("enter");
+    later(&mut s, 300);
+    let words = "main, no upstream, 2 changed here";
+    assert!(words.chars().count() <= 40);
+    let title = s.app.title_line();
+    assert!(
+        title.starts_with(&format!("repo, left panel, {words} (Line counter), in ")),
+        "{title}"
+    );
+    s.focus("src");
+    s.key("enter");
+    later(&mut s, 300);
+    let title = s.app.title_line();
+    assert!(
+        title.starts_with(&format!("src, left panel, {words} (Line counter), in ")),
+        "the marker is found above: {title}"
+    );
+
+    // The slow one: the panel answers every key while it thinks, the
+    // title without words until its answer.
+    s.key("tab");
+    s.focus("slow");
+    s.key("enter");
+    let said = s.key("down");
+    assert!(!said.is_empty(), "the panel moved");
+    let title = s.app.title_line();
+    assert!(
+        title.starts_with("slow, right panel, in "),
+        "not blocked, no words yet: {title}"
+    );
+    later(&mut s, 3000);
+    let title = s.app.title_line();
+    assert!(
+        title.starts_with(&format!("slow, right panel, {words} (Line counter), in ")),
+        "{title}"
+    );
+
+    // A plugin that gives no words adds none.
+    let mut s = session(&w, TestLauncher::with(&[]));
+    s.focus("quiet");
+    s.key("enter");
+    later(&mut s, 300);
+    assert!(s.app.title_line().starts_with("quiet, left panel, in "));
+
+    // A plugin with no [[place_info]] is never asked.
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let folder = w.work.join("repo");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join(MARKER), b"").unwrap();
+    let launcher = TestLauncher::with(&[]);
+    let mut s = session(&w, std::sync::Arc::clone(&launcher));
+    s.focus("repo");
+    s.key("enter");
+    later(&mut s, 300);
+    assert_eq!(*launcher.launches.lock().unwrap(), 0);
+    assert!(s.app.title_line().starts_with("repo, left panel, in "));
+}

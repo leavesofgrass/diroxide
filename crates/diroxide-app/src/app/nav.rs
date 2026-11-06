@@ -218,7 +218,12 @@ impl App {
             self.pending_archive.retain(|(r, _)| *r != request);
         }
         match result {
-            Ok(entries) => self.listed_ok(side, entries),
+            Ok(entries) => {
+                let effects = self.listed_ok(side, entries);
+                // A plugin's words for the title line (alpha 4, lane HP).
+                self.describe_landed(side);
+                effects
+            }
             Err(error) => self.listed_err(side, place, &error),
         }
     }

@@ -713,7 +713,7 @@ pub const ALL: [Method; 66] = [
         A::Lists,
         "a [[place_info]] table",
         "Asks for a short description of a place for the title line.",
-        LATER,
+        NOW,
     ),
     method(
         COMPLETION_QUERY,
