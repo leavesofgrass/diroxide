@@ -39,6 +39,10 @@ serde_json = "1.0.146"
 hadris-iso = { version = "2.5.0", default-features = false, features = ["std", "sync", "joliet"] }
 # Its error type, named in the plugin's error mapping (already in the tree).
 hadris-io = { version = "2.5.0", default-features = false }
+# FAT12, FAT16 and FAT32 with long names (R30 commit 89), behind a
+# wrapper that refuses every write; without chrono, so its times are its
+# own plain fields.
+fatfs = { version = "0.3.6", default-features = false, features = ["std", "alloc"] }
 
 [dev-dependencies]
 # The host's own settings, for the provider contract list run through the

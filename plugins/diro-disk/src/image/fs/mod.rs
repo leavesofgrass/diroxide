@@ -16,6 +16,7 @@ use crate::image::sniff::Content;
 use crate::image::source::Backing;
 use crate::lines::cause;
 
+pub mod fat;
 pub mod iso;
 
 /// What a node is.
@@ -133,6 +134,7 @@ pub fn open(
 ) -> Result<Box<dyn FileSystem>, DiskError> {
     match content {
         Content::Iso => iso::open(backing, limits),
+        Content::Fat => fat::open(backing, limits),
         Content::BitLocker => Err(locked("BitLocker")),
         Content::Luks => Err(locked("LUKS")),
         Content::Gpt | Content::Mbr => Err(DiskError::uses("a partition table inside a partition")),
