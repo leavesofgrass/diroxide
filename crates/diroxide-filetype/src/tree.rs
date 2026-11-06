@@ -3,7 +3,7 @@
 //! three stages, in one order:
 //!
 //! 1. **Signature** ([`TypeStage::Signature`], accuracy 3): bytes at fixed
-//!    positions in the first [`HEAD_BYTES`](crate::HEAD_BYTES), `??` for
+//!    positions in the first [`HEAD_BYTES`], `??` for
 //!    any byte.
 //! 2. **Condition** ([`TypeStage::Condition`], accuracy 2): one filter
 //!    expression over the entry and its first bytes (`content:re:"^#!"`).
