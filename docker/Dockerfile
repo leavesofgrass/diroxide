@@ -42,7 +42,15 @@ RUN apt-get update \
 
 # rustfmt and clippy for the checks; nextest for the tests. Installed as
 # root into the image's cargo home, which stays on PATH for the builder.
-RUN rustup component add rustfmt clippy \
+# The base image names its toolchain by the full release (1.96.1), and
+# rust-toolchain.toml asks for "1.96", so until alpha 4's contract step
+# (P4) every container run downloaded a second toolchain and its
+# components before it built anything. The toolchain is installed here by
+# the toolchain file's own name and made the default, so a run starts
+# building at once.
+RUN rustup toolchain install 1.96 --profile minimal --component rustfmt,clippy \
+ && rustup default 1.96 \
+ && rustup component add rustfmt clippy \
  && cargo install cargo-nextest --version "${NEXTEST_VERSION}" --locked \
  && rm -rf /usr/local/cargo/registry /usr/local/cargo/git
 
@@ -111,4 +119,36 @@ RUN CARGO_HOME=/tmp/a11y-cli-cargo CARGO_TARGET_DIR=/tmp/a11y-cli-target cargo i
       --git https://github.com/DioxusLabs/accessibility-cli \
       --rev "${A11Y_CLI_REV}" accessibility-cli --root /usr/local \
  && rm -rf /tmp/a11y-cli-cargo /tmp/a11y-cli-target
+USER builder
+
+# The helper programs of alpha 4 (tools, previews and conversions; the
+# owner's answer 118, Thursday, November 5, 2026, for this stage and its
+# tests only, nothing on the owner's computer): a stage of its own beside
+# the GUI's, so the dev image above stays as it is. The dev stage already
+# carries ImageMagick, FFmpeg, pandoc, poppler-utils (pdftotext, pdfinfo)
+# and git. This stage adds Tesseract for "Read text in picture", ExifTool
+# for the metadata readers' fallback, GnuPG, age and minisign for
+# encryption and signatures, the file-system makers for the disk-image
+# plugin's fixtures (dosfstools and mtools for FAT, squashfs-tools,
+# ntfs-3g for mkntfs, xorriso for ISO 9660) and qemu-utils for qemu-img.
+#
+#   MSYS_NO_PATHCONV=1 docker compose build tools
+#   MSYS_NO_PATHCONV=1 DIRO_AGENT=p4 docker compose run --rm tools bash
+FROM dev AS tools
+
+USER root
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends \
+      tesseract-ocr \
+      libimage-exiftool-perl \
+      gnupg \
+      age \
+      minisign \
+      dosfstools \
+      mtools \
+      squashfs-tools \
+      ntfs-3g \
+      xorriso \
+      qemu-utils \
+ && rm -rf /var/lib/apt/lists/*
 USER builder
