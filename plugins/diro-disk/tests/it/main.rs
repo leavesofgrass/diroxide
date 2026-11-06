@@ -9,6 +9,8 @@
 
 mod fixture;
 mod images;
+mod iso;
+mod make;
 mod tables;
 
 use std::path::{Path, PathBuf};

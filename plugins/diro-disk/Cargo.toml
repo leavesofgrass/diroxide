@@ -31,6 +31,14 @@ diroxide-plugins = { path = "../../crates/diroxide-plugins", version = "0.1.0-al
 diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.3" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.146"
+# ISO 9660 with Joliet and Rock Ridge (R30 commit 88): G5a's spike DS2
+# found it right where isomage overflowed its stack, allocated by a
+# claimed size and lost long names. Its std feature brings chrono with
+# the clock, whose iana-time-zone has a build script that compiles C only
+# for Haiku, a system diroxide does not build for.
+hadris-iso = { version = "2.5.0", default-features = false, features = ["std", "sync", "joliet"] }
+# Its error type, named in the plugin's error mapping (already in the tree).
+hadris-io = { version = "2.5.0", default-features = false }
 
 [dev-dependencies]
 # The host's own settings, for the provider contract list run through the
@@ -39,6 +47,8 @@ diroxide-config = { path = "../../crates/diroxide-config", version = "0.1.0-alph
 # The partition tables written by other hands, for the cross-check of
 # the plugin's own reader (R29 1.3); tests only, pure Rust.
 gptman = { version = "3.1.1", default-features = false }
+# The ISOs the tests write, Joliet and Rock Ridge both (R29 1.10).
+hadris-iso = { version = "2.5.0", default-features = false, features = ["std", "sync", "joliet", "write"] }
 mbrman = "0.6.1"
 proptest = "1.11.0"
 tempfile = "3.27.0"

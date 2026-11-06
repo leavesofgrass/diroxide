@@ -97,14 +97,19 @@ impl Tree {
     /// The listing of a folder by its stored path, from the cache when it
     /// is there. `ids` are the folders' identities on the way to it, its
     /// own last, for the loop check.
-    fn listing(&mut self, path: &[Vec<u8>], ids: &[u64]) -> Result<Listing, DiskError> {
+    fn listing(
+        &mut self,
+        path: &[Vec<u8>],
+        folder: &Node,
+        ids: &[u64],
+    ) -> Result<Listing, DiskError> {
         if let Some(at) = self.cache.iter().position(|(p, _)| p == path) {
             let hit = self.cache.remove(at);
             let listing = hit.1.clone();
             self.cache.push(hit);
             return Ok(listing);
         }
-        let nodes = self.fs.list(path)?;
+        let nodes = self.fs.list(path, folder)?;
         if nodes.len() > self.limits.max_entries {
             return Err(DiskError::Refused(cause::too_many_entries(
                 self.limits.max_entries,
@@ -197,7 +202,7 @@ impl Tree {
             if found.node.kind != NodeKind::Folder {
                 return Err(DiskError::NotAFolder);
             }
-            let listing = self.listing(&found.path, &found.ids)?;
+            let listing = self.listing(&found.path, &found.node, &found.ids)?;
             let row = listing
                 .rows
                 .into_iter()
@@ -226,7 +231,7 @@ impl Tree {
         if found.path.len() >= MAX_DEPTH {
             return Err(DiskError::Refused(cause::too_deep(MAX_DEPTH)));
         }
-        self.listing(&found.path, &found.ids)
+        self.listing(&found.path, &found.node, &found.ids)
     }
 
     /// Up to `length` bytes of the file at a shown path from `offset`.
@@ -314,7 +319,7 @@ pub mod tests {
             Some(1)
         }
 
-        fn list(&mut self, dir: &[Vec<u8>]) -> Result<Vec<Node>, DiskError> {
+        fn list(&mut self, dir: &[Vec<u8>], _folder: &Node) -> Result<Vec<Node>, DiskError> {
             self.lists.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             self.folders
                 .get(&key(dir))

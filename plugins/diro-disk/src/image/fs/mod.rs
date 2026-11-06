@@ -16,6 +16,8 @@ use crate::image::sniff::Content;
 use crate::image::source::Backing;
 use crate::lines::cause;
 
+pub mod iso;
+
 /// What a node is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NodeKind {
@@ -57,6 +59,9 @@ pub struct Node {
     pub note: Option<String>,
     /// Where the reader finds the contents again, its own numbers.
     pub token: Option<(u64, u64)>,
+    /// A file's data as byte ranges of the volume, in order, where the
+    /// reader keeps them so (ISO 9660's extents).
+    pub extents: Vec<(u64, u64)>,
 }
 
 impl Node {
@@ -73,6 +78,7 @@ impl Node {
             link: None,
             note: None,
             token: None,
+            extents: Vec::new(),
         }
     }
 }
@@ -102,8 +108,11 @@ pub trait FileSystem: Send {
     }
 
     /// The entries of the folder at `dir`, a path of stored names from the
-    /// root (empty for the root), without `.` and `..`.
-    fn list(&mut self, dir: &[Vec<u8>]) -> Result<Vec<Node>, DiskError>;
+    /// root (empty for the root), without `.` and `..`; `folder` is the
+    /// entry its own folder listed (the root's is a folder with no
+    /// token). A reader stops after one entry past the limit, so the tree
+    /// can refuse the folder without the reader collecting all of it.
+    fn list(&mut self, dir: &[Vec<u8>], folder: &Node) -> Result<Vec<Node>, DiskError>;
 
     /// Up to `length` bytes of the file at `path` from `offset`, fewer at
     /// its end; `node` is the entry its folder listed.
@@ -122,8 +131,8 @@ pub fn open(
     backing: Arc<dyn Backing>,
     limits: &Limits,
 ) -> Result<Box<dyn FileSystem>, DiskError> {
-    let _ = (&backing, limits);
     match content {
+        Content::Iso => iso::open(backing, limits),
         Content::BitLocker => Err(locked("BitLocker")),
         Content::Luks => Err(locked("LUKS")),
         Content::Gpt | Content::Mbr => Err(DiskError::uses("a partition table inside a partition")),
