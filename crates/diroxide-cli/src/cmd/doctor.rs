@@ -440,12 +440,20 @@ fn startup_line(config: &Config) -> String {
 }
 
 /// The needed tools' line, and whether one is missing: the tools named,
-/// or the tools the owner's recipes run.
+/// or the tools the owner's recipes run and those `tools.toml` marks
+/// `needed`.
 fn needed_line(named: &[String], env: &Env, report: &ToolsReport) -> (String, bool) {
     let mut needed: Vec<String> = named.to_vec();
     if needed.is_empty() {
-        for recipe in &env.config.conversions.recipes {
-            let tool = recipe.tool.trim();
+        let marked = env
+            .config
+            .tools
+            .tools
+            .iter()
+            .filter(|(_, own)| own.needed)
+            .map(|(id, _)| id.as_str());
+        let recipes = env.config.conversions.recipes.iter().map(|r| r.tool.trim());
+        for tool in recipes.chain(marked) {
             let built_in = BUILTIN
                 .iter()
                 .any(|spec| spec.id == tool && spec.kind == ToolKind::BuiltIn);
@@ -712,6 +720,16 @@ mod tests {
         let (code, lines) = run_lines(&check(&[]), &bench.env(recipes));
         assert_eq!(code, 1);
         assert_eq!(lines.last().unwrap(), "Needed tools missing: ImageMagick");
+        // A tool tools.toml marks needed is checked with none named (K's
+        // request 1).
+        let marked = Config {
+            tools: ToolsConfig::from_toml("[ffmpeg]\nneeded = true\n\n[pandoc]\nneeded = true\n")
+                .unwrap(),
+            ..Config::default()
+        };
+        let (code, lines) = run_lines(&check(&[]), &bench.env(marked));
+        assert_eq!(code, 1);
+        assert_eq!(lines.last().unwrap(), "Needed tools missing: FFmpeg");
         // Without --check, a missing tool never changes the exit code.
         let (code, _) = run_lines(&DoctorArgs::default(), &bench.env(Config::default()));
         assert_eq!(code, 0);
@@ -737,6 +755,7 @@ mod tests {
             ToolOverride {
                 path: None,
                 disabled: true,
+                needed: false,
             },
         );
         config.problems.push(diroxide_config::ConfigProblem::new(

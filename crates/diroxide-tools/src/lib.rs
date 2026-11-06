@@ -683,6 +683,7 @@ mod tests {
             ToolOverride {
                 path: None,
                 disabled: true,
+                needed: false,
             },
         );
         let tools = ToolRegistry::builtin().with_overrides(overrides);
@@ -702,6 +703,7 @@ mod tests {
             ToolOverride {
                 path: None,
                 disabled: true,
+                needed: false,
             },
         );
         let report = ToolRegistry::builtin()

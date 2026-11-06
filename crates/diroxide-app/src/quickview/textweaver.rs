@@ -119,6 +119,7 @@ mod tests {
             ToolOverride {
                 path: None,
                 disabled: true,
+                needed: false,
             },
         );
         let off = bench

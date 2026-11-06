@@ -82,6 +82,7 @@ fn path_override(path: &Path) -> ToolsConfig {
         ToolOverride {
             path: Some(path.to_string_lossy().into_owned()),
             disabled: false,
+            needed: false,
         },
     );
     config
