@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use diroxide_core::Place;
 use diroxide_plugins::host::Host;
-use diroxide_plugins::manifest::PlaceInfoSpec;
+use diroxide_plugins::manifest::{PlaceInfoSpec, ProviderSpec};
 
 /// The most folders a marker is looked for in, the folder and those above
 /// it.
@@ -37,6 +37,35 @@ pub fn scheme_fits(spec: &PlaceInfoSpec, place: &Place) -> bool {
     spec.scheme.as_deref().is_none_or(|s| s == scheme_of(place))
 }
 
+/// The scheme of the plugin's provider that claims a place inside a
+/// container by the container's extension (PD's request 6): the disk
+/// plugin's `disk` for `D:\x\disk.iso!EFI`. `None` for any other place.
+pub fn claimed_scheme<'a>(place: &Place, providers: &'a [ProviderSpec]) -> Option<&'a str> {
+    let (container, _) = place.archive()?;
+    let name = container.name()?.to_lowercase();
+    providers
+        .iter()
+        .flat_map(|p| p.extensions.iter().map(move |e| (p, e)))
+        .filter(|(_, extension)| {
+            let extension = extension.to_lowercase();
+            name.strip_suffix(extension.as_str())
+                .is_some_and(|stem| !stem.is_empty())
+        })
+        .max_by_key(|(_, extension)| extension.len())
+        .map(|(provider, _)| provider.scheme.as_str())
+}
+
+/// Whether a table fits a place: by the place's own scheme, or, for a
+/// place inside a container one of the plugin's providers claims, by that
+/// provider's scheme, so the disk plugin describes a place in an image.
+pub fn fits(spec: &PlaceInfoSpec, providers: &[ProviderSpec], place: &Place) -> bool {
+    scheme_fits(spec, place)
+        || spec
+            .scheme
+            .as_deref()
+            .is_some_and(|s| claimed_scheme(place, providers) == Some(s))
+}
+
 /// Whether a marker is in a local folder or one above it.
 fn marker_found(place: &Place, marker: &str) -> bool {
     let Some(path) = place.local_path() else {
@@ -49,10 +78,12 @@ fn marker_found(place: &Place, marker: &str) -> bool {
 }
 
 /// Whether any of a plugin's `[[place_info]]` tables matches a folder:
-/// its scheme fits, and its marker, when it names one, is found.
-pub fn matches(specs: &[PlaceInfoSpec], place: &Place) -> bool {
+/// its scheme fits (by the place, or by a provider of the plugin's that
+/// claims the place's container), and its marker, when it names one, is
+/// found.
+pub fn matches(specs: &[PlaceInfoSpec], providers: &[ProviderSpec], place: &Place) -> bool {
     specs.iter().any(|spec| {
-        scheme_fits(spec, place)
+        fits(spec, providers, place)
             && spec
                 .marker
                 .as_deref()
@@ -71,6 +102,9 @@ pub struct Describer {
     pub host: Arc<Host>,
     /// Its `[[place_info]]` tables.
     pub specs: Vec<PlaceInfoSpec>,
+    /// Its providers, whose claimed extensions let it describe places
+    /// inside the containers it reads.
+    pub providers: Vec<ProviderSpec>,
 }
 
 /// What the describers said about a folder.
@@ -97,7 +131,7 @@ pub fn ask(describers: &[Describer], place: &Place) -> Described {
     let mut answered = false;
     let mut failed = false;
     for describer in describers {
-        if !matches(&describer.specs, place) {
+        if !matches(&describer.specs, &describer.providers, place) {
             continue;
         }
         match describer.host.describe_place(&describer.id, place) {
@@ -130,6 +164,50 @@ mod tests {
         }
     }
 
+    /// PD's request 6: a place inside a container a plugin's provider
+    /// claims fits that plugin's `[[place_info]]` by the provider's
+    /// scheme, nested in a zip too; a place in a zip it does not claim,
+    /// and a folder, do not.
+    #[test]
+    fn a_place_inside_a_claimed_container_fits_its_plugin() {
+        let disk = ProviderSpec {
+            scheme: "disk".to_owned(),
+            name: "Disk images".to_owned(),
+            separator: "/".to_owned(),
+            flags: std::collections::BTreeSet::new(),
+            max_name_length: None,
+            reserved_names: Vec::new(),
+            methods: std::collections::BTreeSet::new(),
+            extensions: vec![".iso".to_owned(), ".vhdx".to_owned()],
+            wants: Vec::new(),
+        };
+        let providers = [disk];
+        let spec = spec(Some("disk"), None);
+        let at = |text: &str| {
+            let text = if cfg!(windows) {
+                format!("D:{}", text.replace('/', "\\"))
+            } else {
+                text.to_owned()
+            };
+            Place::parse(&text).unwrap()
+        };
+        let inside = at("/x/disk.iso").into_archive().join("EFI").unwrap();
+        assert_eq!(claimed_scheme(&inside, &providers), Some("disk"));
+        assert!(fits(&spec, &providers, &inside));
+        assert!(matches(std::slice::from_ref(&spec), &providers, &inside));
+        let nested = at("/x/bundle.zip")
+            .into_archive()
+            .join("Disk.ISO")
+            .unwrap()
+            .into_archive();
+        assert!(fits(&spec, &providers, &nested));
+        let zip = at("/x/bundle.zip").into_archive();
+        assert_eq!(claimed_scheme(&zip, &providers), None);
+        assert!(!fits(&spec, &providers, &zip));
+        assert!(!fits(&spec, &providers, &at("/x")));
+        assert!(!fits(&spec, &[], &inside), "no provider claims it");
+    }
+
     #[test]
     fn a_marker_is_found_in_the_folder_or_above_it() {
         let dir = tempfile::tempdir().unwrap();
@@ -139,11 +217,19 @@ mod tests {
         std::fs::create_dir_all(repo.join(".git")).unwrap();
         let place = |p: &Path| Place::parse(&p.display().to_string()).unwrap();
         let git = [spec(None, Some(".git"))];
-        assert!(matches(&git, &place(&repo)));
-        assert!(matches(&git, &place(&deep)));
-        assert!(!matches(&git, &place(dir.path())));
-        assert!(matches(&[spec(Some("file"), None)], &place(dir.path())));
-        assert!(!matches(&[spec(Some("sftp"), None)], &place(&repo)));
-        assert!(!matches(&[spec(Some("sftp"), Some(".git"))], &place(&repo)));
+        assert!(matches(&git, &[], &place(&repo)));
+        assert!(matches(&git, &[], &place(&deep)));
+        assert!(!matches(&git, &[], &place(dir.path())));
+        assert!(matches(
+            &[spec(Some("file"), None)],
+            &[],
+            &place(dir.path())
+        ));
+        assert!(!matches(&[spec(Some("sftp"), None)], &[], &place(&repo)));
+        assert!(!matches(
+            &[spec(Some("sftp"), Some(".git"))],
+            &[],
+            &place(&repo)
+        ));
     }
 }

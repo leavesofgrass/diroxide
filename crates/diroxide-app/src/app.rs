@@ -1634,7 +1634,13 @@ impl App {
                     tail.push_str(&format!(", sorted by {}", sort.key.word()));
                 }
             }
-            let side_words = format!("{} panel", self.active.word());
+            // A plugin's words about a place inside a container it claims
+            // follow the panel too (PD's request 6): "EFI, in disk.iso, left
+            // panel, ISO 9660, 3 files (Disk images)".
+            let side_words = match self.place_words(place) {
+                Some(words) => format!("{} panel, {words}", self.active.word()),
+                None => format!("{} panel", self.active.word()),
+            };
             return self.archive_title_line(place, &side_words, &tail, cells);
         }
         let mut head = format!(

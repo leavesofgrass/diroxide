@@ -744,6 +744,7 @@ impl PluginRuntime {
                             name: manifest.name.clone(),
                             host: Arc::clone(&host.host),
                             specs: manifest.place_info.clone(),
+                            providers: manifest.providers.clone(),
                         })
                     })
                     .collect();
