@@ -8,6 +8,7 @@
 //! the owner's Windows computer; the golden lines are in `version.rs`.
 
 use crate::lookup::{Base, InstallFolder};
+use crate::package::Packages;
 use crate::{ToolKind, ToolSpec};
 
 /// carta's version, the converter compiled into diro: the root manifest's
@@ -57,6 +58,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "image details and conversions",
         install_hint: "Install ImageMagick from imagemagick.org or your package manager.",
+        packages: Packages {
+            winget: Some("ImageMagick.ImageMagick"),
+            brew: Some("imagemagick"),
+            apt: Some("imagemagick"),
+            dnf: Some("ImageMagick"),
+            pacman: Some("imagemagick"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -68,6 +76,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "audio and video conversions",
         install_hint: "Install FFmpeg from ffmpeg.org or your package manager.",
+        packages: Packages {
+            winget: Some("Gyan.FFmpeg"),
+            brew: Some("ffmpeg"),
+            apt: Some("ffmpeg"),
+            dnf: Some("ffmpeg-free"),
+            pacman: Some("ffmpeg"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -79,6 +94,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "audio and video details",
         install_hint: "FFprobe comes with FFmpeg.",
+        packages: Packages {
+            winget: Some("Gyan.FFmpeg"),
+            brew: Some("ffmpeg"),
+            apt: Some("ffmpeg"),
+            dnf: Some("ffmpeg-free"),
+            pacman: Some("ffmpeg"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -94,6 +116,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         )]),
         purpose: "document previews and conversions",
         install_hint: "Install pandoc from pandoc.org or your package manager.",
+        packages: Packages {
+            winget: Some("JohnMacFarlane.Pandoc"),
+            brew: Some("pandoc"),
+            apt: Some("pandoc"),
+            dnf: Some("pandoc"),
+            pacman: Some("pandoc-cli"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -110,6 +139,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: folders(&[PROGRAM_FILES_7ZIP, PROGRAM_FILES_X86_7ZIP]),
         purpose: "reading RAR, CAB and other archives, and cross-checking",
         install_hint: "Install 7-Zip from 7-zip.org, or 7zip from your package manager.",
+        packages: Packages {
+            winget: Some("7zip.7zip"),
+            brew: Some("sevenzip"),
+            apt: Some("7zip"),
+            dnf: Some("7zip"),
+            pacman: Some("7zip"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -122,6 +158,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "PDF text previews",
         install_hint: "Install Poppler's utilities from your package manager.",
+        packages: Packages {
+            winget: Some("oschwartz10612.Poppler"),
+            brew: Some("poppler"),
+            apt: Some("poppler-utils"),
+            dnf: Some("poppler-utils"),
+            pacman: Some("poppler"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -133,6 +176,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "PDF details",
         install_hint: "Install Poppler's utilities from your package manager.",
+        packages: Packages {
+            winget: Some("oschwartz10612.Poppler"),
+            brew: Some("poppler"),
+            apt: Some("poppler-utils"),
+            dnf: Some("poppler-utils"),
+            pacman: Some("poppler"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -144,6 +194,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "photo, audio and document details",
         install_hint: "Install ExifTool from exiftool.org or your package manager.",
+        packages: Packages {
+            winget: Some("OliverBetz.ExifTool"),
+            brew: Some("exiftool"),
+            apt: Some("libimage-exiftool-perl"),
+            dnf: Some("perl-Image-ExifTool"),
+            pacman: Some("perl-image-exiftool"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -158,6 +215,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         ]),
         purpose: "reading text in pictures",
         install_hint: "Install Tesseract from its project page or your package manager.",
+        packages: Packages {
+            winget: Some("UB-Mannheim.TesseractOCR"),
+            brew: Some("tesseract"),
+            apt: Some("tesseract-ocr"),
+            dnf: Some("tesseract"),
+            pacman: Some("tesseract"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -169,6 +233,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "converting disk images",
         install_hint: "Install QEMU's qemu-img from qemu.org or your package manager.",
+        packages: Packages {
+            winget: Some("SoftwareFreedomConservancy.QEMU"),
+            brew: Some("qemu"),
+            apt: Some("qemu-utils"),
+            dnf: Some("qemu-img"),
+            pacman: Some("qemu-img"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -180,6 +251,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "making ISO images",
         install_hint: "Install xorriso from your package manager.",
+        packages: Packages {
+            winget: None,
+            brew: Some("xorriso"),
+            apt: Some("xorriso"),
+            dnf: Some("xorriso"),
+            pacman: Some("libisoburn"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -191,6 +269,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: folders(&[GPG4WIN, GPG4WIN_X86, GIT_FOR_WINDOWS_TOOLS]),
         purpose: "OpenPGP encryption and signatures",
         install_hint: "Install GnuPG from gnupg.org, Gpg4win on Windows, or your package manager.",
+        packages: Packages {
+            winget: Some("GnuPG.Gpg4win"),
+            brew: Some("gnupg"),
+            apt: Some("gnupg"),
+            dnf: Some("gnupg2"),
+            pacman: Some("gnupg"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -202,6 +287,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: folders(&[GPG4WIN, GPG4WIN_X86, GIT_FOR_WINDOWS_TOOLS]),
         purpose: "checking OpenPGP signatures",
         install_hint: "gpgv comes with GnuPG.",
+        packages: Packages {
+            winget: Some("GnuPG.Gpg4win"),
+            brew: Some("gnupg"),
+            apt: Some("gpgv"),
+            dnf: Some("gnupg2"),
+            pacman: Some("gnupg"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -213,6 +305,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "age encryption",
         install_hint: "Install age from its releases page or your package manager.",
+        packages: Packages {
+            winget: Some("FiloSottile.age"),
+            brew: Some("age"),
+            apt: Some("age"),
+            dnf: Some("age"),
+            pacman: Some("age"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -224,6 +323,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "checking minisign signatures",
         install_hint: "Install minisign from its releases page or your package manager.",
+        packages: Packages {
+            winget: None,
+            brew: Some("minisign"),
+            apt: Some("minisign"),
+            dnf: Some("minisign"),
+            pacman: Some("minisign"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -235,6 +341,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: folders(&[GIT_FOR_WINDOWS]),
         purpose: "git status and commands",
         install_hint: "Install git from git-scm.com or your package manager.",
+        packages: Packages {
+            winget: Some("Git.Git"),
+            brew: Some("git"),
+            apt: Some("git"),
+            dnf: Some("git"),
+            pacman: Some("git"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -250,6 +363,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         )]),
         purpose: "GitHub from git places, and private component sources",
         install_hint: "Install the GitHub CLI from cli.github.com or your package manager.",
+        packages: Packages {
+            winget: Some("GitHub.cli"),
+            brew: Some("gh"),
+            apt: Some("gh"),
+            dnf: Some("gh"),
+            pacman: Some("github-cli"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -272,6 +392,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "opening files in their default programs",
         install_hint: "Install xdg-utils from your package manager.",
+        packages: Packages {
+            winget: None,
+            brew: None,
+            apt: Some("xdg-utils"),
+            dnf: Some("xdg-utils"),
+            pacman: Some("xdg-utils"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -283,6 +410,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "reading a document aloud, from the quick view",
         install_hint: "Install textweaver from its releases page or with cargo.",
+        packages: Packages::NONE,
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -294,6 +422,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "downloading components when the built-in client is off",
         install_hint: "curl comes with Windows 10 and later; install it from your package manager.",
+        packages: Packages {
+            winget: None,
+            brew: Some("curl"),
+            apt: Some("curl"),
+            dnf: Some("curl"),
+            pacman: Some("curl"),
+        },
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -305,6 +440,13 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "downloading components when curl is missing",
         install_hint: "Install wget from your package manager.",
+        packages: Packages {
+            winget: None,
+            brew: Some("wget"),
+            apt: Some("wget"),
+            dnf: Some("wget"),
+            pacman: Some("wget"),
+        },
         kind: ToolKind::Program,
     },
     #[cfg(target_os = "macos")]
@@ -317,6 +459,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "Spotlight's details of a file",
         install_hint: "mdls comes with macOS.",
+        packages: Packages::NONE,
         kind: ToolKind::Program,
     },
     ToolSpec {
@@ -328,6 +471,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         install_folders: &[],
         purpose: "document conversions in diro itself",
         install_hint: "carta is built into diro.",
+        packages: Packages::NONE,
         kind: ToolKind::BuiltIn,
     },
 ];

@@ -41,13 +41,16 @@ use diroxide_vfs::{OpContext, RunLimits};
 use thiserror::Error;
 
 pub mod lookup;
+pub mod package;
 pub mod process;
 pub mod report;
 pub mod run;
+mod runner;
 pub mod table;
 pub mod version;
 
 pub use lookup::{Base, Bases, InstallFolder, SYSTEM_FOLDERS, file_names, which, which_all};
+pub use package::{Packages, Platform, package_command_for};
 pub use process::{ProcessError, ProcessHandle, ProcessSpec, Stream, Tie};
 pub use report::{
     FoundBy, LOOKUP_ORDER, LookupStep, NextStep, ToolKind, ToolReport, ToolState, ToolsReport,
@@ -80,8 +83,11 @@ pub struct ToolSpec {
     pub install_folders: &'static [InstallFolder],
     /// What diroxide uses it for, in words.
     pub purpose: &'static str,
-    /// Where to get it, in words.
+    /// Where to get it, in words: said when no package command is known.
     pub install_hint: &'static str,
+    /// Its packages, for the command that installs it on this system
+    /// ([`ToolRegistry::package_command`]).
+    pub packages: Packages,
     /// A program, or built into diro (carta).
     pub kind: ToolKind,
 }
@@ -226,6 +232,10 @@ pub struct ToolRegistry {
     /// Whether a program said its tool's [`ToolSpec::must_say`] words,
     /// by path, so a version command runs once per program.
     verdicts: Arc<Mutex<HashMap<PathBuf, bool>>>,
+    /// The system, for package commands.
+    platform: Platform,
+    /// `/etc/os-release`'s text on Linux, read once.
+    os_release: Option<String>,
 }
 
 impl ToolRegistry {
@@ -239,7 +249,36 @@ impl ToolRegistry {
             bases: Bases::from_environment(),
             components: Vec::new(),
             verdicts: Arc::default(),
+            platform: Platform::current(),
+            os_release: package::os_release(),
         }
+    }
+
+    /// The same registry naming package commands for another system, for
+    /// tests and for a report about another computer.
+    pub fn with_platform(mut self, platform: Platform, os_release: Option<String>) -> Self {
+        self.platform = platform;
+        self.os_release = os_release;
+        self
+    }
+
+    /// The command that installs a tool from this system's packages, for
+    /// the owner to read or copy: "winget install JohnMacFarlane.Pandoc",
+    /// "sudo apt install pandoc"; `None` when the system's manager has no
+    /// package for it or is not known.
+    pub fn package_command(&self, id: &str) -> Option<String> {
+        let spec = self.spec(id)?;
+        package_command_for(&spec.packages, self.platform, self.os_release.as_deref())
+    }
+
+    /// The next step for a tool that is not found: its package command,
+    /// else its sentence.
+    pub fn next_step(&self, id: &str) -> Option<NextStep> {
+        let spec = self.spec(id)?;
+        Some(match self.package_command(id) {
+            Some(command) => NextStep::Command(command),
+            None => NextStep::Words(spec.install_hint.to_owned()),
+        })
     }
 
     /// The same registry with `tools.toml` overrides.
@@ -451,7 +490,7 @@ impl ToolRegistry {
             Ok(Location::TurnedOff) => ToolState::TurnedOff,
             Ok(Location::PathMissing) => ToolState::PathMissing,
             Ok(Location::NotFound) | Err(_) => ToolState::NotFound {
-                install: Some(NextStep::Words(spec.install_hint.to_owned())),
+                install: self.next_step(spec.id),
             },
         };
         ToolReport {
@@ -536,7 +575,7 @@ impl ToolRegistry {
 
 /// The system's own words in a process error, without the program's name
 /// the error puts first.
-fn system_words(error: &ProcessError) -> String {
+pub(crate) fn system_words(error: &ProcessError) -> String {
     match error {
         ProcessError::Start { message, .. } => message.clone(),
         other => other.to_string(),
@@ -667,6 +706,7 @@ mod tests {
         );
         let report = ToolRegistry::builtin()
             .with_path(None)
+            .with_platform(Platform::Other, None)
             .with_overrides(overrides)
             .report();
         assert_eq!(report.tools.len(), BUILTIN.len());
@@ -689,6 +729,49 @@ mod tests {
             .map(|spec| spec.id)
             .collect();
         assert_eq!(built_in, ["carta"]);
+    }
+
+    /// A tool not found says the command that installs it on this
+    /// system (commit 19), "Install:" first; a tool with no package there
+    /// says its sentence.
+    #[test]
+    fn a_missing_tool_names_its_package_command() {
+        let lines_on = |platform, os_release: Option<&str>| {
+            ToolRegistry::builtin()
+                .with_path(None)
+                .with_platform(platform, os_release.map(str::to_owned))
+                .report()
+                .lines()
+        };
+        let after = |lines: &[String], line: &str| {
+            let at = lines.iter().position(|l| l == line).unwrap();
+            lines[at + 1].clone()
+        };
+        let windows = lines_on(Platform::Windows, None);
+        assert_eq!(
+            after(&windows, "pandoc: not found"),
+            "Install: winget install JohnMacFarlane.Pandoc"
+        );
+        assert_eq!(
+            after(&windows, "xorriso: not found"),
+            "Install xorriso from your package manager."
+        );
+        let debian = lines_on(Platform::Linux, Some("ID=debian\n"));
+        assert_eq!(
+            after(&debian, "ExifTool: not found"),
+            "Install: sudo apt install libimage-exiftool-perl"
+        );
+        let mac = lines_on(Platform::Macos, None);
+        assert_eq!(
+            after(&mac, "7-Zip: not found"),
+            "Install: brew install sevenzip"
+        );
+        for line in [&windows, &debian, &mac].into_iter().flatten() {
+            if let Some(command) = line.strip_prefix("Install: ") {
+                assert!(!command.is_empty());
+                assert!(diroxide_core::format::within_cells(line, "Install:"));
+            }
+        }
     }
 
     /// carta's version in the table is the root manifest's pin.
