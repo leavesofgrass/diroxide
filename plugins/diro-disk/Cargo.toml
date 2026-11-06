@@ -48,6 +48,10 @@ fatfs = { version = "0.3.6", default-features = false, features = ["std", "alloc
 ext4-view = "1.0.0"
 # NTFS, read only, no unsafe (R30 commit 91).
 ntfs = "0.4.0"
+# squashfs with the pure-Rust codecs only, gzip (flate2 over zlib-rs) and
+# LZ4 (R30 commit 92); its default xz and zstd would bring C, so those
+# images go to 7-Zip.
+backhand = { version = "0.25.5", default-features = false, features = ["gzip", "lz4"] }
 
 [dev-dependencies]
 # The host's own settings, for the provider contract list run through the

@@ -15,6 +15,7 @@ mod images;
 mod iso;
 mod make;
 mod ntfs;
+mod squashfs;
 mod tables;
 
 use std::path::{Path, PathBuf};

@@ -21,6 +21,7 @@ pub mod fat;
 pub mod iso;
 pub mod ntfs;
 pub mod pinned;
+pub mod squashfs;
 
 /// What a node is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -147,6 +148,7 @@ pub fn open(
         Content::Fat => fat::open(backing, limits),
         Content::Ext => ext::open(backing, limits),
         Content::Ntfs => ntfs::open(backing, limits),
+        Content::Squashfs => squashfs::open(backing, limits),
         Content::BitLocker => Err(locked("BitLocker")),
         Content::Luks => Err(locked("LUKS")),
         Content::Gpt | Content::Mbr => Err(DiskError::uses("a partition table inside a partition")),
