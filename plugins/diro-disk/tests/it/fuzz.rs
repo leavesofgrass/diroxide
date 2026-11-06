@@ -14,6 +14,8 @@ fn seeds() -> Vec<(String, Vec<u8>)> {
         "ntfs.img",
         "gzip.sqfs",
         "xz.sqfs",
+        "lz4.sqfs",
+        "big-xz.sqfs",
         "xorriso.iso",
         "fat.img",
         "fat.qcow2",
@@ -37,6 +39,7 @@ fn seeds() -> Vec<(String, Vec<u8>)> {
     );
     seeds.push(("iso".to_owned(), fedora_iso(IsoNames::Both)));
     seeds.push(("ext2".to_owned(), ext2()));
+    seeds.push(("ext4".to_owned(), crate::make::ext4()));
     seeds.push(("qcow2 bomb".to_owned(), qcow2_bomb(&floppy)));
     seeds.push(("vdi bomb".to_owned(), vdi_bomb(&floppy)));
     seeds.push(("vhd bomb".to_owned(), vhd_bomb()));

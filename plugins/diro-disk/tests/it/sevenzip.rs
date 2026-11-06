@@ -54,12 +54,14 @@ fn a_member_too_large_for_one_answer_is_unpacked_or_refused_in_words() {
     let root = f.image("big.squashfs", &fixture("big-xz.sqfs"));
     match f.read(&at(&root, &["big.txt"])) {
         Ok(bytes) => {
+            eprintln!("the large member was unpacked into the spool by 7-Zip");
             assert_eq!(bytes.len(), 7_340_032);
             assert!(bytes.starts_with(b"Seven megabytes of the same line"));
         }
         Err(error) => {
             // A 7-Zip older than 25.01 never unpacks (R7's traversal fix).
             let line = words(&error);
+            eprintln!("the large member was refused: {line}");
             assert!(line.contains("is too old: needs 25.01"), "{line}");
         }
     }

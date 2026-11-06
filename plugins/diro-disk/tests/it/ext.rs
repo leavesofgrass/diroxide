@@ -44,3 +44,15 @@ fn an_ext2_partition_says_its_label_and_file_system() {
     let (image, _) = opened(ext2(), "home.img");
     assert_eq!(image.layout_words(), "ext2");
 }
+
+#[test]
+fn an_ext4_volume_reads_a_file_stored_by_an_extent() {
+    let f = Fixture::new();
+    let root = f.image("root.img", &crate::make::ext4());
+    assert_eq!(
+        f.read(&at(&root, &["hello.txt"])).unwrap(),
+        b"Hello, world."
+    );
+    let (image, _) = opened(crate::make::ext4(), "root.img");
+    assert_eq!(image.layout_words(), "ext4");
+}

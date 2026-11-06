@@ -42,3 +42,17 @@ fn an_xz_squashfs_says_it_needs_7zip() {
         "{line}"
     );
 }
+
+#[test]
+fn an_lz4_squashfs_is_read_built_in() {
+    let f = Fixture::new();
+    let root = f.image("lz4.squashfs", &fixture("lz4.sqfs"));
+    assert_eq!(
+        f.read(&at(&root, &["hello.txt"])).unwrap(),
+        b"Hello, world."
+    );
+    assert_eq!(
+        f.read(&at(&root, &["docs", "inner.txt"])).unwrap(),
+        b"inside"
+    );
+}

@@ -390,3 +390,29 @@ pub fn vhd_bomb() -> Vec<u8> {
     img[end..].copy_from_slice(&footer);
     img
 }
+
+/// The ext2 volume with ext4's extents: the superblock says so and
+/// `hello.txt` is stored by an extent, not a block map, so the words say
+/// "ext4" and the read takes ext4's own path.
+pub fn ext4() -> Vec<u8> {
+    let mut img = ext2();
+    let sb = 1024;
+    let incompat = u32::from_le_bytes(img[sb + 0x60..sb + 0x64].try_into().unwrap()) | 0x40;
+    img[sb + 0x60..sb + 0x64].copy_from_slice(&incompat.to_le_bytes());
+    // hello.txt is inode 13; its flags say extents and its block field
+    // holds an extent header and one extent of one block, block 11.
+    let inode = 5 * 1024 + 12 * 128;
+    img[inode + 0x20..inode + 0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes());
+    let mut tree = Vec::new();
+    tree.extend_from_slice(&0xf30au16.to_le_bytes());
+    tree.extend_from_slice(&1u16.to_le_bytes());
+    tree.extend_from_slice(&4u16.to_le_bytes());
+    tree.extend_from_slice(&0u16.to_le_bytes());
+    tree.extend_from_slice(&0u32.to_le_bytes());
+    tree.extend_from_slice(&0u32.to_le_bytes());
+    tree.extend_from_slice(&1u16.to_le_bytes());
+    tree.extend_from_slice(&0u16.to_le_bytes());
+    tree.extend_from_slice(&11u32.to_le_bytes());
+    img[inode + 0x28..inode + 0x28 + tree.len()].copy_from_slice(&tree);
+    img
+}

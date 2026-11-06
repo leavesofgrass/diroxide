@@ -94,3 +94,27 @@ fn a_gpt_disk_lists_its_partitions_in_words() {
         .unwrap();
     assert!(one.name.starts_with("Partition 2, home"), "{}", one.name);
 }
+
+#[test]
+fn a_bitlocker_partition_is_shown_locked_and_never_opened() {
+    let f = Fixture::new();
+    let mut locked = vec![0u8; 64 * 1024];
+    locked[3..11].copy_from_slice(b"-FVE-FS-");
+    let disk = crate::make::gpt_with(
+        4 * 1024 * 1024,
+        &[(crate::make::guid::BASIC_DATA, "", &locked)],
+    );
+    let root = f.image("locked.img", &disk);
+    let entries = f.list(&root).unwrap();
+    let about = entries[0]
+        .extra
+        .get("disk.about")
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(about, "Partition 1, BitLocker, 65.5 KB, locked");
+    let line = words(&f.list(&at(&root, &["partition-1"])).unwrap_err());
+    assert!(
+        line.contains("it is locked by BitLocker, and diroxide does not unlock it"),
+        "{line}"
+    );
+}

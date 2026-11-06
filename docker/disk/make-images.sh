@@ -70,6 +70,8 @@ mksquashfs "$src" "$work/gzip.sqfs" -comp gzip -noappend -all-root -quiet
 pack gzip.sqfs
 mksquashfs "$src" "$work/xz.sqfs" -comp xz -noappend -all-root -quiet
 pack xz.sqfs
+mksquashfs "$src" "$work/lz4.sqfs" -comp lz4 -noappend -all-root -quiet
+pack lz4.sqfs
 # A member larger than one answer of the host's (7 MB of repeated text),
 # which 7-Zip must unpack into the spool rather than pipe.
 mkdir -p "$work/big"
