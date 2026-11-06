@@ -147,11 +147,18 @@ pub const ALLOWED: [(&str, &[&str]); 19] = [
 /// Workspace crates a member may use in its tests alone, each with the
 /// reason: a `[dev-dependencies]` entry, never a normal or a build one.
 /// Keep in step with docs/dev/architecture.md.
-pub const ALLOWED_DEV: [(&str, &str, &str); 1] = [(
-    "diroxide-gui",
-    "diroxide-vfs",
-    "the GUI's every-purpose test opens the trash browser on a test trash and the junction and item-error questions through a provider double, on every system, never the owner's trash or drives (G1's request 5, lane A5)",
-)];
+pub const ALLOWED_DEV: [(&str, &str, &str); 2] = [
+    (
+        "diroxide-gui",
+        "diroxide-vfs",
+        "the GUI's every-purpose test opens the trash browser on a test trash and the junction and item-error questions through a provider double, on every system, never the owner's trash or drives (G1's request 5, lane A5)",
+    ),
+    (
+        "diroxide-plugins",
+        "diroxide-archive",
+        "spike DS6's proof of the claim route: a disk image inside a zip reaches the claiming plugin while the image's own bytes are read from the zip by the real archive provider (alpha 4's contract step, P4)",
+    ),
+];
 
 /// Whether `name` may depend on the workspace crate `dependency` in the
 /// manifest section labeled `section` ("dependencies", "dev-dependencies",

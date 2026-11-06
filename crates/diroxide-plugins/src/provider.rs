@@ -318,7 +318,7 @@ impl PluginProvider {
         host.call(
             &self.plugin,
             "provider/connect",
-            json!({"place": format!("{authority}/"), "interactive": true}),
+            json!({"place": authority_root(place, &authority), "interactive": true}),
         )
         .map_err(|e| plugin_to_vfs(&e, &self.spec.scheme, "sign in"))?;
         connected.insert(authority);
@@ -609,6 +609,10 @@ impl StreamingList for PluginProvider {
 impl Provider for PluginProvider {
     fn scheme(&self) -> &str {
         &self.spec.scheme
+    }
+
+    fn claimed_extensions(&self) -> &[String] {
+        &self.spec.extensions
     }
 
     fn capabilities(&self, _place: &Place) -> Capabilities {
@@ -980,6 +984,13 @@ impl PluginProvider {
     }
 
     fn is_ours(&self, place: &Place) -> bool {
+        if let Some((container, _)) = place.archive() {
+            let name = container.name().unwrap_or_default().to_lowercase();
+            return self.spec.extensions.iter().any(|extension| {
+                name.strip_suffix(extension.as_str())
+                    .is_some_and(|stem| !stem.is_empty())
+            });
+        }
         place
             .remote()
             .is_some_and(|r| r.scheme() == self.spec.scheme)
@@ -1092,10 +1103,25 @@ impl PluginProvider {
     }
 }
 
-/// The authority of a remote place, `scheme://user@host:port` with the user
-/// and the port only when the place has them, so two accounts or two ports
-/// on one host are two sign-ins (S-B's request).
+/// The place `provider/connect` is sent for an authority: a remote
+/// authority's root (`sftp://host/`), or a claimed container's root
+/// (`D:\dl\fedora.iso!`), which the plugin opens once.
+fn authority_root(place: &Place, authority: &str) -> String {
+    match place.archive() {
+        Some((container, _)) => container.clone().into_archive().to_string(),
+        None => format!("{authority}/"),
+    }
+}
+
+/// The authority of a place: for a remote place `scheme://user@host:port`
+/// with the user and the port only when the place has them, so two
+/// accounts or two ports on one host are two sign-ins (S-B's request);
+/// for a place inside a claimed container (the claim route, alpha.7), the
+/// container's own place, so each image is opened once.
 fn authority_of(place: &Place) -> String {
+    if let Some((container, _)) = place.archive() {
+        return container.to_string();
+    }
     place
         .remote()
         .map(|r| {
