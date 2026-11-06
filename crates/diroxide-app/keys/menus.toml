@@ -39,6 +39,9 @@ command = "file.details"
 access = "d"
 
 [[menu.item]]
+command = "file.actions"
+
+[[menu.item]]
 command = "file.context-menu"
 access = "c"
 

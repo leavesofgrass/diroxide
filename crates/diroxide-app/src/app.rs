@@ -53,6 +53,8 @@ mod select;
 // Selection on the filter language (W3a).
 mod selecting;
 mod split_join;
+// Typed actions and the lists of file types (alpha 4, lane TA).
+mod type_actions;
 // The background type check (alpha 4, lane TA).
 mod type_checks;
 mod viewing;
@@ -976,6 +978,13 @@ pub struct App {
     look: look::LookState,
     /// What each panel's type check was asked (lane TA).
     type_checks: type_checks::TypeChecks,
+    /// The slots of the owner's type actions (lane TA).
+    type_slots: crate::typing::TypeSlots,
+    /// A typed action's command is running: Enter and View run their
+    /// built-in ones inside it, never the typed action again.
+    running_typed: bool,
+    /// The owner's `tools.toml`, for a tool action's program (lane TA).
+    tool_overrides: diroxide_config::ToolsConfig,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1305,6 +1314,9 @@ impl App {
             volumes: volumes_ui::VolumesState::default(),
             look: look::LookState::new(&startup.user_themes, startup.themes_dir.clone()),
             type_checks: type_checks::TypeChecks::default(),
+            type_slots: startup.type_slots,
+            running_typed: false,
+            tool_overrides: startup.tools,
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1965,6 +1977,10 @@ impl App {
         }
         // The Volumes list (lane A3).
         if let Some(effects) = self.volumes_dispatch(command) {
+            return effects;
+        }
+        // Typed actions and the lists of file types (lane TA).
+        if let Some(effects) = self.type_actions_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {

@@ -646,6 +646,33 @@ pub mod ids {
         /// Full screen on or off, in the window; the terminal has none.
         FULL_SCREEN = "view.full-screen";
     }
+
+    // File types in the app: typed actions (alpha 4, lane TA, R30 commit
+    // 30).
+    ids! {
+        /// The focused file's type's actions, the one Enter runs first.
+        FILE_ACTIONS = "file.actions";
+        /// Run user action 0 of the focused file's type.
+        TYPE_USER_0 = "type.user0";
+        /// Run user action 1 of the focused file's type.
+        TYPE_USER_1 = "type.user1";
+        /// Run user action 2 of the focused file's type.
+        TYPE_USER_2 = "type.user2";
+        /// Run user action 3 of the focused file's type.
+        TYPE_USER_3 = "type.user3";
+        /// Run user action 4 of the focused file's type.
+        TYPE_USER_4 = "type.user4";
+        /// Run user action 5 of the focused file's type.
+        TYPE_USER_5 = "type.user5";
+        /// Run user action 6 of the focused file's type.
+        TYPE_USER_6 = "type.user6";
+        /// Run user action 7 of the focused file's type.
+        TYPE_USER_7 = "type.user7";
+        /// Run user action 8 of the focused file's type.
+        TYPE_USER_8 = "type.user8";
+        /// Run user action 9 of the focused file's type.
+        TYPE_USER_9 = "type.user9";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -670,7 +697,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 228] = [
+pub static CATALOG: [CommandInfo; 239] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1438,6 +1465,94 @@ pub static CATALOG: [CommandInfo; 228] = [
         Panel,
         &["alt+enter"],
         &["alt+enter"],
+    ),
+    command(
+        ids::FILE_ACTIONS,
+        "Actions for this file",
+        "Lists what the focused file's type offers, its open action first, then View, Preview, Convert, the user actions and the named ones.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_0,
+        "User action 0",
+        "Runs user action 0 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_1,
+        "User action 1",
+        "Runs user action 1 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_2,
+        "User action 2",
+        "Runs user action 2 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_3,
+        "User action 3",
+        "Runs user action 3 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_4,
+        "User action 4",
+        "Runs user action 4 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_5,
+        "User action 5",
+        "Runs user action 5 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_6,
+        "User action 6",
+        "Runs user action 6 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_7,
+        "User action 7",
+        "Runs user action 7 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_8,
+        "User action 8",
+        "Runs user action 8 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TYPE_USER_9,
+        "User action 9",
+        "Runs user action 9 of the focused file's type, set in filetypes.toml; it has no key until you bind one.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::CONTEXT_MENU,

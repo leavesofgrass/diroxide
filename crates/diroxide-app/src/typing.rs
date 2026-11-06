@@ -19,8 +19,11 @@
 //! `check.skip` are typed by name alone: their files are never opened for
 //! their types.
 
+use std::collections::HashMap;
+
+use diroxide_config::FileTypesConfig;
 use diroxide_core::{Clock, Entry, EntryKind, Timestamp};
-use diroxide_filetype::{HEAD_BYTES, Probe, Special, TypeRegistry, TypeStage};
+use diroxide_filetype::{ActionTarget, HEAD_BYTES, Probe, Special, TypeRegistry, TypeStage};
 
 /// Readers of first bytes at once on a disk of this computer.
 pub const LOCAL_READERS: usize = 4;
@@ -102,11 +105,220 @@ pub fn check_item(
     }
 }
 
+// Typed actions (R30 commit 30; R28 4.3): each type lists its actions,
+// and each action fills a slot: Enter, View, Preview, Convert, one of ten
+// numbered user actions, or none (a named action, listed by Actions for
+// NAME). An empty list falls back to the parent type's.
+
+/// Which slot a type's action fills.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Slot {
+    /// Enter: the file's own action, before the system's program.
+    Enter,
+    /// View, before the built-in viewer.
+    View,
+    /// Preview.
+    Preview,
+    /// Convert.
+    Convert,
+    /// A numbered user action, 0 to 9, run by the commands `type.user0`
+    /// to `type.user9`, which have no key until one is bound.
+    User(u8),
+    /// A named action, listed by Actions for NAME alone.
+    Named,
+}
+
+impl Slot {
+    /// A slot as `filetypes.toml` writes it: `enter`, `view`, `preview`,
+    /// `convert`, `user0` to `user9`.
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim().to_ascii_lowercase();
+        Some(match text.as_str() {
+            "enter" => Slot::Enter,
+            "view" => Slot::View,
+            "preview" => Slot::Preview,
+            "convert" => Slot::Convert,
+            _ => {
+                let digit = text.strip_prefix("user")?;
+                let n: u8 = digit.parse().ok().filter(|n| *n <= 9)?;
+                if digit.len() != 1 {
+                    return None;
+                }
+                Slot::User(n)
+            }
+        })
+    }
+
+    /// The slot in words, said after an action's name: "Enter", "user
+    /// action 3"; empty for a named action.
+    pub fn words(self) -> String {
+        match self {
+            Slot::Enter => "Enter".to_owned(),
+            Slot::View => "View".to_owned(),
+            Slot::Preview => "Preview".to_owned(),
+            Slot::Convert => "Convert".to_owned(),
+            Slot::User(n) => format!("user action {n}"),
+            Slot::Named => String::new(),
+        }
+    }
+}
+
+/// The slots of the owner's type actions, read from `filetypes.toml`.
+/// The type model keeps each action's name and target; the slot it fills
+/// is read here from the same file, by the type's id and the action's
+/// name (the first of a name wins).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TypeSlots {
+    slots: HashMap<String, Vec<(String, Slot)>>,
+    problems: Vec<String>,
+}
+
+impl TypeSlots {
+    /// The slots of the types in the owner's file; a slot that does not
+    /// read leaves its action named, and says so.
+    pub fn from_config(config: &FileTypesConfig) -> Self {
+        let mut slots: HashMap<String, Vec<(String, Slot)>> = HashMap::new();
+        let mut problems = Vec::new();
+        for file_type in &config.types {
+            for action in &file_type.actions {
+                let slot = match action.slot.as_deref() {
+                    None => Slot::Named,
+                    Some(text) => Slot::parse(text).unwrap_or_else(|| {
+                        problems.push(format!(
+                            "File type {}: action {} has no slot \"{text}\"; it is listed by name.",
+                            file_type.id, action.name
+                        ));
+                        Slot::Named
+                    }),
+                };
+                slots
+                    .entry(file_type.id.clone())
+                    .or_default()
+                    .push((action.name.clone(), slot));
+            }
+        }
+        Self { slots, problems }
+    }
+
+    /// The slot of a type's action, by the type's id and the action's
+    /// name; a named action where the file says none.
+    pub fn slot(&self, type_id: &str, action: &str) -> Slot {
+        self.slots
+            .get(type_id)
+            .and_then(|actions| actions.iter().find(|(name, _)| name == action))
+            .map_or(Slot::Named, |(_, slot)| *slot)
+    }
+
+    /// The slots that did not read, each line meaning first.
+    pub fn problems(&self) -> &[String] {
+        &self.problems
+    }
+}
+
+/// One action a file's type offers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Offered {
+    /// Its name, as listed: "Make thumbnail".
+    pub name: String,
+    /// The slot it fills.
+    pub slot: Slot,
+    /// What it does: a command, a tool, a plugin's command.
+    pub target: ActionTarget,
+}
+
+/// The actions a type offers (by [`diroxide_core::Entry::type_index`]):
+/// its own, or where its list is empty its parent's, and so on up; in
+/// the order the file lists them, the first of each slot the one that
+/// runs. Empty when no type in its line has any.
+pub fn offered(types: &TypeRegistry, slots: &TypeSlots, type_index: u16) -> Vec<Offered> {
+    let mut at = types.by_index(type_index);
+    for _ in 0..64 {
+        let Some(file_type) = at else {
+            break;
+        };
+        if !file_type.actions.is_empty() {
+            return file_type
+                .actions
+                .iter()
+                .map(|action| Offered {
+                    name: action.name.clone(),
+                    slot: slots.slot(&file_type.id, &action.name),
+                    target: action.target.clone(),
+                })
+                .collect();
+        }
+        at = file_type.parent.as_deref().and_then(|p| types.get(p));
+    }
+    Vec::new()
+}
+
 #[cfg(test)]
 mod tests {
     use diroxide_core::{FixedClock, UtcOffset};
 
     use super::*;
+
+    /// R30 commit 30: an action's slot comes from the owner's file; an
+    /// empty list falls back to the parent type's; a slot that does not
+    /// read is said and the action stays, by name.
+    #[test]
+    fn a_type_offers_its_actions_or_its_parents() {
+        let config = FileTypesConfig::from_toml(
+            r#"
+[[type]]
+id = "zip"
+name = "zip archive"
+short = "zip"
+extensions = ["zip"]
+
+[[type.actions]]
+name = "List with 7-Zip"
+slot = "enter"
+tool = "7z"
+args = ["l", "{file}"]
+
+[[type.actions]]
+name = "Test"
+slot = "user3"
+command = "archive.test"
+
+[[type.actions]]
+name = "Count"
+slot = "user12"
+command = "file.details"
+
+[[type]]
+id = "jar"
+name = "Java archive"
+short = "JAR"
+parent = "zip"
+extensions = ["jar"]
+"#,
+        )
+        .unwrap();
+        let types = TypeRegistry::builtin().with_config(&config);
+        let slots = TypeSlots::from_config(&config);
+        assert_eq!(
+            slots.problems(),
+            ["File type zip: action Count has no slot \"user12\"; it is listed by name."]
+        );
+        let jar = types.types().iter().position(|t| t.id == "jar").unwrap();
+        let actions = offered(&types, &slots, u16::try_from(jar + 1).unwrap());
+        let shown: Vec<(&str, Slot)> = actions.iter().map(|o| (o.name.as_str(), o.slot)).collect();
+        assert_eq!(
+            shown,
+            [
+                ("List with 7-Zip", Slot::Enter),
+                ("Test", Slot::User(3)),
+                ("Count", Slot::Named)
+            ]
+        );
+        assert!(matches!(actions[0].target, ActionTarget::Tool { ref tool, .. } if tool == "7z"));
+        assert_eq!(Slot::User(3).words(), "user action 3");
+        assert_eq!(Slot::parse("USER0"), Some(Slot::User(0)));
+        assert_eq!(Slot::parse("user10"), None);
+        assert!(offered(&types, &slots, 0).is_empty());
+    }
 
     fn clock() -> FixedClock {
         let now = Timestamp::from_civil(2026, 11, 6, 9, 0, 0, UtcOffset::UTC).unwrap();
