@@ -12,10 +12,6 @@
 //! helpers never enter a test. Remotes are `file://` folders of the test's
 //! own; nothing touches the network.
 
-// The fake host is whole from the first commit; the helpers that the
-// later commands' tests use wait here until those commands arrive.
-#![allow(dead_code)]
-
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};

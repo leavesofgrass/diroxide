@@ -38,7 +38,7 @@ panel = "read"
 tools = ["git"]
 
 [permissions.declared]
-network = "git's own remotes, when you fetch, pull or push"
+network = "git's own remotes, when you fetch, pull, push or clone"
 files = "your repositories through git; .gitignore through diroxide"
 programs = "git only; a commit runs the repository's hooks, as in a terminal"
 
@@ -246,6 +246,32 @@ needs = ["git"]
 id = "push_lease"
 name = "Git: replace remote history"
 description = "Makes the upstream what this branch is, after two questions that name it."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+# ---- New repositories ----
+
+[[command]]
+id = "clone"
+name = "Git: clone into this panel"
+description = "Copies a repository into a new folder here, with its progress."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "init"
+name = "Git: make this folder a repository"
+description = "Makes a repository here, with a .gitignore and a first commit if you want them."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "trust"
+name = "Git: trust this repository"
+description = "Asks again whether git status may run here, when the repository's config runs a program."
 selection = "none"
 places = "local"
 needs = ["git"]

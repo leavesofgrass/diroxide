@@ -20,6 +20,7 @@
 
 mod branch;
 mod commit;
+mod create;
 mod diff;
 mod history;
 mod remote;
@@ -68,6 +69,9 @@ pub const IDS: &[&str] = &[
     "pull",
     "push",
     "push_lease",
+    "clone",
+    "init",
+    "trust",
 ];
 
 /// The lists this build opens.
@@ -482,6 +486,9 @@ fn dispatch(ctx: &Ctx<'_>, command: &str) -> Result<Value, GitError> {
         "pull" => remote::pull(ctx),
         "push" => remote::push(ctx),
         "push_lease" => remote::push_lease(ctx),
+        "clone" => create::clone(ctx),
+        "init" => create::init(ctx),
+        "trust" => create::trust(ctx),
         other => Err(GitError::Host(diroxide_plugins::protocol::RpcError::new(
             diroxide_plugins::protocol::ErrorKind::MethodNotFound,
             format!("no command {other}"),

@@ -198,3 +198,27 @@ fn a_command_asks_when_the_title_line_was_not_answered() {
     assert!(!ran_more_than_the_scan(&host), "{:?}", host.seen.tools);
     assert!(!fsmon_ran.exists() && !filter_ran.exists());
 }
+
+#[test]
+fn the_trust_command_asks_again_and_keeps_its_answer() {
+    let (git, mut host) = host();
+    let (repo, fsmon_ran, _) = hostile(&git, "asked", false);
+    host.answers.push_back(json!({"answer": false}));
+    assert_eq!(host.describe(&repo).as_deref(), Some(lines::NOT_TRUSTED));
+    host.answers.push_back(json!({"answer": true}));
+    host.command("trust", &repo, &[]).unwrap();
+    assert_eq!(host.seen.last_said(), lines::TRUSTED);
+    assert_eq!(
+        host.describe(&repo).as_deref(),
+        Some("main, no upstream, 1 changed here")
+    );
+    assert!(!fsmon_ran.exists());
+    host.answers.push_back(json!({"answer": false}));
+    host.command("trust", &repo, &[]).unwrap();
+    assert_eq!(host.seen.last_said(), lines::NOT_TRUSTED_KEPT);
+    assert_eq!(host.describe(&repo).as_deref(), Some(lines::NOT_TRUSTED));
+    // A clean configuration has nothing to trust.
+    let clean = git.repo("clean-too");
+    host.command("trust", &clean, &[]).unwrap();
+    assert_eq!(host.seen.last_said(), lines::NOTHING_TO_TRUST);
+}
