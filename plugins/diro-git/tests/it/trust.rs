@@ -175,3 +175,26 @@ fn a_clean_configuration_asks_nothing() {
     );
     assert!(host.seen.asked.is_empty());
 }
+
+#[test]
+fn a_command_asks_when_the_title_line_was_not_answered() {
+    let (git, mut host) = host();
+    let (repo, fsmon_ran, filter_ran) = hostile(&git, "unanswered", true);
+    // Escape at the title line's question keeps nothing.
+    assert_eq!(host.describe(&repo).as_deref(), Some(lines::NOT_TRUSTED));
+    // A command the owner starts asks once more, and a no stops it.
+    host.answers.push_back(json!({"answer": false}));
+    host.command("status", &repo, &[]).unwrap();
+    assert_eq!(host.seen.asked.len(), 2);
+    assert!(
+        host.seen
+            .said
+            .iter()
+            .any(|(t, i)| t == lines::NOT_TRUSTED && i == "warning"),
+        "{}",
+        host.seen.all_said()
+    );
+    assert!(host.seen.listers.is_empty());
+    assert!(!ran_more_than_the_scan(&host), "{:?}", host.seen.tools);
+    assert!(!fsmon_ran.exists() && !filter_ran.exists());
+}

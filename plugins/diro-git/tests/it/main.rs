@@ -8,6 +8,7 @@
 
 mod status;
 mod support;
+mod tree;
 mod trust;
 
 use std::path::{Path, PathBuf};
@@ -52,6 +53,16 @@ fn the_manifest_reads_and_keeps_the_40_cell_rule() {
     assert_eq!(manifest.columns[0].id, "git");
     assert_eq!(manifest.place_info[0].marker.as_deref(), Some(".git"));
     assert_eq!(manifest.permissions.tools, ["git"]);
+    // Every command the build answers is declared, and the reverse.
+    let declared: Vec<&str> = manifest.commands.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(declared, diro_git::commands::IDS);
+    let lists: Vec<&str> = manifest.listers.iter().map(|l| l.id.as_str()).collect();
+    assert_eq!(lists, diro_git::commands::LISTERS);
+    for command in &manifest.commands {
+        assert!(command.name.starts_with("Git: "), "{}", command.name);
+        assert!(command.key.is_none(), "{} has a key", command.id);
+        assert_eq!(command.needs, ["git"]);
+    }
 }
 
 #[test]
@@ -65,6 +76,8 @@ fn the_plugin_passes_the_conformance_suite() {
         Group::Lifecycle,
         Group::Framing,
         Group::Methods,
+        Group::Commands,
+        Group::Cancel,
     ] {
         assert!(
             matches!(report.verdict(group), Some(Verdict::Pass(_))),

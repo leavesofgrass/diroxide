@@ -117,6 +117,10 @@ fn one_status_serves_the_title_and_the_column_until_a_stamp_changes() {
     git.run(&repo, &["add", "hello.txt"]);
     assert_eq!(host.column(&repo, &["hello.txt"]), ["Staged"]);
     assert_eq!(statuses(&host), 2);
+    // A command of the plugin's own drops the repository's statuses.
+    assert!(!host.plugin.statuses.is_empty());
+    host.command("unstage", &repo, &["hello.txt"]).unwrap();
+    assert!(host.plugin.statuses.is_empty());
 }
 
 #[test]
@@ -137,6 +141,16 @@ fn git_too_old_or_missing_is_said_in_words() {
         host.column(&repo, &["hello.txt"]),
         ["git is too old: 2.20, needs 2.30"]
     );
+    host.command("status", &repo, &[]).unwrap();
+    assert!(
+        host.seen
+            .said
+            .iter()
+            .any(|(t, i)| t == "Git is too old: 2.20, needs 2.30" && i == "warning"),
+        "{}",
+        host.seen.all_said()
+    );
+    assert!(!host.seen.ran("status"));
 
     // A host that finds no git answers -32010, not found.
     let (git, mut host) = super::support::host();
@@ -149,4 +163,12 @@ fn git_too_old_or_missing_is_said_in_words() {
     }));
     assert_eq!(host.describe(&repo).as_deref(), Some(lines::GIT_NOT_FOUND));
     assert_eq!(host.column(&repo, &["hello.txt"]), [lines::GIT_NOT_FOUND]);
+    host.command("status", &repo, &[]).unwrap();
+    assert_eq!(
+        host.seen.said,
+        [
+            ("Git not found".to_owned(), "warning".to_owned()),
+            (lines::GET_GIT.to_owned(), "info".to_owned())
+        ]
+    );
 }

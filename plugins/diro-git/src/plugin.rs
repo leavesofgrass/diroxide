@@ -1,6 +1,8 @@
 //! The plugin's answers to the host: `initialize`, the title line
-//! (`place/describe`) and the Git column (`column/format`), with what
-//! it keeps between them.
+//! (`place/describe`), the Git column (`column/format`), the commands
+//! (`command/run`) and the lists' rows (`lister/rows`), with what it keeps
+//! between them: git's version, the status and scan caches, the trust
+//! answers and the rows of the lists it opened.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -13,6 +15,7 @@ use diroxide_plugins::session::{
 use serde_json::Value;
 
 use crate::cache::{ScanCache, StatusCache};
+use crate::commands::{self, Listers};
 use crate::error::GitError;
 use crate::folder;
 use crate::git::version::Version;
@@ -42,6 +45,8 @@ pub struct Plugin {
     /// Repositories already asked about this session, so the title line
     /// asks once.
     pub asked: Mutex<HashSet<PathBuf>>,
+    /// The rows of the lists the plugin opened.
+    pub listers: Listers,
     /// Folders the repository walk never climbs into, as git's own
     /// `GIT_CEILING_DIRECTORIES` says.
     pub ceilings: Vec<PathBuf>,
@@ -91,6 +96,8 @@ impl Plugin {
         match method {
             methods::PLACE_DESCRIBE => folder::describe(self, host, params),
             methods::COLUMN_FORMAT => folder::column(self, host, params),
+            methods::COMMAND_RUN => commands::run(self, host, params),
+            methods::LISTER_ROWS => commands::rows(self, host, params),
             _ => Err(GitError::Host(RpcError::new(
                 ErrorKind::MethodNotFound,
                 format!("no method {method}"),
@@ -111,6 +118,8 @@ impl Handler for Plugin {
                 version: env!("CARGO_PKG_VERSION").to_owned(),
             },
             plugin_capabilities: PluginCapabilities {
+                commands: commands::IDS.iter().map(|c| (*c).to_owned()).collect(),
+                listers: commands::LISTERS.iter().map(|l| (*l).to_owned()).collect(),
                 columns: vec![COLUMN.to_owned()],
                 place_info: true,
                 concurrency: u32::try_from(WORKERS).ok(),
@@ -133,8 +142,16 @@ impl Handler for Plugin {
     }
 
     fn notification(&self, peer: &Arc<Peer>, method: &str, params: Params) {
-        if method == methods::TOOLS_OUTPUT {
-            peer.deliver_output(&params);
+        match method {
+            methods::TOOLS_OUTPUT => {
+                peer.deliver_output(&params);
+            }
+            methods::LISTER_CLOSED => {
+                if let Some(lister) = params.get("lister").and_then(Value::as_str) {
+                    self.listers.closed(lister);
+                }
+            }
+            _ => {}
         }
     }
 }

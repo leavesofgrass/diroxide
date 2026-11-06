@@ -23,6 +23,7 @@
 //!   40 cells ([`lines`]); the host adds the plugin's name last.
 
 pub mod cache;
+pub mod commands;
 pub mod error;
 pub mod folder;
 pub mod git;
