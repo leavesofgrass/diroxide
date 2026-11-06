@@ -23,6 +23,8 @@ mod frontend;
 mod held;
 // Hooks through the plugin host (lane A2).
 mod hooks;
+// A plugin's forms, diffs and place descriptions (alpha 4, lane HP).
+mod host_pieces;
 // The transfer queue and the Jobs list (lane A2).
 mod jobs;
 mod keys;

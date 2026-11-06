@@ -15,10 +15,25 @@
 //!   question, starting on No; a changed manifest or program asks again
 //!   before the next run.
 //! - A plugin's dialog never replaces a destructive confirmation, a
-//!   password prompt, a job's question or another plugin question: it
-//!   waits behind them and opens when they close.
+//!   password prompt, a job's question or another plugin question (a
+//!   form and its fields' dialogs among them): it waits behind them and
+//!   opens when they close.
 //! - Escape closes a plugin's dialog with "cancelled" for the plugin and
-//!   returns the focus; in a running command it cancels the job.
+//!   returns the focus; in a running command it cancels the job. In a
+//!   form's field it goes back to the form, the field as it was.
+//! - A plugin's words about a folder (`place/describe`, the same lane)
+//!   follow the panel in the title line, its name last: asked off the
+//!   input thread when a panel lands in a folder its `[[place_info]]`
+//!   matches, kept for the folder until it is listed again or the plugin
+//!   fails or is turned off ([`crate::plugins::describe`]).
+//! - A plugin's two documents (`ui/show_diff`, the same lane) open the
+//!   compare screens, compared on the plugin's worker under the app's
+//!   compare options (`comparing`).
+//! - A plugin's form (`ui/form`, alpha 4's host-pieces lane) is a list of
+//!   setting rows in the Pack dialog's shape ([`crate::plugins::form`]):
+//!   Enter on a field changes it in the app's own prompt, list or masked
+//!   prompt, and the form opens again on that field, said with its new
+//!   value.
 //! - A crash, a time-out or a failed start is said once, however many
 //!   ways it is reported.
 
@@ -26,9 +41,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use diroxide_core::{
     ArgValue, Command, CommandId, Effect, EntryKind, JobId, JobKind, Key, Layer, ListModel,
-    ListRow, Message, MessageKind, Place, Redraw, Side, Timestamp,
+    ListRow, Message, MessageKind, Place, Redraw, SecretKind, SecretRequest, Side, Timestamp,
 };
-use diroxide_plugins::ask::{Answer as PluginAnswer, Question, QuestionKind, TextDocument};
+use diroxide_plugins::ask::{
+    Answer as PluginAnswer, Form, FormAnswer, Question, QuestionKind, TextDocument,
+};
 use diroxide_plugins::host::HostEvent;
 use diroxide_plugins::lines;
 use diroxide_plugins::panels::{PanelChange, PanelChoice, PanelSnapshot};
@@ -49,6 +66,7 @@ use crate::entry::{CompletionSource, EntryField};
 use crate::jobs::{FinishedJob, SIGHTED_INTERVAL_MS, millis_between};
 use crate::keymap::Lookup;
 use crate::plugins::catalog::{self, Catalog, CommandEntry, ItemState, Runs};
+use crate::plugins::form::{self, FieldState, FormState};
 use crate::plugins::lister::PanelList;
 use crate::plugins::registry::{self, Proposal};
 use crate::plugins::{
@@ -130,7 +148,36 @@ pub(super) struct PluginState {
     searches: HashMap<u64, (String, bool)>,
     /// The log asked for, by item id.
     log_wanted: Option<String>,
+    /// Plugins' words about folders for the title line, by folder, kept
+    /// until the folder is listed again or the plugin fails or is turned
+    /// off (`place/describe`, alpha 4's host-pieces lane).
+    described: HashMap<Place, Description>,
+    /// Each side's describe on its way: its number and its folder.
+    describing: [Option<(u64, Place)>; 2],
+    /// The folder each side last landed in, so the same folder listed
+    /// again (a reload, a watch, a job's end) asks again.
+    landed: [Option<Place>; 2],
+    /// The last describe's number.
+    describes: u64,
 }
+
+/// A plugin's words about a folder, for the title line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Description {
+    /// The plugin's id.
+    plugin: String,
+    /// Its name, said after its words.
+    name: String,
+    /// The words: "main, no upstream, 2 changed here".
+    text: String,
+}
+
+/// The most characters of a plugin's words the title line keeps; the rest
+/// is "...".
+const DESCRIPTION_CHARS: usize = 40;
+
+/// The most folders whose words are kept at once.
+const MAX_DESCRIBED: usize = 1000;
 
 /// What a plugin dialog is for.
 #[derive(Clone, Debug)]
@@ -151,6 +198,23 @@ pub(super) enum Wants {
     },
     /// A plugin's text document, answered on close when the plugin waits.
     Document { call: Option<CallId> },
+    /// A plugin's form (`ui/form`): its rows.
+    Form(Box<FormState>),
+    /// A form's text or path field, typed in the prompt.
+    FormText { state: Box<FormState>, field: usize },
+    /// A form's choice field's choices.
+    FormChoice { state: Box<FormState>, field: usize },
+    /// A form's multiline field, as its lines.
+    FormLines { state: Box<FormState>, field: usize },
+    /// One line of a form's multiline field typed in the prompt; `None`
+    /// adds a line.
+    FormLine {
+        state: Box<FormState>,
+        field: usize,
+        line: Option<usize>,
+    },
+    /// A form's secret field, in the masked prompt.
+    FormSecret { state: Box<FormState>, field: usize },
     /// The sort choices of the plugin list in a panel (lane L).
     ListerSort { side: Side },
     /// The filter of the plugin list in a panel, typed (lane L).
@@ -658,6 +722,12 @@ impl App {
             } => self.lister_rows_came(&plugin, &lister, rows, refresh),
             PluginEvent::ListerNoRows { plugin, lister } => self.lister_no_rows(&plugin, &lister),
             PluginEvent::Note(message) => vec![self.say(message)],
+            PluginEvent::Described {
+                request,
+                side,
+                place,
+                described,
+            } => self.place_described(request, side, place, described),
         }
     }
 
@@ -665,6 +735,19 @@ impl App {
     /// plugins list made again, a command waiting for its enable run.
     fn catalog_found(&mut self, catalog: Catalog) -> Vec<Effect> {
         self.plugins.catalog = catalog;
+        // A disabled or changed plugin's words leave the title line.
+        let describers = self.describers(None);
+        self.plugins
+            .described
+            .retain(|_, d| describers.contains(&d.plugin));
+        // The folders shown now, which may have been listed before the
+        // catalog came, are described once it is here.
+        for side in Side::BOTH {
+            let place = self.panel(side).place().clone();
+            if !self.plugins.described.contains_key(&place) {
+                self.ask_describers(side, place);
+            }
+        }
         self.bind_plugin_keys();
         self.plugins.scanned = true;
         let mut effects = Vec::new();
@@ -1068,6 +1151,54 @@ impl App {
                 }
                 effects
             }
+            Wants::Form(state) => match row {
+                Some(row) => self.form_row(*state, &row),
+                None => Vec::new(),
+            },
+            Wants::FormText { state, field } => {
+                // Enter in a path's candidates takes one into the field.
+                if let (Some((_, Dialog::Edit { in_list: true, .. })), Some(row)) =
+                    (self.dialogs.last(), &row)
+                {
+                    let row = row.clone();
+                    return self.take_candidate(&row);
+                }
+                self.form_text_typed(*state, field, text)
+            }
+            Wants::FormChoice { mut state, field } => {
+                let Some(choice) = row.and_then(|r| state.choice_of(field, &r)) else {
+                    return Vec::new();
+                };
+                state.set(field, FieldState::Choice(choice));
+                let mut effects = self.close_top();
+                effects.extend(self.show_form(*state, &form::field_row(field)));
+                effects
+            }
+            Wants::FormLines { state, field } => match row {
+                Some(row) => self.form_line_chosen(*state, field, &row),
+                None => Vec::new(),
+            },
+            Wants::FormLine {
+                mut state,
+                field,
+                line,
+            } => {
+                state.set_line(field, line, &text);
+                let at = line.unwrap_or_else(|| state.lines(field).len().saturating_sub(1));
+                let mut effects = self.close_top();
+                effects.extend(self.show_form_lines(*state, field, &form::line_row(at)));
+                effects
+            }
+            Wants::FormSecret { mut state, field } => {
+                let typed = match self.dialogs.last() {
+                    Some((_, Dialog::Secret { typed, .. })) => typed.clone(),
+                    _ => return Vec::new(),
+                };
+                state.set(field, FieldState::Secret(typed));
+                let mut effects = self.close_top();
+                effects.extend(self.show_form(*state, &form::field_row(field)));
+                effects
+            }
             Wants::ListerSort { side } => {
                 let Some(column) = row else {
                     return Vec::new();
@@ -1201,6 +1332,20 @@ impl App {
             Wants::Document { call: Some(call) } => {
                 self.reply(call, Reply::Shown);
                 Vec::new()
+            }
+            // Escape in a form answers "cancelled"; in one of its fields'
+            // dialogs it goes back to the form, the field as it was.
+            Wants::Form(state) => {
+                self.reply(state.call, Reply::Form(FormAnswer::Cancelled));
+                Vec::new()
+            }
+            Wants::FormText { state, field }
+            | Wants::FormChoice { state, field }
+            | Wants::FormLines { state, field }
+            | Wants::FormSecret { state, field } => self.show_form(*state, &form::field_row(field)),
+            Wants::FormLine { state, field, line } => {
+                let focus = line.map_or_else(|| form::ADD_LINE.to_owned(), form::line_row);
+                self.show_form_lines(*state, field, &focus)
             }
             Wants::RunConfirm { command, .. } => {
                 let name = self
@@ -1371,6 +1516,30 @@ impl App {
                 let help = settings::setting_help(&item.name, spec);
                 Some(vec![self.say(Message::info(help))])
             }
+            // Space on a form's checkbox turns it over, as Enter does.
+            Wants::Form(state) if action == Some(Action::ToggleSelect) => {
+                let row = match self.dialogs.last() {
+                    Some((_, Dialog::Choose { list, .. })) => list.focused()?.id.clone(),
+                    _ => return None,
+                };
+                let field = form::row_field(&row).filter(|f| state.kind(*f) == "checkbox")?;
+                Some(self.form_toggle(*state, field))
+            }
+            // Delete on a line of a form's multiline field removes it.
+            Wants::FormLines { state, field }
+                if command
+                    .as_ref()
+                    .is_some_and(|id| *id == ids::TRASH || *id == ids::DELETE_PERMANENTLY) =>
+            {
+                let row = match self.dialogs.last() {
+                    Some((_, Dialog::Choose { list, .. })) => list.focused()?.id.clone(),
+                    _ => return None,
+                };
+                Some(match form::row_line(&row) {
+                    Some(line) => self.form_line_removed(*state, field, line),
+                    None => vec![self.say(Message::status("Choose a line first."))],
+                })
+            }
             Wants::Ask { question, .. } => {
                 if let QuestionKind::Choose { multiple: true, .. } = question.kind
                     && action == Some(Action::ToggleSelect)
@@ -1405,6 +1574,7 @@ impl App {
         matches!(
             self.opens.last().map(|o| &o.purpose),
             Some(Purpose::Plugin(w)) if matches!(&**w, Wants::Ask { question, .. } if question.kind == QuestionKind::Secret)
+                || matches!(&**w, Wants::FormSecret { .. })
         )
     }
 
@@ -1412,19 +1582,31 @@ impl App {
 
     /// Whether a plugin dialog must wait: a confirmation, a password, a
     /// job's question, a field the owner types in (so a typed letter never
-    /// answers the plugin), a typed confirmation or another plugin question
-    /// is open.
+    /// answers the plugin), a typed confirmation, another plugin question
+    /// or a plugin's form, in any of its dialogs, is open.
     fn plugin_dialog_blocked(&self) -> bool {
-        self.dialogs.iter().zip(&self.opens).any(|((_, dialog), open)| {
-            matches!(
-                dialog,
-                Dialog::Confirm { .. }
-                    | Dialog::Secret { .. }
-                    | Dialog::Question { .. }
-                    | Dialog::Edit { .. }
-            ) || matches!(open.purpose, Purpose::TypedPlan(..))
-                || matches!(&open.purpose, Purpose::Plugin(w) if matches!(**w, Wants::Ask { .. }))
-        })
+        self.dialogs
+            .iter()
+            .zip(&self.opens)
+            .any(|((_, dialog), open)| {
+                matches!(
+                    dialog,
+                    Dialog::Confirm { .. }
+                        | Dialog::Secret { .. }
+                        | Dialog::Question { .. }
+                        | Dialog::Edit { .. }
+                ) || matches!(open.purpose, Purpose::TypedPlan(..))
+                    || matches!(&open.purpose, Purpose::Plugin(w) if matches!(
+                        **w,
+                        Wants::Ask { .. }
+                            | Wants::Form(_)
+                            | Wants::FormText { .. }
+                            | Wants::FormChoice { .. }
+                            | Wants::FormLines { .. }
+                            | Wants::FormLine { .. }
+                            | Wants::FormSecret { .. }
+                    ))
+            })
     }
 
     /// Opens a plugin dialog that waited, when nothing blocks it now.
@@ -1448,7 +1630,11 @@ impl App {
     fn plugin_call(&mut self, call: CallId, plugin: String, request: Call) -> Vec<Effect> {
         let opens_dialog = matches!(
             request,
-            Call::Ask(_) | Call::ShowText(_) | Call::OpenLister(_)
+            Call::Ask(_)
+                | Call::ShowText(_)
+                | Call::Form(_)
+                | Call::ShowDiff(_)
+                | Call::OpenLister(_)
         );
         if opens_dialog && self.plugin_dialog_blocked() {
             self.plugins.queue.push_back((call, plugin, request));
@@ -1469,6 +1655,17 @@ impl App {
                 )
             }
             Call::ShowText(document) => self.show_document(call, &document),
+            Call::Form(form) => self.open_form(call, &plugin, *form),
+            Call::CompareOptions => {
+                let options = super::comparing::file_options(&self.settings);
+                self.reply(call, Reply::CompareOptions(options));
+                Vec::new()
+            }
+            Call::ShowDiff(shown) => {
+                let effects = self.show_documents(*shown);
+                self.reply(call, Reply::Shown);
+                effects
+            }
             Call::Panel(which) => {
                 let snapshot = self.snapshot(which);
                 self.reply(call, Reply::Panel(Some(Box::new(snapshot))));
@@ -1538,6 +1735,397 @@ impl App {
             self.reply(call, Reply::Shown);
         }
         effects
+    }
+
+    // ---- A plugin's words for the title line (`place/describe`) ----
+
+    /// The enabled process plugins whose `[[place_info]]` may match a
+    /// folder by its scheme (any folder when `None`), in the catalog's
+    /// order; the marker is looked for off the input thread.
+    fn describers(&self, place: Option<&Place>) -> Vec<String> {
+        if self.plugins.catalog.off {
+            return Vec::new();
+        }
+        self.plugins
+            .catalog
+            .items
+            .iter()
+            .filter(|item| item.contributes() && item.is_process())
+            .filter(|item| {
+                item.manifest.as_ref().is_some_and(|m| {
+                    m.place_info.iter().any(|spec| {
+                        place.is_none_or(|p| crate::plugins::describe::scheme_fits(spec, p))
+                    })
+                })
+            })
+            .map(|item| item.id.clone())
+            .collect()
+    }
+
+    /// A panel landed in a folder (the listing hook in `nav.rs`): the
+    /// plugins that may describe it are asked off the input thread, once a
+    /// folder; the same folder listed again (a reload, a watch, a job's
+    /// end) asks again, the old words kept until the answer. A plugin whose
+    /// manifest declares no `[[place_info]]` is never asked.
+    pub(super) fn describe_landed(&mut self, side: Side) {
+        let place = self.panel(side).place().clone();
+        let at = side.index();
+        let again = self.plugins.landed[at].as_ref() == Some(&place);
+        self.plugins.landed[at] = Some(place.clone());
+        if !again && self.plugins.described.contains_key(&place) {
+            return;
+        }
+        self.ask_describers(side, place);
+    }
+
+    /// Asks the plugins that may describe a side's folder, unless a
+    /// describe of that folder is on its way.
+    fn ask_describers(&mut self, side: Side, place: Place) {
+        let at = side.index();
+        if self.plugins.describing[at]
+            .as_ref()
+            .is_some_and(|(_, p)| *p == place)
+        {
+            return;
+        }
+        let plugins = self.describers(Some(&place));
+        if plugins.is_empty() {
+            return;
+        }
+        self.plugins.describes += 1;
+        let request = self.plugins.describes;
+        self.plugins.describing[at] = Some((request, place.clone()));
+        self.request(Request::Plugins(Box::new(PluginRequest::Describe {
+            request,
+            side,
+            place,
+            plugins,
+        })));
+    }
+
+    /// What the plugins said about a folder: their words kept for the
+    /// folder, nothing said aloud; a failure leaves the title as it was.
+    fn place_described(
+        &mut self,
+        request: u64,
+        side: Side,
+        place: Place,
+        described: crate::plugins::describe::Described,
+    ) -> Vec<Effect> {
+        use crate::plugins::describe::Described;
+        let at = side.index();
+        if self.plugins.describing[at]
+            .as_ref()
+            .is_some_and(|(r, _)| *r == request)
+        {
+            self.plugins.describing[at] = None;
+        }
+        match described {
+            Described::Words { plugin, name, text } => {
+                // A long session keeps at most so many folders' words: past
+                // them, only the folders shown now are kept.
+                if self.plugins.described.len() >= MAX_DESCRIBED {
+                    let shown = [
+                        self.panel(Side::Left).place().clone(),
+                        self.panel(Side::Right).place().clone(),
+                    ];
+                    self.plugins.described.retain(|p, _| shown.contains(p));
+                }
+                self.plugins
+                    .described
+                    .insert(place.clone(), Description { plugin, name, text });
+            }
+            Described::Nothing => {
+                self.plugins.described.remove(&place);
+            }
+            Described::Failed => {}
+        }
+        let shown = self.active_panel();
+        if shown.loading_place().unwrap_or(shown.place()) == &place {
+            vec![Effect::Redraw(Redraw::TitleLine)]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// A plugin's words about a folder as the title line says them, its
+    /// name last (answer 90): "main, no upstream, 2 changed here (Git)".
+    pub(super) fn place_words(&self, place: &Place) -> Option<String> {
+        let found = self.plugins.described.get(place)?;
+        let text = if found.text.chars().count() > DESCRIPTION_CHARS {
+            let kept: String = found.text.chars().take(DESCRIPTION_CHARS).collect();
+            format!("{}...", kept.trim_end())
+        } else {
+            found.text.clone()
+        };
+        Some(format!("{text} ({})", found.name))
+    }
+
+    /// A plugin failed or was turned off: its words leave the title line.
+    fn forget_descriptions(&mut self, plugin: &str) -> Vec<Effect> {
+        let before = self.plugins.described.len();
+        self.plugins.described.retain(|_, d| d.plugin != plugin);
+        if self.plugins.described.len() == before {
+            Vec::new()
+        } else {
+            vec![Effect::Redraw(Redraw::TitleLine)]
+        }
+    }
+
+    // ---- A plugin's form (`ui/form`) ----
+
+    /// Opens a plugin's form, the focus on its focus field: "Commit (Git).
+    /// 2 files staged on main. Message: empty, 2 of 7".
+    fn open_form(&mut self, call: CallId, plugin: &str, form: Form) -> Vec<Effect> {
+        let name = self
+            .plugins
+            .catalog
+            .item(plugin)
+            .map_or_else(|| plugin.to_owned(), |item| item.name.clone());
+        let state = FormState::new(call, &name, form);
+        let focus = state.focus_row();
+        let mut list = state.list();
+        list.focus_id(&focus);
+        let mut words = vec![state.title().to_owned()];
+        if focus != form::BUTTON
+            && let Some(summary) = state.form.summary.as_ref().filter(|s| !s.is_empty())
+        {
+            words.push(summary.clone());
+        }
+        words.push(list.announce_focus());
+        let message = Message::new(
+            words.join(". "),
+            diroxide_core::Importance::High,
+            MessageKind::Question,
+        );
+        self.open_dialog_saying(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::ACCEPT),
+            },
+            Purpose::Plugin(Box::new(Wants::Form(Box::new(state)))),
+            message,
+        )
+    }
+
+    /// The form's dialog again, the focus on a row, said as a list opens:
+    /// its title and that row with its new value.
+    fn show_form(&mut self, state: FormState, focus: &str) -> Vec<Effect> {
+        let mut list = state.list();
+        list.focus_id(focus);
+        self.open_dialog(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::ACCEPT),
+            },
+            Purpose::Plugin(Box::new(Wants::Form(Box::new(state)))),
+        )
+    }
+
+    /// Enter on a row of a plugin's form: the default button answers (or
+    /// cancels, when it is No or Cancel); a field opens its own dialog, or
+    /// a checkbox turns over.
+    fn form_row(&mut self, state: FormState, row: &str) -> Vec<Effect> {
+        if row == form::BUTTON && state.button_cancels() {
+            let effects = self.close_top();
+            self.reply(state.call, Reply::Form(FormAnswer::Cancelled));
+            return effects;
+        }
+        if row == form::BUTTON || row == form::OK {
+            return self.form_answered(state);
+        }
+        let Some(field) = form::row_field(row) else {
+            return Vec::new();
+        };
+        let kind = state.kind(field).to_owned();
+        if kind == "checkbox" {
+            return self.form_toggle(state, field);
+        }
+        let mut effects = self.close_top();
+        let title = state.field_title(field);
+        let more = match kind.as_str() {
+            "multiline" => self.show_form_lines(state, field, &form::line_row(0)),
+            "choice" => {
+                let list = state.choices_list(field);
+                self.open_dialog(
+                    Dialog::Choose {
+                        list,
+                        on_enter: Command::new(ids::ACCEPT),
+                    },
+                    Purpose::Plugin(Box::new(Wants::FormChoice {
+                        state: Box::new(state),
+                        field,
+                    })),
+                )
+            }
+            "secret" => self.open_dialog(
+                Dialog::secret(SecretRequest::new(SecretKind::ServerPrompt, title)),
+                Purpose::Plugin(Box::new(Wants::FormSecret {
+                    state: Box::new(state),
+                    field,
+                })),
+            ),
+            _ => {
+                let source = if kind == "path" {
+                    CompletionSource::Paths
+                } else {
+                    CompletionSource::None
+                };
+                let entry = EntryField::new(title, source).with_text(state.text(field));
+                self.open_dialog(
+                    Dialog::edit(entry),
+                    Purpose::Plugin(Box::new(Wants::FormText {
+                        state: Box::new(state),
+                        field,
+                    })),
+                )
+            }
+        };
+        effects.extend(more);
+        effects
+    }
+
+    /// The default button: every typed value checked against its field's
+    /// pattern, then the values to the plugin.
+    fn form_answered(&mut self, state: FormState) -> Vec<Effect> {
+        if let Err((field, why)) = state.check() {
+            if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.last_mut() {
+                list.focus_id(&form::field_row(field));
+            }
+            // The field first, then why: "Author: Use letters and spaces
+            // only".
+            let line = format!("{}: {why}", state.label(field));
+            return vec![Effect::Redraw(Redraw::All), self.say(Message::info(line))];
+        }
+        let effects = self.close_top();
+        self.reply(state.call, Reply::Form(state.answer()));
+        effects
+    }
+
+    /// Enter or Space on a form's checkbox: it turns over in place, and its
+    /// row is said ("Sign-off: on").
+    fn form_toggle(&mut self, mut state: FormState, field: usize) -> Vec<Effect> {
+        if state.toggle(field).is_none() {
+            return Vec::new();
+        }
+        let words = state.row_words(field);
+        let list = state.list();
+        if let Some((_, Dialog::Choose { list: open, .. })) = self.dialogs.last_mut() {
+            *open = list;
+            open.focus_id(&form::field_row(field));
+        }
+        if let Some(open) = self.opens.last_mut() {
+            open.purpose = Purpose::Plugin(Box::new(Wants::Form(Box::new(state))));
+        }
+        vec![
+            Effect::Redraw(Redraw::All),
+            self.say(Message::status(words)),
+        ]
+    }
+
+    /// A text or path field typed: a text must fit its pattern; a path is
+    /// read against the active panel's folder, as a path question's is.
+    fn form_text_typed(&mut self, mut state: FormState, field: usize, text: String) -> Vec<Effect> {
+        let value = if state.kind(field) == "path" {
+            let typed = text.trim();
+            if typed.is_empty() {
+                String::new()
+            } else {
+                let here = self.panel(self.active).place().clone();
+                match Place::resolve(typed, &here) {
+                    Ok(place) => place.to_string(),
+                    Err(error) => {
+                        return vec![self.say(Message::from_error("use", typed, &error))];
+                    }
+                }
+            }
+        } else {
+            if let Some(Err(why)) = state.form.fields.get(field).map(|f| f.check_text(&text)) {
+                return vec![self.say(Message::info(why))];
+            }
+            text
+        };
+        state.set(field, FieldState::Text(value));
+        let mut effects = self.close_top();
+        effects.extend(self.show_form(state, &form::field_row(field)));
+        effects
+    }
+
+    /// A multiline field's lines as a list, the focus on a row.
+    fn show_form_lines(&mut self, state: FormState, field: usize, focus: &str) -> Vec<Effect> {
+        let mut list = state.lines_list(field);
+        if !list.focus_id(focus) {
+            list.focus_id(form::ADD_LINE);
+        }
+        self.open_dialog(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::ACCEPT),
+            },
+            Purpose::Plugin(Box::new(Wants::FormLines {
+                state: Box::new(state),
+                field,
+            })),
+        )
+    }
+
+    /// Enter on a line, or on "Add a line": the prompt with that line's
+    /// text, or empty.
+    fn form_line_chosen(&mut self, state: FormState, field: usize, row: &str) -> Vec<Effect> {
+        let lines = state.lines(field);
+        let line = form::row_line(row).filter(|l| *l < lines.len());
+        if line.is_none() && row != form::ADD_LINE {
+            return Vec::new();
+        }
+        let number = line.map_or(lines.len() + 1, |l| l + 1);
+        let text = line.map(|l| lines[l].clone()).unwrap_or_default();
+        let label = format!("{}, line {number} ({})", state.label(field), state.plugin);
+        let entry = EntryField::new(label, CompletionSource::None).with_text(text);
+        let mut effects = self.close_top();
+        effects.extend(self.open_dialog(
+            Dialog::edit(entry),
+            Purpose::Plugin(Box::new(Wants::FormLine {
+                state: Box::new(state),
+                field,
+                line,
+            })),
+        ));
+        effects
+    }
+
+    /// Delete on a line of a multiline field: it goes, and the list says
+    /// so and where the focus is.
+    fn form_line_removed(
+        &mut self,
+        mut state: FormState,
+        field: usize,
+        line: usize,
+    ) -> Vec<Effect> {
+        if !state.remove_line(field, line) {
+            return Vec::new();
+        }
+        let left = state.lines(field).len();
+        let mut list = state.lines_list(field);
+        if left == 0 || !list.focus_id(&form::line_row(line.min(left.saturating_sub(1)))) {
+            list.focus_id(form::ADD_LINE);
+        }
+        let now_on = list.announce_focus();
+        if let Some((_, Dialog::Choose { list: open, .. })) = self.dialogs.last_mut() {
+            *open = list;
+        }
+        if let Some(open) = self.opens.last_mut() {
+            open.purpose = Purpose::Plugin(Box::new(Wants::FormLines {
+                state: Box::new(state),
+                field,
+            }));
+        }
+        vec![
+            Effect::Redraw(Redraw::All),
+            self.say(Message::info(format!(
+                "Line {} removed. {now_on}",
+                line + 1
+            ))),
+        ]
     }
 
     /// A panel as a plugin sees it.
@@ -1687,18 +2275,22 @@ impl App {
             HostEvent::StartFailed { plugin, message }
             | HostEvent::TimedOut { plugin, message }
             | HostEvent::Crashed { plugin, message } => {
+                let mut effects = self.forget_descriptions(&plugin);
                 if self.failure_said_lately(&plugin) {
-                    return Vec::new();
+                    return effects;
                 }
                 self.note_failure_said(&plugin);
-                vec![self.say(message)]
+                effects.push(self.say(message));
+                effects
             }
             HostEvent::TurnedOff { plugin, message } => {
+                let mut effects = self.forget_descriptions(&plugin);
                 self.plugins
                     .off
                     .insert(plugin.clone(), message.text.clone());
                 self.note_failure_said(&plugin);
-                vec![self.say(message)]
+                effects.push(self.say(message));
+                effects
             }
             HostEvent::Flooded { plugin, message } => {
                 self.note_failure_said(&plugin);

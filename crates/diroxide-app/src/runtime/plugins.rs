@@ -34,7 +34,7 @@ use diroxide_config::{Paths, PluginSettings};
 use diroxide_core::{CommandId, Entry, JobId, JobRequest, Message};
 use diroxide_ops::JobReport;
 use diroxide_plugins::PluginError;
-use diroxide_plugins::ask::{Answer, Question, TextDocument};
+use diroxide_plugins::ask::{Answer, DiffDocuments, Form, FormAnswer, Question, TextDocument};
 use diroxide_plugins::host::{Host, HostServices, Launcher, PluginInfo, QUIT_BUDGET};
 use diroxide_plugins::listers::ListerView;
 use diroxide_plugins::live::CallOptions;
@@ -58,6 +58,7 @@ use serde_json::{Value, json};
 use super::{Shared, Work, lock};
 use crate::app::AppEvent;
 use crate::plugins::catalog::{self, Catalog, Item, Roots, Runs};
+use crate::plugins::describe::{self, Describer};
 use crate::plugins::{
     Call, CallId, Finished, Outcome, PluginEvent, PluginRequest, Reply, RunRequest,
 };
@@ -171,6 +172,37 @@ impl HostServices for AppServices {
             Wait::App
         };
         match self.call(Call::ShowText(Box::new(document.clone())), wait) {
+            Some(Reply::Done(Err(error))) => Err(error),
+            _ => Ok(()),
+        }
+    }
+
+    /// `ui/form`: the app's list of setting rows; the owner's thinking
+    /// time counts as idle, as a question's does. A form the app could not
+    /// answer is cancelled.
+    fn form(&self, form: &Form) -> Result<FormAnswer, RpcError> {
+        match self.call(Call::Form(Box::new(form.clone())), Wait::Owner) {
+            Some(Reply::Form(answer)) => Ok(answer),
+            _ => Ok(FormAnswer::Cancelled),
+        }
+    }
+
+    /// `ui/show_diff`: the app's compare options first, then the two
+    /// documents compared here, on the plugin's worker, never on the input
+    /// thread; answered when the compare screens show them.
+    fn show_diff(&self, documents: &DiffDocuments) -> Result<(), RpcError> {
+        let options = match self.call(Call::CompareOptions, Wait::App) {
+            Some(Reply::CompareOptions(options)) => options,
+            _ => {
+                return Err(RpcError::new(
+                    ErrorKind::Failed,
+                    "the compare screens did not answer",
+                ));
+            }
+        };
+        let shown = crate::plugins::diff::compare_documents(documents, &options)
+            .map_err(|why| RpcError::new(ErrorKind::Failed, why))?;
+        match self.call(Call::ShowDiff(Box::new(shown)), Wait::App) {
             Some(Reply::Done(Err(error))) => Err(error),
             _ => Ok(()),
         }
@@ -683,6 +715,45 @@ impl PluginRuntime {
                 if let Some(host) = self.hosts.get(&plugin) {
                     host.host.lister_closed(&plugin, &lister);
                 }
+            }
+            // The title line's words (alpha 4, lane HP): asked on a thread
+            // of their own, never the input thread, and not counted as
+            // work in flight, so a slow plugin never holds anything up.
+            PluginRequest::Describe {
+                request,
+                side,
+                place,
+                plugins,
+            } => {
+                let describers: Vec<Describer> = plugins
+                    .iter()
+                    .filter_map(|id| {
+                        let host = self.hosts.get(id)?;
+                        let manifest = host.item.manifest.as_ref()?;
+                        (!manifest.place_info.is_empty()).then(|| Describer {
+                            id: id.clone(),
+                            name: manifest.name.clone(),
+                            host: Arc::clone(&host.host),
+                            specs: manifest.place_info.clone(),
+                        })
+                    })
+                    .collect();
+                let shared = Arc::clone(shared);
+                let ask = move || {
+                    let described = describe::ask(&describers, &place);
+                    send(
+                        &shared,
+                        PluginEvent::Described {
+                            request,
+                            side,
+                            place,
+                            described,
+                        },
+                    );
+                };
+                let _ = thread::Builder::new()
+                    .name("plugin-describe".to_owned())
+                    .spawn(ask);
             }
         }
     }

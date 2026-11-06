@@ -26,8 +26,10 @@
 //! `ui/form` and `ui/show_diff` have their final shapes ([`Form`] with
 //! [`FormAnswer`], [`DiffDocuments`]) and the app's side
 //! ([`crate::HostServices::form`] and [`crate::HostServices::show_diff`])
-//! since alpha 4's contract step; the host answers them "not served"
-//! until the host-pieces lane serves them for the git plugin.
+//! since alpha 4's contract step. The host serves both since alpha 4's
+//! host-pieces lane: the app shows a form as a list of setting rows and
+//! answers each field by its id, and two documents in its compare
+//! screens.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -805,7 +807,7 @@ pub(crate) fn read_document(params: &Params, plugin: &str) -> Result<TextDocumen
     })
 }
 
-/// A field of a form (`ui/form`, shape only in this alpha).
+/// A field of a form (`ui/form`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FormField {
     /// The id the answer carries.
@@ -828,8 +830,33 @@ pub struct FormField {
     pub pattern_message: Option<String>,
 }
 
-/// A dialog of several labeled fields (`ui/form`, shape only in this
-/// alpha: the git plugin's commit and new-repository dialogs).
+impl FormField {
+    /// Whether a typed value is acceptable: a `text` field's whole value
+    /// must match its pattern, when it has one. The error is the sentence
+    /// the dialog says, the field's own words or "The text does not fit
+    /// what is asked." (the host-pieces lane; [`read_form`] refused a
+    /// pattern that does not read).
+    pub fn check_text(&self, text: &str) -> Result<(), String> {
+        let Some(source) = self.pattern.as_deref().filter(|_| self.kind == "text") else {
+            return Ok(());
+        };
+        let Ok(regex) = Regex::new(source) else {
+            return Ok(());
+        };
+        if regex.find(text).is_some_and(|m| m.as_str() == text) {
+            return Ok(());
+        }
+        Err(self
+            .pattern_message
+            .as_deref()
+            .map(|m| clean_text(m, MAX_ANNOUNCE_CHARS))
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(lines::text_does_not_fit))
+    }
+}
+
+/// A dialog of several labeled fields (`ui/form`: the git plugin's commit
+/// and new-repository dialogs).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Form {
     /// The title.
@@ -848,8 +875,7 @@ pub struct Form {
     pub default_button: Option<String>,
 }
 
-/// Two texts for the diff view (`ui/show_diff`, shape only in this
-/// alpha).
+/// Two texts for the compare screens (`ui/show_diff`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiffDocuments {
     /// The view's title.
@@ -922,7 +948,10 @@ pub const FIELD_KINDS: [&str; 6] = ["text", "multiline", "choice", "checkbox", "
 /// plugin's name as a question's does (alpha 4's contract step: the shape
 /// the app's side, [`crate::HostServices::form`], receives). Every label
 /// and the summary are cleaned; a field of an unknown kind, a choice with
-/// no choices, two fields with one id or a focus on no field is refused.
+/// no choices, two fields with one id or a focus on no field is refused,
+/// and, as `ui/ask` refuses them (the host-pieces lane), a pattern that is
+/// no regular expression, a choice's default that is none of its choices
+/// and a checkbox's default that is not true or false.
 pub fn read_form(params: &Params, plugin: &str) -> Result<Form, RpcError> {
     let invalid = |why: String| RpcError::new(ErrorKind::InvalidParams, why);
     let mut form: Form = serde_json::from_value(Value::Object(params.clone()))
@@ -945,6 +974,33 @@ pub fn read_form(params: &Params, plugin: &str) -> Result<Form, RpcError> {
         }
         if field.kind == "choice" && field.choices.is_empty() {
             return Err(invalid(format!("field {} has no choices", field.id)));
+        }
+        if let Some(source) = &field.pattern
+            && Regex::new(source).is_err()
+        {
+            return Err(invalid(format!(
+                "field {} has a pattern that is not a valid regular expression",
+                field.id
+            )));
+        }
+        match (field.kind.as_str(), &field.default) {
+            ("choice", Some(default))
+                if !default
+                    .as_str()
+                    .is_some_and(|d| field.choices.iter().any(|c| c == d)) =>
+            {
+                return Err(invalid(format!(
+                    "field {}'s default is not one of its choices",
+                    field.id
+                )));
+            }
+            ("checkbox", Some(default)) if !default.is_boolean() => {
+                return Err(invalid(format!(
+                    "field {}'s default must be true or false",
+                    field.id
+                )));
+            }
+            _ => {}
         }
         if !ids.insert(field.id.clone()) {
             return Err(invalid(format!("two fields have the id {}", field.id)));
@@ -1039,6 +1095,43 @@ mod tests {
             ),
             "the focus z is no field of the form"
         );
+        // As `ui/ask` refuses them (the host-pieces lane).
+        assert_eq!(
+            refused(
+                json!([{"id": "a", "label": "A", "kind": "text", "pattern": "(["}]),
+                None
+            ),
+            "field a has a pattern that is not a valid regular expression"
+        );
+        assert_eq!(
+            refused(
+                json!([{"id": "b", "label": "Branch", "kind": "choice", "choices": ["main"], "default": "dev"}]),
+                None
+            ),
+            "field b's default is not one of its choices"
+        );
+        assert_eq!(
+            refused(
+                json!([{"id": "s", "label": "Sign-off", "kind": "checkbox", "default": "yes"}]),
+                None
+            ),
+            "field s's default must be true or false"
+        );
+        let checked = read_form(
+            &params(json!({"title": "x", "fields": [
+                {"id": "n", "label": "Name", "kind": "text", "pattern": "[a-z]+",
+                 "pattern_message": "Use small letters only"},
+                {"id": "p", "label": "Place", "kind": "path", "pattern": "[a-z]+"}
+            ]})),
+            "Git",
+        )
+        .unwrap();
+        assert_eq!(checked.fields[0].check_text("main"), Ok(()));
+        assert_eq!(
+            checked.fields[0].check_text("main2"),
+            Err("Use small letters only".to_owned())
+        );
+        assert_eq!(checked.fields[1].check_text("D:/x"), Ok(()), "text only");
         let answer = FormAnswer::Submitted(vec![
             (
                 "message".to_owned(),

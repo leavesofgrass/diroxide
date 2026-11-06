@@ -121,12 +121,27 @@ pub fn page() -> String {
          off.\n\
          - For `ui/form`, the app's side is `HostServices::form`, from a `Form` to a `FormAnswer` \
          (`{\"values\": {\"ID\": VALUE}}` or `{\"cancelled\": true}`), fields of kind text, \
-         multiline, choice, checkbox, path and secret. Shape only until the host-pieces lane \
-         serves it.\n\
+         multiline, choice, checkbox, path and secret. Served since alpha 4: the app shows a \
+         list of setting rows, the default button's row first, then one row a field, its label \
+         first and its value after (\"Message: empty\", \"Sign-off: off\", \"Password: \
+         hidden\"); a multiline field answers its lines joined by line feeds, and Escape answers \
+         `{\"cancelled\": true}`.\n\
          - For `ui/show_diff`, the app's side is `HostServices::show_diff`, two documents in the \
-         compare screens. Shape only until the host-pieces lane serves it.\n\
+         compare screens. Served since alpha 4: the same screens as two files, in the same \
+         order (the verdict and counts, the direction, what was ignored, the files' facts, the \
+         change list, one change in full, the unified view, Swap), named by the two documents' \
+         titles, the view's title said last; a text with a NUL or many control characters is \
+         compared byte by byte; a document has no place, so the viewer does not open on it.\n\
          - For `place/describe`, the app calls `Host::describe_place` off the input thread for a \
-         folder a `[[place_info]]` matches; the answer's `text` is the title line's words.\n\
+         folder a `[[place_info]]` matches; the answer's `text` is the title line's words. Called \
+         since alpha 4: when a panel lands in a folder whose scheme fits and whose marker is in \
+         it or a folder above it, the enabled plugins are asked in turn and the first words \
+         win; the title line says them after the panel, cut at 40 characters, the plugin's \
+         name last (\"repo, left panel, main, no upstream, 2 changed here (Git), in D:\\work\"); \
+         the old title stays until the answer; the words are kept for the folder until it is \
+         listed again (a reload, a change the folder's watch sees, a job's end) or the plugin \
+         fails or is turned off; a plugin whose manifest declares no `[[place_info]]` is never \
+         asked.\n\
          - For `column/format`, file panels call `Host::plugin_columns` for the columns enabled \
          plugins declare, keyed `PLUGIN.COLUMN`, and `Host::column_page` for a page of cells, \
          \"pending\" where unanswered and \"unavailable: plugin stopped\" when the plugin \

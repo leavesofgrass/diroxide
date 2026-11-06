@@ -713,7 +713,7 @@ pub const ALL: [Method; 66] = [
         A::Lists,
         "a [[place_info]] table",
         "Asks for a short description of a place for the title line.",
-        LATER,
+        NOW,
     ),
     method(
         COMPLETION_QUERY,
@@ -749,7 +749,7 @@ pub const ALL: [Method; 66] = [
         A::Services,
         "always",
         "Asks several labeled fields in one accessible dialog.",
-        LATER,
+        NOW,
     ),
     method(
         UI_SHOW_TEXT,
@@ -767,7 +767,7 @@ pub const ALL: [Method; 66] = [
         A::Services,
         "always",
         "Compares two texts in the diff view.",
-        LATER,
+        NOW,
     ),
     method(
         PANEL_GET,
@@ -1020,6 +1020,7 @@ mod tests {
         assert!(names.contains(&UI_ANNOUNCE));
         assert!(names.contains(&FS_COPY));
         assert!(!names.contains(&COMMAND_RUN));
-        assert!(!names.contains(&UI_FORM), "ui/form is shape only");
+        assert!(names.contains(&UI_FORM), "ui/form is served since alpha 4");
+        assert!(names.contains(&UI_SHOW_DIFF), "and ui/show_diff");
     }
 }

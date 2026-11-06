@@ -19,6 +19,13 @@
 //!   menu's key lists every action.
 //! - A file over the text limit asks: the first part as text, byte by
 //!   byte, or cancel, the focus on cancel.
+//! - **A plugin's two documents** (`ui/show_diff`, alpha 4's host-pieces
+//!   lane) take the same screens in the same order: the compare holds two
+//!   documents beside its two places ([`Source`]), named by their titles
+//!   ("HEAD", "working tree"), the view's title said last ("hello.txt
+//!   (Git)"). Swap, one change in full and the unified view work alike;
+//!   the viewer opens only where a place exists, so a document's view key
+//!   says it has no file. Binary documents are compared byte by byte.
 
 use std::sync::Arc;
 
@@ -67,11 +74,49 @@ impl Pair {
     }
 }
 
+/// What a compare read: two files, or two documents a plugin handed over
+/// (`ui/show_diff`), which have no place to view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Source {
+    /// Two files, read through their providers.
+    Files(Pair),
+    /// Two documents: their titles, before first, and the view's title,
+    /// the plugin's name last.
+    Documents {
+        before: String,
+        after: String,
+        title: String,
+    },
+}
+
+impl Source {
+    /// The names, before first.
+    fn names(&self) -> (String, String) {
+        match self {
+            Source::Files(pair) => pair.names(),
+            Source::Documents { before, after, .. } => (before.clone(), after.clone()),
+        }
+    }
+
+    /// The two places, before first, when there are files.
+    fn places(&self) -> Option<(&Place, &Place)> {
+        match self {
+            Source::Files(pair) => Some((&pair.before, &pair.after)),
+            Source::Documents { .. } => None,
+        }
+    }
+
+    /// Whether the two came from the panels (there and here).
+    fn panels(&self) -> bool {
+        matches!(self, Source::Files(pair) if pair.panels)
+    }
+}
+
 /// A finished compare, as its dialogs show it.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Compared {
     pub result: FileComparison,
-    pub pair: Pair,
+    pub source: Source,
     pub swapped: bool,
     pub options: FileOptions,
 }
@@ -79,10 +124,10 @@ pub(crate) struct Compared {
 impl Compared {
     /// The sides as the report says them.
     fn sides(&self) -> Sides {
-        let sides = if self.pair.panels {
+        let sides = if self.source.panels() {
             Sides::panels()
         } else {
-            let (b, a) = self.pair.names();
+            let (b, a) = self.source.names();
             Sides::files(&b, &a)
         };
         if self.swapped { sides.swapped() } else { sides }
@@ -90,8 +135,18 @@ impl Compared {
 
     /// The names, before first, as read now.
     fn names(&self) -> (String, String) {
-        let (b, a) = self.pair.names();
+        let (b, a) = self.source.names();
         if self.swapped { (a, b) } else { (b, a) }
+    }
+
+    /// The two places, before first, as read now; none for documents.
+    fn places(&self) -> Option<(&Place, &Place)> {
+        let (before, after) = self.source.places()?;
+        Some(if self.swapped {
+            (after, before)
+        } else {
+            (before, after)
+        })
     }
 
     /// The report before the change list, one string, the verdict with
@@ -107,6 +162,11 @@ impl Compared {
         };
         if let Some(verdict) = lines.first_mut() {
             *verdict = verdict_sentence(self.result.verdict(), first, second);
+        }
+        // A plugin's documents: the view's title last, its name at the end
+        // (answer 90), after everything R18's order says first.
+        if let Source::Documents { title, .. } = &self.source {
+            lines.push(title.clone());
         }
         join_sentences(&lines)
     }
@@ -146,11 +206,7 @@ impl Compared {
             return None;
         };
         let change = content.text().changes().get(index)?;
-        let (before, after) = if self.swapped {
-            (&self.pair.after, &self.pair.before)
-        } else {
-            (&self.pair.before, &self.pair.after)
-        };
+        let (before, after) = self.places()?;
         let lines = change.lines();
         let place = if change.kind == ChangeKind::Removed {
             before
@@ -404,13 +460,29 @@ impl App {
         let options = file_options(&self.settings);
         let compared = Compared {
             result,
-            pair: wait.pair,
+            source: Source::Files(wait.pair.clone()),
             swapped: false,
             options,
         };
         if compared.result.outcome == Outcome::TooLarge {
-            return self.ask_large(compared);
+            return self.ask_large(compared, wait.pair);
         }
+        self.show_compared(compared, None)
+    }
+
+    /// A plugin's two documents, compared on its worker (`ui/show_diff`):
+    /// the same report and change list as two files, in R18's order.
+    pub(super) fn show_documents(&mut self, shown: crate::plugins::diff::ShownDiff) -> Vec<Effect> {
+        let compared = Compared {
+            result: shown.result,
+            source: Source::Documents {
+                before: shown.before,
+                after: shown.after,
+                title: shown.title,
+            },
+            swapped: false,
+            options: shown.options,
+        };
         self.show_compared(compared, None)
     }
 
@@ -430,7 +502,7 @@ impl App {
 
     /// A file over the text limit: the first part, byte by byte, or
     /// cancel, the focus on cancel.
-    fn ask_large(&mut self, compared: Compared) -> Vec<Effect> {
+    fn ask_large(&mut self, compared: Compared, pair: Pair) -> Vec<Effect> {
         let limit = compared.options.max_text_bytes / MIB;
         let rows = vec![
             ListRow::new("head", format!("Compare the first {limit} MiB as text")),
@@ -445,7 +517,7 @@ impl App {
             .summary(&before, &after, &compared.sides(), &compared.options);
         self.open_dialog(
             Dialog::Question { lines, choices },
-            Purpose::CompareLarge(Box::new(compared.pair)),
+            Purpose::CompareLarge(Box::new(pair)),
         )
     }
 
@@ -625,10 +697,8 @@ impl App {
         let Some(found) = rows.get(row) else {
             return Vec::new();
         };
-        let (before, after) = if compared.swapped {
-            (&compared.pair.after, &compared.pair.before)
-        } else {
-            (&compared.pair.before, &compared.pair.after)
+        let Some((before, after)) = compared.places() else {
+            return self.no_file_to_view(&compared);
         };
         let (place, line) = match (found.kind, found.after_line, found.before_line) {
             (UnifiedKind::Removed, _, Some(line)) => (before.clone(), line),
@@ -645,24 +715,39 @@ impl App {
             .top_row_id()
             .and_then(|r| r.parse::<usize>().ok())
             .unwrap_or(0);
-        match compared.change_line(index) {
-            Some((place, line)) => self.view_compared(&compared, place, line),
-            None => {
-                let (_, after) = (compared.pair.before.clone(), compared.pair.after.clone());
+        match (compared.change_line(index), compared.places()) {
+            (Some((place, line)), _) => self.view_compared(&compared, place, line),
+            (None, Some((_, after))) => {
+                let after = after.clone();
                 self.view_compared(&compared, after, 1)
             }
+            (None, None) => self.no_file_to_view(&compared),
         }
+    }
+
+    /// The view key on a plugin's documents: there is no file to open,
+    /// said with the view's title, the plugin's name last.
+    fn no_file_to_view(&mut self, compared: &Compared) -> Vec<Effect> {
+        let title = match &compared.source {
+            Source::Documents { title, .. } => title.clone(),
+            Source::Files(_) => return Vec::new(),
+        };
+        vec![self.say(Message::status(format!("No file to view: {title}")))]
     }
 
     /// The viewer on one of the compared files at a line, the compare's
     /// lists aside until it closes; Next and Previous file step between
     /// the two.
     fn view_compared(&mut self, compared: &Compared, place: Place, line: u64) -> Vec<Effect> {
+        // The places as read now, so each keeps its own size after Swap.
+        let Some((before, after)) = compared.places() else {
+            return self.no_file_to_view(compared);
+        };
         let siblings = vec![
-            crate::viewer::Sibling::new(compared.pair.before.clone(), compared.result.before.size),
-            crate::viewer::Sibling::new(compared.pair.after.clone(), compared.result.after.size),
+            crate::viewer::Sibling::new(before.clone(), compared.result.before.size),
+            crate::viewer::Sibling::new(after.clone(), compared.result.after.size),
         ];
-        let size = if place == compared.pair.before {
+        let size = if place == *before {
             compared.result.before.size
         } else {
             compared.result.after.size

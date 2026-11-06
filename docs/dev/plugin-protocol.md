@@ -119,16 +119,16 @@ Each method says who sends it, whether it is answered, what allows it, and wheth
 - `lister/closed`: host to plugin, notification. Says a lister's list left its panel: the owner left it, or a place replaced it. Allowed by: a [[lister]] table. State: served.
 - `column/format`: host to plugin, request. Asks for a batch of a column's values, at most 500 places. Allowed by: a [[column]] table. State: shape only, served later.
 - `column/changed`: plugin to host, notification. Says some of a column's values are stale. Allowed by: a [[column]] table. State: shape only, served later.
-- `place/describe`: host to plugin, request. Asks for a short description of a place for the title line. Allowed by: a [[place_info]] table. State: shape only, served later.
+- `place/describe`: host to plugin, request. Asks for a short description of a place for the title line. Allowed by: a [[place_info]] table. State: served.
 - `completion/query`: host to plugin, request. Asks for candidates for the text typed so far. Allowed by: a prompt whose completion source is the plugin. State: shape only, served later.
 
 ### Services the host offers
 
 - `ui/announce`: plugin to host, notification. Says a sentence, cleaned, rate-limited and attributed to the plugin. Allowed by: always. State: served.
 - `ui/ask`: plugin to host, request. Asks one question in a dialog; its message is one text or a list of lines. Allowed by: always. State: served.
-- `ui/form`: plugin to host, request. Asks several labeled fields in one accessible dialog. Allowed by: always. State: shape only, served later.
+- `ui/form`: plugin to host, request. Asks several labeled fields in one accessible dialog. Allowed by: always. State: served.
 - `ui/show_text`: plugin to host, request. Shows a text document in the viewer. Allowed by: always. State: served.
-- `ui/show_diff`: plugin to host, request. Compares two texts in the diff view. Allowed by: always. State: shape only, served later.
+- `ui/show_diff`: plugin to host, request. Compares two texts in the diff view. Allowed by: always. State: served.
 - `panel/get`: plugin to host, request. Reads a panel's place, cursor, selection, sort and filter, and its plugin list or null. Allowed by: permissions.panel = read. State: served.
 - `panel/set`: plugin to host, request. Changes a panel's place, cursor or marks, as ordinary commands; a place closes a plugin list. Allowed by: permissions.panel = write. State: served.
 - `panel/changed`: host to plugin, notification. Tells a serve client that a panel's place, cursor, selection or plugin list changed. Allowed by: a serve client. State: served.
@@ -155,9 +155,9 @@ Additions within protocol 1, fixed by alpha 4's contract step so the lanes that 
 
 - `tools/run` takes `split` as `"lines"` (the default, at each line feed), `"nul"` (at each NUL) or `"cr"` (at each line feed and each carriage return, so a progress line a program rewrites in place, such as git's `clone --progress`, arrives as each rewrite; the empty record between a CR and its LF is dropped).
 - A `[[provider]]` table takes `extensions`, the containers it claims inside archive places (disk images such as `.iso`, the 7z tool's formats such as `.rar`, raw images such as `.img`; never a format diroxide reads itself): a place such as `fedora.iso!EFI/` reaches the plugin, which opens each container once, and reads a container inside an archive through `fs/read`. It also takes `wants`, tools it uses when they are there and works without, which Settings names and nothing turns off.
-- For `ui/form`, the app's side is `HostServices::form`, from a `Form` to a `FormAnswer` (`{"values": {"ID": VALUE}}` or `{"cancelled": true}`), fields of kind text, multiline, choice, checkbox, path and secret. Shape only until the host-pieces lane serves it.
-- For `ui/show_diff`, the app's side is `HostServices::show_diff`, two documents in the compare screens. Shape only until the host-pieces lane serves it.
-- For `place/describe`, the app calls `Host::describe_place` off the input thread for a folder a `[[place_info]]` matches; the answer's `text` is the title line's words.
+- For `ui/form`, the app's side is `HostServices::form`, from a `Form` to a `FormAnswer` (`{"values": {"ID": VALUE}}` or `{"cancelled": true}`), fields of kind text, multiline, choice, checkbox, path and secret. Served since alpha 4: the app shows a list of setting rows, the default button's row first, then one row a field, its label first and its value after ("Message: empty", "Sign-off: off", "Password: hidden"); a multiline field answers its lines joined by line feeds, and Escape answers `{"cancelled": true}`.
+- For `ui/show_diff`, the app's side is `HostServices::show_diff`, two documents in the compare screens. Served since alpha 4: the same screens as two files, in the same order (the verdict and counts, the direction, what was ignored, the files' facts, the change list, one change in full, the unified view, Swap), named by the two documents' titles, the view's title said last; a text with a NUL or many control characters is compared byte by byte; a document has no place, so the viewer does not open on it.
+- For `place/describe`, the app calls `Host::describe_place` off the input thread for a folder a `[[place_info]]` matches; the answer's `text` is the title line's words. Called since alpha 4: when a panel lands in a folder whose scheme fits and whose marker is in it or a folder above it, the enabled plugins are asked in turn and the first words win; the title line says them after the panel, cut at 40 characters, the plugin's name last ("repo, left panel, main, no upstream, 2 changed here (Git), in D:\work"); the old title stays until the answer; the words are kept for the folder until it is listed again (a reload, a change the folder's watch sees, a job's end) or the plugin fails or is turned off; a plugin whose manifest declares no `[[place_info]]` is never asked.
 - For `column/format`, file panels call `Host::plugin_columns` for the columns enabled plugins declare, keyed `PLUGIN.COLUMN`, and `Host::column_page` for a page of cells, "pending" where unanswered and "unavailable: plugin stopped" when the plugin cannot answer.
 
 ## Index by direction

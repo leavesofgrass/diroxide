@@ -1546,8 +1546,10 @@ impl App {
     /// parent (research/alpha1-plan.md part three): "Documents, left
     /// panel, in D:\work". A filter and a sort other than the configured
     /// one follow the panel: "Documents, left panel, filter *.pdf, in
-    /// D:\work, sorted by size". Hidden characters in names are drawn as
-    /// question marks (the display-name rule).
+    /// D:\work, sorted by size". A plugin's words about the folder follow
+    /// the panel too, the plugin's name last: "diroxide, left panel, main,
+    /// no upstream, 2 changed here (Git), in D:\work". Hidden characters
+    /// in names are drawn as question marks (the display-name rule).
     pub fn title_line(&self) -> String {
         self.title_line_within(usize::MAX)
     }
@@ -1593,6 +1595,12 @@ impl App {
             crate::panel::place_leaf(place),
             self.active.word()
         );
+        // A plugin's words about the folder, its name last (alpha 4, lane
+        // HP): "diroxide, left panel, main, no upstream, 2 changed here
+        // (Git), in D:\work".
+        if let Some(words) = self.place_words(place) {
+            head.push_str(&format!(", {words}"));
+        }
         if panel.is_loading() {
             head.push_str(", loading");
         }

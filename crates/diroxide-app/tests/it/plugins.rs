@@ -116,7 +116,7 @@ fn serve(
                     json!({"jsonrpc": "2.0", "id": id, "result": {
                         "protocol": 1,
                         "plugin": {"name": "Test plugin", "version": "0.1.0"},
-                        "plugin_capabilities": {"commands": commands, "listers": listers, "completion": true}
+                        "plugin_capabilities": {"commands": commands, "listers": listers, "completion": true, "place_info": true}
                     }}),
                 );
             }
@@ -188,6 +188,20 @@ fn serve(
                         {"name": "c.txt", "kind": "item", "extra": {"id": "c.txt", "state": "Deleted", "lines": "7"}}
                     ]}}),
                 );
+            }
+            // The title line's words (lane HP): a folder named "slow" is
+            // described after a pause, one named "quiet" not at all.
+            Some("place/describe") => {
+                let place = message["params"]["place"].as_str().unwrap_or_default();
+                if place.ends_with("slow") {
+                    thread::sleep(Duration::from_millis(2500));
+                }
+                let result = if place.ends_with("quiet") {
+                    json!({})
+                } else {
+                    json!({"text": "main, no upstream, 2 changed here"})
+                };
+                write(&peer, json!({"jsonrpc": "2.0", "id": id, "result": result}));
             }
             Some("completion/query") => {
                 let text = message["params"]["text"].as_str().unwrap_or_default();

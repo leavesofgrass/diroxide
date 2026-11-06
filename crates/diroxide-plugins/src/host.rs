@@ -109,8 +109,8 @@ pub trait HostServices: Send + Sync {
     /// shape): titled with [`Form::title`] (the plugin's name last), the
     /// focus on [`Form::focus`], Enter on the default button, Escape
     /// [`FormAnswer::Cancelled`]; a secret field is masked and its value
-    /// reaches no log. The default says this host has no forms (alpha 4's
-    /// contract step; the host-pieces lane serves it).
+    /// reaches no log. The default says this host has no forms; the app
+    /// serves it (alpha 4's host-pieces lane).
     fn form(&self, form: &Form) -> Result<FormAnswer, RpcError> {
         let _ = form;
         Err(RpcError::new(
@@ -121,8 +121,8 @@ pub trait HostServices: Send + Sync {
 
     /// `ui/show_diff`: two texts in the compare screens, the verdict
     /// first, with Swap, titled with [`DiffDocuments::title`]. The default
-    /// says this host has no compare screens (alpha 4's contract step; the
-    /// host-pieces lane serves it).
+    /// says this host has no compare screens; the app serves it (alpha 4's
+    /// host-pieces lane).
     fn show_diff(&self, documents: &DiffDocuments) -> Result<(), RpcError> {
         let _ = documents;
         Err(RpcError::new(
@@ -1234,8 +1234,8 @@ impl Host {
     /// `None` when it gives none. The app calls it off the input thread
     /// when a panel enters a folder the plugin's `[[place_info]]` matches,
     /// keeps the old title until the answer, and keeps the answer until
-    /// `folder_changed` (the host-pieces lane; alpha 4's contract step
-    /// fixes this shape).
+    /// the folder is listed again or the plugin fails (alpha 4's contract
+    /// step fixed this shape; its host-pieces lane calls it).
     pub fn describe_place(
         &self,
         plugin: &str,
