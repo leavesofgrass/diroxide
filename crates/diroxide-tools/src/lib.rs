@@ -22,8 +22,10 @@ use diroxide_vfs::OpContext;
 use thiserror::Error;
 
 pub mod process;
+pub mod report;
 
 pub use process::{ProcessError, ProcessHandle, ProcessSpec, Stream, Tie};
+pub use report::{FoundBy, LOOKUP_ORDER, LookupStep, ToolKind, ToolReport, ToolState, ToolsReport};
 
 /// One external tool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,6 +42,8 @@ pub struct ToolSpec {
     pub purpose: &'static str,
     /// Where to get it, in words.
     pub install_hint: &'static str,
+    /// A program, or built into diro (alpha.7: carta).
+    pub kind: ToolKind,
 }
 
 /// The tools diroxide knows about. A slice, so later alphas add tools
@@ -52,6 +56,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &["-version"],
         purpose: "image details and conversions",
         install_hint: "Install ImageMagick from imagemagick.org or your package manager.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "ffmpeg",
@@ -60,6 +65,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &["-version"],
         purpose: "audio and video conversions",
         install_hint: "Install FFmpeg from ffmpeg.org or your package manager.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "ffprobe",
@@ -68,6 +74,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &["-version"],
         purpose: "audio and video details",
         install_hint: "FFprobe comes with FFmpeg.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "pandoc",
@@ -76,6 +83,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &["--version"],
         purpose: "document previews and conversions",
         install_hint: "Install pandoc from pandoc.org or your package manager.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "7z",
@@ -84,6 +92,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &[],
         purpose: "cross-checking archives",
         install_hint: "Install 7-Zip from 7-zip.org, or p7zip from your package manager.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "pdftotext",
@@ -92,6 +101,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &["-v"],
         purpose: "PDF text previews",
         install_hint: "Install Poppler's utilities from your package manager.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "open",
@@ -106,6 +116,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &[],
         purpose: "opening files in their default programs",
         install_hint: "Install xdg-utils from your package manager.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "tw",
@@ -114,6 +125,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &["--version"],
         purpose: "reading a document aloud, from the quick view",
         install_hint: "Install textweaver from its releases page or with cargo.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "curl",
@@ -122,6 +134,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &["--version"],
         purpose: "downloading components when the built-in client is off",
         install_hint: "curl comes with Windows 10 and later; install it from your package manager.",
+        kind: ToolKind::Program,
     },
     ToolSpec {
         id: "wget",
@@ -130,6 +143,7 @@ pub const BUILTIN: &[ToolSpec] = &[
         version_args: &["--version"],
         purpose: "downloading components when curl is missing",
         install_hint: "Install wget from your package manager.",
+        kind: ToolKind::Program,
     },
 ];
 
@@ -277,6 +291,47 @@ impl ToolRegistry {
             .iter()
             .find_map(|program| which(program, self.path_var.as_deref()))
             .map_or(ToolStatus::NotFound, ToolStatus::Found))
+    }
+
+    /// Every tool's line for the Settings Tools page and `diro doctor`,
+    /// in the table's order. Naive until the registry's lane: no version
+    /// is read, and only `tools.toml` and PATH are looked in.
+    pub fn report(&self) -> ToolsReport {
+        let tools = self
+            .specs
+            .iter()
+            .map(|spec| {
+                let overridden = self
+                    .overrides
+                    .tools
+                    .get(spec.id)
+                    .is_some_and(|own| own.path.is_some());
+                let state = match (spec.kind, self.find(spec.id)) {
+                    (ToolKind::BuiltIn, _) => ToolState::Found {
+                        version: None,
+                        by: FoundBy::BuiltIn,
+                    },
+                    (_, Ok(ToolStatus::Found(_))) => ToolState::Found {
+                        version: None,
+                        by: if overridden {
+                            FoundBy::ToolsToml
+                        } else {
+                            FoundBy::Path
+                        },
+                    },
+                    (_, Ok(ToolStatus::Disabled)) => ToolState::TurnedOff,
+                    (_, Ok(ToolStatus::NotFound) | Err(_)) => ToolState::NotFound {
+                        install: Some(spec.install_hint.to_owned()),
+                    },
+                };
+                ToolReport {
+                    id: spec.id.to_owned(),
+                    name: spec.name.to_owned(),
+                    state,
+                }
+            })
+            .collect();
+        ToolsReport { tools }
     }
 
     /// The tool's state in words, its name first: "pandoc, found at
@@ -458,5 +513,37 @@ mod tests {
         let tools = ToolRegistry::builtin().with_overrides(overrides);
         assert_eq!(tools.find("ffmpeg"), Ok(ToolStatus::Disabled));
         assert_eq!(tools.describe("ffmpeg"), "FFmpeg, turned off");
+    }
+
+    /// The naive report (alpha 4's contract step): every tool of the
+    /// table, its line name first, the count first; on an empty PATH none
+    /// is found and each says how to get it.
+    #[test]
+    fn the_report_lists_every_tool_name_first() {
+        let mut overrides = ToolsConfig::default();
+        overrides.tools.insert(
+            "ffmpeg".to_owned(),
+            ToolOverride {
+                path: None,
+                disabled: true,
+            },
+        );
+        let report = ToolRegistry::builtin()
+            .with_path(None)
+            .with_overrides(overrides)
+            .report();
+        assert_eq!(report.tools.len(), BUILTIN.len());
+        let lines = report.lines();
+        assert_eq!(lines[0], format!("Tools: 0 of {} found", BUILTIN.len()));
+        assert_eq!(lines[1], "ImageMagick: not found");
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "FFmpeg: turned off in tools.toml")
+        );
+        assert!(
+            BUILTIN.iter().all(|spec| spec.kind == ToolKind::Program),
+            "carta joins as a built-in with the table's lane"
+        );
     }
 }
