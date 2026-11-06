@@ -1,5 +1,10 @@
 //! Integration tests of file type detection.
 
+// Test helpers: a failure is the test's.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod containers;
+
 use diroxide_config::FileTypesConfig;
 use diroxide_filetype::TypeRegistry;
 
