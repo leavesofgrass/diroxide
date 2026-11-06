@@ -43,7 +43,7 @@ use crate::image::sniff::{self, Container};
 use crate::image::source::{Backing, Cached};
 use crate::image::source::{SpoolFile, read_vec};
 use crate::image::tree::Row;
-use crate::image::{Image, Inner, Volume};
+use crate::image::{Image, Inner, Layout, Volume};
 use crate::lines;
 use crate::rpc::{Cancel, Peer};
 use crate::spool::Spool;
@@ -153,6 +153,8 @@ pub struct Open {
     pub spool: Option<Arc<Spool>>,
     /// Held while a partition is handed to 7-Zip, so it is handed once.
     falling_back: Mutex<()>,
+    /// The image file's own place, for 7-Zip when it is on a local drive.
+    pub place: Place,
 }
 
 /// The open images, by their container's place.
@@ -164,6 +166,10 @@ pub struct Images {
     pub spool: Mutex<Option<PathBuf>>,
     /// 7-Zip as the host finds it, looked for once.
     seven: Mutex<Option<Option<SevenZip>>>,
+    /// One lock a container while it opens, so two requests that arrive
+    /// together open it once (an image inside an image takes its outer
+    /// one's lock after its own, never the other way round).
+    opening: Mutex<HashMap<String, Arc<Mutex<()>>>>,
 }
 
 impl Default for Images {
@@ -180,6 +186,7 @@ impl Images {
             limits,
             spool: Mutex::new(None),
             seven: Mutex::new(None),
+            opening: Mutex::new(HashMap::new()),
         }
     }
 
@@ -201,12 +208,7 @@ impl Images {
             )));
         }
         let key = container.to_string();
-        let cached = self
-            .open
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&key)
-            .cloned();
+        let cached = self.cached(&key);
         if let Some(open) = cached {
             if self.still_the_same(peer, container, &open)? {
                 return Ok(open);
@@ -215,12 +217,32 @@ impl Images {
             host::announce(peer, lines::IMAGE_CHANGED, "warning");
             return Err(DiskError::Changed);
         }
+        let lock = Arc::clone(
+            self.opening
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .entry(key.clone())
+                .or_default(),
+        );
+        let _opening = lock.lock().unwrap_or_else(PoisonError::into_inner);
+        // Another request may have opened it while this one waited.
+        if let Some(open) = self.cached(&key) {
+            return Ok(open);
+        }
         let open = Arc::new(self.open_now(peer, container, depth)?);
         self.open
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(key, Arc::clone(&open));
         Ok(open)
+    }
+
+    fn cached(&self, key: &str) -> Option<Arc<Open>> {
+        self.open
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(key)
+            .cloned()
     }
 
     /// Whether the image file is as it was opened; checked at most every
@@ -290,6 +312,7 @@ impl Images {
             checked: Mutex::new(Instant::now()),
             spool,
             falling_back: Mutex::new(()),
+            place: container.clone(),
         })
     }
 
@@ -443,17 +466,26 @@ impl Images {
         let (Some(seven), Some(spool)) = (self.seven(peer)?, open.spool.as_ref()) else {
             return Ok(volume);
         };
-        let backing = Arc::clone(&volume.backing);
-        let len = backing.len();
-        let path = spool.copy_in("part.img", len, open.image.held, |at, n| {
-            read_vec(backing.as_ref(), at, n).map_err(|e| DiskError::from_io(&e))
-        })?;
-        if let Some(fs) = SevenZipFs::open(
-            seven,
-            path.display().to_string(),
-            Some(Arc::clone(spool)),
-            open.image.held,
-        )? {
+        // A raw image that is its one file system (a UDF disc, an exFAT
+        // stick) on a local drive goes to 7-Zip by its own path; anything
+        // else, a partition or a disk inside a container, is copied into
+        // the spool first, inside the budget.
+        let whole = matches!(open.image.layout, Layout::Single(_))
+            && open.image.container == Container::Raw;
+        let path = match open.place.local_path() {
+            Some(local) if whole => local.to_owned(),
+            _ => {
+                let backing = Arc::clone(&volume.backing);
+                let len = backing.len();
+                spool
+                    .copy_in("part.img", len, open.image.held, |at, n| {
+                        read_vec(backing.as_ref(), at, n).map_err(|e| DiskError::from_io(&e))
+                    })?
+                    .display()
+                    .to_string()
+            }
+        };
+        if let Some(fs) = SevenZipFs::open(seven, path, Some(Arc::clone(spool)), open.image.held)? {
             crate::tool::announce_read_with_7zip(peer);
             volume.set_file_system(Box::new(fs));
         }
@@ -468,6 +500,7 @@ impl Images {
             checked: Mutex::new(Instant::now()),
             spool: self.new_spool(),
             falling_back: Mutex::new(()),
+            place: container.clone(),
         });
         self.open
             .lock()
