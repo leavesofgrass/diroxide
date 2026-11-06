@@ -300,6 +300,7 @@ pub(crate) fn build_list(
     let mut list = OpenWithList {
         apps: Vec::new(),
         choose_another: true,
+        unread: 0,
     };
     let default = facts
         .user_choice
@@ -459,6 +460,7 @@ pub(crate) fn open_with_list(file: &Path) -> OpenWithList {
         return OpenWithList {
             apps: Vec::new(),
             choose_another: true,
+            unread: 0,
         };
     };
     let facts = read_associations(&extension);

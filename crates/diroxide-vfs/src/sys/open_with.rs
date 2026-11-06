@@ -150,9 +150,22 @@ pub struct OpenWithList {
     /// Whether the system has its own dialog for the rest ("Choose
     /// another program"): Windows.
     pub choose_another: bool,
+    /// How many programs could not be read, so are not listed: on macOS,
+    /// the applications whose `Info.plist` is binary.
+    pub unread: usize,
 }
 
 impl OpenWithList {
+    /// The line for the programs not listed, or `None` when every one was
+    /// read: "3 programs not listed: binary Info.plist" (40 cells).
+    pub fn unread_line(&self) -> Option<String> {
+        match self.unread {
+            0 => None,
+            1 => Some("1 program not listed: binary Info.plist".to_owned()),
+            n => Some(format!("{n} programs not listed: binary Info.plist")),
+        }
+    }
+
     /// The first row of an Open with list, the system's own choice.
     pub const DEFAULT_PROGRAM: &str = "Default program";
 
@@ -164,14 +177,15 @@ impl OpenWithList {
         format!("Open {name} with:")
     }
 
-    /// Adds a program unless one with the same id or the same command is
-    /// in already; a later default marks the one in.
+    /// Adds a program unless one with the same id or the same command (the
+    /// program, its case aside, and the same arguments) is in already; a
+    /// later default marks the one in.
     pub fn push(&mut self, app: OpenWithApp) {
         let same = |a: &OpenWithApp| {
             a.id.eq_ignore_ascii_case(&app.id)
                 || match (&a.launch, &app.launch) {
                     (Launch::Command(x), Launch::Command(y)) => {
-                        x.program.eq_ignore_ascii_case(&y.program)
+                        x.program.eq_ignore_ascii_case(&y.program) && x.args == y.args
                     }
                     _ => false,
                 }
@@ -199,11 +213,15 @@ pub fn open_with_list(file: &Path, mime: Option<&str>) -> OpenWithList {
         let _ = mime;
         super::windows_open_with::open_with_list(file)
     }
+    #[cfg(target_os = "macos")]
+    {
+        super::mac_apps::open_with_list(file, mime)
+    }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         super::xdg_apps::open_with_list(file, mime)
     }
-    #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
+    #[cfg(not(any(windows, unix)))]
     {
         let _ = (file, mime);
         OpenWithList::default()

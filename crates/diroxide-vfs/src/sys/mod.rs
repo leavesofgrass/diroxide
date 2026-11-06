@@ -21,6 +21,8 @@
 // file; the crate's lib.rs re-exports its four public names. Each system's
 // reader is compiled where it runs and in the tests everywhere, so its
 // parsing is tested on every system.
+#[cfg(any(test, target_os = "macos"))]
+mod mac_apps;
 pub mod open_with;
 #[cfg(windows)]
 mod owner_pipe;
