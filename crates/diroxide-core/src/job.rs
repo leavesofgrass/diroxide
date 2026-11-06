@@ -73,6 +73,28 @@ pub enum JobKind {
     /// Delete items in the trash for good, after listing every one (the
     /// trash browser's Delete for good and Empty the trash).
     Purge,
+    /// Encrypt the sources into new files beside them or in the
+    /// destination (alpha.7: age through its program until it can be in
+    /// process, OpenPGP through gpg); the sources stay.
+    Encrypt,
+    /// Decrypt the sources into new files; the sources stay.
+    Decrypt,
+    /// Compute the sources' checksums, and write a checksum file when the
+    /// request asks for one; nothing else is written.
+    Checksum,
+    /// Check the sources against a checksum file, a pasted value or a
+    /// signature; nothing is written. The verdict comes first.
+    Verify,
+    /// Make a detached signature beside each source.
+    Sign,
+    /// Change what a file says about itself in a low-risk way: the
+    /// internet mark's removal now, tags in a later alpha. The old value
+    /// is kept for undo.
+    EditMetadata,
+    /// Copy the sources without their private metadata, each beside its
+    /// original (`photo-clean.jpg`); the originals stay. A rewrite of an
+    /// archive reuses [`JobKind::Pack`].
+    StripMetadata,
     /// A kind this version does not know. Never planned.
     #[serde(other)]
     Unknown,
@@ -105,6 +127,13 @@ impl JobKind {
         JobKind::Undo,
         JobKind::Restore,
         JobKind::Purge,
+        JobKind::Encrypt,
+        JobKind::Decrypt,
+        JobKind::Checksum,
+        JobKind::Verify,
+        JobKind::Sign,
+        JobKind::EditMetadata,
+        JobKind::StripMetadata,
         JobKind::Unknown,
     ];
 
@@ -134,6 +163,13 @@ impl JobKind {
             JobKind::Undo => "undo",
             JobKind::Restore => "restore",
             JobKind::Purge => "delete",
+            JobKind::Encrypt => "encrypt",
+            JobKind::Decrypt => "decrypt",
+            JobKind::Checksum => "checksum",
+            JobKind::Verify => "verify",
+            JobKind::Sign => "sign",
+            JobKind::EditMetadata => "edit",
+            JobKind::StripMetadata => "strip",
             JobKind::Unknown => "run an unknown job on",
         }
     }
@@ -164,6 +200,13 @@ impl JobKind {
             JobKind::Undo => "Undoing",
             JobKind::Restore => "Restoring",
             JobKind::Purge => "Deleting for good",
+            JobKind::Encrypt => "Encrypting",
+            JobKind::Decrypt => "Decrypting",
+            JobKind::Checksum => "Computing checksums",
+            JobKind::Verify => "Verifying",
+            JobKind::Sign => "Signing",
+            JobKind::EditMetadata => "Editing metadata",
+            JobKind::StripMetadata => "Stripping metadata",
             JobKind::Unknown => "Working",
         }
     }
@@ -724,13 +767,20 @@ mod tests {
             JobKind::Undo => 19,
             JobKind::Restore => 20,
             JobKind::Purge => 21,
-            JobKind::Unknown => 22,
+            JobKind::Encrypt => 22,
+            JobKind::Decrypt => 23,
+            JobKind::Checksum => 24,
+            JobKind::Verify => 25,
+            JobKind::Sign => 26,
+            JobKind::EditMetadata => 27,
+            JobKind::StripMetadata => 28,
+            JobKind::Unknown => 29,
         }
     }
 
     #[test]
     fn every_kind_has_its_words() {
-        assert_eq!(JobKind::ALL.len(), 23);
+        assert_eq!(JobKind::ALL.len(), 30);
         let mut words = std::collections::HashSet::new();
         for (at, kind) in JobKind::ALL.iter().enumerate() {
             assert_eq!(position(*kind), at, "{kind:?}");
@@ -761,6 +811,26 @@ mod tests {
         assert_eq!(JobKind::TestArchive.verb(), "test");
         assert_eq!(JobKind::Restore.progress_word(), "Restoring");
         assert_eq!(serde_json::to_string(&JobKind::Purge).unwrap(), "\"purge\"");
+        assert_eq!(
+            serde_json::to_string(&JobKind::EditMetadata).unwrap(),
+            "\"edit-metadata\""
+        );
+        assert_eq!(
+            serde_json::to_string(&JobKind::StripMetadata).unwrap(),
+            "\"strip-metadata\""
+        );
+        assert_eq!(JobKind::Checksum.verb(), "checksum");
+        assert_eq!(JobKind::Checksum.progress_word(), "Computing checksums");
+        assert_eq!(
+            serde_json::to_string(&JobKind::EditMetadata).unwrap(),
+            "\"edit-metadata\""
+        );
+        assert_eq!(
+            serde_json::to_string(&JobKind::StripMetadata).unwrap(),
+            "\"strip-metadata\""
+        );
+        assert_eq!(JobKind::Checksum.verb(), "checksum");
+        assert_eq!(JobKind::Checksum.progress_word(), "Computing checksums");
         assert_eq!(
             serde_json::to_string(&JobKind::TestArchive).unwrap(),
             "\"test-archive\""

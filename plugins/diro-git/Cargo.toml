@@ -1,0 +1,63 @@
+# The git plugin, the git half (alpha 4; R29 part 2): the title line, the
+# Git column, the status list and git's everyday commands, through the
+# git program alone (answer 45: no git library). A workspace of its own,
+# outside the main one (plan section 5.8, item 3): a plugin is a feature
+# family the owner opts into, installed as a component or with `cargo
+# install` of this crate. Pure Rust, no C build.
+#
+#   cargo build --manifest-path plugins/diro-git/Cargo.toml
+#
+# The contract step of alpha 4 (P4) made this skeleton; the git lane
+# (commits 98 to 107) builds the commands, after the trust scan.
+[workspace]
+
+[package]
+name = "diro-git"
+description = "The git plugin of diroxide: git's state in the panels and its commands, through the git program."
+version = "0.1.0-alpha.3"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+publish = false
+
+[dependencies]
+diroxide-core = { path = "../../crates/diroxide-core", version = "0.1.0-alpha.3" }
+# The wire types, the session's lifecycle and the error kinds, shared with
+# the host so the two never drift (pure Rust).
+diroxide-plugins = { path = "../../crates/diroxide-plugins", version = "0.1.0-alpha.3" }
+diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.3" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.146"
+
+[dev-dependencies]
+# The host's own settings, for the column and the title line asked by the
+# real host (already under diroxide-plugins; no new crate).
+diroxide-config = { path = "../../crates/diroxide-config", version = "0.1.0-alpha.3" }
+proptest = "1.11.0"
+tempfile = "3.27.0"
+
+[[bin]]
+name = "diro-git"
+path = "src/main.rs"
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_qualifications = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "warn"
+expect_used = "warn"
+
+# Lean debug builds that share a cache, as the main workspace's.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false

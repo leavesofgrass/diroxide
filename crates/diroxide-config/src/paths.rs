@@ -51,8 +51,10 @@ impl Paths {
     pub const CONVERSIONS: &'static str = "conversions.toml";
     /// The external tool overrides.
     pub const TOOLS: &'static str = "tools.toml";
-    /// The hot folders' rules (reserved now; alpha.7 reads it).
-    pub const HOTFOLDERS: &'static str = "hotfolders.toml";
+    /// The folder of tasks, under the config folder: one TOML file each,
+    /// `tasks/NAME.toml`, the hot folders among them (alpha.7; plan
+    /// question 52). It replaces the reserved `hotfolders.toml`.
+    pub const TASKS: &'static str = "tasks";
     /// The folder of plugins, under the config folder.
     pub const PLUGINS: &'static str = "plugins";
     /// The folder of the owner's theme files, under the config folder.
@@ -210,7 +212,7 @@ mod tests {
             Paths::BANKS,
             Paths::CONVERSIONS,
             Paths::TOOLS,
-            Paths::HOTFOLDERS,
+            Paths::TASKS,
             Paths::PLUGINS,
             Paths::THEMES,
             Paths::SESSION,

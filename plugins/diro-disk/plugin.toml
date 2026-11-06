@@ -1,0 +1,50 @@
+# The disk-image places plugin, reading half (R29 part 1; alpha 4). It
+# claims the disk images that open by name and the raw ones "Open as disk
+# image" makes places of, so the host sends a place such as
+# `fedora.iso!EFI/` here (the claim route). Read only: no write, no
+# trash, no watch. 7-Zip and qemu-img are used when they are there and
+# never needed.
+#
+# The contract step (P4) made this skeleton: it lists nothing yet. The
+# disk lane (commits 86 to 97) serves the readers.
+
+[plugin]
+id = "disk"
+name = "Disk images"
+version = "0.1.0-alpha.3"
+description = "Opens disk images as folders: ISO, raw disks and virtual disks, read only."
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+protocol = 1
+min_host = "0.1.0-alpha.3"
+
+[run]
+command = ["./diro-disk"]
+start = "on_demand"
+concurrency = 16
+idle_timeout = "5m"
+
+[run.windows]
+command = ["./diro-disk.exe"]
+
+[permissions]
+# The host's ranged reads, for an image inside an archive or on SFTP.
+fs = "read"
+tools = ["7z", "qemu-img"]
+
+[permissions.declared]
+network = "no network"
+files = "reads the image you open; a spool for 7-Zip"
+programs = "7-Zip and qemu-img, when present"
+
+[[provider]]
+scheme = "disk"
+name = "Disk images"
+separator = "/"
+case_sensitive = true
+links = true
+attributes = true
+methods = ["connect", "list", "stat", "read", "volumes"]
+lease = "listers"
+extensions = [".iso", ".vhd", ".vhdx", ".vdi", ".vmdk", ".qcow2", ".squashfs", ".sfs", ".img", ".raw", ".bin", ".dd"]
+wants = ["7z", "qemu-img"]

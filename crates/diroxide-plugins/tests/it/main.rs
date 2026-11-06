@@ -3,6 +3,7 @@
 // Test helpers may unwrap: a failure is the test's failure.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod claims;
 #[cfg(feature = "fake-plugin")]
 mod conformance;
 #[cfg(feature = "fake-plugin")]

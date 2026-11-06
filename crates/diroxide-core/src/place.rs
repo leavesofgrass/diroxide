@@ -19,15 +19,82 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PlaceError;
 
-/// The archive extensions, lowercase, the longest first: a local file
-/// with one of them is listed as an archive, and `!` after one starts a
-/// member path. `.gz` is a one-member archive unless it holds a tar
-/// (`notes.txt.gz!notes.txt`, W2a's request 2). A slice, so the formats of
-/// later alphas (`.tar.bz2`, `.tar.zst`, `.bz2`, `.zst`, `.rar`, `.iso`)
-/// join without breaking callers.
+/// The archive extensions, lowercase, the compound ones first: a local
+/// file with one of them is listed as an archive, and `!` after one starts
+/// a member path. `.gz` is a one-member archive unless it holds a tar
+/// (`notes.txt.gz!notes.txt`, W2a's request 2). The first nine are read in
+/// process by the archive provider; then come the disk images by name
+/// ([`DISK_IMAGE_EXTENSIONS`]) and the formats read through the 7z tool
+/// ([`TOOL_ARCHIVE_EXTENSIONS`]), alpha.7's (R29 1.2). A slice, so later
+/// formats (`.tar.bz2`, `.tar.zst`, `.bz2`, `.zst`) join without breaking
+/// callers.
 pub const ARCHIVE_EXTENSIONS: &[&str] = &[
-    ".tar.gz", ".tar.xz", ".zip", ".tgz", ".txz", ".tar", ".7z", ".xz", ".gz",
+    ".tar.gz",
+    ".tar.xz",
+    ".zip",
+    ".tgz",
+    ".txz",
+    ".tar",
+    ".7z",
+    ".xz",
+    ".gz",
+    ".squashfs",
+    ".qcow2",
+    ".vhdx",
+    ".vmdk",
+    ".iso",
+    ".vhd",
+    ".vdi",
+    ".sfs",
+    ".cpio",
+    ".rar",
+    ".cab",
+    ".rpm",
+    ".arj",
+    ".lzh",
+    ".lha",
+    ".ar",
 ];
+
+/// Disk images that open by their name (R29 1.2, question 18's default):
+/// listed as archives, served by the plugin that claims them (the
+/// disk-image plugin) through the registry's claim route, else said in
+/// words. Part of [`ARCHIVE_EXTENSIONS`].
+pub const DISK_IMAGE_EXTENSIONS: &[&str] = &[
+    ".squashfs",
+    ".qcow2",
+    ".vhdx",
+    ".vmdk",
+    ".iso",
+    ".vhd",
+    ".vdi",
+    ".sfs",
+];
+
+/// Archives the archive provider reads through the 7z tool, read only
+/// (R29 6.1): RAR and the rest. Part of [`ARCHIVE_EXTENSIONS`].
+pub const TOOL_ARCHIVE_EXTENSIONS: &[&str] = &[
+    ".cpio", ".rar", ".cab", ".rpm", ".arj", ".lzh", ".lha", ".ar",
+];
+
+/// Raw disk images whose names say little (`.img` is as often a picture
+/// or a floppy): never listed as archives, but `!` after one starts a
+/// member path, so "Open as disk image" makes a place that reads back
+/// (`card.img!`), as [`ZIP_DOCUMENT_EXTENSIONS`] do for "Open as
+/// archive".
+pub const RAW_IMAGE_EXTENSIONS: &[&str] = &[".img", ".raw", ".bin", ".dd"];
+
+/// Whether a provider other than the archive provider may claim this
+/// extension inside archive places (the claim route, alpha.7): the disk
+/// images, the 7z tool's formats and the raw images, never a format the
+/// archive provider reads in process. Lowercase, with the dot.
+pub fn claimable_extension(extension: &str) -> bool {
+    DISK_IMAGE_EXTENSIONS
+        .iter()
+        .chain(TOOL_ARCHIVE_EXTENSIONS)
+        .chain(RAW_IMAGE_EXTENSIONS)
+        .any(|ext| *ext == extension)
+}
 
 /// Files that are zip archives inside, lowercase: `!` after one of them
 /// also starts a member path, so "Open as archive" on `report.docx` makes
@@ -37,8 +104,9 @@ pub const ZIP_DOCUMENT_EXTENSIONS: &[&str] = &[
     ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".epub", ".jar", ".apk",
 ];
 
-/// Whether `name` ends with an archive extension, or with a zip-based
-/// document's, followed by an optional part number (`backup.7z.001`): the
+/// Whether `name` ends with an archive extension, a zip-based document's
+/// or a raw disk image's, followed by an optional part number
+/// (`backup.7z.001`): the
 /// names after which `!` starts a member path, so a split archive opens as
 /// one place. Case is ignored. `photo.jpg.001` is not one, and neither is
 /// a name with no stem before the extension (`.zip`, `..zip`), which is a
@@ -53,6 +121,7 @@ pub fn opens_as_archive(name: &str) -> bool {
     ARCHIVE_EXTENSIONS
         .iter()
         .chain(ZIP_DOCUMENT_EXTENSIONS)
+        .chain(RAW_IMAGE_EXTENSIONS)
         .any(|ext| {
             base.strip_suffix(ext)
                 .is_some_and(|stem| !stem.is_empty() && !stem.bytes().all(|b| b == b'.'))
@@ -942,6 +1011,47 @@ mod tests {
             "D:\\docs\\report.docx!"
         );
         assert!(!ARCHIVE_EXTENSIONS.contains(&".docx"));
+    }
+
+    /// The claim route's names (alpha.7, R29 1.2): disk images and the 7z
+    /// tool's formats open as archives by name, raw images only as a
+    /// place made on purpose, and a disk image inside a zip nests.
+    #[test]
+    fn disk_images_and_tool_formats_open_by_name_and_nest() {
+        for name in [
+            "fedora.iso",
+            "vm.VHDX",
+            "a.qcow2",
+            "root.squashfs",
+            "old.rar",
+            "x.lzh",
+        ] {
+            assert!(opens_as_archive(name), "{name}");
+            let ext = name
+                .rsplit_once('.')
+                .map(|(_, e)| format!(".{}", e.to_lowercase()));
+            let ext = ext.unwrap();
+            assert!(ARCHIVE_EXTENSIONS.contains(&ext.as_str()), "{name}");
+            assert!(claimable_extension(&ext), "{name}");
+        }
+        // Raw images split, but are not listed as archives.
+        assert!(opens_as_archive("card.img"));
+        assert!(!ARCHIVE_EXTENSIONS.contains(&".img"));
+        // The archive provider's own formats are never claimed.
+        for own in [".zip", ".7z", ".tar", ".tar.gz", ".gz", ".xz"] {
+            assert!(!claimable_extension(own), "{own}");
+        }
+        // `.ar` is a suffix of `.tar`, and a tar stays a tar.
+        assert!(opens_as_archive("backup.tar") && opens_as_archive("lib.ar"));
+        assert!(!opens_as_archive("libfoo.a"));
+        let nested = win("D:\\dl\\bundle.zip!disk.iso!EFI/BOOT");
+        let (container, member) = nested.archive().unwrap();
+        assert_eq!(member, "EFI/BOOT");
+        assert_eq!(container.name(), Some("disk.iso"));
+        let (outer, inner) = container.archive().unwrap();
+        assert_eq!(inner, "disk.iso");
+        assert_eq!(outer.name(), Some("bundle.zip"));
+        assert_eq!(win(&nested.to_string()), nested);
     }
 
     #[test]

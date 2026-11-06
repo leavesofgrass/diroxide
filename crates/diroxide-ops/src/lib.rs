@@ -24,6 +24,8 @@
 //! before anything is touched.
 
 pub mod access;
+pub mod convert;
+pub mod crypt;
 pub mod engine;
 pub mod error;
 pub mod fake;
@@ -33,6 +35,7 @@ mod gate_tests;
 pub mod hooks;
 #[cfg(test)]
 mod hooks_tests;
+pub mod hot;
 pub mod join;
 pub mod journal;
 #[cfg(test)]

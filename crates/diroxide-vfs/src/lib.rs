@@ -19,9 +19,11 @@
 //! The local provider ([`LocalProvider`], Wave 1, W1a) is complete on the
 //! Wave 1 contract: see its module for what each method does, per place.
 
+pub mod archive;
 pub mod cancel;
 pub mod capabilities;
 pub mod error;
+pub mod extended;
 pub mod facts;
 pub mod limits;
 pub mod local;
@@ -29,6 +31,7 @@ pub mod names;
 pub mod protected;
 pub mod provider;
 pub mod registry;
+pub mod runner;
 mod sys;
 pub mod trash;
 pub mod volume;
@@ -39,6 +42,7 @@ pub use cancel::{
 };
 pub use capabilities::{AccessCapabilities, Can, Capabilities};
 pub use error::{ErrorClass, ErrorScope, VfsError};
+pub use extended::{ExtendedAttributes, ExtendedItem, ExtendedKind};
 pub use local::{
     LocalEntryBuilder, LocalProvider, PurgeCheck, SystemTrash, TRASH_NOT_LISTED, TrashBin, TrashId,
     TrashedItem,
@@ -50,6 +54,10 @@ pub use provider::{
     StreamingList, WatchEvent, WatchHandle, WatchSink, WriteMode,
 };
 pub use registry::Registry;
+pub use runner::{
+    NoTools, RunLimits, Split, ToolInput, ToolOutput, ToolRequest, ToolRunError, ToolRunner,
+    ToolStream,
+};
 /// The kill-on-close job object of Windows, for the process helper.
 #[cfg(windows)]
 pub use sys::KillOnCloseJob;

@@ -133,6 +133,10 @@ pub struct Capabilities {
     /// [`crate::Provider::as_resumable`]. The reading side needs
     /// [`Self::random_read`]; anything else starts the file again.
     pub resume: bool,
+    /// Extended attributes or alternate data streams can be read, and
+    /// changed where the place is writable, through
+    /// [`crate::Provider::as_extended`] (alpha.7, R12's request 2).
+    pub extended_attributes: bool,
 }
 
 impl Capabilities {
@@ -164,6 +168,7 @@ impl Capabilities {
             clone_copy: false,
             replace_rename: false,
             resume: false,
+            extended_attributes: false,
         }
     }
 

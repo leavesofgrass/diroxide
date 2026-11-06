@@ -1045,6 +1045,72 @@ pub(crate) mod tests {
         );
         let backwards = call(&host, methods::COMMAND_RUN, json!({}));
         assert_eq!(backwards["error"]["code"], -32601);
+        let diff = call(&host, methods::UI_SHOW_DIFF, json!({"title": "x"}));
+        assert_eq!(
+            diff["error"]["message"],
+            "the host does not serve ui/show_diff yet"
+        );
+        // The app's side has its final shape, and by default no form and
+        // no compare screens.
+        use crate::host::HostServices;
+        let form = crate::ask::Form {
+            title: "x".to_owned(),
+            summary: None,
+            fields: Vec::new(),
+            focus: None,
+            default_button: None,
+        };
+        assert_eq!(
+            services.form(&form).unwrap_err().message,
+            "this host has no forms"
+        );
+        let documents = crate::ask::DiffDocuments {
+            title: "x".to_owned(),
+            old: crate::ask::DiffSide {
+                title: "a".to_owned(),
+                text: String::new(),
+            },
+            new: crate::ask::DiffSide {
+                title: "b".to_owned(),
+                text: String::new(),
+            },
+        };
+        assert_eq!(
+            services.show_diff(&documents).unwrap_err().message,
+            "this host has no compare screens"
+        );
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
+    /// The plugin columns' caller (alpha 4's contract step): the declared
+    /// columns by key, a page of cells in the places' order, and every
+    /// cell "unavailable: plugin stopped" when the plugin cannot answer;
+    /// a plugin with no [[place_info]] is not asked to describe a folder.
+    #[test]
+    fn plugin_columns_come_a_page_at_a_time() {
+        let services = RecordingServices::new();
+        let (host, _) = host_with(&services, LISTER);
+        let columns = host.plugin_columns();
+        assert_eq!(columns.len(), 1);
+        assert_eq!(columns[0].key(), "line-counter.git");
+        assert_eq!(columns[0].header, "Git");
+        let folder = root("repo");
+        let places = [folder.join("a.txt").unwrap(), folder.join("b.txt").unwrap()];
+        let cells = host.column_page(&columns[0], &folder, &places);
+        let texts: Vec<&str> = cells.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(texts, ["Modified", "pending"]);
+        let missing = crate::listers::PluginColumn {
+            column: "size".to_owned(),
+            ..columns[0].clone()
+        };
+        let cells = host.column_page(&missing, &folder, &places);
+        assert!(
+            cells
+                .iter()
+                .all(|c| c.text == "unavailable: plugin stopped")
+        );
+        assert!(lines::column_unavailable().chars().count() <= 40);
+        assert!(host.describe_place("line-counter", &folder).is_err());
         host.shutdown_all(QUIT_BUDGET);
     }
 }

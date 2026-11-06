@@ -69,6 +69,37 @@ services:
     mem_limit: ${DIRO_MEM:-6g}
     cpus: ${DIRO_CPUS:-4}
 
+  # The helper programs of alpha 4 (P4; the owner's answer 118): the dev
+  # image's tools stage, with Tesseract, ExifTool, GnuPG, age, minisign,
+  # the file-system makers for the disk-image fixtures and qemu-img, beside
+  # the dev stage's ImageMagick, FFmpeg, pandoc and poppler. Same mounts
+  # and limits as dev.
+  #
+  #   MSYS_NO_PATHCONV=1 docker compose build tools
+  #   MSYS_NO_PATHCONV=1 DIRO_AGENT=p4 docker compose run --rm tools scripts/dev-check.sh
+  tools:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: tools
+    image: diroxide-tools
+    working_dir: /work
+    volumes:
+      - .:/work
+      - target:/target
+      - cargo-registry:/home/builder/.cargo/registry
+      - cargo-git:/home/builder/.cargo/git
+    environment:
+      CARGO_TARGET_DIR: /target
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: ${DIRO_JOBS:-4}
+      CARGO_TERM_COLOR: never
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: /work
+    mem_limit: ${DIRO_MEM:-6g}
+    cpus: ${DIRO_CPUS:-4}
+
 volumes:
   target:
     name: diro-target-${DIRO_AGENT:-orch}

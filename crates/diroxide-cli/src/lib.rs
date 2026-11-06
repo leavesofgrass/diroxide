@@ -82,6 +82,16 @@ pub enum Invocation {
     Components(cmd::components::ComponentsArgs),
     /// Run one command headless (W4b).
     Run(cmd::run::RunArgs),
+    /// Say what this diro has and finds (alpha.7; a stub until its lane).
+    Doctor(cmd::doctor::DoctorArgs),
+    /// Convert files with recipes (alpha.7; a stub until its lane).
+    Convert(cmd::convert::ConvertArgs),
+    /// A file's details as plain lines (alpha.7; a stub until its lane).
+    Info(cmd::info::InfoArgs),
+    /// Compute or check checksums (alpha.7; a stub until its lane).
+    Sum(cmd::sum::SumArgs),
+    /// Run a task's hot folder (alpha.7; a stub until its lane).
+    WatchTask(cmd::watch_task::WatchTaskArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -290,7 +300,14 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "split" => cmd::split::parse(&args[1..]).map(Invocation::Split),
         "join" => cmd::join::parse(&args[1..]).map(Invocation::Join),
         "diff" => cmd::diff::parse(&args[1..]).map(Invocation::Diff),
+        "watch" if cmd::watch_task::wants_task(&args[1..]) => {
+            cmd::watch_task::parse(&args[1..]).map(Invocation::WatchTask)
+        }
         "watch" => cmd::watch::parse(&args[1..]).map(Invocation::Watch),
+        "doctor" => cmd::doctor::parse(&args[1..]).map(Invocation::Doctor),
+        "convert" => cmd::convert::parse(&args[1..]).map(Invocation::Convert),
+        "info" => cmd::info::parse(&args[1..]).map(Invocation::Info),
+        "sum" => cmd::sum::parse(&args[1..]).map(Invocation::Sum),
         "components" => cmd::components::parse(&args[1..]).map(Invocation::Components),
         "run" => cmd::run::parse(&args[1..]).map(Invocation::Run),
         _ => parse_open(&args).map(Invocation::Open),
@@ -329,6 +346,11 @@ pub fn run(
         Invocation::Watch(args) => cmd::watch::run(&args, out),
         Invocation::Components(args) => cmd::components::run(&args, out),
         Invocation::Run(args) => cmd::run::run(&args, out),
+        Invocation::Doctor(args) => cmd::doctor::run(&args, out),
+        Invocation::Convert(args) => cmd::convert::run(&args, out),
+        Invocation::Info(args) => cmd::info::run(&args, out),
+        Invocation::Sum(args) => cmd::sum::run(&args, out),
+        Invocation::WatchTask(args) => cmd::watch_task::run(&args, out),
     }
 }
 
@@ -481,6 +503,44 @@ mod tests {
         assert!(matches!(
             parse(args(&["init", "bash"])),
             Ok(Invocation::Init(_))
+        ));
+    }
+
+    /// Alpha 4's route stubs (the contract step): each command parses,
+    /// says it is not built yet and exits 1; `watch` with a task takes the
+    /// task's route and without one stays the say-each-file mode.
+    #[test]
+    fn the_alpha_four_routes_say_they_are_not_built_yet() {
+        for (line, words) in [
+            (&["doctor"][..], "diro doctor"),
+            (&["convert", "a.md", "--to", "docx"], "diro convert"),
+            (&["info", "a.jpg"], "diro info"),
+            (&["sum", "--check", "SHA256SUMS"], "diro sum"),
+            (&["watch", "--task", "scans", "--once"], "diro watch --task"),
+        ] {
+            let mut out = Vec::new();
+            let mut err = Vec::new();
+            let code = main_with(args(line), &mut std::io::empty(), &mut out, &mut err);
+            assert_eq!(code, 1, "{line:?}");
+            let said = String::from_utf8(err).unwrap();
+            assert_eq!(said, format!("Not built yet: {words}.\n"), "{line:?}");
+            assert!(said.chars().count() <= 40, "{said}");
+        }
+        assert_eq!(
+            parse(args(&["watch", "--rule=scans", "--dry-run"])),
+            Ok(Invocation::WatchTask(cmd::watch_task::WatchTaskArgs {
+                task: Some("scans".to_owned()),
+                dry_run: true,
+                ..Default::default()
+            }))
+        );
+        assert!(matches!(
+            parse(args(&["watch", "D:\\scans"])),
+            Ok(Invocation::Watch(_))
+        ));
+        assert!(matches!(
+            parse(args(&["watch", "--task"])),
+            Err(CliError::Missing(_))
         ));
     }
 

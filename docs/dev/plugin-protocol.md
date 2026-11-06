@@ -149,6 +149,17 @@ Each method says who sends it, whether it is answered, what allows it, and wheth
 - `tools/launch`: plugin to host, request. Starts an allowed program detached and answers at once. Allowed by: permissions.launch. State: served.
 - `tools/output`: host to plugin, notification. Sends a chunk of a streamed tool's output. Allowed by: a streamed tools/run. State: served.
 
+## Additions of alpha 4
+
+Additions within protocol 1, fixed by alpha 4's contract step so the lanes that serve them change no shape.
+
+- `tools/run` takes `split` as `"lines"` (the default, at each line feed), `"nul"` (at each NUL) or `"cr"` (at each line feed and each carriage return, so a progress line a program rewrites in place, such as git's `clone --progress`, arrives as each rewrite; the empty record between a CR and its LF is dropped).
+- A `[[provider]]` table takes `extensions`, the containers it claims inside archive places (disk images such as `.iso`, the 7z tool's formats such as `.rar`, raw images such as `.img`; never a format diroxide reads itself): a place such as `fedora.iso!EFI/` reaches the plugin, which opens each container once, and reads a container inside an archive through `fs/read`. It also takes `wants`, tools it uses when they are there and works without, which Settings names and nothing turns off.
+- For `ui/form`, the app's side is `HostServices::form`, from a `Form` to a `FormAnswer` (`{"values": {"ID": VALUE}}` or `{"cancelled": true}`), fields of kind text, multiline, choice, checkbox, path and secret. Shape only until the host-pieces lane serves it.
+- For `ui/show_diff`, the app's side is `HostServices::show_diff`, two documents in the compare screens. Shape only until the host-pieces lane serves it.
+- For `place/describe`, the app calls `Host::describe_place` off the input thread for a folder a `[[place_info]]` matches; the answer's `text` is the title line's words.
+- For `column/format`, file panels call `Host::plugin_columns` for the columns enabled plugins declare, keyed `PLUGIN.COLUMN`, and `Host::column_page` for a page of cells, "pending" where unanswered and "unavailable: plugin stopped" when the plugin cannot answer.
+
 ## Index by direction
 
 Host to plugin, requests (29): initialize, shutdown, command/run, provider/connect, provider/list, provider/stat, provider/read, provider/write_begin, provider/write_chunk, provider/write_end, provider/create_dir, provider/rename, provider/create_link, provider/remove, provider/trash, provider/set_attributes, provider/copy_hint, provider/copy, provider/watch, provider/unwatch, provider/volumes, provider/places, preview/render, convert/run, hook/before, lister/rows, column/format, place/describe, completion/query.

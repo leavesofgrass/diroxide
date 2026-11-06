@@ -437,6 +437,9 @@ pub struct QuickViewSettings {
     pub follow_changes: bool,
     /// Line numbers for plain text and code.
     pub line_numbers: bool,
+    /// The largest document read whole as a container (DOCX, EPUB, a
+    /// spreadsheet), in MB (alpha.7, R28 2.3).
+    pub max_document_mb: u64,
 }
 
 impl Default for QuickViewSettings {
@@ -447,8 +450,27 @@ impl Default for QuickViewSettings {
             deadline_ms: 2_000,
             follow_changes: true,
             line_numbers: false,
+            max_document_mb: 64,
         }
     }
+}
+
+/// The `[filetypes]` table (alpha.7, R28 4.3).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FileTypeSettings {
+    /// Read the retro pack's types too (Amiga and tracker music, the old
+    /// formats Worker knew).
+    pub retro: bool,
+}
+
+/// The `[check]` table (alpha.7, R28 4.3): where a file's contents are
+/// never read to find its type.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CheckSettings {
+    /// Folders whose files are typed by their names alone, as written.
+    pub skip: Vec<String>,
 }
 
 /// One mebibyte, for the `_mib` settings.
@@ -709,6 +731,10 @@ pub struct Settings {
     pub components_ask_again: bool,
     /// The plugins section.
     pub plugins: PluginSettings,
+    /// File types (alpha.7).
+    pub filetypes: FileTypeSettings,
+    /// Where contents are never read to find a type (alpha.7).
+    pub check: CheckSettings,
     /// Keys this version does not know, kept as they were.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, Value>,
@@ -766,6 +792,8 @@ impl Default for Settings {
             components_first_run_shown: false,
             components_ask_again: false,
             plugins: PluginSettings::default(),
+            filetypes: FileTypeSettings::default(),
+            check: CheckSettings::default(),
             unknown: BTreeMap::new(),
         }
     }
@@ -936,6 +964,8 @@ impl Settings {
             "viewer",
             "quick_view",
             "archives",
+            "filetypes",
+            "check",
         ] {
             if table.get(parent).is_some_and(|v| !v.is_table()) {
                 problems.push(ConfigProblem::new(

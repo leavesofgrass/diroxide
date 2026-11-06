@@ -115,6 +115,14 @@ pub enum VfsError {
         /// What it uses: "compression method 99".
         what: String,
     },
+    /// Opening it needs a plugin or a helper program that is not there
+    /// (alpha.7, R29 1.2): "Could not open disk.vhd: it needs the disk
+    /// image plugin or 7-Zip." The app offers the component.
+    #[error("it needs {what}")]
+    NeedsHelper {
+        /// What it needs, in words: "the disk image plugin or 7-Zip".
+        what: String,
+    },
     /// The account lacks a privilege the operation needs (a symbolic link
     /// on Windows without Developer Mode). W1a's contract request 3.
     #[error("{what} needs a privilege this account does not have")]
@@ -303,6 +311,7 @@ impl VfsError {
             | VfsError::UnsupportedFeature { .. } => ErrorClass::Data,
             VfsError::Unsupported { .. }
             | VfsError::NoProvider(_)
+            | VfsError::NeedsHelper { .. }
             | VfsError::Unsafe { .. }
             | VfsError::TrashRefused { .. } => ErrorClass::Refused,
             VfsError::CrossesDevices
@@ -452,6 +461,9 @@ impl Explain for VfsError {
             VfsError::UnsupportedFeature { .. } => {
                 "Open it with a program that reads it.".to_owned()
             }
+            VfsError::NeedsHelper { .. } => {
+                "Get it from Manage optional components, then try again.".to_owned()
+            }
             VfsError::Unsafe { .. } => "Check what it is before you open it.".to_owned(),
             VfsError::NeedsPrivilege { .. } => {
                 "Turn on Developer Mode in Windows settings, or make a junction instead.".to_owned()
@@ -591,7 +603,26 @@ mod tests {
             VfsError::TrashRefused {
                 why: "this drive has no trash".into(),
             },
+            VfsError::NeedsHelper {
+                what: "the disk image plugin or 7-Zip".into(),
+            },
         ];
+        let helper = Message::from_error(
+            "open",
+            "disk.vhd",
+            &VfsError::NeedsHelper {
+                what: "the disk image plugin or 7-Zip".into(),
+            },
+        );
+        assert_eq!(
+            helper.text,
+            "Could not open disk.vhd: it needs the disk image plugin or 7-Zip. \
+             Get it from Manage optional components, then try again."
+        );
+        assert!(within_cells(
+            &helper.text,
+            "Could not open disk.vhd: it needs"
+        ));
         for error in errors {
             let m = Message::from_error("copy", "report.pdf", &error);
             assert!(

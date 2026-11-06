@@ -20,7 +20,7 @@ use toml::{Table, Value};
 
 /// Each crate and the workspace crates it may depend on. Keep in step with
 /// docs/dev/architecture.md.
-pub const ALLOWED: [(&str, &[&str]); 19] = [
+pub const ALLOWED: [(&str, &[&str]); 20] = [
     ("diroxide-core", &[]),
     ("diroxide-theme", &[]),
     ("diroxide-vfs", &["diroxide-core"]),
@@ -44,6 +44,20 @@ pub const ALLOWED: [(&str, &[&str]); 19] = [
             "diroxide-tools",
         ],
     ),
+    // Metadata (alpha 4's contract step, R30 commit 12): beside the
+    // archive crate's place, so the checksum and strip job runners live
+    // with their engines; the preview crate, the app and the command line
+    // may depend on it, the job engine may not.
+    (
+        "diroxide-meta",
+        &[
+            "diroxide-core",
+            "diroxide-vfs",
+            "diroxide-config",
+            "diroxide-tools",
+            "diroxide-ops",
+        ],
+    ),
     (
         "diroxide-preview",
         &[
@@ -51,6 +65,7 @@ pub const ALLOWED: [(&str, &[&str]); 19] = [
             "diroxide-vfs",
             "diroxide-tools",
             "diroxide-filetype",
+            "diroxide-meta",
         ],
     ),
     (
@@ -95,6 +110,7 @@ pub const ALLOWED: [(&str, &[&str]); 19] = [
             "diroxide-theme",
             "diroxide-diff",
             "diroxide-components",
+            "diroxide-meta",
         ],
     ),
     (
@@ -124,6 +140,7 @@ pub const ALLOWED: [(&str, &[&str]); 19] = [
             "diroxide-theme",
             "diroxide-diff",
             "diroxide-components",
+            "diroxide-meta",
         ],
     ),
     ("diro", &["diroxide-cli"]),
@@ -147,11 +164,18 @@ pub const ALLOWED: [(&str, &[&str]); 19] = [
 /// Workspace crates a member may use in its tests alone, each with the
 /// reason: a `[dev-dependencies]` entry, never a normal or a build one.
 /// Keep in step with docs/dev/architecture.md.
-pub const ALLOWED_DEV: [(&str, &str, &str); 1] = [(
-    "diroxide-gui",
-    "diroxide-vfs",
-    "the GUI's every-purpose test opens the trash browser on a test trash and the junction and item-error questions through a provider double, on every system, never the owner's trash or drives (G1's request 5, lane A5)",
-)];
+pub const ALLOWED_DEV: [(&str, &str, &str); 2] = [
+    (
+        "diroxide-gui",
+        "diroxide-vfs",
+        "the GUI's every-purpose test opens the trash browser on a test trash and the junction and item-error questions through a provider double, on every system, never the owner's trash or drives (G1's request 5, lane A5)",
+    ),
+    (
+        "diroxide-plugins",
+        "diroxide-archive",
+        "spike DS6's proof of the claim route: a disk image inside a zip reaches the claiming plugin while the image's own bytes are read from the zip by the real archive provider (alpha 4's contract step, P4)",
+    ),
+];
 
 /// Whether `name` may depend on the workspace crate `dependency` in the
 /// manifest section labeled `section` ("dependencies", "dev-dependencies",

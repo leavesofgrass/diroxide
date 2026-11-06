@@ -1,0 +1,42 @@
+[package]
+name = "diroxide-meta"
+description = "The metadata of diroxide: fields read from files by cost class, checksums, and stripping into a copy."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+# The crate of alpha 4's metadata (R30 commit 12; R28 part 3): it may
+# depend on core, vfs, config, tools and ops (so the checksum and strip
+# job runners live beside their engines); the preview crate, the app and
+# the command line may depend on it, and the job engine may not. The
+# preview crate's image and ffprobe readers implement its Reader trait, so
+# it never depends on the preview crate.
+[dependencies]
+diroxide-core.workspace = true
+diroxide-vfs.workspace = true
+thiserror.workspace = true
+# The readers and engines the metadata lane builds here (commits 45 to
+# 50), declared now so the lock and the native gate hold them: audio
+# tags, document properties (PDF, OOXML, ODF, EPUB through the zip and
+# XML readers), the checksum engine's hashes (BLAKE3 for columns,
+# through the native gate's blake3 entry), and the strip. `plist`, for
+# Finder tags, is declared in the workspace only: the preview crate's
+# highlight test refuses any plist in the lock until its owner narrows
+# that test to syntect's own features (a contract request of P4).
+blake3.workspace = true
+crc32fast.workspace = true
+img-parts.workspace = true
+lofty.workspace = true
+lopdf.workspace = true
+md-5.workspace = true
+roxmltree.workspace = true
+sha2.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

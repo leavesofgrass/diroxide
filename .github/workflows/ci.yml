@@ -63,6 +63,17 @@ jobs:
         run: |
           cargo clippy --manifest-path plugins/diro-sftp/Cargo.toml --all-targets --all-features --locked -- -D warnings
           cargo nextest run --manifest-path plugins/diro-sftp/Cargo.toml --all-features --locked
+      # The disk-image and git plugins from their own workspaces, on every
+      # leg (alpha 4's contract step): no server to start, and the release
+      # builds them for each computer, so no other job compiles them there.
+      # --locked, as the release does.
+      - name: Disk and git plugins, clippy and tests from their own workspaces
+        shell: bash
+        run: |
+          for plugin in diro-disk diro-git; do
+            cargo clippy --manifest-path "plugins/$plugin/Cargo.toml" --all-targets --all-features --locked -- -D warnings
+            cargo nextest run --manifest-path "plugins/$plugin/Cargo.toml" --all-features --locked
+          done
       # The SFTP plugin against a real OpenSSH server (answer 99), on the
       # Linux leg only: in the development image, which holds Debian's
       # openssh-server. The tests start and stop their own sshd on a

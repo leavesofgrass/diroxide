@@ -28,14 +28,15 @@ use diroxide_tools::process::ProcessSpec;
 use diroxide_vfs::{Registry, WatchEvent, WatchSink};
 use serde_json::{Map, Value};
 
-use crate::ask::{Answer, PromptHistory, Question, TextDocument};
+use crate::ask::{Answer, DiffDocuments, Form, FormAnswer, PromptHistory, Question, TextDocument};
 use crate::calls::Calls;
 use crate::error::PluginError;
 use crate::files::Files;
 use crate::hooks::{HookAfter, HookBefore, HookDecision, decide};
 use crate::lines;
 use crate::listers::{
-    ColumnValue, ListerView, MAX_LISTER_ROWS, column_params, read_column_values, read_rows,
+    ColumnValue, ListerView, MAX_COLUMN_BATCH, MAX_LISTER_ROWS, PluginColumn, column_params,
+    read_column_values, read_rows,
 };
 use crate::live::{CallOptions, LivePlugin, Notice, RequestKind};
 use crate::log::{PluginLog, Source};
@@ -100,6 +101,33 @@ pub trait HostServices: Send + Sync {
         Err(RpcError::new(
             ErrorKind::Unsupported,
             "this host has no viewer",
+        ))
+    }
+
+    /// `ui/form`: several labeled fields in one dialog, the app's own,
+    /// shown as a list of setting rows (the Pack and Access dialogs'
+    /// shape): titled with [`Form::title`] (the plugin's name last), the
+    /// focus on [`Form::focus`], Enter on the default button, Escape
+    /// [`FormAnswer::Cancelled`]; a secret field is masked and its value
+    /// reaches no log. The default says this host has no forms (alpha 4's
+    /// contract step; the host-pieces lane serves it).
+    fn form(&self, form: &Form) -> Result<FormAnswer, RpcError> {
+        let _ = form;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host has no forms",
+        ))
+    }
+
+    /// `ui/show_diff`: two texts in the compare screens, the verdict
+    /// first, with Swap, titled with [`DiffDocuments::title`]. The default
+    /// says this host has no compare screens (alpha 4's contract step; the
+    /// host-pieces lane serves it).
+    fn show_diff(&self, documents: &DiffDocuments) -> Result<(), RpcError> {
+        let _ = documents;
+        Err(RpcError::new(
+            ErrorKind::Unsupported,
+            "this host has no compare screens",
         ))
     }
 
@@ -1154,6 +1182,83 @@ impl Host {
             .map_err(|e| PluginError::Limit(e.message))?;
         let answer = self.call(plugin, methods::COLUMN_FORMAT, params)?;
         Ok(read_column_values(&answer, &texts))
+    }
+
+    /// The columns the enabled plugins declare, in plugin and manifest
+    /// order: what file panels offer beside their built-in columns
+    /// (alpha.7, R28 3.2).
+    pub fn plugin_columns(&self) -> Vec<PluginColumn> {
+        self.plugins()
+            .iter()
+            .filter(|p| p.enabled)
+            .flat_map(|p| {
+                p.manifest.columns.iter().map(|c| PluginColumn {
+                    plugin: p.manifest.id.clone(),
+                    column: c.id.clone(),
+                    header: c.header.clone(),
+                    batch: (c.batch as usize).clamp(1, MAX_COLUMN_BATCH),
+                })
+            })
+            .collect()
+    }
+
+    /// One page of a plugin column's cells for places of one folder, in
+    /// the places' order, at most the column's batch: "pending" where the
+    /// plugin answered none, and every cell "unavailable: plugin stopped"
+    /// when it cannot answer. The app calls it off the input thread, a
+    /// page of rows at a time, and keeps the answers by place, size,
+    /// modified time and the plugin's version (the metadata-in-the-app
+    /// lane; alpha 4's contract step fixes this shape).
+    pub fn column_page(
+        &self,
+        column: &PluginColumn,
+        folder: &Place,
+        places: &[Place],
+    ) -> Vec<ColumnValue> {
+        let page = &places[..places.len().min(column.batch)];
+        match self.column_values(&column.plugin, &column.column, folder, page) {
+            Ok(mut values) => page
+                .iter()
+                .map(|p| {
+                    values
+                        .remove(&p.to_string())
+                        .unwrap_or_else(ColumnValue::pending)
+                })
+                .collect(),
+            Err(_) => page.iter().map(|_| ColumnValue::unavailable()).collect(),
+        }
+    }
+
+    /// `place/describe`: the plugin's short description of a folder for
+    /// the title line ("main, no upstream, 2 changed here"), cleaned, or
+    /// `None` when it gives none. The app calls it off the input thread
+    /// when a panel enters a folder the plugin's `[[place_info]]` matches,
+    /// keeps the old title until the answer, and keeps the answer until
+    /// `folder_changed` (the host-pieces lane; alpha 4's contract step
+    /// fixes this shape).
+    pub fn describe_place(
+        &self,
+        plugin: &str,
+        folder: &Place,
+    ) -> Result<Option<String>, PluginError> {
+        let declared = self
+            .plugin(plugin)
+            .is_some_and(|p| !p.manifest.place_info.is_empty());
+        if !declared {
+            return Err(PluginError::Protocol(
+                "the manifest declares no [[place_info]]".to_owned(),
+            ));
+        }
+        let answer = self.call(
+            plugin,
+            methods::PLACE_DESCRIBE,
+            serde_json::json!({"place": folder.to_string()}),
+        )?;
+        Ok(answer
+            .get("text")
+            .and_then(Value::as_str)
+            .map(|text| clean_text(text, MAX_ANNOUNCE_CHARS))
+            .filter(|text| !text.is_empty()))
     }
 
     fn notify_running(&self, plugin: &str, method: &str, params: Value) {

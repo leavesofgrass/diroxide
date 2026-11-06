@@ -506,6 +506,23 @@ pub trait Provider: Send + Sync + fmt::Debug {
     fn as_resumable(&self) -> Option<&dyn ResumableWrite> {
         None
     }
+
+    /// The extended attributes or streams, when this provider reads them;
+    /// a place says whether it can with
+    /// [`Capabilities::extended_attributes`](crate::Capabilities::extended_attributes).
+    fn as_extended(&self) -> Option<&dyn crate::ExtendedAttributes> {
+        None
+    }
+
+    /// The container extensions this provider claims inside archive
+    /// places, lowercase with the dot (`.iso`, `.vhd`): a plugin's
+    /// `[[provider]] extensions` (the claim route, alpha.7, R29 1.2).
+    /// [`Registry::register`](crate::Registry::register) takes them, so a
+    /// place such as `fedora.iso!EFI/` reaches this provider and not the
+    /// archive provider. Empty for every other provider.
+    fn claimed_extensions(&self) -> &[String] {
+        &[]
+    }
 }
 
 #[cfg(test)]
@@ -661,5 +678,7 @@ mod tests {
         assert!(provider.volume(&place, &ctx).unwrap().root.is_root());
         assert!(provider.as_streaming().is_none());
         assert!(provider.as_resumable().is_none());
+        assert!(provider.as_extended().is_none());
+        assert!(provider.claimed_extensions().is_empty());
     }
 }

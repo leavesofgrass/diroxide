@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use diroxide_core::{Secret, SecretRequest};
 
 use crate::error::VfsError;
+use crate::runner::{NoTools, ToolOutput, ToolRequest, ToolRunError, ToolRunner};
 
 /// A shared flag that asks an operation to stop. Cloning shares the flag.
 #[derive(Clone, Debug, Default)]
@@ -91,7 +92,8 @@ impl SecretSource for NoSecrets {
 }
 
 /// What every provider operation receives: how to know it should stop,
-/// where to report progress, and whom to ask for a secret.
+/// where to report progress, whom to ask for a secret, and what runs a
+/// helper program.
 #[derive(Clone)]
 pub struct OpContext {
     /// Checked between steps.
@@ -100,16 +102,35 @@ pub struct OpContext {
     pub progress: Arc<dyn ProgressSink>,
     /// Asked for a password or passphrase when one is needed.
     pub secrets: Arc<dyn SecretSource>,
+    /// Runs helper programs (ImageMagick, FFmpeg, 7-Zip, gpg) for the job
+    /// engine, which cannot see the tools registry (alpha.7, R30 commit
+    /// 7). [`NoTools`] unless the app or the command line puts the
+    /// registry's runner here.
+    pub tools: Arc<dyn ToolRunner>,
 }
 
 impl OpContext {
-    /// A context with a fresh token, no progress reporting and no secrets.
+    /// A context with a fresh token, no progress reporting, no secrets and
+    /// no tools.
     pub fn new() -> Self {
         Self {
             cancel: CancelToken::new(),
             progress: Arc::new(NoProgress),
             secrets: Arc::new(NoSecrets),
+            tools: Arc::new(NoTools),
         }
+    }
+
+    /// The same context running programs through this runner.
+    pub fn with_tools(mut self, tools: Arc<dyn ToolRunner>) -> Self {
+        self.tools = tools;
+        self
+    }
+
+    /// Runs a helper program through the context's runner, cancelled with
+    /// the context's token.
+    pub fn run_tool(&self, request: &ToolRequest) -> Result<ToolOutput, ToolRunError> {
+        self.tools.run(request, &self.cancel)
     }
 
     /// The same context with this token.
@@ -173,6 +194,56 @@ mod tests {
         let ctx = OpContext::new().with_secrets(Arc::new(Always));
         let secret = ctx.ask_secret(&request).unwrap();
         assert!(!format!("{ctx:?} {secret:?}").contains("canary"));
+    }
+
+    /// The job engine reaches a program only through the context: none by
+    /// default, the one the app gives otherwise.
+    #[test]
+    fn a_context_runs_tools_through_its_runner() {
+        use crate::runner::ToolStream;
+        use std::ops::ControlFlow;
+        let request = ToolRequest::new("pandoc", ["--version"]);
+        assert!(matches!(
+            OpContext::new().run_tool(&request),
+            Err(ToolRunError::NotInstalled { .. })
+        ));
+        struct Echo;
+        impl ToolRunner for Echo {
+            fn has(&self, tool: &str) -> bool {
+                tool == "pandoc"
+            }
+            fn run(
+                &self,
+                request: &ToolRequest,
+                cancel: &CancelToken,
+            ) -> Result<ToolOutput, ToolRunError> {
+                if cancel.is_cancelled() {
+                    return Err(ToolRunError::Cancelled);
+                }
+                Ok(ToolOutput::new(
+                    Some(0),
+                    request.tool.clone().into_bytes(),
+                    Vec::new(),
+                ))
+            }
+            fn run_streaming(
+                &self,
+                request: &ToolRequest,
+                cancel: &CancelToken,
+                record: &mut dyn FnMut(ToolStream, &str) -> ControlFlow<()>,
+            ) -> Result<ToolOutput, ToolRunError> {
+                let _ = record(ToolStream::Stdout, &request.tool);
+                self.run(request, cancel)
+            }
+        }
+        let token = CancelToken::new();
+        let ctx = OpContext::new()
+            .with_tools(Arc::new(Echo))
+            .with_cancel(token.clone());
+        assert_eq!(ctx.run_tool(&request).unwrap().stdout, b"pandoc");
+        assert!(ctx.tools.has("pandoc") && !ctx.tools.has("magick"));
+        token.cancel();
+        assert_eq!(ctx.run_tool(&request), Err(ToolRunError::Cancelled));
     }
 
     #[test]

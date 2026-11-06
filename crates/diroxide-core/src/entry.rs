@@ -342,6 +342,12 @@ fn windows_words(flags: u32, with_archive: bool) -> String {
     }
 }
 
+/// Whether a type index is 0, so an entry whose type is not known writes
+/// no `type_index` and reads as it did before alpha.7.
+fn is_zero(index: &u16) -> bool {
+    *index == 0
+}
+
 /// One thing in a place. The real name is kept for operations; rows show
 /// [`Entry::display_name`], with hidden characters replaced.
 ///
@@ -400,6 +406,14 @@ pub struct Entry {
     /// The detected file type's short name, such as "PDF"; `None` until
     /// the type is checked.
     pub type_name: Option<String>,
+    /// The detected file type's place in the app's type registry, plus
+    /// one: two bytes an entry, so the group and the type's actions are
+    /// found without a string (alpha.7, R28 4.3). 0 until the type is
+    /// known, and for an entry no type takes; core never reads it, and
+    /// [`Lookup::group`](crate::filter::Lookup::group) falls back to the
+    /// extension table.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub type_index: u16,
     /// The user's labels on this entry.
     pub labels: Vec<String>,
     /// More facts as text, by key: a plugin's columns, the custom
@@ -440,6 +454,7 @@ impl Entry {
             blocks: None,
             hidden: false,
             type_name: None,
+            type_index: 0,
             labels: Vec::new(),
             extra: BTreeMap::new(),
             needs_care,
@@ -657,5 +672,21 @@ mod tests {
             back.extra.get("git.author").map(String::as_str),
             Some("Ada Example")
         );
+    }
+
+    /// The type index costs two bytes, is written only when known, and an
+    /// entry written before alpha.7 reads with none.
+    #[test]
+    fn the_type_index_is_two_bytes_and_written_only_when_known() {
+        let mut entry = Entry::new("report.pdf", EntryKind::File);
+        assert_eq!(size_of_val(&entry.type_index), 2);
+        let text = serde_json::to_string(&entry).unwrap();
+        assert!(!text.contains("type_index"), "{text}");
+        let back: Entry = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.type_index, 0);
+        entry.type_index = 7;
+        let text = serde_json::to_string(&entry).unwrap();
+        assert!(text.contains(r#""type_index":7"#), "{text}");
+        assert_eq!(serde_json::from_str::<Entry>(&text).unwrap(), entry);
     }
 }

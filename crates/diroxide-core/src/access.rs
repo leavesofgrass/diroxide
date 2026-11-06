@@ -391,11 +391,19 @@ pub struct AttributeEdit {
     pub accessed: Option<Timestamp>,
     /// The offset times are said in: the app's local offset.
     pub offset: UtcOffset,
+    /// A new owner, as typed: a user name (`ada`) or a number (`1000`).
+    /// The planner looks it up for each entry; Unix places only (R29
+    /// 4.3), and Windows shows the owner and hands off to its own dialog.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    /// A new group, as typed: a group name (`staff`) or a number.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 impl AttributeEdit {
     /// The command arguments of an edit, in the order written.
-    pub const ARGUMENTS: [&'static str; 7] = [
+    pub const ARGUMENTS: [&'static str; 9] = [
         "recursion",
         "mode",
         "attributes",
@@ -403,6 +411,8 @@ impl AttributeEdit {
         "created",
         "accessed",
         "offset",
+        "owner",
+        "group",
     ];
 
     /// An edit that changes nothing yet, applied as `recursion` says.
@@ -449,6 +459,18 @@ impl AttributeEdit {
         self
     }
 
+    /// The same edit giving the entries a new owner, by name or number.
+    pub fn with_owner(mut self, owner: impl Into<String>) -> Self {
+        self.owner = Some(owner.into());
+        self
+    }
+
+    /// The same edit giving the entries a new group, by name or number.
+    pub fn with_group(mut self, group: impl Into<String>) -> Self {
+        self.group = Some(group.into());
+        self
+    }
+
     /// Whether the edit changes nothing.
     pub fn is_empty(&self) -> bool {
         self.mode.is_none()
@@ -456,11 +478,17 @@ impl AttributeEdit {
             && self.modified.is_none()
             && self.created.is_none()
             && self.accessed.is_none()
+            && !self.changes_owner()
     }
 
     /// Whether it changes only times.
     pub fn times_only(&self) -> bool {
-        self.mode.is_none() && self.windows.is_none()
+        self.mode.is_none() && self.windows.is_none() && !self.changes_owner()
+    }
+
+    /// Whether it changes the owner or the group.
+    pub fn changes_owner(&self) -> bool {
+        self.owner.is_some() || self.group.is_some()
     }
 
     /// The command with this edit's arguments added ([`Self::ARGUMENTS`]):
@@ -489,6 +517,12 @@ impl AttributeEdit {
         if self.offset != UtcOffset::UTC {
             put("offset", offset_text(self.offset));
         }
+        if let Some(owner) = &self.owner {
+            put("owner", owner.clone());
+        }
+        if let Some(group) = &self.group {
+            put("group", group.clone());
+        }
         command
     }
 
@@ -516,6 +550,8 @@ impl AttributeEdit {
             edit.offset =
                 parse_offset(&text).ok_or_else(|| bad_value("offset", &text, OFFSET_EXPECTED))?;
         }
+        edit.owner = principal_of(command, "owner", OWNER_EXPECTED)?;
+        edit.group = principal_of(command, "group", GROUP_EXPECTED)?;
         Ok(Some(edit))
     }
 }
@@ -688,6 +724,32 @@ impl LinkEdit {
 
 const TIME_EXPECTED: &str = "a time in UTC, such as 2026-10-17T14:05:00Z";
 const OFFSET_EXPECTED: &str = "an offset from UTC, such as -07:00";
+
+const OWNER_EXPECTED: &str = "a user name, such as ada, or a number";
+
+const GROUP_EXPECTED: &str = "a group name, such as staff, or a number";
+
+/// An owner or group argument: a name or a number, never empty and never
+/// with a space or a hidden character, so a typed value cannot smuggle a
+/// second word into the lookup.
+fn principal_of(
+    command: &Command,
+    name: &str,
+    expected: &'static str,
+) -> Result<Option<String>, CommandTextError> {
+    match text_of(command, name, expected)? {
+        None => Ok(None),
+        Some(text)
+            if !text.is_empty()
+                && !text
+                    .chars()
+                    .any(|c| c.is_whitespace() || crate::names::classify(c).is_hidden()) =>
+        {
+            Ok(Some(text))
+        }
+        Some(text) => Err(bad_value(name, &text, expected)),
+    }
+}
 
 fn bad_value(name: &str, value: &str, expected: &'static str) -> CommandTextError {
     CommandTextError::BadValue {
@@ -963,6 +1025,40 @@ mod tests {
         let bare = Command::new(CommandId::from_static("file.copy"));
         assert_eq!(AttributeEdit::from_command(&bare), Ok(None));
         assert_eq!(LinkEdit::from_command(&bare), Ok(None));
+    }
+
+    /// The owner and group of alpha.7's change-owner dialog (R29 4.3)
+    /// travel as typed, a name or a number, and count as a change; a value
+    /// with a space or a hidden character is refused in words.
+    #[test]
+    fn an_owner_change_round_trips_and_a_spaced_name_is_refused() {
+        let edit = AttributeEdit::new(Recursion::ThisItem)
+            .with_owner("ada")
+            .with_group("1000");
+        assert!(!edit.is_empty() && !edit.times_only() && edit.changes_owner());
+        let command = edit.add_to(Command::new(CommandId::from_static("file.permissions")));
+        let text = command.to_string();
+        // A number is quoted, so it reads back as the text it was typed.
+        assert_eq!(
+            text,
+            "file.permissions group=\"1000\" owner=ada recursion=this_item"
+        );
+        let read = Command::parse_text(&text).unwrap();
+        assert_eq!(AttributeEdit::from_command(&read), Ok(Some(edit)));
+        let mut spaced = Command::new(CommandId::from_static("file.permissions"));
+        spaced.args.insert(
+            "owner".to_owned(),
+            ArgValue::Text("ada lovelace".to_owned()),
+        );
+        let error = AttributeEdit::from_command(&spaced).unwrap_err();
+        assert!(
+            error.to_string().contains("a user name, such as ada"),
+            "{error}"
+        );
+        // An edit without them reads as it did before alpha.7.
+        let old: AttributeEdit = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.owner, None);
+        assert!(!serde_json::to_string(&old).unwrap().contains("owner"));
     }
 
     #[test]

@@ -3,6 +3,7 @@
 //! the whole language, and the laws of three-valued logic on random
 //! entries.
 
+use std::borrow::Cow;
 use std::cell::Cell;
 
 use proptest::prelude::*;
@@ -464,6 +465,32 @@ fn content_queries_honor_their_limit_and_case() {
         !wide
             .evaluator(&written())
             .matches(&fixture("notes.txt"), &Wide)
+    );
+}
+
+/// `group` asks the lookup (alpha.7's type model): a lookup that knows
+/// the type answers from it, one still checking says the type is not
+/// checked, and the default keeps the extension table's answer.
+#[test]
+fn group_asks_the_lookup_and_defaults_to_the_extension_table() {
+    let filter = Filter::parse("group images").unwrap();
+    let evaluator = filter.evaluator(&written());
+    let photo = fixture("holiday.PNG");
+    assert!(evaluator.matches(&photo, &NoLookup));
+    struct Typed;
+    impl Lookup for Typed {
+        fn group(&self, entry: &Entry) -> Result<Option<Cow<'_, str>>, Unknown> {
+            if entry.name.ends_with(".pdf") {
+                Ok(Some(Cow::Borrowed("images")))
+            } else {
+                Err(Unknown::TypeNotChecked)
+            }
+        }
+    }
+    assert!(evaluator.matches(&fixture("report.pdf"), &Typed));
+    assert_eq!(
+        evaluator.test(&photo, &Typed),
+        Truth::Unknown(Unknown::TypeNotChecked)
     );
 }
 

@@ -18,7 +18,17 @@
 //! its two C files only with its `log` feature, never turned on here (the
 //! window loads libwayland at run time), and of `android-activity`, which
 //! compiles C only for Android's GameActivity, a system diroxide does not
-//! build for. Anything else fails, with the chain that brought it in.
+//! build for. Alpha 4's contract step (P4) adds `cc` as the build
+//! dependency of `blake3`, reached only through `diroxide-meta`, the
+//! checksum columns' hash (answer 45: `blake3` declares `cc` even with
+//! its `pure` feature, which the workspace turns on); and `pkg-config`,
+//! which finds a system C library to link, as a native tool of its own,
+//! with the four crates under the GUI that reach it, each loading its
+//! library at run time with the features diroxide turns on:
+//! `khronos-egl` (wgpu's EGL, `static` off), `tiny-xlib` (softbuffer's
+//! X11, `dlopen` on), `wayland-sys` (`dlopen` on) and
+//! `yeslogic-fontconfig-sys` (fontique's Fontconfig, `dlopen` on).
+//! Anything else fails, with the chain that brought it in.
 //! Crates under `third_party/` are path dependencies, so the inverted tree
 //! prints them with their folder and they are checked as members are.
 //!
@@ -31,8 +41,9 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-/// The build tools that mean C, C++ or assembly is compiled.
-pub const NATIVE_TOOLS: [&str; 4] = ["cc", "cmake", "cxx", "cxx-build"];
+/// The build tools that mean C, C++ or assembly is compiled, or a system
+/// C library is found to link (`pkg-config`).
+pub const NATIVE_TOOLS: [&str; 5] = ["cc", "cmake", "cxx", "cxx-build", "pkg-config"];
 
 /// One allowed way for a native build tool into the workspace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,7 +61,7 @@ pub struct Allow {
 
 /// The allow list, the inventory: each entry with its reason, and nothing
 /// else.
-pub const ALLOWED: [Allow; 6] = [
+pub const ALLOWED: [Allow; 14] = [
     Allow {
         tool: "cc",
         user: "ring",
@@ -89,11 +100,74 @@ pub const ALLOWED: [Allow; 6] = [
     },
     Allow {
         tool: "cc",
+        user: "wayland-backend",
+        through: &["softbuffer"],
+        reason: "the same build-only wayland-backend, reached through software drawing on \
+                 Wayland; seen once the check read every chain in full (alpha 4's contract \
+                 step)",
+    },
+    Allow {
+        tool: "cc",
         user: "android-activity",
         through: &["winit"],
         reason: "Android only: android-activity compiles C for GameActivity alone, and \
                  diroxide builds no Android program; winit names it for every target \
                  (the GUI alpha's contract step)",
+    },
+    Allow {
+        tool: "cc",
+        user: "blake3",
+        through: &["diroxide-meta"],
+        reason: "blake3 declares cc as a build dependency even with its pure feature, which \
+                 the workspace turns on, so no C is compiled; the checksum columns' hash \
+                 (answer 45, alpha 4's contract step)",
+    },
+    Allow {
+        tool: "pkg-config",
+        user: "khronos-egl",
+        through: &["wgpu-hal"],
+        reason: "khronos-egl asks pkg-config for libEGL only with its static feature, which \
+                 wgpu-hal leaves off: the GUI's renderer loads EGL at run time (alpha 4's \
+                 contract step, alpha 3's follow-up)",
+    },
+    Allow {
+        tool: "pkg-config",
+        user: "tiny-xlib",
+        through: &["softbuffer"],
+        reason: "with its dlopen feature on, tiny-xlib asks pkg-config only where libX11 \
+                 lives and loads it at run time, linking nothing: software drawing on X11 \
+                 (alpha 4's contract step)",
+    },
+    Allow {
+        tool: "pkg-config",
+        user: "wayland-sys",
+        through: &["softbuffer"],
+        reason: "with its dlopen feature on, wayland-sys never asks pkg-config and loads \
+                 libwayland at run time: software drawing on Wayland (alpha 4's contract \
+                 step)",
+    },
+    Allow {
+        tool: "pkg-config",
+        user: "wayland-sys",
+        through: &["wayland-backend"],
+        reason: "the same wayland-sys, dlopen on, under the window runner's Wayland client \
+                 (alpha 4's contract step)",
+    },
+    Allow {
+        tool: "pkg-config",
+        user: "x11-dl",
+        through: &["winit"],
+        reason: "x11-dl loads Xlib at run time; its build asks pkg-config only where the \
+                 libraries live, linking nothing: the window on X11 (alpha 4's contract \
+                 step, seen once the check read every chain in full)",
+    },
+    Allow {
+        tool: "pkg-config",
+        user: "yeslogic-fontconfig-sys",
+        through: &["fontique"],
+        reason: "with its dlopen feature on (fontique's fontconfig-dlopen), the Fontconfig \
+                 binding never asks pkg-config and loads Fontconfig at run time, so diro \
+                 starts without it (alpha 4's contract step)",
     },
 ];
 
@@ -175,6 +249,11 @@ fn inverted_tree(root: &Path, tool: &str) -> Result<Option<String>> {
             "depth",
             "--format",
             "{p}",
+            // Every chain in full: without it a subtree printed once is
+            // marked `(*)` the next time and its members are never
+            // checked (how x11-dl's pkg-config went unseen until alpha
+            // 4's contract step).
+            "--no-dedupe",
             "--invert",
             tool,
         ])
@@ -201,7 +280,7 @@ pub fn check(root: &Path) -> Result<bool> {
     }
     if problems.is_empty() {
         println!(
-            "native: Pass. No C build in the main workspace but the inventory's: ring, for the fetch feature; psm and stacker, for carta; wayland-backend and android-activity, build-only under the window."
+            "native: Pass. No C build in the main workspace but the inventory's: ring, for the fetch feature; psm and stacker, for carta; blake3, build-only, for the checksums; wayland-backend and android-activity, build-only under the window; pkg-config only for libraries the GUI loads at run time."
         );
         Ok(true)
     } else {
@@ -265,9 +344,59 @@ mod tests {
         assert_eq!(problems_in_tree("cmake", &tree).len(), 1);
     }
 
+    /// blake3's entry (answer 45): through the metadata crate only.
+    #[test]
+    fn blake3_through_the_metadata_crate_is_allowed_and_nowhere_else() {
+        let tree = "0cc v1.2.49\n\
+            1blake3 v1.8.2\n\
+            2diroxide-meta v0.1.0-alpha.3 (D:\\w\\crates\\diroxide-meta)\n\
+            3diroxide-app v0.1.0-alpha.3 (D:\\w\\crates\\diroxide-app)\n\
+            4diroxide-cli v0.1.0-alpha.3 (D:\\w\\crates\\diroxide-cli)\n";
+        assert_eq!(problems_in_tree("cc", tree), Vec::<String>::new());
+        let elsewhere = "0cc v1.2.49\n\
+            1blake3 v1.8.2\n\
+            2diroxide-search v0.1.0-alpha.3 (D:\\w\\crates\\diroxide-search)\n";
+        assert_eq!(problems_in_tree("cc", elsewhere).len(), 1);
+    }
+
+    /// pkg-config is a native tool of its own: the GUI's five users of it
+    /// pass by their own paths, any other fails, and a cc entry does not
+    /// let it through.
+    #[test]
+    fn pkg_config_is_allowed_only_for_the_guis_run_time_libraries() {
+        assert!(NATIVE_TOOLS.contains(&"pkg-config"));
+        let tree = "0pkg-config v0.3.34\n\
+            1khronos-egl v6.0.0\n\
+            2wgpu-hal v28.0.1\n\
+            3wgpu v28.0.0\n\
+            4masonry_imaging v0.4.0 (D:\\w\\third_party\\xilem\\masonry_imaging)\n\
+            1tiny-xlib v0.2.5\n\
+            2softbuffer v0.4.8\n\
+            3masonry_winit v0.4.0 (D:\\w\\third_party\\xilem\\masonry_winit)\n\
+            1wayland-sys v0.31.11\n\
+            2softbuffer v0.4.8\n\
+            3masonry_winit v0.4.0 (D:\\w\\third_party\\xilem\\masonry_winit)\n\
+            2wayland-backend v0.3.17\n\
+            3winit v0.30.13\n\
+            4diroxide-gui v0.1.0-alpha.3 (D:\\w\\crates\\diroxide-gui)\n\
+            1x11-dl v2.21.0\n\
+            2winit v0.30.13\n\
+            3diroxide-gui v0.1.0-alpha.3 (D:\\w\\crates\\diroxide-gui)\n\
+            1yeslogic-fontconfig-sys v6.0.1\n\
+            2fontique v0.11.1\n\
+            3diroxide-gui v0.1.0-alpha.3 (D:\\w\\crates\\diroxide-gui)\n";
+        assert_eq!(problems_in_tree("pkg-config", tree), Vec::<String>::new());
+        let other = "0pkg-config v0.3.34\n\
+            1openssl-sys v0.9.0\n\
+            2diroxide-app v0.1.0-alpha.3 (D:\\w\\crates\\diroxide-app)\n";
+        assert_eq!(problems_in_tree("pkg-config", other).len(), 1);
+        let as_cc = tree.replacen("0pkg-config v0.3.34", "0cc v1.2.49", 1);
+        assert!(!problems_in_tree("cc", &as_cc).is_empty());
+    }
+
     #[test]
     fn the_inventory_lists_each_entry_with_its_reason() {
-        assert_eq!(ALLOWED.len(), 6);
+        assert_eq!(ALLOWED.len(), 14);
         for allow in &ALLOWED {
             assert!(NATIVE_TOOLS.contains(&allow.tool), "{allow:?}");
             assert!(

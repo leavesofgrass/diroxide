@@ -41,6 +41,11 @@ pub const METHODS: &[&str] = &[
 /// The authority the toy refuses as untrusted, as a changed host key is.
 pub const UNTRUSTED: &str = "changed";
 
+/// The container extension the toy serves inside archive places, as the
+/// disk-image plugin claims its images (spike DS6): `disk.iso!EFI/` is
+/// the toy's `/EFI`.
+pub const CLAIMED: &str = ".iso";
+
 /// The toy's size in bytes; what its files hold is taken from it.
 pub const SIZE: u64 = 1_000_000;
 
@@ -195,6 +200,18 @@ impl MemFs {
             .ok_or_else(|| error(ErrorKind::InvalidParams, "a place is missing"))?;
         let place = Place::parse(text)
             .map_err(|_| error(ErrorKind::InvalidParams, "the place cannot be read"))?;
+        // A place inside a claimed image (the claim route, spike DS6): the
+        // image's own tree, from its root.
+        if let Some((container, member)) = place.archive() {
+            let claimed = container
+                .name()
+                .is_some_and(|name| name.to_lowercase().ends_with(CLAIMED));
+            if !claimed {
+                return Err(error(ErrorKind::InvalidParams, "not a claimed image"));
+            }
+            let member = member.trim_matches('/');
+            return Ok(format!("/{member}"));
+        }
         let remote = place
             .remote()
             .filter(|r| r.scheme() == SCHEME)

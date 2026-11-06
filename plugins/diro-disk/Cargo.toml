@@ -1,0 +1,63 @@
+# The disk-image places plugin, reading half (alpha 4; R29 part 1): ISO,
+# raw disks with their partitions, and the virtual-disk containers, read
+# only, through the claim route (the host sends `fedora.iso!EFI/` here). A
+# workspace of its own, outside the main one (plan section 5.8, item 3):
+# a plugin is a feature family the owner opts into, installed as a
+# component or with `cargo install` of this crate. Pure Rust, no C build.
+#
+#   cargo build --manifest-path plugins/diro-disk/Cargo.toml
+#
+# The contract step of alpha 4 (P4) made this skeleton; the disk lane
+# (commits 86 to 97) builds the readers.
+[workspace]
+
+[package]
+name = "diro-disk"
+description = "The disk-image places plugin of diroxide: ISO, raw disks and virtual disks, read only."
+version = "0.1.0-alpha.3"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+publish = false
+
+[dependencies]
+diroxide-core = { path = "../../crates/diroxide-core", version = "0.1.0-alpha.3" }
+# The wire types, the session's lifecycle and the error kinds, shared with
+# the host so the two never drift (pure Rust).
+diroxide-plugins = { path = "../../crates/diroxide-plugins", version = "0.1.0-alpha.3" }
+# The container rules every reader shares, lifted out of the archive
+# crate for this plugin (diroxide_vfs::archive: the limits and the member
+# names), without the job engine.
+diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.3" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.146"
+
+[dev-dependencies]
+proptest = "1.11.0"
+tempfile = "3.27.0"
+
+[[bin]]
+name = "diro-disk"
+path = "src/main.rs"
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_qualifications = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "warn"
+expect_used = "warn"
+
+# Lean debug builds that share a cache, as the main workspace's.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false

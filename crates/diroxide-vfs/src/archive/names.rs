@@ -15,7 +15,7 @@ use std::fmt;
 
 use diroxide_core::names::classify;
 
-use crate::limits::Limits;
+use super::limits::Limits;
 
 /// What the name rules found about a member's name. Each flag has its
 /// words ([`NameFlags::words`]), which a row says after "name needs care".

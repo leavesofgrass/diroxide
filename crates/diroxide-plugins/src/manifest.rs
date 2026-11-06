@@ -443,6 +443,15 @@ pub struct ProviderSpec {
     /// The provider methods it implements, without the `provider/` prefix;
     /// `list` and `stat` are always there.
     pub methods: BTreeSet<String>,
+    /// The container extensions it claims inside archive places,
+    /// lowercase with the dot (`.iso`): the claim route of alpha.7 (R29
+    /// 1.2). Only the disk images, the 7z tool's formats and the raw
+    /// images may be claimed, never a format diroxide reads itself.
+    pub extensions: Vec<String>,
+    /// Tools it uses when they are there and works without (`7z`,
+    /// `qemu-img`): Settings says "7-Zip, for UDF and the rest: not
+    /// installed", and nothing is turned off.
+    pub wants: Vec<String>,
 }
 
 /// A previewer.
@@ -1217,6 +1226,8 @@ const PROVIDER_KEYS: &[&str] = &[
     "atomic_rename",
     "methods",
     "lease",
+    "extensions",
+    "wants",
 ];
 const PROVIDER_FLAGS: &[&str] = &[
     "case_sensitive",
@@ -1939,6 +1950,35 @@ fn read_provider(table: &Table, path: &str, r: &mut Reader) -> Option<ProviderSp
         );
     }
     f.word("lease", &["listers"], r);
+    let mut extensions = Vec::new();
+    for (i, written) in f.strings("extensions", r).into_iter().enumerate() {
+        let lower = written.trim().to_lowercase();
+        let extension = if lower.starts_with('.') {
+            lower
+        } else {
+            format!(".{lower}")
+        };
+        if diroxide_core::place::claimable_extension(&extension) {
+            if !extensions.contains(&extension) {
+                extensions.push(extension);
+            }
+        } else {
+            r.error(
+                &format!("{}[{i}]", f.field("extensions")),
+                &format!("\"{written}\" is not a container a plugin may claim"),
+                &format!(
+                    "Use disk images, the 7z tool's formats or raw images: {}.",
+                    claimable_list()
+                ),
+            );
+        }
+    }
+    let mut wants = Vec::new();
+    for (i, tool) in f.strings("wants", r).into_iter().enumerate() {
+        if check_tool_name(r, &format!("{}[{i}]", f.field("wants")), &tool) {
+            wants.push(tool);
+        }
+    }
     Some(ProviderSpec {
         scheme: scheme?,
         name: name?,
@@ -1947,7 +1987,23 @@ fn read_provider(table: &Table, path: &str, r: &mut Reader) -> Option<ProviderSp
         max_name_length,
         reserved_names,
         methods,
+        extensions,
+        wants,
     })
+}
+
+/// The extensions a plugin may claim, as a list for a fix.
+fn claimable_list() -> String {
+    use diroxide_core::place::{
+        DISK_IMAGE_EXTENSIONS, RAW_IMAGE_EXTENSIONS, TOOL_ARCHIVE_EXTENSIONS,
+    };
+    DISK_IMAGE_EXTENSIONS
+        .iter()
+        .chain(TOOL_ARCHIVE_EXTENSIONS)
+        .chain(RAW_IMAGE_EXTENSIONS)
+        .copied()
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn read_previewer(
@@ -2522,6 +2578,39 @@ description = "Do not count blank lines."
             report.text(),
             "Error, plugin.name: is 41 characters, over the 40 of one Braille line. Use plain words, 40 characters at most, meaning first.\n"
         );
+    }
+
+    /// The claim route's keys (alpha.7, R29 1.2): a provider claims disk
+    /// images by extension, any case, with or without the dot, never a
+    /// format diroxide reads itself; it may want tools it can do without.
+    #[test]
+    fn a_provider_claims_disk_images_and_wants_tools() {
+        let disk = format!(
+            "{SAMPLE}\n[[provider]]\nscheme = \"disk\"\nname = \"Disk images\"\n\
+             extensions = [\".iso\", \"VHD\", \".iso\"]\nwants = [\"7z\", \"qemu-img\"]\n"
+        );
+        let report = Manifest::check(&disk);
+        let manifest = report.manifest.expect("the manifest reads");
+        let provider = &manifest.providers[0];
+        assert_eq!(provider.extensions, [".iso", ".vhd"]);
+        assert_eq!(provider.wants, ["7z", "qemu-img"]);
+        let zip = disk.replace("\"VHD\"", "\".zip\"");
+        let report = Manifest::check(&zip);
+        assert!(report.manifest.is_none());
+        let text = report.text();
+        assert!(
+            text.starts_with(
+                "Error, provider[0].extensions[1]: \".zip\" is not a container a plugin may claim."
+            ),
+            "{text}"
+        );
+        let path = disk.replace("\"qemu-img\"", "\"/usr/bin/qemu-img\"");
+        assert!(Manifest::check(&path).manifest.is_none());
+        // Without the keys, a provider claims nothing, as before.
+        let sftp = format!("{SAMPLE}\n[[provider]]\nscheme = \"sftp\"\nname = \"SFTP\"\n");
+        let manifest = Manifest::check(&sftp).manifest.expect("reads");
+        assert!(manifest.providers[0].extensions.is_empty());
+        assert!(manifest.providers[0].wants.is_empty());
     }
 
     #[test]
