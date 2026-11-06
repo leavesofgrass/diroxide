@@ -253,9 +253,7 @@ impl App {
             effects.extend(self.open_by_system());
         } else if row == CHOOSE_ROW {
             self.request(Request::ChooseAnother(place));
-            effects.push(self.say(Message::info(format!(
-                "The system's Open with list, for {name}"
-            ))));
+            effects.push(self.say(Message::info(format!("System's Open with list: {name}"))));
         } else if let Some(app) = row
             .strip_prefix(APP_ROW)
             .and_then(|i| i.parse::<usize>().ok())
@@ -297,7 +295,7 @@ impl App {
             };
             (shown.name.clone(), current, automatic, true)
         } else {
-            let line = "Encoding works in the viewer and the quick view.";
+            let line = "Encoding needs the viewer or quick view.";
             return vec![self.say(Message::info(line))];
         };
         let mut rows = vec![ListRow::new(AUTOMATIC_ROW, automatic.automatic_line())];

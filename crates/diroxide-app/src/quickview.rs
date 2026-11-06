@@ -664,7 +664,7 @@ impl QuickView {
         now: Instant,
     ) -> Vec<Message> {
         let Some(shown) = self.shown.as_ref() else {
-            return vec![Message::status("Nothing shown to read in another encoding")];
+            return vec![Message::status("Nothing shown to read again")];
         };
         let place = shown.place.clone();
         let name = place.name().unwrap_or_default().to_owned();

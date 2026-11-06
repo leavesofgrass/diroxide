@@ -88,7 +88,7 @@ pub(super) enum TypeWants {
 pub(super) fn needs_line(tools: &ToolRegistry, tool: &str) -> String {
     let name = tools.name_of(tool);
     match tools.find(tool) {
-        Ok(ToolStatus::Disabled) => format!("Needs {name}, turned off in tools.toml."),
+        Ok(ToolStatus::Disabled) => format!("Needs {name}, off in tools.toml."),
         _ => format!("Needs {name}, not found."),
     }
 }
@@ -391,4 +391,40 @@ impl App {
 /// Whether the rows hold the built-in viewer's row already.
 fn rows_have(rows: &[ListRow]) -> bool {
     rows.iter().any(|r| r.id == VIEW_ROW)
+}
+
+#[cfg(test)]
+mod tests {
+    use diroxide_config::{ToolOverride, ToolsConfig};
+
+    use super::*;
+
+    /// A tool action's reason fits a Braille line, the tool's name first
+    /// after "Needs"; nothing is run to find it.
+    #[test]
+    fn a_missing_tool_is_said_in_one_line() {
+        let mut overrides = ToolsConfig::default();
+        let tool = |path: Option<&str>, disabled: bool| ToolOverride {
+            path: path.map(str::to_owned),
+            disabled,
+            needed: false,
+        };
+        overrides
+            .tools
+            .insert("magick".to_owned(), tool(None, true));
+        overrides.tools.insert(
+            "pandoc".to_owned(),
+            tool(Some("no-such-folder/pandoc-stand-in"), false),
+        );
+        let tools = ToolRegistry::builtin().with_overrides(overrides);
+        for (id, line) in [
+            ("magick", "Needs ImageMagick, off in tools.toml."),
+            ("pandoc", "Needs pandoc, not found."),
+        ] {
+            assert_eq!(needs_line(&tools, id), line);
+            assert!(line.chars().count() <= 40, "{line}");
+        }
+        assert_eq!(slot_order(Slot::Enter), 0);
+        assert!(slot_order(Slot::User(9)) < slot_order(Slot::Named));
+    }
 }

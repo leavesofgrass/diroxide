@@ -185,7 +185,7 @@ impl TypeSlots {
                     None => Slot::Named,
                     Some(text) => Slot::parse(text).unwrap_or_else(|| {
                         problems.push(format!(
-                            "File type {}: action {} has no slot \"{text}\"; it is listed by name.",
+                            "File type {}: slot {text} unknown. Action {} is listed by name.",
                             file_type.id, action.name
                         ));
                         Slot::Named
@@ -343,7 +343,7 @@ extensions = ["jar"]
         let slots = TypeSlots::from_config(&config);
         assert_eq!(
             slots.problems(),
-            ["File type zip: action Count has no slot \"user12\"; it is listed by name."]
+            ["File type zip: slot user12 unknown. Action Count is listed by name."]
         );
         let jar = types.types().iter().position(|t| t.id == "jar").unwrap();
         let actions = offered(&types, &slots, u16::try_from(jar + 1).unwrap());

@@ -615,7 +615,7 @@ fn open_with_lists_the_programs_and_starts_one_through_the_runtime() {
     s.command(ids::OPEN_WITH);
     s.key("end");
     let said = s.key("enter");
-    assert_eq!(said, ["The system's Open with list, for report.pdf"]);
+    assert_eq!(said, ["System's Open with list: report.pdf"]);
     assert_eq!(
         recorder.chosen_another.lock().unwrap().as_slice(),
         std::slice::from_ref(&file)
@@ -715,7 +715,7 @@ fn the_quick_view_reads_its_file_in_the_encoding_chosen() {
     );
     s.focus("legacy.txt");
     let said = s.command(ids::ENCODING);
-    assert_eq!(said, ["Encoding works in the viewer and the quick view."]);
+    assert_eq!(said, ["Encoding needs the viewer or quick view."]);
     s.command(ids::QUICK_VIEW);
     settle(&mut s);
     s.command(ids::ENCODING);
