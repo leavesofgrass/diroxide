@@ -73,6 +73,11 @@ hadris-iso = { version = "2.5.0", default-features = false, features = ["std", "
 flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
 sha2 = "0.11.1"
 mbrman = "0.6.1"
+# The real archive provider and a zip writer, for the nesting test
+# (bundle.zip!disk.iso!EFI through the zip, as the app reads it); tests
+# only, pure Rust, already in the main workspace's lock.
+diroxide-archive = { path = "../../crates/diroxide-archive", version = "0.1.0-alpha.3" }
+zip = { version = "=9.0.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 proptest = "1.11.0"
 tempfile = "3.27.0"
 

@@ -15,6 +15,7 @@ mod fixtures;
 mod images;
 mod iso;
 mod make;
+mod nesting;
 mod ntfs;
 mod qemu;
 mod sevenzip;
