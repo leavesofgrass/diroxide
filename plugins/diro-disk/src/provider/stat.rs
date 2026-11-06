@@ -25,9 +25,9 @@ pub fn stat(call: &Call<'_>) -> Result<Value, DiskError> {
             )
         }
         (partition, names) => {
-            let found = open
-                .image
-                .volume(partition)?
+            let found = call
+                .images
+                .volume(call.peer, &open, partition)?
                 .with_tree(|tree| tree.stat(names))?;
             let shown = names.last().map(|n| (*n).to_owned()).unwrap_or_default();
             wire_entry(&Row {

@@ -27,7 +27,7 @@ pub fn list(call: &Call<'_>) -> Result<Value, DiskError> {
             .collect();
         return Ok(json!({"entries": entries, "complete": true}));
     }
-    let volume = open.image.volume(inner.partition)?;
+    let volume = call.images.volume(call.peer, &open, inner.partition)?;
     let listing = volume.with_tree(|tree| tree.list(&inner.names))?;
     if let Some(note) = lines::listing_notes(listing.loops_skipped, listing.names_skipped) {
         host::announce(call.peer, &note, "status");

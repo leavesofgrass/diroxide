@@ -16,6 +16,8 @@ mod images;
 mod iso;
 mod make;
 mod ntfs;
+mod qemu;
+mod sevenzip;
 mod squashfs;
 mod tables;
 

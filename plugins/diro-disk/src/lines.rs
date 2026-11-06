@@ -260,9 +260,9 @@ pub mod cause {
     /// A file NTFS compressed, which the built-in reader cannot read.
     pub const NTFS_COMPRESSED: &str = "NTFS compressed it, and only 7-Zip reads that.";
 
-    /// A password-protected image through 7-Zip.
-    pub const PASSWORD: &str =
-        "password needed, and 7-Zip can only take it on a command line, which diroxide never does";
+    /// A password-protected image through 7-Zip: 7-Zip reads a password
+    /// from a pipe (spike DS4), and this plugin asks none.
+    pub const PASSWORD: &str = "it is encrypted, and this plugin asks no password";
 
     /// 7-Zip is older than extraction allows.
     pub fn old_7zip(found: &str, needs: &str) -> String {
@@ -423,7 +423,7 @@ mod tests {
             (cause::too_many_entries(1_000_000), "the folder has"),
             (cause::read_failed("timed out"), "reading failed"),
             (cause::NTFS_COMPRESSED.to_owned(), "NTFS compressed it"),
-            (cause::PASSWORD.to_owned(), "password needed"),
+            (cause::PASSWORD.to_owned(), "it is encrypted"),
             (cause::old_7zip("24.08", "25.01"), "7-Zip 24.08 is too"),
         ] {
             let line = could(&cause);

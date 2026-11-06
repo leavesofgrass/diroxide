@@ -95,7 +95,7 @@ pub fn read(call: &Call<'_>) -> Result<Value, DiskError> {
     if inner.names.is_empty() {
         return Err(DiskError::IsAFolder);
     }
-    let volume = open.image.volume(inner.partition)?;
+    let volume = call.images.volume(call.peer, &open, inner.partition)?;
     if !to_spool {
         let bytes = volume.with_tree(|tree| tree.read(&inner.names, offset, length))?;
         let eof = bytes.len() < length;

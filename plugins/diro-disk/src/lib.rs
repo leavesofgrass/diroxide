@@ -27,3 +27,5 @@ pub mod lines;
 pub mod plugin;
 pub mod provider;
 pub mod rpc;
+pub mod spool;
+pub mod tool;

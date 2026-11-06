@@ -70,6 +70,16 @@ mksquashfs "$src" "$work/gzip.sqfs" -comp gzip -noappend -all-root -quiet
 pack gzip.sqfs
 mksquashfs "$src" "$work/xz.sqfs" -comp xz -noappend -all-root -quiet
 pack xz.sqfs
+# A member larger than one answer of the host's (7 MB of repeated text),
+# which 7-Zip must unpack into the spool rather than pipe.
+mkdir -p "$work/big"
+python3 - "$work/big/big.txt" <<'PY'
+import sys
+line = b"Seven megabytes of the same line, for the spool path.\n"
+open(sys.argv[1], "wb").write((line * 140000)[:7340032])
+PY
+mksquashfs "$work/big" "$work/big-xz.sqfs" -comp xz -noappend -all-root -quiet
+pack big-xz.sqfs
 
 # An ISO from xorriso with Rock Ridge and Joliet: a long name, a link,
 # and a folder deeper than ISO 9660's eight levels, which Rock Ridge
@@ -98,6 +108,11 @@ qemu-img convert -q -f raw -O vpc "$work/fat.img" "$work/dynamic.vhd"
 pack dynamic.vhd
 qemu-img convert -q -f raw -O vpc -o subformat=fixed "$work/fat.img" "$work/fixed.vhd"
 pack fixed.vhd
+# A QCOW2 whose data is all in its backing file, named plainly beside it:
+# only qemu-img reads it (the plugin's reader and 7-Zip refuse a backing
+# file), so the tests copy fat.qcow2 next to it.
+(cd "$work" && qemu-img create -q -f qcow2 -b fat.qcow2 -F qcow2 overlay.qcow2)
+pack overlay.qcow2
 
 sort -k 2 "$work/sums" > "$out/SHA256SUMS"
 echo "make-images.sh: wrote $(wc -l < "$out/SHA256SUMS") images to $out"

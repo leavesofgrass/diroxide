@@ -140,3 +140,28 @@ pub fn at(place: &Place, names: &[&str]) -> Place {
 pub fn words(error: &VfsError) -> String {
     diroxide_core::Message::from_error("open", "the image", error).text
 }
+
+/// A tool box that finds 7-Zip: on PATH, or, on Windows, in its usual
+/// install folder; `None` when this system has none (the test then says
+/// so and passes, as the host's own git test does).
+pub fn seven_zip_tools() -> Option<ToolBox> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let mut folders: Vec<PathBuf> = std::env::split_paths(&path).collect();
+    if cfg!(windows) {
+        folders.push(PathBuf::from(r"C:\Program Files\7-Zip"));
+    }
+    let names: &[&str] = if cfg!(windows) {
+        &["7z.exe", "7za.exe", "7zz.exe"]
+    } else {
+        &["7z", "7za", "7zz"]
+    };
+    let found = folders
+        .iter()
+        .any(|folder| names.iter().any(|name| folder.join(name).is_file()));
+    if !found {
+        eprintln!("skipped: no 7-Zip on this system");
+        return None;
+    }
+    let joined = std::env::join_paths(folders).ok()?;
+    Some(ToolBox::with_path(Some(joined)))
+}

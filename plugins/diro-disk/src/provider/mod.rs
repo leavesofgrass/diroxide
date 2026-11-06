@@ -39,11 +39,15 @@ use serde_json::Value;
 use crate::error::DiskError;
 use crate::host::{self, HostFile, Stamp};
 use crate::image::fs::NodeKind;
+use crate::image::sniff::{self, Container};
 use crate::image::source::{Backing, Cached};
+use crate::image::source::{SpoolFile, read_vec};
 use crate::image::tree::Row;
-use crate::image::{Image, Inner};
+use crate::image::{Image, Inner, Volume};
 use crate::lines;
 use crate::rpc::{Cancel, Peer};
+use crate::spool::Spool;
+use crate::tool::{SevenZip, SevenZipFs};
 
 /// The image extensions the manifest claims, lowercase with the dot: the
 /// plugin reads an image inside one of these itself.
@@ -145,6 +149,10 @@ pub struct Open {
     /// The image.
     pub image: Image,
     checked: Mutex<Instant>,
+    /// The plugin's files in the spool for this image, removed with it.
+    pub spool: Option<Arc<Spool>>,
+    /// Held while a partition is handed to 7-Zip, so it is handed once.
+    falling_back: Mutex<()>,
 }
 
 /// The open images, by their container's place.
@@ -154,6 +162,8 @@ pub struct Images {
     pub limits: Limits,
     /// The host's spool folder, from `initialize`.
     pub spool: Mutex<Option<PathBuf>>,
+    /// 7-Zip as the host finds it, looked for once.
+    seven: Mutex<Option<Option<SevenZip>>>,
 }
 
 impl Default for Images {
@@ -169,6 +179,7 @@ impl Images {
             open: Mutex::new(HashMap::new()),
             limits,
             spool: Mutex::new(None),
+            seven: Mutex::new(None),
         }
     }
 
@@ -266,10 +277,19 @@ impl Images {
         };
         let file: Arc<dyn Backing> = Arc::new(Cached::new(file));
         let siblings = |sibling: &str| self.sibling(peer, container, sibling, depth);
-        let image = Image::open(file, &name, stamp, &self.limits, &siblings)?;
+        let spool = self.new_spool();
+        let image = match Image::open(Arc::clone(&file), &name, stamp, &self.limits, &siblings) {
+            Ok(image) => image,
+            Err(error) if wants_fallback(&error) => self
+                .fall_back(peer, container, &file, &name, stamp, spool.as_ref(), depth)?
+                .ok_or(error)?,
+            Err(error) => return Err(error),
+        };
         Ok(Open {
             image,
             checked: Mutex::new(Instant::now()),
+            spool,
+            falling_back: Mutex::new(()),
         })
     }
 
@@ -307,12 +327,147 @@ impl Images {
         }
     }
 
+    /// A spool for one image, when the host named a spool folder.
+    fn new_spool(&self) -> Option<Arc<Spool>> {
+        let dir = self
+            .spool
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()?;
+        Some(Arc::new(Spool::new(dir, self.limits.max_spool_disk_bytes)))
+    }
+
+    /// 7-Zip, looked for once a session.
+    pub fn seven(&self, peer: &Arc<Peer>) -> Result<Option<SevenZip>, DiskError> {
+        let mut seven = self.seven.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(found) = seven.as_ref() {
+            return Ok(found.clone());
+        }
+        let found = SevenZip::find(peer)?;
+        *seven = Some(found.clone());
+        Ok(found)
+    }
+
+    /// A path the host's 7-Zip reads for an image file: its own path when
+    /// it is on a local drive, else a copy in the spool.
+    fn tool_path(
+        container: &Place,
+        file: &Arc<dyn Backing>,
+        spool: Option<&Arc<Spool>>,
+    ) -> Result<String, DiskError> {
+        if let Some(path) = container.local_path() {
+            return Ok(path.to_owned());
+        }
+        let spool = spool.ok_or_else(|| DiskError::needs_7zip("this image"))?;
+        let len = file.len();
+        let path = spool.copy_in("image", len, len, |at, n| {
+            read_vec(file.as_ref(), at, n).map_err(|e| DiskError::from_io(&e))
+        })?;
+        Ok(path.display().to_string())
+    }
+
+    /// The image read by 7-Zip, or else as the raw disk `qemu-img`
+    /// converts it to; `None` when neither tool is there or opens it.
+    #[allow(clippy::too_many_arguments)]
+    fn fall_back(
+        &self,
+        peer: &Arc<Peer>,
+        container: &Place,
+        file: &Arc<dyn Backing>,
+        name: &str,
+        stamp: Stamp,
+        spool: Option<&Arc<Spool>>,
+        depth: usize,
+    ) -> Result<Option<Image>, DiskError> {
+        let head = read_vec(file.as_ref(), 0, 4096).unwrap_or_default();
+        let tail = read_vec(file.as_ref(), file.len().saturating_sub(512), 512).unwrap_or_default();
+        let kind = sniff::container(&head, &tail);
+        if let Some(seven) = self.seven(peer)? {
+            let path = Self::tool_path(container, file, spool)?;
+            if let Some(fs) = SevenZipFs::open(seven, path, spool.cloned(), file.len())? {
+                crate::tool::announce_read_with_7zip(peer);
+                return Ok(Some(Image::with_file_system(
+                    Arc::clone(file),
+                    name,
+                    kind,
+                    stamp,
+                    Box::new(fs),
+                    &self.limits,
+                )));
+            }
+        }
+        let Some(spool) = spool else {
+            return Ok(None);
+        };
+        if kind == Container::Raw {
+            return Ok(None);
+        }
+        let source = Self::tool_path(container, file, Some(spool))?;
+        let Some(raw) = crate::tool::qemu::convert(peer, spool, kind, &source, file.len())? else {
+            return Ok(None);
+        };
+        let raw = std::fs::File::open(&raw).map_err(|e| DiskError::Io(e.to_string()))?;
+        let raw: Arc<dyn Backing> =
+            Arc::new(SpoolFile::open(raw).map_err(|e| DiskError::Io(e.to_string()))?);
+        let siblings = |sibling: &str| self.sibling(peer, container, sibling, depth);
+        let mut image = Image::open(raw, name, stamp, &self.limits, &siblings)?;
+        image.held = file.len();
+        image.container = kind;
+        Ok(Some(image))
+    }
+
+    /// The volume a call names, handed to 7-Zip first when no built-in
+    /// reader opens it (an exFAT partition, an xz squashfs): its bytes are
+    /// copied into the spool, inside the budget, and 7-Zip lists them.
+    pub fn volume<'a>(
+        &self,
+        peer: &Arc<Peer>,
+        open: &'a Open,
+        partition: Option<u32>,
+    ) -> Result<&'a Volume, DiskError> {
+        let volume = open.image.volume(partition)?;
+        let needs_7zip = matches!(
+            volume.with_tree(|_| Ok(())),
+            Err(DiskError::Needs { ref hint, .. }) if hint == lines::cause::GET_7ZIP
+        );
+        if !needs_7zip {
+            return Ok(volume);
+        }
+        let _once = open
+            .falling_back
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if volume.failure().is_none() {
+            return Ok(volume);
+        }
+        let (Some(seven), Some(spool)) = (self.seven(peer)?, open.spool.as_ref()) else {
+            return Ok(volume);
+        };
+        let backing = Arc::clone(&volume.backing);
+        let len = backing.len();
+        let path = spool.copy_in("part.img", len, open.image.held, |at, n| {
+            read_vec(backing.as_ref(), at, n).map_err(|e| DiskError::from_io(&e))
+        })?;
+        if let Some(fs) = SevenZipFs::open(
+            seven,
+            path.display().to_string(),
+            Some(Arc::clone(spool)),
+            open.image.held,
+        )? {
+            crate::tool::announce_read_with_7zip(peer);
+            volume.set_file_system(Box::new(fs));
+        }
+        Ok(volume)
+    }
+
     /// Opens an image from bytes the caller has, for the tests and the
     /// fuzz runs.
     pub fn insert(&self, container: &Place, image: Image) -> Arc<Open> {
         let open = Arc::new(Open {
             image,
             checked: Mutex::new(Instant::now()),
+            spool: self.new_spool(),
+            falling_back: Mutex::new(()),
         });
         self.open
             .lock()
@@ -349,6 +504,13 @@ impl Images {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
+
+/// Whether an error at open is one 7-Zip or `qemu-img` may answer: a
+/// format or a feature the plugin does not read, or a structure a crate
+/// refused.
+fn wants_fallback(error: &DiskError) -> bool {
+    matches!(error, DiskError::Needs { .. } | DiskError::Damaged(_))
 }
 
 /// A file inside an open image, read as the bytes of an image inside it.

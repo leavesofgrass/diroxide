@@ -240,6 +240,29 @@ impl Image {
         })
     }
 
+    /// An image read by a file system the caller opened over the whole
+    /// file (the 7-Zip fallback): no table, its size what the file holds.
+    pub fn with_file_system(
+        file: Arc<dyn Backing>,
+        name: &str,
+        container: Container,
+        stamp: Stamp,
+        fs: Box<dyn FileSystem>,
+        limits: &Limits,
+    ) -> Self {
+        let held = file.len();
+        let volume = Volume::with_content(file, Content::Unknown, *limits);
+        volume.set_file_system(fs);
+        Self {
+            name: name.to_owned(),
+            container,
+            claimed: held,
+            held,
+            stamp,
+            layout: Layout::Single(Box::new(volume)),
+        }
+    }
+
     /// Splits an inner path (`partition-2/home/ada`) by the layout.
     pub fn inner<'a>(&self, path: &'a str) -> Result<Inner<'a>, DiskError> {
         let mut names: Vec<&str> = path.split('/').filter(|n| !n.is_empty()).collect();
