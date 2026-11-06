@@ -205,7 +205,10 @@ lofty = "0.25.5"
 # extended-attributes trait.
 xattr = "1.7.0"
 # macOS property lists: Finder tags and the applications' document types
-# for Open with (MIT).
+# for Open with (MIT). Declared only: no crate depends on it yet, since
+# the preview crate's highlight test refuses any plist in the lock (it
+# guards syntect's plist loader); the lane that needs it asks the preview
+# crate's owner to narrow that test first.
 plist = "1.10.3"
 # Strip metadata into a copy: JPEG, PNG and WebP segments (MIT OR
 # Apache-2.0).

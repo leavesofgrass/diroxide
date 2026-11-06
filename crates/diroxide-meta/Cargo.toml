@@ -20,15 +20,17 @@ thiserror.workspace = true
 # The readers and engines the metadata lane builds here (commits 45 to
 # 50), declared now so the lock and the native gate hold them: audio
 # tags, document properties (PDF, OOXML, ODF, EPUB through the zip and
-# XML readers), Finder tags, the checksum engine's hashes (BLAKE3 for
-# columns, through the native gate's blake3 entry), and the strip.
+# XML readers), the checksum engine's hashes (BLAKE3 for columns,
+# through the native gate's blake3 entry), and the strip. `plist`, for
+# Finder tags, is declared in the workspace only: the preview crate's
+# highlight test refuses any plist in the lock until its owner narrows
+# that test to syntect's own features (a contract request of P4).
 blake3.workspace = true
 crc32fast.workspace = true
 img-parts.workspace = true
 lofty.workspace = true
 lopdf.workspace = true
 md-5.workspace = true
-plist.workspace = true
 roxmltree.workspace = true
 sha2.workspace = true
 zip.workspace = true
