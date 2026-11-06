@@ -121,8 +121,11 @@ pub fn page() -> String {
          off.\n\
          - For `ui/form`, the app's side is `HostServices::form`, from a `Form` to a `FormAnswer` \
          (`{\"values\": {\"ID\": VALUE}}` or `{\"cancelled\": true}`), fields of kind text, \
-         multiline, choice, checkbox, path and secret. Shape only until the host-pieces lane \
-         serves it.\n\
+         multiline, choice, checkbox, path and secret. Served since alpha 4: the app shows a \
+         list of setting rows, the default button's row first, then one row a field, its label \
+         first and its value after (\"Message: empty\", \"Sign-off: off\", \"Password: \
+         hidden\"); a multiline field answers its lines joined by line feeds, and Escape answers \
+         `{\"cancelled\": true}`.\n\
          - For `ui/show_diff`, the app's side is `HostServices::show_diff`, two documents in the \
          compare screens. Shape only until the host-pieces lane serves it.\n\
          - For `place/describe`, the app calls `Host::describe_place` off the input thread for a \

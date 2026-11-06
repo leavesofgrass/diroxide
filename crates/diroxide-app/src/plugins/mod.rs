@@ -10,6 +10,8 @@
 //!   nothing and appears only in Manage plugins.
 //! - [`ask`]: a plugin's question (five kinds) and text documents as the
 //!   app's own dialogs, the plugin's name last in every title.
+//! - [`form`]: a plugin's form (`ui/form`) as a list of setting rows, one
+//!   row a field, its label first and its value after.
 //! - [`lister`]: a plugin's lister of item rows, sorted and filtered by its
 //!   columns.
 //! - [`settings`] and [`log`]: a plugin's settings under its name, kept in
@@ -29,6 +31,7 @@
 
 pub mod ask;
 pub mod catalog;
+pub mod form;
 pub mod lister;
 pub mod log;
 pub mod registry;
@@ -36,7 +39,7 @@ pub mod settings;
 
 use diroxide_core::{CommandId, Entry, JobId, JobRequest, Message};
 use diroxide_ops::JobReport;
-use diroxide_plugins::ask::{Answer, Question, TextDocument};
+use diroxide_plugins::ask::{Answer, Form, FormAnswer, Question, TextDocument};
 use diroxide_plugins::host::HostEvent;
 use diroxide_plugins::listers::ListerView;
 use diroxide_plugins::panels::{PanelChange, PanelChoice, PanelSnapshot};
@@ -83,6 +86,9 @@ pub enum Call {
     /// `ui/show_text`: a document to read; answered when it is shown, or
     /// when the owner closes it if the plugin waits.
     ShowText(Box<TextDocument>),
+    /// `ui/form`: several labeled fields in one dialog; answered with the
+    /// owner's values or Escape.
+    Form(Box<Form>),
     /// `panel/get`.
     Panel(PanelChoice),
     /// `panel/set`, made through the app's own commands.
@@ -107,6 +113,8 @@ pub enum Reply {
     Answer(Answer),
     /// A document was shown (or closed, when the plugin waits).
     Shown,
+    /// The owner's answer to a form: every field's value, or Escape.
+    Form(FormAnswer),
     /// A panel's state, or none.
     Panel(Option<Box<PanelSnapshot>>),
     /// What a call came to: a value, or the error the plugin receives.

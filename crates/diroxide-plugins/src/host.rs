@@ -109,8 +109,8 @@ pub trait HostServices: Send + Sync {
     /// shape): titled with [`Form::title`] (the plugin's name last), the
     /// focus on [`Form::focus`], Enter on the default button, Escape
     /// [`FormAnswer::Cancelled`]; a secret field is masked and its value
-    /// reaches no log. The default says this host has no forms (alpha 4's
-    /// contract step; the host-pieces lane serves it).
+    /// reaches no log. The default says this host has no forms; the app
+    /// serves it (alpha 4's host-pieces lane).
     fn form(&self, form: &Form) -> Result<FormAnswer, RpcError> {
         let _ = form;
         Err(RpcError::new(

@@ -749,7 +749,7 @@ pub const ALL: [Method; 66] = [
         A::Services,
         "always",
         "Asks several labeled fields in one accessible dialog.",
-        LATER,
+        NOW,
     ),
     method(
         UI_SHOW_TEXT,
@@ -1020,6 +1020,6 @@ mod tests {
         assert!(names.contains(&UI_ANNOUNCE));
         assert!(names.contains(&FS_COPY));
         assert!(!names.contains(&COMMAND_RUN));
-        assert!(!names.contains(&UI_FORM), "ui/form is shape only");
+        assert!(names.contains(&UI_FORM), "ui/form is served since alpha 4");
     }
 }

@@ -34,7 +34,7 @@ use diroxide_config::{Paths, PluginSettings};
 use diroxide_core::{CommandId, Entry, JobId, JobRequest, Message};
 use diroxide_ops::JobReport;
 use diroxide_plugins::PluginError;
-use diroxide_plugins::ask::{Answer, Question, TextDocument};
+use diroxide_plugins::ask::{Answer, Form, FormAnswer, Question, TextDocument};
 use diroxide_plugins::host::{Host, HostServices, Launcher, PluginInfo, QUIT_BUDGET};
 use diroxide_plugins::listers::ListerView;
 use diroxide_plugins::live::CallOptions;
@@ -173,6 +173,16 @@ impl HostServices for AppServices {
         match self.call(Call::ShowText(Box::new(document.clone())), wait) {
             Some(Reply::Done(Err(error))) => Err(error),
             _ => Ok(()),
+        }
+    }
+
+    /// `ui/form`: the app's list of setting rows; the owner's thinking
+    /// time counts as idle, as a question's does. A form the app could not
+    /// answer is cancelled.
+    fn form(&self, form: &Form) -> Result<FormAnswer, RpcError> {
+        match self.call(Call::Form(Box::new(form.clone())), Wait::Owner) {
+            Some(Reply::Form(answer)) => Ok(answer),
+            _ => Ok(FormAnswer::Cancelled),
         }
     }
 
