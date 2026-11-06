@@ -9,26 +9,31 @@
 //!   of the order of facts ([`DetailGroup`](diroxide_core::details::DetailGroup))
 //!   and a private flag.
 //! - **A cell is never blank** ([`Cell`]): "reading", "not available",
-//!   "not computed", or "unreadable: REASON".
+//!   "not computed", "unreadable: REASON" or "unavailable: plugin
+//!   stopped".
 //! - **A reader** ([`Reader`]) says what it takes and its cost class
 //!   ([`Cost`]): fast, background or on demand, Total Commander's three
 //!   loading modes. The preview crate's image and ffprobe readers
 //!   implement the trait, so this crate never depends on the preview
 //!   crate.
 //! - **The pipeline** ([`Pipeline`]) runs the readers that take a file
-//!   in one cost class.
+//!   in one cost class, each under the guard ([`guard`]: a thread, a
+//!   catch, a deadline and a byte limit), and cleans every string like a
+//!   file name ([`clean`]).
 //!
-//! The contract step of alpha 4 (P4) fixes these types with naive bodies:
-//! the pipeline runs its readers inline, where the metadata lane (commit
-//! 45) runs each under the guard (a thread, a catch, a deadline) with
-//! every string cleaned like a file name. Nothing is cached on disk in
-//! this alpha (decision 6); the cache is in memory.
+//! Nothing is cached on disk in this alpha (decision 6); a cache, when
+//! the columns keep one, is in memory.
 
+pub mod clean;
 pub mod field;
 pub mod fuzzing;
+pub mod guard;
 pub mod pipeline;
 pub mod reader;
+pub mod readers;
+pub mod words;
 
 pub use field::{Cell, Field};
-pub use pipeline::Pipeline;
+pub use guard::{Bounded, Guard};
+pub use pipeline::{Outcome, Pipeline};
 pub use reader::{Cost, MetaError, ReadLimits, ReadRequest, Reader};

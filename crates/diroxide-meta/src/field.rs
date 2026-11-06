@@ -69,19 +69,62 @@ pub enum Cell {
     NotComputed,
     /// It could not be read, with why.
     Unreadable(String),
+    /// What gives it cannot run now, with why: a plugin column whose
+    /// plugin stopped says "unavailable: plugin stopped".
+    Unavailable(String),
 }
 
 impl Cell {
     /// The cell's words: the value, "reading", "not available", "not
-    /// computed", or "unreadable: REASON".
+    /// computed", "unreadable: REASON" or "unavailable: REASON". A value
+    /// that is empty says "not available", so a cell is never blank.
     pub fn words(&self) -> String {
         match self {
+            Cell::Value(value) if value.trim().is_empty() => "not available".to_owned(),
             Cell::Value(value) => value.clone(),
             Cell::Reading => "reading".to_owned(),
             Cell::NotAvailable => "not available".to_owned(),
             Cell::NotComputed => "not computed".to_owned(),
             Cell::Unreadable(why) => format!("unreadable: {why}"),
+            Cell::Unavailable(why) => format!("unavailable: {why}"),
         }
+    }
+
+    /// The cell of a reader that failed: "unreadable: REASON"; a reader
+    /// refused because the guard was busy is still "reading", since the
+    /// caller asks again.
+    pub fn from_error(error: &crate::MetaError) -> Self {
+        match error {
+            crate::MetaError::Busy => Cell::Reading,
+            _ => Cell::Unreadable(error.to_string()),
+        }
+    }
+
+    /// The cell of a plugin column whose plugin stopped.
+    pub fn plugin_stopped() -> Self {
+        Cell::Unavailable("plugin stopped".to_owned())
+    }
+}
+
+impl Field {
+    /// The same field with its label and value cleaned like a file name
+    /// ([`crate::clean::clean_text`]) and its key made plain when it is
+    /// not; an empty value says "none".
+    pub fn cleaned(mut self) -> Self {
+        if !crate::clean::is_plain_key(&self.key) {
+            self.key = self
+                .key
+                .split('.')
+                .map(crate::clean::plain_key)
+                .collect::<Vec<_>>()
+                .join(".");
+        }
+        self.label = crate::clean::clean_text(&self.label);
+        self.value = crate::clean::clean_text(&self.value);
+        if self.value.is_empty() {
+            self.value = "none".to_owned();
+        }
+        self
     }
 }
 
@@ -121,5 +164,46 @@ mod tests {
             Cell::Unreadable("too large".to_owned()).words(),
             "unreadable: too large"
         );
+    }
+
+    #[test]
+    fn the_cells_words_fit_a_line_with_the_state_first() {
+        let lines = [
+            Cell::plugin_stopped().words(),
+            Cell::from_error(&crate::MetaError::ReaderFailed).words(),
+            Cell::from_error(&crate::MetaError::TooSlow).words(),
+            Cell::from_error(&crate::MetaError::TooLarge).words(),
+            Cell::from_error(&crate::MetaError::Busy).words(),
+            Cell::Value("  ".to_owned()).words(),
+        ];
+        assert_eq!(
+            lines,
+            [
+                "unavailable: plugin stopped",
+                "unreadable: the reader failed",
+                "unreadable: it took too long to read",
+                "unreadable: it is too large to read here",
+                "reading",
+                "not available",
+            ]
+        );
+        for line in &lines {
+            assert!(line.chars().count() <= 40, "{line}");
+        }
+    }
+
+    #[test]
+    fn a_cleaned_field_is_one_plain_line() {
+        let field = Field::new(
+            "ExifTool.XMP-dc.Creator",
+            "Creator\n",
+            "Ada\u{202E} Example\r\n",
+            DetailGroup::Source,
+        )
+        .cleaned();
+        assert_eq!(field.key, "exiftool.xmp-dc.creator");
+        assert_eq!(field.line(), "Creator: Ada? Example");
+        let empty = Field::new("doc.title", "Title", "\0\0", DetailGroup::Content).cleaned();
+        assert_eq!(empty.value, "none");
     }
 }
