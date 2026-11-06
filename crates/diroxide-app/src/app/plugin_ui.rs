@@ -21,6 +21,9 @@
 //! - Escape closes a plugin's dialog with "cancelled" for the plugin and
 //!   returns the focus; in a running command it cancels the job. In a
 //!   form's field it goes back to the form, the field as it was.
+//! - A plugin's two documents (`ui/show_diff`, the same lane) open the
+//!   compare screens, compared on the plugin's worker under the app's
+//!   compare options (`comparing`).
 //! - A plugin's form (`ui/form`, alpha 4's host-pieces lane) is a list of
 //!   setting rows in the Pack dialog's shape ([`crate::plugins::form`]):
 //!   Enter on a field changes it in the app's own prompt, list or masked
@@ -1574,7 +1577,11 @@ impl App {
     fn plugin_call(&mut self, call: CallId, plugin: String, request: Call) -> Vec<Effect> {
         let opens_dialog = matches!(
             request,
-            Call::Ask(_) | Call::ShowText(_) | Call::Form(_) | Call::OpenLister(_)
+            Call::Ask(_)
+                | Call::ShowText(_)
+                | Call::Form(_)
+                | Call::ShowDiff(_)
+                | Call::OpenLister(_)
         );
         if opens_dialog && self.plugin_dialog_blocked() {
             self.plugins.queue.push_back((call, plugin, request));
@@ -1596,6 +1603,16 @@ impl App {
             }
             Call::ShowText(document) => self.show_document(call, &document),
             Call::Form(form) => self.open_form(call, &plugin, *form),
+            Call::CompareOptions => {
+                let options = super::comparing::file_options(&self.settings);
+                self.reply(call, Reply::CompareOptions(options));
+                Vec::new()
+            }
+            Call::ShowDiff(shown) => {
+                let effects = self.show_documents(*shown);
+                self.reply(call, Reply::Shown);
+                effects
+            }
             Call::Panel(which) => {
                 let snapshot = self.snapshot(which);
                 self.reply(call, Reply::Panel(Some(Box::new(snapshot))));

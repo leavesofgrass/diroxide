@@ -127,7 +127,11 @@ pub fn page() -> String {
          hidden\"); a multiline field answers its lines joined by line feeds, and Escape answers \
          `{\"cancelled\": true}`.\n\
          - For `ui/show_diff`, the app's side is `HostServices::show_diff`, two documents in the \
-         compare screens. Shape only until the host-pieces lane serves it.\n\
+         compare screens. Served since alpha 4: the same screens as two files, in the same \
+         order (the verdict and counts, the direction, what was ignored, the files' facts, the \
+         change list, one change in full, the unified view, Swap), named by the two documents' \
+         titles, the view's title said last; a text with a NUL or many control characters is \
+         compared byte by byte; a document has no place, so the viewer does not open on it.\n\
          - For `place/describe`, the app calls `Host::describe_place` off the input thread for a \
          folder a `[[place_info]]` matches; the answer's `text` is the title line's words.\n\
          - For `column/format`, file panels call `Host::plugin_columns` for the columns enabled \

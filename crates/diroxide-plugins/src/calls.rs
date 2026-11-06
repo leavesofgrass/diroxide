@@ -113,6 +113,7 @@ impl Calls {
             methods::UI_ASK => self.ask(&request.params),
             methods::UI_FORM => self.form(&request.params),
             methods::UI_SHOW_TEXT => self.show_text(&request.params),
+            methods::UI_SHOW_DIFF => self.show_diff(&request.params),
             methods::PANEL_GET => self.panel_get(&request.params),
             methods::PANEL_SET => self.panel_set(&request.params),
             methods::COMMAND_EXECUTE => self.execute(&request.params),
@@ -361,6 +362,17 @@ impl Calls {
             None => crate::ask::FormAnswer::Cancelled,
         };
         Ok(answer.to_value())
+    }
+
+    /// `ui/show_diff`: two documents in the compare screens, answered when
+    /// they are shown.
+    fn show_diff(&self, params: &Params) -> Outcome {
+        let documents = crate::ask::read_diff(params, &self.name)?;
+        let services = self.services.as_ref().ok_or_else(|| {
+            RpcError::new(ErrorKind::Unsupported, "this host has no compare screens")
+        })?;
+        services.show_diff(&documents)?;
+        Ok(json!({"shown": true}))
     }
 
     /// `ui/show_text`: the viewer, waiting for its close when asked to.
@@ -1047,9 +1059,11 @@ pub(crate) mod tests {
     }
 
     /// Host services that answer every form with scripted values and keep
-    /// the forms they were shown (the host-pieces lane's `ui/form`).
+    /// the forms and documents they were shown (the host-pieces lane's
+    /// `ui/form` and `ui/show_diff`).
     struct FormServices {
         forms: Mutex<Vec<crate::ask::Form>>,
+        diffs: Mutex<Vec<crate::ask::DiffDocuments>>,
         answer: crate::ask::FormAnswer,
     }
 
@@ -1067,18 +1081,28 @@ pub(crate) mod tests {
                 .push(form.clone());
             Ok(self.answer.clone())
         }
+
+        fn show_diff(&self, documents: &crate::ask::DiffDocuments) -> Result<(), RpcError> {
+            self.diffs
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(documents.clone());
+            Ok(())
+        }
     }
 
     /// `ui/form` served (the host-pieces lane, R30's commit 21): every
     /// field kind reaches the app's dialog, attributed, with its focus;
     /// the owner's values go back by id; Escape is `cancelled`; a secret's
-    /// value is in the plugin's answer and in no log line.
+    /// value is in the plugin's answer and in no log line. `ui/show_diff`
+    /// (R30's commit 22) reaches the compare screens the same way.
     #[test]
     fn a_form_is_served_and_its_secret_reaches_no_log() {
         use crate::ask::{FieldValue, FormAnswer};
         let canary = "canary-7f3a-not-a-key";
         let services = Arc::new(FormServices {
             forms: Mutex::new(Vec::new()),
+            diffs: Mutex::new(Vec::new()),
             answer: FormAnswer::Submitted(vec![
                 (
                     "message".to_owned(),
@@ -1135,6 +1159,21 @@ pub(crate) mod tests {
             json!({"title": "x", "fields": [{"id": "a", "label": "A", "kind": "slider"}]}),
         );
         assert_eq!(wrong["error"]["code"], -32602);
+        // ui/show_diff reaches the compare screens, attributed.
+        let shown = call(
+            &host,
+            methods::UI_SHOW_DIFF,
+            json!({"title": "hello.txt", "old": {"title": "HEAD", "text": "a\n"},
+                "new": {"title": "working tree", "text": "b\n"}}),
+        );
+        assert_eq!(shown, json!({"shown": true}));
+        let diffs = services
+            .diffs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        assert_eq!(diffs[0].title, "hello.txt (Line counter)");
+        assert_eq!(diffs[0].old.text, "a\n");
         let log = host.log("line-counter").unwrap().tail().join("\n");
         assert!(!log.contains(canary), "{log}");
         host.shutdown_all(QUIT_BUDGET);
@@ -1174,11 +1213,22 @@ pub(crate) mod tests {
         let (host, _) = host_with(&services, "");
         let backwards = call(&host, methods::COMMAND_RUN, json!({}));
         assert_eq!(backwards["error"]["code"], -32601);
-        let diff = call(&host, methods::UI_SHOW_DIFF, json!({"title": "x"}));
+        let stage = call(&host, methods::FS_STAGE, json!({}));
         assert_eq!(
-            diff["error"]["message"],
-            "the host does not serve ui/show_diff yet"
+            stage["error"]["message"],
+            "the host does not serve fs/stage yet"
         );
+        // ui/show_diff is served (the host-pieces lane): a call with no
+        // documents is refused in words, and services with no compare
+        // screens say so.
+        let diff = call(&host, methods::UI_SHOW_DIFF, json!({"title": "x"}));
+        assert_eq!(diff["error"]["code"], -32602);
+        let diff = call(
+            &host,
+            methods::UI_SHOW_DIFF,
+            json!({"title": "x", "old": {"title": "a", "text": ""}, "new": {"title": "b", "text": ""}}),
+        );
+        assert_eq!(diff["error"]["message"], "this host has no compare screens");
         // The app's side has its final shape, and by default no form and
         // no compare screens.
         use crate::host::HostServices;

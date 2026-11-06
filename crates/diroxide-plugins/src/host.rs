@@ -121,8 +121,8 @@ pub trait HostServices: Send + Sync {
 
     /// `ui/show_diff`: two texts in the compare screens, the verdict
     /// first, with Swap, titled with [`DiffDocuments::title`]. The default
-    /// says this host has no compare screens (alpha 4's contract step; the
-    /// host-pieces lane serves it).
+    /// says this host has no compare screens; the app serves it (alpha 4's
+    /// host-pieces lane).
     fn show_diff(&self, documents: &DiffDocuments) -> Result<(), RpcError> {
         let _ = documents;
         Err(RpcError::new(

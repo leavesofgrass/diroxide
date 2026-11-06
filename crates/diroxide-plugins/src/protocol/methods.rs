@@ -767,7 +767,7 @@ pub const ALL: [Method; 66] = [
         A::Services,
         "always",
         "Compares two texts in the diff view.",
-        LATER,
+        NOW,
     ),
     method(
         PANEL_GET,
@@ -1021,5 +1021,6 @@ mod tests {
         assert!(names.contains(&FS_COPY));
         assert!(!names.contains(&COMMAND_RUN));
         assert!(names.contains(&UI_FORM), "ui/form is served since alpha 4");
+        assert!(names.contains(&UI_SHOW_DIFF), "and ui/show_diff");
     }
 }

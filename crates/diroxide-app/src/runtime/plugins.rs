@@ -34,7 +34,7 @@ use diroxide_config::{Paths, PluginSettings};
 use diroxide_core::{CommandId, Entry, JobId, JobRequest, Message};
 use diroxide_ops::JobReport;
 use diroxide_plugins::PluginError;
-use diroxide_plugins::ask::{Answer, Form, FormAnswer, Question, TextDocument};
+use diroxide_plugins::ask::{Answer, DiffDocuments, Form, FormAnswer, Question, TextDocument};
 use diroxide_plugins::host::{Host, HostServices, Launcher, PluginInfo, QUIT_BUDGET};
 use diroxide_plugins::listers::ListerView;
 use diroxide_plugins::live::CallOptions;
@@ -183,6 +183,27 @@ impl HostServices for AppServices {
         match self.call(Call::Form(Box::new(form.clone())), Wait::Owner) {
             Some(Reply::Form(answer)) => Ok(answer),
             _ => Ok(FormAnswer::Cancelled),
+        }
+    }
+
+    /// `ui/show_diff`: the app's compare options first, then the two
+    /// documents compared here, on the plugin's worker, never on the input
+    /// thread; answered when the compare screens show them.
+    fn show_diff(&self, documents: &DiffDocuments) -> Result<(), RpcError> {
+        let options = match self.call(Call::CompareOptions, Wait::App) {
+            Some(Reply::CompareOptions(options)) => options,
+            _ => {
+                return Err(RpcError::new(
+                    ErrorKind::Failed,
+                    "the compare screens did not answer",
+                ));
+            }
+        };
+        let shown = crate::plugins::diff::compare_documents(documents, &options)
+            .map_err(|why| RpcError::new(ErrorKind::Failed, why))?;
+        match self.call(Call::ShowDiff(Box::new(shown)), Wait::App) {
+            Some(Reply::Done(Err(error))) => Err(error),
+            _ => Ok(()),
         }
     }
 

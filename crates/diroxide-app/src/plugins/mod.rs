@@ -12,6 +12,8 @@
 //!   app's own dialogs, the plugin's name last in every title.
 //! - [`form`]: a plugin's form (`ui/form`) as a list of setting rows, one
 //!   row a field, its label first and its value after.
+//! - [`diff`]: a plugin's two documents (`ui/show_diff`) compared on the
+//!   plugin's worker for the compare screens.
 //! - [`lister`]: a plugin's lister of item rows, sorted and filtered by its
 //!   columns.
 //! - [`settings`] and [`log`]: a plugin's settings under its name, kept in
@@ -31,6 +33,7 @@
 
 pub mod ask;
 pub mod catalog;
+pub mod diff;
 pub mod form;
 pub mod lister;
 pub mod log;
@@ -89,6 +92,12 @@ pub enum Call {
     /// `ui/form`: several labeled fields in one dialog; answered with the
     /// owner's values or Escape.
     Form(Box<Form>),
+    /// `ui/show_diff`, first step: the app's compare options, so the
+    /// plugin's worker compares the two documents off the input thread.
+    CompareOptions,
+    /// `ui/show_diff`, second step: two documents compared, for the
+    /// compare screens; answered when they are shown.
+    ShowDiff(Box<diff::ShownDiff>),
     /// `panel/get`.
     Panel(PanelChoice),
     /// `panel/set`, made through the app's own commands.
@@ -115,6 +124,8 @@ pub enum Reply {
     Shown,
     /// The owner's answer to a form: every field's value, or Escape.
     Form(FormAnswer),
+    /// The app's compare options (`[compare]`).
+    CompareOptions(diroxide_diff::FileOptions),
     /// A panel's state, or none.
     Panel(Option<Box<PanelSnapshot>>),
     /// What a call came to: a value, or the error the plugin receives.

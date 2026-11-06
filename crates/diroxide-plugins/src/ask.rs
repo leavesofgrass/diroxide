@@ -26,10 +26,10 @@
 //! `ui/form` and `ui/show_diff` have their final shapes ([`Form`] with
 //! [`FormAnswer`], [`DiffDocuments`]) and the app's side
 //! ([`crate::HostServices::form`] and [`crate::HostServices::show_diff`])
-//! since alpha 4's contract step. The host serves `ui/form` since alpha
-//! 4's host-pieces lane: the app shows the form as a list of setting rows
-//! and answers each field by its id; `ui/show_diff` is answered "not
-//! served" until that lane serves it too.
+//! since alpha 4's contract step. The host serves both since alpha 4's
+//! host-pieces lane: the app shows a form as a list of setting rows and
+//! answers each field by its id, and two documents in its compare
+//! screens.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -875,8 +875,7 @@ pub struct Form {
     pub default_button: Option<String>,
 }
 
-/// Two texts for the diff view (`ui/show_diff`, shape only in this
-/// alpha).
+/// Two texts for the compare screens (`ui/show_diff`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiffDocuments {
     /// The view's title.

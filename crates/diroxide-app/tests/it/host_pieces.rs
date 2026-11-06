@@ -1,6 +1,7 @@
 //! The host pieces R29 found shape-only, served and called (alpha 4, lane
-//! HP, R30's commits 21 to 23): a plugin's form as a list of setting rows,
-//! driven through the app with the in-process test plugin of `plugins`.
+//! HP, R30's commits 21 to 23): a plugin's form as a list of setting rows
+//! and its two documents in the compare screens, driven through the app
+//! with the in-process test plugin of `plugins`.
 
 use diroxide_app::plugins::{Call, CallId, PluginEvent};
 use diroxide_app::{AppEvent, Dialog};
@@ -283,4 +284,89 @@ fn escape_cancels_a_form_and_a_form_waits_its_turn() {
         "it opens when the confirmation closes"
     );
     s.key("escape");
+}
+
+/// R30's commit 22: a fake plugin shows a diff of two texts, and the
+/// screens read in R18's order: the verdict and counts, the direction,
+/// the change list, one change in full, the unified view, Swap; the view
+/// key says there is no file. Two binary documents are compared byte by
+/// byte.
+#[test]
+fn a_plugins_diff_reads_in_r18s_order() {
+    let w = world(MANIFEST);
+    enable(&w.paths);
+    let diff = json!({"title": "hello.txt",
+        "old": {"title": "HEAD", "text": "one\ntwo\nthree\n"},
+        "new": {"title": "working tree", "text": "one\n2\nthree\nfour\n"}});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("ask", Act::Call("ui/show_diff", diff))]),
+    );
+    let said = s.run_command(Command::new(id("line-counter.ask")));
+    // The verdict and counts, the direction, the view's title last.
+    let report = "2 changes between HEAD and working tree. Changed 1, added 1. \
+                  From HEAD to working tree. hello.txt (Line counter).";
+    assert!(said.contains(&report.to_owned()), "{said:?}");
+    assert!(
+        said.contains(&r#"Host said {"shown":true}. By Line counter."#.to_owned()),
+        "answered when shown: {said:?}"
+    );
+    let verdict = s.dialog_title().unwrap();
+    assert_eq!(verdict, "2 changes between HEAD and working tree");
+    assert!(verdict.chars().count() <= 40);
+    // The change list, one row a change.
+    assert_eq!(
+        rows(&s),
+        ["Changed line 2, was: two, now: 2", "Added line 4, four"]
+    );
+    // One change in full.
+    assert_eq!(
+        s.key("enter"),
+        [
+            "Change 1 of 2, line 2 before, line 2 after. Before, line 2: two. After, line 2: 2. Differs: two became 2."
+        ]
+    );
+    s.key("escape");
+    // The unified view, words before signs.
+    assert_eq!(
+        s.key("u"),
+        ["Unified view, working tree, Same 1: one, 1 of 7"]
+    );
+    assert_eq!(
+        rows(&s),
+        [
+            "Same 1: one",
+            "Change 1 of 2, line 2 before, line 2 after",
+            "Removed 2: two",
+            "Added 2: 2",
+            "Same 3: three",
+            "Change 2 of 2, none before, line 4 after",
+            "Added 4: four"
+        ]
+    );
+    s.key("escape");
+    // Swap turns the direction around and says so.
+    assert_eq!(s.key("s"), ["Swapped. From working tree to HEAD."]);
+    assert_eq!(
+        rows(&s),
+        ["Changed line 2, was: 2, now: two", "Removed line 4, four"]
+    );
+    // A document has no place: the view key says so.
+    assert_eq!(s.key("f3"), ["No file to view: hello.txt (Line counter)"]);
+    s.key("escape");
+    assert!(s.dialog().is_none());
+
+    // Two binary documents: byte by byte, the verdict first.
+    let binary = json!({"title": "logo.png",
+        "old": {"title": "HEAD", "text": "PNG\u{0}\u{0}\u{1}abc"},
+        "new": {"title": "working tree", "text": "PNG\u{0}\u{0}\u{1}abd"}});
+    let mut s = session(
+        &w,
+        TestLauncher::with(&[("ask", Act::Call("ui/show_diff", binary))]),
+    );
+    let said = s.run_command(Command::new(id("line-counter.ask")));
+    let report = "Binary, 1 byte differs: HEAD and working tree. Both 9 bytes; 1 byte \
+                  differs in 1 run. First difference at byte 8. logo.png (Line counter).";
+    assert!(said.contains(&report.to_owned()), "{said:?}");
+    assert_eq!(rows(&s), ["Byte 8 differs"]);
 }
