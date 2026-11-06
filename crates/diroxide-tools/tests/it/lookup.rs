@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use diroxide_config::{ToolOverride, ToolsConfig};
-use diroxide_tools::{Bases, Location, ToolRegistry, ToolStatus};
+use diroxide_tools::{Bases, ToolRegistry, ToolStatus};
 
 /// Writes a fake tool `name` into `folder` that prints `out` on standard
 /// output and `err` on standard error, and exits with `code`. Returns its
@@ -265,6 +265,8 @@ fn a_silent_version_command_is_said_in_words() {
 #[cfg(windows)]
 #[test]
 fn pathext_comes_before_the_bare_name() {
+    use diroxide_tools::Location;
+
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("path");
     fake(&path, "pandoc", &["pandoc 3.13"], &[], 0);
