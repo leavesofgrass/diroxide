@@ -24,11 +24,16 @@ mkdir -p "$out"
 work="$(mktemp -d /tmp/diro-disk-images-XXXXXX)"
 src="$work/src"
 
-# The tree every image holds, as far as its file system allows.
+# The tree every image holds, as far as its file system allows. Every
+# file made here has a plain name; the one whose name inside the images
+# has spaces ("A Long File Name.txt") is made as long.txt beside the tree
+# and named in each image by the tool that writes it, so no file with a
+# space in its name is ever made, even in this throwaway folder.
 mkdir -p "$src/docs" "$src/deep/a/b/c/d/e/f/g/h/i/j"
 printf 'Hello, world.' > "$src/hello.txt"
 printf 'inside' > "$src/docs/inner.txt"
-printf 'a long name' > "$src/A Long File Name.txt"
+printf 'a long name' > "$work/long.txt"
+spaced='A Long File Name.txt'
 printf 'deep down' > "$src/deep/a/b/c/d/e/f/g/h/i/j/deep.txt"
 ln -s hello.txt "$src/link"
 touch -d '2026-01-02 03:04:05 UTC' "$src/hello.txt" "$src/docs/inner.txt"
@@ -46,7 +51,7 @@ pack() {
 truncate -s 2M "$work/ntfs.img"
 mkntfs -F -Q -q -s 512 -L ntfsvol "$work/ntfs.img"
 ntfscp -q "$work/ntfs.img" "$src/hello.txt" hello.txt
-ntfscp -q "$work/ntfs.img" "$src/A Long File Name.txt" "A Long File Name.txt"
+ntfscp -q "$work/ntfs.img" "$work/long.txt" "$spaced"
 ntfscp -q -N secret "$work/ntfs.img" "$src/docs/inner.txt" hello.txt
 # The $UpCase table is 128 KiB that no compressor shrinks (each entry
 # differs from the next) and that the plugin's reader never reads, so it
@@ -66,11 +71,12 @@ pack ntfs.img
 
 # squashfs, with the codec the plugin reads itself and one it gives to
 # 7-Zip.
-mksquashfs "$src" "$work/gzip.sqfs" -comp gzip -noappend -all-root -quiet
+long="\"$spaced\" f 644 0 0 cat $work/long.txt"
+mksquashfs "$src" "$work/gzip.sqfs" -comp gzip -noappend -all-root -quiet -p "$long"
 pack gzip.sqfs
-mksquashfs "$src" "$work/xz.sqfs" -comp xz -noappend -all-root -quiet
+mksquashfs "$src" "$work/xz.sqfs" -comp xz -noappend -all-root -quiet -p "$long"
 pack xz.sqfs
-mksquashfs "$src" "$work/lz4.sqfs" -comp lz4 -noappend -all-root -quiet
+mksquashfs "$src" "$work/lz4.sqfs" -comp lz4 -noappend -all-root -quiet -p "$long"
 pack lz4.sqfs
 # A member larger than one answer of the host's (7 MB of repeated text),
 # which 7-Zip must unpack into the spool rather than pipe.
@@ -86,7 +92,8 @@ pack big-xz.sqfs
 # An ISO from xorriso with Rock Ridge and Joliet: a long name, a link,
 # and a folder deeper than ISO 9660's eight levels, which Rock Ridge
 # relocates.
-xorriso -as mkisofs -quiet -R -J -V HARDISO -o "$work/xorriso.iso" "$src"
+xorriso -as mkisofs -quiet -R -J -V HARDISO -graft-points -o "$work/xorriso.iso" \
+    /="$src" "$spaced=$work/long.txt"
 pack xorriso.iso
 
 # FAT made by mkfs.fat and mtools, then the same disk in each container
