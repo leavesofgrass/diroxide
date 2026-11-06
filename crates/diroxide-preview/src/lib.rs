@@ -17,10 +17,13 @@
 //! validity lines. The quick view's [`doc`] modules (W2e): the row-based
 //! document view the quick view moves through, and its readers. Alpha 4
 //! (R30 commits 33 to 40) adds the typed previewers in front of the text
-//! previewer: [`images`], pictures in words from their headers alone.
+//! previewer: [`images`], pictures in words from their headers alone;
+//! [`documents`], every format the quick view's [`doc`] readers read
+//! (Markdown, carta's formats, SVG drawings), as rows.
 
 pub mod classes;
 pub mod doc;
+pub mod documents;
 pub mod encoding;
 pub mod fuzzing;
 pub mod hex;
@@ -58,6 +61,9 @@ pub enum PreviewKind {
     Details,
     /// A picture in words: the sentence, then its rows ([`images`]).
     Image,
+    /// A document read into rows ([`documents`]); the view travels in
+    /// [`Preview::document`].
+    Document,
 }
 
 /// A preview: a details line, then lines to read.
@@ -80,6 +86,11 @@ pub struct Preview {
     /// with no runs ([`Preview::runs_of`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<Vec<ClassRun>>,
+    /// The document's rows with their outline, tables and links, for a
+    /// document preview, so the quick view moves by heading and table
+    /// (alpha 4); `None` for every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<doc::DocView>,
 }
 
 impl Preview {
@@ -91,6 +102,7 @@ impl Preview {
             lines: Vec::new(),
             details: Vec::new(),
             runs: Vec::new(),
+            document: None,
         }
     }
 
@@ -318,6 +330,7 @@ pub(crate) fn details_preview(
         lines: details.iter().map(DetailRow::spoken).collect(),
         details,
         runs: Vec::new(),
+        document: None,
     }
 }
 
@@ -372,6 +385,7 @@ impl Previewer for TextPreviewer {
                 .collect(),
             details: detail_rows(&request.entry, file_type),
             runs: Vec::new(),
+            document: None,
         })
     }
 }
@@ -405,6 +419,7 @@ impl Previewer for HexPreviewer {
             lines,
             details: detail_rows(&request.entry, file_type),
             runs: Vec::new(),
+            document: None,
         })
     }
 }
@@ -421,6 +436,7 @@ impl Previews {
         Self {
             previewers: vec![
                 Box::new(images::ImagePreviewer::default()),
+                Box::new(documents::DocPreviewer::default()),
                 Box::new(TextPreviewer),
                 Box::new(HexPreviewer),
             ],

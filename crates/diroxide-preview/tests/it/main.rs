@@ -5,6 +5,7 @@
 
 mod carta;
 mod carta_paths;
+mod documents;
 mod encoding;
 mod images;
 mod markdown;

@@ -1800,6 +1800,7 @@ dependencies = [
  "png",
  "proptest",
  "pulldown-cmark",
+ "roxmltree 0.21.2",
  "scraper",
  "serde",
  "serde_json",

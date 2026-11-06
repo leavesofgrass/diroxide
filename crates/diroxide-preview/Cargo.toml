@@ -26,6 +26,9 @@ image.workspace = true
 kamadak-exif.workspace = true
 png.workspace = true
 pulldown-cmark.workspace = true
+# SVG drawings read as SVG-AAM exposes them (alpha 4, R30 commit 34),
+# behind the nesting cut carried from textweaver's xmldepth.
+roxmltree.workspace = true
 # carta's HTML fragments read into the quick view's rows (path A, W2e).
 scraper.workspace = true
 serde.workspace = true

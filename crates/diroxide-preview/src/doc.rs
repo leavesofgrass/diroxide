@@ -33,11 +33,13 @@
 //! docs, to docs/index.md".
 //!
 //! The readers ([`read`]): Markdown ([`markdown`]), carta's five formats
-//! ([`carta`], through the HTML-fragment reader [`html`]), and plain text
-//! and code ([`text`]), with bytes that are not text refused to hex. A
-//! reader takes bytes and a name, never a path, so it cannot read another
-//! file; Markdown and carta run under the [`guard`], on a thread with an
-//! 8 MiB stack, with a catch and a deadline.
+//! ([`carta`], through the HTML-fragment reader [`html`]), SVG drawings
+//! ([`svg`], alpha 4), and plain text and code ([`text`]), with bytes that
+//! are not text refused to hex. A reader takes bytes and a name, never a
+//! path, so it cannot read another file; every reader but plain text runs
+//! under the [`guard`], on a thread with an 8 MiB stack, with a catch and
+//! a deadline. An XML part's nesting is cut before it is parsed
+//! ([`xmldepth`]).
 
 mod build;
 pub mod callout;
@@ -45,15 +47,19 @@ pub mod carta;
 pub mod guard;
 pub mod html;
 pub mod markdown;
+pub mod svg;
 #[cfg(test)]
 mod tests;
 pub mod text;
+pub mod xmldepth;
 
 use std::ops::Range;
 
 use diroxide_core::Explain;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use diroxide_filetype::FileType;
 
 use crate::classes::ClassRun;
 use crate::encoding::{binary_kind, decode};
@@ -101,6 +107,8 @@ pub enum Reader {
     Markdown,
     /// carta, in one of its formats.
     Carta(CartaFormat),
+    /// An SVG drawing (alpha 4).
+    Svg,
     /// Plain text and code, or hex for bytes that are not text.
     Text,
 }
@@ -108,12 +116,31 @@ pub enum Reader {
 impl Reader {
     /// The reader a file name says, by its extension.
     pub fn for_name(name: &str) -> Self {
+        let ext = name
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .unwrap_or_default();
         if markdown::is_markdown(name) {
             Reader::Markdown
         } else if let Some(format) = CartaFormat::from_name(name) {
             Reader::Carta(format)
+        } else if ext == "svg" {
+            Reader::Svg
         } else {
             Reader::Text
+        }
+    }
+
+    /// The reader a file's checked type says, by its id, else its name's
+    /// extension ([`Reader::for_name`]): the type speaks first, so a
+    /// drawing named `.xml` that was checked as SVG reads as a drawing.
+    pub fn for_type(file_type: Option<&FileType>, name: &str) -> Self {
+        match file_type.map(|t| t.id.as_str()) {
+            Some("markdown") => Reader::Markdown,
+            Some("org") => Reader::Carta(CartaFormat::Org),
+            Some("rst") => Reader::Carta(CartaFormat::Rst),
+            Some("svg") => Reader::Svg,
+            _ => Self::for_name(name),
         }
     }
 }
@@ -141,14 +168,27 @@ impl Default for ReadOptions {
 /// that are not text as hex, Markdown and carta's formats under the
 /// guard, anything else as plain text or code.
 pub fn read(name: &str, bytes: Vec<u8>, options: &ReadOptions) -> Result<DocView, DocError> {
+    read_as(Reader::for_name(name), name, bytes, options)
+}
+
+/// Reads a file's bytes into a view by a reader chosen by the caller, as
+/// [`read`] does: the typed previewers choose by the file's checked type
+/// ([`Reader::for_type`]).
+pub fn read_as(
+    reader: Reader,
+    name: &str,
+    bytes: Vec<u8>,
+    options: &ReadOptions,
+) -> Result<DocView, DocError> {
     if binary_kind(&bytes).is_some() {
         return Ok(text::read_hex(&bytes, options.hex_row));
     }
-    match Reader::for_name(name) {
+    match reader {
         Reader::Markdown => options
             .guard
             .run(move || markdown::read(&decode(&bytes, None).text)),
         Reader::Carta(format) => options.guard.run(move || carta::read(format, &bytes))?,
+        Reader::Svg => options.guard.run(move || svg::read(&bytes))?,
         Reader::Text => Ok(text::read(name, &bytes, options.hex_row)),
     }
 }
@@ -160,11 +200,22 @@ pub fn read_or_text(
     bytes: Vec<u8>,
     options: &ReadOptions,
 ) -> (DocView, Option<DocError>) {
-    let fallback = match Reader::for_name(name) {
+    read_as_or_text(Reader::for_name(name), name, bytes, options)
+}
+
+/// Reads as [`read_as`] does, and when the reader could not, the bytes as
+/// plain text, with why.
+pub fn read_as_or_text(
+    reader: Reader,
+    name: &str,
+    bytes: Vec<u8>,
+    options: &ReadOptions,
+) -> (DocView, Option<DocError>) {
+    let fallback = match reader {
         Reader::Text => None,
         _ => Some(bytes.clone()),
     };
-    match read(name, bytes, options) {
+    match read_as(reader, name, bytes, options) {
         Ok(view) => (view, None),
         Err(error) => {
             let bytes = fallback.unwrap_or_default();
@@ -191,6 +242,9 @@ pub enum DocKind {
     /// A format carta reads, by its name as said: "Org",
     /// "reStructuredText".
     Carta(String),
+    /// A format one of alpha 4's typed readers reads, by its name as said:
+    /// "SVG".
+    Format(String),
     /// Code in a language on the highlight allow-list.
     Code(Language),
     /// Plain text.
@@ -205,7 +259,7 @@ impl DocKind {
     /// counts alone.
     pub fn word(&self) -> Option<&str> {
         match self {
-            DocKind::Carta(name) => Some(name),
+            DocKind::Carta(name) | DocKind::Format(name) => Some(name),
             DocKind::Code(language) => Some(language.name()),
             DocKind::Hex => Some("binary"),
             DocKind::Document | DocKind::Markdown | DocKind::Text => None,
