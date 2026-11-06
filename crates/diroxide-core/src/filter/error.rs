@@ -167,6 +167,17 @@ pub enum Problem {
         /// The nearest group, when one is close.
         nearest: Option<&'static str>,
     },
+    /// A group name that is none of the groups the filter was read with
+    /// ([`super::Filter::parse_with_groups`]): the built-in ones and the
+    /// owner's own from `filetypes.toml` (alpha 4).
+    UnknownGroupOf {
+        /// The word.
+        word: String,
+        /// The nearest group, when one is close.
+        nearest: Option<String>,
+        /// The groups there are, in their list's order.
+        groups: Vec<String>,
+    },
     /// `state` with anything but selected.
     StateIsSelected,
     /// A depth test in a one-folder panel.
@@ -216,7 +227,9 @@ impl Problem {
             Problem::CommaNotHere => "comma not allowed here".to_owned(),
             Problem::CaseNeedsText => "case works on text".to_owned(),
             Problem::UnknownKind(word) => format!("unknown kind '{word}'"),
-            Problem::UnknownGroup { word, .. } => format!("unknown group '{word}'"),
+            Problem::UnknownGroup { word, .. } | Problem::UnknownGroupOf { word, .. } => {
+                format!("unknown group '{word}'")
+            }
             Problem::StateIsSelected => "state means selected".to_owned(),
             Problem::DepthInPanel => "depth works in searches".to_owned(),
             Problem::SignNeedsField(sign) => format!("{sign} needs a field"),
@@ -274,6 +287,12 @@ impl Problem {
             Problem::CommaNotHere => "Commas join names, extensions and labels; use or.".to_owned(),
             Problem::CaseNeedsText => "Put case before a name or content test.".to_owned(),
             Problem::UnknownKind(_) => KINDS_SENTENCE.to_owned(),
+            Problem::UnknownGroupOf {
+                nearest, groups, ..
+            } => match nearest {
+                Some(group) => format!("Did you mean {group}?"),
+                None => format!("Groups: {}.", groups.join(", ")),
+            },
             Problem::UnknownGroup { nearest, .. } => match nearest {
                 Some(group) => format!("Did you mean {group}?"),
                 None => {

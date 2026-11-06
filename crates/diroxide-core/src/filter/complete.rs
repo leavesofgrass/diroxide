@@ -63,6 +63,10 @@ pub struct CompletionContext<'a> {
     pub labels: &'a [String],
     /// The detected types' short names, such as PDF.
     pub types: &'a [String],
+    /// The groups `group:` offers, by id, the owner's own from
+    /// `filetypes.toml` among them (alpha 4); empty offers the seven
+    /// built-in groups.
+    pub groups: &'a [String],
 }
 
 /// Characters that end the word being completed, besides spaces.
@@ -155,9 +159,14 @@ fn candidates(expected: &[Expected], context: &CompletionContext<'_>) -> Vec<Can
                     }
                 }
                 _ => match field {
-                    Field::Group => {
+                    Field::Group if context.groups.is_empty() => {
                         for group in GROUPS {
                             out.push(Candidate::new(group.name, "group"));
+                        }
+                    }
+                    Field::Group => {
+                        for group in context.groups {
+                            out.push(Candidate::new(insertable(group), "group"));
                         }
                     }
                     Field::Type => {
@@ -339,6 +348,7 @@ mod tests {
         let context = CompletionContext {
             labels: &labels,
             types: &types,
+            groups: &[],
         };
         complete(
             text,
@@ -429,6 +439,7 @@ mod tests {
         let context = CompletionContext {
             labels: &labels,
             types: &[],
+            groups: &[],
         };
         let found = complete("siz and hidden", 3, &FilterOptions::default(), &context);
         assert_eq!(texts(&found), ["size"]);

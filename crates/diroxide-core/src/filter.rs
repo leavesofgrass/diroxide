@@ -121,9 +121,34 @@ impl Filter {
 
     /// Reads a filter with the owner's settings.
     pub fn parse_with(text: &str, options: &FilterOptions) -> Result<Self, FilterError> {
+        Self::read(text, options, None)
+    }
+
+    /// Reads a filter with the owner's settings, `group is` taking these
+    /// groups by their ids, the owner's own from `filetypes.toml` among
+    /// them (alpha 4): a word that is none of them is refused with the
+    /// nearest one or the list ("Did you mean screenshots?"). Without a
+    /// list, only the seven built-in groups read.
+    pub fn parse_with_groups(
+        text: &str,
+        options: &FilterOptions,
+        groups: &[String],
+    ) -> Result<Self, FilterError> {
+        Self::read(text, options, Some(groups))
+    }
+
+    fn read(
+        text: &str,
+        options: &FilterOptions,
+        groups: Option<&[String]>,
+    ) -> Result<Self, FilterError> {
         let trimmed = text.trim();
         let lead = text.len() - text.trim_start().len();
-        let expr = parse::parse(trimmed, options).map_err(|error| shift(error, lead))?;
+        let expr = match groups {
+            Some(groups) => parse::parse_with_groups(trimmed, options, groups),
+            None => parse::parse(trimmed, options),
+        }
+        .map_err(|error| shift(error, lead))?;
         // Every pattern compiled while reading, so this cannot fail; a
         // failure is still said in words rather than a panic.
         let plan = eval::compile(&expr, true).map_err(|error| {

@@ -702,6 +702,7 @@ impl App {
         let context = CompletionContext {
             labels: &labels,
             types: &types,
+            groups: &[],
         };
         let found = diroxide_core::filter::complete(text, cursor, &self.filter_options(), &context);
         let candidates = found
