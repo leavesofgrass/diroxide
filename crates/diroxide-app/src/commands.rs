@@ -656,6 +656,8 @@ pub mod ids {
         OPEN_WITH = "file.open-with";
         /// The file groups, with how many files of each are here.
         GROUPS_LIST = "select.groups";
+        /// Read the viewed or previewed file in another encoding.
+        ENCODING = "viewer.encoding";
         /// Run user action 0 of the focused file's type.
         TYPE_USER_0 = "type.user0";
         /// Run user action 1 of the focused file's type.
@@ -701,7 +703,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 241] = [
+pub static CATALOG: [CommandInfo; 242] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1469,6 +1471,14 @@ pub static CATALOG: [CommandInfo; 241] = [
         Panel,
         &["alt+enter"],
         &["alt+enter"],
+    ),
+    command(
+        ids::ENCODING,
+        "Encoding",
+        "Reads the file in the viewer or the quick view in another encoding, chosen from a list by language, or by the automatic choice.",
+        Global,
+        &[],
+        &[],
     ),
     command(
         ids::OPEN_WITH,

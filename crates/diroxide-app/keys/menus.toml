@@ -347,6 +347,9 @@ bar = false
 command = "preview.leave"
 
 [[menu.item]]
+command = "viewer.encoding"
+
+[[menu.item]]
 command = "preview.next-heading"
 
 [[menu.item]]
@@ -444,6 +447,9 @@ command = "viewer.previous-match"
 
 [[menu.item]]
 command = "viewer.hex"
+
+[[menu.item]]
+command = "viewer.encoding"
 
 [[menu.item]]
 command = "viewer.byte"

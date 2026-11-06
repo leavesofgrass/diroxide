@@ -20,10 +20,14 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use diroxide_core::format::count;
-use diroxide_core::{Command, Effect, Entry, EntryKind, ListModel, ListRow, Message, Place, Side};
+use diroxide_core::{
+    Command, Effect, Entry, EntryKind, ListModel, ListRow, Message, Place, Redraw, Side,
+};
 use diroxide_filetype::retro_line;
+use diroxide_preview::encoding::{Choice, Chosen, ENCODING_LIST, listed};
 use diroxide_theme::ColorRole;
 use diroxide_vfs::OpenWithList;
 
@@ -47,6 +51,9 @@ const CHOOSE_ROW: &str = "choose";
 /// Open with's row for a listed program: its place in the list.
 const APP_ROW: &str = "app:";
 
+/// The encoding chooser's first row: the automatic choice.
+const AUTOMATIC_ROW: &str = "automatic";
+
 /// A theme file's table mapping groups to color roles.
 const GROUP_COLORS: &str = "group-colors";
 
@@ -64,7 +71,8 @@ impl App {
     /// The commands of this module; `None` for commands that are not
     /// theirs.
     pub(super) fn type_lists_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
-        if command.id != ids::GROUPS_LIST && command.id != ids::OPEN_WITH {
+        let ours = [ids::GROUPS_LIST, ids::OPEN_WITH, ids::ENCODING];
+        if !ours.contains(&command.id) {
             return None;
         }
         if !self.dialogs.is_empty() {
@@ -72,6 +80,8 @@ impl App {
         }
         Some(if command.id == ids::GROUPS_LIST {
             self.groups_list(self.active)
+        } else if command.id == ids::ENCODING {
+            self.encoding_list()
         } else {
             self.ask_open_with()
         })
@@ -258,6 +268,92 @@ impl App {
                 program: app.clone(),
                 mime,
             });
+        }
+        effects
+    }
+
+    /// The encoding chooser (R30 commit 32): in the viewer, or for the
+    /// quick view's file. "Automatic" first with what it found ("Automatic:
+    /// UTF-8 (byte-order mark)"), then the encodings by language
+    /// ("Western European (Windows-1252)", 31 cells), the focus on the one
+    /// in use.
+    fn encoding_list(&mut self) -> Vec<Effect> {
+        let (name, current, automatic, quick) = if let Some(viewing) = self.viewing.as_mut() {
+            let viewer = &mut viewing.viewer;
+            (
+                viewer.name().to_owned(),
+                viewer.encoding_choice(),
+                viewer.automatic_choice(),
+                false,
+            )
+        } else if let Some(shown) = self.quick_view().and_then(|v| v.shown()) {
+            let Some(automatic) = shown.automatic else {
+                let line = format!("No text shown: {} is not read as text", shown.name);
+                return vec![self.say(Message::info(line))];
+            };
+            let current = match shown.encoding {
+                Some(encoding) => Choice::by_you(encoding, b""),
+                None => automatic,
+            };
+            (shown.name.clone(), current, automatic, true)
+        } else {
+            let line = "Encoding works in the viewer and the quick view.";
+            return vec![self.say(Message::info(line))];
+        };
+        let mut rows = vec![ListRow::new(AUTOMATIC_ROW, automatic.automatic_line())];
+        for (label, words) in ENCODING_LIST {
+            let mut row = ListRow::new(label, words);
+            if label == "windows-1252" {
+                row.details.push("also ISO-8859-1".to_owned());
+            }
+            rows.push(row);
+        }
+        let mut list = ListModel::new(format!("Encoding of {name}")).with_rows(rows);
+        list.set_help("Up and Down choose, Enter reads the file in it, Escape closes.");
+        if current.chosen == Chosen::ByYou
+            && let Some((label, _)) = ENCODING_LIST
+                .iter()
+                .find(|(label, _)| listed(label) == Some(current.encoding))
+        {
+            list.focus_id(label);
+        }
+        self.open_dialog(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::ACCEPT),
+            },
+            Purpose::Organize(Box::new(super::organize::Wants::Types(
+                TypeWants::Encoding { quick },
+            ))),
+        )
+    }
+
+    /// Enter in the encoding chooser: the file read again in the chosen
+    /// encoding, or by the automatic choice.
+    pub(super) fn encoding_chosen(&mut self, quick: bool, row: &str) -> Vec<Effect> {
+        let mut effects = self.close_all();
+        let encoding = if row == AUTOMATIC_ROW {
+            None
+        } else {
+            let Some(encoding) = listed(row) else {
+                return effects;
+            };
+            Some(encoding)
+        };
+        let said = if quick {
+            match self.preview.view.as_mut().filter(|v| v.is_on()) {
+                Some(view) => view.choose_encoding(encoding, Instant::now()),
+                None => vec![Message::info("The quick view is off; nothing changed.")],
+            }
+        } else {
+            match self.viewer_mut() {
+                Some(viewer) => viewer.set_encoding(encoding),
+                None => vec![Message::info("The viewer closed; nothing changed.")],
+            }
+        };
+        effects.push(Effect::Redraw(Redraw::All));
+        for message in said {
+            effects.push(self.say(message));
         }
         effects
     }

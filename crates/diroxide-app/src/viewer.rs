@@ -44,7 +44,7 @@ use diroxide_config::{Highlighting, Settings, ViewerSettings};
 use diroxide_core::format::{count, grouped, human_size};
 use diroxide_core::names::display_name;
 use diroxide_core::{Explain, Message, Place};
-use diroxide_preview::encoding::{SNIFF_BYTES, binary_kind};
+use diroxide_preview::encoding::{Choice, Encoding, SNIFF_BYTES, binary_kind};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
@@ -275,6 +275,9 @@ pub struct Viewer {
     code: Option<code::CodeDoc>,
     job: Option<highlight::Job>,
     point: usize,
+    /// The encoding the owner chose for this file, for this session
+    /// (lane TA); `None` reads by the automatic choice.
+    chosen: Option<&'static Encoding>,
 }
 
 impl fmt::Debug for Viewer {
@@ -339,6 +342,7 @@ impl Viewer {
             code: None,
             job: None,
             point: 0,
+            chosen: None,
         };
         viewer.load()?;
         let said = viewer.opening_lines();
@@ -350,8 +354,11 @@ impl Viewer {
     fn load(&mut self) -> Result<(), ViewerError> {
         let head = self.source.chunk(0, SNIFF_BYTES)?.to_vec();
         let more_follows = self.source.total().is_none_or(|t| t > head.len() as u64);
-        self.form = TextForm::from_head(&head, more_follows);
-        self.binary = binary_kind(&head);
+        // An encoding the owner chose says the file is text in it.
+        (self.form, self.binary) = match self.chosen {
+            Some(encoding) => (TextForm::chosen(encoding, &head), None),
+            None => (TextForm::from_head(&head, more_follows), binary_kind(&head)),
+        };
         self.mode = if self.binary.is_some() {
             ViewerMode::Hex
         } else {
@@ -368,6 +375,54 @@ impl Viewer {
         };
         self.index.scan(&mut self.source, budget)?;
         Ok(())
+    }
+
+    /// The encoding the file is read in, and how it was chosen.
+    pub fn encoding_choice(&self) -> Choice {
+        self.form.choice
+    }
+
+    /// What the automatic choice finds for the file, whatever the owner
+    /// chose: the encoding chooser's first row.
+    pub fn automatic_choice(&mut self) -> Choice {
+        let more_follows = |len: usize, total: Option<u64>| total.is_none_or(|t| t > len as u64);
+        let total = self.source.total();
+        match self.source.chunk(0, SNIFF_BYTES) {
+            Ok(head) => {
+                let head = head.to_vec();
+                TextForm::from_head(&head, more_follows(head.len(), total)).choice
+            }
+            Err(_) => self.form.choice,
+        }
+    }
+
+    /// Reads the file again in an encoding the owner chose from the
+    /// encoding list, or by the automatic choice again (`None`), from its
+    /// first line: "Encoding Windows-1252, chosen by you" (36 cells), or
+    /// the automatic choice's own line. For this file and this session;
+    /// the next file is read by the automatic choice.
+    pub fn set_encoding(&mut self, encoding: Option<&'static Encoding>) -> Vec<Message> {
+        self.chosen = encoding;
+        self.cursor = RowPos::default();
+        self.top = RowPos::default();
+        self.hex_cursor = 0;
+        self.hex_top = 0;
+        if let Err(error) = self.load() {
+            return vec![error.message(&self.name)];
+        }
+        let line = match self.chosen {
+            Some(_) => self.form.choice.line().unwrap_or_default(),
+            None => {
+                let automatic = self.form.choice.automatic_line();
+                match self.binary_line() {
+                    Some(binary) => format!("{automatic}. {binary}"),
+                    None => automatic,
+                }
+            }
+        };
+        let mut said = vec![Message::info(line)];
+        said.extend(self.start_code());
+        said
     }
 
     /// What is said when the file opens: the title, then each policy line.

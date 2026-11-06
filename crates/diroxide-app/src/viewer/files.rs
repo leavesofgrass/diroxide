@@ -96,6 +96,8 @@ impl Viewer {
         self.place = place;
         self.source = source;
         self.follow = false;
+        // An encoding chosen was for the file before (lane TA).
+        self.chosen = None;
         self.cursor = RowPos::default();
         self.top = RowPos::default();
         self.hex_cursor = 0;

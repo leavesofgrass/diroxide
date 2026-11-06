@@ -69,6 +69,11 @@ pub(super) enum TypeWants {
         /// The file.
         place: Place,
     },
+    /// The encoding chooser, for the viewer or the quick view.
+    Encoding {
+        /// Whether it is for the quick view's file.
+        quick: bool,
+    },
     /// Open with: the file and the programs listed for it.
     OpenWith {
         /// The file.
@@ -375,6 +380,7 @@ impl App {
                 effects
             }
             TypeWants::OpenWith { place, list } => self.open_with_chosen(place, &list, &row),
+            TypeWants::Encoding { quick } => self.encoding_chosen(quick, &row),
         }
     }
 }

@@ -625,3 +625,131 @@ fn open_with_lists_the_programs_and_starts_one_through_the_runtime() {
     assert_eq!(said, ["Opening report.pdf"]);
     assert_eq!(recorder.opened.lock().unwrap().as_slice(), [file]);
 }
+
+/// A folder with a file in Windows-1251: "Privet" in Cyrillic letters,
+/// which the automatic choice reads as Windows-1252.
+fn cyrillic_folder(root: &std::path::Path) -> std::path::PathBuf {
+    let work = root.join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    std::fs::write(work.join("legacy.txt"), b"\xcf\xf0\xe8\xe2\xe5\xf2\nok\n").unwrap();
+    work
+}
+
+/// R30 commit 32: the encoding chooser in the viewer. "Automatic" first
+/// with what it found, then the encodings by language; a choice reads
+/// the file again in it and says so; the next time the list opens on
+/// the choice; Automatic goes back.
+#[test]
+fn the_viewer_reads_a_file_in_the_encoding_chosen() {
+    use crate::support::{Session, place, settings, temp};
+    let dir = temp();
+    let work = cyrillic_folder(dir.path());
+    let mut s = Session::start(
+        place(&work),
+        place(&work),
+        diroxide_vfs::Registry::with_local(),
+        None,
+        settings(),
+    );
+    s.focus("legacy.txt");
+    s.command(ids::VIEW);
+    let read = |s: &mut Session| s.app.viewer_mut().unwrap().line_text(0).unwrap();
+    assert_eq!(read(&mut s), "\u{cf}\u{f0}\u{e8}\u{e2}\u{e5}\u{f2}");
+    s.command(ids::ENCODING);
+    let (title, rows) = dialog_rows(&s.app);
+    assert_eq!(title, "Encoding of legacy.txt");
+    assert_eq!(rows[0], "Automatic: Windows-1252 (not UTF-8)");
+    assert_eq!(rows[4], "Western European (Windows-1252)");
+    assert!(rows.contains(&"Cyrillic (Windows-1251)".to_owned()));
+    for line in &rows {
+        assert!(line.chars().count() <= 40, "{line}");
+    }
+    let to = |s: &mut Session, id: &str| {
+        if let Some((_, Dialog::Choose { .. })) = s.app.dialog() {
+            let at = dialog_rows(&s.app).1.len();
+            for _ in 0..at {
+                let focused = match s.app.dialog() {
+                    Some((_, Dialog::Choose { list, .. })) => list.focused().unwrap().id.clone(),
+                    _ => String::new(),
+                };
+                if focused == id {
+                    break;
+                }
+                s.key("down");
+            }
+        }
+    };
+    to(&mut s, "windows-1251");
+    let said = s.key("enter");
+    assert_eq!(said, ["Encoding Windows-1251, chosen by you"]);
+    assert_eq!(read(&mut s), "\u{41f}\u{440}\u{438}\u{432}\u{435}\u{442}");
+    s.command(ids::ENCODING);
+    let focused = match s.app.dialog() {
+        Some((_, Dialog::Choose { list, .. })) => list.focused().unwrap().id.clone(),
+        _ => String::new(),
+    };
+    assert_eq!(focused, "windows-1251", "the list opens on the choice");
+    s.key("home");
+    let said = s.key("enter");
+    assert_eq!(said, ["Automatic: Windows-1252 (not UTF-8)"]);
+    assert_eq!(read(&mut s), "\u{cf}\u{f0}\u{e8}\u{e2}\u{e5}\u{f2}");
+}
+
+/// R30 commit 32: the encoding chooser for the quick view's file; and
+/// outside the viewer and the quick view it says where it works.
+#[test]
+fn the_quick_view_reads_its_file_in_the_encoding_chosen() {
+    use crate::support::{Session, Setup, place, settings, temp};
+    let dir = temp();
+    let work = cyrillic_folder(dir.path());
+    let mut quick = settings();
+    quick.quick_view.wait_ms = 0;
+    let mut s = Session::open(
+        place(&work),
+        place(&work),
+        diroxide_vfs::Registry::with_local(),
+        Setup {
+            settings: quick,
+            ..Setup::default()
+        },
+    );
+    s.focus("legacy.txt");
+    let said = s.command(ids::ENCODING);
+    assert_eq!(said, ["Encoding works in the viewer and the quick view."]);
+    s.command(ids::QUICK_VIEW);
+    settle(&mut s);
+    s.command(ids::ENCODING);
+    let (title, rows) = dialog_rows(&s.app);
+    assert_eq!(title, "Encoding of legacy.txt");
+    assert_eq!(rows[0], "Automatic: Windows-1252 (not UTF-8)");
+    let at = rows
+        .iter()
+        .position(|r| r == "Cyrillic (Windows-1251)")
+        .unwrap();
+    for _ in 0..at {
+        s.key("down");
+    }
+    let mut said = s.key("enter");
+    said.extend(settle(&mut s));
+    assert_eq!(said, ["Encoding Windows-1251, chosen by you"]);
+    let shown = s.app.quick_view().unwrap();
+    let first = shown.view().unwrap().rows()[0].shown();
+    assert!(
+        first.contains("\u{41f}\u{440}\u{438}\u{432}\u{435}\u{442}"),
+        "{first}"
+    );
+    assert!(shown.shown().unwrap().encoding.is_some());
+}
+
+fn settle(s: &mut crate::support::Session) -> Vec<String> {
+    let mut said = Vec::new();
+    for _ in 0..400 {
+        if s.app.quick_view_wants_tick().is_none() {
+            break;
+        }
+        let effects = s.app.quick_view_tick();
+        said.extend(s.run(effects));
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    said
+}

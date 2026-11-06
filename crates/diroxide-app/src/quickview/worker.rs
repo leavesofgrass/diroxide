@@ -16,7 +16,7 @@ use diroxide_core::{Entry, EntryKind, Place};
 use diroxide_filetype::TypeRegistry;
 use diroxide_preview::LatestOnly;
 use diroxide_preview::doc::{self, DocError, DocView, ReadOptions};
-use diroxide_preview::encoding::{SNIFF_BYTES, binary_kind};
+use diroxide_preview::encoding::{Choice, Encoding, SNIFF_BYTES, binary_kind, choose, choose_head};
 use diroxide_vfs::{CancelToken, OpContext, Registry, VfsError};
 
 /// The bytes read between two checks of the cancel token.
@@ -41,6 +41,8 @@ pub(super) struct Request {
     /// Ask the provider for the entry's size again: the file changed.
     pub refresh: bool,
     pub cancel: CancelToken,
+    /// The encoding the owner chose for this file (lane TA).
+    pub encoding: Option<&'static Encoding>,
 }
 
 /// What a render made.
@@ -53,6 +55,9 @@ pub(super) enum Rendered {
         error: Option<DocError>,
         /// Whether the cap stopped the read short of the file's end.
         capped: bool,
+        /// What the automatic choice finds for the bytes' encoding, for
+        /// the encoding chooser (lane TA).
+        choice: Option<Choice>,
     },
     /// Nothing to show for this kind of file yet: the details in words
     /// ("PNG image, 2.0 MB").
@@ -250,14 +255,17 @@ fn render(shared: &Shared, request: &Request, entry: &mut Entry) -> Rendered {
             Err(error) => return Rendered::Failed(VfsError::from(error)),
         };
         bytes.extend_from_slice(&chunk[..n]);
-        if !sniffed && bytes.len() >= SNIFF_BYTES.min(CHUNK) {
+        if !sniffed && request.encoding.is_none() && bytes.len() >= SNIFF_BYTES.min(CHUNK) {
             sniffed = true;
             if let Some(words) = not_text(shared, entry, &bytes) {
                 return Rendered::NoPreview(words);
             }
         }
     }
-    if !sniffed && let Some(words) = not_text(shared, entry, &bytes) {
+    if !sniffed
+        && request.encoding.is_none()
+        && let Some(words) = not_text(shared, entry, &bytes)
+    {
         return Rendered::NoPreview(words);
     }
     let capped = bytes.len() as u64 > shared.max_bytes;
@@ -269,11 +277,28 @@ fn render(shared: &Shared, request: &Request, entry: &mut Entry) -> Rendered {
             bytes.truncate(end + 1);
         }
     }
+    let head = &bytes[..bytes.len().min(SNIFF_BYTES)];
+    let choice = Some(if capped || bytes.len() > SNIFF_BYTES {
+        choose_head(head, None)
+    } else {
+        choose(head, None)
+    });
+    // An encoding the owner chose: the bytes are read in it, as UTF-8 for
+    // the readers, its own byte-order mark left out.
+    let bytes = match request.encoding {
+        Some(encoding) => encoding
+            .decode_with_bom_removal(&bytes)
+            .0
+            .into_owned()
+            .into_bytes(),
+        None => bytes,
+    };
     let (view, error) = doc::read_or_text(&name, bytes, &shared.read);
     Rendered::Document {
         view,
         error,
         capped,
+        choice,
     }
 }
 
