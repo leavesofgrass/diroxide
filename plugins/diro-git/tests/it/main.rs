@@ -9,6 +9,7 @@
 mod branches;
 mod commit;
 mod create;
+mod fuzz;
 mod history;
 mod remote;
 mod status;

@@ -26,6 +26,7 @@ pub mod cache;
 pub mod commands;
 pub mod error;
 pub mod folder;
+pub mod fuzzing;
 pub mod git;
 pub mod host;
 pub mod lines;
