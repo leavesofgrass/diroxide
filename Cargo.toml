@@ -102,7 +102,17 @@ crc32fast = "1.5.2"
 # The local provider's `sys` module (research/file-operations.md C6):
 # safe Unix wrappers, the Windows calls, and copy-on-write clones.
 rustix = { version = "1.1.5", features = ["fs"] }
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl"] }
+# Alpha 4's contract step (P4) adds the features of the calls its lanes
+# make, names read in windows-sys 0.61.2's own modules: alternate data
+# streams (FindFirstStreamW and FindNextStreamW, in Storage_FileSystem,
+# already here), the registry reads of Open with (RegOpenKeyExW,
+# RegQueryValueExW, RegEnumKeyExW: System_Registry), the security
+# descriptor, the access list's words and the Authz check
+# (GetNamedSecurityInfoW, ConvertSidToStringSidW, AuthzInitializeContextFromSid,
+# AuthzAccessCheck: Security_Authorization; LookupAccountSidW, GetAce:
+# Security), and the hand-offs to the system's own dialogs (the Security
+# tab and Open with: SHObjectProperties and ShellExecuteExW, UI_Shell).
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl", "Win32_System_Registry", "Win32_UI_Shell"] }
 reflink-copy = "0.1.30"
 # Watching, trash, volumes, folders, hashing. trash 5.2.9 is the version
 # spikes four and six measured; it is used only behind the trash gate
@@ -118,7 +128,12 @@ dirs = "6.0.0"
 # the duplicate finder (alpha.8) uses it, the owner decides: a second allow
 # entry for blake3 with `pure`, or a pure-Rust hash (sha2 is declared).
 blake3 = { version = "1.8.2", features = ["pure"] }
-# Pins for the components downloader and checksums.
+# Pins for the components downloader and checksums. Held at 0.10 by alpha
+# 4's contract step (R28's disagreement 15): 0.11's digest traits drop
+# std::io::Write from the hashers (the digest-io crate wraps them now),
+# and the job engine's parts test copies a reader into a hasher, so the
+# move waits for that one test's change (a contract request). md-5 below
+# stays on the same digest family.
 sha2 = "0.10.9"
 # Comment-preserving writes of the owner's TOML files (plan section 5.11).
 toml_edit = "0.25.15"
@@ -146,25 +161,69 @@ pulldown-cmark = { version = "0.13.4", default-features = false, features = ["ht
 # Text decoding: textweaver's encoding module carries over whole (answer
 # 41); (Apache-2.0 OR MIT) AND BSD-3-Clause, both allowed.
 encoding_rs = "0.8.42"
-# carta, the pure-Rust converter (answer 27): pinned exactly, textweaver's
-# pin, default features off (no CLI, no `fetch`, no highlight grammars),
-# with the five readers the quick view uses. Its include directives are
-# never followed and its Typst reader is never used. The writer is
-# `write-html`, path A of spike C1 (plan question 66, W2e, Friday, October
-# 16, 2026): carta's CommonMark writer (path B) kept the headings, list
-# items and links of all fifteen samples and none of their 20 tables,
-# which it writes as raw HTML, so carta writes an HTML fragment for the
-# quick view's fragment reader. A bump waits for the samples
-# (`fixtures/docs/carta/`). MIT OR Apache-2.0.
-carta = { version = "=0.0.11", default-features = false, features = ["read-org", "read-rst", "read-mediawiki", "read-dokuwiki", "read-jira", "write-html"] }
+# carta, the pure-Rust converter (answer 27): pinned exactly, default
+# features off (no CLI, no `fetch`, no highlight grammars). Its include
+# directives are never followed and its Typst reader is never built (it
+# reads any file a document names). The writer the quick view uses is
+# `write-html`, path A of spike C1 (plan question 66, W2e, Friday,
+# October 16, 2026): carta writes an HTML fragment for the quick view's
+# fragment reader. 0.0.13 since alpha 4's contract step, by spike C2
+# (answer 119): on twelve samples each, its DOCX, EPUB, ODT, CSV and HTML
+# readers kept every heading, every table with its header row and every
+# list's nesting, so those formats are carta's; its RTF reader never
+# keeps a table's header row, so RTF is textweaver's port (commit 40b)
+# and `read-rtf` is not built. LaTeX and TSV are carta's by answer 119's
+# default (not in C2's samples). The writers are the conversions'
+# (AsciiDoc, Typst, LaTeX, MediaWiki, Org, DOCX, EPUB, from Markdown
+# read by `read-commonmark`). MIT OR Apache-2.0.
+carta = { version = "=0.0.13", default-features = false, features = ["read-org", "read-rst", "read-mediawiki", "read-dokuwiki", "read-jira", "read-docx", "read-epub", "read-odt", "read-csv", "read-tsv", "read-html", "read-latex", "read-commonmark", "write-html", "write-asciidoc", "write-typst", "write-latex", "write-mediawiki", "write-org", "write-docx", "write-epub"] }
 # The quick view's HTML-fragment reader for carta's output (path A of
 # spike C1), carried from textweaver's html.rs. ISC, allowed.
 scraper = "0.27.0"
-# Detection and images.
-infer = "0.19" # unverified
-image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
-kamadak-exif = "0.6" # unverified
+# Images. `infer` is gone since alpha 4's contract step: the type model's
+# data-driven table replaces it (R28 4.4). `ico` joins image's formats for
+# the image words (R28 2.2). kamadak-exif reads Exif from JPEG, TIFF,
+# HEIF and PNG; checked in the crates.io index, BSD-2-Clause, pure Rust,
+# one dependency (alpha 4's contract step).
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff", "ico"] }
+kamadak-exif = "0.6.2"
 resvg = "0.47.0"
+# Alpha 4: tools, previews and conversions (the contract step, P4, R30
+# commit 4; versions and licenses read on Thursday, November 5, 2026).
+# Each is pure Rust; `cargo xtask native --check` and `cargo deny check`
+# passed with all of them in the tree. Audio tags (MIT OR Apache-2.0).
+lofty = "0.25.5"
+# Extended attributes on Linux, macOS and the BSDs, for the internet mark
+# and the origin row (MIT OR Apache-2.0); the Unix side of the vfs
+# extended-attributes trait.
+xattr = "1.7.0"
+# macOS property lists: Finder tags and the applications' document types
+# for Open with (MIT).
+plist = "1.10.3"
+# Strip metadata into a copy: JPEG, PNG and WebP segments (MIT OR
+# Apache-2.0).
+img-parts = "0.4.2"
+# MD5 for old checksum lists, labeled old (MIT OR Apache-2.0); 0.10, the
+# digest family sha2 0.10 shares, so the checksum engine has one Digest
+# trait (0.11 moves with sha2).
+md-5 = "0.10.6"
+# PNG text chunks, which image does not expose (MIT OR Apache-2.0).
+png = "0.18.1"
+# Detached minisign signatures, checked in the main binary (R29 Q12; MIT).
+minisign-verify = "0.3.0"
+# Spreadsheets as rows: XLSX, XLS, XLSB and ODS (MIT).
+calamine = { version = "0.38.0", default-features = false }
+# PDF properties for the details view (answer 120), without its clock and
+# its thread pool (MIT).
+lopdf = { version = "0.47.0", default-features = false }
+# XML for SVG reading and document properties, behind the nesting cut
+# textweaver's xmldepth carries (MIT OR Apache-2.0).
+roxmltree = "0.21.2"
+# The DOS code pages encoding_rs leaves out (437, 850, 866), for the
+# encoding chooser, if it passes the gates (R28 4.3; MIT).
+oem_cp = "2.1.2"
+# macOS access lists, read only, through the system's own library (MIT).
+exacl = "0.13.0"
 # Terminal and window.
 ratatui = "0.30.2"
 crossterm = "0.29.0"
