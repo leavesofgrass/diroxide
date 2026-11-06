@@ -94,7 +94,8 @@ fn a_depth_test_or_a_bad_pattern_is_refused_in_words() {
 fn by_kind_size_and_date() {
     let mut f = open();
     let said = f.s.command(ids::SELECT_BY_KIND);
-    assert_eq!(said, ["Select by kind, Folders, 1 of 11"]);
+    // Four kinds and the eight groups of the type model (lane TA).
+    assert_eq!(said, ["Select by kind, Folders, 1 of 12"]);
     assert_eq!(f.s.key("enter"), ["Selected 2 folders. 2 selected."]);
     assert_eq!(selected(&f.s), ["Backup", "Photos"]);
     f.s.command(ids::SELECT_NONE);

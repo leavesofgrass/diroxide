@@ -139,7 +139,10 @@ impl App {
         if text.trim().is_empty() {
             return Ok(None);
         }
-        Filter::parse_with(text, &self.filter_options()).map(Some)
+        // `group:` takes the type model's groups, the owner's own among
+        // them (lane TA).
+        let groups = self.types.group_names();
+        Filter::parse_with_groups(text, &self.filter_options(), &groups).map(Some)
     }
 
     /// Runs a command of the filter's own: Say filter, stash and restore,
@@ -699,10 +702,11 @@ impl App {
     ) -> (usize, Vec<crate::entry::Candidate>) {
         let labels = self.label_names();
         let types: Vec<String> = self.types.types().iter().map(|t| t.short.clone()).collect();
+        let groups = self.types.group_names();
         let context = CompletionContext {
             labels: &labels,
             types: &types,
-            groups: &[],
+            groups: &groups,
         };
         let found = diroxide_core::filter::complete(text, cursor, &self.filter_options(), &context);
         let candidates = found

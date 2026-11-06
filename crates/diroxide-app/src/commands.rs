@@ -652,6 +652,10 @@ pub mod ids {
     ids! {
         /// The focused file's type's actions, the one Enter runs first.
         FILE_ACTIONS = "file.actions";
+        /// The programs the system has for the focused file.
+        OPEN_WITH = "file.open-with";
+        /// The file groups, with how many files of each are here.
+        GROUPS_LIST = "select.groups";
         /// Run user action 0 of the focused file's type.
         TYPE_USER_0 = "type.user0";
         /// Run user action 1 of the focused file's type.
@@ -697,7 +701,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 239] = [
+pub static CATALOG: [CommandInfo; 241] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1465,6 +1469,22 @@ pub static CATALOG: [CommandInfo; 239] = [
         Panel,
         &["alt+enter"],
         &["alt+enter"],
+    ),
+    command(
+        ids::OPEN_WITH,
+        "Open with",
+        "Lists the programs the system has for the focused file, the default program first; the chosen one opens it.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::GROUPS_LIST,
+        "Groups",
+        "Lists the file groups, yours among them, with how many files of each are here; the chosen group's files are selected.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::FILE_ACTIONS,

@@ -381,3 +381,247 @@ fn typed_actions_run_from_enter_the_user_slots_and_the_actions_list() {
         ]
     );
 }
+
+/// The owner's group of receipts, by name, beside the built-in groups;
+/// a folder of two receipts, a photo, a screenshot and a note.
+fn grouped_app() -> App {
+    let filetypes = diroxide_config::FileTypesConfig::from_toml(
+        r#"
+[[group]]
+id = "receipts"
+name = "Receipts"
+about = "Receipts, by their names."
+patterns = ["receipt-*"]
+"#,
+    )
+    .unwrap();
+    let mut options = AppOptions::new(local("/work"), local("/other")).in_utc();
+    options.types = TypeRegistry::builtin().with_config(&filetypes);
+    listed_with(
+        App::new(options),
+        &[
+            "receipt-01.pdf",
+            "receipt-02.pdf",
+            "crow.png",
+            "Screenshot (3).png",
+            "notes.txt",
+        ],
+    )
+}
+
+/// The app started, its left panel listed with these files by hand.
+fn listed_with(mut app: App, names: &[&str]) -> App {
+    let effects = app.start();
+    for effect in effects {
+        if let Effect::List { request, place } = effect {
+            let entries = if place == local("/work") {
+                names
+                    .iter()
+                    .map(|n| Entry::new(*n, EntryKind::File).with_size(10))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            app.handle(AppEvent::Listed {
+                request,
+                place,
+                result: Ok(entries),
+            });
+        }
+    }
+    app.take_requests();
+    app
+}
+
+fn dialog_rows(app: &App) -> (String, Vec<String>) {
+    let Some((_, Dialog::Choose { list, .. })) = app.dialog() else {
+        panic!("no list open");
+    };
+    (
+        list.title().to_owned(),
+        list.rows().iter().map(|r| r.label.clone()).collect(),
+    )
+}
+
+/// R30 commit 31: a user group appears in Select by group; the Groups
+/// list says each group's files here, the owner's own among them, and
+/// Enter selects them; the last row turns the retro types on; `group:`
+/// reads the owner's groups and matches a file in two groups by either.
+#[test]
+fn a_user_group_appears_in_select_by_group_and_the_groups_list() {
+    let mut app = grouped_app();
+    app.dispatch(&Command::new(ids::SELECT_BY_KIND));
+    let (_, kinds) = dialog_rows(&app);
+    assert!(kinds.contains(&"Receipts, group".to_owned()), "{kinds:?}");
+    assert!(
+        kinds.contains(&"Screenshots, group".to_owned()),
+        "{kinds:?}"
+    );
+    app.dispatch(&Command::new(ids::CANCEL));
+
+    app.dispatch(&Command::new(ids::GROUPS_LIST));
+    let (title, rows) = dialog_rows(&app);
+    assert_eq!(title, "Groups: 8 built in, 1 yours");
+    assert_eq!(
+        rows,
+        [
+            "Images: 2 files here",
+            "Music: no files here",
+            "Video: no files here",
+            "Documents: 2 files here",
+            "Archives: no files here",
+            "Code: no files here",
+            "Text: 1 file here",
+            "Screenshots: 1 file here",
+            "Receipts: 2 files here",
+            "Retro types: off",
+        ]
+    );
+    for line in &rows {
+        assert!(line.chars().count() <= 40, "{line}");
+    }
+    app.dispatch(&Command::new(ids::LIST_END));
+    app.dispatch(&Command::new(ids::LIST_UP));
+    let effects = app.dispatch(&Command::new(ids::ACCEPT));
+    assert_eq!(said(&effects), ["Selected 2 receipts. 2 selected."]);
+    assert_eq!(app.panel(Side::Left).list().selected_count(), 2);
+
+    app.dispatch(&Command::new(ids::GROUPS_LIST));
+    app.dispatch(&Command::new(ids::LIST_END));
+    let effects = app.dispatch(&Command::new(ids::ACCEPT));
+    assert_eq!(said(&effects), ["Retro types: on"]);
+    assert!(app.settings().filetypes.retro);
+
+    let filter = |app: &mut App, text: &str| {
+        app.dispatch(
+            &Command::new(ids::FILTER)
+                .with_arg("pattern", diroxide_core::ArgValue::Text(text.to_owned())),
+        );
+        let mut names: Vec<String> = app
+            .panel(Side::Left)
+            .entries()
+            .iter()
+            .map(|e| e.name.clone())
+            .collect();
+        names.sort();
+        names
+    };
+    assert_eq!(
+        filter(&mut app, "group:screenshots"),
+        ["Screenshot (3).png"]
+    );
+    assert_eq!(
+        filter(&mut app, "group:images"),
+        ["Screenshot (3).png", "crow.png"]
+    );
+    assert_eq!(
+        filter(&mut app, "group:receipt"),
+        ["receipt-01.pdf", "receipt-02.pdf"]
+    );
+}
+
+/// R30 commit 31: a theme may map a group to one of its existing color
+/// roles; the row's words are unchanged, and the default maps none.
+#[test]
+fn a_theme_maps_a_group_to_an_existing_role() {
+    let temp = crate::support::temp();
+    std::fs::write(
+        temp.path().join("crows.toml"),
+        "[theme]\nname = \"crows\"\ndisplay_name = \"Crows\"\ninherits = \"galaxy\"\n\n[group-colors]\nimages = \"heading2\"\nnot-a-group = \"heading1\"\n",
+    )
+    .unwrap();
+    let mut themes = diroxide_theme::Registry::builtin();
+    let report = themes.load_dir(temp.path());
+    assert_eq!(report.loaded, ["crows"]);
+    let crows = themes.get("crows").unwrap().clone();
+    let open = |theme: Option<&str>| {
+        let mut options = AppOptions::new(local("/work"), local("/other")).in_utc();
+        if let Some(theme) = theme {
+            options.settings.theme = theme.to_owned();
+        }
+        options.startup.user_themes = vec![crows.clone()];
+        listed_with(App::new(options), &["crow.png", "notes.txt"])
+    };
+    let app = open(None);
+    assert_eq!(
+        app.row_role(Side::Left, "crow.png"),
+        None,
+        "none by default"
+    );
+    let app = open(Some("crows"));
+    assert_eq!(
+        app.row_role(Side::Left, "crow.png"),
+        Some(diroxide_theme::ColorRole::Heading2)
+    );
+    assert_eq!(app.row_role(Side::Left, "notes.txt"), None);
+    let row = app.panel(Side::Left).list().rows()[0].spoken();
+    assert_eq!(row, "crow.png, PNG, 10 bytes", "the words never change");
+}
+
+/// R30 commit 31: Open with lists the system's programs for the focused
+/// file, read off the input thread: "Default program" first, each by
+/// name, "Choose another program" last; Enter starts the chosen one
+/// through the runtime, here a recorder, so no program is started.
+#[test]
+fn open_with_lists_the_programs_and_starts_one_through_the_runtime() {
+    use crate::support::{Recorder, Session, Setup, fixture, place, temp};
+    let dir = temp();
+    let work = fixture(dir.path());
+    let recorder = std::sync::Arc::new(Recorder::default());
+    let mut s = Session::open(
+        place(&work),
+        place(&work.join("Backup")),
+        diroxide_vfs::Registry::with_local(),
+        Setup {
+            recorder: recorder.clone(),
+            ..Setup::default()
+        },
+    );
+    s.focus("report.pdf");
+    let said = s.command(ids::OPEN_WITH);
+    assert_eq!(
+        said,
+        [
+            "Finding programs for report.pdf",
+            "Open report.pdf with:, Default program, Reader, 1 of 4"
+        ]
+    );
+    let (title, rows) = dialog_rows(&s.app);
+    assert_eq!(title, "Open report.pdf with:");
+    assert_eq!(
+        rows,
+        [
+            "Default program",
+            "Reader",
+            "Writer",
+            "Choose another program"
+        ]
+    );
+    let spoken: Vec<String> = match s.app.dialog() {
+        Some((_, Dialog::Choose { list, .. })) => list.rows().iter().map(|r| r.spoken()).collect(),
+        _ => Vec::new(),
+    };
+    assert_eq!(spoken[0], "Default program, Reader");
+    assert_eq!(spoken[1], "Reader, the default");
+    s.key("down");
+    s.key("down");
+    let said = s.key("enter");
+    assert_eq!(said, ["Opening report.pdf with Writer"]);
+    let file = work.join("report.pdf");
+    assert_eq!(
+        recorder.started_with.lock().unwrap().as_slice(),
+        [("writer".to_owned(), file.clone())]
+    );
+    s.command(ids::OPEN_WITH);
+    s.key("end");
+    let said = s.key("enter");
+    assert_eq!(said, ["The system's Open with list, for report.pdf"]);
+    assert_eq!(
+        recorder.chosen_another.lock().unwrap().as_slice(),
+        std::slice::from_ref(&file)
+    );
+    s.command(ids::OPEN_WITH);
+    let said = s.key("enter");
+    assert_eq!(said, ["Opening report.pdf"]);
+    assert_eq!(recorder.opened.lock().unwrap().as_slice(), [file]);
+}

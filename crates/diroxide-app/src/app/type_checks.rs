@@ -129,6 +129,7 @@ impl App {
         let clock = Arc::clone(&self.clock);
         for panel in &mut self.panels {
             panel.set_check_skip(skip.clone());
+            panel.set_types(Arc::clone(&types));
             panel.retype(&types, clock.as_ref());
         }
     }

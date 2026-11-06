@@ -26,11 +26,12 @@
 //!
 //! Wave 1 (W1d) owns this module.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 use diroxide_config::{ColumnKind, Settings};
-use diroxide_core::filter::{ContentQuery, Filter, Lookup, Tally, Truth, Unknown};
+use diroxide_core::filter::{ContentQuery, Filter, Lookup, NoLookup, Tally, Truth, Unknown};
 use diroxide_core::format::human_size;
 use diroxide_core::names::display_name;
 use diroxide_core::{
@@ -292,9 +293,32 @@ struct PanelLookup<'a> {
     selected: &'a HashSet<&'a str>,
     bookmarks: Option<&'a crate::bookmarks::Bookmarks>,
     content: Option<&'a ContentAnswers>,
+    /// The type model's groups, the owner's own among them (lane TA);
+    /// without it `group:` answers from core's extension table.
+    types: Option<(&'a TypeRegistry, &'a dyn Clock)>,
 }
 
 impl Lookup for PanelLookup<'_> {
+    fn group(&self, entry: &Entry) -> Result<Option<Cow<'_, str>>, Unknown> {
+        match self.types {
+            Some((types, clock)) => types
+                .group_for(entry, clock)
+                .map(|group| group.map(|g| Cow::Owned(g.id.clone()))),
+            None => NoLookup
+                .group(entry)
+                .map(|g| g.map(|g| g.into_owned().into())),
+        }
+    }
+
+    fn in_group(&self, entry: &Entry, group: &str) -> Result<bool, Unknown> {
+        match self.types {
+            Some((types, clock)) => types
+                .groups_of(entry, clock)
+                .map(|groups| groups.iter().any(|g| g.id.eq_ignore_ascii_case(group))),
+            None => NoLookup.in_group(entry, group),
+        }
+    }
+
     fn path(&self, entry: &Entry) -> Option<String> {
         self.place.join(&entry.name).ok().map(|p| p.to_string())
     }
@@ -363,6 +387,9 @@ pub struct Panel {
     /// "Name says PNG; contents say JPEG", by entry name: said on request,
     /// in the details and when the file is opened.
     disagreements: HashMap<String, String>,
+    /// The file types the filter's `group:` asks, the owner's groups
+    /// among them (lane TA).
+    types: Option<std::sync::Arc<TypeRegistry>>,
 }
 
 /// One bit for each entry of a listing.
@@ -430,6 +457,7 @@ impl Panel {
             entries_generation: 0,
             check_skip: CheckSkip::new(&settings.check.skip),
             disagreements: HashMap::new(),
+            types: None,
         }
     }
 
@@ -943,6 +971,14 @@ impl Panel {
         self.refresh(clock)
     }
 
+    /// The file types the filter's `group:` asks: the type model's
+    /// groups, the owner's own among them, and the groups whose name
+    /// patterns take a file (a screenshot is in images and screenshots).
+    /// Without them, `group:` answers from core's extension table.
+    pub fn set_types(&mut self, types: std::sync::Arc<TypeRegistry>) {
+        self.types = Some(types);
+    }
+
     /// The folders whose files are typed by name alone, from the setting
     /// `check.skip`.
     pub fn set_check_skip(&mut self, skip: CheckSkip) {
@@ -1246,6 +1282,7 @@ impl Panel {
             selected: &selected,
             bookmarks,
             content: None,
+            types: self.types.as_deref().map(|t| (t, clock)),
         };
         let evaluator = filter.evaluator(clock);
         self.entries
@@ -1310,6 +1347,7 @@ impl Panel {
                     selected: &selected,
                     bookmarks: filter.bookmarks.as_ref(),
                     content: filter.content.as_ref(),
+                    types: self.types.as_deref().map(|t| (t, clock)),
                 };
                 let evaluator = filter.filter.evaluator(clock);
                 self.all_entries

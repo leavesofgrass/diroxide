@@ -11,12 +11,14 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use diroxide_core::filter::{GROUPS, kind_word};
+use diroxide_core::filter::kind_word;
 use diroxide_core::format::count;
 use diroxide_core::{
     Command, CommandId, Effect, EntryKind, Importance, ListModel, ListRow, Message, MessageKind,
     Move, Side,
 };
+
+use diroxide_filetype::TypeRegistry;
 
 use super::{App, Purpose};
 use crate::commands::ids;
@@ -59,8 +61,9 @@ fn route(id: &CommandId) -> Option<Do> {
 }
 
 /// The kinds Select by kind offers, each a filter and its words: the
-/// entry kinds first, then the file-type groups.
-fn kind_choices() -> Vec<(String, String)> {
+/// entry kinds first, then the file-type groups, the owner's own among
+/// them (lane TA).
+fn kind_choices(types: &TypeRegistry) -> Vec<(String, String)> {
     let mut choices: Vec<(String, String)> = [
         (EntryKind::Folder, "Folders"),
         (EntryKind::File, "Files"),
@@ -70,14 +73,26 @@ fn kind_choices() -> Vec<(String, String)> {
     .into_iter()
     .map(|(kind, words)| (format!("kind {}", kind_word(kind)), words.to_owned()))
     .collect();
-    for group in &GROUPS {
-        let mut words = group.name.to_owned();
-        if let Some(first) = words.get_mut(0..1) {
-            first.make_ascii_uppercase();
-        }
-        choices.push((format!("group {}", group.name), format!("{words}, group")));
+    for group in types.groups() {
+        choices.push((
+            format!("group {}", group_word(&group.id)),
+            format!("{}, group", group.name),
+        ));
     }
     choices
+}
+
+/// A group's id as the filter language takes it: quoted when it is not
+/// one plain word.
+pub(super) fn group_word(id: &str) -> String {
+    if id
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        id.to_owned()
+    } else {
+        format!("\"{}\"", id.replace('"', "\"\""))
+    }
 }
 
 impl App {
@@ -215,7 +230,7 @@ impl App {
 
     /// Select by kind: the kinds and the file-type groups as a list.
     fn select_kind_list(&mut self, side: Side) -> Vec<Effect> {
-        let rows = kind_choices()
+        let rows = kind_choices(&self.types)
             .into_iter()
             .map(|(id, words)| ListRow::new(id, words))
             .collect();
@@ -232,6 +247,11 @@ impl App {
 
     /// Enter on a kind: every entry of it is selected at once.
     pub(super) fn select_kind_chosen(&mut self, side: Side, text: &str) -> Vec<Effect> {
+        // The Groups list's last row turns the retro types on or off
+        // (lane TA).
+        if text == super::type_lists::RETRO_ROW {
+            return self.toggle_retro();
+        }
         let mut effects = self.close_top();
         let rows = match self.pattern_rows(side, text) {
             Ok(rows) => rows,
@@ -240,7 +260,7 @@ impl App {
                 return effects;
             }
         };
-        let words = kind_choices()
+        let words = kind_choices(&self.types)
             .into_iter()
             .find(|(id, _)| id == text)
             .map(|(_, words)| words.split(',').next().unwrap_or_default().to_lowercase())

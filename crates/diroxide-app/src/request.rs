@@ -612,6 +612,28 @@ pub enum Request {
     /// Stop a panel's type check: the panel left the folder, or nothing
     /// in it is left to read.
     StopTypes(Side),
+    /// List the programs the system has for a file, for Open with (lane
+    /// TA); answered as
+    /// [`AppEvent::OpenWithListed`](crate::AppEvent::OpenWithListed).
+    ListOpenWith {
+        /// The file.
+        place: Place,
+        /// Its media type, from its type.
+        mime: Option<String>,
+    },
+    /// Start one of Open with's programs on a file, never waited for; a
+    /// failure comes back as a problem in words.
+    StartWith {
+        /// The file.
+        place: Place,
+        /// The program, as Open with listed it.
+        program: crate::typing::OpenWithRow,
+        /// The file's media type, as the list was read with.
+        mime: Option<String>,
+    },
+    /// Hand a file to the system's own Open with dialog ("Choose another
+    /// program").
+    ChooseAnother(Place),
 }
 
 #[cfg(test)]

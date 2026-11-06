@@ -42,6 +42,9 @@ access = "d"
 command = "file.actions"
 
 [[menu.item]]
+command = "file.open-with"
+
+[[menu.item]]
 command = "file.context-menu"
 access = "c"
 
@@ -788,6 +791,9 @@ access = "r"
 # Selection on the filter language (W3a).
 [[menu.item]]
 command = "select.by-kind"
+
+[[menu.item]]
+command = "select.groups"
 access = "k"
 
 [[menu.item]]

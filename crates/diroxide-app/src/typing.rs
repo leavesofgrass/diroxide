@@ -226,6 +226,49 @@ pub struct Offered {
     pub target: ActionTarget,
 }
 
+/// One program of Open with's list, as the app shows it (R30 commit 31).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OpenWithRow {
+    /// Its name, as said: "Notepad".
+    pub name: String,
+    /// Where the system keeps it, to start it by: the executable, the
+    /// class, the desktop file or the bundle.
+    pub id: String,
+    /// Whether it is the system's default for the file.
+    pub default: bool,
+}
+
+/// Open with's programs for one file, the default first.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OpenWithRows {
+    /// The programs.
+    pub rows: Vec<OpenWithRow>,
+    /// Whether the system has its own dialog for the rest: Windows.
+    pub choose_another: bool,
+    /// The line for programs that could not be read, when some were not
+    /// ("3 programs not listed: binary Info.plist").
+    pub unread: Option<String>,
+}
+
+impl OpenWithRows {
+    /// The rows of the system's list.
+    pub fn of(list: &diroxide_vfs::OpenWithList) -> Self {
+        Self {
+            rows: list
+                .apps
+                .iter()
+                .map(|app| OpenWithRow {
+                    name: app.name.clone(),
+                    id: app.id.clone(),
+                    default: app.default,
+                })
+                .collect(),
+            choose_another: list.choose_another,
+            unread: list.unread_line(),
+        }
+    }
+}
+
 /// The actions a type offers (by [`diroxide_core::Entry::type_index`]):
 /// its own, or where its list is empty its parent's, and so on up; in
 /// the order the file lists them, the first of each slot the one that

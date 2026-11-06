@@ -69,6 +69,13 @@ pub(super) enum TypeWants {
         /// The file.
         place: Place,
     },
+    /// Open with: the file and the programs listed for it.
+    OpenWith {
+        /// The file.
+        place: Place,
+        /// The programs.
+        list: Box<crate::typing::OpenWithRows>,
+    },
 }
 
 /// The line for a tool action whose tool is not here: "Needs ImageMagick,
@@ -367,6 +374,7 @@ impl App {
                 }
                 effects
             }
+            TypeWants::OpenWith { place, list } => self.open_with_chosen(place, &list, &row),
         }
     }
 }

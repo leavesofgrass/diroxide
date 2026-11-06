@@ -55,6 +55,8 @@ mod selecting;
 mod split_join;
 // Typed actions and the lists of file types (alpha 4, lane TA).
 mod type_actions;
+// The Groups list, Open with and the theme words (alpha 4, lane TA).
+mod type_lists;
 // The background type check (alpha 4, lane TA).
 mod type_checks;
 mod viewing;
@@ -483,6 +485,13 @@ pub enum AppEvent {
         listing: u64,
         /// What each file is.
         answers: Vec<crate::typing::TypeAnswer>,
+    },
+    /// The programs the system has for a file, for Open with (lane TA).
+    OpenWithListed {
+        /// The file.
+        place: Place,
+        /// The programs.
+        list: Box<crate::typing::OpenWithRows>,
     },
 }
 
@@ -1322,6 +1331,10 @@ impl App {
         for side in Side::BOTH {
             app.set_panel_help(side);
         }
+        // The filter's `group:` asks the type model's groups (lane TA).
+        for panel in &mut app.panels {
+            panel.set_types(Arc::clone(&app.types));
+        }
         app
     }
 
@@ -1889,6 +1902,7 @@ impl App {
                 listing,
                 answers,
             } => self.types_checked(side, listing, answers),
+            AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
         }
     }
 
@@ -1981,6 +1995,9 @@ impl App {
         }
         // Typed actions and the lists of file types (lane TA).
         if let Some(effects) = self.type_actions_dispatch(command) {
+            return effects;
+        }
+        if let Some(effects) = self.type_lists_dispatch(command) {
             return effects;
         }
         if preview::preview_route(&command.id).is_some() {
