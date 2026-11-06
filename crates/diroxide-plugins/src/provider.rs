@@ -208,7 +208,20 @@ pub fn plugin_to_vfs(error: &PluginError, scheme: &str, operation: &str) -> VfsE
             };
         }
     };
+    // A plugin's own words for what it cannot do, or for what is too
+    // large, are kept, its hint after them (PD's request 4): "it needs
+    // 7-Zip to read squashfs with xz" says more than "the disk provider
+    // cannot read files".
+    let own_words = !message.trim().is_empty();
     match ErrorKind::from_code(code) {
+        Some(ErrorKind::Unsupported) if own_words => VfsError::Io {
+            kind: io::ErrorKind::Unsupported,
+            message: with_hint(message, hint.as_deref()),
+        },
+        Some(ErrorKind::TooLarge) if own_words => VfsError::Io {
+            kind: io::ErrorKind::FileTooLarge,
+            message: with_hint(message, hint.as_deref()),
+        },
         Some(ErrorKind::NotFound) => VfsError::NotFound,
         Some(ErrorKind::AlreadyExists) => VfsError::AlreadyExists,
         Some(ErrorKind::PermissionDenied | ErrorKind::DeniedByHost) => VfsError::PermissionDenied,
@@ -247,6 +260,10 @@ pub fn plugin_to_vfs(error: &PluginError, scheme: &str, operation: &str) -> VfsE
 /// not only for an untrusted place).
 fn with_hint(message: String, hint: Option<&str>) -> String {
     match hint.map(str::trim).filter(|h| !h.is_empty()) {
+        // A message with no stop of its own gets one before the hint.
+        Some(hint) if !message.contains(hint) && !message.trim_end().ends_with(['.', '!', '?']) => {
+            format!("{}. {hint}", message.trim_end())
+        }
         Some(hint) if !message.contains(hint) => format!("{message} {hint}"),
         _ => message,
     }
@@ -1488,10 +1505,45 @@ mod tests {
         ] {
             assert_eq!(plugin_to_vfs(&remote(kind), "memfs", "read"), expected);
         }
+        // A plugin's own words for what it cannot do are kept, its hint
+        // after them (PD's request 4); with none, the provider's words.
+        let own = |kind: ErrorKind, message: &str, hint: Option<&str>| PluginError::Remote {
+            plugin: "Disk images".into(),
+            code: kind.code(),
+            message: message.into(),
+            hint: hint.map(str::to_owned),
+        };
         assert!(matches!(
-            plugin_to_vfs(&remote(ErrorKind::Unsupported), "memfs", "read files"),
+            plugin_to_vfs(
+                &own(ErrorKind::Unsupported, "", None),
+                "memfs",
+                "read files"
+            ),
             VfsError::Unsupported { .. }
         ));
+        let needs = plugin_to_vfs(
+            &own(
+                ErrorKind::Unsupported,
+                "it needs 7-Zip to read squashfs with xz",
+                Some("Get 7-Zip from Manage optional components."),
+            ),
+            "disk",
+            "read files",
+        );
+        assert_eq!(
+            needs.to_string(),
+            "it needs 7-Zip to read squashfs with xz. Get 7-Zip from Manage optional components."
+        );
+        let large = plugin_to_vfs(
+            &own(ErrorKind::TooLarge, "the member is over 6 MiB", None),
+            "disk",
+            "read",
+        );
+        assert_eq!(large.to_string(), "the member is over 6 MiB");
+        assert_eq!(
+            plugin_to_vfs(&own(ErrorKind::TooLarge, "", None), "disk", "read"),
+            VfsError::FileTooLarge
+        );
         let untrusted = PluginError::Remote {
             plugin: "SFTP places".into(),
             code: ErrorKind::Untrusted.code(),
