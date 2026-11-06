@@ -28,7 +28,7 @@ pub fn stat(call: &Call<'_>) -> Result<Value, DiskError> {
             let found = open
                 .image
                 .volume(partition)?
-                .with_tree(|tree| tree.resolve(names))?;
+                .with_tree(|tree| tree.stat(names))?;
             let shown = names.last().map(|n| (*n).to_owned()).unwrap_or_default();
             wire_entry(&Row {
                 needs_care: String::from_utf8_lossy(&found.node.name) != shown,

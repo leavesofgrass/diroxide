@@ -46,6 +46,8 @@ fatfs = { version = "0.3.6", default-features = false, features = ["std", "alloc
 # ext2, ext3 and ext4, read only by design, over positional reads (R30
 # commit 90).
 ext4-view = "1.0.0"
+# NTFS, read only, no unsafe (R30 commit 91).
+ntfs = "0.4.0"
 
 [dev-dependencies]
 # The host's own settings, for the provider contract list run through the
@@ -56,6 +58,10 @@ diroxide-config = { path = "../../crates/diroxide-config", version = "0.1.0-alph
 gptman = { version = "3.1.1", default-features = false }
 # The ISOs the tests write, Joliet and Rock Ridge both (R29 1.10).
 hadris-iso = { version = "2.5.0", default-features = false, features = ["std", "sync", "joliet", "write"] }
+# The committed fixtures, gzipped and checked by their SHA-256 (R29
+# 1.10); pure Rust.
+flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
+sha2 = "0.11.1"
 mbrman = "0.6.1"
 proptest = "1.11.0"
 tempfile = "3.27.0"

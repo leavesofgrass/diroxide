@@ -19,6 +19,7 @@ use crate::lines::cause;
 pub mod ext;
 pub mod fat;
 pub mod iso;
+pub mod ntfs;
 pub mod pinned;
 
 /// What a node is.
@@ -126,6 +127,13 @@ pub trait FileSystem: Send {
         offset: u64,
         length: usize,
     ) -> Result<Vec<u8>, DiskError>;
+
+    /// One entry's details, which may read more than its row did (NTFS
+    /// counts a file's alternate streams here, never in a listing).
+    fn detail(&mut self, path: &[Vec<u8>], node: &Node) -> Result<Node, DiskError> {
+        let _ = path;
+        Ok(node.clone())
+    }
 }
 
 /// Opens the file system a volume holds, by what its bytes say.
@@ -138,6 +146,7 @@ pub fn open(
         Content::Iso => iso::open(backing, limits),
         Content::Fat => fat::open(backing, limits),
         Content::Ext => ext::open(backing, limits),
+        Content::Ntfs => ntfs::open(backing, limits),
         Content::BitLocker => Err(locked("BitLocker")),
         Content::Luks => Err(locked("LUKS")),
         Content::Gpt | Content::Mbr => Err(DiskError::uses("a partition table inside a partition")),

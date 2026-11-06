@@ -219,6 +219,15 @@ impl Tree {
         Ok(found)
     }
 
+    /// The entry at a shown path with its full details.
+    pub fn stat(&mut self, shown: &[&str]) -> Result<Found, DiskError> {
+        let mut found = self.resolve(shown)?;
+        if !shown.is_empty() {
+            found.node = self.fs.detail(&found.path, &found.node)?;
+        }
+        Ok(found)
+    }
+
     /// The listing of the folder at a shown path.
     pub fn list(&mut self, shown: &[&str]) -> Result<Listing, DiskError> {
         let found = self.resolve(shown)?;

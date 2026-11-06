@@ -10,9 +10,11 @@
 mod ext;
 mod fat;
 mod fixture;
+mod fixtures;
 mod images;
 mod iso;
 mod make;
+mod ntfs;
 mod tables;
 
 use std::path::{Path, PathBuf};
