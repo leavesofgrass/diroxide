@@ -383,12 +383,13 @@ pub fn switched(name: &str) -> String {
     format!("Switched to {name}")
 }
 
-/// git refused to switch: "Cannot switch: hello.txt has local changes".
+/// git refused to switch, the reason before the name, which may be long:
+/// "Cannot switch, local changes: hello.txt" (39).
 pub fn cannot_switch_changes(paths: &[String]) -> String {
     match paths {
-        [one] => format!("Cannot switch: {one} has local changes"),
+        [one] => format!("Cannot switch, local changes: {one}"),
         _ => format!(
-            "Cannot switch: {} have local changes",
+            "Cannot switch, local changes: {}",
             count(paths.len() as u64, "file", "files")
         ),
     }
@@ -397,9 +398,9 @@ pub fn cannot_switch_changes(paths: &[String]) -> String {
 /// The next step after it.
 pub const COMMIT_OR_STASH: &str = "Commit or stash your changes first, then switch.";
 
-/// "Created branch topic and switched to it".
+/// "Switched to a new branch: topic" (31), the name last.
 pub fn created_branch(name: &str) -> String {
-    format!("Created branch {name} and switched to it")
+    format!("Switched to a new branch: {name}")
 }
 
 /// "Renamed branch topic to feature".
@@ -506,13 +507,13 @@ pub fn brought_back(n: usize, stash: u32) -> String {
     )
 }
 
-/// A discard undone over a file changed since: "Not brought back:
-/// hello.txt changed since".
+/// A discard undone over a file changed since, the reason before the
+/// name: "Not brought back, changed since: hello.txt" (42 with that name).
 pub fn changed_since_discard(paths: &[String]) -> String {
     match paths {
-        [one] => format!("Not brought back: {one} changed since"),
+        [one] => format!("Not brought back, changed since: {one}"),
         _ => format!(
-            "Not brought back: {} changed since",
+            "Not brought back, changed since: {}",
             count(paths.len() as u64, "file", "files")
         ),
     }
@@ -852,12 +853,13 @@ mod tests {
             (switched("topic"), "Switched to topic"),
             (
                 cannot_switch_changes(&["hello.txt".into()]),
-                "Cannot switch: hello.txt has local changes",
+                "Cannot switch, local changes: hello.txt",
             ),
             (
-                created_branch("topic"),
-                "Created branch topic and switched to it",
+                cannot_switch_changes(&["a".into(), "b".into()]),
+                "Cannot switch, local changes: 2 files",
             ),
+            (created_branch("topic"), "Switched to a new branch: topic"),
             (popped(2), "Popped stash 2"),
             (dropped(2), "Dropped stash 2"),
             (drop_title(2), "Drop stash 2?"),
@@ -892,9 +894,20 @@ mod tests {
             (brought_back(2, 0), "Brought back 2 files from stash 0"),
             (
                 changed_since_discard(&["hello.txt".into()]),
-                "Not brought back: hello.txt changed since",
+                "Not brought back, changed since: hello.txt",
             ),
         ];
+        // A long name pushes only itself past the line: the reason is
+        // read first.
+        let long = "a-rather-long-file-name-for-the-test.txt".to_owned();
+        assert!(within_cells(
+            &cannot_switch_changes(std::slice::from_ref(&long)),
+            "Cannot switch, local changes"
+        ));
+        assert!(within_cells(
+            &changed_since_discard(&[long]),
+            "Not brought back, changed since"
+        ));
         for (line, words) in built {
             assert_eq!(line, words);
         }

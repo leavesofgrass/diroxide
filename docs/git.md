@@ -69,7 +69,7 @@ The commands are under the Plugins menu and in the palette by name; they have no
 
 ## Branches and stashes
 
-- **Git: branches** lists the local branches: "main, current, 2 ahead", "topic, no upstream". Enter switches. When your changes would be overwritten, git refuses and the plugin says which file: "Cannot switch: hello.txt has local changes". Nothing is ever forced.
+- **Git: branches** lists the local branches: "main, current, 2 ahead", "topic, no upstream". Enter switches. When your changes would be overwritten, git refuses and the plugin says why, then which file: "Cannot switch, local changes: hello.txt". Nothing is ever forced.
 - **Git: new branch** asks for a name and switches to the new branch; **Git: rename branch** renames the branch on the row, or the current one.
 - **Git: stashes** lists the stashes, the newest first: "Stash 0: half done, on main, 2026-11-06". Enter shows a stash's changes as a document.
 - **Git: stash changes** asks for a message and puts your changes away.

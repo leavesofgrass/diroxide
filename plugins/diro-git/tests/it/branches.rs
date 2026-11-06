@@ -42,7 +42,7 @@ fn branches_list_switch_and_refuse_to_lose_changes() {
         host.seen
             .said
             .iter()
-            .any(|(t, i)| t == "Cannot switch: hello.txt has local changes" && i == "warning"),
+            .any(|(t, i)| t == "Cannot switch, local changes: hello.txt" && i == "warning"),
         "{}",
         host.seen.all_said()
     );
@@ -65,7 +65,7 @@ fn new_and_renamed_branches_check_their_names() {
     host.command("branch_new", &repo, &[]).unwrap();
     assert_eq!(
         host.seen.last_said(),
-        "Created branch feature/one and switched to it"
+        "Switched to a new branch: feature/one"
     );
     assert_eq!(
         git.run(&repo, &["branch", "--show-current"]).trim(),
