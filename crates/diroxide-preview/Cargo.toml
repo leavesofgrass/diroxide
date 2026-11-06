@@ -40,6 +40,9 @@ toml.workspace = true
 syntect = { workspace = true, optional = true }
 thiserror.workspace = true
 two-face = { workspace = true, optional = true }
+# The container read path (alpha 4, R30 commit 36): DOCX, EPUB, ODT and
+# the sheets checked member by member before any reader sees them.
+zip.workspace = true
 
 [dev-dependencies]
 # The real tools registry, for the test that runs ffprobe when it is

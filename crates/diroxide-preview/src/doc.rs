@@ -47,6 +47,7 @@ pub mod carta;
 pub mod guard;
 pub mod html;
 pub mod markdown;
+pub mod package;
 pub mod svg;
 #[cfg(test)]
 mod tests;
@@ -88,6 +89,13 @@ pub enum DocError {
     /// deadline among them.
     #[error("an earlier document is still being read")]
     Busy,
+    /// The file is past the read's cap (alpha 4's container read path).
+    #[error("too large")]
+    TooLarge,
+    /// The file breaks a rule a hostile file breaks, said in words: "its
+    /// parts overlap", "it unpacks to more than 256 MB".
+    #[error("{0}")]
+    Refused(String),
 }
 
 impl Explain for DocError {

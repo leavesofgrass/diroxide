@@ -20,8 +20,10 @@
 //! previewer: [`images`], pictures in words from their headers alone;
 //! [`documents`], every format the quick view's [`doc`] readers read
 //! (Markdown, carta's formats, SVG drawings), as rows; [`media`], sound
-//! and video in words through ffprobe.
+//! and video in words through ffprobe; [`archive`], an archive's members
+//! counted and listed, never extracted.
 
+pub mod archive;
 pub mod classes;
 pub mod doc;
 pub mod documents;
@@ -68,6 +70,8 @@ pub enum PreviewKind {
     Document,
     /// Sound or moving pictures in words, through ffprobe ([`media`]).
     Media,
+    /// An archive's members, counted and listed ([`archive`]).
+    Listing,
 }
 
 /// A preview: a details line, then lines to read.
@@ -441,6 +445,7 @@ impl Previews {
             previewers: vec![
                 Box::new(images::ImagePreviewer::default()),
                 Box::new(media::MediaPreviewer),
+                Box::new(archive::ArchivePreviewer),
                 Box::new(documents::DocPreviewer::default()),
                 Box::new(TextPreviewer),
                 Box::new(HexPreviewer),

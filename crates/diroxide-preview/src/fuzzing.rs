@@ -6,6 +6,7 @@
 
 use std::io::{self, Cursor, Read, Seek, SeekFrom};
 
+use crate::doc::package::{self, ContainerCaps};
 use crate::images::{self, HeaderLimits, PixelGuard, TypeHint};
 
 /// A source that counts the bytes read from it, so a target can check
@@ -58,6 +59,36 @@ pub fn image_header(data: &[u8]) {
     );
 }
 
+/// The caps the container target reads with: small, so a run stays
+/// fast, and every cap reachable.
+pub fn container_caps() -> ContainerCaps {
+    ContainerCaps {
+        max_container: 4 << 20,
+        max_members: 512,
+        max_part: 4 << 20,
+        max_member: 4 << 20,
+        max_total: 16 << 20,
+        ..ContainerCaps::default()
+    }
+}
+
+/// `preview_container`: any bytes as a zip-based document, through the
+/// container read path's checks and nesting cut. The properties: no
+/// panic; a package that passes unpacks within the caps; a rewritten
+/// package opens again and passes again.
+pub fn container(data: &[u8]) {
+    let caps = container_caps();
+    let Ok(checked) = package::check(data.to_vec(), &caps, "zip") else {
+        return;
+    };
+    assert!(checked.unpacked <= caps.max_total);
+    assert!(checked.members <= caps.max_members);
+    if checked.flattened {
+        let again = package::check(checked.bytes, &caps, "zip");
+        assert!(again.is_ok(), "a rewritten package passes again: {again:?}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,5 +102,17 @@ mod tests {
         image_header(b"RIFF\x00\x00\x00\x00WEBPVP8X\x0a\x00\x00\x00");
         image_header(&[0, 0, 1, 0, 0xFF, 0xFF]);
         image_header(b"II*\x00\xff\xff\xff\xff");
+    }
+
+    #[test]
+    fn the_container_target_takes_any_bytes() {
+        container(&[]);
+        container(b"PK\x03\x04");
+        container(b"PK\x05\x06\0\0\0\0\x01\0\x01\0\xff\xff\xff\xff\0\0\0\0\0\0");
+        let mut deep = String::from("<r>");
+        deep.push_str(&"<x>".repeat(600));
+        deep.push_str(&"</x>".repeat(600));
+        deep.push_str("</r>");
+        container(&package::tests::zip_of(&[("content.xml", deep.as_bytes())]));
     }
 }
