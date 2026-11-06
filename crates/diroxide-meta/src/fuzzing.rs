@@ -27,6 +27,7 @@ pub fn file_bytes(bytes: &[u8]) -> usize {
     let mut found = usize::from(crate::exif::parse(bytes).is_some());
     found += usize::from(crate::origin::InternetMark::from_zone_identifier(bytes).is_some());
     found += usize::from(crate::origin::InternetMark::from_quarantine(bytes).is_some());
+    found += usize::from(crate::json::parse(&String::from_utf8_lossy(bytes)).is_some());
     found + readers_on(bytes)
 }
 

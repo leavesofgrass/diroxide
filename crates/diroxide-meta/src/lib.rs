@@ -31,12 +31,14 @@ pub mod field;
 pub mod fuzzing;
 pub mod guard;
 pub mod image;
+pub mod json;
 pub mod origin;
 pub mod pipeline;
 pub mod privacy;
 pub mod reader;
 pub mod readers;
 pub mod strip;
+pub mod tools;
 pub mod words;
 
 pub use field::{Cell, Field};
