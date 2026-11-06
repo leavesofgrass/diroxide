@@ -118,3 +118,30 @@ fn a_bitlocker_partition_is_shown_locked_and_never_opened() {
         "{line}"
     );
 }
+
+#[test]
+fn the_title_words_come_from_place_describe() {
+    let f = Fixture::new();
+    let root = f.image("two-parts.img", &gpt_disk());
+    // The listing opens the image; the title words follow.
+    f.list(&root).unwrap();
+    let title = |place: &diroxide_core::Place| f.host.describe_place("disk", place).unwrap();
+    assert_eq!(
+        title(&at(&root, &["partition-2"])).as_deref(),
+        Some("Partition 2, in two-parts.img")
+    );
+    let iso = f.image(
+        "fedora.iso",
+        &crate::make::fedora_iso(crate::make::IsoNames::Both),
+    );
+    assert_eq!(
+        title(&at(&iso, &["EFI"])).as_deref(),
+        Some("EFI, in fedora.iso")
+    );
+    for line in [
+        title(&at(&root, &["partition-2"])).unwrap_or_default(),
+        title(&iso).unwrap_or_default(),
+    ] {
+        assert!(line.chars().count() <= 40, "{line}");
+    }
+}
