@@ -188,7 +188,7 @@ pub enum ToolError {
     },
     /// The tool ran past its time limit and was stopped, with every child
     /// it started.
-    #[error("{tool} took longer than {seconds} seconds and was stopped")]
+    #[error("{tool} took longer than {} and was stopped", diroxide_vfs::runner::seconds_words(.seconds))]
     TimedOut {
         /// The tool's name.
         tool: String,

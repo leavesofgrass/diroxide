@@ -249,7 +249,7 @@ pub enum ToolRunError {
     },
     /// The program ran past its time limit and was stopped, with every
     /// child it started.
-    #[error("{name} took longer than {seconds} seconds and was stopped")]
+    #[error("{name} took longer than {} and was stopped", seconds_words(.seconds))]
     TimedOut {
         /// Its name as said.
         name: String,
@@ -351,6 +351,16 @@ impl ToolRunner for NoTools {
     }
 }
 
+/// A whole number of seconds in words for a message: "1 second", "90
+/// seconds".
+pub fn seconds_words(seconds: &u64) -> String {
+    if *seconds == 1 {
+        "1 second".to_owned()
+    } else {
+        format!("{seconds} seconds")
+    }
+}
+
 fn not_installed(tool: &str) -> ToolRunError {
     ToolRunError::NotInstalled {
         tool: tool.to_owned(),
@@ -426,6 +436,14 @@ mod tests {
         assert_eq!(
             timed.to_string(),
             "FFmpeg took longer than 600 seconds and was stopped"
+        );
+        let short = ToolRunError::TimedOut {
+            name: "pandoc".to_owned(),
+            seconds: 1,
+        };
+        assert_eq!(
+            short.to_string(),
+            "pandoc took longer than 1 second and was stopped"
         );
         let capped: VfsError = ToolRunError::TooMuchOutput {
             name: "ExifTool".to_owned(),
