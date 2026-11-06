@@ -1793,6 +1793,7 @@ dependencies = [
  "diroxide-core",
  "diroxide-filetype",
  "diroxide-meta",
+ "diroxide-tools",
  "diroxide-vfs",
  "encoding_rs",
  "image",

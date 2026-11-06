@@ -19,7 +19,8 @@
 //! (R30 commits 33 to 40) adds the typed previewers in front of the text
 //! previewer: [`images`], pictures in words from their headers alone;
 //! [`documents`], every format the quick view's [`doc`] readers read
-//! (Markdown, carta's formats, SVG drawings), as rows.
+//! (Markdown, carta's formats, SVG drawings), as rows; [`media`], sound
+//! and video in words through ffprobe.
 
 pub mod classes;
 pub mod doc;
@@ -29,6 +30,7 @@ pub mod fuzzing;
 pub mod hex;
 pub mod highlight;
 pub mod images;
+pub mod media;
 pub mod words;
 
 use std::io::{Cursor, Read};
@@ -64,6 +66,8 @@ pub enum PreviewKind {
     /// A document read into rows ([`documents`]); the view travels in
     /// [`Preview::document`].
     Document,
+    /// Sound or moving pictures in words, through ffprobe ([`media`]).
+    Media,
 }
 
 /// A preview: a details line, then lines to read.
@@ -436,6 +440,7 @@ impl Previews {
         Self {
             previewers: vec![
                 Box::new(images::ImagePreviewer::default()),
+                Box::new(media::MediaPreviewer),
                 Box::new(documents::DocPreviewer::default()),
                 Box::new(TextPreviewer),
                 Box::new(HexPreviewer),

@@ -9,6 +9,7 @@ mod documents;
 mod encoding;
 mod images;
 mod markdown;
+mod media;
 mod text;
 
 use diroxide_core::{Entry, EntryKind, Place};
