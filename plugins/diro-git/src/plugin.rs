@@ -2,8 +2,9 @@
 //! (`place/describe`) and the Git column (`column/format`), with what
 //! it keeps between them.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use diroxide_plugins::protocol::{ErrorKind, PROTOCOL, Params, RpcError, methods};
 use diroxide_plugins::session::{
@@ -11,12 +12,14 @@ use diroxide_plugins::session::{
 };
 use serde_json::Value;
 
+use crate::cache::{ScanCache, StatusCache};
 use crate::error::GitError;
 use crate::folder;
 use crate::git::version::Version;
 use crate::host::Host;
 use crate::repo::{self, Repo};
 use crate::rpc::{Cancel, Handler, Peer, WORKERS};
+use crate::store::TrustStore;
 
 /// The plugin's name, as its manifest says; the host adds it last to
 /// every line the plugin causes.
@@ -30,6 +33,15 @@ pub const COLUMN: &str = "git";
 pub struct Plugin {
     /// git's version, once read.
     pub version: Mutex<Option<Version>>,
+    /// Folder statuses for the title line and the column.
+    pub statuses: StatusCache,
+    /// Trust scans by repository.
+    pub scans: ScanCache,
+    /// The owner's trust answers.
+    pub trust: TrustStore,
+    /// Repositories already asked about this session, so the title line
+    /// asks once.
+    pub asked: Mutex<HashSet<PathBuf>>,
     /// Folders the repository walk never climbs into, as git's own
     /// `GIT_CEILING_DIRECTORIES` says.
     pub ceilings: Vec<PathBuf>,
@@ -59,6 +71,15 @@ impl Plugin {
         repo::find_below(folder, &self.ceilings)
     }
 
+    /// Marks a repository as asked about this session; false when it was
+    /// already.
+    pub fn first_ask(&self, root: &std::path::Path) -> bool {
+        self.asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(root.to_path_buf())
+    }
+
     fn serve(
         &self,
         peer: &Arc<Peer>,
@@ -79,7 +100,10 @@ impl Plugin {
 }
 
 impl Handler for Plugin {
-    fn initialize(&self, _params: &InitializeParams) -> InitializeResult {
+    fn initialize(&self, params: &InitializeParams) -> InitializeResult {
+        if !params.dirs.state.is_empty() {
+            self.trust.set_folder(PathBuf::from(&params.dirs.state));
+        }
         InitializeResult {
             protocol: PROTOCOL,
             plugin: Who {

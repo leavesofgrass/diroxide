@@ -14,6 +14,8 @@
 //! `[` is that name and nothing else.
 
 pub mod progress;
+pub mod status;
+pub mod trust;
 pub mod version;
 
 use std::path::Path;

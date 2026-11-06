@@ -8,6 +8,7 @@
 
 mod status;
 mod support;
+mod trust;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

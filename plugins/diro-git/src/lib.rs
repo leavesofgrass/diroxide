@@ -22,6 +22,7 @@
 //! - **Words first.** Every line it says carries its meaning in the first
 //!   40 cells ([`lines`]); the host adds the plugin's name last.
 
+pub mod cache;
 pub mod error;
 pub mod folder;
 pub mod git;
@@ -30,3 +31,4 @@ pub mod lines;
 pub mod plugin;
 pub mod repo;
 pub mod rpc;
+pub mod store;

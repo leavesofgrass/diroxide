@@ -8,6 +8,118 @@ use super::support::host;
 use diro_git::lines;
 
 #[test]
+fn the_title_says_branch_upstream_and_what_changed_here() {
+    let (git, mut host) = host();
+    let repo = git.repo("title");
+    std::fs::create_dir_all(repo.join("sub")).unwrap();
+    std::fs::write(repo.join("sub").join("a.txt"), "a\n").unwrap();
+    std::fs::write(repo.join("sub").join("b.txt"), "b\n").unwrap();
+    std::fs::write(repo.join("hello.txt"), "changed\n").unwrap();
+    assert_eq!(
+        host.describe(&repo).as_deref(),
+        Some("main, no upstream, 2 changed here")
+    );
+    assert_eq!(
+        host.describe(&repo.join("sub")).as_deref(),
+        Some("main, no upstream, 1 changed here")
+    );
+    let _bare = git.remote_for(&repo, "title-origin.git");
+    git.run(&repo, &["add", "hello.txt"]);
+    git.run(&repo, &["commit", "-q", "-m", "Second"]);
+    // The commit changed the index and HEAD, so the title is taken again.
+    assert_eq!(
+        host.describe(&repo).as_deref(),
+        Some("main, 1 ahead, 1 changed here")
+    );
+    let title = host.describe(&repo).unwrap();
+    assert!(title.chars().count() <= lines::TITLE_CELLS, "{title}");
+    git.run(&repo, &["checkout", "-q", "--detach"]);
+    let detached = host.describe(&repo).unwrap();
+    assert!(detached.starts_with("Detached at "), "{detached}");
+    // A folder outside any repository gets no words.
+    let plain = git.path().join("plain");
+    std::fs::create_dir_all(&plain).unwrap();
+    assert_eq!(host.describe(&plain), None);
+}
+
+#[test]
+fn the_column_says_each_row_s_state_in_words() {
+    let (git, mut host) = host();
+    let repo = git.repo("column");
+    std::fs::create_dir_all(repo.join("src")).unwrap();
+    std::fs::write(repo.join("src").join("lib.rs"), "fn x() {}\n").unwrap();
+    git.run(&repo, &["add", "src/lib.rs"]);
+    git.run(&repo, &["commit", "-q", "-m", "Source"]);
+    std::fs::write(repo.join("notes.txt"), "n\n").unwrap();
+    std::fs::write(repo.join("staged.txt"), "s\n").unwrap();
+    git.run(&repo, &["add", "staged.txt"]);
+    std::fs::write(repo.join("staged.txt"), "s2\n").unwrap();
+    std::fs::write(repo.join(".gitignore"), "*.log\n/build/\n").unwrap();
+    std::fs::write(repo.join("debug.log"), "x\n").unwrap();
+    std::fs::create_dir_all(repo.join("build")).unwrap();
+    std::fs::write(repo.join("build").join("out.bin"), "x\n").unwrap();
+    std::fs::write(repo.join("src").join("lib.rs"), "fn y() {}\n").unwrap();
+    std::fs::write(repo.join("src").join("new.rs"), "\n").unwrap();
+    std::fs::write(repo.join("hello.txt"), "changed\n").unwrap();
+    let cells = host.column(
+        &repo,
+        &[
+            "hello.txt",
+            "notes.txt",
+            "staged.txt",
+            "debug.log",
+            "build",
+            "src",
+            ".gitignore",
+        ],
+    );
+    assert_eq!(
+        cells,
+        [
+            "Modified",
+            "Untracked",
+            "Added, modified",
+            "Ignored",
+            "Ignored",
+            "2 changed inside",
+            "Untracked",
+        ]
+    );
+    git.run(&repo, &["add", "."]);
+    git.run(&repo, &["commit", "-q", "-m", "All"]);
+    assert_eq!(
+        host.column(&repo, &["hello.txt", "src"]),
+        ["Clean", "Clean"]
+    );
+    for cell in &cells {
+        assert!(cell.chars().count() <= 40);
+    }
+}
+
+#[test]
+fn one_status_serves_the_title_and_the_column_until_a_stamp_changes() {
+    let (git, mut host) = host();
+    let repo = git.repo("cache");
+    std::fs::write(repo.join("hello.txt"), "changed\n").unwrap();
+    host.describe(&repo).unwrap();
+    let statuses = |host: &super::support::FakeHost| {
+        host.seen
+            .tools
+            .iter()
+            .filter(|a| a.iter().any(|w| w == "status"))
+            .count()
+    };
+    assert_eq!(statuses(&host), 1);
+    // The column's page right after the listing takes the same status.
+    host.column(&repo, &["hello.txt"]);
+    assert_eq!(statuses(&host), 1);
+    // A change to the index (git add) drops it.
+    git.run(&repo, &["add", "hello.txt"]);
+    assert_eq!(host.column(&repo, &["hello.txt"]), ["Staged"]);
+    assert_eq!(statuses(&host), 2);
+}
+
+#[test]
 fn git_too_old_or_missing_is_said_in_words() {
     let (git, mut host) = host();
     let repo = git.repo("old");
