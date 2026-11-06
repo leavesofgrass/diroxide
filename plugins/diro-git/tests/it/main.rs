@@ -7,6 +7,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod branches;
+mod remote;
 mod status;
 mod support;
 mod tree;

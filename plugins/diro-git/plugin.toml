@@ -160,6 +160,40 @@ description = "Shows the stash's changes as a document."
 selection = "one"
 needs = ["git"]
 
+# ---- Remotes ----
+
+[[command]]
+id = "fetch"
+name = "Git: fetch"
+description = "Gets the remote's new commits without changing your files."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "pull"
+name = "Git: pull"
+description = "Brings in the upstream's commits, fast-forward only."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "push"
+name = "Git: push"
+description = "Sends this branch's commits to its upstream, never forced."
+selection = "none"
+places = "local"
+needs = ["git"]
+
+[[command]]
+id = "push_lease"
+name = "Git: replace remote history"
+description = "Makes the upstream what this branch is, after two questions that name it."
+selection = "none"
+places = "local"
+needs = ["git"]
+
 # ---- Lists ----
 
 [[lister]]

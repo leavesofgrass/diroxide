@@ -19,6 +19,7 @@
 //! row would not survive that.
 
 mod branch;
+mod remote;
 mod tree;
 
 use std::collections::VecDeque;
@@ -53,6 +54,10 @@ pub const IDS: &[&str] = &[
     "stash_pop",
     "stash_drop",
     "stash_show",
+    "fetch",
+    "pull",
+    "push",
+    "push_lease",
 ];
 
 /// The lists this build opens.
@@ -440,6 +445,10 @@ fn dispatch(ctx: &Ctx<'_>, command: &str) -> Result<Value, GitError> {
         "stash_pop" => branch::stash_pop(ctx),
         "stash_drop" => branch::stash_drop(ctx),
         "stash_show" => branch::stash_show(ctx),
+        "fetch" => remote::fetch(ctx),
+        "pull" => remote::pull(ctx),
+        "push" => remote::push(ctx),
+        "push_lease" => remote::push_lease(ctx),
         other => Err(GitError::Host(diroxide_plugins::protocol::RpcError::new(
             diroxide_plugins::protocol::ErrorKind::MethodNotFound,
             format!("no command {other}"),
