@@ -71,7 +71,14 @@ def walk(acc, depth, out, lists):
     role = acc.getRoleName()
     name = acc.name or ""
     st = ",".join(s for s in states(acc) if s in SAID)
-    out.append(f"{'  ' * depth}- {role} {name!r}{place(acc)} [{st}]")
+    # What Orca reads after the name: a picture's words, a dialog's
+    # situation.
+    try:
+        desc = acc.description or ""
+    except Exception:
+        desc = ""
+    said = f" description {desc!r}" if desc else ""
+    out.append(f"{'  ' * depth}- {role} {name!r}{place(acc)} [{st}]{said}")
     if role in ("list", "list box"):
         lists.append(acc)
     for i in range(acc.childCount):
