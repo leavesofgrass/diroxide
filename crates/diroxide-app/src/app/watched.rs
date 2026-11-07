@@ -221,12 +221,17 @@ impl App {
                 vec![self.say(Message::info(line))]
             }
             WatchedNote::Preview { name, dry } => {
-                let title = format!("{}: {}", self.task_title(&name), dry.summary);
-                let lines = if dry.lines.is_empty() {
-                    vec!["Nothing waits in in".to_owned()]
-                } else {
-                    dry.lines
-                };
+                // "Notes: 2 would convert, 0 skipped"; the whole summary last.
+                let title = format!(
+                    "{}: {}",
+                    self.task_title(&name),
+                    dry.summary.trim_start_matches("Dry run: ")
+                );
+                let mut lines = dry.lines;
+                if lines.is_empty() {
+                    lines.push("Nothing waits in in".to_owned());
+                }
+                lines.push(dry.summary);
                 self.open_dialog(Dialog::Read { title, lines }, Purpose::Read)
             }
             WatchedNote::Log { name, lines } => {
@@ -301,6 +306,7 @@ impl App {
                 if let Some(why) = &row.paused {
                     list_row.details.push(why.clone());
                 }
+                list_row.details.push(row.sentence.clone());
                 list_row
             })
             .collect();

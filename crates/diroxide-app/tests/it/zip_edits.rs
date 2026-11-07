@@ -235,6 +235,57 @@ fn a_name_already_in_the_zip_is_refused_whole() {
     assert!(s.dialog().is_none());
 }
 
+/// A made-up password, never anyone's.
+const CANARY: &str = "canary-aw-not-a-password";
+
+/// A locked zip: the password is asked once, through the masked prompt,
+/// for reading the old members and locking the new ones; it is never
+/// said or kept in a dialog.
+#[test]
+fn a_locked_zip_asks_its_password_once_and_stays_locked() {
+    let dir = temp();
+    let demo = demo(dir.path());
+    let build = dir.path().join("build");
+    fs::write(build.join("secret.txt"), "the secret\n").unwrap();
+    fs::write(build.join("plain.txt"), "plain\n").unwrap();
+    pack_into(
+        &build,
+        "locked.zip",
+        &["secret.txt", "plain.txt"],
+        Some(CANARY),
+    );
+    fs::rename(build.join("locked.zip"), demo.join("locked.zip")).unwrap();
+    let (mut s, trash) = session(dir.path(), &demo);
+    s.focus("locked.zip");
+    s.key("enter");
+    s.focus("plain.txt");
+    s.key("delete");
+    let rows = listing(&s);
+    assert!(
+        rows.iter()
+            .any(|r| r == "Password: asked once, kept for the job"),
+        "{rows:?}"
+    );
+    let said = s.key("y");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Password for locked.zip (hidden):")
+    );
+    s.type_text(CANARY);
+    let said = s.key("enter");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Removed plain.txt from locked.zip")),
+        "{said:?}"
+    );
+    assert_eq!(members(&demo.join("locked.zip")), ["secret.txt"]);
+    assert_eq!(trash.count(), 1);
+    for message in &s.said {
+        assert!(!message.text.contains(CANARY), "{}", message.text);
+    }
+    assert!(!format!("{:?}", s.app.dialogs()).contains(CANARY));
+}
+
 /// A RAR 5 listing as 7-Zip 24.08 prints it, one file, and that 7-Zip's
 /// banner: what the fake 7-Zip answers. No real 7-Zip runs.
 const RAR_LISTING: &str = "\n7-Zip 24.08 (x64) : Copyright (c) 1999-2024 Igor Pavlov : 2024-08-11\n\nListing archive: Backup.rar\n\n--\nPath = Backup.rar\nType = Rar5\nPhysical Size = 64\nSolid = -\nBlocks = 1\nEncrypted = -\n\n----------\nPath = notes.txt\nFolder = -\nSize = 13\nPacked Size = 13\nModified = 2026-11-06 12:48:43\nAttributes = A\nEncrypted = -\nCRC = 0A1B2C3D\n\n";

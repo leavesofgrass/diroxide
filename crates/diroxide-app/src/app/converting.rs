@@ -8,6 +8,7 @@
 //! the tools registry; its report said at the end ("Report: 1 failed, 12
 //! converted") and kept with the last 20 in the Conversion reports list,
 //! each report's rows failures first. Undo trashes what the job made.
+//! carta runs in the `diro` child the frontend gives the runtime.
 //!
 //! No default key: Shift+F5 is copy with options. The lists are hosted
 //! under the Organize purpose so the window's test of every purpose keeps
@@ -254,7 +255,7 @@ impl App {
             if let Some(first) = plan.lines().first()
                 && (first.starts_with("Refused: ") || first.starts_with("Skipped "))
             {
-                text = format!("{} {first}.", plan.summary());
+                text = format!("{}. {first}.", plan.summary());
             }
             return vec![self.say(Message::info(text))];
         }

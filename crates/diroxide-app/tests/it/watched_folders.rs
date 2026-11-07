@@ -103,6 +103,12 @@ fn the_list_says_each_task_and_its_actions_preview_and_say_its_rule() {
     s.command(ids::WATCHED_FOLDERS);
     assert_eq!(s.dialog_title().as_deref(), Some("Watched folders: 1 task"));
     assert_eq!(labels(&s), ["Notes, off"]);
+    match s.dialog() {
+        Some(Dialog::Choose { list, .. }) => {
+            assert!(list.rows()[0].details[0].starts_with("Notes. Watches "));
+        }
+        other => panic!("{other:?}"),
+    }
     s.key("enter");
     assert_eq!(s.dialog_title().as_deref(), Some("Notes actions"));
     assert_eq!(
@@ -125,8 +131,15 @@ fn the_list_says_each_task_and_its_actions_preview_and_say_its_rule() {
     action(&mut s, "Preview");
     match s.dialog() {
         Some(Dialog::Read { title, lines }) => {
-            assert_eq!(title, "Notes: Dry run: 2 would convert, 0 skipped");
-            assert_eq!(lines, &["Would convert a.md", "Would convert b.md"]);
+            assert_eq!(title, "Notes: 2 would convert, 0 skipped");
+            assert_eq!(
+                lines,
+                &[
+                    "Would convert a.md",
+                    "Would convert b.md",
+                    "Dry run: 2 would convert, 0 skipped"
+                ]
+            );
         }
         other => panic!("{other:?}"),
     }

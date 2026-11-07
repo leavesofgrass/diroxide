@@ -1,9 +1,9 @@
 //! Conversions on workers (alpha 4, lane AW): the recipes a selection
 //! takes, the plan through CL's engine with the app's tools runner and
 //! type registry, and the run, whose report is kept on the state folder's
-//! shelf of the last 20 and sent to the app. An attended conversion runs
-//! carta in process (CL's default); the watched folders give theirs a
-//! `diro` child.
+//! shelf of the last 20 and sent to the app. carta runs in the `diro`
+//! child the frontend gives the runtime, which the job can stop; in
+//! process without one (tests).
 
 use std::sync::Arc;
 
@@ -72,6 +72,7 @@ impl Runtime {
             } => {
                 let engine = self.engine.clone().with_tools(tools.0);
                 let paths = self.paths.clone();
+                let carta = self.hot.carta.clone();
                 self.worker(move |shared| {
                     let book = recipe_book(paths.as_ref());
                     let result = match book.get(&recipe).cloned() {
@@ -80,7 +81,7 @@ impl Runtime {
                         ))),
                         Some(recipe) => {
                             let mut request =
-                                ConvertRequest::new(job, sources, destination, recipe);
+                                ConvertRequest::new(job, sources, destination, recipe).carta(carta);
                             if let Some(paths) = &paths {
                                 request = request.spool(paths.spool_dir());
                             }
@@ -123,9 +124,7 @@ impl Runtime {
             ConvertAsk::Reports => {
                 let result = match &self.paths {
                     Some(paths) => Ok(report_shelf(paths).list()),
-                    None => Err(Message::info(
-                        "No conversion reports: no state folder to keep them",
-                    )),
+                    None => Err(Message::info("No reports kept: no state folder")),
                 };
                 self.queue.push_back(note(ConvertNote::Reports(result)));
             }
