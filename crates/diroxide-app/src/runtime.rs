@@ -755,7 +755,8 @@ impl Runtime {
             .with_ledger(Arc::clone(&self.ledger))
             .with_speed_limit(self.engine.speed_limiter())
             .with_hooks(self.hooks.clone())
-            .with_trash(Arc::clone(&self.trash));
+            .with_trash(Arc::clone(&self.trash))
+            .with_tools(Arc::clone(self.engine.tools()));
         if let Some(journal) = self.engine.journal() {
             engine = engine.with_journal(journal.clone());
         }
@@ -844,6 +845,15 @@ impl Runtime {
     pub fn set_editor(&mut self, editor: &str) {
         let editor = editor.trim();
         self.editor = (!editor.is_empty()).then(|| OsString::from(editor));
+    }
+
+    /// The same runtime running helper programs through `tools`: the tools
+    /// registry in the program (7-Zip for a RAR, a conversion's tool), a
+    /// recording runner in tests, so no test starts a real program. Every
+    /// job's context and the archive listings carry it (CL's K4, lane AW).
+    pub fn with_tool_runner(mut self, tools: Arc<dyn diroxide_vfs::ToolRunner>) -> Self {
+        self.engine = self.engine.clone().with_tools(tools);
+        self
     }
 
     /// A runtime with only the local provider.
@@ -1035,7 +1045,10 @@ impl Runtime {
         if place.kind() == diroxide_core::PlaceKind::Archive
             && let Some(archives) = self.archives.clone()
         {
-            self.worker(move |shared| list_archive(shared, &registry, &archives, request, place));
+            let tools = Arc::clone(self.engine.tools());
+            self.worker(move |shared| {
+                list_archive(shared, &registry, &archives, request, place, tools);
+            });
             return;
         }
         let cancel = CancelToken::new();
@@ -1402,16 +1415,31 @@ impl Runtime {
                 };
                 let registry = Arc::clone(&self.registry);
                 let map = Arc::clone(&self.archive_secrets);
+                let tools = Arc::clone(self.engine.tools());
                 self.worker(move |shared| {
                     archive_jobs::plan_unpack_job(
-                        shared, &registry, &archives, &map, job, &request,
+                        shared, &registry, &archives, &map, job, &request, tools,
                     );
                 });
             }
             Request::PlanPack { job, request } => {
                 let registry = Arc::clone(&self.registry);
+                let tools = Arc::clone(self.engine.tools());
                 self.worker(move |shared| {
-                    archive_jobs::plan_pack_job(shared, &registry, job, &request);
+                    archive_jobs::plan_pack_job(shared, &registry, job, &request, tools);
+                });
+            }
+            Request::PlanRewrite(ask) => {
+                let Some(archives) = self.archives.clone() else {
+                    self.queue.push_back(AppEvent::ArchivePlanned {
+                        job: ask.job,
+                        result: Err(archive_jobs::no_archives("change")),
+                    });
+                    return;
+                };
+                let tools = Arc::clone(self.engine.tools());
+                self.worker(move |shared| {
+                    archive_jobs::plan_rewrite_job(shared, &archives, &ask, tools);
                 });
             }
             Request::RunArchive(plan) => {
@@ -2771,6 +2799,7 @@ fn list_archive(
     archives: &ArchiveProvider,
     request: RequestId,
     place: Place,
+    tools: Arc<dyn diroxide_vfs::ToolRunner>,
 ) {
     let progress = Arc::new(ListingProgress {
         request,
@@ -2781,7 +2810,8 @@ fn list_archive(
         shared: Arc::clone(shared),
     });
     let secrets = JobSecrets::new(source);
-    let ctx = OpContext::new().with_progress(progress);
+    // 7-Zip reads a RAR and the other tool formats (lane AW).
+    let ctx = OpContext::new().with_progress(progress).with_tools(tools);
     let Some((container, _)) = place.archive() else {
         return;
     };
@@ -2821,6 +2851,9 @@ fn list_archive(
             if listing.capped() {
                 notes.push(diroxide_archive::capped_line());
             }
+            // A tool-read archive that cannot be unpacked here says why
+            // after its opening line (lane AW).
+            notes.extend(opened.unpack_note());
             let facts = crate::archives::ArchiveFacts {
                 place: place.clone(),
                 container: container.clone(),

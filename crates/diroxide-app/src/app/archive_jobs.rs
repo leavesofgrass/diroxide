@@ -24,7 +24,105 @@ fn start_line(plan: &ArchivePlan) -> String {
     }
 }
 
+/// The member paths of places inside one archive, `/` between names, and
+/// that archive; `None` when a place is not inside it.
+fn members_of(places: &[Place]) -> Option<(Place, Vec<String>)> {
+    let (container, _) = places.first()?.archive()?;
+    let container = container.clone();
+    let mut members = Vec::new();
+    for place in places {
+        let (outer, member) = place.archive()?;
+        if *outer != container || member.is_empty() {
+            return None;
+        }
+        members.push(member.to_owned());
+    }
+    Some((container, members))
+}
+
+/// A member path in the folder `place` names inside its archive: "" at
+/// the root, "week1" in that folder.
+fn folder_member(place: &Place) -> Option<(Place, String)> {
+    let (container, member) = place.archive()?;
+    Some((container.clone(), member.trim_matches('/').to_owned()))
+}
+
+/// Joins a member folder and a name: "week1/notes.txt", or the name at
+/// the root.
+fn member_path(folder: &str, name: &str) -> String {
+    if folder.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{folder}/{name}")
+    }
+}
+
 impl App {
+    /// Delete, Rename and Make folder inside a zip (alpha 4, lane AW, R30
+    /// commit 82; the owner's answer 114): the job these commands would
+    /// plan becomes a rewrite of the archive, planned on a worker, then
+    /// asked about with its cost and what it loses, starting on No. The
+    /// old archive goes to the trash only after the new one tests clean,
+    /// so Undo restores it. A 7z or a tar keeps the read-only sentence;
+    /// RAR and the other formats read through 7-Zip say they are never
+    /// written. `None` for any job that does not change an archive.
+    pub(super) fn rewrite_instead(
+        &mut self,
+        side: Side,
+        request: &diroxide_core::JobRequest,
+        note: Option<String>,
+    ) -> Option<Vec<Effect>> {
+        let (archive, removals, renames, folders) = match request.kind {
+            JobKind::Trash | JobKind::DeletePermanently => {
+                let (archive, members) = members_of(&request.sources)?;
+                (archive, members, Vec::new(), Vec::new())
+            }
+            JobKind::MakeFolder => {
+                let (archive, folder) = folder_member(request.destination.as_ref()?)?;
+                let name = request.new_name.clone()?;
+                (
+                    archive,
+                    Vec::new(),
+                    Vec::new(),
+                    vec![member_path(&folder, &name)],
+                )
+            }
+            JobKind::Rename => {
+                let places: Vec<Place> = request.renames.iter().map(|(p, _)| p.clone()).collect();
+                let (archive, members) = members_of(&places)?;
+                let renames = members
+                    .iter()
+                    .zip(&request.renames)
+                    .map(|(old, (_, new))| {
+                        let folder = old.rsplit_once('/').map_or("", |(f, _)| f);
+                        (old.clone(), member_path(folder, new))
+                    })
+                    .collect();
+                (archive, Vec::new(), renames, Vec::new())
+            }
+            _ => return None,
+        };
+        let job = request.id;
+        self.flows.insert(
+            job,
+            Flow {
+                side,
+                note,
+                then: Then::Report,
+                confirm: true,
+                kind: JobKind::Rewrite,
+            },
+        );
+        self.request(Request::PlanRewrite(Box::new(crate::request::RewriteAsk {
+            job,
+            archive,
+            removals,
+            renames,
+            folders,
+        })));
+        Some(Vec::new())
+    }
+
     /// A copy whose sources are inside an archive: an unpack of those
     /// members into the destination, with no folder made for the archive
     /// (W2b's notes). Never asked of a place outside an archive.
@@ -169,7 +267,7 @@ impl App {
                     .map(|flow| self.panel(flow.side.other()).place().clone());
                 pack.destination.parent() == other
             }
-            ArchivePlan::Unpack { .. } => true,
+            ArchivePlan::Unpack { .. } | ArchivePlan::Rewrite { .. } => true,
         };
         listing.extend(plan.rows(other_panel));
         self.open_dialog(
@@ -191,6 +289,13 @@ impl App {
         self.jobs.begin(job, kind, line.clone(), now);
         if let ArchivePlan::Pack { plan: pack, .. } = &plan
             && let Some(folder) = pack.destination.parent()
+        {
+            self.remember_pack_folder(&folder);
+        }
+        // A rewrite writes its new copy beside the archive too, so the
+        // sweep at start finds what an interrupted one left.
+        if let ArchivePlan::Rewrite { plan: rewrite } = &plan
+            && let Some(folder) = rewrite.archive.parent()
         {
             self.remember_pack_folder(&folder);
         }

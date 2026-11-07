@@ -75,6 +75,8 @@ mod views;
 mod volumes;
 // Watch this folder (W3t).
 mod watching;
+// Delete, Rename and Make folder inside a zip (alpha 4, lane AW).
+mod zip_edits;
 
 use diroxide_app::{App, AppEvent, AppOptions, Runtime};
 use diroxide_core::{Effect, Key, Place, Side};

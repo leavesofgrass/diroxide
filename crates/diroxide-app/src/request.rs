@@ -165,6 +165,13 @@ pub enum ArchivePlan {
         /// The new archive's password, when one was set.
         password: Option<Secret>,
     },
+    /// Delete, Rename or Make folder inside a zip (alpha 4, lane AW): the
+    /// zip written again without, or with, those members, the old one to
+    /// the trash. A locked zip's password is asked once when it runs.
+    Rewrite {
+        /// The plan.
+        plan: Box<diroxide_archive::RewritePlan>,
+    },
 }
 
 impl ArchivePlan {
@@ -173,33 +180,65 @@ impl ArchivePlan {
         match self {
             ArchivePlan::Unpack { plan, .. } => plan.job,
             ArchivePlan::Pack { plan, .. } => plan.job,
+            ArchivePlan::Rewrite { plan } => plan.pack.job,
         }
     }
 
     /// The question before it runs, starting on No: "Unpack 4 members
-    /// into out? y or n", "Pack 2 items into reports.zip? y or n".
+    /// into out? y or n", "Pack 2 items into reports.zip? y or n",
+    /// "Remove 2 members from course.zip? y or n".
     pub fn question(&self) -> diroxide_core::Message {
         match self {
             ArchivePlan::Unpack { plan, .. } => plan.question(),
             ArchivePlan::Pack { plan, .. } => plan.question(),
+            ArchivePlan::Rewrite { plan } => plan.question(),
         }
     }
 
-    /// The plan's rows, each a labeled setting with its meaning first.
+    /// The plan's rows, each a labeled setting with its meaning first. A
+    /// rewrite's are its cost first ("Rewrites all of course.zip: 1.2
+    /// GB"), then what it loses and where the old copy goes; the change
+    /// itself is the question.
     pub fn rows(&self, other_panel: bool) -> Vec<String> {
         match self {
             ArchivePlan::Unpack { plan, .. } => plan.rows(),
             ArchivePlan::Pack { plan, .. } => plan.rows_for(other_panel),
+            ArchivePlan::Rewrite { plan } => {
+                let summary = plan.summary();
+                plan.rows().into_iter().filter(|r| *r != summary).collect()
+            }
         }
     }
 
-    /// The job request kept in the jobs list: no password in it.
+    /// The job request kept in the jobs list: no password in it. A
+    /// rewrite's says the rewrite, not Pack.
     pub fn job_request(&self) -> JobRequest {
         match self {
             ArchivePlan::Unpack { plan, .. } => plan.job_request(),
             ArchivePlan::Pack { plan, .. } => plan.job_request(),
+            ArchivePlan::Rewrite { plan } => {
+                let mut request = plan.pack.job_request();
+                request.kind = diroxide_core::JobKind::Rewrite;
+                request
+            }
         }
     }
+}
+
+/// A change asked inside a zip, to plan as a rewrite (lane AW): member
+/// paths as the panel has them, `/` between names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RewriteAsk {
+    /// The job.
+    pub job: JobId,
+    /// The archive file.
+    pub archive: Place,
+    /// The members to remove, with everything inside a folder among them.
+    pub removals: Vec<String>,
+    /// The members to rename: old path, new path.
+    pub renames: Vec<(String, String)>,
+    /// The folders to make.
+    pub folders: Vec<String>,
 }
 
 /// What the program that runs is.
@@ -425,6 +464,9 @@ pub enum Request {
         /// What to pack and where, with its password.
         request: Box<diroxide_archive::PackRequest>,
     },
+    /// Plan a rewrite of a zip on a worker (Delete, Rename and Make folder
+    /// inside it, lane AW); answered like [`Request::PlanUnpack`].
+    PlanRewrite(Box<RewriteAsk>),
     /// Run an archive job the user confirmed, exactly as planned; its end
     /// comes as [`AppEvent::ArchiveFinished`](crate::AppEvent::ArchiveFinished).
     RunArchive(Box<ArchivePlan>),

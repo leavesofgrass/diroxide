@@ -2078,18 +2078,12 @@ impl App {
         }
         let side = self.active;
         // A change inside an archive is refused in words (W2a, P2b): an
-        // archive is read only here, and Pack makes a new one.
+        // archive is read only here, and Pack makes a new one. Make
+        // folder, Delete and Rename go on to their flows, which rewrite a
+        // zip and refuse the rest (lane AW).
         let changes_here = matches!(
             action,
-            Action::MakeFolder
-                | Action::Trash
-                | Action::DeletePermanently
-                | Action::Rename
-                | Action::Duplicate
-                | Action::Paste
-                | Action::Move
-                | Action::MoveTo
-                | Action::ClipCut
+            Action::Duplicate | Action::Paste | Action::Move | Action::MoveTo | Action::ClipCut
         );
         if changes_here && let Some(refused) = self.read_only_refusal(side) {
             return refused;

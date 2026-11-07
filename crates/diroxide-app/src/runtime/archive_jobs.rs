@@ -13,16 +13,20 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use diroxide_archive::{
-    Allowances, ArchiveError, ArchiveProvider, ArchiveQuestions, JobEnv, JobSecrets, PackRequest,
-    UnpackRequest, plan_pack, plan_unpack, run_pack, run_unpack, test_archive,
+    Allowances, ArchiveError, ArchiveFormat, ArchiveProvider, ArchiveQuestions, JobEnv, JobSecrets,
+    PackRequest, UnpackRequest, ZIP_ONLY, plan_pack, plan_rewrite, plan_unpack, run_pack,
+    run_rewrite, run_unpack, test_archive,
 };
-use diroxide_core::{JobId, Message, Place};
-use diroxide_ops::{Engine, JobControl};
-use diroxide_vfs::{CancelToken, OpContext, Registry, SecretSource};
+use diroxide_core::{ConflictAnswer, ErrorAction, JobId, JobKind, Message, Place};
+use diroxide_ops::{
+    Conflict, ConnectionAnswer, ConnectionQuestion, Engine, ItemError, JobControl, JobNotice,
+    JobProgress, JobSink,
+};
+use diroxide_vfs::{CancelToken, OpContext, Registry, SecretSource, ToolRunner, VfsError};
 
 use super::{ForwardSecrets, Shared, forward_sink, lock};
 use crate::app::AppEvent;
-use crate::request::{ArchivePlan, Question, Reply};
+use crate::request::{ArchivePlan, Question, Reply, RewriteAsk};
 
 /// The secrets of the archive jobs between their plan and their run.
 pub(super) type JobSecretsMap = Arc<Mutex<HashMap<JobId, Arc<JobSecrets>>>>;
@@ -102,13 +106,14 @@ pub(super) fn plan_unpack_job(
     map: &JobSecretsMap,
     job: JobId,
     request: &UnpackRequest,
+    tools: Arc<dyn ToolRunner>,
 ) {
     let source: Arc<dyn SecretSource> = Arc::new(ForwardSecrets {
         job: Some(job),
         shared: Arc::clone(shared),
     });
     let secrets = JobSecrets::new(source);
-    let ctx = OpContext::new();
+    let ctx = OpContext::new().with_tools(tools);
     let planned = asking(shared, job, &ctx.cancel, |allow| {
         secrets.with_tries(&ctx, |ctx| {
             plan_unpack(archives, registry, request, job, ctx, allow)
@@ -122,7 +127,8 @@ pub(super) fn plan_unpack_job(
                 allow,
             }))
         }
-        Err(error) => Err(error.message("unpack", &name_of(&request.source))),
+        Err(error) => Err(needs_seven_zip(&error, &request.source)
+            .unwrap_or_else(|| error.message("unpack", &name_of(&request.source)))),
     };
     shared.send(AppEvent::ArchivePlanned { job, result });
 }
@@ -133,8 +139,9 @@ pub(super) fn plan_pack_job(
     registry: &Registry,
     job: JobId,
     request: &PackRequest,
+    tools: Arc<dyn ToolRunner>,
 ) {
-    let ctx = OpContext::new();
+    let ctx = OpContext::new().with_tools(tools);
     let result = match plan_pack(registry, request, job, &ctx) {
         Ok(plan) => Ok(Box::new(ArchivePlan::Pack {
             plan: Box::new(plan),
@@ -181,9 +188,16 @@ pub(super) fn run_archive_job(
             shared: Arc::clone(shared),
         })
     };
-    let env = JobEnv::new(engine, archives, job, control, &sink)
+    // A rewrite's rows say the rewrite, not the pack that runs it.
+    let rewriting = RewriteSink(&sink);
+    let job_sink: &dyn JobSink = match plan {
+        ArchivePlan::Rewrite { .. } => &rewriting,
+        _ => &sink,
+    };
+    let env = JobEnv::new(engine, archives, job, control, job_sink)
         .with_questions(&questions)
-        .with_secrets(source);
+        .with_secrets(source)
+        .with_tools(Arc::clone(engine.tools()));
     let (report, lines) = match plan {
         ArchivePlan::Unpack { plan, allow } => {
             let outcome = run_unpack(plan, None, *allow, &env);
@@ -191,6 +205,14 @@ pub(super) fn run_archive_job(
         }
         ArchivePlan::Pack { plan, password } => {
             let outcome = run_pack(plan, password.as_ref(), &env);
+            (outcome.report, outcome.lines)
+        }
+        ArchivePlan::Rewrite { plan } => {
+            let mut outcome = run_rewrite(plan, None, &env);
+            outcome.report.kind = JobKind::Rewrite;
+            if outcome.report.undo.kind.is_some() {
+                outcome.report.undo.kind = Some(JobKind::Rewrite);
+            }
             (outcome.report, outcome.lines)
         }
     };
@@ -223,7 +245,8 @@ pub(super) fn test_archive_job(
     });
     let env = JobEnv::new(engine, archives, job, control, &sink)
         .with_questions(&questions)
-        .with_secrets(source);
+        .with_secrets(source)
+        .with_tools(Arc::clone(engine.tools()));
     let outcome = test_archive(archive, None, &env);
     let mut lines = vec![outcome.sentence().text];
     for line in outcome.lines() {
@@ -235,6 +258,110 @@ pub(super) fn test_archive_job(
         report: Box::new(outcome.report),
         lines,
     });
+}
+
+/// Plans a rewrite of a zip (Delete, Rename or Make folder inside it) and
+/// sends the plan, or why not in words: a refusal said whole; 7z and tar
+/// the old read-only sentence ("Archives are read only here. Use Pack to
+/// make a new one."); a format read through 7-Zip its own ("RAR is read
+/// only: diroxide never writes it").
+pub(super) fn plan_rewrite_job(
+    shared: &Arc<Shared>,
+    archives: &ArchiveProvider,
+    ask: &RewriteAsk,
+    tools: Arc<dyn ToolRunner>,
+) {
+    let ctx = OpContext::new().with_tools(tools);
+    let planned = plan_rewrite(
+        archives,
+        &ask.archive,
+        &ask.removals,
+        &ask.renames,
+        &ask.folders,
+        ask.job,
+        &ctx,
+    );
+    let result = match planned {
+        Ok(plan) => Ok(Box::new(ArchivePlan::Rewrite {
+            plan: Box::new(plan),
+        })),
+        Err(ArchiveError::Refused(sentence)) if sentence == ZIP_ONLY => {
+            Err(not_rewritten(archives, &ask.archive, &ctx))
+        }
+        Err(error) => Err(needs_seven_zip(&error, &ask.archive)
+            .unwrap_or_else(|| error.message("change", &name_of(&ask.archive)))),
+    };
+    shared.send(AppEvent::ArchivePlanned {
+        job: ask.job,
+        result,
+    });
+}
+
+/// Why an archive that is not a zip is not changed: a format read through
+/// 7-Zip is never written; any other keeps the read-only sentence.
+fn not_rewritten(archives: &ArchiveProvider, archive: &Place, ctx: &OpContext) -> Message {
+    let format = archives
+        .open_archive(archive, ctx, Allowances::all())
+        .map(|opened| opened.format())
+        .ok();
+    match format {
+        Some(ArchiveFormat::Tool(signature)) => {
+            Message::error(diroxide_archive::sniff::never_written(signature))
+        }
+        _ => Message::error(diroxide_archive::READ_ONLY),
+    }
+}
+
+/// The 7-Zip need said with the format first and the way to get it:
+/// "RAR needs 7-Zip: not installed. Get it from Manage optional
+/// components, then try again." `None` for any other error.
+fn needs_seven_zip(error: &ArchiveError, archive: &Place) -> Option<Message> {
+    let needs = matches!(
+        error,
+        ArchiveError::Vfs(VfsError::NeedsHelper { .. })
+            | ArchiveError::Vfs(VfsError::UnsupportedFeature { .. })
+    );
+    let container = archive.archive().map_or(archive, |(c, _)| c);
+    let signature = container
+        .name()
+        .and_then(diroxide_archive::sniff::tool_signature_of_name)?;
+    if !needs || signature.is_disk_image() {
+        return None;
+    }
+    Some(Message::error(format!(
+        "{}. Get it from Manage optional components, then try again.",
+        diroxide_archive::sniff::not_installed_line(signature)
+    )))
+}
+
+/// A job's sink that says a rewrite's progress as the rewrite's, not the
+/// pack's that runs it ("Rewriting course.zip", lane AW).
+struct RewriteSink<'a>(&'a dyn JobSink);
+
+impl JobSink for RewriteSink<'_> {
+    fn progress(&self, progress: &JobProgress) {
+        let mut progress = progress.clone();
+        if progress.kind == JobKind::Pack {
+            progress.kind = JobKind::Rewrite;
+        }
+        self.0.progress(&progress);
+    }
+
+    fn conflict(&self, conflict: &Conflict) -> ConflictAnswer {
+        self.0.conflict(conflict)
+    }
+
+    fn error(&self, error: &ItemError) -> ErrorAction {
+        self.0.error(error)
+    }
+
+    fn connection(&self, question: &ConnectionQuestion) -> ConnectionAnswer {
+        self.0.connection(question)
+    }
+
+    fn notice(&self, notice: &JobNotice) {
+        self.0.notice(notice);
+    }
 }
 
 /// A plan's sentence when the job could not even be planned.

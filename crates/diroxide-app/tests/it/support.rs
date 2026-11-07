@@ -507,7 +507,8 @@ impl Session {
             .with_launcher(setup.recorder.clone())
             .with_opener(setup.recorder.clone())
             .with_open_with(setup.recorder.clone())
-            .with_components_offline();
+            .with_components_offline()
+            .with_tool_runner(setup.tools.clone());
         if let Some(paths) = paths {
             runtime = runtime.with_paths(paths.clone());
         }

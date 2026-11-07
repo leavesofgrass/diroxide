@@ -96,15 +96,21 @@ fn entering_and_leaving_an_archive_says_where_and_what_opened() {
         "{}",
         s.app.title_line()
     );
-    // A change inside an archive is refused in words.
-    assert_eq!(
-        s.key("f7"),
-        ["Archives are read only here. Use Pack to make a new one."]
+    // A change inside a zip is a rewrite, asked first (lane AW): Make
+    // folder asks the name, Delete asks with the cost, No changes nothing.
+    let said = s.key("f7");
+    assert!(
+        said.iter().any(|l| l.starts_with("New folder in week1")),
+        "{said:?}"
     );
-    assert_eq!(
-        s.key("f8"),
-        ["Archives are read only here. Use Pack to make a new one."]
+    s.key("escape");
+    let said = s.key("f8");
+    assert!(
+        said.last()
+            .is_some_and(|l| l.ends_with("from course.zip? No is the default. y or n")),
+        "{said:?}"
     );
+    assert_eq!(s.key("n"), ["Nothing changed."]);
     // Back up to the archive's root, then out of it.
     let said = s.key("left");
     assert!(
