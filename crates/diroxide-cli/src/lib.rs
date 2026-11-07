@@ -172,6 +172,9 @@ pub fn help_text() -> String {
         "diro components list      list the optional components: title, state, size, license",
         "diro components download ID  say its size and license, ask, then download it",
         "diro doctor               say the tools, components and plugins diro finds",
+        "diro info PATH...         say a file's details as plain lines, the name first",
+        "diro sum FILE...          print each file's SHA-256, the name first",
+        "diro sum --check LIST     check the files LIST names: 0 all match, 1 not",
         "diro --version            print the version",
         "diro --help               print this help",
         "",
@@ -513,7 +516,9 @@ mod tests {
     /// says it is not built yet and exits 1; `watch` with a task takes the
     /// task's route and without one stays the say-each-file mode. `diro
     /// doctor` left the list when the registry's lane built it (its tests
-    /// are in `cmd/doctor.rs`, on fake folders and tools only).
+    /// are in `cmd/doctor.rs`, on fake folders and tools only), and `diro
+    /// info` and `diro sum` when the metadata lane built them (theirs are
+    /// in `cmd/info.rs` and `cmd/sum.rs`).
     #[test]
     fn the_alpha_four_routes_say_they_are_not_built_yet() {
         assert!(matches!(
@@ -522,8 +527,6 @@ mod tests {
         ));
         for (line, words) in [
             (&["convert", "a.md", "--to", "docx"][..], "diro convert"),
-            (&["info", "a.jpg"], "diro info"),
-            (&["sum", "--check", "SHA256SUMS"], "diro sum"),
             (&["watch", "--task", "scans", "--once"], "diro watch --task"),
         ] {
             let mut out = Vec::new();
