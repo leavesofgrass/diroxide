@@ -45,6 +45,21 @@ pub struct FilePin {
     pub exec: Option<String>,
     /// Leading folder levels an unpack drops from each member's path.
     pub strip: u32,
+    /// For an archive that is unpacked: the members it unpacks, as
+    /// patterns on each member's path after `strip` ([`crate::keep`]):
+    /// `bin/*`, `exiftool_files/**`, `LICENSE*`. Empty: every member. A
+    /// member no pattern keeps is not part of the component and is not
+    /// said.
+    pub keep: Vec<String>,
+    /// For an archive that is unpacked: members written under another
+    /// name, as (path after `strip`, new path), for the few names a
+    /// publisher makes that are not plain (`exiftool(-k).exe` to
+    /// `exiftool.exe`). The new path is plain names joined by `/`.
+    pub rename: Vec<(String, String)>,
+    /// More programs in the component's folder besides `exec`, plain
+    /// paths: each gets the executable bit on Unix and is offered to the
+    /// tools registry (`bin/ffprobe` beside `bin/ffmpeg`).
+    pub also_exec: Vec<String>,
 }
 
 impl FilePin {
@@ -59,7 +74,19 @@ impl FilePin {
             url: None,
             exec: None,
             strip: 0,
+            keep: Vec::new(),
+            rename: Vec::new(),
+            also_exec: Vec::new(),
         }
+    }
+
+    /// Its programs' paths in the component's folder: `exec`, then each
+    /// of `also_exec`.
+    pub fn programs(&self) -> impl Iterator<Item = &str> {
+        self.exec
+            .as_deref()
+            .into_iter()
+            .chain(self.also_exec.iter().map(String::as_str))
     }
 
     /// The pin of some bytes, named `name`.

@@ -12,10 +12,15 @@
 //!   `generated_by`, and one `[[component]]` table per component.
 //! - Per component: `id`, `title`, `kind` (`plugin`, `helper`, `data`),
 //!   `version`, `license`, `license_note`, `credit`, `features`,
-//!   `needs_tools`, `needs_components`, `protocol`, `min_diro`, `action`
-//!   (`place` or `unpack`), `folder` (the id by default), `unpacked_size`.
+//!   `needs_tools`, `needs_components`, `tools` (a helper's programs, by
+//!   the tools registry's ids), `notice` (a sentence the ask-first
+//!   question says), `protocol`, `min_diro`, `action` (`place` or
+//!   `unpack`), `folder` (the id by default), `unpacked_size`.
 //! - Per file (`[[component.file]]`): `name`, `size`, `sha256`, `target`
-//!   (a triple or `any`), `url` (optional, `https` only), `exec`, `strip`.
+//!   (a triple or `any`), `url` (optional, `https` only), `exec`, `strip`,
+//!   `also_exec` (more programs), `keep` (the members unpacked, as
+//!   patterns, [`crate::keep`]) and `rename` (pairs of a member's path and
+//!   its plain new path).
 //!
 //! Checked at load, in words: plain names; sizes above zero; 64 hex
 //! digits; `https` only; the pair of id and target unique; at most
@@ -121,6 +126,10 @@ struct RawComponent {
     needs_tools: Vec<String>,
     #[serde(default)]
     needs_components: Vec<String>,
+    #[serde(default)]
+    tools: Vec<String>,
+    #[serde(default)]
+    notice: String,
     protocol: Option<u32>,
     min_diro: Option<String>,
     #[serde(default)]
@@ -145,6 +154,12 @@ struct RawFile {
     exec: Option<String>,
     #[serde(default)]
     strip: u32,
+    #[serde(default)]
+    keep: Vec<String>,
+    #[serde(default)]
+    rename: Vec<(String, String)>,
+    #[serde(default)]
+    also_exec: Vec<String>,
 }
 
 /// The first line of a parser's message, without the snippet it quotes.
@@ -186,6 +201,7 @@ impl RawComponent {
             ("license", &self.license),
             ("license_note", &self.license_note),
             ("credit", &self.credit),
+            ("notice", &self.notice),
         ] {
             if !sayable(text) {
                 return Err(format!("its {field} has control characters or is too long"));
@@ -198,6 +214,7 @@ impl RawComponent {
             ("features", &self.features),
             ("needs_tools", &self.needs_tools),
             ("needs_components", &self.needs_components),
+            ("tools", &self.tools),
         ] {
             if let Some(bad) = names.iter().find(|n| !is_plain_name(n)) {
                 return Err(format!("{field} names {bad:?}, which is not a plain name"));
@@ -222,6 +239,9 @@ impl RawComponent {
                 url: f.url,
                 exec: f.exec,
                 strip: f.strip,
+                keep: f.keep,
+                rename: f.rename,
+                also_exec: f.also_exec,
             })
             .collect();
         let component = Component {
@@ -236,6 +256,8 @@ impl RawComponent {
             features: self.features,
             needs_tools: self.needs_tools,
             needs_components: self.needs_components,
+            tools: self.tools,
+            notice: self.notice,
             protocol: self.protocol,
             min_diro: self.min_diro,
             action,
@@ -363,7 +385,7 @@ impl Manifest {
 
     /// The programs of the installed helper components, for the tools
     /// registry's component step (`ToolRegistry::with_components`): each
-    /// file with an `exec`, in its component's folder under
+    /// file's `exec` and `also_exec`, in its component's folder under
     /// `components_dir`, for `target`. `diro doctor` and the app's tools
     /// registries ask the same (K's request 3).
     pub fn helper_programs(&self, components_dir: &Path, target: &str) -> Vec<PathBuf> {
@@ -371,18 +393,7 @@ impl Manifest {
             .iter()
             .filter(|c| c.kind == Kind::Helper)
             .filter(|c| matches!(c.status_in(components_dir, target), Status::Installed))
-            .flat_map(|c| {
-                let dir = c.dir_in(components_dir);
-                c.files_for(target)
-                    .into_iter()
-                    .filter_map(|file| file.exec.clone())
-                    .map(move |exec| {
-                        exec.split('/')
-                            .filter(|part| !part.is_empty())
-                            .fold(dir.clone(), |path, part| path.join(part))
-                    })
-                    .collect::<Vec<_>>()
-            })
+            .flat_map(|c| c.programs_in(components_dir, target))
             .collect()
     }
 
@@ -440,11 +451,12 @@ impl Manifest {
                 ("features", &c.features),
                 ("needs_tools", &c.needs_tools),
                 ("needs_components", &c.needs_components),
+                ("tools", &c.tools),
             ] {
-                if !list.is_empty() {
-                    let items: Vec<String> = list.iter().map(|s| quoted(s)).collect();
-                    out.push_str(&format!("{key} = [{}]\n", items.join(", ")));
-                }
+                push_list(&mut out, key, list);
+            }
+            if !c.notice.is_empty() {
+                out.push_str(&format!("notice = {}\n", quoted(&c.notice)));
             }
             if let Some(protocol) = c.protocol {
                 out.push_str(&format!("protocol = {protocol}\n"));
@@ -474,9 +486,27 @@ impl Manifest {
                 if f.strip > 0 {
                     out.push_str(&format!("strip = {}\n", f.strip));
                 }
+                push_list(&mut out, "also_exec", &f.also_exec);
+                push_list(&mut out, "keep", &f.keep);
+                if !f.rename.is_empty() {
+                    let pairs: Vec<String> = f
+                        .rename
+                        .iter()
+                        .map(|(from, to)| format!("[{}, {}]", quoted(from), quoted(to)))
+                        .collect();
+                    out.push_str(&format!("rename = [{}]\n", pairs.join(", ")));
+                }
             }
         }
         out
+    }
+}
+
+/// `key = ["a", "b"]`, when the list holds anything.
+fn push_list(out: &mut String, key: &str, list: &[String]) {
+    if !list.is_empty() {
+        let items: Vec<String> = list.iter().map(|s| quoted(s)).collect();
+        out.push_str(&format!("{key} = [{}]\n", items.join(", ")));
     }
 }
 
@@ -762,6 +792,85 @@ sha256 = "{}"
             seen += 1;
         }
         assert!(seen >= 15, "{seen} fixtures");
+    }
+
+    /// A helper's fields (alpha 4) read, write back the same, and are
+    /// checked: the tools, the notice, and each file's extra programs,
+    /// member filter and renames.
+    #[test]
+    fn a_helper_reads_and_writes_back_its_members_and_programs() {
+        let text = format!(
+            r#"
+format = 1
+
+[[component]]
+id = "exiftool"
+title = "ExifTool"
+kind = "helper"
+version = "13.61"
+license = "Artistic-1.0-Perl OR GPL-1.0-or-later"
+tools = ["exiftool"]
+notice = "A sentence to say."
+action = "unpack"
+unpacked_size = 100
+
+[[component.file]]
+name = "exiftool-13.61_64.zip"
+size = 3
+sha256 = "{}"
+target = "x86_64-pc-windows-msvc"
+url = "https://example.invalid/exiftool-13.61_64.zip"
+strip = 1
+exec = "exiftool.exe"
+also_exec = ["exiftool_files/perl.exe"]
+keep = ["exiftool*.exe", "exiftool_files/**"]
+rename = [["exiftool(-k).exe", "exiftool.exe"]]
+"#,
+            sha256_hex(b"abc")
+        );
+        let m = parse(&text, Origin::Public).unwrap();
+        assert!(m.refused.is_empty(), "{:?}", m.refused);
+        let c = m.get("exiftool").unwrap();
+        assert_eq!(c.tools, ["exiftool"]);
+        assert_eq!(c.notice, "A sentence to say.");
+        let f = &c.files[0];
+        assert_eq!(f.also_exec, ["exiftool_files/perl.exe"]);
+        assert_eq!(f.keep, ["exiftool*.exe", "exiftool_files/**"]);
+        assert_eq!(
+            f.rename,
+            [("exiftool(-k).exe".to_owned(), "exiftool.exe".to_owned())]
+        );
+        assert_eq!(parse(&m.to_toml(), Origin::Public).unwrap(), m);
+        fuzz_manifest(text.as_bytes());
+        for (from, to, words) in [
+            ("keep = [", "keep = [\"a b\", ", "not a plain pattern"),
+            (
+                "\"exiftool.exe\"]]",
+                "\"exiftool .exe\"]]",
+                "not plain names",
+            ),
+            ("[[\"exiftool(-k)", "[[\"../exiftool(-k)", "cannot name"),
+            (
+                "tools = [\"exiftool\"]",
+                "tools = [\"exif tool\"]",
+                "not a plain name",
+            ),
+            (
+                "rename = [[",
+                "rename = [[\"a\"], [",
+                "not written as format 1 says",
+            ),
+        ] {
+            let bad = text.replacen(from, to, 1);
+            assert_ne!(bad, text, "{from}");
+            let m = parse(&bad, Origin::OwnSource).unwrap();
+            assert!(m.components.is_empty(), "{to}");
+            assert!(
+                m.refused[0].reason.contains(words),
+                "{}",
+                m.refused[0].reason
+            );
+        }
     }
 
     #[test]

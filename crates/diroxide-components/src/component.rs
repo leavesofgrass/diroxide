@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use diroxide_core::format::{count, human_size};
 
 use crate::error::ComponentError;
+use crate::keep;
 use crate::pin::{FilePin, hash_file, is_plain_name, is_plain_path};
 use crate::receipt::{self, Receipt};
 
@@ -118,6 +119,14 @@ pub struct Component {
     pub needs_tools: Vec<String>,
     /// Components it needs, by id.
     pub needs_components: Vec<String>,
+    /// For a helper: the tools registry's ids of the programs it holds
+    /// (`ffmpeg`, `ffprobe`), for the version line said after install and
+    /// the package command said where it has no build.
+    pub tools: Vec<String>,
+    /// A sentence the ask-first question says after the size and the
+    /// license, meaning first within 40 cells: 7-Zip's unRAR sentence.
+    /// Often empty.
+    pub notice: String,
     /// For a plugin, the protocol major it speaks.
     pub protocol: Option<u32>,
     /// The oldest diroxide it works with.
@@ -226,6 +235,8 @@ impl Component {
             features: Vec::new(),
             needs_tools: Vec::new(),
             needs_components: Vec::new(),
+            tools: Vec::new(),
+            notice: String::new(),
             protocol: None,
             min_diro: None,
             action: Action::Place,
@@ -267,6 +278,22 @@ impl Component {
             .split('/')
             .filter(|part| !part.is_empty())
             .fold(components_dir.to_path_buf(), |path, part| path.join(part))
+    }
+
+    /// The full paths of its programs for the computer `target` names: each
+    /// file's `exec` and `also_exec`, in its folder under `components_dir`,
+    /// whether they are there or not.
+    pub fn programs_in(&self, components_dir: &Path, target: &str) -> Vec<PathBuf> {
+        let dir = self.dir_in(components_dir);
+        self.files_for(target)
+            .into_iter()
+            .flat_map(FilePin::programs)
+            .map(|exec| {
+                exec.split('/')
+                    .filter(|part| !part.is_empty())
+                    .fold(dir.clone(), |path, part| path.join(part))
+            })
+            .collect()
     }
 
     /// The staging folder beside its folder: `<folder>.partial`.
@@ -340,12 +367,69 @@ impl Component {
                     self.id, file.name
                 ));
             }
+            self.check_members(file)?;
             if !seen.insert((file.target.clone(), file.name.to_ascii_lowercase())) {
                 return Err(format!(
                     "{}: two files named {} for one computer, by case",
                     self.id, file.name
                 ));
             }
+        }
+        if self.tools.len() > keep::MAX_PROGRAMS {
+            return Err(format!("{}: it names too many tools", self.id));
+        }
+        if let Some(bad) = self.tools.iter().find(|t| !is_plain_name(t)) {
+            return Err(format!("{}: the tool {bad:?} is not a plain name", self.id));
+        }
+        if self.notice.chars().any(char::is_control) {
+            return Err(format!("{}: the notice has control characters", self.id));
+        }
+        Ok(())
+    }
+
+    /// Checks a file's member filter, its renames and its extra programs:
+    /// plain patterns, plain new names, each named once.
+    fn check_members(&self, file: &FilePin) -> Result<(), String> {
+        let name = &file.name;
+        if file.keep.len() > keep::MAX_PATTERNS
+            || file.rename.len() > keep::MAX_RENAMES
+            || file.also_exec.len() > keep::MAX_PROGRAMS
+        {
+            return Err(format!("{}: {name} has too many patterns", self.id));
+        }
+        if let Some(bad) = file.keep.iter().find(|p| !keep::is_keep_pattern(p)) {
+            return Err(format!(
+                "{}: {name} keeps {bad:?}, which is not a plain pattern",
+                self.id
+            ));
+        }
+        let mut sources = BTreeSet::new();
+        let mut targets = BTreeSet::new();
+        for (from, to) in &file.rename {
+            if !keep::is_rename_source(from) {
+                return Err(format!(
+                    "{}: {name} renames a member it cannot name",
+                    self.id
+                ));
+            }
+            if !is_plain_path(to) {
+                return Err(format!(
+                    "{}: {name} renames to {to:?}, which is not plain names",
+                    self.id
+                ));
+            }
+            if !sources.insert(from.as_str()) || !targets.insert(to.to_ascii_lowercase()) {
+                return Err(format!(
+                    "{}: {name} renames one member or one name twice",
+                    self.id
+                ));
+            }
+        }
+        if let Some(bad) = file.also_exec.iter().find(|p| !is_plain_path(p)) {
+            return Err(format!(
+                "{}: the exec path {bad:?} is not plain names",
+                self.id
+            ));
         }
         Ok(())
     }
@@ -779,6 +863,38 @@ mod tests {
                     c.files.push(twin);
                 }),
             ),
+            (
+                "not a plain pattern",
+                Box::new(|c| c.files[0].keep = vec!["bin/a b".into()]),
+            ),
+            (
+                "which is not plain names",
+                Box::new(|c| c.files[0].rename = vec![("x(1).exe".into(), "x 1.exe".into())]),
+            ),
+            (
+                "cannot name",
+                Box::new(|c| c.files[0].rename = vec![("../x".into(), "x".into())]),
+            ),
+            (
+                "twice",
+                Box::new(|c| {
+                    c.files[0].rename =
+                        vec![("a(1)".into(), "a1".into()), ("a(2)".into(), "A1".into())];
+                }),
+            ),
+            (
+                "not plain names",
+                Box::new(|c| c.files[0].also_exec = vec!["bin/../sh".into()]),
+            ),
+            (
+                "too many patterns",
+                Box::new(|c| c.files[0].keep = vec!["a".into(); keep::MAX_PATTERNS + 1]),
+            ),
+            (
+                "is not a plain name",
+                Box::new(|c| c.tools = vec!["ff mpeg".into()]),
+            ),
+            ("notice", Box::new(|c| c.notice = "a\u{7}b".into())),
         ];
         for (words, change) in cases {
             let mut c = sample();

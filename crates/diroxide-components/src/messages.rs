@@ -12,9 +12,10 @@ use std::path::Path;
 use std::time::Duration;
 
 use diroxide_core::format::human_size;
+use diroxide_tools::{NextStep, ToolRegistry};
 
 use crate::component::{Checked, Component, FileState, Kind, Origin, Status};
-use crate::download::{Event, Progress};
+use crate::download::{Event, Outcome, Progress};
 use crate::error::ComponentError;
 use crate::manifest::Manifest;
 
@@ -36,7 +37,8 @@ pub const NO_BUILD: &str = "No build for this computer.";
 /// The feature a key names, in words, for "X needs ...": `examples` is
 /// "Getting example plugins", `sftp` "Opening SFTP places", `disk`
 /// "Opening a disk image", `git` "Git in the panels", `rar` "Reading a
-/// RAR file". An unknown key is "This feature".
+/// RAR file"; for the helpers, `metadata` "Reading file metadata" and
+/// `github` "Working with GitHub". An unknown key is "This feature".
 pub fn feature_words(feature: &str) -> &'static str {
     match feature {
         "examples" => "Getting example plugins",
@@ -47,6 +49,8 @@ pub fn feature_words(feature: &str) -> &'static str {
         "iso" => "Reading an ISO image",
         "previews" => "This preview",
         "conversions" => "This conversion",
+        "metadata" => "Reading file metadata",
+        "github" => "Working with GitHub",
         _ => "This feature",
     }
 }
@@ -94,7 +98,9 @@ pub fn origin_line(origin: Origin) -> &'static str {
 /// license come before the question, so a terminal's prompt ends on it.
 ///
 /// - "Reading a RAR file needs 7-Zip 25.01." / "Size 3.1 MB, license
-///   LGPL-2.1-or-later." / "Download it now? y or n"
+///   LGPL-2.1-or-later." / then the component's notice when it has one,
+///   such as "unRAR terms: diroxide never writes RAR." / "Download it
+///   now? y or n"
 /// - "Opening SFTP places needs a plugin." / "License MIT. From the
 ///   public manifest." / "Download diro-sftp 0.1.0, 4.2 MB? y or n"
 pub fn ask_first(component: &Component, feature: Option<&str>, target: &str) -> AskFirst {
@@ -131,6 +137,9 @@ pub fn ask_first(component: &Component, feature: Option<&str>, target: &str) -> 
         needs,
         format!("Size {size}, license {}.", license(component)),
     ];
+    if !component.notice.is_empty() {
+        lines.push(component.notice.clone());
+    }
     if component.origin == Origin::OwnSource {
         lines.push(origin_line(Origin::OwnSource).to_owned());
     }
@@ -141,16 +150,41 @@ pub fn ask_first(component: &Component, feature: Option<&str>, target: &str) -> 
 }
 
 /// The lines when a component has no build for this computer: the fact,
-/// then what to do. A helper names the system's packages; a plugin from
-/// this repository's `plugins/` workspaces names the `cargo install`
-/// line that builds it here (R25 N13), its address derived from the
-/// repository so no account is written; anything else, a file.
+/// then what to do. A helper names the command that installs each of its
+/// tools from this system's packages, as the tools registry gives it
+/// ("Install: sudo apt install ffmpeg", K's request 2), or the registry's
+/// sentence, or the system's packages in words; a plugin from this
+/// repository's `plugins/` workspaces names the `cargo install` line that
+/// builds it here (R25 N13), its address derived from the repository so
+/// no account is written; anything else, a file.
 pub fn no_build(component: &Component) -> Vec<String> {
+    no_build_with(component, &ToolRegistry::builtin())
+}
+
+/// [`no_build`] with the tools registry given: its system decides the
+/// package commands.
+pub fn no_build_with(component: &Component, tools: &ToolRegistry) -> Vec<String> {
     match component.kind {
-        Kind::Helper => vec![
-            NO_BUILD.to_owned(),
-            format!("Install {} from your system's packages.", component.title),
-        ],
+        Kind::Helper => {
+            let mut lines = vec![NO_BUILD.to_owned()];
+            for id in &component.tools {
+                let line = match tools.next_step(id) {
+                    Some(NextStep::Command(command)) => format!("Install: {command}"),
+                    Some(NextStep::Words(words)) => words,
+                    None => continue,
+                };
+                if !lines.contains(&line) {
+                    lines.push(line);
+                }
+            }
+            if lines.len() == 1 {
+                lines.push(format!(
+                    "Install {} from your system's packages.",
+                    component.title
+                ));
+            }
+            lines
+        }
         Kind::Plugin => vec![
             NO_BUILD.to_owned(),
             "Build it from source with cargo:".to_owned(),
@@ -184,6 +218,25 @@ pub fn starting(id: &str, bytes: u64) -> String {
 /// "Ready: diro-sftp 0.1.0."
 pub fn ready(component: &Component) -> String {
     format!("Ready: {} {}.", component.id, component.version)
+}
+
+/// What a finished download or install says, in order: "Ready: pandoc
+/// 3.13.", the version check's line for each program of a helper
+/// ("pandoc: 3.13, from components", or "Installed pandoc, but it did not
+/// start."), then each member left out with why. A file in a zip or a
+/// folder to install from that is not one of the component's files is not
+/// said ([`crate::unpack::NOT_ITS_FILE`]).
+pub fn installed(component: &Component, outcome: &Outcome) -> Vec<String> {
+    let mut lines = vec![ready(component)];
+    lines.extend(outcome.started.iter().cloned());
+    lines.extend(
+        outcome
+            .left_out
+            .iter()
+            .filter(|(_, reason)| reason != crate::unpack::NOT_ITS_FILE)
+            .map(|(name, reason)| left_out(name, reason)),
+    );
+    lines
 }
 
 /// "Already installed: diro-sftp 0.1.0."
@@ -739,6 +792,87 @@ mod tests {
             no_build(&seven_zip())[1],
             "Install 7-Zip from your system's packages."
         );
+    }
+
+    /// The helpers' lines (alpha 4): the unRAR sentence in 7-Zip's ask
+    /// line, the package commands where there is no build, and what an
+    /// install says, each with its point in 40 cells.
+    #[test]
+    fn the_helpers_say_their_notice_package_commands_and_versions() {
+        use diroxide_tools::Platform;
+
+        let mut seven = seven_zip();
+        seven.version = "26.05".into();
+        seven.notice = "unRAR terms: diroxide never writes RAR.".into();
+        let ask = ask_first(&seven, Some("rar"), ANY_TARGET);
+        assert_eq!(
+            ask.rows(),
+            [
+                "Reading a RAR file needs 7-Zip 26.05.",
+                "Size 3.1 MB, license LGPL-2.1-or-later.",
+                "unRAR terms: diroxide never writes RAR.",
+                "Download it now? y or n",
+            ]
+        );
+        assert!(within_cells(&ask.lines[2], "never writes RAR"));
+        let mut ffmpeg = sized(
+            "ffmpeg",
+            "FFmpeg",
+            Kind::Helper,
+            "9.0.2",
+            "LGPL-2.1-or-later",
+            76_000_000,
+        );
+        ffmpeg.tools = vec!["ffmpeg".into(), "ffprobe".into()];
+        let debian =
+            ToolRegistry::builtin().with_platform(Platform::Linux, Some("ID=debian\n".to_owned()));
+        let lines = no_build_with(&ffmpeg, &debian);
+        assert_eq!(
+            lines,
+            [
+                "No build for this computer.",
+                "Install: sudo apt install ffmpeg"
+            ]
+        );
+        assert!(within_cells(&lines[1], "sudo apt install ffmpeg"));
+        let windows = ToolRegistry::builtin().with_platform(Platform::Windows, None);
+        assert_eq!(
+            no_build_with(&ffmpeg, &windows)[1],
+            "Install: winget install Gyan.FFmpeg"
+        );
+        let other = ToolRegistry::builtin().with_platform(Platform::Other, None);
+        assert_eq!(
+            no_build_with(&ffmpeg, &other)[1],
+            "Install FFmpeg from ffmpeg.org or your package manager."
+        );
+        ffmpeg.tools.clear();
+        assert_eq!(
+            no_build_with(&ffmpeg, &debian)[1],
+            "Install FFmpeg from your system's packages."
+        );
+        let outcome = Outcome {
+            fetched: vec!["ffmpeg.zip".into()],
+            kept: Vec::new(),
+            left_out: vec![
+                ("bin/a b.dll".into(), "a b.dll is not a plain name".into()),
+                ("extra.txt".into(), crate::unpack::NOT_ITS_FILE.into()),
+            ],
+            started: vec![
+                "FFmpeg: 9.0.2, from components".into(),
+                "Installed ffprobe, but it did not start.".into(),
+            ],
+        };
+        assert_eq!(
+            installed(&ffmpeg, &outcome),
+            [
+                "Ready: ffmpeg 9.0.2.",
+                "FFmpeg: 9.0.2, from components",
+                "Installed ffprobe, but it did not start.",
+                "Left out bin/a b.dll: a b.dll is not a plain name.",
+            ]
+        );
+        assert_eq!(feature_words("metadata"), "Reading file metadata");
+        assert_eq!(feature_words("github"), "Working with GitHub");
     }
 
     #[test]

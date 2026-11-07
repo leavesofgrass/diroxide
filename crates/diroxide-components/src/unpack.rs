@@ -41,8 +41,9 @@ use diroxide_vfs::{OpContext, VfsError};
 use sha2::{Digest, Sha256};
 
 use crate::component::{Action, Component, PART_SUFFIX};
-use crate::download::{Claim, Outcome, finish_with, set_executable};
+use crate::download::{Claim, Outcome, finish_with, set_executable, version_check};
 use crate::error::ComponentError;
+use crate::keep;
 use crate::pin::{FilePin, hash_file, is_plain_name};
 use crate::receipt::{Receipt, ReceiptFile};
 
@@ -192,20 +193,26 @@ fn unpack_one(
         };
         // Shown to the owner: hidden characters spelled out.
         let raw = spell_out(&index.path(id)).into_owned();
-        match record.kind {
-            RecordKind::Folder => return Ok(true),
-            RecordKind::Link | RecordKind::Special => {
-                left_out.push((raw, "a link or a special file, not a file".to_owned()));
-                return Ok(true);
-            }
-            RecordKind::File => {}
+        if record.kind == RecordKind::Folder {
+            return Ok(true);
+        }
+        let parts: Vec<&str> = raw.split('/').collect();
+        let strip = pin.strip as usize;
+        // A member the file's keep patterns do not name is not part of the
+        // component: it is not unpacked, and not said.
+        if !pin.keep.is_empty()
+            && (parts.len() <= strip || !keep::keeps(&pin.keep, &parts[strip..].join("/")))
+        {
+            return Ok(true);
+        }
+        if matches!(record.kind, RecordKind::Link | RecordKind::Special) {
+            left_out.push((raw, "a link or a special file, not a file".to_owned()));
+            return Ok(true);
         }
         if !record.name_flags.is_empty() {
             left_out.push((raw, record.name_flags.words().join(", ")));
             return Ok(true);
         }
-        let parts: Vec<&str> = raw.split('/').collect();
-        let strip = pin.strip as usize;
         if parts.len() <= strip {
             left_out.push((
                 raw.clone(),
@@ -213,7 +220,11 @@ fn unpack_one(
             ));
             return Ok(true);
         }
-        let parts = &parts[strip..];
+        // A rename gives the few names that are not plain a plain one;
+        // every name is then held to the plain-name rule.
+        let source = parts[strip..].join("/");
+        let named = keep::renamed(&pin.rename, &source).unwrap_or(&source);
+        let parts: Vec<&str> = named.split('/').collect();
         if let Some(bad) = parts.iter().find(|p| !is_plain_name(p)) {
             let why = if bad.contains(':') {
                 "has a colon, which would make a hidden stream".to_owned()
@@ -259,7 +270,7 @@ fn unpack_one(
 }
 
 fn file_is_exec(pin: &FilePin, rel: &str) -> bool {
-    pin.exec.as_deref() == Some(rel)
+    pin.programs().any(|program| program == rel)
 }
 
 enum Skip {
@@ -489,6 +500,7 @@ pub fn install_from(
     let mut left = finish_with(component, &dest, &staging, &outcome.fetched, ctx)?;
     outcome.left_out.append(&mut left);
     drop(claim);
+    outcome.started = version_check(component, components_dir, target);
     Ok(outcome)
 }
 
