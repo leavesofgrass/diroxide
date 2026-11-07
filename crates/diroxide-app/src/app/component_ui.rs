@@ -128,12 +128,12 @@ impl App {
     /// The first-run list opened: it is not shown again by itself, and
     /// the ask-again setting turns off.
     fn first_run_shown(&mut self) {
+        // The showing is always written, whatever the setting held in
+        // memory: a session started with it on but never saved would
+        // otherwise open the list again at the next first start, now that
+        // the list holds the helper components and is never empty.
         let changes = [
-            (
-                "components_first_run_shown",
-                !self.settings.components_first_run_shown,
-                true,
-            ),
+            ("components_first_run_shown", true, true),
             (
                 "components_ask_again",
                 self.settings.components_ask_again,
