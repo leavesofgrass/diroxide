@@ -381,6 +381,26 @@ impl App {
                 DetailGroup::Yours,
             ));
         }
+        // The owner's note and named fields beside the labels (R30 commit
+        // 51): "Note: call about the invoice", "Project: Apollo".
+        if let Some(note) = self.organize.labels.note_of(place) {
+            rows.push(DetailRow::new(
+                crate::labels::NOTE_KEY,
+                "Note",
+                note,
+                DetailGroup::Yours,
+            ));
+        }
+        if let Some(fields) = self.organize.labels.fields_of(place) {
+            for (name, value) in fields {
+                rows.push(DetailRow::new(
+                    crate::labels::field_key(name),
+                    crate::labels::field_label(name),
+                    value.clone(),
+                    DetailGroup::Yours,
+                ));
+            }
+        }
         rows.push(DetailRow::new(
             "path",
             "Path",

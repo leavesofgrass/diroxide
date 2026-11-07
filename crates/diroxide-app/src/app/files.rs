@@ -1127,6 +1127,10 @@ impl App {
         {
             self.undo.record(report.undo.clone());
         }
+        // Labels, notes and fields follow a move or a rename, and an undo
+        // of one, in the same step (R30 commit 51): the panels listed
+        // again below show them at the new places.
+        self.labels_follow_moves(&report.undo.moves);
         let missing = report
             .reconciliation
             .as_ref()

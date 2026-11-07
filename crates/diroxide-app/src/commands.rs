@@ -361,6 +361,12 @@ pub mod ids {
         LABEL_CLEAR = "label.clear";
         /// The Labels list.
         LABELS = "label.list";
+        /// Set the owner's note on the marked items, or the focused one
+        /// (alpha 4); an empty note removes it.
+        LABEL_NOTE = "label.note";
+        /// Set a named field, `name: value`, on the marked items, or the
+        /// focused one (alpha 4); an empty value removes it.
+        LABEL_FIELD = "label.field";
         /// Toggle the first label of the Labels list.
         LABEL_FAVORITE_1 = "label.favorite-1";
         /// Toggle the second label of the Labels list.
@@ -724,7 +730,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 248] = [
+pub static CATALOG: [CommandInfo; 250] = [
     command(
         ids::QUIT,
         "Quit",
@@ -2033,6 +2039,22 @@ pub static CATALOG: [CommandInfo; 248] = [
         ids::LABELS,
         "Labels list",
         "Lists the labels with how many items carry each; choosing one lists its items.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABEL_NOTE,
+        "Set note",
+        "Keeps your own one-line note on the marked items, or the focused one, in diroxide's labels file, never in the file; an empty note removes it. It follows the file when diroxide moves it.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABEL_FIELD,
+        "Set field",
+        "Keeps a named field, typed as name: value, on the marked items, or the focused one, shown in the details and as the column custom.NAME; an empty value removes it.",
         Panel,
         &[],
         &[],

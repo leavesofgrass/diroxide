@@ -117,6 +117,20 @@ pub(super) enum Wants {
     /// this file, Open with, the encoding chooser. Hosted here so the
     /// window's test of every purpose keeps its count.
     Types(super::type_actions::TypeWants),
+    /// Set note: the note typed for these places (alpha 4, lane MA).
+    Note {
+        side: Side,
+        places: Vec<Place>,
+        /// The item's name when there is one item.
+        one: Option<String>,
+    },
+    /// Set field: `name: value` typed for these places.
+    Field {
+        side: Side,
+        places: Vec<Place>,
+        /// The item's name when there is one item.
+        one: Option<String>,
+    },
 }
 
 impl Wants {
@@ -142,13 +156,17 @@ enum Do {
     ForgetPlace,
     SaveView,
     ForgetView,
+    Note,
+    Field,
 }
 
-const ROUTES: [(CommandId, Do); 18] = [
+const ROUTES: [(CommandId, Do); 20] = [
     (ids::LABEL_SET, Do::SetLabel),
     (ids::LABEL_TOGGLE, Do::ToggleLabel),
     (ids::LABEL_CLEAR, Do::ClearLabels),
     (ids::LABELS, Do::Labels),
+    (ids::LABEL_NOTE, Do::Note),
+    (ids::LABEL_FIELD, Do::Field),
     (ids::LABEL_FAVORITE_1, Do::Favorite(1)),
     (ids::LABEL_FAVORITE_2, Do::Favorite(2)),
     (ids::LABEL_FAVORITE_3, Do::Favorite(3)),
@@ -207,6 +225,8 @@ impl App {
             }
             Do::SaveView => self.save_view(side),
             Do::ForgetView => self.forget_view(side),
+            Do::Note => self.note_prompt(side, command),
+            Do::Field => self.field_prompt(side, command),
         })
     }
 
@@ -338,6 +358,8 @@ impl App {
             },
             Wants::RemoveBookmark { .. } => self.dialog_escape(),
             Wants::Types(wants) => self.type_lists_accept(wants, row),
+            Wants::Note { side, places, one } => self.note_typed(side, places, one, &text),
+            Wants::Field { side, places, one } => self.field_typed(side, places, one, &text),
         }
     }
 

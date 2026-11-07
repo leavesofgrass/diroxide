@@ -226,6 +226,14 @@ command = "label.list"
 access = "l"
 
 [[menu.item]]
+command = "label.note"
+access = "n"
+
+[[menu.item]]
+command = "label.field"
+access = "f"
+
+[[menu.item]]
 command = "label.favorite-1"
 access = "1"
 

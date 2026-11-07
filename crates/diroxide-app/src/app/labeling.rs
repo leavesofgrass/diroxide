@@ -281,8 +281,8 @@ impl App {
             self.organize.labels.apply_to_entries(&place, &mut entries);
             if entries
                 .iter()
-                .map(|e| &e.labels)
-                .eq(panel.all_entries().iter().map(|e| &e.labels))
+                .map(|e| (&e.labels, &e.extra))
+                .eq(panel.all_entries().iter().map(|e| (&e.labels, &e.extra)))
             {
                 continue;
             }
@@ -427,6 +427,103 @@ impl App {
             Effect::Redraw(diroxide_core::Redraw::All),
             self.say(Message::status(text)),
         ]
+    }
+
+    /// Set note: with a `note` argument it is set at once; otherwise a
+    /// field opens, the one item's note in it, and Enter keeps what is
+    /// typed. An empty note removes it.
+    pub(super) fn note_prompt(&mut self, side: Side, command: &Command) -> Vec<Effect> {
+        let Some((places, one)) = self.label_targets(side) else {
+            let empty = self.panel(side).list().empty_text().to_owned();
+            return vec![self.say(Message::status(empty))];
+        };
+        if let Some(text) = command.text("note") {
+            return self.note_typed(side, places, one, text);
+        }
+        let now = match places.as_slice() {
+            [place] => self.organize.labels.note_of(place).unwrap_or_default(),
+            _ => "",
+        };
+        let label = format!("Note on {}", Self::targets_words(&places, one.as_deref()));
+        let field = EntryField::new(label, CompletionSource::None).with_text(now);
+        self.open_organize(Dialog::edit(field), Wants::Note { side, places, one })
+    }
+
+    /// The note typed: set on the places, or removed when empty, as one
+    /// step Undo takes back.
+    pub(super) fn note_typed(
+        &mut self,
+        side: Side,
+        places: Vec<Place>,
+        one: Option<String>,
+        text: &str,
+    ) -> Vec<Effect> {
+        let note = match crate::labels::check_note(text) {
+            Ok(note) => note,
+            Err(why) => return vec![self.say(Message::error(why))],
+        };
+        let mut effects = self.close_organize_field();
+        effects.extend(self.change_labels(side, LabelChange::Note(note), places, one));
+        effects
+    }
+
+    /// Set field: with a `field` argument (`name: value`) it is set at
+    /// once; otherwise a field opens with the field names in use listed.
+    pub(super) fn field_prompt(&mut self, side: Side, command: &Command) -> Vec<Effect> {
+        let Some((places, one)) = self.label_targets(side) else {
+            let empty = self.panel(side).list().empty_text().to_owned();
+            return vec![self.say(Message::status(empty))];
+        };
+        if let Some(text) = command.text("field") {
+            return self.field_typed(side, places, one, text);
+        }
+        let names: Vec<String> = self
+            .organize
+            .labels
+            .field_names()
+            .into_iter()
+            .map(|name| format!("{name}: "))
+            .collect();
+        let label = format!(
+            "Field on {}, as name: value",
+            Self::targets_words(&places, one.as_deref())
+        );
+        let field = EntryField::new(label, CompletionSource::Values(names));
+        self.open_organize(Dialog::edit(field), Wants::Field { side, places, one })
+    }
+
+    /// `name: value` typed: the field set on the places, or removed when
+    /// the value is empty, as one step Undo takes back.
+    pub(super) fn field_typed(
+        &mut self,
+        side: Side,
+        places: Vec<Place>,
+        one: Option<String>,
+        text: &str,
+    ) -> Vec<Effect> {
+        let (name, value) = match crate::labels::parse_field(text) {
+            Ok(parsed) => parsed,
+            Err(why) => return vec![self.say(Message::error(why))],
+        };
+        let mut effects = self.close_organize_field();
+        effects.extend(self.change_labels(side, LabelChange::Field { name, value }, places, one));
+        effects
+    }
+
+    /// Closes the Set note or Set field prompt when it is on top.
+    fn close_organize_field(&mut self) -> Vec<Effect> {
+        match self.organize_top() {
+            Some(Wants::Note { .. } | Wants::Field { .. }) => self.close_top(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// A finished job's moves and renames, as (from, to): the labels,
+    /// notes and fields of what moved go with it, saved at once.
+    pub(super) fn labels_follow_moves(&mut self, moves: &[(Place, Place)]) {
+        if !moves.is_empty() && self.organize.labels.follow_moves(moves) > 0 {
+            self.save_labels();
+        }
     }
 
     /// The label words of a sort by label when no entry has one.
