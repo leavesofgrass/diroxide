@@ -709,6 +709,14 @@ pub mod ids {
         /// viewer.
         READ_PICTURE_TEXT = "file.read-text-in-picture";
     }
+
+    // The metadata commands (alpha 4, lane MA, R30 commits 54 to 56),
+    // none with a default key: the File menu and the palette.
+    ids! {
+        /// The SHA-256 of the marked files, or the focused one, to read,
+        /// copy, compare with a pasted value or save as `SHA256SUMS`.
+        CHECKSUM = "file.checksum";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -733,7 +741,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 251] = [
+pub static CATALOG: [CommandInfo; 252] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1522,6 +1530,14 @@ pub static CATALOG: [CommandInfo; 251] = [
         ids::COPY_ALL_DETAILS,
         "Copy all details",
         "Puts every detail of the focused file on the clipboard, the private ones too.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::CHECKSUM,
+        "Checksum",
+        "Computes the SHA-256 of the marked files, or the focused one, as a job Cancel stops; then lists it to read, copy, compare with a pasted value, or save as SHA256SUMS beside them.",
         Panel,
         &[],
         &[],

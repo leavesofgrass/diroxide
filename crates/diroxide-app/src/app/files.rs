@@ -1398,7 +1398,8 @@ impl App {
                 if let Some(words) = self
                     .plugin_cancel_words(job)
                     .or_else(|| self.component_cancel_words(job))
-                    .or_else(|| self.picture_cancel_words(job)) =>
+                    .or_else(|| self.picture_cancel_words(job))
+                    .or_else(|| self.meta_cancel_words(job)) =>
             {
                 vec![Effect::CancelJob(job), self.say(Message::info(words))]
             }

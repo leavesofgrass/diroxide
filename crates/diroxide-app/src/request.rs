@@ -474,6 +474,11 @@ pub enum Request {
     /// Settings Tools page (alpha 4, R30 commit 42); answered as
     /// [`AppEvent::ToolsReported`](crate::AppEvent::ToolsReported).
     ToolsReport(SharedRegistry),
+    /// A metadata command's work on a worker (alpha 4, lane MA): a
+    /// checksum, a verify, a strip, a check or the internet mark, as a job
+    /// in the jobs line that Cancel stops; answered as
+    /// [`AppEvent::Meta`](crate::AppEvent::Meta).
+    Meta(Box<crate::metadata::MetaAsk>),
     /// Read the text in a picture with Tesseract on a worker, as a job in
     /// the jobs line that Cancel stops (alpha 4, R30 commit 44); answered
     /// as [`AppEvent::PictureText`](crate::AppEvent::PictureText).

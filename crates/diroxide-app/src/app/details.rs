@@ -434,10 +434,16 @@ impl App {
             ));
         }
         if file_like(entry) {
+            // The value the Checksum command computed this session, while
+            // the file is as it was (lane MA): "SHA-256: ba78 16bf, ending
+            // 15ad".
+            let value = self
+                .known_checksum(place, entry)
+                .unwrap_or_else(|| NOT_COMPUTED.to_owned());
             rows.push(DetailRow::new(
                 "file.checksum",
                 "Checksum",
-                NOT_COMPUTED,
+                value,
                 DetailGroup::System,
             ));
         }

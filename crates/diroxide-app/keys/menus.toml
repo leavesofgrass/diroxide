@@ -51,6 +51,9 @@ command = "file.copy-all-details"
 command = "file.read-text-in-picture"
 
 [[menu.item]]
+command = "file.checksum"
+
+[[menu.item]]
 command = "file.actions"
 
 [[menu.item]]

@@ -137,6 +137,8 @@ pub(super) enum Wants {
         side: Side,
         fill: super::columns_ui::Fill,
     },
+    /// A list or a field of the metadata commands (alpha 4, lane MA).
+    Meta(super::metadata_ui::MetaWants),
 }
 
 impl Wants {
@@ -367,6 +369,7 @@ impl App {
             Wants::Note { side, places, one } => self.note_typed(side, places, one, &text),
             Wants::Field { side, places, one } => self.field_typed(side, places, one, &text),
             Wants::ReadColumns { .. } => self.dialog_escape(),
+            Wants::Meta(wants) => self.meta_accept(wants, row, &text),
         }
     }
 

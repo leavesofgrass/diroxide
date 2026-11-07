@@ -63,6 +63,8 @@ mod type_lists;
 mod type_checks;
 // The custom columns in the app (alpha 4, lane MA).
 mod columns_ui;
+// The metadata commands in the app (alpha 4, lane MA).
+mod metadata_ui;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -269,6 +271,8 @@ pub enum AppEvent {
     /// The tools registry's report for the Settings Tools page: each
     /// helper program's line, found or not (alpha 4).
     ToolsReported(Box<diroxide_tools::ToolsReport>),
+    /// What a metadata command's worker found (alpha 4, lane MA).
+    Meta(Box<crate::metadata::MetaNote>),
     /// Tesseract read the text in a picture, or the line that says why
     /// not (alpha 4).
     PictureText {
@@ -1026,6 +1030,8 @@ pub struct App {
     type_checks: type_checks::TypeChecks,
     /// What each panel's column readers were asked (lane MA).
     columns: columns_ui::ColumnsState,
+    /// The metadata commands' jobs and lists (lane MA).
+    meta: metadata_ui::MetaState,
     /// The slots of the owner's type actions (lane TA).
     type_slots: crate::typing::TypeSlots,
     /// A typed action's command is running: Enter and View run their
@@ -1366,6 +1372,7 @@ impl App {
             look: look::LookState::new(&startup.user_themes, startup.themes_dir.clone()),
             type_checks: type_checks::TypeChecks::default(),
             columns: columns_ui::ColumnsState::default(),
+            meta: metadata_ui::MetaState::default(),
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,
@@ -1883,6 +1890,7 @@ impl App {
             AppEvent::PictureText { job, place, result } => {
                 self.picture_text_read(job, &place, result)
             }
+            AppEvent::Meta(note) => self.meta_note(*note),
             AppEvent::ViewerSource {
                 request,
                 place,
@@ -2073,6 +2081,10 @@ impl App {
         }
         // Fill columns (alpha 4, lane MA).
         if let Some(effects) = self.columns_dispatch(command) {
+            return effects;
+        }
+        // Checksum, Verify, Strip, Check and the internet mark (lane MA).
+        if let Some(effects) = self.meta_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).

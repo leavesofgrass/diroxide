@@ -51,6 +51,8 @@ use diroxide_vfs::{
 mod archive_jobs;
 // The readers of the custom columns (alpha 4, lane MA).
 mod columns;
+// The metadata commands' workers (alpha 4, lane MA).
+mod meta;
 // Optional components (W4d).
 mod components;
 // Plugins and script commands (W4d).
@@ -521,6 +523,9 @@ pub struct Runtime {
     /// The Read text in picture jobs running, each with its cancel token
     /// (alpha 4, lane VA).
     picture_runs: Arc<Mutex<HashMap<JobId, CancelToken>>>,
+    /// The metadata commands' jobs running, each with its cancel token
+    /// (alpha 4, lane MA).
+    meta_runs: Arc<Mutex<HashMap<JobId, CancelToken>>>,
     engine: Engine,
     shared: Arc<Shared>,
     receiver: Receiver<AppEvent>,
@@ -646,6 +651,7 @@ impl Runtime {
             plugins: plugins::PluginRuntime::default(),
             components: components::ComponentRuntime::default(),
             picture_runs: Arc::default(),
+            meta_runs: Arc::default(),
             components_source: String::new(),
             registry,
             shared,
@@ -1169,6 +1175,9 @@ impl Runtime {
         if let Some(token) = lock(&self.picture_runs).get(&job) {
             token.cancel();
         }
+        if let Some(token) = lock(&self.meta_runs).get(&job) {
+            token.cancel();
+        }
         let asks: Vec<AskId> = lock(&self.shared.asks)
             .iter()
             .filter(|(_, (asker, _))| *asker == Some(job))
@@ -1516,6 +1525,23 @@ impl Runtime {
                     let result = crate::picture_text::read(&registry, &place, &tools, &token);
                     lock(&runs).remove(&job);
                     shared.send(AppEvent::PictureText { job, place, result });
+                });
+            }
+            // The metadata commands (alpha 4, lane MA): a job's token is
+            // kept until its answer, so Cancel stops the engine.
+            Request::Meta(ask) => {
+                let registry = Arc::clone(&self.registry);
+                let token = CancelToken::new();
+                let job = meta::job_of(&ask);
+                if let Some(job) = job {
+                    lock(&self.meta_runs).insert(job, token.clone());
+                }
+                let runs = Arc::clone(&self.meta_runs);
+                self.worker(move |shared| {
+                    meta::run(shared, &registry, *ask, token);
+                    if let Some(job) = job {
+                        lock(&runs).remove(&job);
+                    }
                 });
             }
             Request::ToolsReport(tools) => {
