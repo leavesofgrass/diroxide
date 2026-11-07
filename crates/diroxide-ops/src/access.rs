@@ -135,13 +135,91 @@ pub fn change_words(before: u32, after: u32, kind: EntryKind) -> String {
     }
 }
 
-/// A time as the plan's rows say it: "2026-10-10 22:09".
+/// A time as the plan's rows and the time dialog say it, the weekday
+/// first and computed from the date, never typed (the owner's rule on
+/// dates): "Saturday, 2026-10-10 22:09".
 pub fn time_words(time: Timestamp, offset: UtcOffset) -> String {
     let civil = time.to_civil(offset);
     format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}",
-        civil.year, civil.month, civil.day, civil.hour, civil.minute
+        "{}, {:04}-{:02}-{:02} {:02}:{:02}",
+        civil.weekday.name(),
+        civil.year,
+        civil.month,
+        civil.day,
+        civil.hour,
+        civil.minute
     )
+}
+
+/// One of an entry's times, as the time dialog lists them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TimeKind {
+    /// When its contents last changed: settable everywhere.
+    Modified,
+    /// When it was last read: settable everywhere, kept to the day on FAT.
+    Accessed,
+    /// When it was made: settable on Windows and macOS only.
+    Created,
+    /// When its details last changed (the Unix change time): the system
+    /// sets it, never a program.
+    Changed,
+}
+
+impl TimeKind {
+    /// The label, said first: "Modified".
+    pub const fn label(self) -> &'static str {
+        match self {
+            TimeKind::Modified => "Modified",
+            TimeKind::Accessed => "Accessed",
+            TimeKind::Created => "Created",
+            TimeKind::Changed => "Changed",
+        }
+    }
+}
+
+/// The refusal when the change time is chosen to be set (R11 sections 7
+/// and 8).
+pub const CHANGE_TIME_REFUSAL: &str =
+    "Could not set the change time: the system sets it. Set the modified time instead.";
+
+/// The time dialog's row for one time: "Modified: Saturday, 2026-10-10
+/// 22:09"; "Created: not settable on this system"; "Changed: set by the
+/// system"; "Accessed: not known".
+pub fn time_row(
+    kind: TimeKind,
+    time: Option<Timestamp>,
+    offset: UtcOffset,
+    settable: bool,
+) -> String {
+    let label = kind.label();
+    if kind == TimeKind::Changed {
+        return format!("{label}: set by the system");
+    }
+    if !settable {
+        return format!("{label}: not settable on this system");
+    }
+    match time {
+        Some(time) => format!("{label}: {}", time_words(time, offset)),
+        None => format!("{label}: not known"),
+    }
+}
+
+/// What the disk kept of a time that was set, read back after the job:
+/// `None` when it kept the time asked for; "Modified time rounded by the
+/// disk" when it kept one within two days of it (FAT keeps the modified
+/// time to two seconds, the accessed time to the day, in local time);
+/// "Modified time not kept by the disk" when it kept another or none.
+pub fn rounded_line(kind: TimeKind, asked: Timestamp, kept: Option<Timestamp>) -> Option<String> {
+    /// Two days: a day of rounding and a day of time zone.
+    const NEAR: i64 = 2 * 24 * 60 * 60;
+    let label = kind.label();
+    match kept {
+        Some(kept) if kept == asked => None,
+        Some(kept) if (kept.unix_seconds() - asked.unix_seconds()).abs() <= NEAR => {
+            Some(format!("{label} time rounded by the disk"))
+        }
+        _ => Some(format!("{label} time not kept by the disk")),
+    }
 }
 
 /// The rows of a group of entries with one change: "12 files: group gains
@@ -318,7 +396,10 @@ mod tests {
             vec!["Turns on hidden", "Turns off read-only"]
         );
         let time = Timestamp::from_civil(2026, 10, 10, 22, 9, 0, UtcOffset::UTC).unwrap();
-        assert_eq!(time_words(time, UtcOffset::UTC), "2026-10-10 22:09");
+        assert_eq!(
+            time_words(time, UtcOffset::UTC),
+            "Saturday, 2026-10-10 22:09"
+        );
         assert_eq!(
             Recursion::FilesAndFolders.row(),
             "Apply to: files and folders inside"
@@ -328,6 +409,52 @@ mod tests {
             AttributeEdit::new(Recursion::ThisItem)
                 .with_modified(time)
                 .times_only()
+        );
+    }
+
+    #[test]
+    fn times_say_their_weekday_from_the_date_and_what_the_disk_kept() {
+        // The weekdays checked against Python's calendar on the machine.
+        for (y, m, d, words) in [
+            (2026, 9, 21, "Monday, 2026-09-21 15:13"),
+            (2026, 11, 7, "Saturday, 2026-11-07 15:13"),
+            (2000, 2, 29, "Tuesday, 2000-02-29 15:13"),
+            (1969, 12, 31, "Wednesday, 1969-12-31 15:13"),
+        ] {
+            let time = Timestamp::from_civil(y, m, d, 15, 13, 0, UtcOffset::UTC).unwrap();
+            assert_eq!(time_words(time, UtcOffset::UTC), words);
+        }
+        let time = Timestamp::from_civil(2026, 10, 10, 22, 9, 0, UtcOffset::UTC).unwrap();
+        let row = time_row(TimeKind::Modified, Some(time), UtcOffset::UTC, true);
+        assert_eq!(row, "Modified: Saturday, 2026-10-10 22:09");
+        assert_eq!(row.len(), 36);
+        let created = time_row(TimeKind::Created, None, UtcOffset::UTC, false);
+        assert_eq!(created, "Created: not settable on this system");
+        assert_eq!(
+            time_row(TimeKind::Changed, Some(time), UtcOffset::UTC, false),
+            "Changed: set by the system"
+        );
+        assert_eq!(
+            time_row(TimeKind::Accessed, None, UtcOffset::UTC, true),
+            "Accessed: not known"
+        );
+        assert!(within_cells(
+            CHANGE_TIME_REFUSAL,
+            "Could not set the change time"
+        ));
+        let rounded = Timestamp::from_unix(time.unix_seconds() + 1, 0);
+        assert_eq!(rounded_line(TimeKind::Modified, time, Some(time)), None);
+        let line = rounded_line(TimeKind::Modified, time, Some(rounded));
+        assert_eq!(line.as_deref(), Some("Modified time rounded by the disk"));
+        assert_eq!("Modified time rounded by the disk".len(), 33);
+        let far = Timestamp::from_unix(time.unix_seconds() - 30 * 86_400, 0);
+        assert_eq!(
+            rounded_line(TimeKind::Accessed, time, Some(far)).as_deref(),
+            Some("Accessed time not kept by the disk")
+        );
+        assert_eq!(
+            rounded_line(TimeKind::Created, time, None).as_deref(),
+            Some("Created time not kept by the disk")
         );
     }
 }

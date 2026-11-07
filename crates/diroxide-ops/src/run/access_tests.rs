@@ -248,7 +248,7 @@ fn times_are_set_for_a_folder_after_its_contents_and_undone() {
         vec![p("/t/one.txt"), p("/t/sub/two.txt"), p("/t/sub"), p("/t")],
         "each folder after its contents"
     );
-    assert_eq!(rows(&plan)[1], "Modified time to 2026-09-21 15:13");
+    assert_eq!(rows(&plan)[1], "Modified time to Monday, 2026-09-21 15:13");
     let report = engine.run(&plan, &JobControl::new(), &Script::default());
     assert!(report.failed.is_empty(), "{:?}", report.failed);
     for path in ["/t", "/t/sub", "/t/one.txt", "/t/sub/two.txt"] {
