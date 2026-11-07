@@ -71,6 +71,8 @@ mod columns_ui;
 mod metadata_ui;
 // Show picture, the window's picture view (alpha 4, lane AE).
 pub mod picture_view;
+// Outputs a plugin staged and committed (alpha 4, lane AE).
+mod staged;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -1054,6 +1056,8 @@ pub struct App {
     meta: metadata_ui::MetaState,
     /// The picture Show picture asked the window to show (lane AE).
     picture_ask: Option<picture_view::PictureAsk>,
+    /// The files each running plugin command committed (lane AE).
+    staged: staged::StagedState,
     /// The slots of the owner's type actions (lane TA).
     type_slots: crate::typing::TypeSlots,
     /// A typed action's command is running: Enter and View run their
@@ -1398,6 +1402,7 @@ impl App {
             columns: columns_ui::ColumnsState::default(),
             meta: metadata_ui::MetaState::default(),
             picture_ask: None,
+            staged: staged::StagedState::default(),
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,

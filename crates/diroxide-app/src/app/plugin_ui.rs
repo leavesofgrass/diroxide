@@ -725,6 +725,7 @@ impl App {
             } => self.lister_rows_came(&plugin, &lister, rows, refresh),
             PluginEvent::ListerNoRows { plugin, lister } => self.lister_no_rows(&plugin, &lister),
             PluginEvent::Note(message) => vec![self.say(message)],
+            PluginEvent::Committed { plugin, report } => self.plugin_committed(&plugin, *report),
             PluginEvent::Described {
                 request,
                 side,
@@ -2229,7 +2230,7 @@ impl App {
 
     // ---- Jobs and their ends ----
 
-    fn running_of(&self, plugin: &str) -> Option<JobId> {
+    pub(super) fn running_of(&self, plugin: &str) -> Option<JobId> {
         self.plugins
             .running
             .iter()
@@ -2339,6 +2340,8 @@ impl App {
             return Vec::new();
         };
         let job = finished.job;
+        // The outputs it staged and committed: one undo record (lane AE).
+        self.commits_ended(job);
         if running.refresh == Refresh::Devices {
             return self.devices_finished(job, &running, finished);
         }

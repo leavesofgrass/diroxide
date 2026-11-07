@@ -49,6 +49,8 @@ mod queue;
 mod saved_queue;
 // A plugin's keys in keymap.toml and the Keys list (lane A2).
 mod plugin_keys;
+// Outputs a plugin staged and committed (alpha 4, lane AE).
+mod staged;
 // Plugins and script commands (W4d).
 mod plugins;
 mod preview;

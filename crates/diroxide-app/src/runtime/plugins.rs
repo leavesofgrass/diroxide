@@ -235,6 +235,16 @@ impl HostServices for AppServices {
         }
     }
 
+    fn committed(&self, report: &JobReport) {
+        send(
+            &self.shared,
+            PluginEvent::Committed {
+                plugin: self.plugin.clone(),
+                report: Box::new(report.clone()),
+            },
+        );
+    }
+
     fn open_lister(&self, lister: &ListerView) -> Result<(), RpcError> {
         match self.call(Call::OpenLister(Box::new(lister.clone())), Wait::App) {
             Some(Reply::Done(result)) => result.map(|_| ()),
