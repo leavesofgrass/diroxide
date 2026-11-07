@@ -383,6 +383,9 @@ pub struct Session<'a> {
     pub progress: bool,
     /// The split presets, the built-in ones with the user's merged in.
     pub presets: Vec<SplitPreset>,
+    /// The helper programs: 7-Zip for a RAR and the other formats it
+    /// reads (alpha 4, lane AW); none in tests.
+    pub tools: Arc<dyn diroxide_vfs::ToolRunner>,
 }
 
 impl std::fmt::Debug for Session<'_> {
@@ -411,6 +414,20 @@ pub fn from_settings() -> (Vec<SplitPreset>, bool) {
     (settings.split_presets, asterisks)
 }
 
+/// The tools registry of this computer: the owner's `tools.toml`, the
+/// installed helper components, then PATH and the known folders.
+pub fn tools_here() -> diroxide_tools::ToolRegistry {
+    match crate::open::paths(false) {
+        Some(paths) => diroxide_tools::ToolRegistry::builtin()
+            .with_overrides(diroxide_config::load(&paths).tools)
+            .with_components(
+                diroxide_components::Manifest::embedded()
+                    .helper_programs(&paths.components_dir(), diroxide_components::host_target()),
+            ),
+        None => diroxide_tools::ToolRegistry::builtin(),
+    }
+}
+
 /// Runs `body` with a session over the real places, the local clock, the
 /// current folder and the terminal.
 pub fn with_terminal<T>(
@@ -429,6 +446,7 @@ pub fn with_terminal<T>(
         asker: asker.as_ref(),
         progress: io::stderr().is_terminal(),
         presets,
+        tools: Arc::new(tools_here()),
     };
     body(&session)
 }
@@ -470,7 +488,13 @@ impl Session<'_> {
 
     /// The engine over the session's places, with the default options.
     pub fn engine(&self) -> Engine {
-        Engine::new(self.registry.clone())
+        Engine::new(self.registry.clone()).with_tools(Arc::clone(&self.tools))
+    }
+
+    /// A context for a call outside a job, with the session's helper
+    /// programs.
+    fn context(&self) -> OpContext {
+        OpContext::new().with_tools(Arc::clone(&self.tools))
     }
 
     /// Asks a question on this thread, or, with nobody there, says it and
@@ -993,7 +1017,7 @@ fn open(
     session.drive(&relay, unanswered, || {
         let mut allow = Allowances::default();
         loop {
-            let opened = secrets.with_tries(&OpContext::new(), |ctx| {
+            let opened = secrets.with_tries(&session.context(), |ctx| {
                 archives.open_archive(container, ctx, allow)
             });
             match opened {
@@ -1338,7 +1362,7 @@ fn pack(
         }
     }
     let job = JobId::new(1);
-    let plan = plan_pack(&session.registry, &request, job, &OpContext::new())
+    let plan = plan_pack(&session.registry, &request, job, &session.context())
         .map_err(|e| archive_failed("pack", &name, &e))?;
     lines(out, &plan.rows())?;
     let engine = session.engine();
@@ -1351,7 +1375,8 @@ fn pack(
         let source: Arc<dyn SecretSource> = relay.clone();
         let env = JobEnv::new(&engine, archives, job, &control, relay.as_ref())
             .with_questions(relay.as_ref())
-            .with_secrets(source);
+            .with_secrets(source)
+            .with_tools(Arc::clone(&session.tools));
         run_pack(&plan, password.as_ref(), &env)
     });
     unanswered.write(out)?;
@@ -1395,7 +1420,7 @@ fn unpack(args: &UnpackArgs, out: &mut dyn Write, session: &Session<'_>) -> Resu
     let planned = session.drive(&relay, &mut unanswered, || {
         let mut allow = Allowances::default();
         loop {
-            let plan = secrets.with_tries(&OpContext::new(), |ctx| {
+            let plan = secrets.with_tries(&session.context(), |ctx| {
                 plan_unpack(archives, registry, &request, job, ctx, allow)
             });
             match plan {
@@ -1434,7 +1459,8 @@ fn unpack(args: &UnpackArgs, out: &mut dyn Write, session: &Session<'_>) -> Resu
         };
         let env = JobEnv::new(&engine, archives, job, &control, relay.as_ref())
             .with_questions(relay.as_ref())
-            .with_secrets(shared);
+            .with_secrets(shared)
+            .with_tools(Arc::clone(&session.tools));
         run_unpack(&plan, None, allow, &env)
     });
     unanswered.write(out)?;
@@ -1455,7 +1481,8 @@ fn test(archive: &str, out: &mut dyn Write, session: &Session<'_>) -> Result<i32
         let source: Arc<dyn SecretSource> = relay.clone();
         let env = JobEnv::new(&engine, archives, JobId::new(1), &control, relay.as_ref())
             .with_questions(relay.as_ref())
-            .with_secrets(source);
+            .with_secrets(source)
+            .with_tools(Arc::clone(&session.tools));
         test_archive(&container, None, &env)
     });
     unanswered.write(out)?;
@@ -1639,6 +1666,7 @@ pub(crate) mod tests {
             asker,
             progress: false,
             presets: builtin_split_presets(),
+            tools: Arc::new(diroxide_vfs::NoTools),
         }
     }
 
