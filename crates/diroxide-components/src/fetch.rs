@@ -272,6 +272,13 @@ impl StandardFetcher {
         }
     }
 
+    /// The fetcher for this computer with no `tools.toml`: the built-in
+    /// client when this build has it, then curl and wget from PATH; what
+    /// `cargo xtask components --pin` uses on CI's runner.
+    pub fn system() -> Self {
+        Self::from_tools(&ToolRegistry::builtin())
+    }
+
     /// The same without the built-in client: curl, then wget, as a build
     /// without the `fetch` feature has them.
     #[cfg_attr(not(feature = "fetch"), allow(unused_mut))]

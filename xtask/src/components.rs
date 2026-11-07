@@ -27,6 +27,16 @@
 //! the list, so the list committed without assets stays current and
 //! `regen --check` passes; the release regenerates it with the assets
 //! before it builds `diro`, which then pins every plugin file.
+//!
+//! Helper programs (alpha 4, the owner's answers 116 and 117) are files a
+//! publisher makes: a file with a `url` and no `pack`, pinned by
+//! [`pins::PINS`], which `--pin ID` writes on CI's runner ([`pins`]). A
+//! helper file not pinned yet is left out with a line, as a plugin's
+//! missing asset is; so is a file or a component that is `held`, with
+//! its reason, until the owner settles it. `--addresses` fails when a
+//! pinned address answers 404.
+
+mod pins;
 
 use std::fs;
 use std::io::{Cursor, Write};
@@ -35,7 +45,10 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use diroxide_components::manifest::{self, Manifest};
-use diroxide_components::{Action, Component, FilePin, Kind, Origin, is_plain_name};
+use diroxide_components::{
+    Action, Component, Fetcher, FilePin, Kind, Origin, StandardFetcher, is_https, is_plain_name,
+};
+use diroxide_core::Secret;
 use serde::Deserialize;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, DateTime, System, ZipWriter};
@@ -75,10 +88,16 @@ struct Definition {
     needs_tools: Vec<String>,
     #[serde(default)]
     needs_components: Vec<String>,
+    #[serde(default)]
+    tools: Vec<String>,
+    #[serde(default)]
+    notice: String,
     protocol: Option<u32>,
     min_diro: Option<String>,
     action: String,
     folder: Option<String>,
+    /// Why the component is left out of the list for now, when it is.
+    held: Option<String>,
     file: Vec<FileDefinition>,
 }
 
@@ -90,9 +109,103 @@ struct FileDefinition {
     target: String,
     exec: Option<String>,
     #[serde(default)]
+    also_exec: Vec<String>,
+    #[serde(default)]
     strip: u32,
+    #[serde(default)]
+    keep: Vec<String>,
+    #[serde(default)]
+    rename: Vec<(String, String)>,
     url: Option<String>,
+    /// The publisher's checksums file, for a file GitHub does not serve.
+    checksums: Option<String>,
+    /// Why the file is left out of the list for now, when it is.
+    held: Option<String>,
+    #[serde(default)]
     pack: Vec<PackFrom>,
+}
+
+impl FileDefinition {
+    /// The file's pin with its size and hash still to fill in: every field
+    /// the definition gives.
+    fn pin_with(&self, size: u64, sha256: String) -> FilePin {
+        let mut pin = FilePin::new(self.name.clone(), size, sha256);
+        pin.target = self.target.clone();
+        pin.exec = self.exec.clone();
+        pin.also_exec = self.also_exec.clone();
+        pin.strip = self.strip;
+        pin.keep = self.keep.clone();
+        pin.rename = self.rename.clone();
+        pin.url = self.url.clone();
+        pin
+    }
+
+    /// Whether it is a publisher's file: an address and nothing to pack.
+    fn is_external(&self) -> bool {
+        self.pack.is_empty()
+    }
+}
+
+impl Definition {
+    /// The component with these files and every field the definition
+    /// gives, as the list will read it.
+    fn component(&self, files: Vec<FilePin>, unpacked_size: u64) -> Result<Component> {
+        let kind = Kind::from_word(&self.kind)
+            .with_context(|| format!("{}: kind {}", self.id, self.kind))?;
+        let action = match self.action.as_str() {
+            "place" => Action::Place,
+            "unpack" => Action::Unpack,
+            other => bail!("{}: the action {other} is not one the list knows", self.id),
+        };
+        let mut component = Component::new(self.id.clone(), self.title.clone(), files);
+        component.kind = kind;
+        component.version = self.version.clone();
+        component.license = self.license.clone();
+        component.license_note = self.license_note.clone();
+        component.credit = self.credit.clone();
+        component.features = self.features.clone();
+        component.needs_tools = self.needs_tools.clone();
+        component.needs_components = self.needs_components.clone();
+        component.tools = self.tools.clone();
+        component.notice = self.notice.clone();
+        component.protocol = self.protocol;
+        component.min_diro = self.min_diro.clone();
+        component.action = action;
+        component.folder = self.folder.clone().unwrap_or_else(|| self.id.clone());
+        component.unpacked_size = if action == Action::Unpack {
+            unpacked_size
+        } else {
+            0
+        };
+        component.origin = Origin::Public;
+        Ok(component)
+    }
+}
+
+/// Reads the definitions at the root.
+fn definitions(root: &Path) -> Result<Definitions> {
+    let text = fs::read_to_string(root.join(DEFINITIONS))
+        .with_context(|| format!("{DEFINITIONS} could not be read"))?;
+    let definitions: Definitions =
+        toml::from_str(&text).with_context(|| format!("{DEFINITIONS} is not as expected"))?;
+    if definitions.format != manifest::FORMAT {
+        bail!("{DEFINITIONS} has format {}, not 1", definitions.format);
+    }
+    for d in &definitions.component {
+        for f in &d.file {
+            match (&f.url, f.is_external()) {
+                (None, true) => bail!("{}: {} has neither a pack nor a url", d.id, f.name),
+                (Some(url), _) if !is_https(url) => {
+                    bail!("{}: {} has an address that is not https", d.id, f.name)
+                }
+                _ => {}
+            }
+            if f.checksums.as_deref().is_some_and(|c| !is_https(c)) {
+                bail!("{}: {}'s checksums address is not https", d.id, f.name);
+            }
+        }
+    }
+    Ok(definitions)
 }
 
 fn any() -> String {
@@ -271,73 +384,63 @@ pub fn build(root: &Path) -> Result<Built> {
 }
 
 /// Builds every defined component from the repository and the prebuilt
-/// files under `assets` (`<assets>/<target>/<program>`).
+/// files under `assets` (`<assets>/<target>/<program>`), with the helper
+/// files' pins from [`pins::PINS`].
 pub fn build_with(root: &Path, assets: Option<&Path>) -> Result<Built> {
-    let text = fs::read_to_string(root.join(DEFINITIONS))
-        .with_context(|| format!("{DEFINITIONS} could not be read"))?;
-    let definitions: Definitions =
-        toml::from_str(&text).with_context(|| format!("{DEFINITIONS} is not as expected"))?;
-    if definitions.format != manifest::FORMAT {
-        bail!("{DEFINITIONS} has format {}, not 1", definitions.format);
-    }
+    let definitions = definitions(root)?;
+    let pinned = pins::read(&root.join(pins::PINS))?;
     let mut list = Manifest::new(env!("CARGO_PKG_VERSION"), GENERATED_BY);
     let mut files = Vec::new();
     let mut notes = Vec::new();
     for d in definitions.component {
-        let kind =
-            Kind::from_word(&d.kind).with_context(|| format!("{}: kind {}", d.id, d.kind))?;
-        let action = match d.action.as_str() {
-            "place" => Action::Place,
-            "unpack" => Action::Unpack,
-            other => bail!("{}: the action {other} is not one the list knows", d.id),
-        };
+        if let Some(why) = &d.held {
+            notes.push(format!("{}: held, left out of the list: {why}", d.id));
+            continue;
+        }
         let release = format!("{}-{}", d.id, d.version);
-        let mut pins = Vec::new();
-        let mut unpacked_size = 0u64;
+        let mut file_pins = Vec::new();
+        let mut packed_size = 0u64;
+        let mut external_size = 0u64;
         for f in &d.file {
+            if let Some(why) = &f.held {
+                notes.push(format!("{}: {} held, left out: {why}", d.id, f.name));
+                continue;
+            }
+            if f.is_external() {
+                let url = f.url.as_deref().unwrap_or_default();
+                let Some(pin) = pinned.iter().find(|p| p.applies(&d.id, &f.name, url)) else {
+                    notes.push(format!(
+                        "{}: {} is not pinned yet; the pin job pins it.",
+                        d.id, f.name
+                    ));
+                    continue;
+                };
+                external_size = external_size.max(pin.unpacked);
+                file_pins.push(f.pin_with(pin.size, pin.sha256.clone()));
+                continue;
+            }
             let Some(members) = pack_members(root, assets, &d.id, f, &mut notes)? else {
                 continue;
             };
-            unpacked_size += members.iter().map(|(_, b)| b.len() as u64).sum::<u64>();
+            packed_size += members.iter().map(|(_, b)| b.len() as u64).sum::<u64>();
             let bytes = pack_bytes(members, f.exec.as_deref())?;
-            let mut pin = FilePin::of_bytes(f.name.clone(), &bytes);
-            pin.target = f.target.clone();
-            pin.exec = f.exec.clone();
-            pin.strip = f.strip;
-            pin.url = f.url.clone();
-            pins.push(pin);
+            let packed = FilePin::of_bytes(f.name.clone(), &bytes);
+            file_pins.push(f.pin_with(packed.size, packed.sha256));
             files.push(BuiltFile {
                 release: release.clone(),
                 name: f.name.clone(),
                 bytes,
             });
         }
-        if pins.is_empty() {
+        if file_pins.is_empty() {
             notes.push(format!(
                 "{}: no file was built; left out of the list.",
                 d.id
             ));
             continue;
         }
-        let mut component = Component::new(d.id.clone(), d.title, pins);
-        component.kind = kind;
-        component.version = d.version;
-        component.license = d.license;
-        component.license_note = d.license_note;
-        component.credit = d.credit;
-        component.features = d.features;
-        component.needs_tools = d.needs_tools;
-        component.needs_components = d.needs_components;
-        component.protocol = d.protocol;
-        component.min_diro = d.min_diro;
-        component.action = action;
-        component.folder = d.folder.unwrap_or(d.id);
-        component.unpacked_size = if action == Action::Unpack {
-            unpacked_size
-        } else {
-            0
-        };
-        component.origin = Origin::Public;
+        // One computer unpacks one helper file, so the largest counts.
+        let component = d.component(file_pins, packed_size + external_size)?;
         list.components.push(component);
     }
     // The list must read back whole, as the program will read it.
@@ -366,25 +469,144 @@ fn source_folder(root: &Path) -> PathBuf {
         .join("source")
 }
 
-/// `cargo xtask components [--check] [--assets FOLDER]`: writes the built
-/// files as a folder source and the list; with `--check`, only says
-/// whether the list is current. `--assets` adds the prebuilt plugin
-/// programs in FOLDER, as the release does.
+/// `--pin ID...`: downloads, compares and unpacks each publisher's file of
+/// the components named (`all`: every component with one, held ones too,
+/// so the pin job's run says what holds them), and writes the pins that
+/// check out into [`pins::PINS`]. Whether every file pinned.
+pub fn pin_files(
+    root: &Path,
+    ids: &[String],
+    fetcher: &dyn Fetcher,
+    token: Option<&Secret>,
+    work: &Path,
+) -> Result<bool> {
+    let definitions = definitions(root)?;
+    let all = ids.iter().any(|id| id == "all");
+    if let Some(unknown) = ids
+        .iter()
+        .find(|id| *id != "all" && !definitions.component.iter().any(|d| &d.id == *id))
+    {
+        bail!("--pin {unknown}: no component has that id");
+    }
+    let path = root.join(pins::PINS);
+    let mut pinned = pins::read(&path)?;
+    let pinner = pins::Pinner {
+        fetcher,
+        token,
+        work,
+    };
+    let mut passed = true;
+    let mut count = 0;
+    for d in definitions
+        .component
+        .iter()
+        .filter(|d| all || ids.contains(&d.id))
+    {
+        for f in d.file.iter().filter(|f| f.is_external()) {
+            let wanted = pins::Wanted {
+                component: d.component(vec![f.pin_with(1, "0".repeat(64))], 1)?,
+                checksums: f.checksums.clone(),
+            };
+            let mut lines = Vec::new();
+            match pinner.pin(&wanted, &mut lines) {
+                Ok(pin) => {
+                    count += 1;
+                    pins::replace(&mut pinned, pin);
+                }
+                Err(line) => {
+                    passed = false;
+                    lines.push(format!("Fail. {line}"));
+                }
+            }
+            for line in lines {
+                println!("components: {line}");
+            }
+        }
+    }
+    fs::write(&path, pins::to_text(&pinned))
+        .with_context(|| format!("{} could not be written", pins::PINS))?;
+    println!("components: pinned {count} files in {}.", pins::PINS);
+    Ok(passed)
+}
+
+/// The pins that apply to the definitions as they are now.
+fn current_pins(root: &Path) -> Result<Vec<pins::Pin>> {
+    let definitions = definitions(root)?;
+    let pinned = pins::read(&root.join(pins::PINS))?;
+    Ok(pinned
+        .into_iter()
+        .filter(|p| {
+            definitions.component.iter().any(|d| {
+                d.id == p.component
+                    && d.file.iter().any(|f| {
+                        f.is_external() && f.name == p.name && f.url.as_deref() == Some(&p.url)
+                    })
+            })
+        })
+        .collect())
+}
+
+/// `cargo xtask components [--check] [--assets FOLDER] [--pin ID]...
+/// [--addresses]`: writes the built files as a folder source and the
+/// list; with `--check`, only says whether the list is current.
+/// `--assets` adds the prebuilt plugin programs in FOLDER, as the release
+/// does. `--pin` pins the helper files of the components named (or `all`)
+/// first, from the network, as the pin job does. `--addresses` only asks
+/// each pinned address whether it is still there, from the network.
 pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
     let mut check = false;
+    let mut addresses = false;
     let mut assets = None;
+    let mut pin_ids: Vec<String> = Vec::new();
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         match *arg {
             "--check" => check = true,
+            "--addresses" => addresses = true,
             "--assets" => {
                 let folder = rest.next().context("--assets needs a folder")?;
                 assets = Some(PathBuf::from(folder));
             }
-            other => {
-                bail!("cargo xtask components takes --check and --assets FOLDER, not {other}")
+            "--pin" => {
+                let id = rest.next().context("--pin needs a component id, or all")?;
+                if !is_plain_name(id) {
+                    bail!("--pin {id}: not a plain name");
+                }
+                pin_ids.push((*id).to_owned());
             }
+            other => bail!(
+                "cargo xtask components takes --check, --assets FOLDER, --pin ID and --addresses, not {other}"
+            ),
         }
+    }
+    if addresses {
+        let (lines, passed) = pins::check_addresses(&current_pins(root)?, &pins::curl_probe);
+        for line in lines {
+            println!("{line}");
+        }
+        return Ok(passed);
+    }
+    let mut pinned_all = true;
+    if !pin_ids.is_empty() {
+        let token = std::env::var("GITHUB_TOKEN")
+            .ok()
+            .filter(|t| !t.trim().is_empty())
+            .map(Secret::new);
+        let work_root = pins::work_folder(root);
+        fs::create_dir_all(&work_root)
+            .with_context(|| format!("{} could not be made", work_root.display()))?;
+        // Removed with everything in it when the pins are written.
+        let work = tempfile::Builder::new()
+            .prefix("pin-")
+            .tempdir_in(&work_root)
+            .context("the work folder for the pins could not be made")?;
+        pinned_all = pin_files(
+            root,
+            &pin_ids,
+            &StandardFetcher::system(),
+            token.as_ref(),
+            work.path(),
+        )?;
     }
     let built = build_with(root, assets.as_deref())?;
     for note in &built.notes {
@@ -395,7 +617,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
     if check {
         if on_disk == text {
             println!("components: Pass. {MANIFEST} is current.");
-            Ok(true)
+            Ok(pinned_all)
         } else {
             println!(
                 "components: Fail. {MANIFEST} is out of date. Run cargo xtask components and commit it."
@@ -425,7 +647,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
                 .with_context(|| format!("{MANIFEST} could not be written"))?;
             println!("components: wrote {MANIFEST}.");
         }
-        Ok(true)
+        Ok(pinned_all)
     }
 }
 
@@ -614,8 +836,13 @@ mod tests {
             name: "x.zip".to_owned(),
             target: "any".to_owned(),
             exec: None,
+            also_exec: Vec::new(),
             strip: 0,
+            keep: Vec::new(),
+            rename: Vec::new(),
             url: None,
+            checksums: None,
+            held: None,
             pack: vec![PackFrom {
                 from: None,
                 asset: Some("../outside/diro-sftp".to_owned()),
@@ -704,5 +931,158 @@ mod tests {
             "run cargo xtask components and commit {path}"
         );
         assert_eq!(on_disk, manifest::EMBEDDED);
+    }
+
+    /// A root with one helper's definition and, when given, the pin file.
+    fn helper_root(pins_text: Option<&str>) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        let folder = tmp.path().join("packaging").join("components");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            folder.join("components.toml"),
+            r#"format = 1
+
+[[component]]
+id = "tool"
+title = "Tool"
+kind = "helper"
+version = "1.2"
+license = "MIT"
+tools = ["pandoc"]
+action = "unpack"
+
+[[component.file]]
+name = "tool-1.2.zip"
+target = "x86_64-unknown-linux-gnu"
+url = "https://github.com/example/tool/releases/download/v1.2/tool-1.2.zip"
+strip = 1
+keep = ["bin/*", "LICENSE"]
+exec = "bin/tool"
+
+[[component.file]]
+name = "tool-1.2-other.zip"
+target = "aarch64-unknown-linux-gnu"
+url = "https://github.com/example/tool/releases/download/v1.2/tool-1.2-other.zip"
+held = "not this time"
+"#,
+        )
+        .unwrap();
+        if let Some(text) = pins_text {
+            fs::write(folder.join("pins.toml"), text).unwrap();
+        }
+        tmp
+    }
+
+    #[test]
+    fn a_pinned_helper_file_joins_the_list_with_its_members() {
+        let unpinned = helper_root(None);
+        let built = build(unpinned.path()).unwrap();
+        assert!(built.manifest.components.is_empty());
+        assert_eq!(
+            built.notes,
+            [
+                "tool: tool-1.2.zip is not pinned yet; the pin job pins it.",
+                "tool: tool-1.2-other.zip held, left out: not this time",
+                "tool: no file was built; left out of the list.",
+            ]
+        );
+        let pin = pins::Pin {
+            component: "tool".into(),
+            name: "tool-1.2.zip".into(),
+            url: "https://github.com/example/tool/releases/download/v1.2/tool-1.2.zip".into(),
+            size: 1234,
+            sha256: "f".repeat(64),
+            unpacked: 5678,
+            checked: "GitHub's digest matches".into(),
+        };
+        let pinned = helper_root(Some(&pins::to_text(std::slice::from_ref(&pin))));
+        let built = build(pinned.path()).unwrap();
+        let tool = built.manifest.get("tool").expect("listed once pinned");
+        assert_eq!(tool.kind, Kind::Helper);
+        assert_eq!(tool.tools, ["pandoc"]);
+        assert_eq!(tool.unpacked_size, 5678);
+        assert_eq!(tool.files.len(), 1);
+        let file = &tool.files[0];
+        assert_eq!(
+            (file.size, file.sha256.as_str()),
+            (1234, pin.sha256.as_str())
+        );
+        assert_eq!(file.url.as_deref(), Some(pin.url.as_str()));
+        assert_eq!(file.keep, ["bin/*", "LICENSE"]);
+        assert_eq!(file.exec.as_deref(), Some("bin/tool"));
+        assert!(built.files.is_empty(), "nothing of a publisher's is packed");
+        // A pin for another address is not this file's.
+        let moved = pins::Pin {
+            url: "https://github.com/example/tool/releases/download/v1.3/tool-1.2.zip".into(),
+            ..pin
+        };
+        let stale = helper_root(Some(&pins::to_text(&[moved])));
+        assert!(build(stale.path()).unwrap().manifest.components.is_empty());
+    }
+
+    #[test]
+    fn pin_files_writes_the_pins_that_check_out() {
+        use diroxide_components::fake::{FakeAnswer, FakeFetcher};
+        use diroxide_components::sha256_hex;
+
+        let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, bytes) in [
+            ("tool-1.2/bin/tool", "program"),
+            ("tool-1.2/LICENSE", "MIT"),
+        ] {
+            zip.start_file(name, SimpleFileOptions::default()).unwrap();
+            zip.write_all(bytes.as_bytes()).unwrap();
+        }
+        let bytes = zip.finish().unwrap().into_inner();
+        let fake = FakeFetcher::new();
+        let base = "https://github.com/example/tool/releases/download/v1.2";
+        fake.serve(
+            format!("{base}/tool-1.2.zip"),
+            FakeAnswer::Bytes(bytes.clone()),
+        );
+        let release = format!(
+            r#"{{"assets": [{{"name": "tool-1.2.zip", "size": {}, "digest": "sha256:{}"}}]}}"#,
+            bytes.len(),
+            sha256_hex(&bytes)
+        );
+        fake.serve(
+            "https://api.github.com/repos/example/tool/releases/tags/v1.2",
+            FakeAnswer::Bytes(release.into_bytes()),
+        );
+        let root = helper_root(None);
+        let work = tempfile::tempdir().unwrap();
+        let ids = vec!["all".to_owned()];
+        // The held file is pinned too, so the job's run says what it
+        // holds; its address is not served here, so it fails alone.
+        assert!(!pin_files(root.path(), &ids, &fake, None, work.path()).unwrap());
+        let written = pins::read(&root.path().join(pins::PINS)).unwrap();
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].sha256, sha256_hex(&bytes));
+        assert_eq!(written[0].unpacked, 10);
+        let built = build(root.path()).unwrap();
+        assert_eq!(
+            built.manifest.get("tool").unwrap().files[0].size,
+            bytes.len() as u64
+        );
+        assert!(
+            pin_files(
+                root.path(),
+                &["nothing".to_owned()],
+                &fake,
+                None,
+                work.path()
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("no component has that id")
+        );
+    }
+
+    #[test]
+    fn the_pin_file_is_checked_in_as_the_xtask_writes_it() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let path = root.join(pins::PINS);
+        let read = pins::read(&path).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), pins::to_text(&read));
     }
 }

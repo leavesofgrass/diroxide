@@ -1,0 +1,88 @@
+# The pin job (alpha 4, R30 commit 109; the owner's answers 116 and 117).
+# On CI's runner, cargo xtask components --pin downloads each helper file
+# from its publisher's own address, compares it with the publisher's
+# digest where one is shown (GitHub's for a release asset, the checksums
+# file for ExifTool), unpacks it as diroxide will and says every member
+# left out, then writes the size and SHA-256 into
+# packaging/components/pins.toml and regenerates the embedded list. It
+# never pushes: both files are uploaded as the artifact "pins" and the
+# change is written to the run's summary, for the orchestrator to commit.
+# By hand for the helpers named (or all), and on the 3rd of each month,
+# so a pin that a publisher dropped is noticed: BtbN keeps a daily FFmpeg
+# build 14 days and the last of each month two years. Plain logs, no
+# color, so they read well in a screen reader.
+name: Pin helpers
+
+on:
+  workflow_dispatch:
+    inputs:
+      components:
+        description: Helper ids to pin, separated by spaces, or all
+        default: all
+  schedule:
+    # 06:23 UTC on the 3rd of each month, off the hour as GitHub asks.
+    - cron: "23 6 3 * *"
+
+concurrency:
+  group: pin-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: never
+
+jobs:
+  pin:
+    name: Pin the helper files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # The job's token goes to GitHub's API alone, for the release
+      # digests; the files themselves are fetched without it.
+      - name: Download, compare, unpack and pin
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          IDS: ${{ inputs.components || 'all' }}
+        run: |
+          set -uf
+          args=()
+          for id in $IDS; do
+            args+=(--pin "$id")
+          done
+          cargo xtask components "${args[@]}" 2>&1 | tee pin-log.txt
+      - name: Write what changed to the summary
+        if: always()
+        run: |
+          {
+            echo "## Pins"
+            echo
+            if git diff --quiet -- packaging/components/pins.toml crates/diroxide-components/components.toml; then
+              echo "No pin changed."
+            else
+              echo "Changed: packaging/components/pins.toml and the embedded list."
+              echo
+              echo '```'
+              git diff -- packaging/components/pins.toml
+              echo '```'
+            fi
+            echo
+            echo "## The run, line by line"
+            echo
+            echo '```'
+            cat pin-log.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pins
+          path: |
+            packaging/components/pins.toml
+            crates/diroxide-components/components.toml
+            pin-log.txt

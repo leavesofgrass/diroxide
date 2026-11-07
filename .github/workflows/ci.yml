@@ -116,6 +116,9 @@ jobs:
       - run: cargo xtask native --check
       - run: cargo xtask keyboard --check
       - run: cargo xtask regen --check
+      # The helper files' pinned addresses still answer (alpha 4): fails
+      # when one answers 404, as a dropped BtbN build does after 14 days.
+      - run: cargo xtask components --addresses
 
   deny:
     name: Licenses, bans, sources and advisories
