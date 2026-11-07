@@ -145,6 +145,8 @@ pub(super) enum Wants {
     },
     /// A list or a field of the metadata commands (alpha 4, lane MA).
     Meta(super::metadata_ui::MetaWants),
+    /// A question of the Encryption submenu (alpha 4, lane AE).
+    Crypt(super::crypt_ui::CryptWants),
 }
 
 impl Wants {
@@ -378,6 +380,7 @@ impl App {
             Wants::Field { side, places, one } => self.field_typed(side, places, one, &text),
             Wants::ReadColumns { .. } => self.dialog_escape(),
             Wants::Meta(wants) => self.meta_accept(wants, row, &text),
+            Wants::Crypt(wants) => self.crypt_accept(wants, &text),
         }
     }
 
@@ -389,6 +392,7 @@ impl App {
             Wants::Watched(wants) => self.watched_yes(wants),
             Wants::ReadColumns { side, fill } => self.start_fill(side, fill),
             Wants::Meta(wants) => self.meta_yes(wants),
+            Wants::Crypt(wants) => self.crypt_yes(wants),
             _ => Vec::new(),
         }
     }
@@ -404,6 +408,7 @@ impl App {
                 vec![self.say(Message::info("Nothing read; the order stays."))]
             }
             Wants::Meta(wants) => self.meta_escape(wants),
+            Wants::Crypt(wants) => self.crypt_escape(wants),
             Wants::BookmarkForm { side, .. } => self.refresh_bookmarks_list(side),
             Wants::BookmarkText { side, place, .. } => self.bookmark_form(side, place, None),
             Wants::Convert(wants) => self.convert_escape(wants),

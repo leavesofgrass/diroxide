@@ -32,6 +32,8 @@ pub mod commands;
 pub mod components;
 // Conversions in the app and the command line (alpha 4, lane AW).
 pub mod conversions;
+// The Encryption submenu's words and requests (alpha 4, lane AE).
+pub mod crypt;
 // The details view's reading and words (alpha 4, lane VA).
 pub mod details;
 pub mod dialog;

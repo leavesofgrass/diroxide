@@ -22,6 +22,8 @@ mod converting;
 // lane VA).
 mod details;
 mod dialogs;
+// The Encryption submenu (alpha 4, lane AE).
+mod encryption;
 // The panel filter on the filter language (W3a).
 mod filtering;
 // What a frontend reaches beside keys and commands (lane A5).

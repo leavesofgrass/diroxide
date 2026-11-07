@@ -69,6 +69,8 @@ mod type_checks;
 mod columns_ui;
 // The metadata commands in the app (alpha 4, lane MA).
 mod metadata_ui;
+// The Encryption submenu (alpha 4, lane AE).
+mod crypt_ui;
 // Show picture, the window's picture view (alpha 4, lane AE).
 pub mod picture_view;
 // Outputs a plugin staged and committed (alpha 4, lane AE).
@@ -2139,6 +2141,10 @@ impl App {
         }
         // Checksum, Verify, Strip, Check and the internet mark (lane MA).
         if let Some(effects) = self.meta_dispatch(command) {
+            return effects;
+        }
+        // The Encryption submenu (lane AE).
+        if let Some(effects) = self.crypt_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).

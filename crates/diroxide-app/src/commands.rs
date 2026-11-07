@@ -749,6 +749,18 @@ pub mod ids {
         /// picture view.
         VIEW_PICTURE = "view.picture";
     }
+
+    // The Encryption submenu (alpha 4, lane AE, R29 3.2): the File menu
+    // and the palette, no default keys.
+    ids! {
+        /// Encrypt the marked files, or the focused one, with a passphrase
+        /// typed twice (age, the encryption plugin).
+        ENCRYPT_PASSPHRASE = "file.encrypt-passphrase";
+        /// Encrypt them for a pasted age public key or a recipients file.
+        ENCRYPT_RECIPIENT = "file.encrypt-recipient";
+        /// Decrypt age files, asking a passphrase or an identity file.
+        DECRYPT = "file.decrypt";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -773,7 +785,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 260] = [
+pub static CATALOG: [CommandInfo; 263] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1602,6 +1614,30 @@ pub static CATALOG: [CommandInfo; 260] = [
         ids::REMOVE_INTERNET_MARK,
         "Remove the internet mark",
         "Removes the mark the system keeps on a downloaded file, after asking, so the system stops warning when it opens; Undo puts the mark back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::ENCRYPT_PASSPHRASE,
+        "Encrypt with a passphrase",
+        "Encrypts the marked files, or the focused one, with age and a passphrase you type twice in hidden fields, each into NAME.age beside it; the originals stay, and nothing you type is kept. Needs the Encryption plugin.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::ENCRYPT_RECIPIENT,
+        "Encrypt for a recipient",
+        "Encrypts the marked files, or the focused one, with age for a pasted public key starting age1 or a recipients file you name by its path, each into NAME.age beside it; the originals stay. Needs the Encryption plugin.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::DECRYPT,
+        "Decrypt",
+        "Decrypts the marked age files, or the focused one, asking the passphrase in a hidden field or an identity file by its path each time; nothing is kept. Needs the Encryption plugin.",
         Panel,
         &[],
         &[],

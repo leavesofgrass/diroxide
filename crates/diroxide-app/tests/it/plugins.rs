@@ -44,6 +44,9 @@ pub enum Act {
     /// (`fs/commit`), says what the host answered, then answers (lane
     /// AE).
     Stage(&'static str),
+    /// Answers with this result, as the encryption plugin answers what
+    /// it made (lane AE).
+    Answer(Value),
 }
 
 /// Starts the test plugin over a memory transport.
@@ -173,6 +176,9 @@ fn serve(
                         return;
                     }
                     Act::Hang => hanging = id,
+                    Act::Answer(result) => {
+                        write(&peer, json!({"jsonrpc": "2.0", "id": id, "result": result}));
+                    }
                     Act::Stage(output) => {
                         write(
                             &peer,

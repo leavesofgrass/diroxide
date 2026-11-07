@@ -28,6 +28,11 @@ access = "o"
 menu = "archive"
 access = "a"
 
+# Encrypt, decrypt, sign and verify (lane AE).
+[[menu.item]]
+menu = "encryption"
+access = "y"
+
 [[menu.item]]
 command = "file.view"
 access = "v"
@@ -174,6 +179,25 @@ access = "t"
 [[menu.item]]
 command = "archive.open-as"
 access = "o"
+
+# The Encryption submenu (lane AE): age through the Encryption plugin.
+[[menu]]
+id = "encryption"
+title = "Encryption"
+access = "y"
+bar = false
+
+[[menu.item]]
+command = "file.encrypt-passphrase"
+access = "p"
+
+[[menu.item]]
+command = "file.encrypt-recipient"
+access = "r"
+
+[[menu.item]]
+command = "file.decrypt"
+access = "d"
 
 [[menu]]
 id = "edit"

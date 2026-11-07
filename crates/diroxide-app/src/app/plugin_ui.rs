@@ -2340,8 +2340,13 @@ impl App {
             return Vec::new();
         };
         let job = finished.job;
-        // The outputs it staged and committed: one undo record (lane AE).
-        self.commits_ended(job);
+        // The outputs it staged and committed: one undo record; what an
+        // encryption command made, from its answer (lane AE).
+        let committed = self.commits_ended(job);
+        let made = match &finished.outcome {
+            Outcome::Process(Ok(value)) => crate::crypt::made_by(&running.command, value),
+            _ => None,
+        };
         if running.refresh == Refresh::Devices {
             return self.devices_finished(job, &running, finished);
         }
@@ -2493,6 +2498,8 @@ impl App {
         }
         // A volume action ended: an open Volumes list follows (lane A3).
         effects.extend(self.volume_command_ended(&running.command));
+        // Undo for what it made, and the trash offered (lane AE).
+        effects.extend(self.crypt_made(made, committed));
         effects
     }
 
