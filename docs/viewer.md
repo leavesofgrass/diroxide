@@ -88,6 +88,7 @@ Three commands are in the palette only. Show in folder closes the viewer and put
 
 - Ctrl+R reads the file again: "Reloaded notes.txt, 14 lines".
 - F (Follow file) reads more of a file as it grows, as a log does, and stays at the end: "Follow on". It does not read each new line aloud. At the progress interval it says "12 new lines". The `viewer.follow` setting starts every file in follow mode.
+- Text read from a picture by Read text in picture opens in the viewer, titled as a machine's guess: "Text in picture (machine read), sign.png, 9 words". Reload does not read the picture's bytes as text. It says "This text was read from the picture. Read text in picture reads it again." [Previews](previews.md#read-text-in-picture) has the rest.
 
 ## Large files
 
