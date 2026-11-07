@@ -2,7 +2,7 @@
 
 This guide covers the two commands that check a file's integrity, Checksum and Verify checksum, and the two shell commands that do the same without the panels, `diro sum` and `diro sum --check`.
 
-The short version: Checksum computes a file's SHA-256 and lists it to read, copy, compare with a value you paste, or save as a `SHA256SUMS` file. Verify checksum finds the checksum list beside a download and checks the file against it, the verdict first. A match tells you the file is not damaged. It never tells you who made the file, and diroxide never calls a file safe or genuine because of one.
+The short version: Checksum computes a file's SHA-256 and lists it to read, copy, compare with a value you paste, or save as a `SHA256SUMS` file. Verify checksum finds the checksum list beside a download and checks the file against it, the verdict first. A match tells you the file is not damaged. It never tells you who made the file, and diroxide never calls a file safe or genuine because of one. When the list has a signature beside it, Verify checksum checks that too, and says whether the list is signed ([Encryption and signatures](encryption.md) has the signature commands).
 
 What this guide says about the spoken lines comes from their design and from the tests that check each sentence at 40 cells. Nothing here had been heard on a screen reader when it was written; if your experience differs, that is a finding.
 
@@ -91,16 +91,21 @@ The rows come in this order:
 
 1. The failures, each with the name first: "Does not match: notes.txt, SHA-256", "Missing: gone.txt", and "Unreadable: NAME, WHY" for a file that could not be read.
 2. "Matches BLAKE3, not SHA-256" for a value that named no algorithm and matched the second of the two.
-3. The line about the list's signature, below.
-4. "This shows the files are not damaged. It does not show who made them." This line comes only when something matched.
+3. The chain, below: one sentence about the list's signature, and after it the signature's own lines.
+4. "This shows the files are not damaged. It does not show who made them." This line comes only with "List not signed", and only when something matched.
 5. "Show the 1 match", which lists each match when you ask: "Match: example-tool.zip, SHA-256".
 
-### The signature line
+### The signature chain
 
-A checksum list proves nothing about who made it unless it is signed, and a match against an unsigned list means only that the file is the one the list describes.
+A checksum list proves nothing about who made it unless it is signed, and a match against an unsigned list means only that the file is the one the list describes. Verify checksum looks beside the list for `NAME.asc`, `NAME.sig` and `NAME.minisig`, takes the first it finds, and checks it. It then says one of three sentences, each with the count of files that matched, on a file the one line it checked ("1 of 1") and on a list every line ("1 of 3"):
 
-- "List not signed." says no signature file sits beside the list.
-- "Signature not checked: SHA256SUMS.asc" says one does, and names it. diroxide looks for `NAME.asc`, `NAME.sig` and `NAME.minisig` beside the list. Checking it comes in a later pass of this alpha, so today the line only names the file.
+- "List is signed: 12 of 12 files match". The signature is good. The signature's own lines follow: "Signature good: key ending 4E7B", "Key ending 4E7B is named Ada Example <ada@example.invalid>" and "Good means the key fits, not who holds it." The name is the one the key's maker chose, so it says who the key claims to be, not who holds it.
+- "List not signed: 12 of 12 match". No signature file sits beside the list. The next line says what a match shows: "This shows the files are not damaged. It does not show who made them."
+- A signature that is bad or cannot be checked. Its verdict comes first, then "List not verified: 12 of 12 match". The verdicts are the ones [Encryption and signatures](encryption.md#verify-signature) lists: "Signature bad: the file was changed", "Cannot check: public key is missing" and the rest. With no gpg, an OpenPGP signature says "gpg not found. Install GnuPG first." and then "List not verified: 12 of 12 match".
+
+An OpenPGP signature, `.asc` or `.sig`, is checked by gpg. A minisign signature, `.minisig`, needs a public key, and this check has none to give it, so it says "Cannot check: no public key given" and then "List not verified". To check a list with a minisign signature, focus the list and use Verify signature, which asks for the key.
+
+Nothing here says safe or genuine. A good signature shows the key fits; whose key it is stays for you to know.
 
 ## From a shell
 
@@ -124,7 +129,8 @@ The exit codes are those of `sha256sum --check`: 0 when done, and with `--check`
 
 ## Known limits
 
-- The signature beside a list is named and not checked yet. The words "List is signed" are not said anywhere in this build.
+- A list's minisign signature is not checked by Verify checksum, which has no public key for it. Verify signature checks it, with the key you give.
+- On Windows, checking a list's OpenPGP signature can be slow when gpg's agent has to start again. [Encryption and signatures](encryption.md#on-windows) says why.
 - The details view's Checksum row holds only the values computed in this session.
 - SHA-1 lines are read from old lists and not checked, because diroxide computes no SHA-1.
 - Nothing about how the two lists read on a Braille display has been heard yet.
@@ -132,6 +138,7 @@ The exit codes are those of `sha256sum --check`: 0 when done, and with `--check`
 ## See also
 
 - [The details view](details.md)
+- [Encryption and signatures](encryption.md), which checks the signature beside a list
 - [Split and join](split-join.md), which writes a checksum file for its parts
 - [Tools and diro doctor](tools.md)
 - [Operations and undo](operations.md)
