@@ -49,6 +49,10 @@ use diroxide_vfs::{
 };
 
 mod archive_jobs;
+// The readers of the custom columns (alpha 4, lane MA).
+mod columns;
+// The metadata commands' workers (alpha 4, lane MA).
+mod meta;
 // Optional components (W4d).
 mod components;
 // Conversions on workers (alpha 4, lane AW).
@@ -523,6 +527,12 @@ pub struct Runtime {
     /// The Read text in picture jobs running, each with its cancel token
     /// (alpha 4, lane VA).
     picture_runs: Arc<Mutex<HashMap<JobId, CancelToken>>>,
+    /// The metadata commands' jobs running, each with its cancel token
+    /// (alpha 4, lane MA).
+    meta_runs: Arc<Mutex<HashMap<JobId, CancelToken>>>,
+    /// The details list's field read running: a newer one or the list
+    /// closing stops it.
+    details_run: Option<CancelToken>,
     engine: Engine,
     shared: Arc<Shared>,
     receiver: Receiver<AppEvent>,
@@ -581,6 +591,8 @@ pub struct Runtime {
     /// Each panel's type check, counted, so a newer one stops the
     /// readers of the one before (lane TA).
     type_readers: typing::TypeReaders,
+    /// Each panel's column reads, counted the same way (lane MA).
+    column_readers: columns::ColumnReaders,
     /// Open with's lists and starts (lane TA): the system's, or a
     /// recorder in tests.
     open_with: Arc<dyn OpenWithPrograms>,
@@ -648,6 +660,8 @@ impl Runtime {
             plugins: plugins::PluginRuntime::default(),
             components: components::ComponentRuntime::default(),
             picture_runs: Arc::default(),
+            meta_runs: Arc::default(),
+            details_run: None,
             components_source: String::new(),
             registry,
             shared,
@@ -677,6 +691,7 @@ impl Runtime {
             trash,
             local_volumes: None,
             type_readers: typing::TypeReaders::default(),
+            column_readers: columns::ColumnReaders::default(),
             open_with: Arc::new(SystemOpenWith),
             hot: watched::WatchedRuntime::default(),
         }
@@ -1200,6 +1215,9 @@ impl Runtime {
         if let Some(token) = lock(&self.picture_runs).get(&job) {
             token.cancel();
         }
+        if let Some(token) = lock(&self.meta_runs).get(&job) {
+            token.cancel();
+        }
         let asks: Vec<AskId> = lock(&self.shared.asks)
             .iter()
             .filter(|(_, (asker, _))| *asker == Some(job))
@@ -1553,10 +1571,21 @@ impl Runtime {
             }
             Request::Details(ask) => {
                 let registry = Arc::clone(&self.registry);
+                let cancel = CancelToken::new();
+                if ask.wanted == crate::details::Wanted::Fields
+                    && let Some(older) = self.details_run.replace(cancel.clone())
+                {
+                    older.cancel();
+                }
                 self.worker(move |shared| {
-                    let note = crate::details::answer(&registry, &ask);
+                    let note = crate::details::answer_with(&registry, &ask, &cancel);
                     shared.send(AppEvent::Details(Box::new(note)));
                 });
+            }
+            Request::StopDetails => {
+                if let Some(running) = self.details_run.take() {
+                    running.cancel();
+                }
             }
             Request::PictureText { job, place, tools } => {
                 let registry = Arc::clone(&self.registry);
@@ -1567,6 +1596,23 @@ impl Runtime {
                     let result = crate::picture_text::read(&registry, &place, &tools, &token);
                     lock(&runs).remove(&job);
                     shared.send(AppEvent::PictureText { job, place, result });
+                });
+            }
+            // The metadata commands (alpha 4, lane MA): a job's token is
+            // kept until its answer, so Cancel stops the engine.
+            Request::Meta(ask) => {
+                let registry = Arc::clone(&self.registry);
+                let token = CancelToken::new();
+                let job = meta::job_of(&ask);
+                if let Some(job) = job {
+                    lock(&self.meta_runs).insert(job, token.clone());
+                }
+                let runs = Arc::clone(&self.meta_runs);
+                self.worker(move |shared| {
+                    meta::run(shared, &registry, *ask, token);
+                    if let Some(job) = job {
+                        lock(&runs).remove(&job);
+                    }
                 });
             }
             Request::ToolsReport(tools) => {
@@ -1893,6 +1939,35 @@ impl Runtime {
             }
             Request::StopTypes(side) => {
                 self.type_readers.next(side);
+            }
+            Request::ReadColumns {
+                side,
+                listing,
+                folder,
+                items,
+                urgent,
+                costs,
+                pipeline,
+                ask,
+            } => {
+                let job = columns::ColumnJob {
+                    side,
+                    listing,
+                    generation: self.column_readers.next(side),
+                    current: self.column_readers.current(side),
+                    folder,
+                    items,
+                    next: AtomicUsize::new(0),
+                    urgent,
+                    costs,
+                    pipeline: pipeline.0,
+                    registry: Arc::clone(&self.registry),
+                    ask,
+                };
+                self.worker(move |shared| columns::run(shared, &job));
+            }
+            Request::StopColumns(side) => {
+                self.column_readers.next(side);
             }
             Request::ListOpenWith { place, mime } => {
                 let programs = Arc::clone(&self.open_with);

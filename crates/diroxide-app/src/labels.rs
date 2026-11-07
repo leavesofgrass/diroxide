@@ -10,9 +10,22 @@
 //! carry which labels, keyed by the place as written (folded to lowercase
 //! on the case-insensitive local file systems of Windows and macOS). It
 //! lives in `labels.toml` in the state folder, written atomically on every
-//! change. A moved file loses its label
-//! until it is labeled again; the Labels list counts such missing items
-//! when it opens.
+//! change. Nothing is ever written into the owner's folders.
+//!
+//! **Notes and named fields** (alpha 4, R30 commit 51; R28 3.2): an item
+//! also keeps the owner's own note ("Note: call about the invoice", one
+//! line, at most [`NOTE_LIMIT`] characters) and named fields
+//! (`project = "Apollo"`), shown in the details beside the labels and as
+//! the columns `custom.note` and `custom.NAME`. Format 2 of the file adds
+//! them to `[[item]]`, both defaulted, so a format 1 file loads as it is.
+//!
+//! **They follow a move** (R28 question 3.4): when a move or a rename
+//! finishes, the app hands its pairs to [`LabelStore::follow_moves`], and
+//! the labels, the note and the fields of a moved file, or of anything
+//! inside a moved folder, are kept under the new place in the same step.
+//! A copy does not take them. A file moved by another program still loses
+//! them until they are set again; the Labels list counts such missing
+//! items when it opens.
 //!
 //! The starter set, plan question 71's: Urgent, Waiting, Review, Done,
 //! Keep and "Skip in searches" (which search leaves out). The first seven
@@ -46,8 +59,98 @@ pub const FAVORITES: usize = 7;
 /// The longest label name, so a row keeps its meaning in 40 cells.
 pub const NAME_LIMIT: usize = 30;
 
-/// The version of `labels.toml` this build writes.
-pub const FORMAT: u32 = 1;
+/// The version of `labels.toml` this build writes: 2 adds each item's
+/// note and fields; a format 1 file loads as it is.
+pub const FORMAT: u32 = 2;
+
+/// The longest note, in characters: one line, a few hundred at most.
+pub const NOTE_LIMIT: usize = 300;
+
+/// The longest field name, so a row keeps its meaning in 40 cells.
+pub const FIELD_NAME_LIMIT: usize = 24;
+
+/// The column key of the note: `custom.note`. A named field's key is
+/// `custom.NAME` ([`field_key`]).
+pub const NOTE_KEY: &str = "custom.note";
+
+/// The prefix of the owner's own columns.
+pub const CUSTOM_PREFIX: &str = "custom.";
+
+/// The column key of a named field: `custom.project`.
+pub fn field_key(name: &str) -> String {
+    format!("{CUSTOM_PREFIX}{name}")
+}
+
+/// Checks a note: trimmed, one line, at most [`NOTE_LIMIT`] characters.
+/// An empty note is `None`, which removes it. The error is a sentence.
+pub fn check_note(text: &str) -> Result<Option<String>, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    if text.chars().count() > NOTE_LIMIT {
+        return Err(format!("A note is at most {NOTE_LIMIT} characters."));
+    }
+    if text.chars().any(char::is_control) {
+        return Err("A note is one line, with no control characters.".to_owned());
+    }
+    Ok(Some(text.to_owned()))
+}
+
+/// Checks a field's value as a note is checked: one line, at most
+/// [`NOTE_LIMIT`] characters; an empty value is `None`, which removes the
+/// field.
+pub fn check_field_value(text: &str) -> Result<Option<String>, String> {
+    check_note(text).map_err(|why| why.replacen("A note", "A field's value", 1))
+}
+
+/// Reads Set field's text, `name: value` or `name = value`: the checked
+/// name, and the value or `None` to remove the field.
+pub fn parse_field(text: &str) -> Result<(String, Option<String>), String> {
+    let Some(at) = text.find([':', '=']) else {
+        return Err("Type the field as name: value.".to_owned());
+    };
+    let name = check_field_name(&text[..at])?;
+    let value = check_field_value(&text[at + 1..])?;
+    Ok((name, value))
+}
+
+/// Checks a field's name: small letters, digits, `-` and `_`, at most
+/// [`FIELD_NAME_LIMIT`] characters, never `note` (the note's own column),
+/// so its column key reads `custom.project`. The error is a sentence.
+pub fn check_field_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("A field needs a name, as name: value.".to_owned());
+    }
+    if name.chars().count() > FIELD_NAME_LIMIT {
+        return Err(format!(
+            "A field name is at most {FIELD_NAME_LIMIT} characters."
+        ));
+    }
+    let plain = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_';
+    if !name.chars().all(plain) {
+        return Err("Field names use small letters, digits, - and _ only.".to_owned());
+    }
+    if name == "note" {
+        return Err("A field cannot be called note: Set note keeps the note.".to_owned());
+    }
+    Ok(name.to_owned())
+}
+
+/// A field's name as a label: the first letter capital, `_` and `-` as
+/// spaces: `project_code` reads "Project code".
+pub fn field_label(name: &str) -> String {
+    let spaced: String = name
+        .chars()
+        .map(|c| if c == '_' || c == '-' { ' ' } else { c })
+        .collect();
+    let mut chars = spaced.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
 
 /// A label's color: a set that never pairs red with green. The color is
 /// always said as a word after the name, never shown alone.
@@ -209,13 +312,42 @@ fn name_key(folder: &Place, name: &str) -> String {
     }
 }
 
-/// One labeled place and its labels, in the label list's order.
+/// Where `place` lands when `from` moves to `to`: `to` itself, or the
+/// same names under `to` for a place inside `from`; `None` for a place
+/// elsewhere, or one whose names cannot be joined under `to`.
+fn moved_place(place: &Place, from: &Place, to: &Place) -> Option<Place> {
+    let from_key = place_key(from);
+    let mut names = Vec::new();
+    let mut at = place.clone();
+    while place_key(&at) != from_key {
+        names.push(at.name()?.to_owned());
+        at = at.parent()?;
+    }
+    names
+        .iter()
+        .rev()
+        .try_fold(to.clone(), |under, name| under.join(name).ok())
+}
+
+/// One place the owner marked, and what it carries: its labels, in the
+/// label list's order, its note and its named fields.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Labeled {
     /// The place.
     pub place: Place,
     /// Its labels' names.
     pub labels: Vec<String>,
+    /// The owner's note, one line.
+    pub note: Option<String>,
+    /// The owner's named fields, by name: `project = "Apollo"`.
+    pub fields: BTreeMap<String, String>,
+}
+
+impl Labeled {
+    /// Whether it carries nothing, so the store keeps no item for it.
+    pub fn is_empty(&self) -> bool {
+        self.labels.is_empty() && self.note.is_none() && self.fields.is_empty()
+    }
 }
 
 /// What a label command does to its items.
@@ -229,29 +361,45 @@ pub enum LabelChange {
     Toggle(String),
     /// Take every label off.
     Clear,
+    /// Set every item's note, or remove it with `None` (alpha 4).
+    Note(Option<String>),
+    /// Set a named field on every item, or remove it with `None`.
+    Field {
+        /// The field's name, checked by [`check_field_name`].
+        name: String,
+        /// Its value, one line.
+        value: Option<String>,
+    },
 }
 
-/// How to put a label change back: each item's labels before it.
+/// How to put a label change back: each item's labels, note and fields
+/// before it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LabelUndo {
     /// What was done (never [`LabelChange::Toggle`]: the resolved change).
     pub done: LabelChange,
     /// Each changed place and its labels before the change.
     pub before: Vec<(Place, Vec<String>)>,
+    /// Each changed place's note and fields before a note or field
+    /// change.
+    pub kept: Vec<(Place, Option<String>, BTreeMap<String, String>)>,
     /// The one item's name when one changed, for the sentence.
     pub one: Option<String>,
 }
 
 impl LabelUndo {
     /// What undoing it says: "Undid label urgent on 3 items", "Undid
-    /// clear labels on report.pdf".
+    /// clear labels on report.pdf", "Undid note on report.pdf", "Undid
+    /// field project on 3 items".
     pub fn sentence(&self) -> String {
-        let what = subject(self.before.len(), self.one.as_deref());
+        let what = subject(self.before.len() + self.kept.len(), self.one.as_deref());
         match &self.done {
             LabelChange::Clear => format!("Undid clear labels on {what}"),
             LabelChange::Add(name) | LabelChange::Remove(name) | LabelChange::Toggle(name) => {
                 format!("Undid label {} on {what}", in_sentence(name))
             }
+            LabelChange::Note(_) => format!("Undid note on {what}"),
+            LabelChange::Field { name, .. } => format!("Undid field {name} on {what}"),
         }
     }
 }
@@ -293,13 +441,37 @@ impl Applied {
         };
         let rest = if self.changed > 0 && self.unchanged > 0 {
             match &self.done {
-                LabelChange::Add(_) => format!("; {} already had it", self.unchanged),
+                LabelChange::Add(_)
+                | LabelChange::Note(Some(_))
+                | LabelChange::Field { value: Some(_), .. } => {
+                    format!("; {} already had it", self.unchanged)
+                }
                 _ => format!("; {} did not have it", self.unchanged),
             }
         } else {
             String::new()
         };
         match &self.done {
+            LabelChange::Note(Some(_)) if self.changed == 0 => {
+                format!("The note is already on {everything}")
+            }
+            LabelChange::Note(Some(_)) => format!("Note set on {changed}{rest}"),
+            LabelChange::Note(None) if self.changed == 0 => format!("No note on {everything}"),
+            LabelChange::Note(None) => format!("Note removed from {changed}{rest}"),
+            LabelChange::Field {
+                name,
+                value: Some(_),
+            } if self.changed == 0 => format!("Field {name} is already so on {everything}"),
+            LabelChange::Field {
+                name,
+                value: Some(_),
+            } => format!("Field {name} set on {changed}{rest}"),
+            LabelChange::Field { name, value: None } if self.changed == 0 => {
+                format!("No field {name} on {everything}")
+            }
+            LabelChange::Field { name, value: None } => {
+                format!("Field {name} removed from {changed}{rest}")
+            }
             LabelChange::Clear if self.changed == 0 => format!("No labels on {everything}"),
             LabelChange::Clear => format!("Labels cleared from {changed}"),
             LabelChange::Add(name) | LabelChange::Toggle(name) if self.changed == 0 => {
@@ -420,9 +592,65 @@ impl LabelStore {
             .map_or(&[], |item| item.labels.as_slice())
     }
 
-    /// Every labeled place, by key.
+    /// The owner's note on a place.
+    pub fn note_of(&self, place: &Place) -> Option<&str> {
+        self.items
+            .get(&place_key(place))
+            .and_then(|item| item.note.as_deref())
+    }
+
+    /// The owner's named fields on a place, by name.
+    pub fn fields_of(&self, place: &Place) -> Option<&BTreeMap<String, String>> {
+        self.items
+            .get(&place_key(place))
+            .map(|item| &item.fields)
+            .filter(|fields| !fields.is_empty())
+    }
+
+    /// Every field name used on any item, in order: the Set field
+    /// prompt's candidates and the column chooser's `custom.NAME` keys.
+    pub fn field_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .items
+            .values()
+            .flat_map(|item| item.fields.keys().cloned())
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    /// Every place the owner marked, by key: labeled, or with a note or
+    /// a field.
     pub fn items(&self) -> impl Iterator<Item = &Labeled> {
         self.items.values()
+    }
+
+    /// Keeps each moved place's labels, note and fields under its new
+    /// place, and those of everything inside a moved folder under the
+    /// folder's new place: what a finished move or rename hands over, as
+    /// (from, to) pairs in the order done. Returns how many items moved
+    /// with their places.
+    pub fn follow_moves(&mut self, moves: &[(Place, Place)]) -> usize {
+        let mut moved = 0;
+        for (from, to) in moves {
+            let landed: Vec<(String, Place)> = self
+                .items
+                .iter()
+                .filter_map(|(key, item)| {
+                    moved_place(&item.place, from, to).map(|place| (key.clone(), place))
+                })
+                .collect();
+            for (key, place) in landed {
+                let Some(mut item) = self.items.remove(&key) else {
+                    continue;
+                };
+                item.place = place;
+                moved += 1;
+                self.items.insert(place_key(&item.place), item);
+            }
+        }
+        moved
     }
 
     /// The places that carry a label, in key order.
@@ -442,37 +670,44 @@ impl LabelStore {
             .any(|l| l.eq_ignore_ascii_case(SKIP_IN_SEARCHES))
     }
 
-    /// Fills in each listed entry's labels from the store: the entries are
-    /// a listing of `folder`. A quick pass when nothing in the folder is
-    /// labeled.
+    /// Fills in each listed entry's labels from the store, and its note
+    /// and fields as the columns `custom.note` and `custom.NAME` in its
+    /// [`Entry::extra`]: the entries are a listing of `folder`. A quick
+    /// pass when nothing in the folder is marked.
     pub fn apply_to_entries(&self, folder: &Place, entries: &mut [Entry]) {
         let folder_key = place_key(folder);
-        let mut here: HashMap<String, &[String]> = HashMap::new();
+        let mut here: HashMap<String, &Labeled> = HashMap::new();
         for item in self.items.values() {
             let in_folder = item
                 .place
                 .parent()
                 .is_some_and(|parent| place_key(&parent) == folder_key);
             if let (true, Some(name)) = (in_folder, item.place.name()) {
-                here.insert(name_key(folder, name), &item.labels);
+                here.insert(name_key(folder, name), item);
             }
         }
         for entry in entries {
-            entry.labels = here
-                .get(&name_key(folder, &entry.name))
-                .map(|labels| labels.to_vec())
-                .unwrap_or_default();
+            let item = here.get(&name_key(folder, &entry.name));
+            entry.labels = item.map(|item| item.labels.clone()).unwrap_or_default();
+            if !entry.extra.is_empty() {
+                entry.extra.retain(|key, _| !key.starts_with(CUSTOM_PREFIX));
+            }
+            let Some(item) = item else {
+                continue;
+            };
+            if let Some(note) = &item.note {
+                entry.extra.insert(NOTE_KEY.to_owned(), note.clone());
+            }
+            for (name, value) in &item.fields {
+                entry.extra.insert(field_key(name), value.clone());
+            }
         }
     }
 
-    /// Sets a place's labels, in the label list's order; an empty list
-    /// takes the place out of the store.
+    /// Sets a place's labels, in the label list's order, keeping its note
+    /// and fields; a place left with nothing is taken out of the store.
     fn put(&mut self, place: &Place, labels: Vec<String>) {
         let key = place_key(place);
-        if labels.is_empty() {
-            self.items.remove(&key);
-            return;
-        }
         let order = |name: &String| {
             self.labels
                 .iter()
@@ -482,13 +717,96 @@ impl LabelStore {
         let mut labels = labels;
         labels.sort_by_key(order);
         labels.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-        self.items.insert(
+        let (note, fields) = self
+            .items
+            .remove(&key)
+            .map(|item| (item.note, item.fields))
+            .unwrap_or_default();
+        self.keep(
             key,
             Labeled {
                 place: place.clone(),
                 labels,
+                note,
+                fields,
             },
         );
+    }
+
+    /// Sets a place's note and fields, keeping its labels; a place left
+    /// with nothing is taken out of the store.
+    fn put_owned(&mut self, place: &Place, note: Option<String>, fields: BTreeMap<String, String>) {
+        let key = place_key(place);
+        let labels = self
+            .items
+            .remove(&key)
+            .map(|item| item.labels)
+            .unwrap_or_default();
+        self.keep(
+            key,
+            Labeled {
+                place: place.clone(),
+                labels,
+                note,
+                fields,
+            },
+        );
+    }
+
+    fn keep(&mut self, key: String, item: Labeled) {
+        if !item.is_empty() {
+            self.items.insert(key, item);
+        }
+    }
+
+    /// Sets or removes a note or a field on places (alpha 4); `one` is
+    /// the item's name when there is one item.
+    fn apply_owned(
+        &mut self,
+        change: &LabelChange,
+        places: &[Place],
+        one: Option<&str>,
+    ) -> Applied {
+        let mut kept = Vec::new();
+        let mut unchanged = 0;
+        for place in places {
+            let item = self.items.get(&place_key(place));
+            let note = item.and_then(|item| item.note.clone());
+            let fields = item.map(|item| item.fields.clone()).unwrap_or_default();
+            let (new_note, new_fields) = match change {
+                LabelChange::Note(text) => (text.clone(), fields.clone()),
+                LabelChange::Field { name, value } => {
+                    let mut new = fields.clone();
+                    match value {
+                        Some(value) => new.insert(name.clone(), value.clone()),
+                        None => new.remove(name),
+                    };
+                    (note.clone(), new)
+                }
+                _ => (note.clone(), fields.clone()),
+            };
+            if new_note == note && new_fields == fields {
+                unchanged += 1;
+                continue;
+            }
+            kept.push((place.clone(), note, fields));
+            self.put_owned(place, new_note, new_fields);
+        }
+        let changed = kept.len();
+        let one = one.map(str::to_owned);
+        let undo = (changed > 0).then(|| LabelUndo {
+            done: change.clone(),
+            before: Vec::new(),
+            kept,
+            one: one.clone(),
+        });
+        Applied {
+            done: change.clone(),
+            changed,
+            unchanged,
+            one,
+            undo,
+        }
     }
 
     /// Applies a change to places; `one` is the item's name when there is
@@ -501,6 +819,9 @@ impl LabelStore {
                     .map_or_else(|| n.trim().to_owned(), |l| l.name.clone()),
             ),
             LabelChange::Clear => None,
+            LabelChange::Note(_) | LabelChange::Field { .. } => {
+                return self.apply_owned(change, places, one);
+            }
         };
         let has = |store: &Self, place: &Place, name: &str| {
             store
@@ -562,6 +883,7 @@ impl LabelStore {
         let undo = (changed > 0).then(|| LabelUndo {
             done: done.clone(),
             before,
+            kept: Vec::new(),
             one: one.clone(),
         });
         Applied {
@@ -577,6 +899,9 @@ impl LabelStore {
     pub fn restore(&mut self, undo: &LabelUndo) {
         for (place, labels) in &undo.before {
             self.put(place, labels.clone());
+        }
+        for (place, note, fields) in &undo.kept {
+            self.put_owned(place, note.clone(), fields.clone());
         }
     }
 
@@ -634,6 +959,37 @@ impl LabelStore {
                 labels.push(name);
             }
             store.put(&place, labels);
+            // Format 2's note and fields; a format 1 item has neither.
+            let shown = diroxide_core::names::spell_out(&line.place).into_owned();
+            let note = line.note.as_deref().and_then(|text| {
+                let (kept, cut) = one_line(text);
+                if cut {
+                    problems.push(format!(
+                        "Note on {shown} was cut to one line of {NOTE_LIMIT} characters."
+                    ));
+                }
+                kept
+            });
+            let mut fields = BTreeMap::new();
+            for (name, value) in &line.fields {
+                match check_field_name(name) {
+                    Ok(name) => {
+                        let (kept, cut) = one_line(value);
+                        if cut {
+                            problems.push(format!(
+                                "Field {name} on {shown} was cut to one line of {NOTE_LIMIT} characters."
+                            ));
+                        }
+                        if let Some(value) = kept {
+                            fields.insert(name, value);
+                        }
+                    }
+                    Err(why) => problems.push(format!("Field left out on {shown}: {why}")),
+                }
+            }
+            if note.is_some() || !fields.is_empty() {
+                store.put_owned(&place, note, fields);
+            }
         }
         Ok((store, problems))
     }
@@ -656,11 +1012,30 @@ impl LabelStore {
                 .map(|item| ItemLine {
                     place: item.place.to_string(),
                     labels: item.labels.clone(),
+                    note: item.note.clone(),
+                    fields: item.fields.clone(),
                 })
                 .collect(),
         };
         toml::to_string(&file)
     }
+}
+
+/// A note or field value as one line of at most [`NOTE_LIMIT`]
+/// characters, control characters made spaces; `None` when nothing is
+/// left; and whether it had to change.
+fn one_line(text: &str) -> (Option<String>, bool) {
+    let spaced: String = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    let trimmed = spaced.trim();
+    let kept: String = trimmed.chars().take(NOTE_LIMIT).collect();
+    let changed = kept.len() != trimmed.len() || spaced != text;
+    (
+        (!kept.is_empty()).then_some(kept),
+        changed && !text.trim().is_empty(),
+    )
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -683,7 +1058,13 @@ struct LabelLine {
 #[serde(default)]
 struct ItemLine {
     place: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     labels: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
+    // A table, so it is written last, after the item's plain values.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    fields: BTreeMap<String, String>,
 }
 
 /// Reads `labels.toml` from the state folder: the starter set when there
@@ -1007,6 +1388,162 @@ mod tests {
         assert!(problems[0].starts_with("Label Hot: red is not offered"));
         assert!(problems[1].starts_with("A labeled place cannot be read"));
         assert!(LabelStore::from_toml("[[label]\nname=").is_err());
+    }
+
+    #[test]
+    fn notes_and_fields_are_set_said_undone_and_shown_as_columns() {
+        let mut store = LabelStore::starter();
+        let items = [p("/w/a.txt"), p("/w/b.txt")];
+        let note = check_note("  call about the invoice ").unwrap();
+        let set = store.apply(&LabelChange::Note(note.clone()), &items[..1], Some("a.txt"));
+        assert_eq!(set.sentence(), "Note set on a.txt");
+        assert_eq!(store.note_of(&items[0]), Some("call about the invoice"));
+        let again = store.apply(&LabelChange::Note(note), &items[..1], Some("a.txt"));
+        assert_eq!(again.sentence(), "The note is already on a.txt");
+        let field = LabelChange::Field {
+            name: check_field_name("project").unwrap(),
+            value: Some("Apollo".to_owned()),
+        };
+        let both = store.apply(&field, &items, None);
+        assert_eq!(both.sentence(), "Field project set on 2 items");
+        assert_eq!(store.field_names(), ["project"]);
+        // Labels and notes live side by side: clearing labels keeps the
+        // note, and a place keeps its item while anything is left.
+        store.apply(&LabelChange::Add("Urgent".into()), &items[..1], None);
+        store.apply(&LabelChange::Clear, &items[..1], None);
+        assert_eq!(store.note_of(&items[0]), Some("call about the invoice"));
+        let mut entries = vec![
+            Entry::new("a.txt", EntryKind::File),
+            Entry::new("c.txt", EntryKind::File),
+        ];
+        entries[1]
+            .extra
+            .insert("custom.stale".to_owned(), "gone".to_owned());
+        store.apply_to_entries(&p("/w"), &mut entries);
+        assert_eq!(entries[0].extra[NOTE_KEY], "call about the invoice");
+        assert_eq!(entries[0].extra[&field_key("project")], "Apollo");
+        assert!(entries[1].extra.is_empty(), "{:?}", entries[1].extra);
+        // Undo puts the fields back as they were, and says so.
+        let undo = both.undo.unwrap();
+        assert_eq!(undo.sentence(), "Undid field project on 2 items");
+        store.restore(&undo);
+        assert_eq!(store.fields_of(&items[0]), None);
+        assert!(store.items().all(|item| item.place == items[0]));
+        let removed = store.apply(&LabelChange::Note(None), &items[..1], Some("a.txt"));
+        assert_eq!(removed.sentence(), "Note removed from a.txt");
+        assert_eq!(store.items().count(), 0, "nothing left, no item kept");
+        for text in [
+            set.sentence(),
+            removed.sentence(),
+            "Note: call about the invoice".to_owned(),
+        ] {
+            assert!(within_cells(&text, &text));
+        }
+    }
+
+    #[test]
+    fn a_note_and_a_field_name_are_checked_in_words() {
+        assert_eq!(check_note("   "), Ok(None));
+        assert!(check_note(&"x".repeat(NOTE_LIMIT + 1)).is_err());
+        assert!(check_note("two\nlines").is_err());
+        assert_eq!(check_field_name(" project "), Ok("project".to_owned()));
+        for bad in ["", "Project", "a b", "note", "x/y", &"a".repeat(25)] {
+            assert!(check_field_name(bad).is_err(), "{bad}");
+        }
+        assert_eq!(field_label("project_code"), "Project code");
+        assert_eq!(field_key("project"), "custom.project");
+    }
+
+    #[test]
+    fn labels_notes_and_fields_follow_a_move_and_a_folder_move() {
+        let mut store = LabelStore::starter();
+        store.apply(&LabelChange::Add("Urgent".into()), &[p("/w/a.txt")], None);
+        store.apply(
+            &LabelChange::Note(Some("inside".into())),
+            &[p("/w/docs/deep/b.txt")],
+            None,
+        );
+        store.apply(
+            &LabelChange::Field {
+                name: "project".into(),
+                value: Some("Apollo".into()),
+            },
+            &[p("/w/docs")],
+            None,
+        );
+        store.apply(
+            &LabelChange::Add("Keep".into()),
+            &[p("/w/docsx/c.txt")],
+            None,
+        );
+        let moved = store.follow_moves(&[
+            (p("/w/a.txt"), p("/w/renamed.txt")),
+            (p("/w/docs"), p("/archive/docs-2026")),
+        ]);
+        assert_eq!(moved, 3);
+        assert!(store.labels_of(&p("/w/a.txt")).is_empty());
+        assert_eq!(store.labels_of(&p("/w/renamed.txt")), ["Urgent"]);
+        assert_eq!(
+            store.note_of(&p("/archive/docs-2026/deep/b.txt")),
+            Some("inside")
+        );
+        assert_eq!(
+            store.fields_of(&p("/archive/docs-2026")).unwrap()["project"],
+            "Apollo"
+        );
+        // A sibling whose name only starts the same stays where it was.
+        assert_eq!(store.labels_of(&p("/w/docsx/c.txt")), ["Keep"]);
+        // A move of something unmarked changes nothing.
+        assert_eq!(store.follow_moves(&[(p("/w/z"), p("/w/y"))]), 0);
+    }
+
+    #[test]
+    fn format_1_still_loads_and_format_2_round_trips() {
+        let old = "format = 1\n\n[[label]]\nname = \"Urgent\"\ncolor = \"orange\"\n\n[[item]]\nplace = \"/w/a.txt\"\nlabels = [\"Urgent\"]\n";
+        let old = if cfg!(windows) {
+            old.replace("/w/a.txt", "D:\\\\w\\\\a.txt")
+        } else {
+            old.to_owned()
+        };
+        let (read, problems) = LabelStore::from_toml(&old).unwrap();
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(read.labels_of(&p("/w/a.txt")), ["Urgent"]);
+        assert_eq!(read.note_of(&p("/w/a.txt")), None);
+        let mut store = read;
+        store.apply(
+            &LabelChange::Note(Some("a note".into())),
+            &[p("/w/a.txt")],
+            None,
+        );
+        store.apply(
+            &LabelChange::Field {
+                name: "project".into(),
+                value: Some("Apollo".into()),
+            },
+            &[p("/w/b.txt")],
+            None,
+        );
+        let text = store.to_toml().unwrap();
+        assert!(text.starts_with("format = 2\n"), "{text}");
+        let (back, problems) = LabelStore::from_toml(&text).unwrap();
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(back, store);
+        // A field name no column could carry is left out and said; a
+        // note with a line break is made one line and said.
+        let bad = "[[item]]\nplace = \"/w/c.txt\"\nnote = \"one\\ntwo\"\n[item.fields]\n\"Bad Name\" = \"x\"\n";
+        let bad = if cfg!(windows) {
+            bad.replace("/w/c.txt", "D:\\\\w\\\\c.txt")
+        } else {
+            bad.to_owned()
+        };
+        let (read, problems) = LabelStore::from_toml(&bad).unwrap();
+        assert_eq!(read.note_of(&p("/w/c.txt")), Some("one two"));
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(problems[0].starts_with("Note on "), "{problems:?}");
+        assert!(
+            problems[1].starts_with("Field left out on "),
+            "{problems:?}"
+        );
     }
 
     #[test]

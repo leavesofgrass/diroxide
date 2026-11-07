@@ -65,6 +65,10 @@ mod type_actions;
 mod type_lists;
 // The background type check (alpha 4, lane TA).
 mod type_checks;
+// The custom columns in the app (alpha 4, lane MA).
+mod columns_ui;
+// The metadata commands in the app (alpha 4, lane MA).
+mod metadata_ui;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -271,6 +275,8 @@ pub enum AppEvent {
     /// The tools registry's report for the Settings Tools page: each
     /// helper program's line, found or not (alpha 4).
     ToolsReported(Box<diroxide_tools::ToolsReport>),
+    /// What a metadata command's worker found (alpha 4, lane MA).
+    Meta(Box<crate::metadata::MetaNote>),
     /// Tesseract read the text in a picture, or the line that says why
     /// not (alpha 4).
     PictureText {
@@ -507,6 +513,23 @@ pub enum AppEvent {
         listing: u64,
         /// What each file is.
         answers: Vec<crate::typing::TypeAnswer>,
+    },
+    /// A batch of a panel's column cells (alpha 4, lane MA), answering
+    /// [`Request::ReadColumns`].
+    ColumnsRead {
+        /// The panel.
+        side: Side,
+        /// The entries they were asked for; cells for older ones are
+        /// dropped.
+        listing: u64,
+        /// Each file's cells.
+        cells: Vec<crate::columns::ColumnCell>,
+        /// Whether a plugin's column answered (a page of `column/format`)
+        /// rather than the metadata readers.
+        plugin: bool,
+        /// The app's number for the read it answers: only its own answers
+        /// count toward its end.
+        ask: u64,
     },
     /// The programs the system has for a file, for Open with (lane TA).
     OpenWithListed {
@@ -1023,6 +1046,10 @@ pub struct App {
     look: look::LookState,
     /// What each panel's type check was asked (lane TA).
     type_checks: type_checks::TypeChecks,
+    /// What each panel's column readers were asked (lane MA).
+    columns: columns_ui::ColumnsState,
+    /// The metadata commands' jobs and lists (lane MA).
+    meta: metadata_ui::MetaState,
     /// The slots of the owner's type actions (lane TA).
     type_slots: crate::typing::TypeSlots,
     /// A typed action's command is running: Enter and View run their
@@ -1364,6 +1391,8 @@ impl App {
             volumes: volumes_ui::VolumesState::default(),
             look: look::LookState::new(&startup.user_themes, startup.themes_dir.clone()),
             type_checks: type_checks::TypeChecks::default(),
+            columns: columns_ui::ColumnsState::default(),
+            meta: metadata_ui::MetaState::default(),
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,
@@ -1376,6 +1405,13 @@ impl App {
         // The filter's `group:` asks the type model's groups (lane TA).
         for panel in &mut app.panels {
             panel.set_types(Arc::clone(&app.types));
+        }
+        // The custom columns, resolved; a regex column whose pattern
+        // cannot be read is said with the config problems (lane MA).
+        app.resolve_columns();
+        for line in crate::columns::pattern_problems(&app.settings.regex_columns) {
+            app.problems
+                .push(ConfigProblem::new(diroxide_config::Paths::SETTINGS, line));
         }
         app
     }
@@ -1812,6 +1848,7 @@ impl App {
         effects.extend(self.jobs_queue_next());
         self.follow_cursor();
         self.follow_type_checks();
+        effects.extend(self.follow_columns());
         self.mark_requests(effects)
     }
 
@@ -1881,6 +1918,7 @@ impl App {
             AppEvent::PictureText { job, place, result } => {
                 self.picture_text_read(job, &place, result)
             }
+            AppEvent::Meta(note) => self.meta_note(*note),
             AppEvent::ViewerSource {
                 request,
                 place,
@@ -1963,6 +2001,13 @@ impl App {
                 listing,
                 answers,
             } => self.types_checked(side, listing, answers),
+            AppEvent::ColumnsRead {
+                side,
+                listing,
+                cells,
+                plugin,
+                ask,
+            } => self.columns_read(side, listing, cells, plugin, ask),
             AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
             AppEvent::Convert(note) => self.convert_note(*note),
             AppEvent::HotFolder(note) => self.watched_note(*note),
@@ -1977,6 +2022,7 @@ impl App {
         effects.extend(self.jobs_queue_next());
         self.follow_cursor();
         self.follow_type_checks();
+        effects.extend(self.follow_columns());
         self.mark_requests(effects)
     }
 
@@ -2070,6 +2116,14 @@ impl App {
         }
         // The Watched folders list (alpha 4, lane AW).
         if let Some(effects) = self.watched_dispatch(command) {
+            return effects;
+        }
+        // Fill columns (alpha 4, lane MA).
+        if let Some(effects) = self.columns_dispatch(command) {
+            return effects;
+        }
+        // Checksum, Verify, Strip, Check and the internet mark (lane MA).
+        if let Some(effects) = self.meta_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).

@@ -203,6 +203,29 @@ fn serve(
                 };
                 write(&peer, json!({"jsonrpc": "2.0", "id": id, "result": result}));
             }
+            // The Git column (alpha 4, lane MA, R30 commit 53), answered
+            // as diro-git answers: a word for each place it knows, "3
+            // changed inside" for a folder, and never an answer (pending)
+            // for never.txt.
+            Some("column/format") => {
+                let mut values = serde_json::Map::new();
+                for place in message["params"]["places"].as_array().into_iter().flatten() {
+                    let place = place.as_str().unwrap_or_default();
+                    let name = place.rsplit(['/', '\\']).next().unwrap_or_default();
+                    let word = match name {
+                        "report.pdf" => "Staged, modified",
+                        "Backup" => "3 changed inside",
+                        "budget.xlsx" => "Ignored",
+                        "never.txt" => continue,
+                        _ => "Clean",
+                    };
+                    values.insert(place.to_owned(), json!(word));
+                }
+                write(
+                    &peer,
+                    json!({"jsonrpc": "2.0", "id": id, "result": {"values": values}}),
+                );
+            }
             Some("completion/query") => {
                 let text = message["params"]["text"].as_str().unwrap_or_default();
                 write(

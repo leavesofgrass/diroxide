@@ -353,6 +353,9 @@ pub mod ids {
         SORT_LABEL = "view.sort-label";
         /// The Sort list.
         SORT_LIST = "view.sort-list";
+        /// Read every column's cells in this folder, the on-demand ones
+        /// too (alpha 4, lane MA).
+        FILL_COLUMNS = "view.fill-columns";
         /// Add a label to the marked items, or the focused one.
         LABEL_SET = "label.set";
         /// Add a label, or take it off when every item has it.
@@ -361,6 +364,12 @@ pub mod ids {
         LABEL_CLEAR = "label.clear";
         /// The Labels list.
         LABELS = "label.list";
+        /// Set the owner's note on the marked items, or the focused one
+        /// (alpha 4); an empty note removes it.
+        LABEL_NOTE = "label.note";
+        /// Set a named field, `name: value`, on the marked items, or the
+        /// focused one (alpha 4); an empty value removes it.
+        LABEL_FIELD = "label.field";
         /// Toggle the first label of the Labels list.
         LABEL_FAVORITE_1 = "label.favorite-1";
         /// Toggle the second label of the Labels list.
@@ -712,6 +721,26 @@ pub mod ids {
         /// commit 70).
         WATCHED_FOLDERS = "app.hot-folders";
     }
+
+    // The metadata commands (alpha 4, lane MA, R30 commits 54 to 56),
+    // none with a default key: the File menu and the palette.
+    ids! {
+        /// The SHA-256 of the marked files, or the focused one, to read,
+        /// copy, compare with a pasted value or save as `SHA256SUMS`.
+        CHECKSUM = "file.checksum";
+        /// Check the focused file against the checksum list beside it, or
+        /// every file a focused list names, the verdict first.
+        VERIFY_CHECKSUM = "file.verify-checksum";
+        /// Copy the marked pictures, or the focused one, without their
+        /// private metadata, each beside its original.
+        STRIP_METADATA = "file.strip-metadata";
+        /// Say what the marked files, or the focused one, carry that could
+        /// say who made them, where or with what; read only.
+        CHECK_BEFORE_SHARING = "file.check-before-sharing";
+        /// Remove the focused file's internet mark, after asking; Undo
+        /// puts it back.
+        REMOVE_INTERNET_MARK = "file.remove-internet-mark";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -736,7 +765,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 251] = [
+pub static CATALOG: [CommandInfo; 259] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1530,6 +1559,46 @@ pub static CATALOG: [CommandInfo; 251] = [
         &[],
     ),
     command(
+        ids::CHECKSUM,
+        "Checksum",
+        "Computes the SHA-256 of the marked files, or the focused one, as a job Cancel stops; then lists it to read, copy, compare with a pasted value, or save as SHA256SUMS beside them.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VERIFY_CHECKSUM,
+        "Verify checksum",
+        "Checks the focused file against the checksum list beside it (its own .sha256 first, then SHA256SUMS and the others), or every file a focused list names, reading each again; the verdict comes first, the failures next.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::STRIP_METADATA,
+        "Strip metadata into a copy",
+        "Copies the marked JPEG, PNG and WebP pictures, or the focused one, without their place, camera, people, comments and other private details, each beside its original as NAME-clean, after asking; the originals stay, and Undo puts the copies in the trash.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::CHECK_BEFORE_SHARING,
+        "Check before sharing",
+        "Says what the marked files, or the focused one, carry that could say who made them, where or with what, places to two decimals, and what a strip cannot reach; it reads only, and nothing is sent anywhere.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::REMOVE_INTERNET_MARK,
+        "Remove the internet mark",
+        "Removes the mark the system keeps on a downloaded file, after asking, so the system stops warning when it opens; Undo puts the mark back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
         ids::READ_PICTURE_TEXT,
         "Read text in picture",
         "Reads the text in the focused picture with Tesseract and shows it in the viewer, titled as machine read, since the words are a machine's guess.",
@@ -1914,6 +1983,14 @@ pub static CATALOG: [CommandInfo; 251] = [
         &["ctrl+shift+s"],
     ),
     command(
+        ids::FILL_COLUMNS,
+        "Fill columns",
+        "Reads every column of this folder from its files now, those read only on request too, asking first when many files wait; nothing is read on a remote place.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
         ids::FIND,
         "Find files",
         "Searches names and contents below this folder or the marked items, the results listed as they are found.",
@@ -2061,6 +2138,22 @@ pub static CATALOG: [CommandInfo; 251] = [
         ids::LABELS,
         "Labels list",
         "Lists the labels with how many items carry each; choosing one lists its items.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABEL_NOTE,
+        "Set note",
+        "Keeps your own one-line note on the marked items, or the focused one, in diroxide's labels file, never in the file; an empty note removes it. It follows the file when diroxide moves it.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::LABEL_FIELD,
+        "Set field",
+        "Keeps a named field, typed as name: value, on the marked items, or the focused one, shown in the details and as the column custom.NAME; an empty value removes it.",
         Panel,
         &[],
         &[],

@@ -174,6 +174,9 @@ pub fn help_text() -> String {
         "diro components download ID  say its size and license, ask, then download it",
         "diro doctor               say the tools, components and plugins diro finds",
         "diro convert FILE... --to FORMAT  convert files with recipes, one line a result",
+        "diro info PATH...         say a file's details as plain lines, the name first",
+        "diro sum FILE...          print each file's SHA-256, the name first",
+        "diro sum --check LIST     check the files LIST names: 0 all match, 1 not",
         "diro --version            print the version",
         "diro --help               print this help",
         "",
@@ -521,29 +524,17 @@ mod tests {
         ));
     }
 
-    /// Alpha 4's route stubs (the contract step): each command parses,
-    /// says it is not built yet and exits 1; `watch` with a task takes the
-    /// task's route and without one stays the say-each-file mode. `diro
-    /// doctor` left the list when the registry's lane built it (its tests
-    /// are in `cmd/doctor.rs`, on fake folders and tools only).
+    /// Alpha 4's routes (the contract step's stubs, every one built since):
+    /// each command parses; `watch` with a task takes the task's route and
+    /// without one stays the say-each-file mode. Each command's own tests
+    /// are in its `cmd/` file (`doctor.rs` on fake folders and tools only,
+    /// `info.rs`, `sum.rs`, `convert.rs` and `watch_task.rs`).
     #[test]
-    fn the_alpha_four_routes_say_they_are_not_built_yet() {
+    fn the_alpha_four_routes_parse() {
         assert!(matches!(
             parse(args(&["doctor", "--check", "pandoc"])),
             Ok(Invocation::Doctor(_))
         ));
-        for (line, words) in [
-            (&["info", "a.jpg"][..], "diro info"),
-            (&["sum", "--check", "SHA256SUMS"], "diro sum"),
-        ] {
-            let mut out = Vec::new();
-            let mut err = Vec::new();
-            let code = main_with(args(line), &mut std::io::empty(), &mut out, &mut err);
-            assert_eq!(code, 1, "{line:?}");
-            let said = String::from_utf8(err).unwrap();
-            assert_eq!(said, format!("Not built yet: {words}.\n"), "{line:?}");
-            assert!(said.chars().count() <= 40, "{said}");
-        }
         assert_eq!(
             parse(args(&["watch", "--rule=scans", "--dry-run"])),
             Ok(Invocation::WatchTask(cmd::watch_task::WatchTaskArgs {

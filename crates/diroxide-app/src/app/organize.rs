@@ -12,7 +12,7 @@
 
 use std::collections::HashSet;
 
-use diroxide_config::ColumnKind;
+use diroxide_config::ColumnSpec;
 use diroxide_core::{
     Command, CommandId, Effect, Key, Layer, ListModel, Message, Place, RequestId, Side, SortSpec,
 };
@@ -73,7 +73,7 @@ pub(super) struct Check {
 pub(super) struct Look {
     pub(super) sort: SortSpec,
     pub(super) show_hidden: bool,
-    pub(super) columns: Vec<ColumnKind>,
+    pub(super) columns: Vec<ColumnSpec>,
 }
 
 /// A bookmark setting typed in a field.
@@ -123,6 +123,28 @@ pub(super) enum Wants {
     /// The Watched folders list, a task's actions and its questions
     /// (alpha 4, lane AW), hosted here for the same reason.
     Watched(super::watched::WatchedWants),
+    /// Set note: the note typed for these places (alpha 4, lane MA).
+    Note {
+        side: Side,
+        places: Vec<Place>,
+        /// The item's name when there is one item.
+        one: Option<String>,
+    },
+    /// Set field: `name: value` typed for these places.
+    Field {
+        side: Side,
+        places: Vec<Place>,
+        /// The item's name when there is one item.
+        one: Option<String>,
+    },
+    /// The question before the columns read many files, for a sort or
+    /// Fill columns (alpha 4, lane MA).
+    ReadColumns {
+        side: Side,
+        fill: super::columns_ui::Fill,
+    },
+    /// A list or a field of the metadata commands (alpha 4, lane MA).
+    Meta(super::metadata_ui::MetaWants),
 }
 
 impl Wants {
@@ -148,13 +170,17 @@ enum Do {
     ForgetPlace,
     SaveView,
     ForgetView,
+    Note,
+    Field,
 }
 
-const ROUTES: [(CommandId, Do); 18] = [
+const ROUTES: [(CommandId, Do); 20] = [
     (ids::LABEL_SET, Do::SetLabel),
     (ids::LABEL_TOGGLE, Do::ToggleLabel),
     (ids::LABEL_CLEAR, Do::ClearLabels),
     (ids::LABELS, Do::Labels),
+    (ids::LABEL_NOTE, Do::Note),
+    (ids::LABEL_FIELD, Do::Field),
     (ids::LABEL_FAVORITE_1, Do::Favorite(1)),
     (ids::LABEL_FAVORITE_2, Do::Favorite(2)),
     (ids::LABEL_FAVORITE_3, Do::Favorite(3)),
@@ -213,6 +239,8 @@ impl App {
             }
             Do::SaveView => self.save_view(side),
             Do::ForgetView => self.forget_view(side),
+            Do::Note => self.note_prompt(side, command),
+            Do::Field => self.field_prompt(side, command),
         })
     }
 
@@ -346,6 +374,10 @@ impl App {
             Wants::Types(wants) => self.type_lists_accept(wants, row),
             Wants::Convert(wants) => self.convert_accept(wants, row),
             Wants::Watched(wants) => self.watched_accept(wants, row),
+            Wants::Note { side, places, one } => self.note_typed(side, places, one, &text),
+            Wants::Field { side, places, one } => self.field_typed(side, places, one, &text),
+            Wants::ReadColumns { .. } => self.dialog_escape(),
+            Wants::Meta(wants) => self.meta_accept(wants, row, &text),
         }
     }
 
@@ -355,6 +387,8 @@ impl App {
             Wants::RemoveBookmark { side, place } => self.remove_bookmark(side, &place),
             Wants::Convert(wants) => self.convert_yes(wants),
             Wants::Watched(wants) => self.watched_yes(wants),
+            Wants::ReadColumns { side, fill } => self.start_fill(side, fill),
+            Wants::Meta(wants) => self.meta_yes(wants),
             _ => Vec::new(),
         }
     }
@@ -366,6 +400,10 @@ impl App {
             Wants::RemoveBookmark { .. } => {
                 vec![self.say(Message::info("Nothing removed."))]
             }
+            Wants::ReadColumns { .. } => {
+                vec![self.say(Message::info("Nothing read; the order stays."))]
+            }
+            Wants::Meta(wants) => self.meta_escape(wants),
             Wants::BookmarkForm { side, .. } => self.refresh_bookmarks_list(side),
             Wants::BookmarkText { side, place, .. } => self.bookmark_form(side, place, None),
             Wants::Convert(wants) => self.convert_escape(wants),

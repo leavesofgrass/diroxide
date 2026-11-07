@@ -24,6 +24,9 @@
 pub mod app;
 pub mod archives;
 pub mod bookmarks;
+// The custom columns: fields' keys, regex and plugin columns (alpha 4,
+// lane MA).
+pub mod columns;
 pub mod commands;
 // Optional components in the app (W4d).
 pub mod components;
@@ -37,7 +40,9 @@ pub mod jobs;
 pub mod keymap;
 pub mod labels;
 pub mod menu;
+// The metadata commands' requests, answers and words (alpha 4, lane MA).
 pub mod messages;
+pub mod metadata;
 pub mod palette;
 pub mod panel;
 // Read text in picture, through Tesseract (alpha 4, lane VA).

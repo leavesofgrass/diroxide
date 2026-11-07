@@ -609,6 +609,11 @@ impl App {
     }
 
     pub(super) fn undo(&mut self) -> Vec<Effect> {
+        // A removed internet mark newer than the last job and the last
+        // label change is put back first (lane MA).
+        if let Some(effects) = self.undo_mark_removal() {
+            return effects;
+        }
         // A label change newer than the last job is undone first (W3l).
         if let Some(effects) = self.undo_label_change() {
             return effects;
@@ -1131,6 +1136,10 @@ impl App {
         {
             self.undo.record(report.undo.clone());
         }
+        // Labels, notes and fields follow a move or a rename, and an undo
+        // of one, in the same step (R30 commit 51): the panels listed
+        // again below show them at the new places.
+        self.labels_follow_moves(&report.undo.moves);
         let missing = report
             .reconciliation
             .as_ref()
@@ -1170,10 +1179,11 @@ impl App {
                     Some(JobKind::Join) => "join",
                     Some(JobKind::Rewrite) => "zip change",
                     Some(JobKind::Convert) => "conversion",
+                    Some(JobKind::StripMetadata) => "strip",
                     _ => "job",
                 };
                 let how = match kind {
-                    Some(JobKind::Copy | JobKind::Duplicate) => {
+                    Some(JobKind::Copy | JobKind::Duplicate | JobKind::StripMetadata) => {
                         format!("{} in the trash", count(done, "copy is", "copies are"))
                     }
                     Some(
@@ -1408,7 +1418,8 @@ impl App {
                 if let Some(words) = self
                     .plugin_cancel_words(job)
                     .or_else(|| self.component_cancel_words(job))
-                    .or_else(|| self.picture_cancel_words(job)) =>
+                    .or_else(|| self.picture_cancel_words(job))
+                    .or_else(|| self.meta_cancel_words(job)) =>
             {
                 vec![Effect::CancelJob(job), self.say(Message::info(words))]
             }

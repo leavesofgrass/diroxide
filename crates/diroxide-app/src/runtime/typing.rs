@@ -97,7 +97,7 @@ pub(super) fn run(shared: &Arc<Shared>, job: &TypeJob) {
 
 /// How many readers a folder's disk takes: one on a share, four on a disk
 /// of this computer.
-fn readers_for(registry: &Registry, folder: &Place) -> usize {
+pub(super) fn readers_for(registry: &Registry, folder: &Place) -> usize {
     let text = folder.to_string();
     if text.starts_with(r"\\") || text.starts_with("//") {
         return SHARE_READERS;

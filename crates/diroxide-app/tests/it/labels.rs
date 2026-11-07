@@ -265,3 +265,87 @@ fn the_labels_list_counts_missing_items_and_lists_a_labels_items() {
     f.s.key("escape");
     assert_eq!(f.s.dialog(), None);
 }
+
+/// The details list's rows, as said.
+fn detail_rows(s: &Session) -> Vec<String> {
+    match s.dialog() {
+        Some(diroxide_app::Dialog::Choose { list, .. }) => {
+            list.rows().iter().map(|r| r.spoken()).collect()
+        }
+        other => panic!("no details list: {other:?}"),
+    }
+}
+
+#[test]
+fn a_note_and_a_field_show_in_the_details_and_follow_a_rename() {
+    let mut f = open();
+    f.s.focus("report.pdf");
+    let said = f.s.run_command(
+        Command::new(ids::LABEL_NOTE)
+            .with_arg("note", ArgValue::Text("call about the invoice".into())),
+    );
+    assert_eq!(last(&said), "Note set on report.pdf");
+    // Set field opens a field; name: value is typed.
+    let said = f.s.command(ids::LABEL_FIELD);
+    assert!(
+        said[0].starts_with("Field on report.pdf, as name: value"),
+        "{said:?}"
+    );
+    f.s.type_text("project: Apollo");
+    let said = f.s.key("enter");
+    assert_eq!(last(&said), "Field project set on report.pdf");
+    assert_eq!(f.s.dialog(), None);
+    f.s.key("ctrl+1");
+    f.s.command(ids::DETAILS);
+    let rows = detail_rows(&f.s);
+    let at = |start: &str| {
+        rows.iter()
+            .position(|r| r == start)
+            .unwrap_or_else(|| panic!("no {start}: {rows:?}"))
+    };
+    let labels = at("Labels: Urgent");
+    assert_eq!(at("Note: call about the invoice"), labels + 1, "{rows:?}");
+    assert_eq!(at("Project: Apollo"), labels + 2, "{rows:?}");
+    f.s.key("escape");
+    // A bad field is said in words, and the prompt stays.
+    f.s.command(ids::LABEL_FIELD);
+    f.s.type_text("Project Code: 7");
+    let said = f.s.key("enter");
+    assert_eq!(
+        last(&said),
+        "Field names use small letters, digits, - and _ only."
+    );
+    f.s.key("escape");
+    // A rename takes the label, the note and the field along.
+    f.s.focus("report.pdf");
+    f.s.key("f2");
+    f.s.type_text("-2026");
+    let said = f.s.key("enter");
+    assert!(
+        said.iter()
+            .any(|s| s == "Renamed report.pdf to report-2026.pdf"),
+        "{said:?}"
+    );
+    let moved = place(&f.work.join("report-2026.pdf"));
+    let store = f.s.app.labels();
+    assert_eq!(store.labels_of(&moved), ["Urgent"]);
+    assert_eq!(store.note_of(&moved), Some("call about the invoice"));
+    assert_eq!(store.fields_of(&moved).unwrap()["project"], "Apollo");
+    assert!(store.note_of(&place(&f.work.join("report.pdf"))).is_none());
+    assert!(
+        row(&f.s, "report-2026.pdf").contains("label: urgent"),
+        "{}",
+        row(&f.s, "report-2026.pdf")
+    );
+    // Undo of the rename brings them back with the file.
+    f.s.key("ctrl+z");
+    let back = place(&f.work.join("report.pdf"));
+    assert_eq!(
+        f.s.app.labels().note_of(&back),
+        Some("call about the invoice")
+    );
+    // Saved in format 2, read back after a restart.
+    let text = fs::read_to_string(f.paths.state_file(FILE)).unwrap();
+    assert!(text.starts_with("format = 2\n"), "{text}");
+    assert!(text.contains("note = \"call about the invoice\""), "{text}");
+}

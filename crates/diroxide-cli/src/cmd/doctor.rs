@@ -268,7 +268,7 @@ pub fn run_in(args: &DoctorArgs, env: &Env, out: &mut dyn Write) -> Result<i32, 
     lines.push(screen_reader_line(env.config.settings.screen_reader_mode));
     lines.extend(terminal_lines(env));
     lines.extend(folder_lines(env, args.paths));
-    lines.extend(report.lines());
+    lines.extend(tool_lines(env, &report));
     lines.extend(component_lines(env));
     lines.extend(env.plugins.iter().cloned());
     lines.push(startup_line(&env.config));
@@ -374,6 +374,29 @@ fn folder_lines(env: &Env, full: bool) -> Vec<String> {
         say(&env.paths.components_dir())
     ));
     lines.push("Cache folder: none, kept in memory".to_owned());
+    lines
+}
+
+/// The tools in the Tools list's words (VA's request 3): the count, then
+/// each tool's line, a missing tool's with what the helper component that
+/// brings it would download ("FFmpeg: not found, 138 MB to download"),
+/// then how to get it.
+fn tool_lines(env: &Env, report: &ToolsReport) -> Vec<String> {
+    let listing = diroxide_app::components::listing(
+        &env.components,
+        &env.paths.components_dir(),
+        &env.target,
+    );
+    let mut lines = vec![report.summary()];
+    for tool in &report.tools {
+        let component =
+            diroxide_app::tools_page::component_for(&env.tools, &tool.id, Some(&listing));
+        lines.push(diroxide_app::tools_page::line_with_download(
+            tool,
+            component.map(|row| row.size.as_str()),
+        ));
+        lines.extend(tool.install_line());
+    }
     lines
 }
 
@@ -567,6 +590,38 @@ mod tests {
                 },
             }
         }
+    }
+
+    /// A missing tool a helper component brings says what it would
+    /// download, as the Tools list does (VA's request 3): a list with an
+    /// FFmpeg helper for this computer, never fetched.
+    #[test]
+    fn a_missing_tool_says_what_its_helper_would_download() {
+        let bench = Bench::new();
+        let mut env = bench.env(Config::default());
+        let exec = if cfg!(windows) {
+            "bin/ffmpeg.exe"
+        } else {
+            "bin/ffmpeg"
+        };
+        let text = format!(
+            "format = 1\n\n[[component]]\nid = \"ffmpeg\"\ntitle = \"FFmpeg\"\nkind = \"helper\"\nversion = \"9.0.2\"\nlicense = \"LGPL-2.1-or-later\"\ntools = [\"ffmpeg\", \"ffprobe\"]\naction = \"unpack\"\nunpacked_size = 155528675\n\n[[component.file]]\nname = \"ffmpeg-test.zip\"\nsize = 76576818\nsha256 = \"{}\"\ntarget = \"{}\"\nurl = \"https://example.invalid/ffmpeg-test.zip\"\nexec = \"{exec}\"\n",
+            sha256_hex(b"abc"),
+            host_target()
+        );
+        env.components =
+            diroxide_components::manifest::parse(&text, diroxide_components::Origin::Public)
+                .unwrap();
+        let (_, lines) = run_lines(&DoctorArgs::default(), &env);
+        let ffmpeg = lines
+            .iter()
+            .find(|l| l.starts_with("FFmpeg: "))
+            .unwrap_or_else(|| panic!("no FFmpeg line: {lines:#?}"));
+        assert!(
+            ffmpeg.starts_with("FFmpeg: not found, ") && ffmpeg.ends_with(" to download"),
+            "{ffmpeg}"
+        );
+        assert!(within_cells(ffmpeg, ffmpeg), "{ffmpeg}");
     }
 
     fn run_lines(args: &DoctorArgs, env: &Env) -> (i32, Vec<String>) {

@@ -31,7 +31,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use diroxide_config::{Paths, PluginSettings};
-use diroxide_core::{CommandId, Entry, JobId, JobRequest, Message};
+use diroxide_core::{CommandId, Entry, JobId, JobRequest, Message, Place};
 use diroxide_ops::JobReport;
 use diroxide_plugins::PluginError;
 use diroxide_plugins::ask::{Answer, DiffDocuments, Form, FormAnswer, Question, TextDocument};
@@ -763,6 +763,54 @@ impl PluginRuntime {
                 };
                 let _ = thread::Builder::new()
                     .name("plugin-describe".to_owned())
+                    .spawn(ask);
+            }
+            // A plugin's column (alpha 4, lane MA): its pages asked on a
+            // thread of their own, as the title line's words are, and not
+            // counted as work in flight.
+            PluginRequest::ColumnPages {
+                side,
+                listing,
+                folder,
+                column,
+                items,
+                ask,
+            } => {
+                let Some(host) = self.hosts.get(&column.plugin).map(|h| Arc::clone(&h.host)) else {
+                    return;
+                };
+                let shared = Arc::clone(shared);
+                let ask = move || {
+                    let key = column.key();
+                    for page in items.chunks(column.batch.max(1)) {
+                        let places: Vec<Place> = page
+                            .iter()
+                            .filter_map(|(_, name)| folder.join(name).ok())
+                            .collect();
+                        let values = host.column_page(&column, &folder, &places);
+                        let cells = page
+                            .iter()
+                            .zip(values)
+                            .map(|((index, name), value)| crate::columns::ColumnCell {
+                                index: *index,
+                                name: name.clone(),
+                                values: (value.text != diroxide_plugins::lines::pending())
+                                    .then(|| (key.clone(), value.text))
+                                    .into_iter()
+                                    .collect(),
+                            })
+                            .collect();
+                        shared.send(AppEvent::ColumnsRead {
+                            side,
+                            listing,
+                            cells,
+                            plugin: true,
+                            ask,
+                        });
+                    }
+                };
+                let _ = thread::Builder::new()
+                    .name("plugin-column".to_owned())
                     .spawn(ask);
             }
         }

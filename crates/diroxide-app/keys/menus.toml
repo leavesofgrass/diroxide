@@ -51,6 +51,21 @@ command = "file.copy-all-details"
 command = "file.read-text-in-picture"
 
 [[menu.item]]
+command = "file.checksum"
+
+[[menu.item]]
+command = "file.verify-checksum"
+
+[[menu.item]]
+command = "file.strip-metadata"
+
+[[menu.item]]
+command = "file.check-before-sharing"
+
+[[menu.item]]
+command = "file.remove-internet-mark"
+
+[[menu.item]]
 command = "file.actions"
 
 [[menu.item]]
@@ -230,6 +245,14 @@ access = "c"
 [[menu.item]]
 command = "label.list"
 access = "l"
+
+[[menu.item]]
+command = "label.note"
+access = "n"
+
+[[menu.item]]
+command = "label.field"
+access = "f"
 
 [[menu.item]]
 command = "label.favorite-1"
@@ -591,6 +614,10 @@ access = "u"
 [[menu.item]]
 command = "view.sort-list"
 access = "i"
+
+[[menu.item]]
+command = "view.fill-columns"
+access = "f"
 
 [[menu]]
 id = "go"

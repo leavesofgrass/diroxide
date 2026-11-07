@@ -749,6 +749,15 @@ impl App {
             }
         }
         self.bind_plugin_keys();
+        // The plugins' columns on panels (alpha 4, lane MA): a column key
+        // of an enabled plugin now has its cells asked.
+        if self.panels.iter().any(|p| {
+            p.columns()
+                .iter()
+                .any(|c| c.key().is_some_and(|k| !k.starts_with("custom.")))
+        }) {
+            self.resolve_columns();
+        }
         self.plugins.scanned = true;
         let mut effects = Vec::new();
         let rows = self.manage_rows();

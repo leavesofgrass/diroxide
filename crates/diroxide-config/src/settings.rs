@@ -18,7 +18,7 @@ use diroxide_core::{SortKey, SortSpec};
 use serde::{Deserialize, Serialize};
 use toml::{Table, Value};
 
-use crate::columns::ColumnKind;
+use crate::columns::{ColumnKind, ColumnSpec, is_regex_column_name};
 use crate::error::ConfigError;
 use crate::paths::Paths;
 use crate::presets::{
@@ -665,8 +665,12 @@ pub struct Settings {
     /// and how names compare.
     pub sort: SortSpec,
     /// The columns of a panel row, in order, after the name, by
-    /// [`ColumnKind`] name.
+    /// [`ColumnKind`] name or a field's key ([`ColumnSpec`]).
     pub columns: Vec<String>,
+    /// The regex columns: each name's pattern over the file name, its
+    /// first capture group or whole match the cell of `regex.NAME`
+    /// (alpha 4).
+    pub regex_columns: BTreeMap<String, String>,
     /// The program the Edit command opens a file with; empty for
     /// `$VISUAL`, then `$EDITOR`, then the platform's editor.
     pub editor: String,
@@ -780,6 +784,7 @@ impl Default for Settings {
             show_hidden: false,
             sort: SortSpec::default(),
             columns: vec!["type".to_owned(), "size".to_owned(), "modified".to_owned()],
+            regex_columns: BTreeMap::new(),
             editor: String::new(),
             single_letters: SingleLetters::TypeAhead,
             preset: "diroxide".to_owned(),
@@ -914,7 +919,7 @@ fn check_value(info: &SettingInfo, value: &Value) -> Result<(), String> {
         SettingKind::Columns => match value.as_array() {
             Some(items) => {
                 for item in items {
-                    let known = item.as_str().and_then(ColumnKind::from_name);
+                    let known = item.as_str().and_then(ColumnSpec::parse);
                     if known.is_none() {
                         return Err(format!(
                             "{key} cannot hold {}: no column has that name.",
@@ -943,6 +948,28 @@ fn check_value(info: &SettingInfo, value: &Value) -> Result<(), String> {
         SettingKind::Names => match value.as_array() {
             Some(items) if items.iter().all(Value::is_str) => Ok(()),
             _ => Err(format!("{key} needs a list of names in quotes.")),
+        },
+        SettingKind::Patterns => match value.as_table() {
+            Some(table) => {
+                for (name, pattern) in table {
+                    if !is_regex_column_name(name) {
+                        return Err(format!(
+                            "{key} cannot name a column {}: use small letters, digits, - and _.",
+                            shown(&Value::String(name.clone()))
+                        ));
+                    }
+                    if !pattern.is_str() {
+                        return Err(format!(
+                            "{key}.{name} needs a pattern in quotes, not {}.",
+                            shown(pattern)
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            None => Err(format!(
+                "{key} needs a table such as episode = 'S(\\d+)E\\d+'."
+            )),
         },
         SettingKind::Colors => match value.as_table() {
             Some(table) if table.values().all(Value::is_str) => Ok(()),
@@ -1129,11 +1156,20 @@ impl Settings {
     }
 
     /// The columns as kinds, in order; names the schema refused are already
-    /// gone.
+    /// gone, and keys are left out ([`Settings::column_specs`] keeps them).
     pub fn column_kinds(&self) -> Vec<ColumnKind> {
         self.columns
             .iter()
             .filter_map(|c| ColumnKind::from_name(c))
+            .collect()
+    }
+
+    /// The columns in order, built-in kinds and fields' keys alike
+    /// (alpha 4); names the schema refused are already gone.
+    pub fn column_specs(&self) -> Vec<ColumnSpec> {
+        self.columns
+            .iter()
+            .filter_map(|c| ColumnSpec::parse(c))
             .collect()
     }
 
@@ -1157,6 +1193,32 @@ mod tests {
     #[test]
     fn an_empty_file_gives_the_defaults() {
         assert_eq!(Settings::from_toml("").unwrap(), Settings::default());
+    }
+
+    #[test]
+    fn columns_take_fields_keys_and_regex_columns_take_patterns() {
+        let text = "columns = [\"type\", \"audio.artist\", \"regex.episode\"]\n\
+                    [regex_columns]\nepisode = 'S(\\d+)E\\d+'\n";
+        let loaded = Settings::read(text).unwrap();
+        assert!(loaded.problems.is_empty(), "{:?}", loaded.problems);
+        let settings = loaded.value;
+        assert_eq!(
+            settings.column_specs(),
+            [
+                ColumnSpec::Kind(ColumnKind::Type),
+                ColumnSpec::Key("audio.artist".into()),
+                ColumnSpec::Key("regex.episode".into()),
+            ]
+        );
+        assert_eq!(settings.column_kinds(), [ColumnKind::Type]);
+        assert_eq!(settings.regex_columns["episode"], "S(\\d+)E\\d+");
+        let bad = Settings::read("[regex_columns]\nEpisode = 'x'\n").unwrap();
+        let said = &bad.problems[0].text;
+        assert!(
+            said.starts_with("regex_columns cannot name a column \"Episode\""),
+            "{said}"
+        );
+        assert!(bad.value.regex_columns.is_empty());
     }
 
     #[test]

@@ -80,10 +80,17 @@ Numbers in names. Sorts numbers in names by their value, so file2 comes before f
 
 ### columns
 
-Columns. The details said after each name, in this order. Permissions read in words; mode and octal give the Unix forms.
+Columns. The details said after each name, in this order. Permissions read in words; mode and octal give the Unix forms. A field's key adds a column read from the files, such as audio.artist, doc.pages, custom.note or regex.episode.
 
-- Holds: a list of columns: type, size, modified, created, accessed, changed, permissions, mode, octal, owner, group, attributes, link and extension.
+- Holds: a list of columns: type, size, modified, created, accessed, changed, permissions, mode, octal, owner, group, attributes, link and extension, or a field's key such as audio.artist.
 - Default: `["type", "size", "modified"]`.
+
+### regex_columns
+
+Regex columns. Columns made from the file name, such as episode = 'S(\d+)E\d+' in single quotes: the first group in parentheses, or the whole match, is the cell. Add regex.episode to the columns to show it.
+
+- Holds: a table of column names, each with a pattern over the file name.
+- Default: `{}`.
 
 ### editor
 
@@ -105,7 +112,6 @@ Retro file types. Knows the old formats too: Amiga and tracker music, PowerPacke
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with a later alpha.
 
 ### check.skip
 
@@ -113,7 +119,6 @@ Folders typed by name only. Folders where diroxide never reads a file's first by
 
 - Holds: a list of names.
 - Default: `[]`.
-- Comes with a later alpha.
 
 ## Keys
 
@@ -539,7 +544,6 @@ Quick view documents up to. The largest Word, EPUB or spreadsheet file the quick
 
 - Holds: a number of MB, 1 to 1024.
 - Default: `64`.
-- Comes with a later alpha.
 
 ### quick_view.auto_preview
 

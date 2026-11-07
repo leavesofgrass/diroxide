@@ -9,6 +9,8 @@ mod access;
 mod archives;
 mod bookmarks;
 mod braille;
+mod checksums;
+mod columns;
 mod commands;
 // Optional components (W4d).
 mod components;
@@ -48,6 +50,7 @@ mod plugin_keys;
 // Plugins and script commands (W4d).
 mod plugins;
 mod preview;
+mod privacy;
 // Saved searches, the Space list, sizes and newest files (W3a).
 mod search_tools;
 // Search, its dialog and its results (W3a).

@@ -98,6 +98,9 @@ pub enum JobKind {
     /// added (editing inside a zip, alpha.7): a new copy is written beside
     /// it and tested, then put in its place, the old one to the trash.
     Rewrite,
+    /// Read the text in a picture with an OCR program (Tesseract) into
+    /// the viewer; nothing is written (alpha 4, VA's request 4).
+    ReadPictureText,
     /// A kind this version does not know. Never planned.
     #[serde(other)]
     Unknown,
@@ -138,6 +141,7 @@ impl JobKind {
         JobKind::EditMetadata,
         JobKind::StripMetadata,
         JobKind::Rewrite,
+        JobKind::ReadPictureText,
         JobKind::Unknown,
     ];
 
@@ -175,6 +179,7 @@ impl JobKind {
             JobKind::EditMetadata => "edit",
             JobKind::StripMetadata => "strip",
             JobKind::Rewrite => "rewrite",
+            JobKind::ReadPictureText => "read the text in",
             JobKind::Unknown => "run an unknown job on",
         }
     }
@@ -213,6 +218,7 @@ impl JobKind {
             JobKind::EditMetadata => "Editing metadata",
             JobKind::StripMetadata => "Stripping metadata",
             JobKind::Rewrite => "Rewriting",
+            JobKind::ReadPictureText => "Reading text",
             JobKind::Unknown => "Working",
         }
     }
@@ -781,13 +787,14 @@ mod tests {
             JobKind::EditMetadata => 27,
             JobKind::StripMetadata => 28,
             JobKind::Rewrite => 29,
-            JobKind::Unknown => 30,
+            JobKind::ReadPictureText => 30,
+            JobKind::Unknown => 31,
         }
     }
 
     #[test]
     fn every_kind_has_its_words() {
-        assert_eq!(JobKind::ALL.len(), 31);
+        assert_eq!(JobKind::ALL.len(), 32);
         let mut words = std::collections::HashSet::new();
         for (at, kind) in JobKind::ALL.iter().enumerate() {
             assert_eq!(position(*kind), at, "{kind:?}");
@@ -848,6 +855,11 @@ mod tests {
             serde_json::to_string(&JobKind::TestArchive).unwrap(),
             "\"test-archive\""
         );
+        assert_eq!(
+            serde_json::to_string(&JobKind::ReadPictureText).unwrap(),
+            "\"read-picture-text\""
+        );
+        assert_eq!(JobKind::ReadPictureText.progress_word(), "Reading text");
     }
 
     #[test]

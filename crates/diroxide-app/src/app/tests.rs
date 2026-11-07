@@ -226,3 +226,56 @@ fn the_dialog_purpose_names_the_dialog_on_top() {
     settle(&mut app, &mut runtime, effects);
     assert_eq!(app.dialog_purpose(), None);
 }
+
+/// PD's request 5: a plugin's words about an entry (`disk.about`) are
+/// said in its row right after its name, in the details as "About", and
+/// first in Say Details.
+#[test]
+fn a_plugins_words_about_an_entry_are_said_in_its_row_and_details() {
+    let (mut app, mut runtime) = app();
+    let start = app.start();
+    settle(&mut app, &mut runtime, start);
+    let side = app.active;
+    let mut entries = app.panel(side).all_entries().to_vec();
+    let at = entries
+        .iter()
+        .position(|e| e.kind == diroxide_core::EntryKind::Folder)
+        .unwrap();
+    entries[at]
+        .extra
+        .insert("disk.about".into(), "Partition 2, home, ext4".into());
+    let name = entries[at].name.clone();
+    let types = Arc::clone(&app.types);
+    let clock = Arc::clone(&app.clock);
+    app.panels[side.index()].set_entries(entries, &types, clock.as_ref());
+    let row = app
+        .panel(side)
+        .list()
+        .rows()
+        .iter()
+        .find(|r| r.id == name)
+        .unwrap()
+        .spoken();
+    assert!(
+        row.starts_with(&format!("{name}, Partition 2, home, ext4")),
+        "{row}"
+    );
+    app.panels[side.index()].list_mut().focus_id(&name);
+    let effects = app.dispatch(&Command::new(ids::SAY_DETAILS));
+    let said = settle(&mut app, &mut runtime, effects);
+    assert!(
+        said.last()
+            .is_some_and(|l| l.starts_with("Partition 2, home, ext4, ")),
+        "{said:?}"
+    );
+    let effects = app.dispatch(&Command::new(ids::DETAILS));
+    settle(&mut app, &mut runtime, effects);
+    let rows: Vec<String> = match app.dialogs.last() {
+        Some((_, Dialog::Choose { list, .. })) => list.rows().iter().map(|r| r.spoken()).collect(),
+        _ => Vec::new(),
+    };
+    assert!(
+        rows.contains(&"About: Partition 2, home, ext4".to_owned()),
+        "{rows:?}"
+    );
+}
