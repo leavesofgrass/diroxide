@@ -307,12 +307,14 @@ mod tests {
             }),
             ..AttributeChange::default()
         };
-        match check_possible(&owner, false) {
-            Ok(()) => assert!(!cfg!(windows)),
-            Err(error) => assert_eq!(
-                error.to_string(),
-                "the file provider cannot change the owner here; Windows does it in its Security dialog"
-            ),
+        let result = check_possible(&owner, false).map_err(|error| error.to_string());
+        if cfg!(windows) {
+            assert_eq!(
+                result,
+                Err("the file provider cannot change the owner here; Windows does it in its Security dialog".to_owned())
+            );
+        } else {
+            assert_eq!(result, Ok(()));
         }
     }
 }
