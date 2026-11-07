@@ -270,7 +270,7 @@ fn serve(
             None if message["id"] == "stage-1" && message.get("result").is_some() => {
                 let result = &message["result"];
                 let path = result["path"].as_str().unwrap_or_default();
-                let _ = std::fs::write(path, b"made by the test plugin\n");
+                let _ = fs::write(path, b"made by the test plugin\n");
                 write(
                     &peer,
                     json!({"jsonrpc": "2.0", "id": "commit-1", "method": "fs/commit", "params": {"stage": result["stage"]}}),
