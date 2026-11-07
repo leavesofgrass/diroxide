@@ -493,8 +493,7 @@ impl App {
             CryptWants::MinisignKey { file, check } => {
                 let mut effects = self.close_top();
                 if text.trim().is_empty() {
-                    effects
-                        .push(self.say(Message::info("No public key given; nothing was checked.")));
+                    effects.push(self.say(Message::info("No key given; nothing was checked.")));
                     return effects;
                 }
                 let folder = check.signature.parent();

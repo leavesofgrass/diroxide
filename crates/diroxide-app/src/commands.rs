@@ -2374,7 +2374,7 @@ pub static CATALOG: [CommandInfo; 267] = [
     command(
         ids::VIEW_PICTURE,
         "Show picture",
-        "Shows the picture in the viewer or the preview in the window's picture view, where Plus and Minus zoom, 0 fits, 1 is the actual size and Escape goes back; a terminal has no picture view.",
+        "Shows the picture in the viewer or the preview in the window's picture view, which zooms, fits the window and goes back with its own keys, said as it opens; a terminal has no picture view.",
         Viewer,
         &[],
         &["enter"],

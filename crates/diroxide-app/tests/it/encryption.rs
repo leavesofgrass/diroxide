@@ -414,7 +414,7 @@ fn a_minisign_signature_asks_its_public_key() {
     );
     let said = s.key("enter");
     assert!(
-        said.contains(&"No public key given; nothing was checked.".to_owned()),
+        said.contains(&"No key given; nothing was checked.".to_owned()),
         "{said:?}"
     );
     // A key file that is not a key: the verdict says it, in words.
