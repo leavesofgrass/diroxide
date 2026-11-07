@@ -963,6 +963,13 @@ mod tests {
             let c = d.component(files, 1).unwrap();
             assert_eq!(c.check(), Ok(()), "{}", d.id);
             assert!(!c.tools.is_empty(), "{}", d.id);
+            // Its ask line names it within 40 cells: "Reading file
+            // metadata needs ExifTool 13.61." (43, the point at 36).
+            let feature = c.features.first().map(String::as_str);
+            let ask = messages::ask_first(&c, feature, &c.files[0].target);
+            let point = format!("needs {}", c.title);
+            assert!(within_cells(&ask.lines[0], &point), "{}", ask.lines[0]);
+            assert_ne!(messages::feature_words(feature.unwrap()), "This feature");
             assert_eq!(c.action, Action::Unpack, "{}", d.id);
             for f in &d.file {
                 assert!(f.is_external(), "{}: {} packs nothing", d.id, f.name);
