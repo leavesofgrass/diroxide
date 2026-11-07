@@ -33,6 +33,7 @@ If you are new, begin with the [quick start](quickstart.md).
 ### Using the panels
 
 - [The panels](panels.md): the three layouts, what a row says, moving, going to a path or a place (with its site, volume and trash rows), path jump, sorting, filtering and marking rows.
+- [Columns, notes and fields](columns.md): a song's artist or a document's pages said in the row, your own notes and fields, a pattern over the name, a plugin's column, the three loading modes, sorting by a column, and Fill columns.
 - [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo. [The transfer queue](transfer-queue.md) goes further into jobs.
 - [Volumes and the trash](volumes-trash.md): the Volumes list with its state-first rows, free space, Open, Mount, Unmount, Eject and Hide, the Volume actions plugin, the trash browser with Restore, Delete for good and Empty the trash, and free space in the copy plan and in Say Status.
 
