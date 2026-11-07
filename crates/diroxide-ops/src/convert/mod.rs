@@ -10,8 +10,9 @@
 //!   when it loads.
 //! - [`placeholders`]: `{input}`, `{typed_input}`, `{output}`, `{stem}`
 //!   and the typed actions' names, filled per argument, never a shell.
-//! - [`book`]: the recipes in use, the owner's replacing the built-in
-//!   ones by id, every problem a sentence.
+//! - [`book`]: the recipes in use, the built-in ones from the embedded
+//!   `conversions.toml` ([`BUILT_IN`]), the owner's replacing them by id,
+//!   every problem a sentence, and whether each can run here.
 //! - The plan, [`Engine::plan_convert`](crate::Engine::plan_convert) in
 //!   [`plan`]: refusals first, then skips, then the work; overwrite
 //!   refused.
@@ -32,6 +33,8 @@
 //!   is made there and written through the place's committing writer.
 
 pub mod book;
+#[cfg(test)]
+mod builtin_tests;
 pub mod carta;
 pub mod placeholders;
 pub mod plan;
@@ -46,7 +49,7 @@ mod testing;
 pub mod tools;
 pub mod typing;
 
-pub use book::RecipeBook;
+pub use book::{Availability, BUILT_IN, RecipeBook};
 pub use carta::{CHILD_ARGUMENT, CartaRunner, serve_child};
 pub use plan::{ConvertError, ConvertItem, ConvertPlan, ConvertRequest};
 pub use recipe::{ConverterOutput, ConverterParts, Recipe, RecipeError, RecipeShape, RecipeSource};

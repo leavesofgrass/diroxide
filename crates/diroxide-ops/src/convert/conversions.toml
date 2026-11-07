@@ -1,0 +1,385 @@
+# The conversion recipes diroxide ships, embedded in the program. The
+# owner's own conversions.toml, in the config folder, has the same shape
+# and is read after this one: a recipe there with an id from here replaces
+# it, in its place in the list.
+#
+# Each recipe has an id (letters, digits, - and _), a name said in lists,
+# one sentence saying what it does, what it takes (from: extensions;
+# from-group: a file group; from-type: type ids), the extension it makes
+# (to), the tool that runs it (a tools registry id; carta is built in) and
+# the arguments after the program, each one whole: no shell ever reads
+# them. Placeholders: {input} and {file} (the file converted), {typed_input}
+# (FORMAT:PATH by diroxide's own detection, for ImageMagick), {output} (a
+# staging name in the target folder, renamed to the real name only when
+# the tool succeeded), {stem}, {name}, {dir}, {dest} and {other}.
+#
+# The engine adds to every FFmpeg run: -hide_banner -nostdin -nostats
+# -loglevel error -progress pipe:1, and -protocol_whitelist file before
+# each -i. It adds ImageMagick's resource limits before its arguments. A
+# conversion never replaces a file: a taken name keeps both.
+
+# Pictures, through ImageMagick. {typed_input} makes it read each file as
+# the format diroxide found, whatever its name says. A format this
+# ImageMagick cannot read (HEIC in some builds) is refused in the plan,
+# from `magick -list format`.
+
+[[recipe]]
+id = "image-to-jpeg"
+name = "Image to JPEG"
+about = "Makes a JPEG copy of each picture, quality 90, turned upright, transparency on white."
+from-group = "images"
+to = "jpg"
+tool = "magick"
+args = ["{typed_input}", "-auto-orient", "-background", "white", "-alpha", "remove", "-alpha", "off", "-quality", "90", "{output}"]
+timeout = "10m"
+max-input = "500 MB"
+
+[[recipe]]
+id = "image-to-png"
+name = "Image to PNG"
+about = "Makes a lossless PNG copy of each picture, turned upright."
+from-group = "images"
+to = "png"
+tool = "magick"
+args = ["{typed_input}", "-auto-orient", "{output}"]
+timeout = "10m"
+max-input = "500 MB"
+
+[[recipe]]
+id = "image-to-webp"
+name = "Image to WebP"
+about = "Makes a WebP copy of each picture, quality 80, turned upright."
+from-group = "images"
+to = "webp"
+tool = "magick"
+args = ["{typed_input}", "-auto-orient", "-quality", "80", "{output}"]
+timeout = "10m"
+max-input = "500 MB"
+
+[[recipe]]
+id = "image-shrink-to-fit"
+name = "Shrink to 1600 pixels"
+about = "Makes a JPEG copy no wider or taller than 1600 pixels, quality 85; smaller pictures keep their size."
+from-group = "images"
+to = "jpg"
+tool = "magick"
+args = ["{typed_input}", "-auto-orient", "-resize", "1600x1600>", "-background", "white", "-alpha", "remove", "-alpha", "off", "-quality", "85", "{output}"]
+timeout = "10m"
+max-input = "500 MB"
+
+[[recipe]]
+id = "heic-to-jpeg"
+name = "HEIC to JPEG"
+about = "Makes a JPEG copy of each HEIC photo, quality 90, when this ImageMagick reads HEIC."
+from = ["heic", "heif", "hif"]
+from-type = ["heic"]
+to = "jpg"
+tool = "magick"
+args = ["{typed_input}", "-auto-orient", "-quality", "90", "{output}"]
+timeout = "10m"
+max-input = "500 MB"
+
+# Sound, through FFmpeg. Tags are kept (-map_metadata 0); cover art is
+# kept in MP3 and FLAC, and left out of Opus, which FFmpeg cannot give a
+# picture (spike V4).
+
+[[recipe]]
+id = "audio-to-mp3"
+name = "Audio to MP3"
+about = "Makes an MP3 copy of each sound file, high quality variable rate, tags and cover art kept."
+from-group = "music"
+to = "mp3"
+tool = "ffmpeg"
+needs-encoder = "libmp3lame"
+args = ["-i", "file:{input}", "-map", "0:a:0", "-map", "0:v?", "-map_metadata", "0", "-codec:a", "libmp3lame", "-q:a", "2", "-c:v", "copy", "-disposition:v", "attached_pic", "-id3v2_version", "3", "{output}"]
+timeout = "30m"
+
+[[recipe]]
+id = "audio-to-flac"
+name = "Audio to FLAC"
+about = "Makes a lossless FLAC copy of each sound file, tags and cover art kept."
+from-group = "music"
+to = "flac"
+tool = "ffmpeg"
+needs-encoder = "flac"
+args = ["-i", "file:{input}", "-map", "0:a:0", "-map", "0:v?", "-map_metadata", "0", "-codec:a", "flac", "-c:v", "copy", "-disposition:v", "attached_pic", "{output}"]
+timeout = "30m"
+
+[[recipe]]
+id = "audio-to-opus"
+name = "Audio to Opus"
+about = "Makes a small Opus copy of each sound file at 96 kilobits, tags kept, cover art left out."
+from-group = "music"
+to = "opus"
+tool = "ffmpeg"
+needs-encoder = "libopus"
+args = ["-i", "file:{input}", "-vn", "-map_metadata", "0", "-codec:a", "libopus", "-b:a", "96k", "{output}"]
+timeout = "30m"
+
+# Video, through FFmpeg. WebM is offered with any FFmpeg that has VP9; MP4
+# only with one that has the libx264 encoder (a GPL build), which the LGPL
+# build diroxide offers to install does not.
+
+[[recipe]]
+id = "video-to-webm"
+name = "Video to WebM"
+about = "Makes a WebM copy of each video, VP9 picture and Opus sound; slow on long videos."
+from-group = "video"
+to = "webm"
+tool = "ffmpeg"
+needs-encoder = "libvpx-vp9"
+args = ["-i", "file:{input}", "-map_metadata", "0", "-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-c:a", "libopus", "-b:a", "96k", "{output}"]
+timeout = "4h"
+
+[[recipe]]
+id = "video-to-mp4"
+name = "Video to MP4"
+about = "Makes an MP4 copy of each video, H.264 picture and AAC sound, ready to stream."
+from-group = "video"
+to = "mp4"
+tool = "ffmpeg"
+needs-encoder = "libx264"
+args = ["-i", "file:{input}", "-map_metadata", "0", "-c:v", "libx264", "-crf", "23", "-preset", "medium", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "{output}"]
+timeout = "4h"
+
+[[recipe]]
+id = "video-sound-to-opus"
+name = "Sound of a video to Opus"
+about = "Makes an Opus file of each video's sound at 96 kilobits, the picture left out."
+from-group = "video"
+to = "opus"
+tool = "ffmpeg"
+needs-encoder = "libopus"
+args = ["-i", "file:{input}", "-vn", "-map_metadata", "0", "-codec:a", "libopus", "-b:a", "96k", "{output}"]
+timeout = "1h"
+
+# Documents, through pandoc, always with --sandbox, which lets it read
+# only the files named here: a picture a document names is left out of
+# the copy. Debian's pandoc 3.1 cannot write Word or EPUB with --sandbox;
+# pandoc's own builds can (3.9 here, Friday, November 6, 2026).
+
+[[recipe]]
+id = "markdown-to-word"
+name = "Markdown to Word"
+about = "Makes a Word document of each Markdown file; pictures it names are left out."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "docx"
+tool = "pandoc"
+args = ["--sandbox", "--from", "markdown", "--to", "docx", "--output", "{output}", "{input}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-web-page"
+name = "Markdown to a web page"
+about = "Makes a whole web page of each Markdown file, its title from the file's name; pictures stay links."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "html"
+tool = "pandoc"
+args = ["--sandbox", "--from", "markdown", "--to", "html5", "--standalone", "--metadata", "pagetitle={stem}", "--output", "{output}", "{input}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-epub"
+name = "Markdown to EPUB"
+about = "Makes an EPUB book of each Markdown file; pictures it names are left out."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "epub"
+tool = "pandoc"
+args = ["--sandbox", "--from", "markdown", "--to", "epub3", "--metadata", "title={stem}", "--output", "{output}", "{input}"]
+timeout = "5m"
+
+[[recipe]]
+id = "word-to-markdown"
+name = "Word to Markdown"
+about = "Makes a Markdown file of each Word document, lines unwrapped; pictures are not taken out."
+from = ["docx"]
+from-type = ["docx"]
+to = "md"
+tool = "pandoc"
+args = ["--sandbox", "--from", "docx", "--to", "gfm", "--wrap", "none", "--output", "{output}", "{input}"]
+timeout = "5m"
+
+[[recipe]]
+id = "epub-to-markdown"
+name = "EPUB to Markdown"
+about = "Makes a Markdown file of each EPUB book, lines unwrapped; pictures are not taken out."
+from = ["epub"]
+from-type = ["epub"]
+to = "md"
+tool = "pandoc"
+args = ["--sandbox", "--from", "epub", "--to", "gfm", "--wrap", "none", "--output", "{output}", "{input}"]
+timeout = "5m"
+
+[[recipe]]
+id = "odt-to-markdown"
+name = "OpenDocument to Markdown"
+about = "Makes a Markdown file of each OpenDocument text, lines unwrapped; pictures are not taken out."
+from = ["odt"]
+from-type = ["odt"]
+to = "md"
+tool = "pandoc"
+args = ["--sandbox", "--from", "odt", "--to", "gfm", "--wrap", "none", "--output", "{output}", "{input}"]
+timeout = "5m"
+
+[[recipe]]
+id = "rtf-to-markdown"
+name = "RTF to Markdown"
+about = "Makes a Markdown file of each RTF document, lines unwrapped."
+from = ["rtf"]
+from-type = ["rtf"]
+to = "md"
+tool = "pandoc"
+args = ["--sandbox", "--from", "rtf", "--to", "gfm", "--wrap", "none", "--output", "{output}", "{input}"]
+timeout = "5m"
+
+# PDF to text, through pdftotext from Poppler.
+
+[[recipe]]
+id = "pdf-to-text"
+name = "PDF to text"
+about = "Makes a UTF-8 text file of each PDF's words, in reading order."
+from = ["pdf"]
+from-type = ["pdf"]
+to = "txt"
+tool = "pdftotext"
+args = ["-enc", "UTF-8", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "pdf-to-text-layout"
+name = "PDF to text with layout"
+about = "Makes a UTF-8 text file of each PDF with its columns and spacing kept."
+from = ["pdf"]
+from-type = ["pdf"]
+to = "txt"
+tool = "pdftotext"
+args = ["-layout", "-enc", "UTF-8", "{input}", "{output}"]
+timeout = "5m"
+
+# carta, built into diro: nothing to install. Markdown out is GitHub's
+# flavor. What Markdown cannot say (an Org file's footnotes, a title) may
+# be lost on the way; a reStructuredText include is never followed.
+
+[[recipe]]
+id = "markdown-to-latex"
+name = "Markdown to LaTeX"
+about = "Makes a whole LaTeX document of each Markdown file, built in."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "tex"
+tool = "carta"
+args = ["--from", "markdown", "--to", "latex", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-asciidoc"
+name = "Markdown to AsciiDoc"
+about = "Makes an AsciiDoc document of each Markdown file, built in."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "adoc"
+tool = "carta"
+args = ["--from", "markdown", "--to", "asciidoc", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-typst"
+name = "Markdown to Typst"
+about = "Makes a Typst document of each Markdown file, built in."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "typ"
+tool = "carta"
+args = ["--from", "markdown", "--to", "typst", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-mediawiki"
+name = "Markdown to MediaWiki"
+about = "Makes MediaWiki markup of each Markdown file, built in."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "wiki"
+tool = "carta"
+args = ["--from", "markdown", "--to", "mediawiki", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-org"
+name = "Markdown to Org"
+about = "Makes an Org file of each Markdown file, built in."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "org"
+tool = "carta"
+args = ["--from", "markdown", "--to", "org", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-plain-text"
+name = "Markdown to plain text"
+about = "Makes a plain text file of each Markdown file, the marks taken out, built in."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "txt"
+tool = "carta"
+args = ["--from", "markdown", "--to", "plain", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-word-built-in"
+name = "Markdown to Word, built in"
+about = "Makes a Word document of each Markdown file with no pandoc; pictures it names are left out."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "docx"
+tool = "carta"
+args = ["--from", "markdown", "--to", "docx", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "markdown-to-epub-built-in"
+name = "Markdown to EPUB, built in"
+about = "Makes an EPUB book of each Markdown file with no pandoc; pictures it names are left out."
+from = ["md", "markdown"]
+from-type = ["markdown"]
+to = "epub"
+tool = "carta"
+args = ["--from", "markdown", "--to", "epub", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "org-to-markdown"
+name = "Org to Markdown"
+about = "Makes a Markdown file of each Org file, built in; footnotes and the title may be lost."
+from = ["org"]
+from-type = ["org"]
+to = "md"
+tool = "carta"
+args = ["--from", "org", "--to", "gfm", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "rst-to-markdown"
+name = "reStructuredText to Markdown"
+about = "Makes a Markdown file of each reStructuredText file, built in; includes are left out."
+from = ["rst", "rest"]
+from-type = ["rst"]
+to = "md"
+tool = "carta"
+args = ["--from", "rst", "--to", "gfm", "{input}", "{output}"]
+timeout = "5m"
+
+[[recipe]]
+id = "mediawiki-to-markdown"
+name = "MediaWiki to Markdown"
+about = "Makes a Markdown file of each MediaWiki page, built in."
+from = ["mediawiki", "wiki"]
+from-type = ["mediawiki"]
+to = "md"
+tool = "carta"
+args = ["--from", "mediawiki", "--to", "gfm", "{input}", "{output}"]
+timeout = "5m"

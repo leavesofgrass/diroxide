@@ -4,9 +4,52 @@
 //! problem is left out and its sentence kept in [`RecipeBook::problems`],
 //! the recipe's id first.
 
+use std::collections::{BTreeMap, BTreeSet};
+
+use diroxide_vfs::{CancelToken, ToolRequest, ToolRunner};
 use serde::Serialize;
 
 use super::recipe::{KEYS, Recipe, RecipeError, RecipeShape, RecipeSource};
+use super::tools::ffmpeg_encoders;
+
+/// The built-in recipes' file, embedded in the program: the owner can
+/// read it, and copy a recipe into the config folder's
+/// `conversions.toml` to change it.
+pub const BUILT_IN: &str = include_str!("conversions.toml");
+
+/// Whether a recipe can run here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Availability {
+    /// Its tool is found, with the encoder it needs.
+    Ready,
+    /// Its tool is not found, or `tools.toml` turns it off.
+    NeedsTool {
+        /// The tool's name as said: "ImageMagick".
+        name: String,
+    },
+    /// Its tool is found without the encoder it needs.
+    NeedsEncoder {
+        /// The encoder: "libx264".
+        encoder: String,
+    },
+}
+
+impl Availability {
+    /// Whether the recipe can run.
+    pub fn is_ready(&self) -> bool {
+        *self == Availability::Ready
+    }
+
+    /// The recipe's row, its name first: "Image to JPEG, ready", "Video to
+    /// MP4, needs libx264", "Image to JPEG, needs ImageMagick".
+    pub fn line(&self, recipe: &Recipe) -> String {
+        match self {
+            Availability::Ready => format!("{}, ready", recipe.name),
+            Availability::NeedsTool { name } => format!("{}, needs {name}", recipe.name),
+            Availability::NeedsEncoder { encoder } => format!("{}, needs {encoder}", recipe.name),
+        }
+    }
+}
 
 /// The recipes in use, in the order they are offered.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -125,6 +168,55 @@ impl RecipeBook {
                 Err(error) => self.problems.push(error.to_string()),
             }
         }
+    }
+
+    /// The built-in recipes, from the embedded `conversions.toml`.
+    pub fn built_in() -> Self {
+        let mut book = Self::new();
+        book.add_toml(BUILT_IN, &RecipeSource::BuiltIn);
+        book
+    }
+
+    /// Whether each recipe can run here, in the book's order: its tool
+    /// asked of the tools registry (carta is always there), and each tool
+    /// with an encoder to check asked once for its list
+    /// (`ffmpeg -encoders`).
+    pub fn availability(
+        &self,
+        tools: &dyn ToolRunner,
+        cancel: &CancelToken,
+    ) -> Vec<(&Recipe, Availability)> {
+        let mut encoders: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+        self.recipes
+            .iter()
+            .map(|recipe| {
+                let found = recipe.tool == "carta" || tools.has(&recipe.tool);
+                let state = if !found {
+                    Availability::NeedsTool {
+                        name: tools.name_of(&recipe.tool),
+                    }
+                } else if let Some(encoder) = &recipe.needs_encoder {
+                    let listed = encoders.entry(recipe.tool.as_str()).or_insert_with(|| {
+                        let request =
+                            ToolRequest::new(recipe.tool.clone(), ["-hide_banner", "-encoders"]);
+                        tools
+                            .run(&request, cancel)
+                            .map(|out| ffmpeg_encoders(&String::from_utf8_lossy(&out.stdout)))
+                            .unwrap_or_default()
+                    });
+                    if listed.contains(encoder) {
+                        Availability::Ready
+                    } else {
+                        Availability::NeedsEncoder {
+                            encoder: encoder.clone(),
+                        }
+                    }
+                } else {
+                    Availability::Ready
+                };
+                (recipe, state)
+            })
+            .collect()
     }
 
     /// The recipes, in the order they are offered.
