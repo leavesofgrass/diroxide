@@ -7,7 +7,7 @@ This page says what diroxide keeps on your computer, when it uses the network, w
 diroxide keeps its files in two folders. [The settings guide](settings.md) says where they are on each system.
 
 - The config folder holds the files you can edit: `config.toml`, `keymap.toml`, `menus.toml`, the banks of command buttons and your own themes, and two read-only copies of the built-in keys and menus.
-- The state folder holds what diroxide remembers for you: where each panel was and which row was focused when you quit (`session.toml`), the history of the prompts you used (the `history` folder), the folders you visited so path jump can rank them, the undo journal of your last jobs, a ledger of partial files that a lost network left (`partials.json`), the jobs that were waiting or running when you quit or crashed (`queue.json`, with a lock file beside it, `queue.lock`), the labels, bookmarks, saved views and saved searches you made, and `terminal.log`.
+- The state folder holds what diroxide remembers for you: where each panel was and which row was focused when you quit (`session.toml`), the history of the prompts you used (the `history` folder), the folders you visited so path jump can rank them, the undo journal of your last jobs, a ledger of partial files that a lost network left (`partials.json`), the jobs that were waiting or running when you quit or crashed (`queue.json`, with a lock file beside it, `queue.lock`), the labels (with your notes and fields), bookmarks, saved views and saved searches you made, the last 20 conversion reports (the `conversions` folder), the state, ledger and log of each watched folder (the `hot` folder), and `terminal.log`.
 - With `--portable`, both folders sit beside the program instead, so you can carry diroxide on a drive.
 
 All of these are plain files. You can read them, copy them and delete them. Deleting the state folder only makes diroxide forget.
@@ -85,6 +85,15 @@ diroxide writes one log file, `terminal.log`, in the state folder. You can open 
 
 The undo journal lists the paths of the last jobs so that Undo can reverse them, even after a restart. The saved queue, `queue.json`, holds paths to your files too: for each job that was waiting, held or running when you quit or crashed, it keeps the kind, the state, a short description such as "12 items to build", and the request the job was planned from, which names the full paths or addresses of the files and of the folder they were going to. That is what lets the next start list the job under "Interrupted" and plan it again. diroxide removes the file when no job is left, and keeps a copy it cannot read beside it as `queue.json.bad`, never deleting it, so that copy holds the same paths. `queue.lock` marks which window keeps the queue; diroxide writes nothing into it. [The transfer queue](transfer-queue.md#the-queue-at-the-next-start) says how the queue is kept. The prompt histories and the path jump list hold paths you typed or visited. When you use Run a command or Shell here, diroxide writes the paths you had selected to a list file in the `run` folder of the state folder, so your command can read them. All of this stays in the state folder. It is the reason to treat the state folder as private when you share your screen or your files.
 
+## Facts read from your files, conversions and watched folders
+
+- Columns, the details view, Check before sharing and `diro info` read what is inside your files, on this computer. What they read is shown to you and never sent. A private detail, such as the place a photo was taken, is shown in the details and left out of Copy details unless you ask for all. [The details view](details.md) and [privacy before sharing](before-sharing.md) say more.
+- Helper programs that read a file for you, such as ffprobe, ExifTool, Tesseract and pdftotext, run on your computer when a command asks for them, started with a list of arguments and never through a shell.
+- A note and a field you set are kept in `labels.toml` in the state folder, never in the file.
+- A checksum is not stored anywhere. The details view keeps the value for the session, and a `SHA256SUMS` file is written only when you choose Save as.
+- Strip metadata writes a copy and leaves the original as it was. Check before sharing writes nothing. Remove the internet mark changes one file, after asking, and Undo puts the mark back.
+- A watched folder's ledger and log list the names of the files it handled, what happened to each and when, in the state folder. Nothing in them leaves your computer. A conversion's report stays there too, the last 20 of them. [Watched folders](watched-folders.md) and [conversions](conversions.md) say what each holds.
+
 ## Plugins and script commands
 
 A plugin runs with your own rights and can read what you can read, so turn on only plugins you trust. [Security](security.md) says what that means.
@@ -112,6 +121,9 @@ When you report a problem, say what you did, what you heard or saw, the output o
 ## See also
 
 - [Remote places over SFTP](remote-places.md)
+- [Privacy before sharing](before-sharing.md)
+- [Watched folders](watched-folders.md)
+- [Conversions](conversions.md)
 - [Hooks](hooks.md)
 - [Settings and where the files live](settings.md)
 - [Troubleshooting](troubleshooting.md)
