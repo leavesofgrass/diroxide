@@ -63,6 +63,7 @@ pub use runner::{
 #[cfg(windows)]
 pub use sys::KillOnCloseJob;
 pub use sys::open_with::{OpenWithApp, OpenWithList, choose_another_program, open_with_list};
+pub use sys::security_dialog::{SecurityCall, open_security_dialog};
 /// The owner-only named pipe of Windows, for the SFTP plugin's askpass
 /// endpoint (plan answer 101).
 #[cfg(windows)]
