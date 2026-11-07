@@ -39,6 +39,15 @@ const VERSION_OUTPUT_CAP: u64 = 64 * 1024;
 /// its children are then stopped). `args` are the version arguments
 /// alone, never a file.
 pub fn version_line(program: &Path, args: &[&str]) -> Option<String> {
+    version_line_within(program, args, VERSION_TIMEOUT)
+}
+
+/// The same, stopping the command after `timeout` rather than
+/// [`VERSION_TIMEOUT`]: for a registry given a longer deadline
+/// ([`crate::ToolRegistry::with_version_timeout`]), as the lookup tests are,
+/// whose fake tools are scripts a loaded machine once took 2.8 seconds to
+/// start (E's merge check, Saturday, November 7, 2026).
+pub fn version_line_within(program: &Path, args: &[&str], timeout: Duration) -> Option<String> {
     let mut spec = ProcessSpec::new(program)
         .args(args.iter().copied())
         .diroxide_environment();
@@ -46,7 +55,7 @@ pub fn version_line(program: &Path, args: &[&str]) -> Option<String> {
         spec = spec.cwd(folder);
     }
     let limited = Limited::new(
-        Some(VERSION_TIMEOUT),
+        Some(timeout),
         Caps::each(VERSION_OUTPUT_CAP, VERSION_OUTPUT_CAP),
     );
     let done = run_limited(spec, limited, &|| false).ok()?;

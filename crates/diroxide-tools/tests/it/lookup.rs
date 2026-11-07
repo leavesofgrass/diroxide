@@ -60,9 +60,15 @@ fn make_executable(path: &Path) {
 #[cfg(not(unix))]
 fn make_executable(_path: &Path) {}
 
-/// A registry that looks only in `path` and in no install folder.
+/// A registry that looks only in `path` and in no install folder. Its
+/// fake tools' version commands may run for a minute: they are scripts,
+/// and on a machine loaded with other builds a `.cmd` once took 2.8
+/// seconds to start, past the product's two (E's merge check, Saturday,
+/// November 7, 2026). A passing run waits only for the script's end.
 fn on_path(path: &Path) -> ToolRegistry {
-    ToolRegistry::builtin().with_path(Some(path.as_os_str().to_owned()))
+    ToolRegistry::builtin()
+        .with_path(Some(path.as_os_str().to_owned()))
+        .with_version_timeout(std::time::Duration::from_secs(60))
 }
 
 /// The report's line for one tool, and the line after it.
