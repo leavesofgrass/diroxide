@@ -207,9 +207,45 @@ pub fn read_fields(registry: &Registry, ask: &DetailsAsk) -> (Vec<DetailRow>, Ve
         EXTENDED,
         diroxide_meta::origin::extended_fields(provider.as_ref(), &ask.place, &ctx),
     ));
-    let fields = Pipeline::fields(&outcomes);
+    let fields = keep_audio_tags(Pipeline::fields(&outcomes));
     let rows = fields.iter().map(Field::row).collect();
     (rows, unread_words(&outcomes))
+}
+
+/// The pairs of an ffprobe row and the audio reader's row that says the
+/// same of a sound file; the audio reader's stands.
+const AUDIO_OVER_MEDIA: [(&str, &str); 6] = [
+    ("media.title", "audio.title"),
+    ("media.artist", "audio.artist"),
+    ("media.album", "audio.album"),
+    ("media.duration", "audio.length"),
+    ("media.bit_rate", "audio.bitrate"),
+    ("media.cover_picture.", "audio.cover"),
+];
+
+/// A sound file's tags are read twice, by the metadata crate's audio
+/// reader (`audio.*`, lane ML) and by ffprobe's (`media.*`, lane VL):
+/// ffprobe's row is left out where the audio reader gave the same fact
+/// (VL's request 5), and its stream rows stay ("Audio: MP3, stereo, 44.1
+/// kHz").
+pub fn keep_audio_tags(fields: Vec<Field>) -> Vec<Field> {
+    let has = |key: &str| fields.iter().any(|f| f.key == key);
+    let dropped: Vec<&str> = AUDIO_OVER_MEDIA
+        .iter()
+        .filter(|(_, audio)| has(audio))
+        .map(|(media, _)| *media)
+        .collect();
+    if dropped.is_empty() {
+        return fields;
+    }
+    fields
+        .into_iter()
+        .filter(|f| {
+            !dropped
+                .iter()
+                .any(|media| f.key == *media || (media.ends_with('.') && f.key.starts_with(media)))
+        })
+        .collect()
 }
 
 /// What each reader that failed could not read, its reader in words
@@ -486,6 +522,39 @@ mod tests {
         for line in &lines {
             assert!(within_cells(line, "Copied"), "{line}");
         }
+    }
+
+    #[test]
+    fn a_sound_files_tags_are_the_audio_readers() {
+        let field = |key: &str| Field::new(key, key, "x", DetailGroup::Content);
+        let kept = keep_audio_tags(vec![
+            field("audio.title"),
+            field("audio.artist"),
+            field("audio.length"),
+            field("media.title"),
+            field("media.artist"),
+            field("media.album"),
+            field("media.duration"),
+            field("media.audio.1"),
+            field("media.cover_picture.1"),
+        ]);
+        let keys: Vec<&str> = kept.iter().map(|f| f.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                "audio.title",
+                "audio.artist",
+                "audio.length",
+                "media.album",
+                "media.audio.1",
+                "media.cover_picture.1",
+            ],
+            "ffprobe's album and cover stay while the audio reader has none"
+        );
+        let video = keep_audio_tags(vec![field("media.title"), field("media.video.1")]);
+        assert_eq!(video.len(), 2, "no audio reader, ffprobe's rows stay");
+        let covered = keep_audio_tags(vec![field("audio.cover"), field("media.cover_picture.1")]);
+        assert_eq!(covered.len(), 1);
     }
 
     /// VL's request 2: the image words and ffprobe's reader name their
