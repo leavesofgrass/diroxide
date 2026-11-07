@@ -581,6 +581,13 @@ impl App {
             }
             C::NextFile | C::PreviousFile => return self.step_file(command == C::NextFile),
             C::Reload => {
+                // Text diroxide made is not read from the place again
+                // (Read text in picture, alpha 4).
+                if self.viewer().is_some_and(Viewer::is_made) {
+                    let line =
+                        "This text was read from the picture. Read text in picture reads it again.";
+                    return vec![self.say(Message::info(line))];
+                }
                 let Some(place) = self.viewer().map(|v| v.place().clone()) else {
                     return Vec::new();
                 };

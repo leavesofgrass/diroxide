@@ -346,15 +346,15 @@ fn a_file_changed_on_disk_keeps_the_focus_on_its_row() {
 fn no_document_says_why_on_entering() {
     let mut bench = Bench::new(QuickViewOptions::default());
     assert_eq!(texts(&bench.view.enter()), ["Preview", "Quick view off"]);
-    let mut png = vec![0x89, b'P', b'N', b'G', 13, 10, 26, 10];
-    png.extend(std::iter::repeat_n(0u8, 32));
-    let photo = bench.file("photo.png", &png);
-    bench.on(&photo);
+    let mut program = b"MZ".to_vec();
+    program.extend(std::iter::repeat_n(0u8, 38));
+    let setup = bench.file("setup.exe", &program);
+    bench.on(&setup);
     assert_eq!(
         texts(&bench.view.enter()),
         [
-            "Preview, photo.png",
-            "No preview: photo.png, PNG image, 40 bytes"
+            "Preview, setup.exe",
+            "No preview: setup.exe, Windows program, 40 bytes"
         ]
     );
     assert!(bench.view.region().is_empty());

@@ -679,6 +679,27 @@ pub mod ids {
         /// Run user action 9 of the focused file's type.
         TYPE_USER_9 = "type.user9";
     }
+
+    // The details view and previews in the app (alpha 4, lane VA, R30
+    // commits 41 to 44). Say Details and Copy details have no default
+    // key (R30 7.2): the palette, the File menu and a bank button.
+    ids! {
+        /// Say the focused file's summary; the focus stays.
+        SAY_DETAILS = "file.say-details";
+        /// Copy the focused file's details, private ones left out.
+        COPY_DETAILS = "file.copy-details";
+        /// Copy every detail of the focused file, private ones too.
+        COPY_ALL_DETAILS = "file.copy-all-details";
+        /// The Tools list: each helper program, its version and where it
+        /// was found, or how to get it (Settings' Tools page).
+        TOOLS_LIST = "app.tools";
+        /// Preview the focused file now, in the quick view, the helper
+        /// programs' previews included.
+        PREVIEW_FILE = "file.preview";
+        /// Read the text in the focused picture with Tesseract, into the
+        /// viewer.
+        READ_PICTURE_TEXT = "file.read-text-in-picture";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -703,7 +724,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 242] = [
+pub static CATALOG: [CommandInfo; 248] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1471,6 +1492,38 @@ pub static CATALOG: [CommandInfo; 242] = [
         Panel,
         &["alt+enter"],
         &["alt+enter"],
+    ),
+    command(
+        ids::SAY_DETAILS,
+        "Say details",
+        "Says what the focused file is in one line, such as its picture's size or its song's length; the focus stays.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COPY_DETAILS,
+        "Copy details",
+        "Puts the focused file's details on the clipboard, one a line, leaving out the private ones such as a location.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COPY_ALL_DETAILS,
+        "Copy all details",
+        "Puts every detail of the focused file on the clipboard, the private ones too.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::READ_PICTURE_TEXT,
+        "Read text in picture",
+        "Reads the text in the focused picture with Tesseract and shows it in the viewer, titled as machine read, since the words are a machine's guess.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::ENCODING,
@@ -2378,6 +2431,14 @@ pub static CATALOG: [CommandInfo; 242] = [
         &["shift+f3"],
     ),
     command(
+        ids::PREVIEW_FILE,
+        "Preview",
+        "Shows the focused file in the quick view at once, turning it on: sound and video through ffprobe and a PDF's text through pdftotext, which run by themselves only when auto-preview is on.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
         ids::OPEN_IN_TEXTWEAVER,
         "Open in textweaver",
         "Hands the quick view's file to textweaver for full reading with speech, when it is installed.",
@@ -2606,6 +2667,14 @@ pub static CATALOG: [CommandInfo; 242] = [
         ids::COMPONENTS_MANAGE,
         "Manage optional components",
         "Lists the optional components with their state, size and license, to download, verify or remove one.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TOOLS_LIST,
+        "Tools list",
+        "Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it.",
         Global,
         &[],
         &[],

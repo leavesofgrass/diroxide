@@ -16,6 +16,10 @@ diroxide-core.workspace = true
 # Compare files (W3a, over W3d's crate).
 diroxide-diff.workspace = true
 diroxide-filetype.workspace = true
+# The details view reads a file's fields through the metadata pipeline,
+# with the preview crate's image and ffprobe readers added (alpha 4, lane
+# VA; the layering lets the app depend on it).
+diroxide-meta.workspace = true
 diroxide-ops.workspace = true
 # The viewer's decoder and highlighter (W2d).
 diroxide-preview.workspace = true

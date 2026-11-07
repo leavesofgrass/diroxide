@@ -24,6 +24,8 @@ mod bookmarking;
 mod comparing;
 // Optional components (W4d).
 mod component_ui;
+// The details view, Say Details and Copy details (alpha 4, lane VA).
+mod details;
 mod dialogs;
 mod files;
 // The panel filter on the filter language (W3a).
@@ -258,6 +260,22 @@ pub enum AppEvent {
         place: Place,
         /// "Entries: 10 items", or why not.
         line: Result<String, Message>,
+    },
+    /// A file's details were read on a worker: its fields, the preview's
+    /// summary, or ExifTool's tags (alpha 4).
+    Details(Box<crate::details::DetailsNote>),
+    /// The tools registry's report for the Settings Tools page: each
+    /// helper program's line, found or not (alpha 4).
+    ToolsReported(Box<diroxide_tools::ToolsReport>),
+    /// Tesseract read the text in a picture, or the line that says why
+    /// not (alpha 4).
+    PictureText {
+        /// The job.
+        job: JobId,
+        /// The picture.
+        place: Place,
+        /// The text, or the line to say.
+        result: Result<crate::picture_text::PictureText, String>,
     },
     /// A file's bytes for the viewer were read, or could not be (the
     /// sentence says why).
@@ -948,6 +966,9 @@ pub struct App {
     highlighter: Option<crate::viewer::highlight::Session>,
     /// The quick view and the focus in its region.
     preview: preview::Preview,
+    /// The details list and what its commands wait for (alpha 4, lane
+    /// VA).
+    details: details::DetailsState,
     /// Change key's capture, the Keys list and the presets (W3k).
     keys: keys::KeysState,
     /// The labels, bookmarks and folder views, and what their lists wait
@@ -1307,6 +1328,7 @@ impl App {
             viewer_wait: None,
             highlighter: None,
             preview: preview::Preview::default(),
+            details: details::DetailsState::default(),
             keys: keys::KeysState::new(owner_keys),
             organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
             watching: watching::WatchState::default(),
@@ -1829,6 +1851,11 @@ impl App {
             AppEvent::ArchiveOpened { request, facts } => self.archive_opened(request, *facts),
             AppEvent::ArchivePlanned { job, result } => self.archive_planned(job, result),
             AppEvent::ArchiveEntries { place, line } => self.archive_entries_counted(&place, line),
+            AppEvent::Details(note) => self.details_note(*note),
+            AppEvent::ToolsReported(report) => self.tools_reported(*report),
+            AppEvent::PictureText { job, place, result } => {
+                self.picture_text_read(job, &place, result)
+            }
             AppEvent::ViewerSource {
                 request,
                 place,
@@ -2000,6 +2027,14 @@ impl App {
         }
         // The Volumes list (lane A3).
         if let Some(effects) = self.volumes_dispatch(command) {
+            return effects;
+        }
+        // Say Details and Copy details (alpha 4, lane VA).
+        if let Some(effects) = self.details_dispatch(command) {
+            return effects;
+        }
+        // Preview, in the quick view (alpha 4, lane VA).
+        if let Some(effects) = self.preview_file_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).

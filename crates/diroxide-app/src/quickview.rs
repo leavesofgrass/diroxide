@@ -55,12 +55,16 @@ use diroxide_core::format::human_size;
 use diroxide_core::names::display_name;
 use diroxide_core::{Entry, Message, Place};
 use diroxide_filetype::TypeRegistry;
-use diroxide_preview::LatestOnly;
+use diroxide_preview::doc::package::ContainerCaps;
 use diroxide_preview::doc::text::{HEX_ROW, HEX_ROW_SCREEN_READER};
 use diroxide_preview::doc::{self, DocKind, DocView, Guard, ReadOptions, SHOWING_THE_TEXT};
 use diroxide_preview::encoding::{Choice, Encoding};
 use diroxide_preview::highlight::{Caps, Job, Session};
-use diroxide_vfs::{CancelToken, Registry, WatchEvent};
+use diroxide_preview::{LatestOnly, PreviewCache, Previews};
+use diroxide_vfs::{CancelToken, NoTools, Registry, ToolRunner, WatchEvent};
+
+use crate::details::SharedCache;
+use crate::request::SharedTools;
 
 use region::Region;
 pub use region::{LinkTarget, Outcome, QuickViewRequest};
@@ -118,6 +122,25 @@ impl QuickViewOptions {
         Duration::from_millis(self.settings.deadline_ms.max(1))
     }
 
+    /// The container read path's caps: the largest document read whole
+    /// is `max_document_mb`, the other caps the preview crate's.
+    pub fn container_caps(&self) -> ContainerCaps {
+        ContainerCaps {
+            max_container: self
+                .settings
+                .max_document_mb
+                .max(1)
+                .saturating_mul(1024 * 1024),
+            ..ContainerCaps::default()
+        }
+    }
+
+    /// Whether the tool-backed previewers (ffprobe, pdftotext) run after
+    /// the wait: `auto_preview`, off in screen reader mode when automatic.
+    pub fn auto_preview(&self) -> bool {
+        self.settings.auto_preview.runs(self.screen_reader)
+    }
+
     /// The bytes a hex row shows: eight for a screen reader, inside 40
     /// cells; sixteen otherwise.
     pub fn hex_row(&self) -> usize {
@@ -171,6 +194,9 @@ struct Target {
     /// Start at once, without the wait (turning on).
     now: bool,
     reason: Reason,
+    /// Run the tool-backed previewers whatever auto-preview says: the
+    /// Preview command asked.
+    tools: bool,
 }
 
 /// A render the worker has.
@@ -232,6 +258,13 @@ pub struct QuickView {
     /// The encoding the owner chose for one file, for this session (lane
     /// TA): its renders read the bytes in it.
     encoding: Option<(Place, &'static Encoding)>,
+    /// The runner the tool-backed previewers go through (alpha 4).
+    tools: SharedTools,
+    /// The previews' cache, shared with the details and Say Details.
+    cache: SharedCache,
+    /// The file the Preview command asked for: its renders run the
+    /// tool-backed previewers until the cursor leaves it.
+    asked: Option<Place>,
 }
 
 impl QuickView {
@@ -239,11 +272,14 @@ impl QuickView {
     /// whose providers are shared, not copied).
     pub fn new(registry: Registry, options: QuickViewOptions) -> Self {
         let latest = Arc::new(LatestOnly::new());
+        let tools = SharedTools(Arc::new(NoTools));
+        let cache = SharedCache::default();
         let worker = Worker::new(Self::shared(
             registry,
             TypeRegistry::builtin(),
             &latest,
             &options,
+            (&tools, &cache),
         ));
         Self {
             options,
@@ -259,6 +295,9 @@ impl QuickView {
             region: Region::default(),
             siblings: Vec::new(),
             encoding: None,
+            tools,
+            cache,
+            asked: None,
         }
     }
 
@@ -267,6 +306,7 @@ impl QuickView {
         types: TypeRegistry,
         latest: &Arc<LatestOnly>,
         options: &QuickViewOptions,
+        (tools, cache): (&SharedTools, &SharedCache),
     ) -> Shared {
         Shared {
             registry,
@@ -277,18 +317,71 @@ impl QuickView {
                 hex_row: options.hex_row(),
             },
             max_bytes: options.max_bytes(),
+            caps: options.container_caps(),
+            previews: Previews::builtin().with_cache(Arc::clone(&cache.0)),
+            tools: Arc::clone(&tools.0),
+            auto: options.auto_preview(),
         }
+    }
+
+    /// Starts the worker again with what it reads with now; a render in
+    /// flight is dropped, since its answer would come on the old
+    /// thread's channel.
+    fn renew(&mut self, types: TypeRegistry) {
+        let registry = self.worker.shared().registry.clone();
+        let shared = Self::shared(
+            registry,
+            types,
+            &self.latest,
+            &self.options,
+            (&self.tools, &self.cache),
+        );
+        self.cancel_in_flight();
+        self.in_flight = None;
+        self.worker.reset(shared);
     }
 
     /// Uses the user's file types (with their own types) to tell a picture
     /// or a PDF from bytes to show as hex.
     pub fn set_types(&mut self, types: TypeRegistry) {
-        let registry = self.worker.shared().registry.clone();
-        let shared = Self::shared(registry, types, &self.latest, &self.options);
+        self.renew(types);
+    }
+
+    /// The runner ffprobe and pdftotext go through: the app's tools
+    /// registry, or a test's recording runner (alpha 4).
+    pub fn set_tools(&mut self, tools: Arc<dyn ToolRunner>) {
+        self.tools = SharedTools(tools);
+        let types = self.worker.shared().types.clone();
+        self.renew(types);
+    }
+
+    /// The previews' cache, shared with the details and Say Details.
+    pub fn set_cache(&mut self, cache: Arc<PreviewCache>) {
+        self.cache = SharedCache(cache);
+        let types = self.worker.shared().types.clone();
+        self.renew(types);
+    }
+
+    /// The Preview command (alpha 4, R30 commit 43): this file shown at
+    /// once, with the tool-backed previewers whatever auto-preview says,
+    /// and so again while the cursor stays on it. Says the preview's line
+    /// when it is ready.
+    pub fn preview_now(&mut self, place: &Place, entry: &Entry, now: Instant) -> Vec<Message> {
+        if !self.on {
+            return Vec::new();
+        }
+        self.asked = Some(place.clone());
         self.cancel_in_flight();
-        // Its answer would come on the old thread's channel, which goes.
         self.in_flight = None;
-        self.worker.reset(shared);
+        self.target = Some(Target {
+            place: place.clone(),
+            entry: entry.clone(),
+            since: now,
+            now: true,
+            reason: Reason::Moved,
+            tools: true,
+        });
+        self.tick(now)
     }
 
     /// Gives the quick view the session's highlighter, which colors code
@@ -377,6 +470,7 @@ impl QuickView {
                 since: now,
                 now: true,
                 reason: Reason::Moved,
+                tools: false,
             });
         }
         let mut said = vec![Message::info("Quick view on")];
@@ -421,12 +515,16 @@ impl QuickView {
             self.target = None;
             return Vec::new();
         }
+        if self.asked.as_ref().is_some_and(|p| p != place) {
+            self.asked = None;
+        }
         self.target = Some(Target {
             place: place.clone(),
             entry: entry.clone(),
             since: now,
             now: false,
             reason: Reason::Moved,
+            tools: false,
         });
         Vec::new()
     }
@@ -479,6 +577,7 @@ impl QuickView {
             since: now,
             now: false,
             reason: Reason::Changed,
+            tools: false,
         });
         Vec::new()
     }
@@ -495,6 +594,7 @@ impl QuickView {
             since: now,
             now: true,
             reason: Reason::Moved,
+            tools: false,
         });
     }
 
@@ -553,6 +653,7 @@ impl QuickView {
             .as_ref()
             .filter(|(place, _)| *place == target.place)
             .map(|(_, encoding)| *encoding);
+        let with_tools = target.tools || self.asked.as_ref() == Some(&target.place);
         let request = Request {
             generation,
             place: target.place,
@@ -560,6 +661,7 @@ impl QuickView {
             refresh: target.reason == Reason::Changed,
             cancel,
             encoding,
+            with_tools,
         };
         match self.worker.send(request) {
             Some(answer) => self.take(answer),
@@ -605,7 +707,9 @@ impl QuickView {
                 error,
                 capped,
                 choice,
+                line,
             } => {
+                let view = *view;
                 automatic = choice;
                 if let Some(error) = &error {
                     said.push(Message::from_error("read", &name, error));
@@ -621,7 +725,7 @@ impl QuickView {
                             (None, None) => view.preview_line(&name),
                         },
                         Reason::Moved if capped => self.capped_line(&name, size),
-                        Reason::Moved => view.preview_line(&name),
+                        Reason::Moved => line.unwrap_or_else(|| view.preview_line(&name)),
                     }));
                 }
                 said.extend(view.notes().iter().map(Message::status));
@@ -630,6 +734,18 @@ impl QuickView {
             Rendered::NoPreview(words) => {
                 said.push(Message::info(format!("No preview: {name}, {words}")));
                 (Showing::NoPreview(words), false)
+            }
+            Rendered::OnRequest(words) => {
+                said.push(Message::info(format!(
+                    "Preview on request: {name}, {words}"
+                )));
+                (Showing::NoPreview(words), false)
+            }
+            Rendered::NotRead(error) => {
+                let message = Message::from_error("read", &name, &error);
+                let text = message.text.clone();
+                said.push(message);
+                (Showing::Unreadable(text), false)
             }
             Rendered::Failed(error) => {
                 let message = Message::from_error("read", &name, &error);
@@ -679,6 +795,7 @@ impl QuickView {
             since: now,
             now: true,
             reason: Reason::Encoding,
+            tools: false,
         });
         self.tick(now)
     }

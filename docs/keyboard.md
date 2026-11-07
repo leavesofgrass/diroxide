@@ -198,6 +198,10 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Restore selection. Brings back the selection the last select all, none, invert, pattern, finished job or folder change replaced. (select.restore)
 - Copy to a place. Copies the selection to a place you choose, recent places first. (file.copy-to)
 - Move to a place. Moves the selection to a place you choose, recent places first. (file.move-to)
+- Say details. Says what the focused file is in one line, such as its picture's size or its song's length; the focus stays. (file.say-details)
+- Copy details. Puts the focused file's details on the clipboard, one a line, leaving out the private ones such as a location. (file.copy-details)
+- Copy all details. Puts every detail of the focused file on the clipboard, the private ones too. (file.copy-all-details)
+- Read text in picture. Reads the text in the focused picture with Tesseract and shows it in the viewer, titled as machine read, since the words are a machine's guess. (file.read-text-in-picture)
 - Encoding. Reads the file in the viewer or the quick view in another encoding, chosen from a list by language, or by the automatic choice. (viewer.encoding)
 - Open with. Lists the programs the system has for the focused file, the default program first; the chosen one opens it. (file.open-with)
 - Groups. Lists the file groups, yours among them, with how many files of each are here; the chosen group's files are selected. (select.groups)
@@ -260,6 +264,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Previous at this indent. Goes to the line before at the same indent, within the block. (viewer.indent-previous)
 - Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
 - Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
+- Preview. Shows the focused file in the quick view at once, turning it on: sound and video through ffprobe and a PDF's text through pdftotext, which run by themselves only when auto-preview is on. (file.preview)
 - Open in textweaver. Hands the quick view's file to textweaver for full reading with speech, when it is installed. (preview.textweaver)
 - Keys list. Lists every command with its keys in both columns; type to narrow it, and change any key. (keys.list)
 - Key presets. Chooses a set of keys modeled on another file manager; your own keys stay on top. (keys.preset)
@@ -269,6 +274,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
 - Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
 - Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
+- Tools list. Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it. (app.tools)
 - Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
 
 ## In the GUI
@@ -466,6 +472,10 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - Restore selection. Brings back the selection the last select all, none, invert, pattern, finished job or folder change replaced. (select.restore)
 - Copy to a place. Copies the selection to a place you choose, recent places first. (file.copy-to)
 - Move to a place. Moves the selection to a place you choose, recent places first. (file.move-to)
+- Say details. Says what the focused file is in one line, such as its picture's size or its song's length; the focus stays. (file.say-details)
+- Copy details. Puts the focused file's details on the clipboard, one a line, leaving out the private ones such as a location. (file.copy-details)
+- Copy all details. Puts every detail of the focused file on the clipboard, the private ones too. (file.copy-all-details)
+- Read text in picture. Reads the text in the focused picture with Tesseract and shows it in the viewer, titled as machine read, since the words are a machine's guess. (file.read-text-in-picture)
 - Encoding. Reads the file in the viewer or the quick view in another encoding, chosen from a list by language, or by the automatic choice. (viewer.encoding)
 - Open with. Lists the programs the system has for the focused file, the default program first; the chosen one opens it. (file.open-with)
 - Groups. Lists the file groups, yours among them, with how many files of each are here; the chosen group's files are selected. (select.groups)
@@ -527,6 +537,7 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - Previous at this indent. Goes to the line before at the same indent, within the block. (viewer.indent-previous)
 - Up an indent level. Goes to the line before with less indent. (viewer.indent-parent)
 - Into the next indent. Goes to the next line with more indent, inside this one. (viewer.indent-child)
+- Preview. Shows the focused file in the quick view at once, turning it on: sound and video through ffprobe and a PDF's text through pdftotext, which run by themselves only when auto-preview is on. (file.preview)
 - Open in textweaver. Hands the quick view's file to textweaver for full reading with speech, when it is installed. (preview.textweaver)
 - Keys list. Lists every command with its keys in both columns; type to narrow it, and change any key. (keys.list)
 - Key presets. Chooses a set of keys modeled on another file manager; your own keys stay on top. (keys.preset)
@@ -536,6 +547,7 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - Manage plugins. Lists the plugins and scripts with their state; each is enabled after its question, or disabled. (plugins.list)
 - Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
 - Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
+- Tools list. Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it. (app.tools)
 - Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
 
 ## Keys a terminal may keep

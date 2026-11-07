@@ -541,6 +541,16 @@ Quick view documents up to. The largest Word, EPUB or spreadsheet file the quick
 - Default: `64`.
 - Comes with a later alpha.
 
+### quick_view.auto_preview
+
+Auto-preview. Lets the quick view run the helper programs by itself after its wait: ffprobe for sound and video, pdftotext for a PDF's text. Off, they run only on the Preview command and in the details. Auto turns it off in screen reader mode.
+
+- Holds: one of auto, on or off.
+- Default: `"auto"`.
+- `auto`: on, except in screen reader mode.
+- `on`: the quick view runs them.
+- `off`: only on Preview and in the details.
+
 ## Archives and split
 
 ### archives.max_member_gib

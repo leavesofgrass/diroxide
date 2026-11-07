@@ -198,10 +198,110 @@ pub fn clock() -> Arc<FixedClock> {
     ))
 }
 
+/// A tools runner for tests (alpha 4, lane VA): it finds only the tools
+/// a test names, records every run, and answers each with the output set
+/// for its tool, so no test starts a real program (ffprobe, pdftotext,
+/// ExifTool, tesseract).
+#[derive(Default)]
+pub struct FakeTools {
+    /// The tools it finds, by registry id.
+    pub found: Mutex<Vec<String>>,
+    /// The output each tool gives, by registry id.
+    pub answers: Mutex<HashMap<String, diroxide_vfs::ToolOutput>>,
+    /// The output a tool gives when its first argument is this one, by
+    /// registry id and that argument (`tesseract --list-langs`).
+    pub by_first: Mutex<HashMap<(String, String), diroxide_vfs::ToolOutput>>,
+    /// Every run asked for, in order.
+    pub runs: Mutex<Vec<diroxide_vfs::ToolRequest>>,
+}
+
+impl FakeTools {
+    /// Makes a tool found, answering its runs with this standard output.
+    pub fn answer(&self, tool: &str, stdout: &[u8]) {
+        self.answer_with(
+            tool,
+            diroxide_vfs::ToolOutput::new(Some(0), stdout.to_vec(), Vec::new()),
+        );
+    }
+
+    /// Makes a tool found, answering its runs with this output.
+    pub fn answer_with(&self, tool: &str, output: diroxide_vfs::ToolOutput) {
+        self.found.lock().unwrap().push(tool.to_owned());
+        self.answers.lock().unwrap().insert(tool.to_owned(), output);
+    }
+
+    /// Makes a tool found, answering its runs whose first argument is
+    /// `first` with this standard output.
+    pub fn answer_first(&self, tool: &str, first: &str, stdout: &[u8]) {
+        self.found.lock().unwrap().push(tool.to_owned());
+        self.by_first.lock().unwrap().insert(
+            (tool.to_owned(), first.to_owned()),
+            diroxide_vfs::ToolOutput::new(Some(0), stdout.to_vec(), Vec::new()),
+        );
+    }
+
+    /// The tools run so far, by id, in order.
+    pub fn ran(&self) -> Vec<String> {
+        self.runs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.tool.clone())
+            .collect()
+    }
+}
+
+impl diroxide_vfs::ToolRunner for FakeTools {
+    fn has(&self, tool: &str) -> bool {
+        self.found.lock().unwrap().iter().any(|t| t == tool)
+    }
+
+    fn run(
+        &self,
+        request: &diroxide_vfs::ToolRequest,
+        _cancel: &diroxide_vfs::CancelToken,
+    ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+        self.runs.lock().unwrap().push(request.clone());
+        let first = request
+            .args
+            .first()
+            .map(|a| a.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if let Some(output) = self
+            .by_first
+            .lock()
+            .unwrap()
+            .get(&(request.tool.clone(), first))
+        {
+            return Ok(output.clone());
+        }
+        self.answers
+            .lock()
+            .unwrap()
+            .get(&request.tool)
+            .cloned()
+            .ok_or_else(|| diroxide_vfs::ToolRunError::NotInstalled {
+                tool: request.tool.clone(),
+                name: request.tool.clone(),
+            })
+    }
+
+    fn run_streaming(
+        &self,
+        request: &diroxide_vfs::ToolRequest,
+        cancel: &diroxide_vfs::CancelToken,
+        _record: &mut dyn FnMut(diroxide_vfs::ToolStream, &str) -> std::ops::ControlFlow<()>,
+    ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+        self.run(request, cancel)
+    }
+}
+
 /// A session: an app and its runtime, and everything said so far.
 pub struct Session {
     /// The app.
     pub app: App,
+    /// The tools runner its tool-backed work goes through.
+    pub tools: Arc<FakeTools>,
     /// The runtime.
     pub runtime: Runtime,
     /// The clock, moved by the tests.
@@ -317,6 +417,9 @@ pub struct Setup {
     pub no_plugins: bool,
     /// Fetches components in the test's own way (W4d).
     pub component_fetcher: Option<Arc<dyn diroxide_components::Fetcher>>,
+    /// Runs the helper programs in the test's own way, finding none
+    /// unless the test names them (alpha 4).
+    pub tools: Arc<FakeTools>,
 }
 
 impl Default for Setup {
@@ -330,6 +433,7 @@ impl Default for Setup {
             plugin_launcher: None,
             no_plugins: false,
             component_fetcher: None,
+            tools: Arc::new(FakeTools::default()),
         }
     }
 }
@@ -396,7 +500,9 @@ impl Session {
         options.clock = clock.clone();
         options.startup = startup;
         options.keymap = keymap;
-        let app = App::new(options);
+        let mut app = App::new(options);
+        app.set_tool_runner(setup.tools.clone());
+        let tools = setup.tools.clone();
         let mut runtime = Runtime::new(Arc::new(registry))
             .with_launcher(setup.recorder.clone())
             .with_opener(setup.recorder.clone())
@@ -419,6 +525,7 @@ impl Session {
         }
         let mut session = Self {
             app,
+            tools,
             runtime,
             clock,
             said: Vec::new(),
@@ -563,4 +670,58 @@ pub fn hello() -> String {
     let version = env!("CARGO_PKG_VERSION");
     let number = version.rsplit("alpha.").next().unwrap_or(version);
     format!("diroxide alpha {number}.")
+}
+
+/// A small PNG made in memory, never fetched (alpha 4, lane VA): a
+/// header, one stored image block of `width` by `height` RGBA pixels, all
+/// white, and the end chunk, each with its CRC, as the `png` crate reads
+/// them.
+pub fn png_bytes(width: u32, height: u32) -> Vec<u8> {
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = 0xffff_ffffu32;
+        for &byte in bytes {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xedb8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+    fn chunk(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
+        let mut out = (data.len() as u32).to_be_bytes().to_vec();
+        let mut body = kind.to_vec();
+        body.extend_from_slice(data);
+        out.extend_from_slice(&body);
+        out.extend_from_slice(&crc32(&body).to_be_bytes());
+        out
+    }
+    let mut raw = Vec::new();
+    for _ in 0..height {
+        raw.push(0u8);
+        raw.extend(std::iter::repeat_n(0xffu8, width as usize * 4));
+    }
+    // A zlib stream of one stored deflate block, then its Adler-32.
+    let mut zlib = vec![0x78, 0x01, 0x01];
+    let len = raw.len() as u16;
+    zlib.extend_from_slice(&len.to_le_bytes());
+    zlib.extend_from_slice(&(!len).to_le_bytes());
+    zlib.extend_from_slice(&raw);
+    let (mut a, mut b) = (1u32, 0u32);
+    for &byte in &raw {
+        a = (a + u32::from(byte)) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    zlib.extend_from_slice(&((b << 16) | a).to_be_bytes());
+    let mut header = width.to_be_bytes().to_vec();
+    header.extend_from_slice(&height.to_be_bytes());
+    header.extend_from_slice(&[8, 6, 0, 0, 0]);
+    let mut png = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    png.extend(chunk(b"IHDR", &header));
+    png.extend(chunk(b"IDAT", &zlib));
+    png.extend(chunk(b"IEND", &[]));
+    png
 }

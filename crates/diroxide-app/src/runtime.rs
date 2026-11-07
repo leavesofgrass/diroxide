@@ -516,6 +516,9 @@ pub struct Runtime {
     components: components::ComponentRuntime,
     /// The `components_source` setting, from the app's settings.
     components_source: String,
+    /// The Read text in picture jobs running, each with its cancel token
+    /// (alpha 4, lane VA).
+    picture_runs: Arc<Mutex<HashMap<JobId, CancelToken>>>,
     engine: Engine,
     shared: Arc<Shared>,
     receiver: Receiver<AppEvent>,
@@ -638,6 +641,7 @@ impl Runtime {
             base,
             plugins: plugins::PluginRuntime::default(),
             components: components::ComponentRuntime::default(),
+            picture_runs: Arc::default(),
             components_source: String::new(),
             registry,
             shared,
@@ -1157,6 +1161,9 @@ impl Runtime {
         }
         self.plugins.cancel(job);
         self.components.cancel(job);
+        if let Some(token) = lock(&self.picture_runs).get(&job) {
+            token.cancel();
+        }
         let asks: Vec<AskId> = lock(&self.shared.asks)
             .iter()
             .filter(|(_, (asker, _))| *asker == Some(job))
@@ -1486,6 +1493,30 @@ impl Runtime {
                         Err(error) => Err(error.message("count", "the entries")),
                     };
                     shared.send(AppEvent::ArchiveEntries { place, line });
+                });
+            }
+            Request::Details(ask) => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let note = crate::details::answer(&registry, &ask);
+                    shared.send(AppEvent::Details(Box::new(note)));
+                });
+            }
+            Request::PictureText { job, place, tools } => {
+                let registry = Arc::clone(&self.registry);
+                let token = CancelToken::new();
+                lock(&self.picture_runs).insert(job, token.clone());
+                let runs = Arc::clone(&self.picture_runs);
+                self.worker(move |shared| {
+                    let result = crate::picture_text::read(&registry, &place, &tools, &token);
+                    lock(&runs).remove(&job);
+                    shared.send(AppEvent::PictureText { job, place, result });
+                });
+            }
+            Request::ToolsReport(tools) => {
+                self.worker(move |shared| {
+                    let report = tools.0.report();
+                    shared.send(AppEvent::ToolsReported(Box::new(report)));
                 });
             }
             Request::DropArchiveJob(job) => {

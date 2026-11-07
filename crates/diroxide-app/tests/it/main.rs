@@ -14,6 +14,9 @@ mod commands;
 mod components;
 // Compare files (W3a).
 mod comparing;
+// The details view, Say Details, Copy details and Show all (alpha 4,
+// lane VA).
+mod details;
 mod dialogs;
 // The panel filter on the filter language (W3a).
 mod filtering;
@@ -32,6 +35,8 @@ mod labels;
 // Full screen, focus mode and the themes (lane A6).
 mod look;
 mod palette;
+// Read text in picture (alpha 4, lane VA).
+mod picture_text;
 // The queue's settings, messages and questions (lane A2).
 mod queue;
 // The queue saved across restarts and its interrupted jobs (lane Q2).
@@ -55,6 +60,8 @@ mod room;
 // The Sites list's commands and dialogs (lane A3).
 mod site_commands;
 mod split_join;
+// The Settings Tools page (alpha 4, lane VA).
+mod tools_page;
 // The trash browser (lane A3).
 mod trash;
 // Streamed listings reach the panel (lane A2).

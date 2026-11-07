@@ -39,6 +39,18 @@ command = "file.details"
 access = "d"
 
 [[menu.item]]
+command = "file.say-details"
+
+[[menu.item]]
+command = "file.copy-details"
+
+[[menu.item]]
+command = "file.copy-all-details"
+
+[[menu.item]]
+command = "file.read-text-in-picture"
+
+[[menu.item]]
 command = "file.actions"
 
 [[menu.item]]
@@ -315,6 +327,9 @@ access = "v"
 [[menu.item]]
 command = "view.quick-view"
 access = "q"
+
+[[menu.item]]
+command = "file.preview"
 
 [[menu.item]]
 command = "preview.textweaver"
@@ -846,6 +861,10 @@ access = "k"
 [[menu.item]]
 menu = "keys"
 access = "e"
+
+[[menu.item]]
+command = "app.tools"
+access = "t"
 
 [[menu.item]]
 command = "components.manage"

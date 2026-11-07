@@ -260,6 +260,12 @@ const HIGHLIGHTING: &[Choice] = &[
     choice("off", "no colors"),
 ];
 
+const AUTO_PREVIEW: &[Choice] = &[
+    choice("auto", "on, except in screen reader mode"),
+    choice("on", "the quick view runs them"),
+    choice("off", "only on Preview and in the details"),
+];
+
 const FILTER_CASES: &[Choice] = &[
     choice("smart", "case matters only with a capital"),
     choice("ignore", "case never matters"),
@@ -332,7 +338,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 107] = [
+pub const SCHEMA: [SettingInfo; 108] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -987,6 +993,15 @@ pub const SCHEMA: [SettingInfo; 107] = [
         default: "64",
         help: "The largest Word, EPUB or spreadsheet file the quick view opens whole. Past it, the quick view says the file's size and shows nothing more.",
         arrives: Some("alpha.7"),
+    },
+    SettingInfo {
+        key: "quick_view.auto_preview",
+        name: "Auto-preview",
+        group: G::Viewer,
+        kind: SettingKind::Choice(AUTO_PREVIEW),
+        default: "\"auto\"",
+        help: "Lets the quick view run the helper programs by itself after its wait: ffprobe for sound and video, pdftotext for a PDF's text. Off, they run only on the Preview command and in the details. Auto turns it off in screen reader mode.",
+        arrives: None,
     },
     SettingInfo {
         key: "filetypes.retro",

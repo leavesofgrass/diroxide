@@ -27,6 +27,8 @@ pub mod bookmarks;
 pub mod commands;
 // Optional components in the app (W4d).
 pub mod components;
+// The details view's reading and words (alpha 4, lane VA).
+pub mod details;
 pub mod dialog;
 pub mod entry;
 pub mod jobs;
@@ -36,6 +38,8 @@ pub mod menu;
 pub mod messages;
 pub mod palette;
 pub mod panel;
+// Read text in picture, through Tesseract (alpha 4, lane VA).
+pub mod picture_text;
 // Plugins and script commands in the app (W4d).
 pub mod plugins;
 pub mod quickview;
@@ -44,6 +48,8 @@ pub mod runtime;
 pub mod settings;
 pub mod startup;
 pub mod state;
+// The Settings Tools page's rows (alpha 4, lane VA).
+pub mod tools_page;
 // Watch this folder (W3t).
 pub mod tracker;
 // File types in the app: the background check (alpha 4, lane TA).

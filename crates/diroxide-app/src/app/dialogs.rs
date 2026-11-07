@@ -730,6 +730,11 @@ impl App {
                 effects.extend(self.relink(side, link, &text));
                 effects
             }
+            // Show all, the details list's last row: ExifTool's tags,
+            // the list staying open (alpha 4, lane VA).
+            Purpose::Details(place) if row.as_deref() == Some(crate::details::SHOW_ALL_ROW) => {
+                self.details_show_all(&place)
+            }
             Purpose::Read | Purpose::JobItems | Purpose::Details(_) => {
                 if row
                     .as_deref()

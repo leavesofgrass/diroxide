@@ -26,6 +26,57 @@ pub(super) fn p(text: &str) -> Place {
     .unwrap()
 }
 
+/// A small PNG made in memory (alpha 4): a header, one stored image
+/// block of white RGBA pixels and the end chunk, each with its CRC.
+pub(super) fn png(width: u32, height: u32) -> Vec<u8> {
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = 0xffff_ffffu32;
+        for &byte in bytes {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xedb8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+    fn chunk(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
+        let mut out = (data.len() as u32).to_be_bytes().to_vec();
+        let mut body = kind.to_vec();
+        body.extend_from_slice(data);
+        out.extend_from_slice(&body);
+        out.extend_from_slice(&crc32(&body).to_be_bytes());
+        out
+    }
+    let mut raw = Vec::new();
+    for _ in 0..height {
+        raw.push(0u8);
+        raw.extend(std::iter::repeat_n(0xffu8, width as usize * 4));
+    }
+    let mut zlib = vec![0x78, 0x01, 0x01];
+    let len = raw.len() as u16;
+    zlib.extend_from_slice(&len.to_le_bytes());
+    zlib.extend_from_slice(&(!len).to_le_bytes());
+    zlib.extend_from_slice(&raw);
+    let (mut a, mut b) = (1u32, 0u32);
+    for &byte in &raw {
+        a = (a + u32::from(byte)) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    zlib.extend_from_slice(&((b << 16) | a).to_be_bytes());
+    let mut header = width.to_be_bytes().to_vec();
+    header.extend_from_slice(&height.to_be_bytes());
+    header.extend_from_slice(&[8, 6, 0, 0, 0]);
+    let mut png = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    png.extend(chunk(b"IHDR", &header));
+    png.extend(chunk(b"IDAT", &zlib));
+    png.extend(chunk(b"IEND", &[]));
+    png
+}
+
 pub(super) fn fixture(rel: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/docs")
@@ -425,10 +476,11 @@ fn each_kind_of_file_says_its_one_line() {
     let notes = bench.file("notes.txt", &fixture("text/notes.txt"));
     let data = bench.file("a.bin", &fixture("text/data.bin"));
     let org = bench.file("notes.org", &fixture("carta/notes-1.org"));
-    let mut photo_bytes = vec![0x89, b'P', b'N', b'G', 13, 10, 26, 10, 0, 0, 0, 13];
-    photo_bytes.extend(std::iter::repeat_n(0u8, 64));
-    let photo = bench.file("photo.png", &photo_bytes);
+    let photo = bench.file("photo.png", &png(4, 3));
     bench.log.fake.set_listed_size(&photo, 2_000_000);
+    let mut program = b"MZ".to_vec();
+    program.extend(std::iter::repeat_n(0u8, 64));
+    let setup = bench.file("setup.exe", &program);
     let folder = bench.folder.join("src").unwrap();
     bench.log.fake.add_folder(&folder);
     assert_eq!(bench.on(&main)[1], "Preview: main.rs, Rust, 18 lines");
@@ -436,14 +488,23 @@ fn each_kind_of_file_says_its_one_line() {
         (&notes, "Preview: notes.txt, 1,204 lines"),
         (&data, "Preview: a.bin, binary, hex"),
         (&org, "Preview: notes.org, Org, 4 headings"),
-        (&photo, "No preview: photo.png, PNG image, 2.0 MB"),
+        // A picture in words from its header (alpha 4, lane VL's
+        // reader): over 40 cells, the name and the format first.
+        (
+            &photo,
+            "Preview: photo.png, PNG, 4 by 3, 8-bit RGBA, 2.0 MB",
+        ),
+        (&setup, "No preview: setup.exe, Windows program, 66 bytes"),
         (&folder, "No preview: src, folder"),
     ];
     for (n, (place, want)) in cases.into_iter().enumerate() {
         let ms = 1000 * (n as u64 + 1);
         bench.move_to(place, ms);
         assert_eq!(bench.settle(ms + 500), [want], "{place}");
-        assert!(want.chars().count() <= 40, "{want}");
+        assert!(
+            diroxide_core::format::within_cells(want, place.name().unwrap()),
+            "{want}"
+        );
     }
     // The picture and the folder were never read.
     let reads = bench.log.reads();
@@ -561,4 +622,245 @@ fn a_text_or_code_type_is_never_no_preview() {
     assert_eq!(said[0], "Quick view on");
     assert!(!said[1].starts_with("No preview"), "{said:?}");
     assert!(said[1].starts_with("Preview: notes.md"), "{said:?}");
+}
+
+/// A runner for the quick view's tests (alpha 4): it finds the tools a
+/// test names, answers each with its output and records every run, so no
+/// test starts ffprobe or pdftotext.
+#[derive(Debug, Default)]
+struct Tools {
+    answers: Mutex<Vec<(String, Vec<u8>)>>,
+    runs: Mutex<Vec<String>>,
+}
+
+impl Tools {
+    fn with(tool: &str, stdout: &[u8]) -> Arc<Self> {
+        let tools = Self::default();
+        tools
+            .answers
+            .lock()
+            .unwrap()
+            .push((tool.to_owned(), stdout.to_vec()));
+        Arc::new(tools)
+    }
+
+    fn ran(&self) -> Vec<String> {
+        self.runs.lock().unwrap().clone()
+    }
+}
+
+impl ToolRunner for Tools {
+    fn has(&self, tool: &str) -> bool {
+        self.answers.lock().unwrap().iter().any(|(t, _)| t == tool)
+    }
+
+    fn run(
+        &self,
+        request: &diroxide_vfs::ToolRequest,
+        _cancel: &CancelToken,
+    ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+        self.runs.lock().unwrap().push(request.tool.clone());
+        self.answers
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(t, _)| *t == request.tool)
+            .map(|(_, out)| diroxide_vfs::ToolOutput::new(Some(0), out.clone(), Vec::new()))
+            .ok_or_else(|| diroxide_vfs::ToolRunError::NotInstalled {
+                tool: request.tool.clone(),
+                name: request.tool.clone(),
+            })
+    }
+
+    fn run_streaming(
+        &self,
+        request: &diroxide_vfs::ToolRequest,
+        cancel: &CancelToken,
+        _record: &mut dyn FnMut(diroxide_vfs::ToolStream, &str) -> std::ops::ControlFlow<()>,
+    ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+        self.run(request, cancel)
+    }
+}
+
+/// ffprobe's answer for an MP3, spike FP1's fixture (lane VL).
+fn ffprobe_song() -> Vec<u8> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../diroxide-preview/tests/fixtures/ffprobe/song-mp3.json");
+    std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// A zip of stored members, as a package's tests need one: each member's
+/// local header with its CRC, the central directory and its end.
+fn stored_zip(members: &[(&str, &[u8])]) -> Vec<u8> {
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = 0xffff_ffffu32;
+        for &byte in bytes {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xedb8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+    let mut out = Vec::new();
+    let mut central = Vec::new();
+    for (name, data) in members {
+        let offset = out.len() as u32;
+        let crc = crc32(data);
+        let size = data.len() as u32;
+        out.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
+        out.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        out.extend_from_slice(&crc.to_le_bytes());
+        out.extend_from_slice(&size.to_le_bytes());
+        out.extend_from_slice(&size.to_le_bytes());
+        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        out.extend_from_slice(&[0, 0]);
+        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(data);
+        central.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
+        central.extend_from_slice(&[20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        central.extend_from_slice(&crc.to_le_bytes());
+        central.extend_from_slice(&size.to_le_bytes());
+        central.extend_from_slice(&size.to_le_bytes());
+        central.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        central.extend_from_slice(&[0; 12]);
+        central.extend_from_slice(&offset.to_le_bytes());
+        central.extend_from_slice(name.as_bytes());
+    }
+    let at = out.len() as u32;
+    out.extend_from_slice(&central);
+    out.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+    out.extend_from_slice(&[0, 0, 0, 0]);
+    let count = (members.len() as u16).to_le_bytes();
+    out.extend_from_slice(&count);
+    out.extend_from_slice(&count);
+    out.extend_from_slice(&(central.len() as u32).to_le_bytes());
+    out.extend_from_slice(&at.to_le_bytes());
+    out.extend_from_slice(&[0, 0]);
+    out
+}
+
+/// A Word file of one heading and one paragraph.
+fn docx() -> Vec<u8> {
+    let w = "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"";
+    let types = "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>";
+    let rels = "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>";
+    let document = format!(
+        "<?xml version=\"1.0\"?><w:document {w}><w:body>\
+         <w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t>Crows</w:t></w:r></w:p>\
+         <w:p><w:r><w:t>They meet at dawn.</w:t></w:r></w:p>\
+         </w:body></w:document>"
+    );
+    let styles = format!(
+        "<?xml version=\"1.0\"?><w:styles {w}><w:style w:type=\"paragraph\" w:styleId=\"Heading1\"><w:name w:val=\"heading 1\"/></w:style></w:styles>"
+    );
+    stored_zip(&[
+        ("[Content_Types].xml", types.as_bytes()),
+        ("_rels/.rels", rels.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+        ("word/styles.xml", styles.as_bytes()),
+    ])
+}
+
+/// Auto-preview off, as in screen reader mode by default: a song waits
+/// for the Preview command, which runs ffprobe through the runner, and
+/// its renders keep the tools while the cursor stays on it.
+#[test]
+fn a_song_waits_for_preview_when_auto_preview_is_off() {
+    let mut bench = Bench::new(QuickViewOptions::default());
+    assert!(!bench.view.options().auto_preview());
+    let tools = Tools::with("ffprobe", &ffprobe_song());
+    bench.view.set_tools(tools.clone());
+    let song = bench.file("song.mp3", b"ID3 not really sound");
+    let said = bench.on(&song);
+    assert_eq!(
+        said,
+        [
+            "Quick view on",
+            "Preview on request: song.mp3, MP3 audio, 20 bytes"
+        ]
+    );
+    assert!(tools.ran().is_empty(), "nothing ran on a cursor move");
+    let entry = bench.entry(&song);
+    let mut said = bench.view.preview_now(&song, &entry, bench.at(100));
+    said.extend(bench.view.settle(bench.at(100), Duration::from_secs(5)));
+    assert_eq!(
+        texts(&said),
+        ["Preview: song.mp3, MP3, 3 sec, 129 kbps, stereo"]
+    );
+    assert_eq!(tools.ran(), ["ffprobe"]);
+    let rows: Vec<String> = bench
+        .view
+        .region()
+        .rows()
+        .iter()
+        .map(|r| r.label.clone())
+        .collect();
+    assert!(rows.iter().any(|r| r.starts_with("Audio: ")), "{rows:?}");
+}
+
+/// Auto-preview on: the song previews after the wait, ffprobe run once.
+#[test]
+fn auto_preview_runs_ffprobe_after_the_wait() {
+    let mut options = QuickViewOptions {
+        screen_reader: false,
+        ..QuickViewOptions::default()
+    };
+    options.settings.auto_preview = diroxide_config::AutoPreview::Auto;
+    let mut bench = Bench::new(options);
+    assert!(bench.view.options().auto_preview());
+    let tools = Tools::with("ffprobe", &ffprobe_song());
+    bench.view.set_tools(tools.clone());
+    let song = bench.file("song.mp3", b"ID3 not really sound");
+    let said = bench.on(&song);
+    assert_eq!(
+        said,
+        [
+            "Quick view on",
+            "Preview: song.mp3, MP3, 3 sec, 129 kbps, stereo"
+        ]
+    );
+    assert_eq!(tools.ran(), ["ffprobe"]);
+}
+
+/// The Office package goes through the container read path within the
+/// document cap, RTF to its reader before the binary sniff.
+#[test]
+fn packages_and_rtf_are_read_by_their_readers() {
+    let mut options = QuickViewOptions::default();
+    options.settings.max_document_mb = 1;
+    let mut bench = Bench::new(options);
+    let report = bench.file("report.docx", &docx());
+    let said = bench.on(&report);
+    assert_eq!(said[1], "Preview: report.docx, DOCX, 1 heading");
+    let view = bench.view.view().unwrap();
+    assert_eq!(view.rows()[0].text, "Crows");
+    let big = bench.file("big.docx", &vec![0u8; 1024 * 1024 + 1]);
+    bench.move_to(&big, 1000);
+    assert_eq!(bench.settle(1500), ["Could not read big.docx: too large."]);
+    let rtf = bench.file(
+        "letter.rtf",
+        b"{\\rtf1\\ansi {\\b Crows}\\par They meet at dawn.\\par}",
+    );
+    bench.move_to(&rtf, 2000);
+    let said = bench.settle(2500);
+    assert!(
+        said[0].starts_with("Preview: letter.rtf, RTF, "),
+        "{said:?}"
+    );
+    assert!(
+        bench
+            .view
+            .view()
+            .unwrap()
+            .rows()
+            .iter()
+            .any(|r| r.text.contains("They meet at dawn.")),
+        "{:?}",
+        bench.view.view()
+    );
 }
