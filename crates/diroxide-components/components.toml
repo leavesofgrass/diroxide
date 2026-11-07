@@ -22,3 +22,239 @@ name = "diro-examples-0.1.1.zip"
 size = 123981
 sha256 = "89740b194e3a3e7f61f18ec70a8d15320927c34e62b9cdbd662168db9bf83055"
 target = "any"
+
+[[component]]
+id = "pandoc"
+title = "pandoc"
+kind = "helper"
+version = "3.13"
+license = "GPL-2.0-or-later"
+credit = "John MacFarlane and the pandoc contributors"
+features = ["conversions"]
+tools = ["pandoc"]
+action = "unpack"
+unpacked_size = 239189021
+
+[[component.file]]
+name = "pandoc-3.13-windows-x86_64.zip"
+size = 42983200
+sha256 = "23e1f2e978a3df80db8bf65c9c59534f41a23140480cfb4f783a882ab7dc6a4e"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-windows-x86_64.zip"
+exec = "pandoc.exe"
+strip = 1
+keep = ["pandoc.exe", "COPYING*"]
+
+[[component.file]]
+name = "pandoc-3.13-linux-amd64.tar.gz"
+size = 36101020
+sha256 = "38aa33b325a2bc96a4c39409631212db55702f564250bcdbead180b3bf646389"
+target = "x86_64-unknown-linux-gnu"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-linux-amd64.tar.gz"
+exec = "bin/pandoc"
+strip = 1
+keep = ["bin/pandoc"]
+
+[[component.file]]
+name = "pandoc-3.13-linux-arm64.tar.gz"
+size = 38662042
+sha256 = "21e1d4ba09bd0b334590d204580fd4f6629b21be4ab6a32b26cc98982e9e0c68"
+target = "aarch64-unknown-linux-gnu"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-linux-arm64.tar.gz"
+exec = "bin/pandoc"
+strip = 1
+keep = ["bin/pandoc"]
+
+[[component.file]]
+name = "pandoc-3.13-arm64-macOS.zip"
+size = 43148194
+sha256 = "f436d18bebbfb3ddd326597686dacab9fac5dc23bd060495020f35a28a43a7c3"
+target = "aarch64-apple-darwin"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-arm64-macOS.zip"
+exec = "bin/pandoc"
+strip = 1
+keep = ["bin/pandoc"]
+
+[[component.file]]
+name = "pandoc-3.13-x86_64-macOS.zip"
+size = 26891866
+sha256 = "1823278715aa405aaf21b59cde5dc789346aa8d4fc307467f9a9ee84162bedc5"
+target = "x86_64-apple-darwin"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-x86_64-macOS.zip"
+exec = "bin/pandoc"
+strip = 1
+keep = ["bin/pandoc"]
+
+[[component]]
+id = "7zip"
+title = "7-Zip"
+kind = "helper"
+version = "26.05"
+license = "LGPL-2.1-or-later AND BSD-3-Clause"
+credit = "Igor Pavlov"
+features = ["rar"]
+tools = ["7z"]
+notice = "unRAR terms: diroxide never writes RAR."
+action = "unpack"
+unpacked_size = 6078941
+
+[[component.file]]
+name = "7z2605-linux-x64.tar.xz"
+size = 1579976
+sha256 = "22cf82fcc6eb7474f1d5bb4f02c0f8ebd573a718089d6833dc30f8350a3b232e"
+target = "x86_64-unknown-linux-gnu"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-linux-x64.tar.xz"
+exec = "7zz"
+keep = ["7zz", "License.txt"]
+
+[[component.file]]
+name = "7z2605-linux-arm64.tar.xz"
+size = 1317128
+sha256 = "0b71f6cfc34669b3bf69f2347efd3429f77020665003a13b9cdc53b784270421"
+target = "aarch64-unknown-linux-gnu"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-linux-arm64.tar.xz"
+exec = "7zz"
+keep = ["7zz", "License.txt"]
+
+[[component.file]]
+name = "7z2605-mac.tar.xz"
+size = 1868068
+sha256 = "12ef6830317743cfd3f0ab1724bde43fcc270d8b6d8564f8c12c2a2b7f993570"
+target = "universal-apple-darwin"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-mac.tar.xz"
+exec = "7zz"
+keep = ["7zz", "License.txt"]
+
+[[component]]
+id = "ffmpeg"
+title = "FFmpeg"
+kind = "helper"
+version = "9.0.2"
+license = "LGPL-2.1-or-later"
+credit = "The FFmpeg developers; built by BtbN"
+features = ["previews", "conversions"]
+tools = ["ffmpeg", "ffprobe"]
+action = "unpack"
+unpacked_size = 155528675
+
+[[component.file]]
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip"
+size = 76576818
+sha256 = "e907b01fa4783913151237e37df2a10fa97d99a1598a021bf59d4ae62ffed4c0"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip"
+exec = "bin/ffmpeg.exe"
+strip = 1
+also_exec = ["bin/ffprobe.exe"]
+keep = ["bin/ffmpeg.exe", "bin/ffprobe.exe", "bin/*.dll", "LICENSE.txt"]
+
+[[component.file]]
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-winarm64-lgpl-shared-9.0.zip"
+size = 53749359
+sha256 = "68664c6af3dc41384f983d5f6d33eb8cc7540eaced8c8d02fb0dd34ffbcdbbf6"
+target = "aarch64-pc-windows-msvc"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-winarm64-lgpl-shared-9.0.zip"
+exec = "bin/ffmpeg.exe"
+strip = 1
+also_exec = ["bin/ffprobe.exe"]
+keep = ["bin/ffmpeg.exe", "bin/ffprobe.exe", "bin/*.dll", "LICENSE.txt"]
+
+[[component]]
+id = "imagemagick"
+title = "ImageMagick"
+kind = "helper"
+version = "7.1.2-35"
+license = "ImageMagick"
+credit = "ImageMagick Studio LLC"
+features = ["previews", "conversions"]
+tools = ["magick"]
+action = "unpack"
+unpacked_size = 33139484
+
+[[component.file]]
+name = "ImageMagick-7.1.2-35-portable-Q16-HDRI-x64.7z"
+size = 12117825
+sha256 = "34db4364da26c88d6b8cc5bbc1fff22b85d00d3b399c82fe85ee4790efacbbf1"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-35/ImageMagick-7.1.2-35-portable-Q16-HDRI-x64.7z"
+exec = "magick.exe"
+keep = ["magick.exe", "*.xml", "sRGB.icc", "LICENSE.txt", "NOTICE.txt"]
+
+[[component.file]]
+name = "ImageMagick-7.1.2-35-portable-Q16-HDRI-arm64.7z"
+size = 12581852
+sha256 = "35c2c9aa089fe5abe2b96807d6c2febf0843fa72efa1d651a607c1bf725790df"
+target = "aarch64-pc-windows-msvc"
+url = "https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-35/ImageMagick-7.1.2-35-portable-Q16-HDRI-arm64.7z"
+exec = "magick.exe"
+keep = ["magick.exe", "*.xml", "sRGB.icc", "LICENSE.txt", "NOTICE.txt"]
+
+[[component]]
+id = "gh"
+title = "GitHub CLI"
+kind = "helper"
+version = "2.103.3"
+license = "MIT"
+credit = "GitHub, Inc."
+features = ["github"]
+tools = ["gh"]
+action = "unpack"
+unpacked_size = 42128844
+
+[[component.file]]
+name = "gh_2.103.3_windows_amd64.zip"
+size = 15197187
+sha256 = "98d0cfa794721665d7973dd728c78aff7bd836d58f10f6d7a03568eccb0a22e0"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_windows_amd64.zip"
+exec = "bin/gh.exe"
+keep = ["bin/gh.exe", "LICENSE"]
+
+[[component.file]]
+name = "gh_2.103.3_windows_arm64.zip"
+size = 13637549
+sha256 = "197211c98687d7770ac331fe8a3b6c198c389108c1536cdbedf659fe4703e484"
+target = "aarch64-pc-windows-msvc"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_windows_arm64.zip"
+exec = "bin/gh.exe"
+keep = ["bin/gh.exe", "LICENSE"]
+
+[[component.file]]
+name = "gh_2.103.3_linux_amd64.tar.gz"
+size = 15031972
+sha256 = "4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d"
+target = "x86_64-unknown-linux-gnu"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_amd64.tar.gz"
+exec = "bin/gh"
+strip = 1
+keep = ["bin/gh", "LICENSE"]
+
+[[component.file]]
+name = "gh_2.103.3_linux_arm64.tar.gz"
+size = 13661485
+sha256 = "ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63"
+target = "aarch64-unknown-linux-gnu"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_arm64.tar.gz"
+exec = "bin/gh"
+strip = 1
+keep = ["bin/gh", "LICENSE"]
+
+[[component.file]]
+name = "gh_2.103.3_macOS_arm64.zip"
+size = 14106091
+sha256 = "d700207eae9ae98fe2b89535c2c087c07823d4628c56364695a5a07ef311c062"
+target = "aarch64-apple-darwin"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_macOS_arm64.zip"
+exec = "bin/gh"
+strip = 1
+keep = ["bin/gh", "LICENSE"]
+
+[[component.file]]
+name = "gh_2.103.3_macOS_amd64.zip"
+size = 15702601
+sha256 = "a2f86418f4350ae6e9ec60d5000bdf7665728436946a97fc27fe50e6ae752682"
+target = "x86_64-apple-darwin"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_macOS_amd64.zip"
+exec = "bin/gh"
+strip = 1
+keep = ["bin/gh", "LICENSE"]

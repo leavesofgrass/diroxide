@@ -4,3 +4,201 @@
 # (.github/workflows/pin.yml); never typed. A pin applies while the
 # component, the file's name and its address are the same.
 format = 1
+
+[[pin]]
+component = "7zip"
+name = "7z2605-extra.7z"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-extra.7z"
+size = 1763900
+sha256 = "f27a8f103c84785026edcba1f67faf1357225df9d19ddb0b7760d55947141bc7"
+unpacked = 1211460
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "7zip"
+name = "7z2605-linux-arm64.tar.xz"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-linux-arm64.tar.xz"
+size = 1317128
+sha256 = "0b71f6cfc34669b3bf69f2347efd3429f77020665003a13b9cdc53b784270421"
+unpacked = 2471189
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "7zip"
+name = "7z2605-linux-x64.tar.xz"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-linux-x64.tar.xz"
+size = 1579976
+sha256 = "22cf82fcc6eb7474f1d5bb4f02c0f8ebd573a718089d6833dc30f8350a3b232e"
+unpacked = 2896341
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "7zip"
+name = "7z2605-mac.tar.xz"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-mac.tar.xz"
+size = 1868068
+sha256 = "12ef6830317743cfd3f0ab1724bde43fcc270d8b6d8564f8c12c2a2b7f993570"
+unpacked = 6078941
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "exiftool"
+name = "exiftool-13.61_64.zip"
+url = "https://sourceforge.net/projects/exiftool/files/exiftool-13.61_64.zip/download"
+size = 11205455
+sha256 = "ab75b37515385a753aa60a58f68ffffe1ff81e43b319df9540978fb19e0580e5"
+unpacked = 33206031
+checked = "the publisher's checksum matches"
+
+[[pin]]
+component = "ffmpeg"
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-shared-9.0.tar.xz"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-shared-9.0.tar.xz"
+size = 63000228
+sha256 = "5a58e2dffad4835ee3418939f2676d6898489f8e047299f5f62ee0da3f8dd5dc"
+unpacked = 167761435
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "ffmpeg"
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-linuxarm64-lgpl-shared-9.0.tar.xz"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linuxarm64-lgpl-shared-9.0.tar.xz"
+size = 54994636
+sha256 = "4ef690828b307aaf9df28cc05744ca41f8107841a06566db1544380f3d3a5499"
+unpacked = 140201915
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "ffmpeg"
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip"
+size = 76576818
+sha256 = "e907b01fa4783913151237e37df2a10fa97d99a1598a021bf59d4ae62ffed4c0"
+unpacked = 155528675
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "ffmpeg"
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-winarm64-lgpl-shared-9.0.zip"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-winarm64-lgpl-shared-9.0.zip"
+size = 53749359
+sha256 = "68664c6af3dc41384f983d5f6d33eb8cc7540eaced8c8d02fb0dd34ffbcdbbf6"
+unpacked = 96789475
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "gh"
+name = "gh_2.103.3_linux_amd64.tar.gz"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_amd64.tar.gz"
+size = 15031972
+sha256 = "4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d"
+unpacked = 41071820
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "gh"
+name = "gh_2.103.3_linux_arm64.tar.gz"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_arm64.tar.gz"
+size = 13661485
+sha256 = "ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63"
+unpacked = 38143180
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "gh"
+name = "gh_2.103.3_macOS_amd64.zip"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_macOS_amd64.zip"
+size = 15702601
+sha256 = "a2f86418f4350ae6e9ec60d5000bdf7665728436946a97fc27fe50e6ae752682"
+unpacked = 42128844
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "gh"
+name = "gh_2.103.3_macOS_arm64.zip"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_macOS_arm64.zip"
+size = 14106091
+sha256 = "d700207eae9ae98fe2b89535c2c087c07823d4628c56364695a5a07ef311c062"
+unpacked = 38932332
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "gh"
+name = "gh_2.103.3_windows_amd64.zip"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_windows_amd64.zip"
+size = 15197187
+sha256 = "98d0cfa794721665d7973dd728c78aff7bd836d58f10f6d7a03568eccb0a22e0"
+unpacked = 41786233
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "gh"
+name = "gh_2.103.3_windows_arm64.zip"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_windows_arm64.zip"
+size = 13637549
+sha256 = "197211c98687d7770ac331fe8a3b6c198c389108c1536cdbedf659fe4703e484"
+unpacked = 38402425
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "imagemagick"
+name = "ImageMagick-7.1.2-35-portable-Q16-HDRI-arm64.7z"
+url = "https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-35/ImageMagick-7.1.2-35-portable-Q16-HDRI-arm64.7z"
+size = 12581852
+sha256 = "35c2c9aa089fe5abe2b96807d6c2febf0843fa72efa1d651a607c1bf725790df"
+unpacked = 31135518
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "imagemagick"
+name = "ImageMagick-7.1.2-35-portable-Q16-HDRI-x64.7z"
+url = "https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-35/ImageMagick-7.1.2-35-portable-Q16-HDRI-x64.7z"
+size = 12117825
+sha256 = "34db4364da26c88d6b8cc5bbc1fff22b85d00d3b399c82fe85ee4790efacbbf1"
+unpacked = 33139484
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "pandoc"
+name = "pandoc-3.13-arm64-macOS.zip"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-arm64-macOS.zip"
+size = 43148194
+sha256 = "f436d18bebbfb3ddd326597686dacab9fac5dc23bd060495020f35a28a43a7c3"
+unpacked = 195370176
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "pandoc"
+name = "pandoc-3.13-linux-amd64.tar.gz"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-linux-amd64.tar.gz"
+size = 36101020
+sha256 = "38aa33b325a2bc96a4c39409631212db55702f564250bcdbead180b3bf646389"
+unpacked = 168374480
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "pandoc"
+name = "pandoc-3.13-linux-arm64.tar.gz"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-linux-arm64.tar.gz"
+size = 38662042
+sha256 = "21e1d4ba09bd0b334590d204580fd4f6629b21be4ab6a32b26cc98982e9e0c68"
+unpacked = 180257968
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "pandoc"
+name = "pandoc-3.13-windows-x86_64.zip"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-windows-x86_64.zip"
+size = 42983200
+sha256 = "23e1f2e978a3df80db8bf65c9c59534f41a23140480cfb4f783a882ab7dc6a4e"
+unpacked = 239189021
+checked = "GitHub's digest matches"
+
+[[pin]]
+component = "pandoc"
+name = "pandoc-3.13-x86_64-macOS.zip"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-x86_64-macOS.zip"
+size = 26891866
+sha256 = "1823278715aa405aaf21b59cde5dc789346aa8d4fc307467f9a9ee84162bedc5"
+unpacked = 124625728
+checked = "GitHub's digest matches"
