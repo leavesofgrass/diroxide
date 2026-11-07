@@ -13,9 +13,10 @@ use std::path::PathBuf;
 
 use diroxide_core::{Entry, Place};
 use diroxide_vfs::{
-    AttributeChange, Capabilities, CopyHint, FileWriter, LinkRequest, LocalProvider, OpContext,
-    Provider, PurgeCheck, ReadSeek, SpaceInfo, TrashBin, TrashCheck, TrashGate, TrashId,
-    TrashedItem, VfsError, VolumeInfo, WatchHandle, WatchSink, WriteMode,
+    AttributeChange, CancelToken, Capabilities, CopyHint, FileWriter, LinkRequest, LocalProvider,
+    OpContext, Provider, PurgeCheck, ReadSeek, SpaceInfo, ToolOutput, ToolRequest, ToolRunError,
+    ToolRunner, ToolStream, TrashBin, TrashCheck, TrashGate, TrashId, TrashedItem, VfsError,
+    VolumeInfo, WatchHandle, WatchSink, WriteMode,
 };
 
 /// The local disk, with a link refused for the privilege and one file
@@ -151,6 +152,107 @@ impl OneItemBin {
         Self {
             item: TrashedItem::new(TrashId::new("item-1"), original, None),
         }
+    }
+}
+
+/// A tools runner for the window's tests (the fold lane, after G5b found
+/// the window's tests had none): it finds only the tools it is given and
+/// starts no program. gpg asked to encrypt writes its `--output` file
+/// beside the source, as the real one does, and says so on its status
+/// line; every other run of a found tool succeeds with no output.
+#[derive(Debug, Default)]
+pub struct WindowTools {
+    /// The tools it finds, by registry id.
+    pub found: Vec<&'static str>,
+}
+
+impl WindowTools {
+    /// A runner that finds these tools.
+    pub fn finding(found: &[&'static str]) -> Self {
+        Self {
+            found: found.to_vec(),
+        }
+    }
+}
+
+impl ToolRunner for WindowTools {
+    fn has(&self, tool: &str) -> bool {
+        self.found.contains(&tool)
+    }
+
+    fn run(
+        &self,
+        request: &ToolRequest,
+        _cancel: &CancelToken,
+    ) -> Result<ToolOutput, ToolRunError> {
+        if !self.has(&request.tool) {
+            return Err(ToolRunError::NotInstalled {
+                tool: request.tool.clone(),
+                name: request.tool.clone(),
+            });
+        }
+        let args: Vec<String> = request
+            .args
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let output = args
+            .iter()
+            .position(|a| a == "--output")
+            .and_then(|i| args.get(i + 1));
+        if request.tool == "gpg" && args.iter().any(|a| a == "--encrypt") {
+            if let Some(output) = output {
+                std::fs::write(output, b"gpg-encrypted").unwrap();
+            }
+            return Ok(ToolOutput::new(
+                Some(0),
+                b"[GNUPG:] BEGIN_ENCRYPTION 2 9\n[GNUPG:] END_ENCRYPTION\n".to_vec(),
+                Vec::new(),
+            ));
+        }
+        Ok(ToolOutput::new(Some(0), Vec::new(), Vec::new()))
+    }
+
+    fn run_streaming(
+        &self,
+        request: &ToolRequest,
+        cancel: &CancelToken,
+        _record: &mut dyn FnMut(ToolStream, &str) -> ControlFlow<()>,
+    ) -> Result<ToolOutput, ToolRunError> {
+        self.run(request, cancel)
+    }
+}
+
+/// Open with's programs for the window's tests: two fixed programs, the
+/// default first, and the system's own dialog for the rest; nothing is
+/// ever started or handed over.
+#[derive(Debug, Default)]
+pub struct TwoPrograms;
+
+impl diroxide_app::OpenWithPrograms for TwoPrograms {
+    fn list(
+        &self,
+        _file: &std::path::Path,
+        _mime: Option<&str>,
+    ) -> diroxide_app::typing::OpenWithRows {
+        let row = |name: &str, default| diroxide_app::typing::OpenWithRow {
+            name: name.to_owned(),
+            id: name.to_lowercase().replace(' ', "-"),
+            default,
+        };
+        diroxide_app::typing::OpenWithRows {
+            rows: vec![row("Example Reader", true), row("Example Editor", false)],
+            choose_another: true,
+            unread: None,
+        }
+    }
+
+    fn start(&self, _id: &str, _file: &std::path::Path, _mime: Option<&str>) -> Result<(), String> {
+        Err("this test starts no program".to_owned())
+    }
+
+    fn choose_another(&self, _file: &std::path::Path) -> Result<(), String> {
+        Err("this test opens no dialog".to_owned())
     }
 }
 

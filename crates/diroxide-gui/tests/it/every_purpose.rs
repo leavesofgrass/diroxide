@@ -1,16 +1,25 @@
-//! Every dialog purpose (R27's commit 25): the app's dialogs are 77
-//! purposes (`Purpose` in `crates/diroxide-app/src/app.rs`) drawn as
-//! seven shapes, and this test opens each one the app can open from a
-//! test through the window, checking that the dialog has a name and that
-//! the keyboard focus is on a named control inside it. The purposes it
-//! cannot open are listed apart, each with the reason; the two lists
-//! together are held against the enum's variants as the source declares
-//! them, so a purpose added later fails here until it is opened or said.
-//! Each opened dialog's purpose is checked by the app's own test hook
-//! (lane A5's `App::dialog_purpose`), not only its title. The trash
-//! browser, a junction offered for a refused link and an item that cannot
-//! be read are made with the file system crate's doubles
-//! (`tests/it/doubles.rs`), so they open on every system.
+//! Every dialog purpose (R27's commit 25, R30's commit 114): the app's
+//! dialogs are 112 purposes drawn as seven shapes: the 77 variants of
+//! `Purpose` in `crates/diroxide-app/src/app.rs`, and the 35 lists and
+//! questions the alpha 4 lanes host under `Organize` and `RunArchive`,
+//! each with its own name (`Wants::purpose` in `app/organize.rs`). This
+//! test opens each one the app can open from a test through the window,
+//! checking that the dialog has a name and that the keyboard focus is on
+//! a named control inside it. The purposes it cannot open are listed
+//! apart, each with the reason; the two lists together are held against
+//! the names as the source declares them, so a purpose added later fails
+//! here until it is opened or said. Each opened dialog's purpose is
+//! checked by the app's own test hook (lane A5's `App::dialog_purpose`),
+//! not only its title. The trash browser, a junction offered for a
+//! refused link and an item that cannot be read are made with the file
+//! system crate's doubles (`tests/it/doubles.rs`), so they open on every
+//! system; every window runs its helper programs through a tools double
+//! that starts none, and Open with lists two made-up programs.
+//!
+//! The purposes are opened in six tests of about nineteen each, so a
+//! loaded machine stretches six short tests that run side by side rather
+//! than one long one (the run of over eight minutes AE saw while another
+//! lane built, Saturday, November 7, 2026).
 
 #![allow(clippy::unwrap_used)]
 
@@ -23,13 +32,67 @@ use diroxide_app::{Answer, AppEvent, AppOptions, AskId, Question};
 use diroxide_core::{SecretKind, SecretRequest, Side};
 use masonry::accesskit::Role;
 
-use crate::doubles::{Doubles, OneItemBin};
+use crate::doubles::{Doubles, OneItemBin, TwoPrograms, WindowTools};
 use crate::rig::{HostOf, Rig, app_with, name_of};
 
 /// The purposes no test can open, each with the reason, in words: none
 /// since the file system crate's doubles (lane A5 removed JobHistory,
 /// whose dialog the Jobs list had replaced).
 const UNREACHABLE: &[(&str, &str)] = &[];
+
+/// How many purposes the app declares: 77 variants of `Purpose` and the
+/// 35 hosted lists and questions of alpha 4.
+const PURPOSES: usize = 112;
+
+/// The purposes whose scenario may say "not made on this system", each
+/// for its reason: a symbolic link needs Developer Mode on Windows; the
+/// outline needs the syntax set; the preview's three need the quick view
+/// to take the focus; Change owner's three are Unix's (Windows hands off
+/// to its Security dialog); the internet mark needs a disk that keeps
+/// extended attributes or streams.
+const MAY_BE_ABSENT: &[&str] = &[
+    "Relink",
+    "ViewerOutline",
+    "PreviewFind",
+    "PreviewLinks",
+    "PreviewLink",
+    "OwnerForm",
+    "OwnerName",
+    "GroupName",
+    "MarkQuestion",
+];
+
+/// The names `dialog_purpose` can give, as the source declares them: the
+/// string arms of `Purpose::name` in `app.rs` and of `Wants::purpose` in
+/// `app/organize.rs`.
+fn purpose_names() -> BTreeSet<String> {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../diroxide-app/src");
+    let arms = |file: &str, start: &str| -> Vec<String> {
+        let source = std::fs::read_to_string(src.join(file))
+            .unwrap()
+            .replace("\r\n", "\n");
+        let body = source
+            .split(start)
+            .nth(1)
+            .unwrap_or_else(|| panic!("{start} not in {file}"))
+            .split("\n    }\n")
+            .next()
+            .unwrap()
+            .to_owned();
+        body.split("=> \"")
+            .skip(1)
+            .map(|rest| rest.split('"').next().unwrap().to_owned())
+            .collect()
+    };
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for name in arms("app.rs", "impl Purpose {").into_iter().chain(arms(
+        "app/organize.rs",
+        "fn purpose(&self) -> &'static str {",
+    )) {
+        assert!(names.insert(name.clone()), "{name} twice");
+    }
+    names
+}
 
 /// The variants of `Purpose` as `app.rs` declares them.
 fn purpose_variants() -> BTreeSet<String> {
@@ -151,10 +214,26 @@ fn world(root: &Path) -> PathBuf {
 /// settings changed by `change`, its own config and state folders under
 /// `root`, and no components fetched.
 fn window(root: &Path, change: impl FnOnce(&mut AppOptions)) -> Rig {
+    window_finding(root, change, &[])
+}
+
+/// The same window, its tools double finding `tools` (by registry id)
+/// and starting none; Open with lists two made-up programs.
+fn window_finding(
+    root: &Path,
+    change: impl FnOnce(&mut AppOptions),
+    tools: &[&'static str],
+) -> Rig {
     let work = world(root);
-    let (app, runtime) = app_with(&work, &work.join("Backup"), change);
+    let (mut app, runtime) = app_with(&work, &work.join("Backup"), change);
+    let tools = Arc::new(WindowTools::finding(tools));
+    app.set_tool_runner(tools.clone());
     let paths = Paths::new(root.join("config"), root.join("state"));
-    let runtime = runtime.with_paths(paths).with_components_offline();
+    let runtime = runtime
+        .with_paths(paths)
+        .with_components_offline()
+        .with_tool_runner(tools)
+        .with_open_with(Arc::new(TwoPrograms));
     Rig::new(app, runtime)
 }
 
@@ -253,6 +332,13 @@ type Open = fn(&Path) -> Option<Rig>;
 /// `None` where this system cannot make the situation (said in the
 /// report); the test then names it.
 fn scenarios() -> Vec<(&'static str, &'static str, Open)> {
+    let mut all = first_scenarios();
+    all.extend(hosted_scenarios());
+    all
+}
+
+/// The purposes of alpha 3 and before: the variants of `Purpose`.
+fn first_scenarios() -> Vec<(&'static str, &'static str, Open)> {
     vec![
         ("RunPlan", "Copy 1 item to Backup", |root| {
             let mut rig = window(root, |_| {});
@@ -748,6 +834,473 @@ fn scenarios() -> Vec<(&'static str, &'static str, Open)> {
     ]
 }
 
+/// The lists and questions of alpha 4 (lanes TA, AW, MA, AE and AP),
+/// each its own purpose since the fold lane (R30's commit 114).
+fn hosted_scenarios() -> Vec<(&'static str, &'static str, Open)> {
+    vec![
+        // File types (lane TA).
+        ("TypeActions", "Actions for notes.txt", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "notes.txt");
+            rig.run("file.actions");
+            Some(rig)
+        }),
+        ("OpenWith", "Open report.pdf with", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "report.pdf");
+            rig.run("file.open-with");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        ("Encoding", "", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "notes.txt");
+            rig.run("file.view");
+            rig.run("viewer.encoding");
+            Some(rig)
+        }),
+        // Convert and the conversion reports (lane AW).
+        ("ConvertRecipes", "Convert notes.md", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "notes.md");
+            rig.run("file.convert");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        ("ConvertPlan", "Convert 1 file to ", |root| {
+            convert_plan(root)
+        }),
+        ("ConvertReports", "Conversion reports", |root| {
+            let mut rig = convert_plan(root)?;
+            rig.press("y");
+            rig.settle_until(|rig| rig.f.app().jobs().front().is_none());
+            rig.run("file.convert-reports");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        // The Watched folders list (lane AW).
+        ("WatchedFolders", "Watched folders: 1 task", |root| {
+            watched(root, None)
+        }),
+        ("WatchedActions", "Notes actions", |root| {
+            let mut rig = watched(root, None)?;
+            rig.press("enter");
+            Some(rig)
+        }),
+        ("WatchedApprove", "Turn on Notes?", |root| {
+            watched(root, Some("Turn on"))
+        }),
+        ("WatchedCatchUp", "Process the 2 files in Notes?", |root| {
+            let mut rig = watched(root, Some("Turn on"))?;
+            rig.press("y");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        ("WatchedPutBack", "Put back 1 file from failed?", |root| {
+            watched(root, Some("Put failed back"))
+        }),
+        // Notes, fields and the columns' question (lane MA).
+        ("Note", "", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "notes.txt");
+            rig.run("label.note");
+            Some(rig)
+        }),
+        ("Field", "", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "notes.txt");
+            rig.run("label.field");
+            Some(rig)
+        }),
+        ("ReadColumns", "Read ", |root| {
+            let mut rig = window(root, |options| {
+                options.settings.columns = vec!["text.lines".to_owned()];
+            });
+            let work = root.join("work");
+            for n in 0..230 {
+                std::fs::write(work.join(format!("n{n:03}.txt")), b"a\n").unwrap();
+            }
+            rig.run("panel.reload");
+            rig.run("view.sort-list");
+            rig.press("end");
+            rig.press("enter");
+            Some(rig)
+        }),
+        // The metadata commands (lane MA).
+        ("Checksums", "SHA-256 of report.pdf", |root| checksums(root)),
+        ("ChecksumCompare", "Compare with the SHA-256", |root| {
+            let mut rig = checksums(root)?;
+            choose(&mut rig, "Compare");
+            Some(rig)
+        }),
+        ("VerifyLists", "Checksum lists beside report.pdf", |root| {
+            let mut rig = window(root, |_| {});
+            let work = root.join("work");
+            std::fs::write(work.join("report.pdf.sha256"), format!("{REPORT}\n")).unwrap();
+            std::fs::write(work.join("SHA256SUMS"), format!("{REPORT}  report.pdf\n")).unwrap();
+            rig.run("panel.reload");
+            focus(&mut rig, "report.pdf");
+            rig.run("file.verify-checksum");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        ("VerifyReport", "1 differs, 1 missing, 1 match", |root| {
+            verify_report(root)
+        }),
+        ("StripQuestion", "Strip ", |root| {
+            let mut rig = window(root, |_| {});
+            std::fs::write(root.join("work").join("beach.jpg"), beach_jpeg()).unwrap();
+            rig.run("panel.reload");
+            focus(&mut rig, "beach.jpg");
+            rig.run("file.strip-metadata");
+            Some(rig)
+        }),
+        (
+            "MarkQuestion",
+            "Remove the internet mark from setup.exe",
+            |root| marked(root),
+        ),
+        ("MetaLines", "", |root| {
+            let mut rig = window(root, |_| {});
+            std::fs::write(root.join("work").join("beach.jpg"), beach_jpeg()).unwrap();
+            rig.run("panel.reload");
+            focus(&mut rig, "beach.jpg");
+            rig.run("file.check-before-sharing");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        // The Encryption submenu (lane AE), gpg found by the tools double.
+        ("GpgRecipients", "Encrypt for gpg keys", |root| {
+            let mut rig = window_finding(root, |_| {}, &["gpg"]);
+            focus(&mut rig, "notes.txt");
+            rig.run("file.gpg-encrypt");
+            Some(rig)
+        }),
+        ("GpgSigner", "Sign with gpg key", |root| {
+            let mut rig = window_finding(root, |_| {}, &["gpg"]);
+            focus(&mut rig, "notes.txt");
+            rig.run("file.sign");
+            Some(rig)
+        }),
+        ("GpgPlan", "Encrypt 1 file for 1 recipient", |root| {
+            gpg_plan(root)
+        }),
+        ("TrashOriginals", "Move the original to the trash", |root| {
+            let mut rig = gpg_plan(root)?;
+            rig.press("y");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("TrashOriginals"));
+            Some(rig)
+        }),
+        ("MinisignKey", "minisign public key", |root| {
+            let mut rig = window(root, |_| {});
+            std::fs::write(
+                root.join("work").join("notes.txt.minisig"),
+                "untrusted comment: x\n",
+            )
+            .unwrap();
+            rig.run("panel.reload");
+            focus(&mut rig, "notes.txt");
+            rig.run("file.verify-signature");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        // Change time and Change owner (lane AP).
+        ("TimeForm", "Change time", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "notes.txt");
+            rig.run("file.change-time");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        ("TypedTime", "Set to, as ", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "notes.txt");
+            rig.run("file.change-time");
+            wait(&mut rig);
+            choose(&mut rig, "Type a date and time");
+            Some(rig)
+        }),
+        ("OwnerForm", "Change owner of notes.txt", |root| {
+            owner(root, None)
+        }),
+        ("OwnerName", "New owner of notes.txt", |root| {
+            owner(root, Some("Owner"))
+        }),
+        ("GroupName", "New group of notes.txt", |root| {
+            owner(root, Some("Group"))
+        }),
+        // The photo helpers (lane AP).
+        ("Review", "Review: 1 of 2", |root| review(root)),
+        ("ReviewMove", "", |root| {
+            let mut rig = review(root)?;
+            rig.press("m");
+            Some(rig)
+        }),
+        ("MonthFolders", "Move 2 pictures into ", |root| {
+            let mut rig = window(root, |_| {});
+            pictures(root);
+            focus(&mut rig, "Photos");
+            rig.run("panel.enter");
+            rig.run("photo.month-folders");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        // Editing inside a zip (lane AW): its question before the rewrite.
+        (
+            "RewriteArchive",
+            "Remove lesson.txt from course.zip",
+            |root| {
+                let mut rig = window(root, |_| {});
+                focus(&mut rig, "course.zip");
+                rig.run("panel.enter");
+                wait_listed(&mut rig, "lesson.txt");
+                focus(&mut rig, "lesson.txt");
+                rig.press("delete");
+                wait(&mut rig);
+                Some(rig)
+            },
+        ),
+    ]
+}
+
+/// The SHA-256 of `report.pdf` as `world` writes it: 2,100 bytes of "r".
+const REPORT: &str = "9a12407951304313f4f909d1efe5c01f6d54393b311fb3a148f53c26625535af";
+
+/// Waits for the active panel to list `name`.
+fn wait_listed(rig: &mut Rig, name: &str) {
+    rig.settle_until(|rig| {
+        rig.f
+            .app()
+            .active_panel()
+            .list()
+            .rows()
+            .iter()
+            .any(|r| r.id == name)
+    });
+}
+
+/// Convert on notes.md, then its plain-text recipe: the plan's question.
+fn convert_plan(root: &Path) -> Option<Rig> {
+    let mut rig = window(root, |_| {});
+    focus(&mut rig, "notes.md");
+    rig.run("file.convert");
+    wait(&mut rig);
+    choose(&mut rig, "Markdown to plain text");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("ConvertPlan"));
+    Some(rig)
+}
+
+/// The task `notes` in the config folder, two Markdown files waiting in
+/// its `in` and one in `failed`; the Watched folders list open, and
+/// `action` chosen from the task's actions when one is given. The task
+/// stays off: no watcher runs.
+fn watched(root: &Path, action: Option<&str>) -> Option<Rig> {
+    let home = root.join("notes");
+    for folder in ["in", "out", "processed", "failed"] {
+        std::fs::create_dir_all(home.join(folder)).unwrap();
+    }
+    std::fs::write(home.join("in").join("a.md"), "# A\n\nOne.\n").unwrap();
+    std::fs::write(home.join("in").join("b.md"), "# B\n\nTwo.\n").unwrap();
+    std::fs::write(home.join("failed").join("c.md"), "# C\n").unwrap();
+    let tasks = root.join("config").join(Paths::TASKS);
+    std::fs::create_dir_all(&tasks).unwrap();
+    let task = format!(
+        "name = \"notes\"\nkind = \"convert\"\nrecipe = \"markdown-to-org\"\n\n[trigger]\nkind = \"folder\"\nhome = '{}'\nmatch = [\"*.md\"]\nsettle = \"2s\"\n",
+        home.display()
+    );
+    std::fs::write(tasks.join("notes.toml"), task).unwrap();
+    let mut rig = window(root, |_| {});
+    rig.run("app.hot-folders");
+    wait(&mut rig);
+    if let Some(action) = action {
+        rig.press("enter");
+        choose(&mut rig, action);
+        wait(&mut rig);
+    }
+    Some(rig)
+}
+
+/// The Checksum list of report.pdf, its value computed.
+fn checksums(root: &Path) -> Option<Rig> {
+    let mut rig = window(root, |_| {});
+    focus(&mut rig, "report.pdf");
+    rig.run("file.checksum");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("Checksums"));
+    Some(rig)
+}
+
+/// Verify checksum on a list naming three files: one matches, one
+/// differs, one is missing.
+fn verify_report(root: &Path) -> Option<Rig> {
+    let mut rig = window(root, |_| {});
+    let work = root.join("work");
+    std::fs::write(
+        work.join("SHA256SUMS"),
+        format!(
+            "{REPORT}  report.pdf\n{}  notes.txt\n{REPORT}  gone.txt\n",
+            "0".repeat(64)
+        ),
+    )
+    .unwrap();
+    rig.run("panel.reload");
+    focus(&mut rig, "SHA256SUMS");
+    rig.run("file.verify-checksum");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("VerifyReport"));
+    Some(rig)
+}
+
+/// A small JPEG made in memory with a comment and XMP data, the app
+/// test's beach picture.
+fn beach_jpeg() -> Vec<u8> {
+    let segments: [(u8, &[u8]); 2] = [
+        (0xE1, b"http://ns.adobe.com/xap/1.0/\0<x/>"),
+        (0xFE, b"from the beach"),
+    ];
+    let mut out = vec![0xFF, 0xD8];
+    for (marker, body) in segments {
+        out.extend_from_slice(&[0xFF, marker]);
+        out.extend_from_slice(&u16::try_from(body.len() + 2).unwrap().to_be_bytes());
+        out.extend_from_slice(body);
+    }
+    out.extend_from_slice(&[0xFF, 0xC0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0]);
+    out.extend_from_slice(&[0xFF, 0xDA, 0, 8, 1, 1, 0, 0, 63, 0]);
+    out.extend_from_slice(&[0x12, 0x34, 0xFF, 0x00, 0x56]);
+    out.extend_from_slice(&[0xFF, 0xD9]);
+    out
+}
+
+/// setup.exe with an internet mark, written through the file system
+/// crate: a Zone.Identifier stream on Windows, the quarantine attribute
+/// on macOS, the origin attribute elsewhere. `None` where the disk keeps
+/// no such thing.
+fn marked(root: &Path) -> Option<Rig> {
+    use diroxide_vfs::Provider;
+    let work = world(root);
+    let file = work.join("setup.exe");
+    std::fs::write(&file, b"not really a program").unwrap();
+    let place = diroxide_core::Place::parse(file.to_str().unwrap()).unwrap();
+    let provider = diroxide_vfs::LocalProvider::new();
+    if !provider.capabilities(&place).extended_attributes {
+        return None;
+    }
+    // The names diroxide-meta's origin module reads (ZONE_STREAM,
+    // QUARANTINE, XDG_ORIGIN), written out: the GUI does not depend on it.
+    let (name, bytes): (&str, &[u8]) = if cfg!(windows) {
+        (
+            "Zone.Identifier",
+            b"[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=https://example.org/setup.exe\r\n",
+        )
+    } else if cfg!(target_vendor = "apple") {
+        ("com.apple.quarantine", b"0083;6542a1b2;Safari;0B7B4E1D")
+    } else {
+        ("user.xdg.origin.url", b"https://example.org/setup.exe")
+    };
+    let extended = provider.as_extended()?;
+    extended
+        .write_extended(&place, name, bytes, &diroxide_vfs::OpContext::new())
+        .ok()?;
+    let mut rig = window(root, |_| {});
+    focus(&mut rig, "setup.exe");
+    rig.run("file.remove-internet-mark");
+    wait(&mut rig);
+    Some(rig)
+}
+
+/// Encrypt with gpg on notes.txt for the key typed: the plan's question.
+fn gpg_plan(root: &Path) -> Option<Rig> {
+    let mut rig = window_finding(root, |_| {}, &["gpg"]);
+    focus(&mut rig, "notes.txt");
+    rig.run("file.gpg-encrypt");
+    rig.type_text("4E7B");
+    rig.press("enter");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("GpgPlan"));
+    Some(rig)
+}
+
+/// Change owner of notes.txt, then `row` chosen; Unix only (Windows
+/// hands the file to its Security dialog, which no test opens).
+fn owner(root: &Path, row: Option<&str>) -> Option<Rig> {
+    if !cfg!(unix) {
+        return None;
+    }
+    let mut rig = window(root, |_| {});
+    focus(&mut rig, "notes.txt");
+    rig.run("file.change-owner");
+    wait(&mut rig);
+    if let Some(row) = row {
+        choose(&mut rig, row);
+    }
+    Some(rig)
+}
+
+/// Two pictures in Photos, made in memory (one-pixel PNGs).
+fn pictures(root: &Path) {
+    let photos = root.join("work").join("Photos");
+    std::fs::remove_file(photos.join("crow.jpg")).unwrap();
+    std::fs::write(photos.join("crow.png"), one_pixel_png()).unwrap();
+    std::fs::write(photos.join("raccoon.png"), one_pixel_png()).unwrap();
+}
+
+/// Review pictures from the first of two in Photos.
+fn review(root: &Path) -> Option<Rig> {
+    let mut rig = window(root, |_| {});
+    pictures(root);
+    focus(&mut rig, "Photos");
+    rig.run("panel.enter");
+    wait_listed(&mut rig, "crow.png");
+    focus(&mut rig, "crow.png");
+    rig.run("photo.review");
+    wait(&mut rig);
+    Some(rig)
+}
+
+/// A PNG of one gray pixel, written by hand.
+fn one_pixel_png() -> Vec<u8> {
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = !0u32;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+    fn adler32(bytes: &[u8]) -> u32 {
+        let (mut a, mut b) = (1u32, 0u32);
+        for byte in bytes {
+            a = (a + u32::from(*byte)) % 65_521;
+            b = (b + a) % 65_521;
+        }
+        (b << 16) | a
+    }
+    let chunk = |kind: &[u8; 4], data: &[u8], out: &mut Vec<u8>| {
+        out.extend((data.len() as u32).to_be_bytes());
+        let mut body = kind.to_vec();
+        body.extend_from_slice(data);
+        out.extend(&body);
+        out.extend(crc32(&body).to_be_bytes());
+    };
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut header = Vec::new();
+    header.extend(1u32.to_be_bytes());
+    header.extend(1u32.to_be_bytes());
+    header.extend([8, 0, 0, 0, 0]);
+    chunk(b"IHDR", &header, &mut out);
+    // One row: the filter byte, then one gray byte, stored uncompressed.
+    let raw = [0u8, 0x80];
+    let mut data = vec![0x78, 0x01, 1, raw.len() as u8, 0, !(raw.len() as u8), 0xFF];
+    data.extend(raw);
+    data.extend(adler32(&raw).to_be_bytes());
+    chunk(b"IDAT", &data, &mut out);
+    chunk(b"IEND", &[], &mut out);
+    out
+}
+
 /// A search for text files run from the search dialog, its results up.
 fn saved_search(rig: &mut Rig) {
     rig.run("search.find");
@@ -951,15 +1504,73 @@ fn checked(rig: &Rig) -> Result<(String, Role, String), String> {
 }
 
 #[test]
-fn every_dialog_purpose_opens_with_a_name_and_a_focus() {
+fn every_purpose_is_opened_or_said_why_not() {
     let variants = purpose_variants();
     assert_eq!(variants.len(), 77, "{variants:?}");
+    let names = purpose_names();
+    assert_eq!(names.len(), PURPOSES, "{names:?}");
+    // Every variant has its name among them (Organize's from the hosted
+    // lists' function, the others from `Purpose::name`).
+    let missing: Vec<&String> = variants.difference(&names).collect();
+    assert!(missing.is_empty(), "variants with no name: {missing:?}");
     let scenarios = scenarios();
-    let mut listed: BTreeSet<String> = scenarios.iter().map(|(p, _, _)| (*p).to_owned()).collect();
+    let mut listed = BTreeSet::new();
+    for (purpose, _, _) in &scenarios {
+        assert!(listed.insert((*purpose).to_owned()), "{purpose} twice");
+    }
     for (purpose, _) in UNREACHABLE {
         assert!(listed.insert((*purpose).to_owned()), "{purpose} twice");
     }
-    assert_eq!(listed, variants, "every purpose is opened or said why not");
+    assert_eq!(listed, names, "every purpose is opened or said why not");
+    for absent in MAY_BE_ABSENT {
+        assert!(names.contains(*absent), "{absent} is no purpose");
+    }
+}
+
+/// The parts the purposes are opened in, each its own test.
+const PARTS: usize = 6;
+
+#[test]
+fn every_dialog_purpose_opens_with_a_name_and_a_focus() {
+    open_part(0);
+}
+
+#[test]
+fn every_dialog_purpose_opens_part_two() {
+    open_part(1);
+}
+
+#[test]
+fn every_dialog_purpose_opens_part_three() {
+    open_part(2);
+}
+
+#[test]
+fn every_dialog_purpose_opens_part_four() {
+    open_part(3);
+}
+
+#[test]
+fn every_dialog_purpose_opens_part_five() {
+    open_part(4);
+}
+
+#[test]
+fn every_dialog_purpose_opens_part_six() {
+    open_part(5);
+}
+
+/// Opens the purposes of part `part` (every sixth, starting at it), each
+/// in a window of its own: a named dialog, the focus on a named control
+/// inside it, the app's own purpose the one meant. A scenario may say
+/// "not made on this system" only for a purpose in [`MAY_BE_ABSENT`].
+fn open_part(part: usize) {
+    let scenarios: Vec<_> = scenarios()
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| i % PARTS == part)
+        .map(|(_, s)| s)
+        .collect();
     let mut failures = Vec::new();
     let mut opened = Vec::new();
     let mut not_here = Vec::new();
@@ -997,7 +1608,9 @@ fn every_dialog_purpose_opens_with_a_name_and_a_focus() {
     }
     for purpose in &not_here {
         eprintln!("not made on this system: {purpose}");
+        if !MAY_BE_ABSENT.contains(purpose) {
+            failures.push(format!("{purpose}: not made, and it always can be"));
+        }
     }
     assert!(failures.is_empty(), "{failures:#?}");
-    assert!(opened.len() >= 70, "{} opened", opened.len());
 }
