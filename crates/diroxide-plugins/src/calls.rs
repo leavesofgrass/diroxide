@@ -416,6 +416,12 @@ pub(crate) mod tests {
     use crate::supervisor::{ManualTicker, Ticker};
     use crate::testing::{FakeLauncher, Mode, RecordingServices, plugin_info};
 
+    /// How long a test waits for an event it expects (an answer, a
+    /// cancellation, a question): a deadline, never a pause, so a passing
+    /// run returns as the event comes, and long enough that a machine
+    /// loaded with other builds never reaches it.
+    const EVENT_WAIT: Duration = Duration::from_secs(60);
+
     pub(crate) fn host_with(
         services: &Arc<RecordingServices>,
         extra: &str,
@@ -526,7 +532,7 @@ pub(crate) mod tests {
             let host = Arc::clone(&host);
             thread::spawn(move || call(&host, methods::UI_ASK, json!({"title": "Delete?"})))
         };
-        question_came.recv_timeout(Duration::from_secs(5)).unwrap();
+        question_came.recv_timeout(EVENT_WAIT).unwrap();
         // Two minutes of thinking, well past the command's 30 seconds.
         for _ in 0..12 {
             ticker.advance(Duration::from_secs(10));
@@ -590,14 +596,19 @@ pub(crate) mod tests {
             let Some(Completion::Plugin(completer)) = question.completion.clone() else {
                 panic!("no plugin completion");
             };
+            // Both queries wait on their events, the cancellation and the
+            // answer, with a deadline a loaded machine does not reach: at
+            // the product's five seconds the first query once timed out
+            // before the second could cancel it (G5b's check, Friday,
+            // November 6, 2026).
             let first = {
                 let completer = completer.clone();
-                thread::spawn(move || completer.query("ma-slow", 7))
+                thread::spawn(move || completer.query_within("ma-slow", 7, EVENT_WAIT))
             };
             while !completer.is_waiting() {
                 thread::sleep(Duration::from_millis(2));
             }
-            let second = completer.query("mai", 3);
+            let second = completer.query_within("mai", 3, EVENT_WAIT);
             let _ = found.send((first.join().unwrap(), second));
             Answer::Cancelled
         });
