@@ -89,7 +89,7 @@ The quick view reads Markdown, plain text, code, the formats of carta, and, sinc
 - carta's formats, by extension: Org (`.org`), reStructuredText (`.rst`, `.rest`), MediaWiki (`.mediawiki`, `.wiki`), DokuWiki (`.dokuwiki`) and Jira (`.jira`). carta is a converter written in Rust. diroxide pins it to one exact version and never requires it. An Org `#+TITLE` becomes the document's title, not a heading row. A document that carta cannot read shows its text instead, as above.
 - Anything else: text shows as text, and bytes that are not text show as hex.
 
-In the panel an Org file's row reads "file", not "Org", because the file type table has no entry for it yet. The preview line says "Org".
+In the panel an Org file's row reads "Org", and a reStructuredText file's reads "RST", because the file type table has entries for them. The rows of a MediaWiki, DokuWiki or Jira file read "file", because it has none. The quick view reads all five by their extensions.
 
 The preview reads only the file in front of it. It never follows an include or an embed to another file, because that would read a named file from anywhere on your computer. A reStructuredText include is left out and the preview says so once: "An include directive was left out, so the file it names is not read." carta's Typst reader is not in the build, for the same reason.
 
