@@ -690,6 +690,9 @@ pub mod ids {
         COPY_DETAILS = "file.copy-details";
         /// Copy every detail of the focused file, private ones too.
         COPY_ALL_DETAILS = "file.copy-all-details";
+        /// The Tools list: each helper program, its version and where it
+        /// was found, or how to get it (Settings' Tools page).
+        TOOLS_LIST = "app.tools";
     }
 }
 
@@ -715,7 +718,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 245] = [
+pub static CATALOG: [CommandInfo; 246] = [
     command(
         ids::QUIT,
         "Quit",
@@ -2642,6 +2645,14 @@ pub static CATALOG: [CommandInfo; 245] = [
         ids::COMPONENTS_MANAGE,
         "Manage optional components",
         "Lists the optional components with their state, size and license, to download, verify or remove one.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TOOLS_LIST,
+        "Tools list",
+        "Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it.",
         Global,
         &[],
         &[],

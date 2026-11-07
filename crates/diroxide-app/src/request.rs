@@ -280,6 +280,18 @@ impl PartialEq for SharedTools {
     }
 }
 
+/// The tools registry the Settings Tools page reports on, handed to a
+/// worker (alpha 4, lane VA). Two are equal when they are the same
+/// registry.
+#[derive(Clone, Debug)]
+pub struct SharedRegistry(pub std::sync::Arc<diroxide_tools::ToolRegistry>);
+
+impl PartialEq for SharedRegistry {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// A request from the app to its runtime. See the module documentation.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
@@ -445,6 +457,11 @@ pub enum Request {
     /// tag ExifTool reads for Show all (alpha 4, R30 commit 41); answered
     /// as [`AppEvent::Details`](crate::AppEvent::Details).
     Details(Box<crate::details::DetailsAsk>),
+    /// Make the tools registry's report on a worker, each found program's
+    /// version command run (two seconds at most, side by side), for the
+    /// Settings Tools page (alpha 4, R30 commit 42); answered as
+    /// [`AppEvent::ToolsReported`](crate::AppEvent::ToolsReported).
+    ToolsReport(SharedRegistry),
     /// Drop the passwords an archive job's plan holds: its confirmation
     /// said no, or it was never run.
     DropArchiveJob(JobId),

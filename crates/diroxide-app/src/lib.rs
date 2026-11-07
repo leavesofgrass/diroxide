@@ -47,6 +47,8 @@ pub mod settings;
 pub mod startup;
 pub mod state;
 // Watch this folder (W3t).
+// The Settings Tools page's rows (alpha 4, lane VA).
+pub mod tools_page;
 pub mod tracker;
 // File types in the app: the background check (alpha 4, lane TA).
 pub mod typing;

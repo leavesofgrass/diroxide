@@ -857,6 +857,10 @@ menu = "keys"
 access = "e"
 
 [[menu.item]]
+command = "app.tools"
+access = "t"
+
+[[menu.item]]
 command = "components.manage"
 access = "o"
 

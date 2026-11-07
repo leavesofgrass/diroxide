@@ -53,6 +53,23 @@ pub struct Row {
     pub ask_for_feature: Option<AskFirst>,
     /// The lines when it has no build for this computer.
     pub no_build: Vec<String>,
+    /// The programs it brings for this computer, by file name, lowercase
+    /// and without `.exe` (`ffmpeg`, `ffprobe`): how the Settings Tools
+    /// page knows which tool a helper component gives (alpha 4, lane VA).
+    pub programs: Vec<String>,
+    /// What it downloads for this computer, in words: "138 MB".
+    pub size: String,
+}
+
+/// A program's file name as the Tools page matches it to a tool: the last
+/// part of its path, lowercase, without `.exe`.
+pub fn program_name(exec: &str) -> String {
+    let name = exec
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(exec)
+        .to_ascii_lowercase();
+    name.strip_suffix(".exe").map(str::to_owned).unwrap_or(name)
 }
 
 /// What the runtime found: every component known, from the embedded list
@@ -112,6 +129,13 @@ fn row(component: &Component, components_dir: &std::path::Path, target: &str) ->
         ask: messages::ask_first(component, None, target),
         ask_for_feature: feature.map(|f| messages::ask_first(component, Some(f), target)),
         no_build: messages::no_build(component),
+        programs: component
+            .files_for(target)
+            .iter()
+            .filter_map(|file| file.exec.as_deref())
+            .map(program_name)
+            .collect(),
+        size: component.size_text(target),
     }
 }
 

@@ -447,6 +447,9 @@ impl App {
         if key == settings::PLUGINS_ROW {
             return self.open_plugin_settings();
         }
+        if key == settings::TOOLS_ROW {
+            return self.open_tools_page();
+        }
         if key == "preset" {
             return self.preset_chooser();
         }

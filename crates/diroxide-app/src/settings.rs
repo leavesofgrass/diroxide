@@ -87,6 +87,10 @@ pub const KEYS_ROW: &str = "\u{1}keys";
 /// settings, each under its plugin's name (W4d).
 pub const PLUGINS_ROW: &str = "\u{1}plugins";
 
+/// The id of the Settings list's row that opens the Tools list: each
+/// helper program and where it was found (alpha 4, lane VA).
+pub const TOOLS_ROW: &str = "\u{1}tools";
+
 /// The Settings list, one row per setting in schema order: the name, then
 /// the value in words. Each row's id is the setting's key, so F1 on it
 /// gives [`setting_help`] and Enter can change it. The Keys list's row,
@@ -109,6 +113,10 @@ pub fn settings_list_in(settings: &Settings, themes: &diroxide_theme::Registry) 
             );
         }
         if info.key == "plugins.enabled" {
+            rows.push(
+                ListRow::new(TOOLS_ROW, "Tools list")
+                    .with_details(["each helper program and where it was found"]),
+            );
             rows.push(
                 ListRow::new(PLUGINS_ROW, "Plugin settings")
                     .with_details(["each plugin's own, under its name"]),
@@ -170,13 +178,19 @@ mod tests {
         let list = settings_list(&settings);
         assert_eq!(
             list.len(),
-            SCHEMA.len() + 2,
-            "and the Keys list's and the plugin settings' rows"
+            SCHEMA.len() + 3,
+            "and the Keys list's, the Tools list's and the plugin settings' rows"
         );
         assert_eq!(
             list.announce_focus(),
-            format!("Layout, side by side, 1 of {}", SCHEMA.len() + 2)
+            format!("Layout, side by side, 1 of {}", SCHEMA.len() + 3)
         );
+        let tools = list.rows().iter().position(|r| r.id == TOOLS_ROW).unwrap();
+        assert_eq!(
+            list.rows()[tools].spoken(),
+            "Tools list, each helper program and where it was found"
+        );
+        assert_eq!(list.rows()[tools + 1].id, PLUGINS_ROW);
         let plugins = list
             .rows()
             .iter()

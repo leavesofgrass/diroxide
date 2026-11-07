@@ -58,6 +58,8 @@ mod room;
 // The Sites list's commands and dialogs (lane A3).
 mod site_commands;
 mod split_join;
+// The Settings Tools page (alpha 4, lane VA).
+mod tools_page;
 // The trash browser (lane A3).
 mod trash;
 // Streamed listings reach the panel (lane A2).

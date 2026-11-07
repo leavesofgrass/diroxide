@@ -1495,6 +1495,12 @@ impl Runtime {
                     shared.send(AppEvent::Details(Box::new(note)));
                 });
             }
+            Request::ToolsReport(tools) => {
+                self.worker(move |shared| {
+                    let report = tools.0.report();
+                    shared.send(AppEvent::ToolsReported(Box::new(report)));
+                });
+            }
             Request::DropArchiveJob(job) => {
                 // Dropping the job's secrets wipes its password.
                 lock(&self.archive_secrets).remove(&job);

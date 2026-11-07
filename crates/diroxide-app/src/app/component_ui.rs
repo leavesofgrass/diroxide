@@ -54,6 +54,10 @@ pub(super) struct ComponentState {
     next: Option<Next>,
     /// The downloads and installs running, by job: the component's id.
     running: HashMap<JobId, String>,
+    /// Whether the Tools page waits for its report.
+    tools_wanted: bool,
+    /// The Tools page's report and rows, while it is open.
+    tools: Option<(diroxide_tools::ToolsReport, Vec<crate::tools_page::ToolRow>)>,
 }
 
 /// What a components dialog is for.
@@ -75,11 +79,19 @@ pub(super) enum Wants {
     FirstRun,
     /// The question before the marked first-run choices download.
     FirstRunGet { ids: Vec<String> },
+    /// The Settings Tools page (alpha 4, lane VA).
+    Tools,
 }
 
 impl App {
     /// The components' commands; `None` for commands that are not theirs.
     pub(super) fn components_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
+        if command.id == ids::TOOLS_LIST {
+            if !self.dialogs.is_empty() {
+                return Some(vec![self.say(Message::status("Close this dialog first."))]);
+            }
+            return Some(self.open_tools_page());
+        }
         let next = if command.id == ids::COMPONENTS_MANAGE {
             Next::Manage
         } else if command.id == ids::PLUGINS_EXAMPLES {
@@ -235,6 +247,10 @@ impl App {
             && let Some((_, Dialog::Choose { list, .. })) = self.dialogs.get_mut(index)
         {
             list.set_rows(model::manage_list(&listing).rows().to_vec());
+            effects.push(Effect::Redraw(Redraw::All));
+        }
+        // An open Tools page says what the components would download.
+        if self.refresh_tools_page() {
             effects.push(Effect::Redraw(Redraw::All));
         }
         match next {
@@ -548,6 +564,7 @@ impl App {
                 effects
             }
             Wants::FirstRun => self.first_run_get(),
+            Wants::Tools => self.tools_page_enter(row),
             Wants::Read => Vec::new(),
             Wants::AskFirst { .. } | Wants::Remove { .. } | Wants::FirstRunGet { .. } => Vec::new(),
         }
@@ -590,7 +607,96 @@ impl App {
             ))],
             // No to the question: back in the list, the marks kept.
             Wants::FirstRunGet { .. } => vec![self.say(Message::info("Not downloaded."))],
+            Wants::Tools => {
+                self.components.tools = None;
+                Vec::new()
+            }
             _ => Vec::new(),
+        }
+    }
+
+    // ---- The Settings Tools page (alpha 4, lane VA, R30 commit 42) ----
+
+    /// Opens the Tools page: the tools registry's report is made on a
+    /// worker (each found program's version command, two seconds at most,
+    /// side by side), and the components are listed for what a missing
+    /// tool's component would download.
+    pub(super) fn open_tools_page(&mut self) -> Vec<Effect> {
+        let tools = crate::request::SharedRegistry(std::sync::Arc::new(self.tools_registry()));
+        self.components.tools_wanted = true;
+        self.request(Request::Components(Box::new(ComponentRequest::List)));
+        self.request(Request::ToolsReport(tools));
+        vec![self.say(Message::status("Looking for the helper programs"))]
+    }
+
+    /// The report came: the page opens, its title the count ("Tools: 13
+    /// of 22 found"), each tool a row, its name first.
+    pub(super) fn tools_reported(&mut self, report: diroxide_tools::ToolsReport) -> Vec<Effect> {
+        if !std::mem::take(&mut self.components.tools_wanted) {
+            return Vec::new();
+        }
+        let registry = self.tools_registry();
+        let rows = crate::tools_page::rows(&report, &registry, self.components.listing.as_ref());
+        let list = crate::tools_page::page(&report, &rows);
+        self.components.tools = Some((report, rows));
+        self.open_dialog(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::ACCEPT),
+            },
+            Purpose::Component(Box::new(Wants::Tools)),
+        )
+    }
+
+    /// Puts an open Tools page's rows in place again, with the components'
+    /// download sizes; whether one was open.
+    fn refresh_tools_page(&mut self) -> bool {
+        let Some((report, _)) = self.components.tools.as_ref() else {
+            return false;
+        };
+        let report = report.clone();
+        let registry = self.tools_registry();
+        let rows = crate::tools_page::rows(&report, &registry, self.components.listing.as_ref());
+        let fresh = crate::tools_page::page(&report, &rows);
+        let index = self.opens.iter().rposition(
+            |o| matches!(&o.purpose, Purpose::Component(w) if matches!(**w, Wants::Tools)),
+        );
+        self.components.tools = Some((report, rows));
+        if let Some(index) = index
+            && let Some((_, Dialog::Choose { list, .. })) = self.dialogs.get_mut(index)
+        {
+            list.set_rows(fresh.rows().to_vec());
+            return true;
+        }
+        false
+    }
+
+    /// Enter on a tool's row: its component's ask-first question, which
+    /// starts on No; or its install command copied for the owner to run;
+    /// or where to get it; or its line again.
+    fn tools_page_enter(&mut self, row: Option<String>) -> Vec<Effect> {
+        let Some(tool) = row.and_then(|id| {
+            self.components
+                .tools
+                .as_ref()
+                .and_then(|(_, rows)| rows.iter().find(|r| r.id == id).cloned())
+        }) else {
+            return Vec::new();
+        };
+        match tool.offer {
+            crate::tools_page::Offer::Component(id) => match self.component_row(&id) {
+                Some(component) => self.ask_first(&id, &component.ask),
+                None => vec![self.say(Message::info(tool.line))],
+            },
+            crate::tools_page::Offer::Command(command) => {
+                let line = format!("Copied: {command}");
+                vec![
+                    Effect::SetClipboardText(command),
+                    self.say(Message::info(line)),
+                ]
+            }
+            crate::tools_page::Offer::Words(words) => vec![self.say(Message::info(words))],
+            crate::tools_page::Offer::Nothing => vec![self.say(Message::info(tool.line))],
         }
     }
 }

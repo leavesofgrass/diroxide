@@ -264,6 +264,9 @@ pub enum AppEvent {
     /// A file's details were read on a worker: its fields, the preview's
     /// summary, or ExifTool's tags (alpha 4).
     Details(Box<crate::details::DetailsNote>),
+    /// The tools registry's report for the Settings Tools page: each
+    /// helper program's line, found or not (alpha 4).
+    ToolsReported(Box<diroxide_tools::ToolsReport>),
     /// A file's bytes for the viewer were read, or could not be (the
     /// sentence says why).
     ViewerSource {
@@ -1839,6 +1842,7 @@ impl App {
             AppEvent::ArchivePlanned { job, result } => self.archive_planned(job, result),
             AppEvent::ArchiveEntries { place, line } => self.archive_entries_counted(&place, line),
             AppEvent::Details(note) => self.details_note(*note),
+            AppEvent::ToolsReported(report) => self.tools_reported(*report),
             AppEvent::ViewerSource {
                 request,
                 place,
