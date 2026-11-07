@@ -582,6 +582,7 @@ pub fn roundtrip(data: &[u8]) {
             modified: Some(diroxide_core::Timestamp::from_unix(1_760_000_000, 0)),
             mode: Some(if folder { 0o755 } else { 0o644 }),
             owner: None,
+            stored: false,
         });
         contents.push(if folder { Vec::new() } else { bytes });
     }

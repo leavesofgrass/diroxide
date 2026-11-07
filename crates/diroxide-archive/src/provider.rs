@@ -117,6 +117,15 @@ impl Opened {
         }
     }
 
+    /// Whether a zip's member is stored, not compressed: what a rewrite
+    /// keeps.
+    pub(crate) fn stored(&self, id: u32) -> bool {
+        match &self.backend {
+            Backend::Zip(zip) => zip.is_stored(&self.index, id),
+            _ => false,
+        }
+    }
+
     /// Whether it is read through the 7z program (RAR and the rest).
     pub fn read_with_tool(&self) -> bool {
         matches!(self.backend, Backend::Tool(_))

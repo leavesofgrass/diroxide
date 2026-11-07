@@ -514,6 +514,16 @@ impl ZipBackend {
     /// the shortcut a nested archive takes, with no spool and no copy.
     /// `None` for any other member, and for every member of an archive
     /// whose members overlap or whose local header disagrees.
+    /// Whether a member is stored, not compressed.
+    pub(crate) fn is_stored(&self, index: &Index, id: u32) -> bool {
+        let Some(Locator::Zip(i)) = index.record(id).map(|r| r.locator) else {
+            return false;
+        };
+        self.archive
+            .by_index_data(i as usize)
+            .is_ok_and(|entry| entry.compression() == CompressionMethod::Stored)
+    }
+
     pub(crate) fn stored_window(&self, index: &Index, id: u32) -> Option<Source> {
         let record = index.record(id)?;
         let Locator::Zip(i) = record.locator else {

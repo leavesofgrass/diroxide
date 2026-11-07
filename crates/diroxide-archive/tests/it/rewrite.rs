@@ -468,3 +468,37 @@ fn links_stay_links_and_duplicates_are_said() {
     assert_eq!(zip.len(), 3);
     assert!(zip.by_name("link").unwrap().is_symlink());
 }
+
+#[test]
+fn a_stored_member_stays_stored_and_first() {
+    // An EPUB's mimetype is first and stored; readers check both.
+    let world = World::plain();
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let stored =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let deflated = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    writer.start_file("mimetype", stored).unwrap();
+    std::io::Write::write_all(&mut writer, b"application/epub+zip").unwrap();
+    writer
+        .start_file("META-INF/container.xml", deflated)
+        .unwrap();
+    std::io::Write::write_all(&mut writer, &b"<container/>".repeat(40)).unwrap();
+    let book = writer.finish().unwrap().into_inner();
+    let archive = world.put("book.epub", &book);
+    let plan = plan(&world, &archive, &[], &[], &["OEBPS"]).unwrap();
+    assert!(
+        plan.rows()
+            .contains(&"Compression redone: stored stays stored".to_owned())
+    );
+    let outcome = run(&world, &plan, None);
+    assert!(outcome.changed, "{:?}", outcome.lines);
+    let new = world.fake.contents(&archive).unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(new)).unwrap();
+    let first = zip.by_index(0).unwrap();
+    assert_eq!(first.name().unwrap(), "mimetype");
+    assert_eq!(first.compression(), zip::CompressionMethod::Stored);
+    drop(first);
+    let container = zip.by_name("META-INF/container.xml").unwrap();
+    assert_eq!(container.compression(), zip::CompressionMethod::Deflated);
+}

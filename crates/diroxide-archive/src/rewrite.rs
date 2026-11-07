@@ -12,7 +12,8 @@
 //! job, used to read the old members and to lock the new ones with
 //! AES-256). What it loses, said in the plan's rows before the question:
 //! the zip's comments and extra fields, the compression choices (every
-//! file is compressed again at the normal level), older copies of a
+//! compressed file is compressed again at the normal level; a stored one
+//! stays stored, as an EPUB's `mimetype` must), older copies of a
 //! repeated name, names the reader refused, and special entries.
 //!
 //! Zip only in this alpha: 7z and tar are refused in words ([`ZIP_ONLY`]),
@@ -65,8 +66,9 @@ pub const SPLIT_REFUSAL: &str = "Split archives are not rewritten";
 /// members' bytes.
 pub const COMMENTS_LOST: &str = "Zip comments and extra fields are lost";
 
-/// The fidelity note on compression.
-pub const COMPRESSION_REDONE: &str = "Compression choices are not kept";
+/// The fidelity note on compression: every compressed member is
+/// compressed again at the normal level; a stored one stays stored.
+pub const COMPRESSION_REDONE: &str = "Compression redone: stored stays stored";
 
 /// The note of a locked archive: one prompt, for reading and writing.
 pub const PASSWORD_ONCE: &str = "Password: asked once, kept for the job";
@@ -350,7 +352,9 @@ pub fn plan_rewrite(
     if let Some(line) = room.refusal() {
         return Err(refuse(line));
     }
-    let built = build_items(index, &fates, archive, &made, &spoken)?;
+    let built = build_items(index, &fates, archive, &made, &spoken, &|id| {
+        opened.stored(id)
+    })?;
     let mut notes = vec![COMMENTS_LOST.to_owned(), COMPRESSION_REDONE.to_owned()];
     if built.locked.is_some() {
         notes.push(PASSWORD_ONCE.to_owned());
@@ -530,6 +534,7 @@ fn build_items(
     archive: &Place,
     made: &[String],
     spoken: &str,
+    stored: &dyn Fn(u32) -> bool,
 ) -> Result<Built, ArchiveError> {
     let mut built = Built {
         refused: index.summary().refused,
@@ -599,6 +604,7 @@ fn build_items(
             modified,
             mode,
             owner: None,
+            stored: kind == EntryKind::File && stored(id),
         });
         built.items.push(PackItem {
             source: member_place(archive, &index.path(id)),
@@ -617,6 +623,7 @@ fn build_items(
             modified: Some(now),
             mode: None,
             owner: None,
+            stored: false,
         });
         built.items.push(PackItem {
             source: member_place(archive, path),

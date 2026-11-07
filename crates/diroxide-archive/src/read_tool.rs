@@ -1070,6 +1070,7 @@ mod tests {
                 modified: None,
                 mode: None,
                 owner: None,
+                stored: false,
             })
             .collect();
         let settings = Settings {

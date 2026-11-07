@@ -437,6 +437,7 @@ fn write_item(name: &str, kind: ItemKind, size: u64, entry: &Entry, keep_owner: 
         modified: entry.modified,
         mode,
         owner,
+        stored: false,
     }
 }
 
