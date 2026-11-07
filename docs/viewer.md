@@ -74,7 +74,9 @@ A file that looks binary opens in hex mode and says why: "big.bin looks binary; 
 
 ## Which characters: encodings
 
-The viewer decides how to read a file from its first bytes. UTF-8 is tried first; a byte-order mark means UTF-16, and the viewer says so in words: "Encoding: UTF-16 (byte-order mark)". Older Windows text in Windows-1252 is recognized too. A file that fits none of these opens in hex mode. A chooser for other encodings comes in a later alpha.
+The viewer decides how to read a file from its first bytes. UTF-8 is tried first; a byte-order mark means UTF-16, and the viewer says so in words: "Encoding: UTF-16 (byte-order mark)". Older Windows text in Windows-1252 is recognized too. A file that fits none of these opens in hex mode.
+
+When the automatic choice is wrong, Encoding in the View menu (its Viewer submenu) and in the palette lets you choose. It opens a list titled with the file, "Encoding of legacy.txt", whose first row is "Automatic" with what was found, and then the encodings grouped by language. Enter reads the file again in that encoding and says "Encoding Windows-1251, chosen by you". The choice lasts for that file in that session. [File types and groups](file-types.md#the-encoding-chooser) has the whole list.
 
 ## The next file, and back to the folder
 
@@ -86,6 +88,7 @@ Three commands are in the palette only. Show in folder closes the viewer and put
 
 - Ctrl+R reads the file again: "Reloaded notes.txt, 14 lines".
 - F (Follow file) reads more of a file as it grows, as a log does, and stays at the end: "Follow on". It does not read each new line aloud. At the progress interval it says "12 new lines". The `viewer.follow` setting starts every file in follow mode.
+- Text read from a picture by Read text in picture opens in the viewer, titled as a machine's guess: "Text in picture (machine read), sign.png, 9 words". Reload does not read the picture's bytes as text. It says "This text was read from the picture. Read text in picture reads it again." [Previews](previews.md#read-text-in-picture) has the rest.
 
 ## Large files
 

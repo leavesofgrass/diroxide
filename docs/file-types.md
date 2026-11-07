@@ -152,7 +152,7 @@ Select by kind lists the kinds, then each group, yours included: "Receipts, grou
 
 `group:` in a filter takes any group by its id, yours too: `group:receipts`. A file in two groups matches either. Folders and plugin items are in no group. Before the check has settled a file whose name says nothing, its group is not known, and a filter that depends on it is undecided for that row.
 
-A theme file can map a group to one of its existing color roles with a `[group-colors]` table. [Themes and colors](themes.md) has the words. No frontend draws those colors yet, and the row's words never change.
+A theme file can map a group to one of its existing color roles with a `[group-colors]` table. [Themes and colors](themes.md#group-colors) has the words. The window draws those colors on the rows of plain files and archives, the terminal does not yet, and the row's words never change.
 
 ## What Enter and View do for a type
 
@@ -251,7 +251,7 @@ The choice lasts for that file in that session. Outside the viewer and the quick
 - A type's child is tried only through its parent. A type of yours with an extension and no signature, used as a parent, can hide a child that is known by its own extension.
 - An action's slot is matched by the action's name, so each action of a type needs a name of its own.
 - The Preview and Convert slots run from the Actions list only, for now.
-- Group colors in a theme file are answered by the program and drawn by neither the terminal nor the window.
+- Group colors in a theme file are drawn by the window and not yet by the terminal.
 - Windows: Explorer's own order of programs is not read, and Store apps, Edge and Chrome start by class through the shell. Explorer also lists shell verbs that other programs add, which the list does not read.
 - Linux: programs that run in a terminal are left out of Open with.
 - macOS: a binary `Info.plist` is skipped and counted, the default program is not read, and this code has been compiled in the project's tests on other systems only, never run on a Mac.

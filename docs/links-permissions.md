@@ -121,14 +121,13 @@ Copies, moves and unpacks keep the modified time of files and folders. A folder'
 
 ## Details: the information list
 
-Alt+Enter lists the facts about the focused entry, one fact on each row, with its name first. Windows Terminal keeps Alt+Enter; the File menu has Details as the sure way ([terminals](terminals.md)). The list is titled "Details of course.zip", and the rows the viewer and the archives need come at its start:
+Alt+Enter lists the facts about the focused entry, one fact on each row, with its name first. Windows Terminal keeps Alt+Enter; the File menu has Details as the sure way ([terminals](terminals.md)). The list is titled "Details of course.zip", and its first rows are:
 
 - "Type: zip archive" or "Type: PDF document". The type comes first.
+- "Entries: 8 files, 2 folders", for an archive, before the size.
 - "Size: 48 KB (49,152 bytes)". The size in words, then the exact bytes.
-- "Entries: 10 items", for an archive, after the size.
-- "Link to: ../data/x.txt", for a link: the target, with any hidden character in it spelled out.
 
-The other rows are the ones [the panels guide](panels.md) lists: the times, attributes, owner, group and the full path.
+The other rows follow in a fixed order, the times, attributes, labels, the path, "Link to: ../data/x.txt" for a link (the target, with any hidden character in it spelled out), owner, group and the rest. [The details view](details.md) has the whole order, and the rows that are read from inside the file.
 
 ## See also
 

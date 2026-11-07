@@ -1,19 +1,18 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrives with alpha 3. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view, disk images and git are here, and grow as the alpha does. Where a limit has a workaround, the workaround comes first.
 
-## What is not in alpha 3
+## What is not in alpha 4 yet
 
-Each item below is still to come. None of them is dated: a feature that is not in alpha 3 arrives in a later alpha.
+Each item below is still to come. None of them is dated: a feature that is not in alpha 4 yet arrives in a later pass or a later alpha.
 
-- Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out an icon on macOS, your own theme files, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
+- Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out an icon on macOS, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
-- More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR, ISO images, and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
-- The document quick view reads Markdown, plain text, code, and the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira). DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha; until then the quick view says "No preview" and names the kind and size.
-- A chooser for the viewer's text encoding. The viewer picks UTF-8, UTF-16 by its byte-order mark, or Windows-1252, and says which. A chooser for other encodings comes in a later alpha.
-- Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. There is no Change times command in alpha 3, although copies keep dates.
+- More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. An ISO image and the virtual disk formats open through the disk image plugin, an optional component; [Disk images](disk-images.md) says what they do not do yet. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
+- The quick view reads Markdown, plain text, code, the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira), pictures, sound and video, archives, PDF, Word and other documents, and spreadsheets. [Previews](#previews) below says what it does not do.
+- Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. The library for changing an owner is built, and the dialog is not. There is no Change times command yet, although copies keep dates.
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
-- Tools such as ImageMagick and FFmpeg, previews of images and documents, conversions, and the git commands come in a later alpha.
+- Tools, previews, the file type model, disk images and the git plugin are in alpha 4, and the sections below say what they do not do. Conversions, the metadata and checksum commands, hot folders and the access dialogs are built in the library, and reach the program in a later pass.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
 - Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
@@ -30,7 +29,8 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A script can start slowly: about a tenth of a second for bash and Python, and a third of a second to over a second and a half for PowerShell 5.1, on the test machine. Plugins stay running between uses for five minutes, so the cost is paid once.
 - PowerShell 7 has not been tried. Windows PowerShell 5.1 has, with the policy override. A `.cmd` or `.bat` script runs on Windows only.
 - On Windows, bash is Git for Windows' bash. The `bash.exe` in the system folder is WSL's launcher, and diroxide refuses it. Without Git for Windows, bash scripts do not run, and diroxide says so.
-- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/format`, `column/changed`, `place/describe`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit`. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare them and will be called when the feature that needs them arrives.
+- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/format` and `column/changed` (the host can answer for a page of cells, and the panels show no plugin column yet), `completion/query`, `fs/stage` and `fs/commit`. `place/describe`, `ui/form` and `ui/show_diff` are served since alpha 4. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare the shapes and will be called when the feature that needs them arrives.
+- A plugin's form or diff has few limits checked yet: nothing stops 5,000 fields, a default of 1 MB, a label of 90 cells or a title of 120 cells, and an empty id or label is not refused. Unknown keys are dropped in silence, and a title that already names the plugin gets the name twice. Binary content cannot travel in JSON, so a diff side with NUL bytes is read as text and compared byte by byte, and `encoding` and `place` on a diff side are dropped.
 - Watching a folder through a plugin's place is a shape without a working end-to-end test. SFTP cannot watch a folder, so a remote panel does not refresh by itself; open the folder again to see changes.
 - The preview region and the conversions dialog come in a later alpha. Until then `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
 - Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
@@ -51,15 +51,15 @@ Each item below is still to come. None of them is dated: a feature that is not i
 
 [Optional components](components.md) describes the feature. These are the limits.
 
-- The list in a build made from source has one component, the example plugins. The release files add the SFTP places plugin, with a program for Windows on x86-64, Linux on x86-64 and macOS. Windows on ARM and Linux on ARM have none yet. The example pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
+- The list in a build made from source has the example plugins and the helper programs. The release files add the SFTP places, disk image and git plugins, each with a program for Windows on x86-64, Linux on x86-64 and macOS. Windows on ARM and Linux on ARM have none of the three yet. The example pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
 - Downloads use a built-in client, then `curl`, then `wget` from your PATH. A build of diroxide made without the built-in client needs `curl` or `wget`, and says "Not downloaded: curl was not found." when it has neither.
 - A private repository as your own source, reached through the GitHub CLI's sign-in, is not built yet. A folder works, and a repository written `owner/name` is read from its public release downloads.
-- Where a helper has no build for your computer, the message says "No build for this computer." and names a generic next step, not your system's own install command. For the SFTP places plugin it names the `cargo install` line instead, which needs a Rust toolchain, and the program it builds still has to be put where [remote places](remote-places.md) says.
+- Where a helper has no build for your computer, the message says "No build for this computer." and names the install command for your system where diroxide knows it, such as "Install: sudo apt install ffmpeg". For a plugin of the project, such as the SFTP places plugin, it names the `cargo install` line instead, which needs a Rust toolchain, and the program it builds still has to be put where [remote places](remote-places.md) says.
 - The list's `min_diro`, `needs_tools` and `protocol` fields are read and not enforced yet.
 - After Escape, a stalled transfer in the built-in client can take a moment to stop, until the client's own time limits end it. `curl` and `wget` are ended at once.
 - A component that would run an installer is refused: "installers are not supported yet".
 - The downloaded programs are not code-signed, and neither are the builds of diroxide. Windows' SmartScreen and virus scanners may react.
-- The first-run list of components opens once, at the first start, and only when the list holds something besides the example plugins: that is, in the release files, where the SFTP places plugin is. A build from source has nothing to offer, so the first start passes without it. The list never covers a dialog that is open at the start; Ask first-run choices again, in the Tools menu, opens it later, and says "No optional components to choose from yet" when there is nothing to choose.
+- The first-run list of components opens once, at the first start, and only when the list holds something besides the example plugins: that is, the helper programs in every build, and the three plugins in the release files. `diro run`, `diro serve` and a plain listing on a pipe never open it. The list never covers a dialog that is open at the start; Ask first-run choices again, in the Tools menu, opens it later, and says "No optional components to choose from yet" when there is nothing to choose.
 - A no to a download is not remembered. Get example plugins asks again each time.
 - Installing from a zip file or a folder says "Not downloaded" when it finds none of the files, which is the wrong word for an install.
 
@@ -120,7 +120,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A search that follows links or looks inside archives always uses the slower walk, one folder at a time through the provider.
 - In a search, `selected` and `bookmarked` are left undecided, because a search has no panel. `empty` on a folder reads that folder when asked.
 - A depth test works in a search and not in a panel, which shows one folder.
-- `type` matches only entries whose type is already known, and `group` goes by extension, with seven groups. The full type model comes in a later alpha.
+- `type` matches only entries whose type is already known. `group` goes by the type model in a panel, with eight groups and yours, and a file can be in two. In a search, and in Space by kind, it goes by extension, with seven groups.
 - Dates use the computer's current offset from UTC, with no daylight-saving rules. A file changed in the hour a clock changed may land on the wrong side of midnight.
 - Patterns are Rust regular expressions: no look-around and no backreferences. A pattern is at most 1,000 characters.
 - Owner and user group are read where the listing has them. Windows owners are not read in a listing.
@@ -249,11 +249,90 @@ The trash is the default way to delete, and the places where it cannot be truste
 - In the single layout the quick view is drawn only while the focus is in it. The one-line announcement still arrives as you move.
 - Some terminals send Shift+F3 as F15. The View menu (Alt+V, then Q) and the palette turn the quick view on.
 - The key test, `diro keys test`, reports panel and viewer keys. It does not know the quick view's keys yet.
-- An Org file's row in the panel says "file", because the file type table has no Org entry. The preview line says "Org".
+- An Org file's row in the panel says "Org", and a reStructuredText file's says "RST", because the file type table has entries for them. A MediaWiki, DokuWiki or Jira file's row says "file", because it has none. The quick view reads all five by their extensions.
 - The quick view wraps by counting characters, so a wide character counts as one.
-- A reader that runs past its deadline cannot be stopped, so it is left to finish, and at most three run at once. A deeply nested document can be cut off at the deadline: "Could not read big.org: took too long." carta 0.0.11 keeps only 32 levels of a nested DokuWiki list, and content nested past 256 elements reads as one row.
+- A reader that runs past its deadline cannot be stopped, so it is left to finish, and at most three run at once. A deeply nested document can be cut off at the deadline: "Could not read big.org: took too long." An Org file nested 3,000 deep still takes 39 seconds to read under carta 0.0.13, in a release build, so the deadline guard stays. Content nested past 256 elements reads as one row.
 - Raw HTML in Markdown keeps its text and drops its tags. A front-matter title or an Org `#+TITLE` becomes the document's title, not a heading row.
 - Open in textweaver hands over files on this computer only, not a file inside an archive.
+
+## Tools and diro doctor
+
+[Tools and diro doctor](tools.md) describes the registry, the Tools list and `diro doctor`, and [optional components](components.md) the helper programs. These are the limits.
+
+- Nothing here has been heard on a screen reader or read on a Braille display. The "Install:" lines and the "Built in:" line pass 40 cells, so they pan on a Braille display, the name first.
+- Several install commands were written from each package manager's usual names and not checked against a live one: pacman's `pandoc-cli`, several of the dnf names, the Gpg4win folders on Windows, and winget's Poppler id, which is a community build. There is no winget package for xorriso, minisign or wget.
+- macOS has not been run. The Homebrew folders and `mdls` were never compiled by the lane that wrote the lookup. System32's `convert.exe` and `tw --version` were left alone on purpose.
+- The registry's tests use stand-in programs. The version commands were run against the real programs in the project's Linux container and on one Windows computer.
+- `7za` and `7zr` read no RAR, so the lookup tries `7z` and `7zz` first.
+- The helper components were pinned by a job on the project's build machine, 23 files with the publishers' own digests. No helper component has been installed and run on a computer yet.
+- Some helper files are held: ExifTool for Windows, 7-Zip for Windows and FFmpeg for Linux, each for a reason [optional components](components.md) gives. ImageMagick on Linux and macOS, and FFmpeg on macOS, are package commands.
+- After a helper is installed, the library runs its version command, and the program does not say the line yet: "pandoc: 3.13, from components" shows in `diro doctor`, and the end of an install says "Ready".
+- The first-run list on Windows offers 7-Zip, which has no file for Windows yet, and gives its size as 0 bytes.
+- The `diro doctor` of the command line does not say what a missing tool would download, as the Tools list in the program does.
+
+## File types and groups
+
+[File types and groups](file-types.md) describes the model. These are the limits.
+
+- 178 types come built in, not the hundred or so first planned. `tar` is typed by its name only, because its marker is past the first 64 bytes. `.ts` is TypeScript, and transport streams are `.mts` and `.m2ts`.
+- Only a file's first 64 bytes are read. Of the zip-based files, EPUB, JAR and an APK whose manifest comes first are told apart by their head, and so are Office files whose own folder comes first. Office files that start with `[Content_Types].xml` read as "Office Open XML file", OpenDocument is cut short, XPS and CBZ are typed by name only, and an old-style APK reads as a JAR. With its real name, the more exact type wins.
+- The contents speak first: a `.py` file that starts with `#!/bin/sh` is a shell script.
+- MediaWiki, DokuWiki and Jira files have no entry in the table, so their rows say "file". Org and reStructuredText files have one.
+- A type of yours that names a parent with an extension and no signature hides a child known by its own extension, because the tree reaches a child only through its parent. When two types of yours share an id, the first wins.
+- The Preview and Convert slots of a type run from Actions for this file only, and no command calls them yet. The ten numbered user actions have no key.
+- A theme's group colors are drawn by the window. The terminal does not draw them yet.
+- Open with on Windows does not read Explorer's own order, and a Store app, Edge or Chrome starts by its class through the shell without COM set up first. "Choose another program" hands the file to Windows' own dialog, which has not been tried. That dialog read well with NVDA when it was looked at, and JAWS has not been tried.
+- Open with on Linux leaves out programs that run in a terminal, and gives a program's `%u` a path. On macOS a binary `Info.plist` is skipped and counted, the default program is not read, and the code was compiled only in the project's CI.
+- The encoding chooser has Cyrillic IBM866 as its only DOS code page. The others need an encoding type of their own.
+- Not tried: Linux natively, macOS at all, a network share, and starting any program from the Open with list.
+
+## Previews
+
+[Previews and the quick view's formats](previews.md) says what each preview reads. These are the limits.
+
+- A TIFF's page count and a JPEG XL's size are not read. For raw and HEIF pictures the Exif data is looked for in the first 1 MiB and 16 MiB.
+- RTF: bold and italic are not said, and deleted revisions are left out.
+- A spreadsheet's formulas are not worked out again. A part nested deeper than 256 levels is read as flattened text, with a note.
+- Preview and auto-preview gate the whole PDF preview in the quick view, its properties line included. A PDF off this computer gives its properties and no text, because Poppler's standard-input mode has not been tried.
+- A picture that is not on a local disk goes to Tesseract on standard input, up to 64 MiB. A details read is not cancelled when the list closes.
+- The window's picture view has no command of its own yet and is not on the keyboard page. It has not been tried on a picture inside an archive or on an SFTP site, with a decode past its ten-second deadline, on a real Wayland compositor, or on NVDA or JAWS.
+- Not tried: macOS, Linux natively, a real XLS, camera raw, HEIC or AVIF file, and a real Tesseract, ExifTool or ffprobe run inside a test. Nothing in the previews has been heard on a screen reader.
+
+## The details view and access facts
+
+[The details view](details.md) describes the list. These are the limits.
+
+- A details read cannot be cancelled when you close the list. Its own time limits bound it, and the answer is dropped.
+- Show all needs a file on a local disk. Folder sizes are not computed, and a folder has no Privacy row and no Checksum row.
+- "Checksum: not computed" stays so: the checksum engine is built, and no command asks for it yet.
+- Nothing about the order of rows, "Read 9 more details" or how Show all pans on a Braille display has been heard.
+- Who can do what, built in the library and not yet in the program: the details view does not show a file's mode, access list, flags such as immutable, or "You can" answer yet, and no dialog changes an owner. "You can" is advice from the system's own check, not a promise. A macOS access list reads "Access list: not read on this system". Not tried: macOS and the BSDs, a network share, a system with SELinux on, a non-owner account on Windows, Explorer's Effective Access tab, a real FAT disk for time rounding, and the immutable flag set.
+
+## Disk images
+
+[Disk images](disk-images.md) describes the plugin. These are the limits.
+
+- Images are read only. Writing to one, making one and formatting are a later alpha. Open as raw disk image, which would show a hybrid ISO's partitions, is not built, and a hybrid ISO opens as the ISO.
+- A BitLocker or LUKS partition is shown and never opened. An encrypted image through 7-Zip says "it is encrypted, and this plugin asks no password".
+- An NTFS file that NTFS compressed or encrypted is listed, and reading a compressed one says that only 7-Zip reads it. The plugin does not hand such a file to 7-Zip yet.
+- A member of an image that 7-Zip must unpack, over about 6 MB, needs 7-Zip 25.01 or later, and a listing over about 7 MB from 7-Zip is refused. An older 7-Zip says "7-Zip 24.08 is too old: needs 25.01".
+- The partition rows say "partition-2, folder" in the panel, and the partition words, such as "Partition 2, home, ext4, 40.0 GB", are heard in the Volumes list only. The panel's rows and Say Details do not say them yet.
+- The plugin keeps at most sixteen images open, because the program does not tell it when an image's last use ends.
+- A plugin's own next step is replaced by "Try again; if it keeps failing, check the disk." for every refusal except unsupported and too large.
+- Not tried: macOS, p7zip, UDF, HFS+, APFS and exFAT through 7-Zip (no image could be made), an ext4 image made by `mke2fs` (small ext2 and ext4 volumes written by the tests stand in), an NTFS-compressed file, and a password prompt. The tools image has no `e2fsprogs` or `exfatprogs` yet.
+
+## Git
+
+[Git](git.md) describes the plugin. These are the limits.
+
+- Blame asks for the line number, because a plugin command is not given the viewer's cursor line.
+- The title line can stay stale until the folder is listed again. A commit made in a terminal shows after the next reload, because nothing tells the plugin that a folder changed.
+- Add to .gitignore gets the program's own question, "Replace .gitignore? It cannot be undone.", because the program has no way to append to a file for a plugin.
+- Names that are not UTF-8 cannot be staged or compared, and non-UTF-8 text shows stand-ins in diffs.
+- An untrusted repository's question appears when the panel enters it.
+- Not built: a diff between any two revisions, a list of linked worktrees, and counts by kind in the status list's title. The Git column is declared and the panels do not show a plugin's columns yet.
+- Git 2.30, the oldest it accepts, has not been tried. It was tried on 2.54.0 natively and 2.47.3 in the project's Linux container.
+- Not tried: macOS, a real repository git refuses for dubious ownership (a refusal was faked), cancelling a running clone (a partial clone was faked), and any screen reader.
 
 ## Split and join
 
@@ -269,8 +348,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Windows needs Developer Mode or an administrator to make a symbolic link, and a FAT or exFAT drive holds no links at all. The words for the missing right are tested on the error itself; the test machine had the right, so the real refusal has not been seen yet.
 - A folder link on Windows cannot be changed in one step, so changing its target uses the trash. On a drive with no trash, changing a folder link's target fails in words.
 - Not built yet from the permissions plan: typing an octal number or a symbolic mode such as `u=rw,g=r`, Make runnable, the list of permission presets, a list of protected places that refuse changes in administrator mode, extra checks for private-key names, changing a file with several hard links once, and a "why can't I?" explanation. The permissions dialog steps each of owner, group and others through six choices instead.
-- Access lists, flags such as immutable and locked, and extended attributes are neither shown nor edited. They come in a later alpha, shown first. Changing the owner comes in a later alpha too.
-- The first rows of the details list (type, size with its exact bytes, a link's target) have no dates of their own, because the preview code has no time zone. The times are in the details list as before.
+- Access lists and flags such as immutable and locked are not shown or edited yet. The library reads them, and the details view shows them in a later pass. Extended attributes and a file's internet mark are read for the details view and said in words, and are not edited. Changing the owner comes in a later pass too.
 - The Unix half of the atomic link swap is covered by the project's Linux container check. It has not been run natively on a Unix machine outside it.
 
 ## Terminals and keys
@@ -314,7 +392,7 @@ What is said:
 Dialogs, the viewer and the clipboard:
 
 - Every field except a password field opens an input method session. It has not been tried with a real input method. On Linux an input method might deliver typed text twice, once as keys and once as a commit.
-- On Wayland, text the program copies may not reach the clipboard, even though the program says it was copied.
+- On Wayland, text the window copies reaches the clipboard through the window's own connection to the compositor, which has not been tried against a real compositor. Pasting into a field under Wayland with no XWayland still reads nothing, because the window toolkit's paste goes through the X11 clipboard. Copying works.
 - A field that keeps a history changes between a text field and a combo box as its candidates open, so a screen reader may announce the change.
 - F4 starts the editor directly, with no terminal. A console editor such as vi has no terminal to run in on Linux. Use an editor that has a window of its own.
 - Starting a shell, a command or an editor on macOS has not been tried by a person.
@@ -322,7 +400,7 @@ Dialogs, the viewer and the clipboard:
 
 Colors and bars:
 
-- The window draws the 24 built-in themes. It does not read your own theme files, and for a name it does not know it draws Galaxy and says nothing about it. The program finds your theme files by name, so Settings lists them, Next theme steps through them and the verdict is said, and the terminal draws them. `diro --theme NAME` says "Unknown theme: NAME. Galaxy is in use." before the terminal opens even when NAME is a theme file of yours, and the terminal then draws it.
+- The window draws the 24 built-in themes and your own theme files, which the program finds by name in the `themes` folder at its start. For a name it does not know it draws Galaxy and says "Unknown theme NAME. Galaxy is in use." once. A theme file's `[group-colors]` are drawn on the rows of plain files and archives in the window, and the terminal does not draw them yet.
 - Ten themes are below AA. The window draws the parts that fall short in the text color, and says how many. [Themes and colors](themes.md) names the ten. No italic face is built in, so a part that a theme draws in italics, such as the archive and hidden rows, may draw upright. Their words say what they are.
 - The system's light or dark setting is read once, when the window starts. Windows' High Contrast is read at every step.
 - Full screen and focus mode are commands, in the View menu and the palette, and F11 is Full screen's key. The panels' sort buttons and the native menu bar are not under focus mode's veil. A window opened with `--background` never goes full screen. In a terminal, Full screen changes nothing and says so, because full screen there is the terminal program's.
@@ -382,6 +460,12 @@ Menus and the mouse:
 - [Archives](archives.md)
 - [The viewer](viewer.md)
 - [The quick view](quick-view.md)
+- [Previews and the quick view's formats](previews.md)
+- [The details view](details.md)
+- [File types and groups](file-types.md)
+- [Tools and diro doctor](tools.md)
+- [Disk images](disk-images.md)
+- [Git](git.md)
 - [Split and join](split-join.md)
 - [Links, permissions and times](links-permissions.md)
 - [Search and the filter language](search.md)

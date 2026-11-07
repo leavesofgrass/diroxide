@@ -17,11 +17,12 @@ The config folder holds these files:
 - `keymap.toml` holds your changes to the keys. diroxide writes the built-in keys beside it as `keymap-defaults.toml`, a read-only reference that it rewrites at each start; changes to that copy are not read.
 - `menus.toml` holds your changes to the menus. The built-in menus are written beside it as `menus-defaults.toml`, also read-only. Copy it to `menus.toml` and change it there to add, remove and reorder items and submenus.
 - `banks.toml` holds the banks of command buttons, including the function key bar.
-- `filetypes.toml` is a placeholder that later alphas fill in.
+- `filetypes.toml` holds your own file types and groups, added to the ones that come with diroxide. You write it when you want one. [File types and groups](file-types.md) has its keys.
+- `tools.toml` holds, for each helper program, a path to use instead of looking, a switch to turn it off, and whether you need it. [Tools and diro doctor](tools.md) has its keys.
 - A `themes` folder holds your own theme files.
 - A `plugins` folder holds your plugins, one folder each, and its `scripts` folder holds your script commands. [Plugins](plugins.md) and [script commands](script-commands.md) describe them.
 
-Later alphas add more files, such as the tools list. They are described when they arrive.
+Later alphas add more files. They are described when they arrive.
 
 The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. It also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now. A `plugins` folder holds what you turned on (`consent.toml`), a folder for each plugin with its log and its data, and a `runs` folder for the short-lived files of a running script. The SFTP places plugin keeps `sites.toml`, the list of your sites, in its folder there. `partials.json` holds the partial files a lost network left, so a copy can go on from them ([the transfer queue](transfer-queue.md) says how). A `components` folder holds the optional components you installed, one folder each. [Optional components](components.md) describes them.
 
@@ -119,12 +120,27 @@ These settings are for the filter language, search, compare and the key presets.
 
 The SFTP places plugin's settings (which ssh to use, timeouts, how many requests are in flight) are listed in [remote places](remote-places.md). A plugin's own settings are listed in its manifest. The Settings list has a row, "Plugin settings", that opens them: pick a plugin, then a setting. A change reaches the plugin at once, and the F1 help says what each setting does. The values are kept in `settings.toml` in the plugin's folder of the state folder. [Plugins](plugins.md) has the details.
 
+### File types, tools and previews
+
+Four settings and one file cover how diroxide knows what a file is, which helper programs it may use, and what the quick view runs. [The settings reference](settings-reference.md) lists each with its exact help.
+
+- Retro file types (`filetypes.retro`, off; in the Panels group): knows the old formats too, such as Amiga and tracker music. Off, those files read as unknown. The last row of the Groups list turns it on and off. [File types and groups](file-types.md#the-retro-pack) describes the pack.
+- Folders typed by name only (`check.skip`, none; in the Panels group): folders where diroxide never reads a file's first bytes to find its type, such as a slow share. A folder in the list covers everything below it. [File types and groups](file-types.md#folders-that-are-not-read) says more.
+- Auto-preview (`quick_view.auto_preview`, auto): whether the quick view runs ffprobe and pdftotext by itself after its wait. `auto` is on, except in screen reader mode.
+- Quick view documents up to (`quick_view.max_document_mb`, 64; 1 to 1024): the largest Word, EPUB or spreadsheet file the quick view opens whole.
+- `tools.toml`, in the config folder: a `path`, `disabled` and `needed` for any helper program, by its id. The Tools list, in Settings, shows what was found. [Tools and diro doctor](tools.md) has the keys and the words each choice produces.
+
+```toml
+[check]
+skip = ["/mnt/slow"]
+```
+
 ### The viewer, the quick view, archives and split sizes
 
 Four groups of settings cover the viewer, the quick view, archives and split sizes. [The settings reference](settings-reference.md) lists every one with its default and range, under Viewer and quick view and under Archives and split.
 
 - The viewer (`viewer.*`): wrap (`viewer.wrap`, on) and the width it wraps at (`viewer.wrap_width`, 0 for the screen's width, or a number such as 40 for a Braille line), line numbers (`viewer.line_numbers`, off), follow a growing file (`viewer.follow`, off), the hex row (`viewer.hex_row`: `auto` is eight bytes in screen-reader mode and sixteen otherwise), how much of an archive member it keeps decoded (`viewer.member_cache_mib`, 64), and the four caps on code colors (`viewer.highlight_max_kib`, `viewer.highlight_max_lines`, `viewer.highlight_max_line_chars` and `viewer.highlight_deadline_ms`). [The viewer](viewer.md) says what each does.
-- The quick view (`quick_view.*`): how long it waits after the cursor stops (`quick_view.wait_ms`, 500), how much of a file it reads (`quick_view.max_kib`, 1024), how long reading may take (`quick_view.deadline_ms`, 2000), whether it follows changes on disk (`quick_view.follow_changes`, on) and line numbers (`quick_view.line_numbers`, off). [The quick view](quick-view.md) says what each does.
+- The quick view (`quick_view.*`): how long it waits after the cursor stops (`quick_view.wait_ms`, 500), how much of a file it reads (`quick_view.max_kib`, 1024), how long reading may take (`quick_view.deadline_ms`, 2000), whether it follows changes on disk (`quick_view.follow_changes`, on), line numbers (`quick_view.line_numbers`, off), whether it runs the helper programs by itself (`quick_view.auto_preview`, auto) and the largest document it opens whole (`quick_view.max_document_mb`, 64; 1 to 1024). [The quick view](quick-view.md) says what each does, and [Previews](previews.md) says what the last two decide.
 - Archives (`archives.*`): nineteen settings, the limits that protect you from an archive made to fill a drive or a memory, and the two provider settings, `archives.ask_read_ahead_mib` and `archives.spool_folder`. In the file they are one table, `[archives]`. The defaults suit ordinary use. [Archives](archives.md) lists each limit with the question it asks.
 - Split sizes (`split_presets`): the sizes Split offers, a list of presets. In the Settings list the row opens a list you can read, not a field; in `config.toml` you add your own with `[[split_presets]]` tables. [Split and join](split-join.md) has the built-in sizes and how to add one.
 
@@ -150,11 +166,11 @@ Thumbnails are kept now and do nothing yet. The reference marks them as coming w
 
 diroxide comes with 24 themes. Their names, for the `theme` setting, are in the reference. The default is `galaxy`. Among the others are its light partner `galaxy-light`, `contrast` and `high-contrast`, `lamplight`, `sepia`, `amber`, `phosphor`, dark and light pairs of Gruvbox, One and Solarized, and `nord`, `dracula` and `tokyo-night`. [Themes and colors](themes.md) lists all 24 with what each is like, the ten that fall short of contrast, and what the window does for them.
 
-- Choose one in Settings (`theme`), or for one session with `diro --theme NAME`. An unknown name gives Galaxy, and the terminal says "Unknown theme" first; the window says nothing and draws Galaxy. Next theme, in the View menu (Alt+V, then T) and the palette, steps through them. The window draws the same 24 themes.
+- Choose one in Settings (`theme`), or for one session with `diro --theme NAME`. An unknown name gives Galaxy, and both the terminal and the window say "Unknown theme" once. Next theme, in the View menu (Alt+V, then T) and the palette, steps through them. The terminal and the window draw the same 24 themes.
 - When you choose a theme, in Settings or with Next theme, diroxide says whether it meets contrast in words: "Theme Galaxy, meets AA", or "Theme Nord, below AA: 1 check falls short". A high-contrast theme is held to AAA. The verdict is said once, and in the window a theme that falls short adds how many parts of the screen use the text color.
 - Nothing is shown by color alone. Every highlight is also bold, underlined, reversed or marked in text, such as the word "selected" on a marked row.
 - Themes come in light and dark partners, and `follow_system_appearance` (off) can switch between them with your system. The window reads the system's setting once, when it starts. Windows' High Contrast, when it is on, wins over every theme in the window.
-- Your own theme is a TOML file in the `themes` folder in the config folder. The program reads the folder at start and finds a theme by its name: the Settings chooser lists it after the built-in ones, and Next theme steps through it. The terminal draws it. The window does not read that folder yet. [Themes and colors](themes.md#your-own-themes) has the details and a known limit of `--theme`.
+- Your own theme is a TOML file in the `themes` folder in the config folder. The program reads the folder at start and finds a theme by its name: the Settings chooser lists it after the built-in ones, and Next theme steps through it. The terminal and the window both draw it. A theme file can also give a file group its own color with a `[group-colors]` table, which the window draws. [Themes and colors](themes.md#your-own-themes) has the details.
 - To change one color, use the `[colors]` table in `config.toml` with a role's name and a color as `#rrggbb`, such as `folder = "#ffaa00"`. The reference lists the roles. diroxide checks the contrast and says the result in words.
 - `NO_COLOR` is honored: with it set, the terminal uses attributes alone. The default look draws no boxes. The `borders` setting (off) turns on box drawing for sighted users.
 
@@ -223,5 +239,8 @@ To go back to the defaults, move the config folder aside by renaming it, and sta
 - [Remote places over SFTP](remote-places.md)
 - [Volumes and the trash](volumes-trash.md)
 - [Optional components](components.md)
+- [File types and groups](file-types.md)
+- [Tools and diro doctor](tools.md)
+- [Previews and the quick view's formats](previews.md)
 - [Privacy](privacy.md)
 - [The documentation index](README.md)

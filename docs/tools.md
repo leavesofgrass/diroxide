@@ -134,7 +134,7 @@ diro doctor
 3. The terminal: "Terminal: standard output is a terminal" or "Terminal: output goes to a file or pipe", its size when it is one ("Terminal size: 120 by 30"), and what the terminal answered in your last terminal session, read from the log and never asked for now, so no escape sequence is sent. With nothing recorded: "Last terminal session: none recorded".
 4. The folders: "Config folder:", "State folder:", "Components folder:" and "Cache folder: none, kept in memory". With `--portable`, "Settings: beside the program, --portable" comes first.
 5. The tools: the count, then each tool's line, each missing tool followed by its next step.
-6. The components: "Components: 0 of 1 installed", then each component and its state.
+6. The components: "Components: 0 of 6 installed", then each component and its state.
 7. The plugins: "Plugins: none", or the count and one line for each plugin.
 8. "Startup problems: none", or the files with problems and how many each has.
 
@@ -171,7 +171,7 @@ pandoc: 3.9.0.2, on PATH
 7-Zip: 24.08, in Program Files
 FFmpeg: turned off in tools.toml
 carta: 0.0.13, built in
-Components: 0 of 1 installed
+Components: 0 of 6 installed
 Example plugins: not installed
 ```
 

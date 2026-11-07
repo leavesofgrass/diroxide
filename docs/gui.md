@@ -256,6 +256,8 @@ The quick view turns the other panel into a preview of the file under the cursor
 - A click on a row of the preview goes into it, and Escape comes back.
 - Shift+F3 turns the quick view off, and the panel lists a folder again.
 
+A picture can open in a picture view. On a picture, Enter in the viewer or in the quick view's preview shows it as one graphic, named by its file and described by the quick view's sentence. Plus and Minus zoom, 0 fits it to the window, 1 shows the actual size, and Escape goes back. [Previews](previews.md#the-picture-view-in-the-window) has the words and the limits.
+
 ## The dialogs
 
 Every question, list, form and text the program shows is a dialog. The window draws seven shapes of dialog, and a test opens every purpose the program has, 77 of them, and checks that each has a name and that the keyboard focus is on a named control.
@@ -413,7 +415,6 @@ These are not in the window yet. None of them is dated: each is to come in a lat
 
 - An icon on macOS. The mark's smallest sizes, 16 to 24 pixels, have not been looked at by a sighted person.
 - A native menu bar on macOS. Its menus are the list.
-- Your own theme files in the window. It draws the 24 built-in themes, and Galaxy for a name it does not know, without saying that the name is unknown. The program finds the theme files in your `themes` folder by name, so Settings lists them, Next theme steps through them, the verdict is said, and the terminal draws them. [Themes and colors](themes.md#your-own-themes) has the details.
 - A setting for the text size or the font.
 - Mouse support in the viewer.
 - Thumbnails, which the settings list as coming later.
@@ -424,6 +425,7 @@ These are not in the window yet. None of them is dated: each is to come in a lat
 ## See also
 
 - [Using diroxide with a screen reader](screen-readers.md)
+- [Previews and the quick view's formats](previews.md)
 - [Themes and colors](themes.md)
 - [Installing diroxide](install.md)
 - [The panels](panels.md)

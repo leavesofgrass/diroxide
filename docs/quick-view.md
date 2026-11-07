@@ -25,7 +25,10 @@ What the announcement says, one line, with the file first:
 - One of carta's formats: "Preview: notes.org, Org, 2 headings".
 - A file larger than the preview reads: "Preview: big.log, first 1 MiB of 2.0 GB". The limit is `quick_view.max_kib`, 1,024 by default.
 - A binary file: "Preview: a.bin, binary, hex".
-- A kind with no previewer yet: "No preview: locked.zip, archive, 197 bytes".
+- A picture, in words from its header: "Preview: photo.png, PNG, 4 by 3, 8-bit RGBA, 2.0 MB".
+- A Word file: "Preview: report.docx, DOCX, 1 heading".
+- Sound, video or a PDF's text, which wait for the Preview command unless auto-preview is on: "Preview on request: song.mp3, MP3 audio, 20 bytes".
+- A kind no previewer takes: "No preview: setup.exe, Windows program, 66 bytes". A folder says "No preview: src, folder".
 - A file that cannot be read as its format: "Could not read notes.org: not valid Org.", then "Showing the text."
 
 Alt+O (Say other panel) names the preview: "Other panel: Preview, report.md".
@@ -79,28 +82,45 @@ Slash opens the prompt "Find in the preview" and searches the preview, ignoring 
 
 ## What it reads
 
-The quick view reads Markdown, plain text, code and the formats of carta.
+The quick view reads Markdown, plain text, code, the formats of carta, and, since alpha 4, pictures, sound and video, archives, PDF, Word and other documents, and spreadsheets.
 
 - Markdown, by the extensions `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn`, `.mdtxt` and `.rmd`: front matter, lists, tables, code blocks, links, footnotes and callouts are read, and math is kept as written. A title in the front matter becomes the document's title, not a heading row. Embeds, the Obsidian way of pulling in another note, are never followed. Raw HTML keeps its text and drops its tags.
 - Plain text and code: lines, with an optional line-number column (`quick_view.line_numbers`). The preview shows code as plain lines. The viewer (F3) colors it; the preview does not draw code colors.
 - carta's formats, by extension: Org (`.org`), reStructuredText (`.rst`, `.rest`), MediaWiki (`.mediawiki`, `.wiki`), DokuWiki (`.dokuwiki`) and Jira (`.jira`). carta is a converter written in Rust. diroxide pins it to one exact version and never requires it. An Org `#+TITLE` becomes the document's title, not a heading row. A document that carta cannot read shows its text instead, as above.
 - Anything else: text shows as text, and bytes that are not text show as hex.
 
-In the panel an Org file's row reads "file", not "Org", because the file type table has no entry for it yet. The preview line says "Org".
+In the panel an Org file's row reads "Org", and a reStructuredText file's reads "RST", because the file type table has entries for them. The rows of a MediaWiki, DokuWiki or Jira file read "file", because it has none. The quick view reads all five by their extensions.
 
 The preview reads only the file in front of it. It never follows an include or an embed to another file, because that would read a named file from anywhere on your computer. A reStructuredText include is left out and the preview says so once: "An include directive was left out, so the file it names is not read." carta's Typst reader is not in the build, for the same reason.
 
-DOCX, PDF, HTML, EPUB, spreadsheets, and images described in words come in a later alpha. Until then the quick view says "No preview" and names the kind and size.
+Alpha 4 adds readers for more kinds, all described in [Previews and the quick view's formats](previews.md):
+
+- Pictures, said in words from their headers: PNG, JPEG, GIF, WebP, BMP, TIFF and ICO. HEIC, AVIF and a few other formats are named and sized, and say they need a component. Nothing is drawn in the quick view, and nothing is played.
+- SVG drawings, read the way a screen reader reads them.
+- Sound and video, through ffprobe, and a PDF's text, through pdftotext. These wait for the Preview command, below, unless auto-preview is on.
+- Archives, listed and never unpacked.
+- Word (`.docx`), EPUB, OpenDocument text, RTF, HTML and LaTeX documents.
+- Spreadsheets (`.xlsx`, `.xlsb`, `.xls`, `.ods`) and delimited text (`.csv`, `.tsv`), cut to 10,000 rows and 200 columns.
+
+A kind that no reader takes says "No preview" and names the kind and size.
+
+### Preview
+
+Preview is in the View menu and the palette, and has no key. It turns the quick view on, if it is off, and runs the helper programs at once on the focused file: "Quick view on", then "Preview: song.mp3, MP3, 3 sec, 129 kbps, stereo". Without the helper it says why: "No preview: song.mp3, ffprobe not found". The setting `quick_view.auto_preview` decides whether the helpers also run by themselves after the wait: `auto`, the default, is on except in screen reader mode. [Previews](previews.md) has the details.
+
+### Encoding
+
+Encoding, in the Viewer and Preview submenus of the View menu and in the palette, lists the encodings to read the file in when the automatic choice is wrong: "Encoding of legacy.txt". The choice lasts for that file in that session. [File types and groups](file-types.md#the-encoding-chooser) says what is in the list.
 
 A preview never blocks. A reader that takes too long stops at the `quick_view.deadline_ms` limit, 2,000 milliseconds by default: "Could not read big.org: took too long.", then "Showing the text." A reader that ran past its deadline cannot be stopped, so it is left to finish. At most three readers run at once, and when they are all busy the next file says "Could not read notes.org: an earlier document is still being read."
 
 ## Open in textweaver
 
-Open in textweaver hands the file in the preview to `tw`, textweaver's command, for full reading with speech. It is in the palette and in the View menu (Alt+V, then O); it has no key of its own. It works when textweaver is installed: "Opening report.md in textweaver". When it is not: "Could not open report.md in textweaver: textweaver is not installed. Install textweaver from its releases page or with cargo." If the tool is turned off: "Could not open report.md in textweaver: textweaver is turned off in tools.toml. Turn it on in tools.toml." A file inside an archive is not handed over: "Could not open notes.md in textweaver: textweaver opens files on this computer only. Copy it out first." With the quick view off: "Open in textweaver opens the quick view's file. Turn the quick view on first." Settings shows `tw` in the list of tools as found with its version, or not found.
+Open in textweaver hands the file in the preview to `tw`, textweaver's command, for full reading with speech. It is in the palette and in the View menu (Alt+V, then O); it has no key of its own. It works when textweaver is installed: "Opening report.md in textweaver". When it is not: "Could not open report.md in textweaver: textweaver is not installed. Install textweaver from its releases page or with cargo." If the tool is turned off: "Could not open report.md in textweaver: textweaver is turned off in tools.toml. Turn it on in tools.toml." A file inside an archive is not handed over: "Could not open notes.md in textweaver: textweaver opens files on this computer only. Copy it out first." With the quick view off: "Open in textweaver opens the quick view's file. Turn the quick view on first." The Tools list, in Settings, the Tools menu and the palette, shows `tw` as found with its version, or not found. [Tools and diro doctor](tools.md) says more.
 
 ## Settings
 
-The Viewer and quick view group of [the settings reference](settings-reference.md) has five quick view settings: `quick_view.wait_ms`, `quick_view.max_kib`, `quick_view.deadline_ms`, `quick_view.follow_changes` and `quick_view.line_numbers`.
+The Viewer and quick view group of [the settings reference](settings-reference.md) has seven quick view settings: `quick_view.wait_ms`, `quick_view.max_kib`, `quick_view.deadline_ms`, `quick_view.follow_changes`, `quick_view.line_numbers`, `quick_view.auto_preview` and `quick_view.max_document_mb`. `quick_view.max_document_mb` is the largest Word, EPUB or spreadsheet file the quick view opens whole, 64 MB by default, 1 to 1,024. Past it, the file says "too large".
 
 ## See also
 

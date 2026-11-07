@@ -136,7 +136,7 @@ description = "Leave blank lines out of the count."
 - `[[command]]` is a command. `id` is what the plugin receives. `name` is what you see in the menu and the palette; keep it within 40 characters and put the meaning first. `selection` is `none`, `one`, `two`, `any` or `many`. `places` is `any` or `local`. `needs` names tools that must be found, `os` limits it to some systems, and `key` proposes a key that binds only when it is free. A command can also carry the run keys of a script command, such as `mode`, `prompt`, `confirm` and `argv`; [script commands](script-commands.md) lists them.
 - `[[setting]]` is a setting the person who uses the plugin can change. `type` is `bool`, `int`, `string`, `choice`, `path` or `argv`. The plugin gets the whole settings object in `initialize` and again in `settings/changed` after each change.
 
-The other tables are `[[lister]]` with its `[[lister.columns]]` and `[[lister.action]]`, `[[provider]]`, `[[previewer]]`, `[[converter]]` and `[[hook]]`. Their sections are below.
+The other tables are `[[lister]]` with its `[[lister.columns]]` and `[[lister.action]]`, `[[provider]]`, `[[previewer]]`, `[[converter]]`, `[[hook]]`, `[[column]]` and `[[place_info]]`. Their sections are below, except `[[column]]`, which declares a column of values for file rows (an `id`, a `header`, a `kind` of `text`, `number`, `time` or `size`, and the schemes or globs it applies to) and which the panels do not show yet; [the protocol reference](dev/plugin-protocol.md) has its `column/format` request.
 
 ## The protocol in a page
 
@@ -188,7 +188,7 @@ The steps:
 
 A plugin asks diroxide with requests of its own. Each is allowed by something in the manifest. A call that is not allowed gets -32030, and the person using the plugin hears one sentence.
 
-- Say, ask and show: `ui/announce`, `ui/ask` and `ui/show_text` are always allowed, because they only show things. `ui/ask` has five kinds: `confirm`, `choose`, `text`, `path` and `secret`. A confirm of a destructive thing starts on No. Escape is an answer, `{"cancelled": true}`, not an error. A secret is never echoed, never logged, never kept in history and never completed. The dialog is diroxide's own, its title ends with your plugin's name, and the person's thinking time does not count against your timeout. A `text` or `path` question can complete as the person types: `complete` names a source diroxide knows (`path`, `place`, `command`, `label`, `type` or `history`), a fixed `list` of candidates, or `plugin`, which sends you `completion/query` with the text so far. A prompt with a `prompt_id` keeps its own history. A `secret` never completes and never keeps history.
+- Say, ask and show: `ui/announce`, `ui/ask`, `ui/form`, `ui/show_text` and `ui/show_diff` are always allowed, because they only show things. [Forms, diffs and the title line](#forms-diffs-and-the-title-line) describes the form and the diff. `ui/ask` has five kinds: `confirm`, `choose`, `text`, `path` and `secret`. A confirm of a destructive thing starts on No. Escape is an answer, `{"cancelled": true}`, not an error. A secret is never echoed, never logged, never kept in history and never completed. The dialog is diroxide's own, its title ends with your plugin's name, and the person's thinking time does not count against your timeout. A `text` or `path` question can complete as the person types: `complete` names a source diroxide knows (`path`, `place`, `command`, `label`, `type` or `history`), a fixed `list` of candidates, or `plugin`, which sends you `completion/query` with the text so far. A prompt with a `prompt_id` keeps its own history. A `secret` never completes and never keeps history.
 - Panels: `panel/get` reads a panel's place, cursor and selection (needs `panel = "read"`). `panel/set` changes a place, the cursor or the marks (needs `panel = "write"`). `command/execute` runs a diroxide command by id (needs a matching `commands` pattern).
 - Files: `fs/list`, `fs/stat` and `fs/read` need `fs = "read"`. `fs/write`, `fs/mkdir`, `fs/rename`, `fs/copy`, `fs/move` and `fs/delete` need `fs = "write"`, and they run as jobs. A copy of yours shows the same plan, the same question and the same Undo as a copy started from the panels. Delete goes to the trash by default, after a listing. You cannot turn any of this off. Names you create follow the portable-name rules, so a plugin cannot make a name with a control character, a colon or a trailing dot through diroxide.
 - Programs: `tools/run` runs a program named in `permissions.tools`, with an argument list and never a shell line. `tools/find` says whether a tool is found. `tools/launch` starts a program from `permissions.launch` detached.
@@ -283,8 +283,77 @@ lease = "listers"
 - `provider/list` answers in one go, or in batches as `$/progress` partial values for a big folder, so the first rows show while the rest arrive.
 - `lease` says what keeps the plugin alive while a panel shows it.
 - When the place is lost, say so with `provider/lost` and the reason in words.
+- `extensions` is for a provider that opens containers found inside other places, as the disk image plugin does: `extensions = [".iso", ".vhd"]`. A place such as `fedora.iso!EFI/` then reaches the plugin, which opens each container once and reads one inside an archive or on an SFTP site through `fs/read`. Write each with its dot. Only disk images, the formats of the 7z program and raw images may be claimed, never a format diroxide reads itself. A claim for anything else is refused, with "is not a container a plugin may claim" and the list of what may be claimed.
+- `wants` names programs the provider uses when they are there and works without, such as `["7z", "qemu-img"]`. Settings names them, and nothing turns off when they are missing. It is not `permissions.tools`, which is what the plugin may run.
 
 Build one with `diro plugin new my-files --language python --kind provider`.
+
+## Forms, diffs and the title line
+
+Three services of alpha 4 let a plugin show more than a question. `ui/form` and `ui/show_diff` are always allowed. `place/describe` is the host asking you, and your manifest allows it with a `[[place_info]]` table. The git plugin uses all three.
+
+### A form
+
+`ui/form` asks several labeled fields in one dialog. This asks for a commit's message:
+
+```json
+{"method": "ui/form", "params": {
+  "title": "Commit",
+  "summary": "2 files staged on main",
+  "fields": [
+    {"id": "message", "label": "Message", "kind": "multiline"},
+    {"id": "signoff", "label": "Sign-off", "kind": "checkbox", "default": false}
+  ],
+  "default_button": "Commit"}}
+```
+
+- A form has a `title`, an optional `summary`, its `fields`, an optional `focus` (the id of the field that starts focused) and an optional `default_button`, which is "OK" when left out.
+- A field has an `id`, a `label` with its meaning first, and a `kind`: `text`, `multiline`, `choice`, `checkbox`, `path` or `secret`. It may have a `default`, `choices` for a choice, and, for a text field, a `pattern` the whole value must match with a `pattern_message` to say when it does not.
+- The answer is `{"values": {"message": "Fix the parser", "signoff": false}}`, each field's value by its id: text for text, multiline, choice and path fields, true or false for a checkbox, and the text of a secret. A multiline answer is its lines joined by line feeds. Escape and the Cancel button answer `{"cancelled": true}`, which is an answer and not an error.
+- A form that cannot be read is answered with an error: a kind that is not one of the six, a choice with no choices, two fields with one id, a pattern that is not a regular expression, a choice default that is not among the choices, a checkbox default that is not true or false, or a focus on no field.
+
+What the person hears. The dialog is a list of setting rows, in the shape of the Pack dialog, and its title ends with your plugin's name: "Commit (Git)".
+
+- The first row is the default button, its words first and the summary after: "Commit: 2 files staged on main".
+- Every other row is a field, its label first and its value after: "Message: empty", "Sign-off: off", "Password: hidden". A multiline field says its first line and the count: "Message: Fix the parser, 3 lines".
+- Enter on a field changes it. A text or path field opens a prompt, and a path completes as a path prompt does. A multiline field opens as a list of its lines, each typed in the prompt, titled "Message, line 1 (Git)", with an "Add a line" row. A choice opens a list of its choices. A checkbox toggles with Enter or Space. A secret opens the masked prompt, shows as "hidden" or "empty", and its text is in no message, log or history.
+- Enter on the first row answers the form. A text value that does not fit its `pattern` stops the answer, the field named first, and the form stays open: "Name: Use small letters only". With no `pattern_message`, the words are "That text is not accepted here."
+- A form about something destructive names `No` or `Cancel` as its `default_button`. Then the first row cancels, and an "OK" row after the fields answers the form.
+- Escape in a field goes back to the form, the field as it was. Escape in the form answers cancelled.
+- A form waits behind a destructive confirmation, a password prompt, a job's question and another plugin's question, and opens when they close.
+
+### Two texts compared
+
+`ui/show_diff` shows two texts in the compare screens, the same screens as two files:
+
+```json
+{"method": "ui/show_diff", "params": {
+  "title": "hello.txt",
+  "old": {"title": "HEAD", "text": "one\ntwo\n"},
+  "new": {"title": "working tree", "text": "one\n2\n"}}}
+```
+
+The answer is `{"shown": true}`, as soon as the screens open.
+
+- The screens say, in order, the verdict and the counts, the direction, what was ignored, the files' facts, the change list, one change in full, the unified view, and Swap. They are named by the two side titles. Keep a side title short, a word or two such as "HEAD", because the screens say it often.
+- The view's title is your `title` with the plugin's name last: "hello.txt (Git)". It is said last.
+- The texts are compared in the plugin's own worker under the person's compare settings, never on the input thread. A text with a NUL or many control characters is compared byte by byte, and its words are the compare screens' own for binary files.
+- A document has no place, so the view key on a change says "No file to view: hello.txt (Git)". [Compare files](compare.md) has the rest.
+
+### Words for the title line
+
+`place/describe` asks you for a short description of a folder, for the title line. Declare which folders in `plugin.toml`:
+
+```toml
+[[place_info]]
+marker = ".git"
+```
+
+- A `[[place_info]]` names a `scheme`, or a `marker`, which is one file or folder name that is looked for in the folder and in the folders above it, up to 64 levels. A name with a slash, `.` or `..` is refused with "is not one file or folder name", and a table with neither is refused with "names no scheme and no marker". A plugin with `[[place_info]]` needs a `[run]`.
+- When a panel lands in a matching folder, diroxide asks every enabled plugin that declared one, in turn, off the input thread, with `{"place": "PLACE"}`. The first words win. A plugin that declares none is never asked.
+- Answer `{"text": "main, no upstream, 2 changed here"}`. The title line says the panel after the folder, then your words, then your plugin's name in parentheses: "repo, left panel, main, no upstream, 2 changed here (Git), in D:\work". Your words and the name are cut at 40 characters together. A name as short as Git takes six of them, so keep your words to about 33 and put the meaning first.
+- An answer with no text removes your words. An error keeps the old ones. The old title stays until the answer arrives.
+- The words are kept for the folder until it is listed again, which a reload, a change the folder's watch sees or the end of a job does. The plugin is asked at every listing, so cache by something cheap, such as the times of the repository's index. The words are dropped when the plugin crashes, times out or is turned off, and kept across an idle stop.
 
 ## Previewers and converters
 
@@ -450,6 +519,9 @@ And for safety and privacy:
 
 - [Plugins](plugins.md)
 - [Script commands](script-commands.md)
+- [Compare files](compare.md)
+- [Git](git.md)
+- [Disk images](disk-images.md)
 - [Optional components](components.md)
 - [Security](security.md)
 - [The plugin protocol reference](dev/plugin-protocol.md)

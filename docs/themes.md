@@ -1,6 +1,6 @@
 # Themes and colors
 
-This guide covers the 24 themes that come with diroxide, how to choose one, what the words "meets AA" and "below AA" mean, the ten themes that fall short and what the window does for them, your own colors in the `[colors]` table, your own theme files, Windows' High Contrast, and following the system's light or dark setting. The terminal and the window draw the same 24 themes. Where they differ, such as for your own theme files, this guide says so.
+This guide covers the 24 themes that come with diroxide, how to choose one, what the words "meets AA" and "below AA" mean, the ten themes that fall short and what the window does for them, your own colors in the `[colors]` table, your own theme files, Windows' High Contrast, and following the system's light or dark setting. The terminal and the window draw the same 24 themes. Where they differ, such as for group colors, this guide says so.
 
 What this guide quotes is what the program says, taken from the program's code and tests. Nobody has listened to the lines that announce a theme on a screen reader or a Braille display yet. If your experience differs, that is a finding.
 
@@ -9,7 +9,7 @@ Color never carries meaning alone, in any theme. A row says "folder", "link", "b
 ## Choosing a theme
 
 - Settings (Alt+T, then S, or Ctrl+Comma in the window) has a row, Theme (`theme`), whose values are the 24 themes, then any theme files of your own, then "Back to default". The change is saved at once, and the program says the theme's contrast verdict.
-- `diro --theme NAME` chooses one for one session. NAME is the name in code type below, such as `galaxy-light`. An unknown name gives Galaxy. The terminal also says "Unknown theme: NAME. Galaxy is in use." before it opens. The window says nothing for an unknown name and draws Galaxy.
+- `diro --theme NAME` chooses one for one session. NAME is the name in code type below, such as `galaxy-light`. An unknown name gives Galaxy. The terminal says "Unknown theme: NAME. Galaxy is in use." before it opens. The window says "Unknown theme NAME. Galaxy is in use." once, at its first paint, naming the theme it drew in the name's place. A name that is one of your own theme files is known, so neither says anything.
 - Next theme, in the View menu (Alt+V, then T) and the palette, steps to the next theme in the order below, through your own theme files after the 24, and back to the first.
 - The default is `galaxy`.
 
@@ -125,9 +125,28 @@ The setting `follow_system_appearance` ("Follow the system", off by default) let
 
 A theme of your own is a TOML file in the `themes` folder of the config folder. The program reads that folder when it starts and finds each theme by the `name` in the file's `[theme]` table. A theme of yours is listed in the Settings theme chooser after the 24 built-in themes, before Back to default, and Next theme steps through it after the last built-in theme and goes back to the first. Choosing it says its contrast verdict like any other: "Theme Harbor, meets AA". A file that cannot be read is left out, and the start says so once, in a line that begins, for a file named `broken.toml`, "Theme file broken.toml was not loaded".
 
-The terminal draws your themes. The window does not read the `themes` folder in this alpha, so it draws only the 24 built-in themes. For a name it does not know, which includes your themes, it draws Galaxy and does not say that the name is unknown. Use the terminal, `diro --tui`, for your own themes for now.
+The terminal and the window both draw your themes. The window reads the `themes` folder when it starts, as the terminal does, so a theme of yours is in its Settings chooser and Next theme steps through it. `diro --theme harbor` with `harbor.toml` in your `themes` folder starts in that theme in either, and says nothing about it.
 
-One more known limit: `diro --theme harbor` says "Unknown theme: harbor. Galaxy is in use." before the terminal opens, even when `harbor.toml` is in your `themes` folder, because that sentence knows only the built-in names. The terminal then draws your theme. Choosing the theme in Settings does not say it.
+### Group colors
+
+A theme file may give a file group its own color, with a `[group-colors]` table. Each line is a group's id and the key of one color role the theme already has, such as `heading2`:
+
+```toml
+[theme]
+name = "crows"
+display_name = "Crows"
+inherits = "galaxy"
+
+[group-colors]
+images = "heading2"
+```
+
+- The ids are `images`, `music`, `video`, `documents`, `archives`, `code`, `text` and `screenshots`, and the id of any group of yours from `filetypes.toml`. A line whose id or role does not exist is ignored.
+- The color is one the theme already has, so the contrast check measures nothing new, and the window holds it to the same floor as every other part.
+- The window draws it on the rows of plain files and archives. Folders, links, broken links, hidden entries, marked rows and the focused row keep their own looks. In Windows' High Contrast the rows are plain text.
+- A file in two groups takes the color of its type's group when the table names it, and otherwise the color of its other group.
+- A row says its type and group in words whatever its color, so the color is never the only sign.
+- The default theme maps no groups, so nothing changes until a theme asks. The terminal does not draw group colors yet.
 
 [Settings and where the files live](settings.md#themes-and-colors) has the rest. The built-in theme files in the source, in `crates/diroxide-theme/themes`, are models to copy: copy one into your folder under a new name and change its `theme.name`.
 

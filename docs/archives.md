@@ -11,7 +11,8 @@ What this guide says about the dialogs and the spoken lines comes from their des
 - Zip: zip64 archives are read. Passwords are AES-256 when diroxide writes one. Archives that use the old ZipCrypto password are read, with a warning.
 - 7z: solid archives, and archives with encrypted names, are read. diroxide writes 7z with AES-256 and encrypted names.
 - A split archive, such as `backup.7z.001` with its parts beside it, opens as one archive. See [split and join](split-join.md).
-- Not read: bzip2 or Zstandard compression on its own, lzip, RAR, ISO images and spanned zip sets (`.z01`, `.z02`). diroxide says why in words, for example "it uses the RAR format, which is not supported". These come later, through the 7z program when it is installed. [Known limits](known-limits.md) lists them.
+- Disk images: an ISO image and the virtual disk formats (VHD, VHDX, VDI, VMDK and QCOW2) open like archives, through the disk image plugin, an optional component. [Disk images](disk-images.md) says what opens and how. Without the plugin, Enter on an ISO says it needs the plugin or 7-Zip.
+- Not read: bzip2 or Zstandard compression on its own, lzip, RAR and spanned zip sets (`.z01`, `.z02`). diroxide says why in words, for example "it uses the RAR format, which is not supported". These come later, through the 7z program when it is installed. [Known limits](known-limits.md) lists them.
 
 The format comes from the file's first bytes, not only its name. A zip named `data.dat` opens as a zip. When the bytes and the name disagree, the title says which format it found: "a.zip, 7z archive, in D:\docs". Open as archive opens a file by its bytes even when its name says nothing. It is in the File menu under Archive (Alt+F, then A, then O) and in the palette, and it has no key of its own.
 
@@ -181,10 +182,11 @@ The Archives and split group of [the settings reference](settings-reference.md) 
 
 ## Known gaps
 
-[Known limits](known-limits.md) lists everything alpha 1 does not do with archives. The ones you are most likely to meet: no adding to or changing an existing archive, no RAR or ISO, no progress line while a big tar.xz is listed, zip times read as UTC, and the names of older zips in Shift-JIS and other legacy encodings are not chosen yet.
+[Known limits](known-limits.md) lists everything alpha 1 does not do with archives. The ones you are most likely to meet: no adding to or changing an existing archive, no RAR, no progress line while a big tar.xz is listed, zip times read as UTC, and the names of older zips in Shift-JIS and other legacy encodings are not chosen yet.
 
 ## See also
 
+- [Disk images](disk-images.md)
 - [Split and join](split-join.md)
 - [The viewer](viewer.md)
 - [Operations and undo](operations.md)
