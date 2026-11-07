@@ -429,3 +429,81 @@ fn a_minisign_signature_asks_its_public_key() {
     );
     assert!(s.tools.ran().is_empty(), "minisign never runs gpg");
 }
+
+/// The SHA-256 of "abc".
+const ABC: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
+/// A folder with `example-tool.zip` ("abc"), its line in `SHA256SUMS`,
+/// and `SHA256SUMS.asc` when asked; Verify checksum run on the zip, its
+/// rows returned.
+fn chain_rows(signed: bool, gpg: Option<&[u8]>) -> Vec<String> {
+    let (_dir, work, mut s) = plain();
+    fs::write(work.join("example-tool.zip"), b"abc").unwrap();
+    fs::write(
+        work.join("SHA256SUMS"),
+        format!("{ABC}  example-tool.zip\n"),
+    )
+    .unwrap();
+    if signed {
+        fs::write(
+            work.join("SHA256SUMS.asc"),
+            "-----BEGIN PGP SIGNATURE-----\n",
+        )
+        .unwrap();
+    }
+    if let Some(status) = gpg {
+        s.tools.answer("gpg", status);
+    }
+    s.command(ids::RELOAD);
+    s.focus("example-tool.zip");
+    s.command(ids::VERIFY_CHECKSUM);
+    match s.dialog() {
+        Some(Dialog::Choose { list, .. }) => {
+            let mut rows = vec![list.title().to_owned()];
+            rows.extend(list.rows().iter().map(|r| r.label.clone()));
+            rows
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn verify_checksum_says_the_chain_over_the_lists_signature() {
+    let good = b"[GNUPG:] NEWSIG\n[GNUPG:] GOODSIG 168B6F650E9C8469 Ada Example <ada@example.invalid>\n[GNUPG:] VALIDSIG x\n[GNUPG:] TRUST_ULTIMATE 0 pgp\n";
+    assert_eq!(
+        chain_rows(true, Some(good)),
+        [
+            "1 file matches SHA256SUMS",
+            "List is signed: 1 of 1 files match",
+            "Signature good: key ending 8469",
+            "Key ending 8469 is named Ada Example <ada@example.invalid>",
+            "Good means the key fits, not who holds it.",
+            "Show the 1 match",
+        ]
+    );
+    let bad = b"[GNUPG:] NEWSIG\n[GNUPG:] BADSIG 168B6F650E9C8469 Ada Example\n";
+    assert_eq!(
+        chain_rows(true, Some(bad)),
+        [
+            "1 file matches SHA256SUMS",
+            "Signature bad: the file was changed",
+            "List not verified: 1 of 1 match",
+            "Show the 1 match",
+        ]
+    );
+    // A signature with no gpg to check it is not verified, in words.
+    let rows = chain_rows(true, None);
+    assert_eq!(rows[1], "gpg not found. Install GnuPG first.");
+    assert_eq!(rows[2], "List not verified: 1 of 1 match");
+    // No signature: what a match shows, and no more.
+    assert_eq!(
+        chain_rows(false, None)[1..3],
+        [
+            "List not signed: 1 of 1 match",
+            "This shows the files are not damaged. It does not show who made them.",
+        ]
+    );
+    for row in chain_rows(true, Some(good)) {
+        assert!(!row.contains("safe") && !row.contains("genuine"), "{row}");
+    }
+}

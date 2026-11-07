@@ -1611,8 +1611,10 @@ impl Runtime {
                     lock(&self.meta_runs).insert(job, token.clone());
                 }
                 let runs = Arc::clone(&self.meta_runs);
+                // A list's signature is checked through the tools (lane AE).
+                let tools = Arc::clone(self.engine.tools());
                 self.worker(move |shared| {
-                    meta::run(shared, &registry, *ask, token);
+                    meta::run(shared, &registry, tools.as_ref(), *ask, token);
                     if let Some(job) = job {
                         lock(&runs).remove(&job);
                     }

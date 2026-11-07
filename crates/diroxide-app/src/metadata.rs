@@ -357,14 +357,14 @@ pub fn restored_words(name: &str) -> String {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Verified {
-    /// The list's report, verdict first, and a signature file found
-    /// beside the list, not checked here.
+    /// The list's report, verdict first, and the verdict on the list's
+    /// signature beside it.
     Report {
         /// The report.
         report: Box<VerifyReport>,
-        /// A signature file beside the list (`SHA256SUMS.asc`), when one
-        /// is there.
-        signature: Option<String>,
+        /// The verdict on a signature beside the list (`SHA256SUMS.asc`,
+        /// `.sig`, `.minisig`), when one is there (lane AE).
+        signature: Option<Box<diroxide_ops::crypt::SignatureVerdict>>,
     },
     /// Several lists sit beside the file: each one's name and its row,
     /// "SHA256SUMS, 12 files", for the owner to choose.
@@ -391,9 +391,15 @@ pub fn signature_names(list: &str) -> [String; 3] {
 
 /// What Verify checksum's list says, the verdict first (R29 3.5; R30
 /// commit 55): the verdict, the failures, "Matches BLAKE3, not SHA-256"
-/// where a value named no algorithm, then the one line on the signature
-/// and what a match shows. Never "safe" or "genuine".
-pub fn verify_lines(report: &VerifyReport, signature: Option<&str>) -> Vec<String> {
+/// where a value named no algorithm, then the chain over the list's
+/// signature (lane AE, step 6: "List is signed: 12 of 12 files match",
+/// "List not signed: 12 of 12 match" and what a match shows, or the
+/// signature's verdict then "List not verified: 12 of 12 match"). Never
+/// "safe" or "genuine".
+pub fn verify_lines(
+    report: &VerifyReport,
+    signature: Option<&diroxide_ops::crypt::SignatureVerdict>,
+) -> Vec<String> {
     let mut lines = report.lines();
     for entry in &report.entries {
         if let diroxide_meta::checksum::verify::EntryVerdict::Match {
@@ -408,14 +414,15 @@ pub fn verify_lines(report: &VerifyReport, signature: Option<&str>) -> Vec<Strin
             ));
         }
     }
-    lines.push(match signature {
-        // Lane E's commit 73 checks it; until then it is named, unchecked.
-        Some(file) => format!("Signature not checked: {}", display_name(file)),
-        None => "List not signed.".to_owned(),
-    });
-    if report.counts().matched > 0 {
-        lines.push(diroxide_meta::checksum::NOT_PROOF.to_owned());
-    }
+    // The chain's sentences (lane AE); what a match shows only when one
+    // matched.
+    let counts = report.counts();
+    let (matched, files) = (counts.matched, counts.files());
+    lines.extend(
+        diroxide_ops::crypt::chain_lines(signature, matched, files)
+            .into_iter()
+            .filter(|line| matched > 0 || line != diroxide_ops::crypt::lines::chain::ONLY_DAMAGE),
+    );
     lines
 }
 
