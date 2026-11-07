@@ -58,7 +58,7 @@ A field name, an optional colon, then a value. `ext pdf`, `ext:pdf` and `ext is 
 - `ext` (or `extension`): the extension without its dot. A comma list means either.
 - `kind`: `folder`, `file`, `link`, `archive`, `special` or `item`. A file kind also matches archives, because an archive is a file. An item is a row that is not a file, such as one a plugin lists.
 - `type`: the detected type's short name, such as `PDF`. It matches only entries whose type is already known.
-- `group`: a group of file types by extension: `images`, `music`, `video`, `documents`, `archives`, `code` and `text`. The full type model comes in a later alpha.
+- `group`: a group of file types. A panel's filter knows eight: `images`, `music`, `video`, `documents`, `archives`, `code`, `text` and `screenshots`, and any group you add in `filetypes.toml`. In a panel a file is in the group of its detected type, and also in any group whose name patterns take its name, so a screenshot is in `images` and in `screenshots`, and `group:images` and `group:screenshots` both find it. A file whose type is not checked yet is undecided. A search, and Space by kind, still go by extension and know seven groups, without `screenshots` and without yours. [File types and groups](file-types.md) says what is in each.
 - `label`: a label name, or several with commas. [Labels and bookmarks](labels-bookmarks.md) describes labels.
 - `owner`: the name of the file's owner. `usergroup`: the Unix group. (The word `group` always means the group of file types.) Owner and group are compared without regard to case. A Windows listing does not carry owners.
 - `size`: a number with a unit. `depth`: how many folders below the start; direct children are 1.
@@ -119,7 +119,7 @@ Each example gives the text you type and what diroxide reads back. These are the
 - `kind link and broken`: "kind is link and broken". Links whose target is gone.
 - `needs-care`: names that need care, such as hidden characters, trailing dots or spaces and device names.
 - `label urgent and not label done`: "label is urgent and not label is done".
-- `group images and size over 5 MB`: "group is images and size over 5 MB". Large pictures, by extension.
+- `group images and size over 5 MB`: "group is images and size over 5 MB". Large pictures.
 - `content:"total due"`: files that hold the text total due. It reads back as content contains, then the text in quotes.
 - `content:re:"due \d+" and ext txt,md`: regular-expression content in two kinds of file.
 - `hidden and kind file`: "hidden and kind is file, including hidden".
@@ -147,7 +147,7 @@ Every problem starts "Filter problem: " and puts the meaning next, so the first 
 - "Filter problem: content needs text". Then an example to copy, `content:"total due"`.
 - "Filter problem: depth works in searches". Then "A panel shows one folder; search to go deeper."
 - "Filter problem: duration needed". Then "Try within 3 days or older than 1 year."
-- "Filter problem: unknown kind 'thing'". Then the kinds. "Filter problem: unknown group 'pictures'" names the groups.
+- "Filter problem: unknown kind 'thing'". Then the kinds. "Filter problem: unknown group 'pictures'" names the groups the filter knows, and says which is nearest when one is close.
 
 diroxide also notices filters that were probably not meant and says so once. Two globs joined by a space cannot both match one name (`*.txt *.md`): "Both patterns must match one name. Use a comma or or." A label that does not exist: "No label named urgnt. Did you mean urgent?" A range that runs backward: "The range runs from high to low." These are hints. The filter still runs.
 
@@ -187,7 +187,8 @@ Plus (in a terminal, with single-letter keys on, and in the Select menu) asks fo
 
 The Select menu (Alt+S) has more ways to mark, all on the filter language:
 
-- Select by kind (K) lists the kinds and file-type groups: Folders, Files, Links, Archives, and each group. Choose one: "Selected 3 folders. 3 selected."
+- Select by kind (K) lists the kinds and file-type groups: Folders, Files, Links, Archives, and each group, the built-in ones and yours. Choose one: "Selected 3 folders. 3 selected."
+- The Groups list, in the Select menu, lists each file group with how many of its files are in the folder, such as "Images: 41 files here". Enter selects them. [File types and groups](file-types.md#groups-in-the-program) has the rest.
 - Select by size (Z) opens the pattern prompt on `size over `, to finish with a size such as 1 MB. Select by date (D) opens it on `modified within `, to finish with a time such as 3 days.
 - Select same extension (E) marks every file with the focused file's extension: "Selected 4 with .md. 5 selected."
 - Mark range (G) starts a range at the focused row: "Range started at report.pdf. Mark range again ends it." Again, at another row: "Marked 5, report.pdf to notes.txt. 5 selected."
@@ -290,7 +291,7 @@ A saved search can be run and deleted. It cannot be renamed or edited yet: save 
 The Space list answers "what is taking my disk". Space list, in the Search menu and the palette, counts everything below the folder: "Counting the space in work". It counts every file, hidden files included, links not followed, and a hard link once on Unix. It starts with one sentence, at most 40 cells: "Total 66.4 GB. Largest 3 hold 81 percent". Then one row for each of the largest items: "Videos, folder, 41.2 GB, 62 percent". It ends with the rest: "And 340 smaller items, 2.1 GB, 3 percent". At most 30 rows are listed.
 
 - Enter on a folder row goes into it. Backspace goes up. On anything else: "Not a folder: only folders open here." The Sort list works.
-- Space by kind groups the files by their file-type group: images, music, video and the rest, by extension. Space by age groups them by when they last changed: "changed in the last year", "not changed in a year", "not changed in two years".
+- Space by kind groups the files by their file-type group: images, music, video and the rest, by extension, in the seven groups a search knows. Space by age groups them by when they last changed: "changed in the last year", "not changed in a year", "not changed in two years".
 - Largest items below here lists the 50 biggest files below a folder, as search results, so every key of a result works on them. It says "Looking for the largest items below work" and then "Done: the largest 50 below work."
 - Folder sizes counts the marked folders, or the focused one, with everything inside: "Sizing Photos", then "Photos: 5.0 KB in 2 files and no folders". Where it could not read everything: "At least 12.3 GB, 2 folders unreadable". On Windows hard links may be counted more than once, and the line says so. Cloud folders give "total" and "on this computer".
 - Size every folder counts each folder in the panel, then offers the size sort: "Sized 2 folders, 5.0 KB in all. Sort by size? No is the default. y or n". Until then the Size column says the folder's size is not counted.
@@ -373,7 +374,7 @@ Reads as: modified last week, October 4 to 10. The next lines show the tree, the
 
 - Patterns are Rust regular expressions: no look-around and no backreferences.
 - Dates use the computer's current offset from UTC, with no daylight-saving rules.
-- Types that have not been checked do not match. Groups go by extension until the full type model arrives.
+- Types that have not been checked do not match. In a panel, groups go by the type model. In a search and in Space by kind they go by extension, with seven groups.
 - Owner and user group are read where the listing has them. Windows owners are not read in a listing.
 - A folder has no size until it is counted.
 - Names are compared as stored. Accents are not folded.
@@ -390,6 +391,7 @@ Reads as: modified last week, October 4 to 10. The next lines show the tree, the
 ## See also
 
 - [The panels](panels.md)
+- [File types and groups](file-types.md)
 - [Labels and bookmarks](labels-bookmarks.md)
 - [Compare files](compare.md)
 - [Watching a folder](watching.md)
