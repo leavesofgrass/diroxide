@@ -1508,8 +1508,9 @@ impl Runtime {
                 cap,
             } => {
                 let registry = Arc::clone(&self.registry);
+                let tools = Arc::clone(self.engine.tools());
                 self.worker(move |shared| {
-                    let result = open_viewer_source(shared, &registry, &place, size, cap);
+                    let result = open_viewer_source(shared, &registry, &place, size, cap, tools);
                     shared.send(AppEvent::ViewerSource {
                         request,
                         place,
@@ -1521,13 +1522,15 @@ impl Runtime {
                 let Some(archives) = self.archives.clone() else {
                     return;
                 };
+                let tools = Arc::clone(self.engine.tools());
                 self.worker(move |shared| {
                     let source: Arc<dyn SecretSource> = Arc::new(ForwardSecrets {
                         job: None,
                         shared: Arc::clone(shared),
                     });
                     let secrets = JobSecrets::new(source);
-                    let opened = secrets.with_tries(&OpContext::new(), |ctx| {
+                    // 7-Zip counts a RAR's entries (lane AW).
+                    let opened = secrets.with_tries(&OpContext::new().with_tools(tools), |ctx| {
                         archives.open_archive(&place, ctx, Allowances::default())
                     });
                     secrets.forget();
@@ -2782,13 +2785,15 @@ fn open_viewer_source(
     place: &Place,
     size: Option<u64>,
     cap: u64,
+    tools: Arc<dyn diroxide_vfs::ToolRunner>,
 ) -> Result<crate::viewer::ViewerSource, Message> {
     let source: Arc<dyn SecretSource> = Arc::new(ForwardSecrets {
         job: None,
         shared: Arc::clone(shared),
     });
     let secrets = JobSecrets::new(source);
-    let ctx = OpContext::new();
+    // A member of a RAR is read through 7-Zip (lane AW).
+    let ctx = OpContext::new().with_tools(tools);
     let opened = secrets.with_tries(&ctx, |ctx| {
         let provider = registry.resolve(place)?;
         match provider.open_seekable(place, ctx) {
