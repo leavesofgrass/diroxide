@@ -32,7 +32,7 @@ Without the Encryption plugin, the three age commands offer it, and the question
 
 This is age with a passphrase. A form opens, titled "Encrypt with a passphrase" with the plugin's name last. Its rows, in order:
 
-- The first row is the default button, "Encrypt", with its summary after it: "Encrypt 3 files with a passphrase. Typing is hidden. A lost passphrase cannot be got back, so note it where you keep such things."
+- The first row is the default button, "Encrypt", with its summary after it. The summary is the plan, "Encrypt 3 files with a passphrase", and then a warning: "Typing is hidden. A lost passphrase cannot be got back, so note it where you keep such things."
 - "Passphrase" and "Repeat the passphrase", both hidden fields.
 - "ASCII armor", off unless you turn it on. Armor makes the result text, so it can go in a mail.
 
