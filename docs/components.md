@@ -1,6 +1,6 @@
 # Optional components
 
-This guide covers optional components: the plugins, helper programs and data packs that diroxide can use but does not ship inside itself. It covers what a component is, the SFTP places plugin and the Volume actions plugin, the question diroxide asks before it fetches anything, how every file is checked, `diro components` and the Manage optional components screen, the list that opens once at the first start, installing from a file with no network, removing, and where the files come from.
+This guide covers optional components: the plugins, helper programs and data packs that diroxide can use but does not ship inside itself. It covers what a component is, the four components of the project's own and the helper programs from their publishers, the question diroxide asks before it fetches anything, how every file is checked, `diro components` and the Manage optional components screen, the list that opens once at the first start, installing from a file with no network, removing, and where the files come from.
 
 The short version: diroxide never fetches a component without your yes, checks every file against a size and a SHA-256 hash before it uses it, and takes away only the files it put there.
 
@@ -16,22 +16,46 @@ Each has an id, a title that says what it is for, a version, a size, a license, 
 
 diroxide stays small and pure Rust because these are optional. A component comes only when you ask for it, and only after the question below.
 
-The list has two components:
+The list has four components of the project's own, and the helper programs below them:
 
 - Example plugins (id `diro-examples`): a data pack of the eleven example plugins and scripts, about 124 KB, license Apache-2.0 OR MIT. It unpacks into a folder of its own, with one folder or script for each example. Volume actions, which unmounts, ejects and mounts for the Volumes list, is one of them. Installing the pack turns nothing on. The pack is not published with a release yet. Until it is, get it from a folder with `--source`, or install it from a file, as below.
 - SFTP places plugin (id `diro-sftp`, version 0.1.0-alpha.3): the plugin that opens folders on other computers over SSH, license Apache-2.0 OR MIT. It needs the OpenSSH program on your computer; [remote places over SFTP](remote-places.md) says more. It is in the list of the release files, because the release builds the program for each computer below and pins it. A build you made from source does not have it in its list, because there is no program to pin. Build the plugin yourself, as that guide says.
+- Disk image places plugin (id `diro-disk`, version 0.1.0-alpha.3): the plugin that opens ISO images and virtual disks like folders, license Apache-2.0 OR MIT. It needs no other program, and it uses 7-Zip and qemu-img when they are there; [disk images](disk-images.md) says more. Like the SFTP plugin it is in the release files' list and not in a build made from source.
+- Git plugin (id `diro-git`, version 0.1.0-alpha.3): the plugin that shows a repository's branch and changes in the panels and runs git commands, license Apache-2.0 OR MIT. It needs the git program on your computer, version 2.30 or newer; [git in the panels](git.md) says more. It too is in the release files' list only.
 
 `diro components list` always shows what this build knows. The list is part of each build, so a component newer than your diroxide arrives with your next update.
 
 ### Which computers have a build
 
-The SFTP places plugin has a build for three kinds of computer:
+The SFTP places plugin, the disk image places plugin and the Git plugin each have a build for three kinds of computer:
 
 - Windows on x86-64.
 - Linux on x86-64 (glibc).
 - macOS, Apple silicon and Intel, as one universal file.
 
-Windows on ARM and Linux on ARM have none yet. The Example plugins pack is the same everywhere, but its Volume actions plugin needs Python 3 and the system's own tools; [volumes and the trash](volumes-trash.md) lists them.
+Windows on ARM and Linux on ARM have no build of these three plugins yet. The helper programs follow what their publishers make, listed below. The Example plugins pack is the same everywhere, but its Volume actions plugin needs Python 3 and the system's own tools; [volumes and the trash](volumes-trash.md) lists them.
+
+## Helper programs
+
+A helper component is a program from its publisher, such as pandoc or FFmpeg, that a feature can use. diroxide keeps no copy of it. Each file comes from the publisher's own address and is pinned by its size and SHA-256 like every other component. The pins are written by a job on the project's build machine, not typed, so a helper is in the list only once it is pinned. Nothing a helper's archive holds is run by the download, and only the files the helper needs are kept: ImageMagick's portable archive holds 261 MB, and 33 MB of it is kept.
+
+The helpers in the list, with the computers that have a file:
+
+- pandoc 3.13, for documents, license GPL-2.0-or-later: Windows on x86-64, Linux on x86-64 and ARM, and macOS on Apple silicon and Intel.
+- 7-Zip 26.05, for reading RAR, license LGPL-2.1-or-later AND BSD-3-Clause: Linux on x86-64 and ARM, and macOS. Its question carries the unRAR sentence: "unRAR terms: diroxide never writes RAR." diroxide reads RAR and never writes it.
+- FFmpeg 9.0.2, with ffprobe, for previews and conversions, license LGPL-2.1-or-later: Windows on x86-64 and ARM. It is the LGPL build made by BtbN, which has no H.264 encoder.
+- ImageMagick 7.1.2-35, for previews and conversions: the portable build for Windows on x86-64 and ARM. Its license asks that the credit to ImageMagick Studio LLC stay readable, and the credit is part of its entry.
+- GitHub CLI 2.103.3, license MIT: Windows and Linux on x86-64 and ARM, and macOS on Apple silicon and Intel.
+
+Some files are held for now, each with its reason, and are not offered:
+
+- ExifTool 13.61 for Windows. One library in its zip has a plus sign in its name, which the plain-name rule for unpacking refuses, and the program loads it by that name.
+- 7-Zip for Windows. The small package that unpacks has a `7za` that reads no RAR, ISO or disk image, and the full program is inside an installer.
+- FFmpeg for Linux. Its shared builds hold libraries that are links, and an unpack never makes a link.
+
+Where a helper has no file for your computer, you hear "No build for this computer." and then the command that installs it on your system: FFmpeg on Debian says "Install: sudo apt install ffmpeg", and 7-Zip on Windows says "Install: winget install 7zip.7zip". Where diroxide does not know your system, "Install FFmpeg from ffmpeg.org or your package manager." [Tools and diro doctor](tools.md) lists the command for every helper.
+
+Once a helper is installed, the lookup finds it before PATH, and the line says "from components": "pandoc: 3.13, from components". [Tools and diro doctor](tools.md) says how to see it.
 
 ## Nothing is fetched without your yes
 
@@ -40,8 +64,9 @@ When a feature needs a component you do not have, diroxide asks at that moment. 
 For a helper:
 
 ```text
-Reading a RAR file needs 7-Zip 25.01.
+Reading a RAR file needs 7-Zip 26.05.
 Size 3.1 MB, license LGPL-2.1-or-later.
+unRAR terms: diroxide never writes RAR.
 Download it now? y or n
 ```
 
@@ -68,8 +93,10 @@ For a helper:
 
 ```text
 No build for this computer.
-Install 7-Zip from your system's packages.
+Install: sudo apt install ffmpeg
 ```
+
+With no command known for the helper, the second line is "Install FFmpeg from your system's packages."
 
 For a plugin of this project, such as the SFTP places plugin, it names the command that builds it on your computer from the source. You need a Rust toolchain. [Remote places over SFTP](remote-places.md) says where the program goes:
 
@@ -191,11 +218,11 @@ pandoc: 3.9.0.2, on PATH
 7-Zip: 24.08, in Program Files
 FFmpeg: turned off in tools.toml
 carta: 0.0.13, built in
-Components: 0 of 1 installed
+Components: 0 of 6 installed
 Example plugins: not installed
 ```
 
-A program is looked for in `tools.toml` first, then in the installed components, then on PATH, then in the folders its installer uses, and the line says which. diroxide never runs the install command. A folder in your home folder is said from `~`; `--paths` says it in full. `diro doctor --check pandoc ffmpeg` exits with 1 when one of those is missing, and `--check` alone checks the programs your conversion recipes use. Otherwise the exit code is 0.
+A program is looked for in `tools.toml` first, then in the installed components, then on PATH, then in the folders its installer uses, and the line says which. diroxide never runs the install command. A folder in your home folder is said from `~`; `--paths` says it in full. `diro doctor --check pandoc ffmpeg` exits with 1 when one of those is missing, and `--check` alone checks the programs your conversion recipes use. Otherwise the exit code is 0. [Tools and diro doctor](tools.md) says every section, every option and every exit code, and the install command for each helper.
 
 ## Manage optional components
 
@@ -297,7 +324,7 @@ The setting `components_source` names where you keep your own copy of the compon
 components_source = "D:/components"
 ```
 
-- A folder: files are read from `FOLDER/ID-VERSION/FILENAME`, for example `D:/components/diro-examples-0.1.1/diro-examples-0.1.1.zip`. A `components.toml` at the top of the folder may add components.
+- A folder: files are read from `FOLDER/ID-VERSION/FILENAME`, for example `D:/components/diro-examples-0.1.1/diro-examples-0.1.1.zip`. A mirror of a helper's file lays out the same way: `D:/components/pandoc-3.13/pandoc-3.13-windows-x86_64.zip`. A `components.toml` at the top of the folder may add components.
 - A repository written `owner/name`: its release downloads are used the same way.
 - The question says "From your own components source." and never says the address.
 - No token is sent today. A private source that needs a sign-in, such as a private repository reached through the GitHub CLI, is not built yet. When it is, the token will go only to that source, never as a command-line argument.
@@ -307,6 +334,9 @@ Whatever the source, a file is accepted only when it matches the pin. A source i
 ## See also
 
 - [Plugins](plugins.md)
+- [Tools and diro doctor](tools.md)
+- [Disk images](disk-images.md)
+- [Git in the panels](git.md)
 - [Remote places over SFTP](remote-places.md)
 - [Volumes and the trash](volumes-trash.md)
 - [Writing a plugin](writing-a-plugin.md)
