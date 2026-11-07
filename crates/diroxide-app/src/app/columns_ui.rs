@@ -367,6 +367,9 @@ impl App {
         if self.panel(side).entries_generation() != listing {
             return Vec::new();
         }
+        // The photo columns' cells in the photo helpers' words (lane AP).
+        let mut cells = cells;
+        self.photo_cells(side, &mut cells);
         let count = cells.len();
         let clock = Arc::clone(&self.clock);
         let near = self.panels[side.index()].apply_column_cells(cells, clock.as_ref());
@@ -571,6 +574,11 @@ impl App {
             .choose(SortKey::Extra(key.to_owned()));
         let clock = Arc::clone(&self.clock);
         self.panels[side.index()].set_sort(spec.clone(), clock.as_ref());
+        // The Taken column sorts by date, and says the modified times it
+        // used (lane AP).
+        if key == crate::photos::TAKEN {
+            return self.taken_sorted(side, &spec);
+        }
         let text = format!(
             "Sorted by {}, {}",
             crate::labels::in_sentence(label),

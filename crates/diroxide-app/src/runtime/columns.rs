@@ -198,7 +198,14 @@ fn read_cells(
     }
     item.keys
         .iter()
-        .filter_map(|key| cell_words(job.pipeline.cell(key, &outcomes)).map(|w| (key.clone(), w)))
+        .filter_map(|key| {
+            // A photo column's cell in the photo helpers' words (lane AP).
+            let words = match crate::photos::PhotoField::of(key) {
+                Some(field) => crate::photos::cell(field, &job.pipeline, &outcomes),
+                None => cell_words(job.pipeline.cell(key, &outcomes)),
+            };
+            words.map(|w| (key.clone(), w))
+        })
         .collect()
 }
 

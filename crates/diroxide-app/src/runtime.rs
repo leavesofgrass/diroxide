@@ -57,6 +57,8 @@ mod meta;
 // lane AP).
 mod access;
 pub use access::{SecurityDialog, SystemSecurityDialog};
+// The photo helpers' reader (alpha 4, lane AP).
+mod photos;
 // Optional components (W4d).
 mod components;
 // Conversions on workers (alpha 4, lane AW).
@@ -1635,6 +1637,11 @@ impl Runtime {
                 let registry = Arc::clone(&self.registry);
                 let security = Arc::clone(&self.security);
                 self.worker(move |shared| access::run(shared, &registry, &security, *ask));
+            }
+            // The photo helpers' facts (lane AP).
+            Request::Photos(ask) => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| photos::run(shared, &registry, *ask));
             }
             Request::ToolsReport(tools) => {
                 self.worker(move |shared| {

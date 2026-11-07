@@ -47,6 +47,8 @@ pub mod messages;
 pub mod metadata;
 pub mod palette;
 pub mod panel;
+// The photo helpers (alpha 4, lane AP).
+pub mod photos;
 // Read text in picture, through Tesseract (alpha 4, lane VA).
 pub mod picture_text;
 // Plugins and script commands in the app (W4d).

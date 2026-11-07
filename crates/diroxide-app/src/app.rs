@@ -71,6 +71,8 @@ mod type_checks;
 mod columns_ui;
 // The metadata commands in the app (alpha 4, lane MA).
 mod metadata_ui;
+// The photo helpers (alpha 4, lane AP).
+mod photos_ui;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -548,6 +550,8 @@ pub enum AppEvent {
     /// What the runtime answered Change time and Change owner (alpha 4,
     /// lane AP).
     Access(Box<crate::access::AccessNote>),
+    /// What the runtime read for the photo helpers (alpha 4, lane AP).
+    Photos(Box<crate::photos::PhotoNote>),
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -1057,6 +1061,8 @@ pub struct App {
     meta: metadata_ui::MetaState,
     /// Change time's and Change owner's jobs (lane AP).
     access: access_ui::AccessState,
+    /// The photo helpers' facts and what waits for them (lane AP).
+    photos: photos_ui::PhotoState,
     /// The slots of the owner's type actions (lane TA).
     type_slots: crate::typing::TypeSlots,
     /// A typed action's command is running: Enter and View run their
@@ -1401,6 +1407,7 @@ impl App {
             columns: columns_ui::ColumnsState::default(),
             meta: metadata_ui::MetaState::default(),
             access: access_ui::AccessState::default(),
+            photos: photos_ui::PhotoState::default(),
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,
@@ -2020,6 +2027,7 @@ impl App {
             AppEvent::Convert(note) => self.convert_note(*note),
             AppEvent::HotFolder(note) => self.watched_note(*note),
             AppEvent::Access(note) => self.access_note(*note),
+            AppEvent::Photos(note) => self.photo_note(*note),
         }
     }
 
@@ -2137,6 +2145,10 @@ impl App {
         }
         // Change time and Change owner (lane AP).
         if let Some(effects) = self.access_dispatch(command) {
+            return effects;
+        }
+        // The photo helpers (lane AP).
+        if let Some(effects) = self.photo_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).
