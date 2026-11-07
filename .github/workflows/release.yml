@@ -93,13 +93,14 @@ jobs:
             plugins/diro-sftp -> target
             plugins/diro-disk -> target
             plugins/diro-git -> target
+            plugins/diro-crypt -> target
       - name: Build each plugin with the release profile, from its own workspace
         shell: bash
         run: |
           set -euo pipefail
           out="plugin-assets/${{ matrix.target }}"
           mkdir -p "$out"
-          for plugin in diro-sftp diro-disk diro-git; do
+          for plugin in diro-sftp diro-disk diro-git diro-crypt; do
             build() {
               cargo build --release --locked --manifest-path "plugins/$plugin/Cargo.toml" --bin "$plugin" "$@"
             }

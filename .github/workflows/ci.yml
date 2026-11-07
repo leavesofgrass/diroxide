@@ -63,14 +63,14 @@ jobs:
         run: |
           cargo clippy --manifest-path plugins/diro-sftp/Cargo.toml --all-targets --all-features --locked -- -D warnings
           cargo nextest run --manifest-path plugins/diro-sftp/Cargo.toml --all-features --locked
-      # The disk-image and git plugins from their own workspaces, on every
+      # The disk-image, git and encryption plugins from their own workspaces, on every
       # leg (alpha 4's contract step): no server to start, and the release
       # builds them for each computer, so no other job compiles them there.
       # --locked, as the release does.
-      - name: Disk and git plugins, clippy and tests from their own workspaces
+      - name: Disk, git and crypt plugins, clippy and tests from their own workspaces
         shell: bash
         run: |
-          for plugin in diro-disk diro-git; do
+          for plugin in diro-disk diro-git diro-crypt; do
             cargo clippy --manifest-path "plugins/$plugin/Cargo.toml" --all-targets --all-features --locked -- -D warnings
             cargo nextest run --manifest-path "plugins/$plugin/Cargo.toml" --all-features --locked
           done
@@ -144,6 +144,7 @@ jobs:
           cp plugins/diro-sftp/Cargo.lock plugins/diro-sftp/fuzz/Cargo.lock
           cp plugins/diro-disk/Cargo.lock plugins/diro-disk/fuzz/Cargo.lock
           cp plugins/diro-git/Cargo.lock plugins/diro-git/fuzz/Cargo.lock
+          cp plugins/diro-crypt/Cargo.lock plugins/diro-crypt/fuzz/Cargo.lock
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -151,9 +152,11 @@ jobs:
             plugins/diro-sftp/fuzz
             plugins/diro-disk/fuzz
             plugins/diro-git/fuzz
+            plugins/diro-crypt/fuzz
       - name: Check every fuzz target
         run: |
           cargo check --manifest-path fuzz/Cargo.toml --bins
           cargo check --manifest-path plugins/diro-sftp/fuzz/Cargo.toml --bins
           cargo check --manifest-path plugins/diro-disk/fuzz/Cargo.toml --bins
           cargo check --manifest-path plugins/diro-git/fuzz/Cargo.toml --bins
+          cargo check --manifest-path plugins/diro-crypt/fuzz/Cargo.toml --bins

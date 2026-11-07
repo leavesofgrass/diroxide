@@ -18,6 +18,7 @@ Each record keeps one decision: its context, the decision, the alternatives weig
 - [ADR-0012: SFTP over the OpenSSH client, and the askpass helper](0012-sftp-over-the-openssh-client.md)
 - [ADR-0013: The job queue, the connection gate and resume](0013-the-job-queue-and-resume.md)
 - [ADR-0014: Software drawing, and one console program on Windows](0014-software-drawing-and-the-windows-subsystem.md)
+- [ADR-0015: Encryption and signatures: age in a plugin, gpg as a program, minisign in process](0015-encryption.md)
 
 ## The template
 
