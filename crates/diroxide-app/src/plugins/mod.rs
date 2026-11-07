@@ -242,6 +242,23 @@ pub enum PluginRequest {
         /// The plugins that may describe it, in the catalog's order.
         plugins: Vec<String>,
     },
+    /// Asks a plugin for its column's cells of some files of a folder
+    /// (`column/format`, alpha 4, lane MA, R30 commit 53), a page of at
+    /// most the column's batch at a time, off the input thread; each page
+    /// answered with [`crate::AppEvent::ColumnsRead`]. A cell the plugin
+    /// has not answered ("pending") is left out, so it is asked again.
+    ColumnPages {
+        /// The panel.
+        side: Side,
+        /// The panel's entries the files belong to.
+        listing: u64,
+        /// The folder.
+        folder: Place,
+        /// The column.
+        column: diroxide_plugins::listers::PluginColumn,
+        /// The files: each one's index in the listing and its name.
+        items: Vec<(u32, String)>,
+    },
 }
 
 /// How a plugin command ended.

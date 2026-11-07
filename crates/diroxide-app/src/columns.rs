@@ -156,9 +156,23 @@ impl FieldColumn {
         }
     }
 
-    /// Whether the entry still waits for this column's cell.
+    /// Whether the entry still waits for this column's cell: a file the
+    /// metadata readers have not read, or any entry a plugin has not
+    /// answered for.
     pub fn waits(&self, entry: &Entry) -> bool {
-        file_like(entry) && !entry.extra.contains_key(&self.key)
+        match self.source {
+            Source::Meta(_) => file_like(entry) && !entry.extra.contains_key(&self.key),
+            Source::Plugin(_) => !entry.extra.contains_key(&self.key),
+            _ => false,
+        }
+    }
+
+    /// The plugin's column, when its cells come from a plugin.
+    pub fn plugin(&self) -> Option<&PluginColumn> {
+        match &self.source {
+            Source::Plugin(column) => Some(column),
+            _ => None,
+        }
     }
 }
 

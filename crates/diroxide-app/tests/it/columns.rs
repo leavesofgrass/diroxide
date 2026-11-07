@@ -43,6 +43,25 @@ fn session(work: &Path, settings: Settings) -> Session {
     )
 }
 
+/// Takes the host's own events, which come off the counted workers,
+/// until `done` or about five seconds; returns what was said.
+fn until(s: &mut Session, done: impl Fn(&Session) -> bool) -> Vec<String> {
+    let mut said = Vec::new();
+    for _ in 0..50 {
+        if done(s) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let events = s.runtime.poll();
+        let effects: Vec<_> = events
+            .into_iter()
+            .flat_map(|event| s.app.handle(event))
+            .collect();
+        said.extend(s.run(effects));
+    }
+    said
+}
+
 /// The spoken row of a name in the active panel.
 fn row(s: &Session, name: &str) -> String {
     s.app
@@ -241,4 +260,83 @@ fn a_column_key_in_the_settings_list_takes_effect_at_once() {
         .unwrap()
         .spoken();
     assert!(other.contains("dimensions"), "{other}");
+}
+
+/// R30's commit 53: a plugin's column on a panel, end to end through the
+/// real host and the in-process test plugin answering `column/format` as
+/// diro-git does: "pending" until a cell comes, a word for each file, a
+/// folder's count, and a sort by it once every cell is in.
+#[test]
+fn a_plugins_column_fills_the_rows_and_sorts_when_every_cell_is_in() {
+    use crate::plugins::{MANIFEST, TestLauncher, enable, world};
+    let manifest =
+        format!("{MANIFEST}\n[[column]]\nid = \"git\"\nheader = \"Git\"\nkind = \"text\"\n");
+    let w = world(&manifest);
+    enable(&w.paths);
+    let here = place(&w.work);
+    let mut s = Session::open(
+        here.clone(),
+        here,
+        Registry::with_local(),
+        crate::support::Setup {
+            settings: with_columns(&["size", "line-counter.git"]),
+            paths: Some(w.paths.clone()),
+            plugin_launcher: Some(TestLauncher::with(&[])),
+            ..crate::support::Setup::default()
+        },
+    );
+    until(&mut s, |s| row(s, "report.pdf").ends_with("modified"));
+    assert_eq!(
+        row(&s, "report.pdf"),
+        "report.pdf, 2.1 KB, git Staged, modified"
+    );
+    assert_eq!(row(&s, "Backup"), "Backup, git 3 changed inside");
+    assert_eq!(
+        row(&s, "budget.xlsx"),
+        "budget.xlsx, 300 bytes, git Ignored"
+    );
+    // A cell the plugin did not answer yet says so, and is asked again.
+    assert!(
+        row(&s, "notes.txt").ends_with("git pending"),
+        "{}",
+        row(&s, "notes.txt")
+    );
+    s.command(ids::SORT_LIST);
+    let rows = match s.dialog() {
+        Some(diroxide_app::Dialog::Choose { list, .. }) => list.rows().to_vec(),
+        other => panic!("no Sort list: {other:?}"),
+    };
+    let last = rows.last().unwrap();
+    assert_eq!(
+        (last.id.as_str(), last.label.as_str()),
+        ("column:line-counter.git", "Git")
+    );
+    s.key("end");
+    let mut said = s.key("enter");
+    assert!(
+        said.iter()
+            .any(|l| l == "Asking Git for 1 entry to sort by it"),
+        "{said:?}"
+    );
+    said.extend(until(&mut s, |s| {
+        s.said
+            .last()
+            .is_some_and(|m| m.text.starts_with("Sorted by"))
+    }));
+    assert_eq!(said.last().unwrap(), "Sorted by git, A to Z");
+    assert!(
+        row(&s, "notes.txt").ends_with("git Clean"),
+        "{}",
+        row(&s, "notes.txt")
+    );
+    let names = s.names(Side::Left);
+    assert_eq!(
+        names.first().map(String::as_str),
+        Some("Backup"),
+        "{names:?}"
+    );
+    for name in ["report.pdf", "budget.xlsx"] {
+        let row = row(&s, name);
+        assert!(diroxide_core::format::within_cells(&row, name), "{row}");
+    }
 }

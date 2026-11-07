@@ -516,6 +516,9 @@ pub enum AppEvent {
         listing: u64,
         /// Each file's cells.
         cells: Vec<crate::columns::ColumnCell>,
+        /// Whether a plugin's column answered (a page of `column/format`)
+        /// rather than the metadata readers.
+        plugin: bool,
     },
     /// The programs the system has for a file, for Open with (lane TA).
     OpenWithListed {
@@ -1966,7 +1969,8 @@ impl App {
                 side,
                 listing,
                 cells,
-            } => self.columns_read(side, listing, cells),
+                plugin,
+            } => self.columns_read(side, listing, cells, plugin),
             AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
         }
     }

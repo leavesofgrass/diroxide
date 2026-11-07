@@ -50,6 +50,8 @@ const COLUMN_READERS: usize = 8;
 #[derive(Clone, Debug, Default)]
 pub(super) struct ColumnsState {
     asked: [Option<Asked>; 2],
+    /// What each panel's plugins' columns were asked (R30 commit 53).
+    plugin_asked: [Option<Asked>; 2],
     /// The pipeline the columns read through, with the runner a test gave
     /// when it was made (`None`: the tools registry).
     pipeline: Option<(Option<crate::request::SharedTools>, Arc<Pipeline>)>,
@@ -107,9 +109,33 @@ impl App {
         pipeline
     }
 
-    /// The plugins' declared columns, for the keys `PLUGIN.COLUMN`.
+    /// The columns the enabled plugins declare (`[[column]]`), in the
+    /// catalog's order, for the keys `PLUGIN.COLUMN` (R30 commit 53): the
+    /// host's own [`plugin_columns`](diroxide_plugins::host::Host::plugin_columns)
+    /// made from the catalog the app holds.
     pub(super) fn plugin_columns(&self) -> Vec<diroxide_plugins::listers::PluginColumn> {
-        Vec::new()
+        if self.plugins.catalog.off {
+            return Vec::new();
+        }
+        self.plugins
+            .catalog
+            .items
+            .iter()
+            .filter(|item| item.contributes() && item.is_process())
+            .filter_map(|item| item.manifest.as_ref().map(|m| (item, m)))
+            .flat_map(|(item, manifest)| {
+                manifest
+                    .columns
+                    .iter()
+                    .map(|c| diroxide_plugins::listers::PluginColumn {
+                        plugin: item.id.clone(),
+                        column: c.id.clone(),
+                        header: c.header.clone(),
+                        batch: (c.batch as usize)
+                            .clamp(1, diroxide_plugins::listers::MAX_COLUMN_BATCH),
+                    })
+            })
+            .collect()
     }
 
     /// Resolves both panels' columns of fields' keys; their reads start
@@ -124,6 +150,7 @@ impl App {
             let fields = resolve(&specs, &keys, &self.settings.regex_columns, &plugins);
             self.panels[side.index()].set_field_columns(fields, clock.as_ref());
             self.columns.asked[side.index()] = None;
+            self.columns.plugin_asked[side.index()] = None;
         }
     }
 
@@ -170,12 +197,87 @@ impl App {
             {
                 continue;
             }
-            if !reads {
-                continue;
+            if reads {
+                self.ask_columns(side, None);
             }
-            self.ask_columns(side, None);
+        }
+        for side in Side::BOTH {
+            self.follow_plugin_columns(side);
         }
         effects
+    }
+
+    /// A panel's plugins' columns follow the focus as the readers do: the
+    /// visible page and two pages either side, asked a page of the
+    /// column's batch at a time (R30 commit 53).
+    fn follow_plugin_columns(&mut self, side: Side) {
+        let panel = self.panel(side);
+        if panel.is_loading()
+            || !panel.is_listed()
+            || !panel.asks_plugin_columns()
+            || !panel.field_columns().iter().any(|f| f.plugin().is_some())
+        {
+            return;
+        }
+        let listing = panel.entries_generation();
+        let focus = panel.list().focus_index().unwrap_or(0);
+        let half_page = (panel.list().page_size() / 2).max(1);
+        if let Some(asked) = &self.columns.plugin_asked[side.index()]
+            && asked.listing == listing
+            && ((asked.fill.is_some() && asked.left > 0)
+                || focus.abs_diff(asked.focus) <= half_page)
+        {
+            return;
+        }
+        self.ask_plugin_columns(side, None);
+    }
+
+    /// Asks the plugins for their columns' cells: the window around the
+    /// focus, or with a fill every entry its column waits for. Returns how
+    /// many entries it asks for.
+    fn ask_plugin_columns(&mut self, side: Side, fill: Option<Fill>) -> usize {
+        let panel = self.panel(side);
+        let listing = panel.entries_generation();
+        let focus = panel.list().focus_index().unwrap_or(0);
+        let folder = panel.place().clone();
+        let wanted: Vec<diroxide_plugins::listers::PluginColumn> = panel
+            .field_columns()
+            .iter()
+            .filter(|f| match &fill {
+                Some(Fill {
+                    sort: Some((key, _)),
+                    ..
+                }) => f.key == *key,
+                _ => true,
+            })
+            .filter_map(|f| f.plugin().cloned())
+            .collect();
+        let mut asks = Vec::new();
+        for column in wanted {
+            let items = panel.plugin_queue(&column.key(), fill.is_some());
+            if !items.is_empty() {
+                asks.push((column, items));
+            }
+        }
+        let left: usize = asks.iter().map(|(_, items)| items.len()).sum();
+        self.columns.plugin_asked[side.index()] = Some(Asked {
+            listing,
+            focus,
+            left,
+            fill: fill.map(|f| Fill { files: left, ..f }),
+        });
+        for (column, items) in asks {
+            self.request(Request::Plugins(Box::new(
+                crate::plugins::PluginRequest::ColumnPages {
+                    side,
+                    listing,
+                    folder: folder.clone(),
+                    column,
+                    items,
+                },
+            )));
+        }
+        left
     }
 
     /// Asks the runtime to read a panel's cells: without a fill, the
@@ -247,6 +349,7 @@ impl App {
         side: Side,
         listing: u64,
         cells: Vec<ColumnCell>,
+        plugin: bool,
     ) -> Vec<Effect> {
         if self.panel(side).entries_generation() != listing {
             return Vec::new();
@@ -257,7 +360,12 @@ impl App {
         let shown = side == self.active || !self.screen_reader;
         let mut effects = Vec::new();
         let mut ended = None;
-        if let Some(asked) = self.columns.asked[side.index()].as_mut()
+        let asked = if plugin {
+            &mut self.columns.plugin_asked[side.index()]
+        } else {
+            &mut self.columns.asked[side.index()]
+        };
+        if let Some(asked) = asked.as_mut()
             && asked.listing == listing
             && asked.left > 0
         {
@@ -338,6 +446,20 @@ impl App {
             sort: Some((key.to_owned(), field.label.clone())),
             files: waiting,
         };
+        // A plugin's column reads nothing itself: its pages are asked at
+        // once, and the order changes when the last one is in.
+        if field.plugin().is_some() {
+            let asked = self.ask_plugin_columns(side, Some(fill.clone()));
+            if asked == 0 {
+                return self.sort_by_column_now(side, key, &field.label);
+            }
+            let line = format!(
+                "Asking {} for {} to sort by it",
+                field.label,
+                diroxide_core::format::count(asked as u64, "entry", "entries")
+            );
+            return vec![self.say(Message::status(line))];
+        }
         if waiting <= ASK_ABOVE {
             return self.start_fill(side, fill);
         }

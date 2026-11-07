@@ -126,6 +126,7 @@ fn send(shared: &Arc<Shared>, job: &ColumnJob, cells: Vec<ColumnCell>) {
         side: job.side,
         listing: job.listing,
         cells,
+        plugin: false,
     });
 }
 

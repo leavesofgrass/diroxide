@@ -1534,16 +1534,66 @@ impl Panel {
         self.list.set_rows(rows);
     }
 
-    /// How many files still wait for a column's cell, and the cells read
-    /// of the key: for the ask-first sort.
+    /// How many entries still wait for a column's cell: for the
+    /// ask-first sort. None where the column is not read or asked.
     pub fn waiting_for(&self, key: &str) -> usize {
         let Some(field) = self.fields.iter().find(|f| f.key == key) else {
             return 0;
         };
-        if field.cost().is_none() || !self.reads_contents() {
+        let asked = match field.source {
+            Source::Meta(_) => self.reads_contents(),
+            Source::Plugin(_) => self.asks_plugin_columns(),
+            _ => false,
+        };
+        if !asked {
             return 0;
         }
         self.all_entries.iter().filter(|e| field.waits(e)).count()
+    }
+
+    /// The entries a plugin's column still waits for, each with its index
+    /// in the listing: the visible page and two pages either side,
+    /// nearest the focus first, then with `whole` every other one. Empty
+    /// where plugins' columns are not asked.
+    pub fn plugin_queue(&self, key: &str, whole: bool) -> Vec<(u32, String)> {
+        let Some(field) = self
+            .fields
+            .iter()
+            .find(|f| f.key == key && f.plugin().is_some())
+        else {
+            return Vec::new();
+        };
+        if !self.asks_plugin_columns() {
+            return Vec::new();
+        }
+        let index_of: HashMap<&str, usize> = self
+            .all_entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (e.name.as_str(), i))
+            .collect();
+        let focus = self.list.focus_index().unwrap_or(0);
+        let page = self.list.page_size();
+        let mut taken = HashSet::new();
+        let mut queue = Vec::new();
+        let index = |i: usize| u32::try_from(i).unwrap_or(u32::MAX);
+        for row in crate::columns::window_order(focus, self.entries.len(), page) {
+            if let Some(entry) = self.entries.get(row)
+                && let Some(&i) = index_of.get(entry.name.as_str())
+                && taken.insert(i)
+                && field.waits(entry)
+            {
+                queue.push((index(i), entry.name.clone()));
+            }
+        }
+        if whole {
+            for (i, entry) in self.all_entries.iter().enumerate() {
+                if !taken.contains(&i) && field.waits(entry) {
+                    queue.push((index(i), entry.name.clone()));
+                }
+            }
+        }
+        queue
     }
 
     /// How many entries the filter lets through of those hidden rules
