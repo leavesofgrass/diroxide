@@ -17,9 +17,9 @@ use crate::lines;
 /// fit.
 pub fn passphrase_form(files: usize, note: Option<&str>) -> Value {
     let summary = match note {
-        Some(note) => format!("{note} {}", lines::plan_with_passphrase(files)),
+        Some(note) => format!("{note} {}.", lines::plan_with_passphrase(files)),
         None => format!(
-            "{} {}",
+            "{}. {}",
             lines::plan_with_passphrase(files),
             lines::PASSPHRASE_WARNING
         ),
