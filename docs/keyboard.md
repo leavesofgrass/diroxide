@@ -205,6 +205,8 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Encoding. Reads the file in the viewer or the quick view in another encoding, chosen from a list by language, or by the automatic choice. (viewer.encoding)
 - Open with. Lists the programs the system has for the focused file, the default program first; the chosen one opens it. (file.open-with)
 - Groups. Lists the file groups, yours among them, with how many files of each are here; the chosen group's files are selected. (select.groups)
+- Convert. Lists the recipes that take the selection, then converts it into the other panel's folder after a plan you answer, which starts on No. (file.convert)
+- Conversion reports. Lists the last 20 conversion reports, newest first; the chosen one is read, its failures first. (file.convert-reports)
 - Actions for this file. Lists what the focused file's type offers, its open action first, then View, Preview, Convert, the user actions and the named ones. (file.actions)
 - User action 0. Runs user action 0 of the focused file's type, set in filetypes.toml; it has no key until you bind one. (type.user0)
 - User action 1. Runs user action 1 of the focused file's type, set in filetypes.toml; it has no key until you bind one. (type.user1)
@@ -275,6 +277,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
 - Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
 - Tools list. Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it. (app.tools)
+- Watched folders. Lists the tasks that watch a folder, one a row with what it did today; a task's actions turn it on or off, pause it, preview it, show its log and put failed files back. (app.hot-folders)
 - Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
 
 ## In the GUI
@@ -479,6 +482,8 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - Encoding. Reads the file in the viewer or the quick view in another encoding, chosen from a list by language, or by the automatic choice. (viewer.encoding)
 - Open with. Lists the programs the system has for the focused file, the default program first; the chosen one opens it. (file.open-with)
 - Groups. Lists the file groups, yours among them, with how many files of each are here; the chosen group's files are selected. (select.groups)
+- Convert. Lists the recipes that take the selection, then converts it into the other panel's folder after a plan you answer, which starts on No. (file.convert)
+- Conversion reports. Lists the last 20 conversion reports, newest first; the chosen one is read, its failures first. (file.convert-reports)
 - Actions for this file. Lists what the focused file's type offers, its open action first, then View, Preview, Convert, the user actions and the named ones. (file.actions)
 - User action 0. Runs user action 0 of the focused file's type, set in filetypes.toml; it has no key until you bind one. (type.user0)
 - User action 1. Runs user action 1 of the focused file's type, set in filetypes.toml; it has no key until you bind one. (type.user1)
@@ -548,6 +553,7 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - Get example plugins. Downloads the example plugins after a question that says their size and license; nothing is enabled. (plugins.get-examples)
 - Manage optional components. Lists the optional components with their state, size and license, to download, verify or remove one. (components.manage)
 - Tools list. Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it. (app.tools)
+- Watched folders. Lists the tasks that watch a folder, one a row with what it did today; a task's actions turn it on or off, pause it, preview it, show its log and put failed files back. (app.hot-folders)
 - Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
 
 ## Keys a terminal may keep

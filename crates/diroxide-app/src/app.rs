@@ -24,6 +24,10 @@ mod bookmarking;
 mod comparing;
 // Optional components (W4d).
 mod component_ui;
+// The Convert command and the conversion reports (alpha 4, lane AW).
+mod converting;
+// The Watched folders list (alpha 4, lane AW).
+mod watched;
 // The details view, Say Details and Copy details (alpha 4, lane VA).
 mod details;
 mod dialogs;
@@ -511,6 +515,11 @@ pub enum AppEvent {
         /// The programs.
         list: Box<crate::typing::OpenWithRows>,
     },
+    /// What the runtime answered the Convert command (alpha 4, lane AW).
+    Convert(Box<crate::conversions::ConvertNote>),
+    /// What the runtime answered the Watched folders list, or what a
+    /// running task told (alpha 4, lane AW).
+    HotFolder(Box<crate::watched::WatchedNote>),
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -980,6 +989,8 @@ pub struct App {
     organize: organize::Organize,
     /// The folder watched for arrivals (W3t).
     watching: watching::WatchState,
+    /// The watched folders' tasks as the list shows them (lane AW).
+    watched: watched::WatchedState,
     /// The filter's pause, stashes and content reads (W3a).
     filtering: filtering::FilterState,
     /// Where each panel's range started (W3a).
@@ -1337,6 +1348,7 @@ impl App {
             keys: keys::KeysState::new(owner_keys),
             organize: organize::Organize::new(startup.labels, startup.bookmarks, startup.views),
             watching: watching::WatchState::default(),
+            watched: watched::WatchedState::default(),
             filtering: filtering::FilterState::default(),
             selecting: selecting::SelectState::default(),
             searching: searching::SearchState::default(),
@@ -1376,6 +1388,7 @@ impl App {
         self.sweep_at_start();
         self.plugins_start();
         self.components_start();
+        self.watched_start();
         for side in Side::BOTH {
             let place = self.panel(side).place().clone();
             let focus = self.restored_focus(side);
@@ -1951,6 +1964,8 @@ impl App {
                 answers,
             } => self.types_checked(side, listing, answers),
             AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
+            AppEvent::Convert(note) => self.convert_note(*note),
+            AppEvent::HotFolder(note) => self.watched_note(*note),
         }
     }
 
@@ -2049,6 +2064,14 @@ impl App {
         if let Some(effects) = self.preview_file_dispatch(command) {
             return effects;
         }
+        // Convert and the conversion reports (alpha 4, lane AW).
+        if let Some(effects) = self.convert_dispatch(command) {
+            return effects;
+        }
+        // The Watched folders list (alpha 4, lane AW).
+        if let Some(effects) = self.watched_dispatch(command) {
+            return effects;
+        }
         // Typed actions and the lists of file types (lane TA).
         if let Some(effects) = self.type_actions_dispatch(command) {
             return effects;
@@ -2078,18 +2101,12 @@ impl App {
         }
         let side = self.active;
         // A change inside an archive is refused in words (W2a, P2b): an
-        // archive is read only here, and Pack makes a new one.
+        // archive is read only here, and Pack makes a new one. Make
+        // folder, Delete and Rename go on to their flows, which rewrite a
+        // zip and refuse the rest (lane AW).
         let changes_here = matches!(
             action,
-            Action::MakeFolder
-                | Action::Trash
-                | Action::DeletePermanently
-                | Action::Rename
-                | Action::Duplicate
-                | Action::Paste
-                | Action::Move
-                | Action::MoveTo
-                | Action::ClipCut
+            Action::Duplicate | Action::Paste | Action::Move | Action::MoveTo | Action::ClipCut
         );
         if changes_here && let Some(refused) = self.read_only_refusal(side) {
             return refused;

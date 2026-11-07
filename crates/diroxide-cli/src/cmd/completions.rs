@@ -350,6 +350,16 @@ pub fn command() -> Command {
                         .short('0'),
                 )
                 .arg(
+                    Arg::new("task")
+                        .long("task")
+                        .visible_alias("rule")
+                        .value_name("NAME")
+                        .help("Run this task's watched folder"),
+                )
+                .arg(flag("once", "Catch up, run the queue, then end"))
+                .arg(flag("dry-run", "Say what the task would do; touch nothing"))
+                .arg(flag("list", "List the tasks, one a line, the name first"))
+                .arg(
                     Arg::new("place")
                         .value_hint(ValueHint::DirPath)
                         .help("The folder to watch; the current folder by default"),
@@ -357,6 +367,7 @@ pub fn command() -> Command {
         )
         .subcommand(components_command())
         .subcommand(doctor_command())
+        .subcommand(convert_command())
         .subcommand(no_help(
             Command::new("serve")
                 .about("Serve the app over JSON-RPC on standard input and output")
@@ -559,6 +570,50 @@ fn components_command() -> Command {
                 .about("Install from a zip file or a folder")
                 .arg(named("id", "The component"))
                 .arg(named("path", "The zip file or folder").value_hint(ValueHint::AnyPath)),
+        )
+}
+
+/// `diro convert` as `cmd/convert.rs` reads it (alpha 4's lane AW), for
+/// completion only.
+fn convert_command() -> Command {
+    let valued = |name: &'static str, value: &'static str, help: &'static str| {
+        Arg::new(name).long(name).value_name(value).help(help)
+    };
+    Command::new("convert")
+        .about("Convert files with recipes, one line a result")
+        .arg(valued(
+            "to",
+            "FORMAT",
+            "The format to make: an extension or its words",
+        ))
+        .arg(valued("recipe", "ID", "Use this recipe"))
+        .arg(valued("out", "FOLDER", "Put the outputs here").value_hint(ValueHint::DirPath))
+        .arg(
+            valued(
+                "conflicts",
+                "WHICH",
+                "A taken name: keep-both, skip or newer",
+            )
+            .value_parser(["keep-both", "skip", "newer"]),
+        )
+        .arg(flag("recursive", "Convert folders with everything below them").short('r'))
+        .arg(flag("dry-run", "Say the plan and write nothing"))
+        .arg(
+            valued("report", "FILE", "Write the report as Markdown")
+                .value_hint(ValueHint::FilePath),
+        )
+        .arg(flag("json", "One JSON object a line"))
+        .arg(
+            flag("print0", "Write the made files' paths only")
+                .visible_alias("null")
+                .short('0'),
+        )
+        .arg(flag("list", "List the recipes, or those for a file"))
+        .arg(
+            Arg::new("files")
+                .num_args(0..)
+                .value_hint(ValueHint::AnyPath)
+                .help("The files and folders"),
         )
 }
 

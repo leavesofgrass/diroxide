@@ -92,9 +92,12 @@ pub enum JobKind {
     /// is kept for undo.
     EditMetadata,
     /// Copy the sources without their private metadata, each beside its
-    /// original (`photo-clean.jpg`); the originals stay. A rewrite of an
-    /// archive reuses [`JobKind::Pack`].
+    /// original (`photo-clean.jpg`); the originals stay.
     StripMetadata,
+    /// Rewrite an archive with members removed or renamed or folders
+    /// added (editing inside a zip, alpha.7): a new copy is written beside
+    /// it and tested, then put in its place, the old one to the trash.
+    Rewrite,
     /// A kind this version does not know. Never planned.
     #[serde(other)]
     Unknown,
@@ -134,6 +137,7 @@ impl JobKind {
         JobKind::Sign,
         JobKind::EditMetadata,
         JobKind::StripMetadata,
+        JobKind::Rewrite,
         JobKind::Unknown,
     ];
 
@@ -170,6 +174,7 @@ impl JobKind {
             JobKind::Sign => "sign",
             JobKind::EditMetadata => "edit",
             JobKind::StripMetadata => "strip",
+            JobKind::Rewrite => "rewrite",
             JobKind::Unknown => "run an unknown job on",
         }
     }
@@ -207,6 +212,7 @@ impl JobKind {
             JobKind::Sign => "Signing",
             JobKind::EditMetadata => "Editing metadata",
             JobKind::StripMetadata => "Stripping metadata",
+            JobKind::Rewrite => "Rewriting",
             JobKind::Unknown => "Working",
         }
     }
@@ -774,13 +780,14 @@ mod tests {
             JobKind::Sign => 26,
             JobKind::EditMetadata => 27,
             JobKind::StripMetadata => 28,
-            JobKind::Unknown => 29,
+            JobKind::Rewrite => 29,
+            JobKind::Unknown => 30,
         }
     }
 
     #[test]
     fn every_kind_has_its_words() {
-        assert_eq!(JobKind::ALL.len(), 30);
+        assert_eq!(JobKind::ALL.len(), 31);
         let mut words = std::collections::HashSet::new();
         for (at, kind) in JobKind::ALL.iter().enumerate() {
             assert_eq!(position(*kind), at, "{kind:?}");
@@ -811,6 +818,12 @@ mod tests {
         assert_eq!(JobKind::TestArchive.verb(), "test");
         assert_eq!(JobKind::Restore.progress_word(), "Restoring");
         assert_eq!(serde_json::to_string(&JobKind::Purge).unwrap(), "\"purge\"");
+        assert_eq!(JobKind::Rewrite.verb(), "rewrite");
+        assert_eq!(JobKind::Rewrite.progress_word(), "Rewriting");
+        assert_eq!(
+            serde_json::to_string(&JobKind::Rewrite).unwrap(),
+            "\"rewrite\""
+        );
         assert_eq!(
             serde_json::to_string(&JobKind::EditMetadata).unwrap(),
             "\"edit-metadata\""

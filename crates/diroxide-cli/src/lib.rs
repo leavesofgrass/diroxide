@@ -166,12 +166,14 @@ pub fn help_text() -> String {
         "diro join PART            join a split file's parts back into one file",
         "diro diff BEFORE AFTER    compare two files: the verdict first, then each change",
         "diro watch [PATH]         say each file that settles in a folder; Ctrl+C stops",
+        "diro watch --task NAME    run a task's watched folder; --once, --dry-run, --list",
         "diro plugin list          list the plugins and scripts: name, state, kind",
         "diro plugin run NAME [-- PATH...]  run a plugin or script once on PATH",
         "diro run COMMAND [NAME=VALUE...]  run one command headless and say what it says",
         "diro components list      list the optional components: title, state, size, license",
         "diro components download ID  say its size and license, ask, then download it",
         "diro doctor               say the tools, components and plugins diro finds",
+        "diro convert FILE... --to FORMAT  convert files with recipes, one line a result",
         "diro --version            print the version",
         "diro --help               print this help",
         "",
@@ -196,6 +198,7 @@ pub fn help_text() -> String {
         "diro ls --help gives the options of diro ls; diro archive --help those of diro archive.",
         "diro diff --help gives the options of diro diff.",
         "diro components --help gives the options of diro components.",
+        "diro convert --help gives the options of diro convert.",
         "diro plugin --help gives the options of diro plugin.",
         "diro ls --help gives the options of diro ls; diro search --help and diro archive --help theirs.",
     ]
@@ -369,6 +372,15 @@ pub fn main_with(
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> i32 {
+    // The carta child a conversion starts and can stop (CL's request 2,
+    // lane AW): one job on standard input, one answer on standard output.
+    // Never in the help or the completions.
+    if args
+        .first()
+        .is_some_and(|a| diroxide_ops::convert::carta::is_child_argument(a))
+    {
+        return diroxide_ops::convert::serve_child(input, out);
+    }
     let invocation = match parse(args) {
         Ok(invocation) => invocation,
         Err(error) => {
@@ -521,10 +533,8 @@ mod tests {
             Ok(Invocation::Doctor(_))
         ));
         for (line, words) in [
-            (&["convert", "a.md", "--to", "docx"][..], "diro convert"),
-            (&["info", "a.jpg"], "diro info"),
+            (&["info", "a.jpg"][..], "diro info"),
             (&["sum", "--check", "SHA256SUMS"], "diro sum"),
-            (&["watch", "--task", "scans", "--once"], "diro watch --task"),
         ] {
             let mut out = Vec::new();
             let mut err = Vec::new();
@@ -550,6 +560,51 @@ mod tests {
             parse(args(&["watch", "--task"])),
             Err(CliError::Missing(_))
         ));
+    }
+
+    /// The carta child (CL's request 2): the hidden argument converts one
+    /// job read from standard input and answers on standard output; a
+    /// request it cannot read exits 2 with the answer in words.
+    #[test]
+    fn the_carta_child_converts_one_job_and_answers() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("notes.md");
+        let output = dir.path().join("notes.org");
+        std::fs::write(&input, "# Notes\n\nOne line.\n").unwrap();
+        let job = serde_json::json!({
+            "from": "markdown",
+            "to": "org",
+            "input": input,
+            "output": output,
+        });
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        let code = main_with(
+            args(&[diroxide_ops::convert::CHILD_ARGUMENT]),
+            &mut format!("{job}\n").as_bytes(),
+            &mut out,
+            &mut err,
+        );
+        let said = String::from_utf8(out).unwrap();
+        assert_eq!(code, 0, "{said}");
+        assert!(
+            said.starts_with(diroxide_ops::convert::carta::ANSWER_MARK),
+            "{said}"
+        );
+        assert!(
+            std::fs::read_to_string(&output)
+                .unwrap()
+                .contains("One line.")
+        );
+        let mut out = Vec::new();
+        let code = main_with(
+            args(&[diroxide_ops::convert::CHILD_ARGUMENT]),
+            &mut &b"not json\n"[..],
+            &mut out,
+            &mut err,
+        );
+        assert_eq!(code, 2);
+        assert!(!help_text().contains(diroxide_ops::convert::CHILD_ARGUMENT));
     }
 
     #[test]

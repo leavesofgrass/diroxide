@@ -14,6 +14,8 @@ mod commands;
 mod components;
 // Compare files (W3a).
 mod comparing;
+// The Convert command and the conversion reports (alpha 4, lane AW).
+mod converting;
 // The details view, Say Details, Copy details and Show all (alpha 4,
 // lane VA).
 mod details;
@@ -75,6 +77,10 @@ mod views;
 mod volumes;
 // Watch this folder (W3t).
 mod watching;
+// The Watched folders list (alpha 4, lane AW).
+mod watched_folders;
+// Delete, Rename and Make folder inside a zip (alpha 4, lane AW).
+mod zip_edits;
 
 use diroxide_app::{App, AppEvent, AppOptions, Runtime};
 use diroxide_core::{Effect, Key, Place, Side};

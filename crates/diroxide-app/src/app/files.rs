@@ -208,6 +208,10 @@ impl App {
         then: Then,
         confirm: bool,
     ) -> Vec<Effect> {
+        // Delete, Rename and Make folder inside a zip rewrite it (lane AW).
+        if let Some(effects) = self.rewrite_instead(side, &request, note.clone()) {
+            return effects;
+        }
         // A new job's error policy is the setting's unless its request
         // named one (R25 N9).
         if request.errors.is_ask() {
@@ -1164,18 +1168,28 @@ impl App {
                     Some(JobKind::Pack) => "pack",
                     Some(JobKind::Split) => "split",
                     Some(JobKind::Join) => "join",
+                    Some(JobKind::Rewrite) => "zip change",
+                    Some(JobKind::Convert) => "conversion",
                     _ => "job",
                 };
                 let how = match kind {
                     Some(JobKind::Copy | JobKind::Duplicate) => {
                         format!("{} in the trash", count(done, "copy is", "copies are"))
                     }
-                    Some(JobKind::Unpack | JobKind::Pack | JobKind::Split | JobKind::Join) => {
+                    Some(
+                        JobKind::Unpack
+                        | JobKind::Pack
+                        | JobKind::Split
+                        | JobKind::Join
+                        | JobKind::Convert,
+                    ) => {
                         format!("{} in the trash", count(done, "item is", "items are"))
                     }
                     Some(JobKind::MakeFolder) => {
                         format!("{} removed", count(done, "folder", "folders"))
                     }
+                    // The new archive to the trash, the old one back (lane AW).
+                    Some(JobKind::Rewrite) => "the old copy is back".to_owned(),
                     _ => format!("{} back", count(done, "item is", "items are")),
                 };
                 format!("Undid {noun}: {how}")

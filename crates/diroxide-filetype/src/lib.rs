@@ -75,6 +75,9 @@ pub enum ActionTarget {
         /// The plugin's command id.
         command: String,
     },
+    /// Convert the file with a recipe, by its id (alpha.7, R30 commit
+    /// 64): the app plans it into the other panel and asks first.
+    Recipe(String),
 }
 
 /// An action of a file type.
@@ -253,6 +256,8 @@ impl FileType {
                             return None;
                         }
                     }
+                } else if let Some(recipe) = &action.recipe {
+                    ActionTarget::Recipe(recipe.clone())
                 } else if let Some(tool) = &action.tool {
                     ActionTarget::Tool {
                         tool: tool.clone(),
@@ -888,7 +893,9 @@ impl TypeRegistry {
     pub fn action_available(action: &TypeAction, tools: &ToolRegistry) -> bool {
         match &action.target {
             ActionTarget::Tool { tool, .. } => matches!(tools.find(tool), Ok(ToolStatus::Found(_))),
-            ActionTarget::Command(_) | ActionTarget::Plugin { .. } => true,
+            ActionTarget::Command(_) | ActionTarget::Plugin { .. } | ActionTarget::Recipe(_) => {
+                true
+            }
         }
     }
 }

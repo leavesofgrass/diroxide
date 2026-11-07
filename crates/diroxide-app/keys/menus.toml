@@ -57,6 +57,12 @@ command = "file.actions"
 command = "file.open-with"
 
 [[menu.item]]
+command = "file.convert"
+
+[[menu.item]]
+command = "file.convert-reports"
+
+[[menu.item]]
 command = "file.context-menu"
 access = "c"
 
@@ -865,6 +871,10 @@ access = "e"
 [[menu.item]]
 command = "app.tools"
 access = "t"
+
+[[menu.item]]
+command = "app.hot-folders"
+access = "w"
 
 [[menu.item]]
 command = "components.manage"

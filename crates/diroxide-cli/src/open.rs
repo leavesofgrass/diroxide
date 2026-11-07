@@ -526,6 +526,11 @@ pub fn build_for(
     let startup = paths
         .map(|paths| diroxide_app::startup::load(paths, &config, platform))
         .unwrap_or_default();
+    // Helper programs run through the tools registry: 7-Zip for a RAR, a
+    // conversion's tool (lane AW).
+    let tools = diroxide_tools::ToolRegistry::builtin()
+        .with_overrides(config.tools.clone())
+        .with_components(startup.helper_programs.clone());
     let left = match options.places.first() {
         Some(text) => resolve(text)?,
         None => here.clone(),
@@ -563,7 +568,14 @@ pub fn build_for(
     app_options.startup = startup;
     let app = App::new(app_options);
     let editor = app.settings().editor.clone();
-    let mut runtime = Runtime::new(registry).with_engine_options(engine);
+    let mut runtime = Runtime::new(registry)
+        .with_engine_options(engine)
+        .with_tool_runner(std::sync::Arc::new(tools.clone()))
+        .with_tool_versions(tools);
+    // The watched folders' carta runs in a diro child (lane AW).
+    if let Ok(program) = env::current_exe() {
+        runtime = runtime.with_carta_child(program);
+    }
     if options.no_plugins {
         // `--no-plugins`: nothing starts, and the Plugins menu says so
         // (W4d).
