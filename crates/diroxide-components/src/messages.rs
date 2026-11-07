@@ -38,7 +38,8 @@ pub const NO_BUILD: &str = "No build for this computer.";
 /// "Getting example plugins", `sftp` "Opening SFTP places", `disk`
 /// "Opening a disk image", `git` "Git in the panels", `rar` "Reading a
 /// RAR file", `archives` "Reading this archive" (CAB, ARJ, LZH, RPM, cpio
-/// and ar through 7-Zip); for the helpers, `metadata` "Reading file metadata" and
+/// and ar through 7-Zip), `encryption` "Encrypting with age"; for the
+/// helpers, `metadata` "Reading file metadata" and
 /// `github` "Working with GitHub". An unknown key is "This feature".
 pub fn feature_words(feature: &str) -> &'static str {
     match feature {
@@ -49,6 +50,7 @@ pub fn feature_words(feature: &str) -> &'static str {
         "rar" => "Reading a RAR file",
         "archives" => "Reading this archive",
         "iso" => "Reading an ISO image",
+        "encryption" => "Encrypting with age",
         "previews" => "This preview",
         "conversions" => "This conversion",
         "metadata" => "Reading file metadata",
@@ -875,6 +877,7 @@ mod tests {
         );
         assert_eq!(feature_words("metadata"), "Reading file metadata");
         assert_eq!(feature_words("archives"), "Reading this archive");
+        assert_eq!(feature_words("encryption"), "Encrypting with age");
         assert_eq!(feature_words("github"), "Working with GitHub");
     }
 
