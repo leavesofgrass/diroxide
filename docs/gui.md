@@ -256,7 +256,17 @@ The quick view turns the other panel into a preview of the file under the cursor
 - A click on a row of the preview goes into it, and Escape comes back.
 - Shift+F3 turns the quick view off, and the panel lists a folder again.
 
-A picture can open in a picture view. On a picture, Enter in the viewer or in the quick view's preview shows it as one graphic, named by its file and described by the quick view's sentence. Plus and Minus zoom, 0 fits it to the window, 1 shows the actual size, and Escape goes back. [Previews](previews.md#the-picture-view-in-the-window) has the words and the limits.
+### The picture view
+
+The window can show a picture. The terminal cannot, so this is the window's own.
+
+- On a picture, in the viewer (F3) or in the quick view's preview, the window says once "Enter shows the picture." Enter opens the picture view.
+- The picture is one graphic. A screen reader finds it named by its file, and described by the sentence the quick view says for it, such as "PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB". JAWS may need its describe key to read the description.
+- Plus, Equals and the keypad's plus zoom in. Minus zooms out. 0 fits the picture to the window, and 1 shows it at actual size. The arrows move a zoomed picture. Escape goes back to the viewer or the preview. Each key says what it did, and two help lines say the keys as the picture opens.
+- An animation shows its first frame, still, and says so in words. Nothing plays.
+- A picture past the pixel guard is said and never opened. PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are shown, and the other formats say that they need a component.
+
+The picture view has no command of its own yet, so it is not on [the keyboard page](keyboard.md), and Enter is the window's own key for it. [Previews](previews.md#the-picture-view-in-the-window) has the exact words, the numbers of the pixel guard and the limits.
 
 ## The dialogs
 
@@ -300,6 +310,7 @@ After a password field there is a check box, "Show the password", or "Show the p
 - A paste into a field types the first line of the pasted text. The system's paste key does it.
 - On a panel, a paste is refused in words, because its letters would run as keys: "Text paste ignored here. Paste files with Paste in the Edit menu."
 - Text the program copies, such as Copy path and Copy name, goes to the system clipboard: "Name copied: notes.txt". On Windows, if another program holds the clipboard, you hear "Could not copy to the clipboard: another program is using it. Try again in a moment." The window goes on.
+- On Wayland, copied text reaches the clipboard through the window's own connection to the compositor, which was not tried against a real compositor. Pasting into a field under Wayland with no XWayland still reads nothing, because the window toolkit's paste goes through the X11 clipboard.
 
 ## Jobs in the window
 
@@ -387,6 +398,7 @@ The window is drawn in one of 24 themes. The default is Galaxy, a dark page with
 - Every pair of colors the window draws meets 4.5 to 1 contrast for text, or 7 to 1 in a high-contrast theme, and the focus marks meet 3 to 1. Where a theme's own color for a part falls short, the window draws that part in the text color. Tests check every theme.
 - On Windows, High Contrast (Contrast themes) wins over every theme: while it is on, the window draws only with the system's own colors. Turning it on while the window is open is said: "System high contrast colors in use." When you turn it off, your theme comes back.
 - With the `follow_system_appearance` setting on, the window takes the light or dark partner of your theme to match the system's setting. It reads that setting once, when it starts.
+- A theme file can give a file group a color of its own, and the window draws it on the rows of plain files and archives. A row's words never change, so the color is never the only sign, and the terminal does not draw group colors yet. [Group colors](themes.md#group-colors) has the table.
 - The text is 16 pixels at your display's scale. There is no setting for the size or the font yet.
 - The window has an icon, the diroxide mark, and it changes nothing a screen reader reads. On Windows, Explorer shows it for `diro.exe` and for a shortcut to it, and the taskbar and the title bar show it while the window is open. On Linux, the AppImage carries the mark in every size a desktop's icon theme asks for, and in two menu entries: "diroxide", which opens the window, and "diroxide in a terminal", which opens the terminal in a terminal of its own. A build from source has no menu entry of its own; the two entry files are in the source, under `packaging/appimage`. macOS shows no icon in this alpha.
 
@@ -411,13 +423,15 @@ The same two commands are in the terminal's menus and palette, and they only exp
 
 ## What the window does not do yet
 
-These are not in the window yet. None of them is dated: each is to come in a later alpha.
+These are not in the window yet. None of them is dated: each is to come in a later pass or a later alpha.
 
 - An icon on macOS. The mark's smallest sizes, 16 to 24 pixels, have not been looked at by a sighted person.
 - A native menu bar on macOS. Its menus are the list.
 - A setting for the text size or the font.
 - Mouse support in the viewer.
 - Thumbnails, which the settings list as coming later.
+- Headers or a grid for a field column. A column such as `audio.artist` is said in each row's words, after the name, and the window has no header for it.
+- Dialogs of their own for the lists and questions that alpha 4 added: Convert and its report list, the Watched folders list, Checksum and Verify checksum, Strip, Check before sharing and the internet mark. The window draws them in the shapes it has, a list or a confirmation, and its test of every kind of dialog has not been extended to them. Nobody has walked them with a screen reader.
 - Low messages are shown and not announced, as described above. Nobody has yet listened to whether that is too quiet at the edges of a list.
 
 [Known limits](known-limits.md#the-gui) repeats these as limits, with what has not been tried. [Using diroxide with a screen reader](screen-readers.md#the-gui) has a check to run with NVDA or JAWS.
