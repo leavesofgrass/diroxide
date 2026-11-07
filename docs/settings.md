@@ -129,8 +129,7 @@ Four settings and one file cover how diroxide knows what a file is, which helper
 - Retro file types (`filetypes.retro`, off; in the Panels group): knows the old formats too, such as Amiga and tracker music. Off, those files read as unknown. The last row of the Groups list turns it on and off. [File types and groups](file-types.md#the-retro-pack) describes the pack.
 - Folders typed by name only (`check.skip`, none; in the Panels group): folders where diroxide never reads a file's first bytes to find its type, such as a slow share. A folder in the list covers everything below it. [File types and groups](file-types.md#folders-that-are-not-read) says more.
 - Auto-preview (`quick_view.auto_preview`, auto): whether the quick view runs ffprobe and pdftotext by itself after its wait. `auto` is on, except in screen reader mode.
-- Quick view documents up to (`quick_view.max_document_mb`, 64; 1 to 1024): the largest Word, EPUB or spreadsheet file the quick view opens whole.
-- `tools.toml`, in the config folder: a `path`, `disabled` and `needed` for any helper program, by its id. The Tools list, in Settings, shows what was found. [Tools and diro doctor](tools.md) has the keys and the words each choice produces.
+- Quick view documents up to (`quick_view.max_document_mb`, 64; 1 to 1024): the largest Word, EPUB or spreadsheet file the quick view opens whole.- `tools.toml`, in the config folder: a `path`, `disabled` and `needed` for any helper program, by its id. The Tools list, in Settings, shows what was found. [Tools and diro doctor](tools.md) has the keys and the words each choice produces.
 
 ```toml
 [check]
@@ -163,6 +162,12 @@ wait_ms = 800
 ```
 
 Thumbnails are kept now and do nothing yet. The reference marks them as coming with a later alpha. Hiding the menu bar works on Windows in the window, and focus mode works in the window too ([the GUI](gui.md#focus-mode-and-full-screen) says how). Focus mode is also a command, in the View menu and the palette, and the command and the Settings switch say the same words, "Focus mode on: the bars fade after three seconds." and "Focus mode off." Full screen is a command too, on F11 in the window.
+
+### Photos
+
+One setting is for the photo helpers. [The settings reference](settings-reference.md) lists it under Panels.
+
+- Burst gap (`photos.burst_gap_seconds`, 2; 1 to 60): the longest time between two pictures from one camera that Select the bursts counts as one burst. [Photos](photos.md#select-the-screenshots-the-bursts-and-the-pictures-with-no-date) says more.
 
 ## Themes and colors
 
