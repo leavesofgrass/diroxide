@@ -22,6 +22,7 @@ use crate::format::ArchiveFormat;
 use crate::guard::Allowances;
 use crate::job::{JobEnv, Landing, Progress, Settler};
 use crate::pack::{PACK_TEMP_PREFIX, PACK_TEMP_SUFFIX, PackPlan};
+use crate::rewrite::IndexContents;
 use crate::secrets::JobSecrets;
 use crate::test_archive::{Written, check_written};
 use crate::write::{Contents, ItemKind, PackFailure, Records, Settings, Watch, cancelled};
@@ -175,13 +176,33 @@ pub fn run_pack(plan: &PackPlan, password: Option<&Secret>, env: &JobEnv<'_>) ->
         threads: plan.threads,
         keep_owner: plan.keep_owner,
     };
-    let contents = FromProviders {
-        registry: env.engine.registry(),
-        places: plan.items.iter().map(|item| item.source.clone()).collect(),
-        ctx: &ctx,
+    let from_providers;
+    let from_index;
+    let contents: &dyn Contents = match &plan.rewrite {
+        // A rewrite reads the old archive's members by record, and stops
+        // before it writes when the archive changed since the plan.
+        Some(source) => match IndexContents::open(env.archives, source, &ctx) {
+            Ok(opened) => {
+                from_index = opened;
+                &from_index
+            }
+            Err(error) => {
+                failed(&mut report, &plan.destination, error);
+                meter.with(|progress| progress.finish());
+                return finish(report, Vec::new(), None);
+            }
+        },
+        None => {
+            from_providers = FromProviders {
+                registry: env.engine.registry(),
+                places: plan.items.iter().map(|item| item.source.clone()).collect(),
+                ctx: &ctx,
+            };
+            &from_providers
+        }
     };
     let written = write_temp(
-        provider, &temp, plan, &contents, &settings, &meter, &records, &ctx,
+        provider, &temp, plan, contents, &settings, &meter, &records, &ctx,
     );
     if let Err(failure) = written {
         match failure {

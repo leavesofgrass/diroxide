@@ -64,6 +64,8 @@ pub enum Locator {
     Tar(u64),
     /// The whole decompressed stream: the one member of a plain xz.
     Whole,
+    /// An item of a 7-Zip listing, by its number (alpha 4, R30 commit 80).
+    Tool(u32),
 }
 
 /// Facts about a member that its row says in words.

@@ -24,6 +24,7 @@ use diroxide_vfs::names::unused_name;
 use diroxide_vfs::{
     AttributeChange, NoSecrets, OpContext, Provider, SecretSource, TrashCheck, VfsError, WriteMode,
 };
+use diroxide_vfs::{NoTools, ToolRunner};
 
 use crate::guard::{Question, QuestionKind};
 use crate::provider::ArchiveProvider;
@@ -68,6 +69,9 @@ pub struct JobEnv<'a> {
     /// The masked prompt, asked for a password when the first locked
     /// member is reached.
     pub secrets: Arc<dyn SecretSource>,
+    /// The helper programs: 7-Zip for the archives read through it
+    /// (alpha 4); none unless set.
+    pub tools: Arc<dyn ToolRunner>,
 }
 
 impl std::fmt::Debug for JobEnv<'_> {
@@ -96,7 +100,15 @@ impl<'a> JobEnv<'a> {
             sink,
             questions: &NoQuestions,
             secrets: Arc::new(NoSecrets),
+            tools: Arc::new(NoTools),
         }
+    }
+
+    /// The same, running helper programs through `tools` (the tools
+    /// registry): what an unpack of a RAR file needs.
+    pub fn with_tools(mut self, tools: Arc<dyn ToolRunner>) -> Self {
+        self.tools = tools;
+        self
     }
 
     /// The same, asking a limit's questions of `questions`.
@@ -112,11 +124,13 @@ impl<'a> JobEnv<'a> {
     }
 
     /// A context for the job's provider calls: the control's cancel, no
-    /// progress (the runner reports its own), these secrets.
+    /// progress (the runner reports its own), these secrets, the job's
+    /// helper programs.
     pub(crate) fn context(&self, secrets: Arc<dyn SecretSource>) -> OpContext {
         OpContext::new()
             .with_cancel(self.control.cancel.clone())
             .with_secrets(secrets)
+            .with_tools(self.tools.clone())
     }
 
     /// The provider of a place.

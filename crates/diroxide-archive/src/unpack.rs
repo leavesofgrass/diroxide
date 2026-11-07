@@ -521,6 +521,14 @@ pub fn plan_unpack(
     allow: Allowances,
 ) -> Result<UnpackPlan, ArchiveError> {
     let opened = archives.open_archive(&request.source, ctx, allow)?;
+    // An archive read through 7-Zip unpacks only with a program that
+    // writes files safely (25.01 or later): said before the job starts.
+    if let Some(words) = opened.unpack_note() {
+        return Err(ArchiveError::Refused(format!(
+            "Could not unpack {}: {words}.",
+            opened.name()
+        )));
+    }
     let index = opened.index();
     let provider = registry.resolve(&request.destination)?;
     let capabilities = provider.capabilities(&request.destination);

@@ -52,6 +52,10 @@ pub(crate) struct WriteItem {
     pub(crate) mode: Option<u32>,
     /// Its owner's and group's names, when kept (tar only).
     pub(crate) owner: Option<(String, String)>,
+    /// Kept stored, not compressed (zip only): a rewrite keeps a stored
+    /// member stored, as an EPUB's or an OpenDocument's `mimetype` must
+    /// be.
+    pub(crate) stored: bool,
 }
 
 impl WriteItem {
@@ -314,10 +318,13 @@ pub(crate) fn write_zip<W: Write>(
             ItemKind::Link(target) => zip.add_symlink(item.name.as_str(), target.as_str(), base),
             ItemKind::File => {
                 let mut source = feed(contents, n, watch, records)?;
-                let options = base
-                    .compression_method(zip::CompressionMethod::Deflated)
-                    .compression_level(level)
-                    .large_file(item.size >= u64::from(u32::MAX));
+                let options = if item.stored {
+                    base.compression_method(zip::CompressionMethod::Stored)
+                } else {
+                    base.compression_method(zip::CompressionMethod::Deflated)
+                        .compression_level(level)
+                }
+                .large_file(item.size >= u64::from(u32::MAX));
                 let started = match settings.password {
                     Some(password) => zip.start_file(
                         item.name.as_str(),
@@ -385,6 +392,9 @@ pub(crate) fn write_archive<W: Write>(
             }
             xz.finish()
         }
+        ArchiveFormat::Tool(signature) => Err(PackFailure::Write(VfsError::Unsafe {
+            why: crate::sniff::never_written(signature),
+        })),
         _ => Err(PackFailure::Write(VfsError::unsupported(
             "archive",
             "pack a 7z to a sink that cannot seek",
@@ -589,6 +599,7 @@ mod tests {
             modified: Some(Timestamp::from_unix(1_792_152_000, 0)),
             mode: Some(0o640),
             owner: None,
+            stored: false,
         }
     }
 

@@ -10,7 +10,7 @@
 //! the answer.
 
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock, Weak};
 
 use diroxide_core::format::{count, human_size};
@@ -33,6 +33,7 @@ use crate::limits::Limits;
 use crate::names::nesting_depth;
 use crate::read_7z::{self, SevenZBackend};
 use crate::read_tar::{self, SingleBackend, TarBackend, Wrapper};
+use crate::read_tool::{self, SevenZipVersion, ToolBackend};
 use crate::read_xz;
 use crate::read_zip::{self, ZipBackend};
 use crate::sniff::{SNIFF_LEN, Sniffed, decide};
@@ -60,6 +61,7 @@ enum Backend {
     Tar(TarBackend),
     Single(SingleBackend),
     SevenZ(SevenZBackend),
+    Tool(ToolBackend),
 }
 
 impl Opened {
@@ -104,13 +106,54 @@ impl Opened {
     }
 
     /// Whether members can be read with random access: a zip, a 7z that
-    /// is not solid, an uncompressed tar.
+    /// is not solid, an uncompressed tar; never an archive read through
+    /// 7-Zip.
     pub fn random_read(&self) -> bool {
         match &self.backend {
             Backend::Zip(_) => true,
             Backend::Tar(tar) => tar.random_read(),
-            Backend::Single(_) => false,
+            Backend::Single(_) | Backend::Tool(_) => false,
             Backend::SevenZ(sevenz) => sevenz.random_read(),
+        }
+    }
+
+    /// Whether a zip's member is stored, not compressed: what a rewrite
+    /// keeps.
+    pub(crate) fn stored(&self, id: u32) -> bool {
+        match &self.backend {
+            Backend::Zip(zip) => zip.is_stored(&self.index, id),
+            _ => false,
+        }
+    }
+
+    /// Whether it is read through the 7z program (RAR and the rest).
+    pub fn read_with_tool(&self) -> bool {
+        matches!(self.backend, Backend::Tool(_))
+    }
+
+    /// The version of the 7-Zip that read it, when its banner said it.
+    pub fn tool_version(&self) -> Option<SevenZipVersion> {
+        match &self.backend {
+            Backend::Tool(tool) => tool.version(),
+            _ => None,
+        }
+    }
+
+    /// The archive's type as 7-Zip named it ("Rar5", "Cab").
+    pub fn tool_kind(&self) -> Option<&str> {
+        match &self.backend {
+            Backend::Tool(tool) => tool.kind(),
+            _ => None,
+        }
+    }
+
+    /// Why an archive read through 7-Zip cannot be unpacked to disk here,
+    /// in words said after the opening line: "7-Zip 24.08 is too old:
+    /// needs 25.01". `None` for every other archive.
+    pub fn unpack_note(&self) -> Option<String> {
+        match &self.backend {
+            Backend::Tool(tool) => tool.unpack_refusal(),
+            _ => None,
         }
     }
 
@@ -175,6 +218,7 @@ impl Opened {
                 Backend::SevenZ(sevenz) if sevenz.password().is_some() => {
                     sevenz.password().cloned()
                 }
+                Backend::Tool(tool) if tool.password().is_some() => tool.password().cloned(),
                 _ => {
                     let request =
                         SecretRequest::new(SecretKind::ArchivePassword, self.name.clone());
@@ -199,6 +243,15 @@ impl Opened {
                     check_cost(&name, sevenz.ahead(file), cost_ask_bytes, allow)?;
                 }
                 Box::new(sevenz.read(file, password, ctx.cancel.clone())?)
+            }
+            Backend::Tool(tool) => {
+                let Locator::Tool(n) = record.locator else {
+                    return Err(VfsError::NotFound.into());
+                };
+                check_cost(&name, tool.ahead(n), cost_ask_bytes, allow)?;
+                let size =
+                    (!record.flags.contains(RecordFlags::SIZE_UNKNOWN)).then_some(record.size);
+                tool.read(n, size, password.as_ref(), ctx)?
             }
         };
         let size_known = !record.flags.contains(RecordFlags::SIZE_UNKNOWN);
@@ -296,6 +349,9 @@ impl Opened {
             sevenz.visit(password.as_ref(), &ctx.cancel, &wanted_file, &mut visit_one)?;
             return Ok(());
         }
+        if let Backend::Tool(tool) = &self.backend {
+            return self.visit_tool(tool, ctx, allow, budget, limits, wanted, each);
+        }
         let in_order = Allowances {
             cost: true,
             ..allow
@@ -323,6 +379,120 @@ impl Opened {
     }
 }
 
+impl Opened {
+    /// Visits the records of an archive read through 7-Zip: every item
+    /// unpacked once into a staging folder in the spool (7-Zip 25.01 or
+    /// later), then each wanted member read from there through the
+    /// limiter chain, in the archive's order; a link 7-Zip made is
+    /// refused for its member. The staging folder goes when the pass ends.
+    #[allow(clippy::too_many_arguments)]
+    fn visit_tool(
+        &self,
+        tool: &ToolBackend,
+        ctx: &OpContext,
+        allow: Allowances,
+        budget: Budget,
+        limits: &Limits,
+        wanted: &dyn Fn(u32) -> bool,
+        each: &mut Visitor<'_>,
+    ) -> Result<(), ArchiveError> {
+        let index = &self.index;
+        let ids: Vec<u32> = (0..index.len() as u32).filter(|&id| wanted(id)).collect();
+        let locked = ids.iter().any(|&id| {
+            index
+                .record(id)
+                .is_some_and(|r| r.flags.contains(RecordFlags::ENCRYPTED))
+        });
+        let password = match (tool.password(), locked) {
+            (Some(password), _) => Some(password.clone()),
+            (None, true) => {
+                let request = SecretRequest::new(SecretKind::ArchivePassword, self.name.clone());
+                Some(ctx.ask_secret(&request).ok_or(VfsError::PasswordRequired)?)
+            }
+            (None, false) => None,
+        };
+        let any_file = ids
+            .iter()
+            .any(|&id| index.record(id).is_some_and(|r| r.kind == RecordKind::File));
+        let staging = if any_file {
+            let bytes = index.summary().total_size.unwrap_or(0);
+            Some(tool.extract_all(ctx, bytes, password.as_ref())?)
+        } else {
+            None
+        };
+        for id in ids {
+            ctx.check()?;
+            let Some(record) = index.record(id).copied() else {
+                continue;
+            };
+            let go_on = match (&staging, record.kind) {
+                (Some(staging), RecordKind::File) => {
+                    let claims = Claims {
+                        name: index.name(id).to_owned(),
+                        size: (!record.flags.contains(RecordFlags::SIZE_UNKNOWN))
+                            .then_some(record.size),
+                        packed: record.packed(),
+                        crc32: record
+                            .flags
+                            .contains(RecordFlags::HAS_CRC)
+                            .then_some(record.crc32),
+                    };
+                    let reader: Box<dyn Read + Send> = match staging.open(&index.path(id)) {
+                        Ok(file) => Box::new(file),
+                        Err(error) => Box::new(read_tool::Failing(Some(error))),
+                    };
+                    let mut guarded = Guarded::new(
+                        reader,
+                        claims,
+                        *limits,
+                        budget.clone(),
+                        allow,
+                        ctx.cancel.clone(),
+                    );
+                    each(index, id, &mut guarded)?
+                }
+                _ => each(index, id, &mut std::io::empty())?,
+            };
+            if !go_on {
+                break;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Where the 7z tool reads a container from: its own path when it is a
+/// local file, else a spool copy of its bytes, kept while it is open.
+fn tool_file(
+    source: Source,
+    local: Option<&Path>,
+    limits: &Limits,
+    spool_dir: Option<&Path>,
+    budget: &SpoolBudget,
+    ctx: &OpContext,
+) -> Result<(PathBuf, Option<spool::SpoolFile>), ArchiveError> {
+    if let Some(path) = local {
+        return Ok((path.to_owned(), None));
+    }
+    let Some(dir) = spool_dir else {
+        return Err(refuse(
+            "reading an inner archive with 7-Zip",
+            "no spool folder is set".to_owned(),
+        )
+        .into());
+    };
+    let spooled = spool::spool_to_file(Box::new(source), limits, dir, budget, None, &ctx.cancel)?;
+    Ok((spooled.path().to_owned(), Some(spooled)))
+}
+
+/// What the 7z tool backend needs beside the bytes: the container's own
+/// path when it is a local file, and the spool for copies and staging.
+struct ToolPlace<'a> {
+    local: Option<&'a Path>,
+    spool_dir: Option<PathBuf>,
+    budget: &'a SpoolBudget,
+}
+
 /// Builds an archive's index from its bytes: the format by the name and
 /// the first bytes, then the format's reader.
 #[allow(clippy::too_many_arguments)]
@@ -335,6 +505,7 @@ fn open_source(
     limits: &Limits,
     ctx: &OpContext,
     allow: Allowances,
+    tool: ToolPlace<'_>,
 ) -> Result<Opened, ArchiveError> {
     let mut head = vec![0u8; SNIFF_LEN];
     let got = source.read_at(0, &mut head).map_err(VfsError::from)?;
@@ -369,6 +540,19 @@ fn open_source(
             };
             let (index, sevenz) = read_7z::open(source, &name, limits, allow, &ask)?;
             (index, Backend::SevenZ(sevenz))
+        }
+        ArchiveFormat::Tool(signature) => {
+            let (path, spooled) = tool_file(
+                source,
+                tool.local,
+                limits,
+                tool.spool_dir.as_deref(),
+                tool.budget,
+                ctx,
+            )?;
+            let (index, backend) =
+                ToolBackend::open(path, spooled, signature, &name, limits, ctx, tool.spool_dir)?;
+            (index, Backend::Tool(backend))
         }
         ArchiveFormat::TarXz | ArchiveFormat::Xz => {
             let size = read_xz::check(&source, &name, limits, allow)?;
@@ -579,7 +763,7 @@ impl ArchiveProvider {
         }
     }
 
-    fn registry(&self) -> Result<Arc<Registry>, VfsError> {
+    pub(crate) fn registry(&self) -> Result<Arc<Registry>, VfsError> {
         self.registry
             .read()
             .ok()
@@ -690,7 +874,7 @@ impl ArchiveProvider {
 
     /// The bytes free on the spool folder's drive, when the registry can
     /// say.
-    fn free_space(&self, dir: &std::path::Path, ctx: &OpContext) -> Option<u64> {
+    fn free_space(&self, dir: &Path, ctx: &OpContext) -> Option<u64> {
         let place = Place::parse(&dir.to_string_lossy()).ok()?;
         let registry = self.registry().ok()?;
         let provider = registry.resolve(&place).ok()?;
@@ -739,6 +923,17 @@ impl ArchiveProvider {
         }
         let (source, parts) = self.source_of(container, ctx, allow)?;
         let name = container.name().unwrap_or("archive").to_owned();
+        // 7-Zip reads a local file by its own path; anything else (a
+        // member of an archive, a split set, a remote file) is spooled.
+        let local = match (container.archive(), parts) {
+            (None, None) => container.local_path().map(PathBuf::from),
+            _ => None,
+        };
+        let tool = ToolPlace {
+            local: local.as_deref(),
+            spool_dir: self.spool_dir.read().ok().and_then(|d| d.clone()),
+            budget: &self.spool_budget,
+        };
         let opened = Arc::new(open_source(
             source,
             key.clone(),
@@ -748,6 +943,7 @@ impl ArchiveProvider {
             &self.limits,
             ctx,
             allow,
+            tool,
         )?);
         let bytes = opened.index.memory();
         self.cache.put(key, opened.clone(), bytes);
@@ -875,6 +1071,11 @@ impl ArchiveProvider {
             modified: None,
         };
         let name = place.name().unwrap_or("archive").to_owned();
+        let tool = ToolPlace {
+            local: None,
+            spool_dir: self.spool_dir.read().ok().and_then(|d| d.clone()),
+            budget: &self.spool_budget,
+        };
         open_source(
             source,
             key,
@@ -884,6 +1085,7 @@ impl ArchiveProvider {
             &self.limits,
             ctx,
             allow,
+            tool,
         )
     }
 
@@ -957,7 +1159,7 @@ impl Provider for ArchiveProvider {
         let window = match &opened.backend {
             Backend::Zip(zip) => zip.stored_window(&opened.index, id),
             Backend::Tar(tar) => tar.window(&opened.index, id),
-            Backend::Single(_) | Backend::SevenZ(_) => None,
+            Backend::Single(_) | Backend::SevenZ(_) | Backend::Tool(_) => None,
         };
         match window {
             Some(window) => Ok(Box::new(window)),

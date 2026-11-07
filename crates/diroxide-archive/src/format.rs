@@ -1,5 +1,7 @@
 //! The archive formats, by name and by their first bytes.
 
+use crate::sniff::Signature;
+
 /// The archive formats. More join as they ship (gzip, bzip2, Zstandard
 /// and their tars), so callers match with a fallback arm.
 #[non_exhaustive]
@@ -17,10 +19,16 @@ pub enum ArchiveFormat {
     TarXz,
     /// One file compressed with xz, shown as an archive of one member.
     Xz,
+    /// A format read only through the 7z program and never written
+    /// (alpha 4, R29 6.1): RAR, CAB, ARJ, LZH, RPM, cpio and ar, and a
+    /// disk image no plugin claims. The signature says which.
+    Tool(Signature),
 }
 
 impl ArchiveFormat {
-    /// Every format, in the order the tests and the docs list them.
+    /// Every format diroxide reads and writes itself, in the order the
+    /// tests and the docs list them; the formats read through the 7z
+    /// program ([`ArchiveFormat::Tool`]) are not among them.
     pub const ALL: &'static [ArchiveFormat] = &[
         ArchiveFormat::Zip,
         ArchiveFormat::SevenZ,
@@ -60,7 +68,7 @@ impl ArchiveFormat {
     /// gzip stream reads as tar.gz and an xz stream as xz. See
     /// [`crate::sniff`] for every signature and the decision with the name.
     pub fn sniff(head: &[u8]) -> Option<Self> {
-        crate::sniff::sniff_signature(head).and_then(crate::sniff::Signature::format)
+        crate::sniff::sniff_signature(head).and_then(Signature::format)
     }
 
     /// The usual extension, with the dot.
@@ -72,7 +80,13 @@ impl ArchiveFormat {
             ArchiveFormat::TarGz => ".tar.gz",
             ArchiveFormat::TarXz => ".tar.xz",
             ArchiveFormat::Xz => ".xz",
+            ArchiveFormat::Tool(signature) => signature.extension(),
         }
+    }
+
+    /// Whether it is read through the 7z program, and never written.
+    pub const fn read_with_tool(self) -> bool {
+        matches!(self, ArchiveFormat::Tool(_))
     }
 
     /// The format's name as said: "zip archive", "tar archive compressed
@@ -85,6 +99,7 @@ impl ArchiveFormat {
             ArchiveFormat::TarGz => "tar archive compressed with gzip",
             ArchiveFormat::TarXz => "tar archive compressed with xz",
             ArchiveFormat::Xz => "file compressed with xz",
+            ArchiveFormat::Tool(signature) => signature.word(),
         }
     }
 }

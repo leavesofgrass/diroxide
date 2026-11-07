@@ -38,9 +38,10 @@ pub fn read_only_refusal(error: &VfsError) -> Option<Message> {
 }
 
 /// The title line for a place inside an archive, the kind first: "course.zip,
-/// archive, in D:\docs" at the root, "week1, in course.zip" inside, and the
+/// archive, in D:\docs" at the root, "week1, in course.zip" inside, the
 /// format named when the bytes and the name disagree: "a.zip, 7z archive,
-/// in D:\docs".
+/// in D:\docs", and an archive read through 7-Zip said so: "Backup.rar,
+/// read with 7-Zip, in D:\docs".
 pub fn title(place: &Place, sniffed: Option<&Sniffed>) -> String {
     let plain = place.title();
     let Some((container, member)) = place.archive() else {
@@ -51,6 +52,7 @@ pub fn title(place: &Place, sniffed: Option<&Sniffed>) -> String {
     }
     let name = container.name().unwrap_or("archive");
     let kind = match sniffed {
+        Some(sniffed) if sniffed.format.read_with_tool() => "read with 7-Zip",
         Some(sniffed) if sniffed.disagrees() => sniffed.format.spoken_name(),
         _ => "archive",
     };
@@ -154,6 +156,17 @@ mod tests {
             r"a.zip, 7z archive, in D:\docs"
         );
         assert!(within_cells(&title(&lying, Some(&sniffed)), "7z archive"));
+        let backup = Place::parse_with(r"D:\docs\Backup.rar", PathStyle::Windows)
+            .unwrap()
+            .into_archive();
+        let rar = Sniffed {
+            format: ArchiveFormat::Tool(Signature::Rar),
+            by_name: None,
+            signature: Some(Signature::Rar),
+        };
+        let said = title(&backup, Some(&rar));
+        assert_eq!(said, r"Backup.rar, read with 7-Zip, in D:\docs");
+        assert!(within_cells(&said, "Backup.rar, read with 7-Zip"));
     }
 
     #[test]

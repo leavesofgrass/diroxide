@@ -111,6 +111,9 @@ pub struct PackPlan {
     /// The room on the destination's drive.
     pub room: Room,
     pub(crate) write_items: Vec<WriteItem>,
+    /// A rewrite's source: the old archive's records the items are read
+    /// from, in place of the items' places ([`crate::rewrite`]).
+    pub(crate) rewrite: Option<crate::rewrite::FromIndex>,
 }
 
 /// The format's short name, as the rows say it: "zip", "tar.gz".
@@ -122,6 +125,7 @@ pub fn format_word(format: ArchiveFormat) -> &'static str {
         ArchiveFormat::TarGz => "tar.gz",
         ArchiveFormat::TarXz => "tar.xz",
         ArchiveFormat::Xz => "xz",
+        ArchiveFormat::Tool(signature) => signature.short(),
     }
 }
 
@@ -408,6 +412,7 @@ pub fn plan_pack(
             drive: drive_of(&folder),
         },
         write_items,
+        rewrite: None,
     })
 }
 
@@ -432,6 +437,7 @@ fn write_item(name: &str, kind: ItemKind, size: u64, entry: &Entry, keep_owner: 
         modified: entry.modified,
         mode,
         owner,
+        stored: false,
     }
 }
 

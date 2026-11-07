@@ -96,6 +96,14 @@ bench = false
 name = "archive_7z"
 path = "fuzz_targets/archive_7z.rs"
 
+# Alpha 4 (lane Z): the 7z tool backend's listing parser.
+[[bin]]
+name = "archive_slt"
+path = "fuzz_targets/archive_slt.rs"
+test = false
+doc = false
+bench = false
+
 # W2d: the highlighter must never hang (spike H2). Run with -timeout=2.
 [dependencies.diroxide-preview]
 path = "../crates/diroxide-preview"

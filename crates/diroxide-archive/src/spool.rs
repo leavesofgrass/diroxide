@@ -47,7 +47,7 @@ impl SpoolBudget {
 }
 
 /// A spool file: read and seek like the file it is, removed when dropped.
-struct SpoolFile {
+pub(crate) struct SpoolFile {
     file: File,
     path: PathBuf,
     charged: u64,
@@ -125,6 +125,41 @@ pub(crate) fn spool(
         )
         .into());
     };
+    let spooled = fill(held, reader, limits, dir, budget, free, cancel)?;
+    Source::new(Box::new(spooled)).map_err(|e| VfsError::from(e).into())
+}
+
+/// Reads a whole container out into a spool file in `dir`, whatever its
+/// size, for a program that reads files by path (the 7z tool): the same
+/// budget, the same refusals. The file is removed when the result is
+/// dropped.
+pub(crate) fn spool_to_file(
+    reader: Box<dyn Read + Send>,
+    limits: &Limits,
+    dir: &Path,
+    budget: &SpoolBudget,
+    free: Option<u64>,
+    cancel: &CancelToken,
+) -> Result<SpoolFile, ArchiveError> {
+    let mut spooled = fill(Vec::new(), reader, limits, dir, budget, free, cancel)?;
+    // Held for reading only from here: 7-Zip on Windows opens what it
+    // reads with read sharing alone, which a handle that may write would
+    // refuse ("being used by another process").
+    spooled.file = File::open(&spooled.path).map_err(VfsError::from)?;
+    Ok(spooled)
+}
+
+/// Writes `held`, then the rest of `reader`, into a new spool file in
+/// `dir`, charged to the budget as it goes, and rewinds it.
+fn fill(
+    held: Vec<u8>,
+    mut reader: Box<dyn Read + Send>,
+    limits: &Limits,
+    dir: &Path,
+    budget: &SpoolBudget,
+    free: Option<u64>,
+    cancel: &CancelToken,
+) -> Result<SpoolFile, ArchiveError> {
     let (file, path) = create(dir)?;
     let mut spooled = SpoolFile {
         file,
@@ -169,7 +204,22 @@ pub(crate) fn spool(
     }
     spooled.file.flush().map_err(VfsError::from)?;
     spooled.seek(SeekFrom::Start(0)).map_err(VfsError::from)?;
-    Source::new(Box::new(spooled)).map_err(|e| VfsError::from(e).into())
+    Ok(spooled)
+}
+
+impl SpoolFile {
+    /// Where the spool file is.
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl std::fmt::Debug for SpoolFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SpoolFile")
+            .field("path", &self.path)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Whether a name is one this provider gives its spool files.
