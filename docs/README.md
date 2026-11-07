@@ -55,6 +55,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Privacy before sharing](before-sharing.md): Check before sharing says what a file carries that could say who made it, where or with what, Strip metadata into a copy for JPEG, PNG and WebP, and Remove the internet mark with Undo.
 - [Checksums and verifying](checksums.md): Checksum with the value to read, copy, compare with a pasted one or save as `SHA256SUMS`, Verify checksum against the list beside a download, the verdict first and what a match does and does not show, and `diro sum`.
 - [Encryption and signatures](encryption.md): the File menu's Encryption submenu: age with a passphrase or a key through the Encryption plugin, gpg to encrypt, decrypt and sign, Verify signature for gpg and minisign, the originals and the trash, what is never stored, and the signature sentences in Verify checksum.
+- [Photos](photos.md): the photo columns, Sort by date taken, Next day and Previous day, selecting the screenshots, the bursts and the pictures with no date, Review pictures with one key an answer, and Move into month folders with one Undo.
 - [Split and join](split-join.md): cutting a big file into parts for mail, GitHub, a disc or FAT32, joining them back, the checksum file, `diro split` and `diro join`.
 - [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, times, and the details list.
 
