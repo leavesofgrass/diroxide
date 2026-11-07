@@ -100,9 +100,14 @@ pub fn sniff(data: &[u8]) {
     if let Ok(sniffed) = crate::sniff::decide(name, head) {
         assert_eq!(sniffed.signature, signature);
         match signature {
+            // A format read through 7-Zip is decided as that, by its
+            // signature (alpha 4).
+            Some(signature) if signature.format().is_none() => {
+                assert!(signature.read_with_tool());
+                assert_eq!(sniffed.format, crate::ArchiveFormat::Tool(signature));
+            }
             Some(signature) => {
                 let format = signature.format();
-                assert!(format.is_some());
                 assert!(
                     format == Some(sniffed.format)
                         || (format == Some(crate::ArchiveFormat::Xz)

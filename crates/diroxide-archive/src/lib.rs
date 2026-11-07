@@ -35,6 +35,7 @@ mod pipe;
 pub mod provider;
 mod read_7z;
 mod read_tar;
+pub mod read_tool;
 mod read_xz;
 mod read_zip;
 pub mod request;

@@ -125,6 +125,7 @@ pub fn format_word(format: ArchiveFormat) -> &'static str {
         ArchiveFormat::TarGz => "tar.gz",
         ArchiveFormat::TarXz => "tar.xz",
         ArchiveFormat::Xz => "xz",
+        ArchiveFormat::Tool(signature) => signature.short(),
     }
 }
 

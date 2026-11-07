@@ -48,7 +48,7 @@ impl CompressionLevel {
             CompressionLevel::Ultra => 4,
         };
         match format {
-            ArchiveFormat::Tar => None,
+            ArchiveFormat::Tar | ArchiveFormat::Tool(_) => None,
             ArchiveFormat::Zip | ArchiveFormat::TarGz => Some([1, 3, 6, 9, 9][index]),
             _ => Some([1, 3, 6, 8, 9][index]),
         }

@@ -385,6 +385,9 @@ pub(crate) fn write_archive<W: Write>(
             }
             xz.finish()
         }
+        ArchiveFormat::Tool(signature) => Err(PackFailure::Write(VfsError::Unsafe {
+            why: crate::sniff::never_written(signature),
+        })),
         _ => Err(PackFailure::Write(VfsError::unsupported(
             "archive",
             "pack a 7z to a sink that cannot seek",

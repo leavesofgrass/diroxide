@@ -151,6 +151,101 @@ impl Signature {
         )
     }
 
+    /// Whether the archive provider reads it through the 7z program
+    /// (alpha 4, R29 6.1): RAR, CAB, ARJ, LZH, RPM, cpio, ar, a spanned
+    /// zip set, and the disk images a plugin does not claim first.
+    pub const fn read_with_tool(self) -> bool {
+        matches!(
+            self,
+            Signature::Rar
+                | Signature::Cab
+                | Signature::Arj
+                | Signature::Lzh
+                | Signature::Rpm
+                | Signature::Cpio
+                | Signature::Ar
+                | Signature::ZipSpanned
+        ) || self.is_disk_image()
+    }
+
+    /// Its short name, as a line that leads with it says it: "RAR",
+    /// "CAB", "cpio", "ISO".
+    pub const fn short(self) -> &'static str {
+        match self {
+            Signature::Zip | Signature::ZipEmpty => "zip",
+            Signature::ZipSpanned => "Spanned zip",
+            Signature::SevenZ => "7z",
+            Signature::Xz => "xz",
+            Signature::Gzip => "gzip",
+            Signature::Bzip2 => "bzip2",
+            Signature::Zstd => "Zstandard",
+            Signature::Lzip => "lzip",
+            Signature::Tar | Signature::TarOld => "tar",
+            Signature::Rar => "RAR",
+            Signature::Iso => "ISO",
+            Signature::Cab => "CAB",
+            Signature::Rpm => "RPM",
+            Signature::Cpio => "cpio",
+            Signature::Ar => "ar",
+            Signature::Arj => "ARJ",
+            Signature::Lzh => "LZH",
+            Signature::Squashfs => "squashfs",
+            Signature::Vhd => "VHD",
+            Signature::Vhdx => "VHDX",
+            Signature::Vdi => "VDI",
+            Signature::Vmdk => "VMDK",
+            Signature::Qcow2 => "QCOW2",
+            Signature::Ntfs => "NTFS",
+            Signature::Fat => "FAT",
+            Signature::Gpt => "GPT",
+            Signature::Mbr => "MBR",
+            Signature::Ext => "ext",
+        }
+    }
+
+    /// Its usual extension, with the dot: ".rar", ".iso".
+    pub const fn extension(self) -> &'static str {
+        match self {
+            Signature::Zip | Signature::ZipEmpty | Signature::ZipSpanned => ".zip",
+            Signature::SevenZ => ".7z",
+            Signature::Xz => ".xz",
+            Signature::Gzip => ".gz",
+            Signature::Bzip2 => ".bz2",
+            Signature::Zstd => ".zst",
+            Signature::Lzip => ".lz",
+            Signature::Tar | Signature::TarOld => ".tar",
+            Signature::Rar => ".rar",
+            Signature::Iso => ".iso",
+            Signature::Cab => ".cab",
+            Signature::Rpm => ".rpm",
+            Signature::Cpio => ".cpio",
+            Signature::Ar => ".ar",
+            Signature::Arj => ".arj",
+            Signature::Lzh => ".lzh",
+            Signature::Squashfs => ".squashfs",
+            Signature::Vhd => ".vhd",
+            Signature::Vhdx => ".vhdx",
+            Signature::Vdi => ".vdi",
+            Signature::Vmdk => ".vmdk",
+            Signature::Qcow2 => ".qcow2",
+            Signature::Ntfs | Signature::Fat | Signature::Gpt | Signature::Mbr | Signature::Ext => {
+                ".img"
+            }
+        }
+    }
+
+    /// The feature the components' ask line names when 7-Zip is missing
+    /// for it (`feature_words` in the components crate): "rar" ("Reading a
+    /// RAR file"), "iso" ("Reading an ISO image"), and "archives" for the
+    /// rest.
+    pub const fn feature(self) -> &'static str {
+        match self {
+            Signature::Rar => "rar",
+            Signature::Iso => "iso",
+            _ => "archives",
+        }
+    }
+
     /// What it is, in words: "zip archive", "RAR archive".
     pub const fn word(self) -> &'static str {
         match self {
@@ -226,6 +321,60 @@ impl Signature {
             what: what.to_owned(),
         }
     }
+}
+
+/// The refusal to write a format read only through 7-Zip: "RAR is read
+/// only: diroxide never writes it". The owner's answer 116: diroxide
+/// reads RAR and never writes it.
+pub fn never_written(signature: Signature) -> String {
+    format!(
+        "{} is read only: diroxide never writes it",
+        signature.short()
+    )
+}
+
+/// The line when 7-Zip is not installed for a format that needs it, the
+/// format first: "RAR needs 7-Zip: not installed"; a disk image says the
+/// plugin too: "ISO needs the disk plugin or 7-Zip".
+pub fn not_installed_line(signature: Signature) -> String {
+    if signature.is_disk_image() {
+        format!("{} needs the disk plugin or 7-Zip", signature.short())
+    } else {
+        format!("{} needs 7-Zip: not installed", signature.short())
+    }
+}
+
+/// The signature a name says, for the formats read through 7-Zip: by
+/// the extensions of core's lists (the tool archives, the disk images and
+/// the raw images), ignoring case.
+pub fn tool_signature_of_name(name: &str) -> Option<Signature> {
+    let lower = name.to_lowercase();
+    let ends = |ext: &str| lower.len() > ext.len() && lower.ends_with(ext);
+    let table: [(&str, Signature); 19] = [
+        (".rar", Signature::Rar),
+        (".cab", Signature::Cab),
+        (".arj", Signature::Arj),
+        (".lzh", Signature::Lzh),
+        (".lha", Signature::Lzh),
+        (".rpm", Signature::Rpm),
+        (".cpio", Signature::Cpio),
+        (".ar", Signature::Ar),
+        (".iso", Signature::Iso),
+        (".vhdx", Signature::Vhdx),
+        (".vhd", Signature::Vhd),
+        (".vdi", Signature::Vdi),
+        (".vmdk", Signature::Vmdk),
+        (".qcow2", Signature::Qcow2),
+        (".squashfs", Signature::Squashfs),
+        (".sfs", Signature::Squashfs),
+        (".img", Signature::Mbr),
+        (".dd", Signature::Mbr),
+        (".raw", Signature::Mbr),
+    ];
+    table
+        .iter()
+        .find(|(ext, _)| ends(ext))
+        .map(|(_, signature)| *signature)
 }
 
 /// The signature of the first bytes of a file, or `None`. Give it at
@@ -442,6 +591,9 @@ pub fn decide(name: &str, head: &[u8]) -> Result<Sniffed, VfsError> {
                 ArchiveFormat::TarXz
             }
             Some(format) => format,
+            // RAR and the rest, and a disk image no plugin claimed: read
+            // through the 7z program (alpha 4, R30 commit 80).
+            None if signature.read_with_tool() => ArchiveFormat::Tool(signature),
             None => return Err(signature.not_read()),
         },
         (None, Some(ArchiveFormat::Zip)) => ArchiveFormat::Zip,
@@ -450,9 +602,20 @@ pub fn decide(name: &str, head: &[u8]) -> Result<Sniffed, VfsError> {
                 what: "its first bytes are not the archive its name says".to_owned(),
             });
         }
-        (None, None) if is_disk_image_name(name) => {
-            return Err(VfsError::NeedsHelper {
-                what: DISK_IMAGE_NEEDS.to_owned(),
+        // A disk image whose start says nothing (a fixed VHD keeps its
+        // footer at the end, a raw image starts with data): 7-Zip finds
+        // its own way in, so the name sends it there.
+        (None, None) if is_disk_image_name(name) => match tool_signature_of_name(name) {
+            Some(signature) => ArchiveFormat::Tool(signature),
+            None => {
+                return Err(VfsError::NeedsHelper {
+                    what: DISK_IMAGE_NEEDS.to_owned(),
+                });
+            }
+        },
+        (None, None) if tool_signature_of_name(name).is_some() => {
+            return Err(VfsError::Corrupt {
+                what: "its first bytes are not the archive its name says".to_owned(),
             });
         }
         (None, None) => {
@@ -564,18 +727,21 @@ mod tests {
                 );
             }
         }
-        let vhd = decide("disk.vhd", &head_of(Signature::Vhd)).unwrap_err();
-        assert_eq!(vhd.to_string(), "it needs the disk image plugin or 7-Zip");
-        // A fixed VHD keeps its footer at the end, so its start is plain
-        // data: the name says what it is.
-        let fixed = decide("fixed.vhd", &[0u8; 512]).unwrap_err();
-        assert!(matches!(fixed, VfsError::NeedsHelper { .. }), "{fixed}");
-        let raw = decide("card.img", &[0u8; 512]).unwrap_err();
-        assert!(matches!(raw, VfsError::NeedsHelper { .. }), "{raw}");
-        let cab = decide("setup.cab", &head_of(Signature::Cab)).unwrap_err();
+        // With no plugin claiming it, a disk image goes to 7-Zip (alpha 4),
+        // by its bytes or, when its start says nothing, by its name: a
+        // fixed VHD keeps its footer at the end, a raw image starts with
+        // data.
+        let tool = |name: &str, head: &[u8]| decide(name, head).unwrap().format;
+        let vhd = Signature::Vhd;
+        assert_eq!(tool("disk.vhd", &head_of(vhd)), ArchiveFormat::Tool(vhd));
+        assert_eq!(tool("fixed.vhd", &[0u8; 512]), ArchiveFormat::Tool(vhd));
         assert_eq!(
-            cab.to_string(),
-            "it uses the Cabinet format, which is not supported"
+            tool("card.img", &[0u8; 512]),
+            ArchiveFormat::Tool(Signature::Mbr)
+        );
+        assert_eq!(
+            tool("setup.cab", &head_of(Signature::Cab)),
+            ArchiveFormat::Tool(Signature::Cab)
         );
         // A hybrid ISO carries a partition table too, and is an ISO.
         let mut hybrid = head_of(Signature::Iso);
@@ -590,6 +756,51 @@ mod tests {
         // Two-byte magics need their header's next field.
         assert_eq!(sniff_signature(&[0x60, 0xEA, 0, 0]), None);
         assert_eq!(sniff_signature(b"xx-lhz-"), None);
+    }
+
+    /// The formats read through 7-Zip: each said in words that fit the
+    /// display with its point first, never written, its feature for the
+    /// components' ask line.
+    #[test]
+    fn the_tool_formats_say_themselves() {
+        let tools = [
+            Signature::Rar,
+            Signature::Cab,
+            Signature::Arj,
+            Signature::Lzh,
+            Signature::Rpm,
+            Signature::Cpio,
+            Signature::Ar,
+        ];
+        for signature in tools {
+            assert!(signature.read_with_tool());
+            let line = not_installed_line(signature);
+            assert!(line.chars().count() <= 40, "{line}");
+            assert!(line.starts_with(signature.short()), "{line}");
+            assert_eq!(
+                tool_signature_of_name(&format!("x{}", signature.extension())),
+                Some(signature)
+            );
+        }
+        assert_eq!(
+            not_installed_line(Signature::Rar),
+            "RAR needs 7-Zip: not installed"
+        );
+        assert_eq!(not_installed_line(Signature::Rar).chars().count(), 30);
+        assert_eq!(
+            not_installed_line(Signature::Iso),
+            "ISO needs the disk plugin or 7-Zip"
+        );
+        assert_eq!(
+            never_written(Signature::Rar),
+            "RAR is read only: diroxide never writes it"
+        );
+        assert_eq!(Signature::Rar.feature(), "rar");
+        assert_eq!(Signature::Iso.feature(), "iso");
+        assert_eq!(Signature::Cab.feature(), "archives");
+        assert_eq!(tool_signature_of_name("OLD.LHA"), Some(Signature::Lzh));
+        assert_eq!(tool_signature_of_name("notes.txt"), None);
+        assert!(!Signature::Zstd.read_with_tool());
     }
 
     #[test]
@@ -637,13 +848,19 @@ mod tests {
 
     #[test]
     fn what_is_not_read_says_so() {
-        let rar = decide("a.rar", &head_of(Signature::Rar)).unwrap_err();
+        let rar = decide("a.rar", &head_of(Signature::Rar)).unwrap();
+        assert_eq!(rar.format, ArchiveFormat::Tool(Signature::Rar));
+        assert!(!rar.disagrees());
+        let spanned = decide("a.zip", &head_of(Signature::ZipSpanned)).unwrap();
+        assert_eq!(spanned.format, ArchiveFormat::Tool(Signature::ZipSpanned));
+        let zstd = decide("a.zst", &head_of(Signature::Zstd)).unwrap_err();
         assert_eq!(
-            rar.to_string(),
-            "it uses the RAR format, which is not supported"
+            zstd.to_string(),
+            "it uses Zstandard compression, which is not supported"
         );
-        let spanned = decide("a.zip", &head_of(Signature::ZipSpanned)).unwrap_err();
-        assert!(spanned.to_string().contains("needs the 7z tool"));
+        // A tool format's name with other bytes is damaged, not unknown.
+        let lying = decide("Backup.rar", b"hello").unwrap_err();
+        assert!(lying.to_string().starts_with("it is damaged"), "{lying}");
         let nothing = decide("notes.txt", b"hello").unwrap_err();
         assert_eq!(
             nothing.to_string(),
