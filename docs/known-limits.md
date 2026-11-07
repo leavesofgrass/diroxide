@@ -1,6 +1,6 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view, columns, checksums, privacy before sharing, conversions, watched folders, disk images and git are here, and grow as the alpha does. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view, columns, checksums, encryption and signatures, privacy before sharing, conversions, watched folders, disk images, git and photos are here, and grow as the alpha does. Where a limit has a workaround, the workaround comes first.
 
 ## What is not in alpha 4 yet
 
@@ -10,9 +10,8 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - Changing an archive further. A zip can be edited: Delete, Rename and Make folder inside it rewrite it. Adding files to an existing archive is not built, and a 7z, a tar and an archive read through 7-Zip are never changed. Copy into one, rename, delete and make folder say "Archives are read only here. Use Pack to make a new one."
 - More archive formats. bzip2 or Zstandard compression on their own, and lzip, are not read. diroxide says which one it met and that it is not supported. RAR, CAB, ARJ, LZH, RPM, cpio, ar and a spanned zip set (`.z01`, `.z02`) are read, read only, through 7-Zip when it is installed. An ISO image and the virtual disk formats open through the disk image plugin, an optional component, or through 7-Zip; [Disk images](disk-images.md) says what they do not do yet. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The quick view reads Markdown, plain text, code, the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira), pictures, sound and video, archives, PDF, Word and other documents, and spreadsheets. [Previews](#previews) below says what it does not do.
-- Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. The library for changing an owner is built, and the dialog is not. There is no Change times command yet, although copies keep dates.
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
-- Tools, previews, the file type model, columns, checksums, the privacy commands, conversions, watched folders, disk images and the git plugin are in alpha 4, and the sections below say what they do not do. Encryption and signatures, the access rows and dialogs, and the photo helpers reach the program in a later pass.
+- Tools, previews, the file type model, columns, checksums, the privacy commands, conversions, watched folders, disk images, the git plugin, encryption and signatures, the access rows with Change time and Change owner, and the photo helpers are in alpha 4, and the sections below say what they do not do.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
 - Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
@@ -315,7 +314,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The Checksum row shows only the values the Checksum command computed in this session, while the file is as it was. Otherwise it says "Checksum: not computed".
 - `diro info` knows the built-in file types and the built-in tools list, and does not read your `filetypes.toml` or `tools.toml`.
 - Nothing about the order of rows, "Read 9 more details" or how Show all pans on a Braille display has been heard.
-- Who can do what, built in the library and not yet in the program: the details view does not show a file's mode, access list, flags such as immutable, or "You can" answer yet, and no dialog changes an owner. "You can" is advice from the system's own check, not a promise. A macOS access list reads "Access list: not read on this system". Not tried: macOS and the BSDs, a network share, a system with SELinux on, a non-owner account on Windows, Explorer's Effective Access tab, a real FAT disk for time rounding, and the immutable flag set.
+- Who can do what is read for the focused file or folder only, never for every row of a panel. "You can" is advice from the system's own check, not a promise. A macOS access list reads "Access list: not read on this system". The list's help says what "You can" and an access list's mask mean, and each row has no help of its own. Not tried: macOS and the BSDs, a network share, a system with SELinux on, a non-owner account on Windows, Explorer's Effective Access tab, a real FAT disk for time rounding, and the immutable flag set.
 
 ## Columns, notes and fields
 
@@ -333,10 +332,24 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 [Checksums and verifying](checksums.md) describes them. These are the limits.
 
-- A signature beside a checksum list is named and not checked yet: "Signature not checked: SHA256SUMS.asc". "List is signed" is not said anywhere.
+- A list's OpenPGP signature is checked with gpg, and its minisign signature is not checked by Verify checksum, which has no public key for it: it says "Cannot check: no public key given" and then "List not verified: 12 of 12 match". Verify signature checks a minisign signature with the key you give.
+- With no gpg, a list's OpenPGP signature says "gpg not found. Install GnuPG first." and the list is "not verified". On Windows the check can be slow when gpg's agent has to start again.
 - SHA-1 lines in an old list are read and said as not checked, because diroxide computes no SHA-1.
 - A CRC-32 or MD5 match carries the cautions "CRC-32 is for damage, not tampering." and "MD5 is old, not safe against tampering.".
 - The Checksum row of the details view holds this session's values only.
+
+## Encryption and signatures
+
+[Encryption and signatures](encryption.md) describes them. These are the limits.
+
+- The three age commands need the Encryption plugin, an optional component. The plugin writes its files itself, and the program records them for Undo from the plugin's answer. That record lives for the session only, and does not survive a restart.
+- ASCII armor is offered for age and not for gpg, so every gpg result is `.gpg` or `.sig`.
+- age encrypts with a passphrase or an age public key, and decrypts with a passphrase or an identity file. SSH keys, plugin keys and hardware keys are refused, and the age program is not used as a road around the plugin.
+- A passphrase typed for gpg passes through the request that starts gpg, as bytes that are not wiped when the request is dropped. It is never printed, logged or said. The age plugin wipes its copy.
+- On Windows, gpg's agent is stopped with each run, so a passphrase is not remembered from one command to the next, and a command that needs the agent waited about six seconds on the one computer it was measured on.
+- A minisign public key is asked every time and kept nowhere. Verify checksum does not check a list's minisign signature.
+- Not tried: a real gpg or age program started by the program's own commands, a hardware token, a real signed download, Gpg4win, macOS, Linux natively and a screen reader. The plugin ran only as a test plugin, and the age and gpg paths were tested against their own libraries and a fake gpg.
+- Nothing about how the dialogs and verdicts read on a Braille display has been heard.
 
 ## Privacy before sharing
 
@@ -400,6 +413,16 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Git 2.30, the oldest it accepts, has not been tried. It was tried on 2.54.0 natively and 2.47.3 in the project's Linux container.
 - Not tried: macOS, a real repository git refuses for dubious ownership (a refusal was faked), cancelling a running clone (a partial clone was faked), and any screen reader.
 
+## Photos
+
+[Photos](photos.md) describes them. These are the limits.
+
+- A burst needs a camera and a date taken in the picture's own details. The Taken column says the date to the minute, and bursts read it to the second from the Exif block.
+- Review's Label keeps the same picture, so one more key goes on.
+- Move into month folders is planned by the program and run by the job engine, so a plugin's before-move hook does not run for it.
+- The helpers read the pictures of one folder, never subfolders, and never draw a picture. A grid of thumbnails comes in a later alpha.
+- Real camera files, a screen reader and a Braille display were not tried. The tests use small pictures made at test time, with dates and cameras written for the test.
+
 ## Split and join
 
 - A read error partway through a join fails the whole join. Run it again.
@@ -414,7 +437,11 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Windows needs Developer Mode or an administrator to make a symbolic link, and a FAT or exFAT drive holds no links at all. The words for the missing right are tested on the error itself; the test machine had the right, so the real refusal has not been seen yet.
 - A folder link on Windows cannot be changed in one step, so changing its target uses the trash. On a drive with no trash, changing a folder link's target fails in words.
 - Not built yet from the permissions plan: typing an octal number or a symbolic mode such as `u=rw,g=r`, Make runnable, the list of permission presets, a list of protected places that refuse changes in administrator mode, extra checks for private-key names, changing a file with several hard links once, and a "why can't I?" explanation. The permissions dialog steps each of owner, group and others through six choices instead.
-- Access lists and flags such as immutable and locked are not shown or edited yet. The library reads them, and the details view shows them in a later pass. Extended attributes and a file's internet mark are read for the details view and said in words, and are not edited. Changing the owner comes in a later pass too.
+- Access lists and flags such as immutable and locked are shown in the details view and are not edited. Extended attributes and a file's internet mark are read for the details view and said in words, and are not edited.
+- Change owner on Windows hands the focused item to the system's Security dialog, which this build cannot open yet. You hear "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." and use File Explorer.
+- Change owner never starts as an administrator, and it refuses the system's own folders. Putting an owner back can need an administrator.
+- Change time cannot set the change time, which the system keeps, and sets a created time on Windows and macOS only. A typed date is read as your local time, in the form `2026-10-10 22:09`. A disk that rounds a time, such as a FAT disk, is read back after the job and said, and a real FAT disk was not tried.
+- Change time and Change owner were not tried on a real network share, on macOS, with SELinux turned on, or with an account that is not the owner on Windows.
 - The Unix half of the atomic link swap is covered by the project's Linux container check. It has not been run natively on a Unix machine outside it.
 
 ## Terminals and keys
