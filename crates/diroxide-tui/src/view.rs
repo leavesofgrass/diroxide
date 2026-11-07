@@ -46,7 +46,7 @@ use diroxide_app::{App, Dialog};
 use diroxide_core::format::count;
 use diroxide_core::names::display_name;
 use diroxide_core::{DialogId, EntryKind, ListModel, ListRow, Place, Side};
-use diroxide_theme::PanelRole;
+use diroxide_theme::{ColorRole, PanelRole};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::Span;
@@ -63,6 +63,11 @@ pub(crate) struct Run {
     pub text: String,
     pub role: PanelRole,
     pub fill: bool,
+    /// The color role a theme gives the row's file group (`App::row_role`):
+    /// drawn as the text color of a plain file's or an archive's row,
+    /// where the styles have it ([`Styles::group`]); the words are the
+    /// same either way.
+    pub group: Option<ColorRole>,
 }
 
 impl Run {
@@ -73,6 +78,7 @@ impl Run {
             text: text.into(),
             role,
             fill: false,
+            group: None,
         }
     }
 
@@ -226,6 +232,17 @@ pub(crate) fn row_text(row: &ListRow, screen_reader: bool) -> String {
     } else {
         format!("  {spoken}")
     }
+}
+
+/// Whether the theme in use maps any file group to a color role (a theme
+/// file's `[group-colors]` table), so rows are worth asking about.
+fn maps_groups(app: &App) -> bool {
+    let (theme, _) = app.themes().resolve(&app.settings().theme);
+    theme
+        .extra
+        .get("group-colors")
+        .and_then(|table| table.as_table())
+        .is_some_and(|table| !table.is_empty())
 }
 
 /// A panel row's role: the focus, a mark, then what the entry is.
@@ -408,6 +425,9 @@ fn panel_region(
                 ScrollKey::Panel(side)
             };
             let start = memory.start(key, Some(panel.place()), focused, rows, list.len());
+            // A group's color role, asked of the app only when the theme
+            // maps groups and the rows are the folder's files.
+            let groups = plugin_list.is_none() && maps_groups(app);
             for (i, row) in list.rows().iter().enumerate().skip(start).take(rows) {
                 let is_focus = active && Some(i) == focused;
                 if is_focus {
@@ -418,7 +438,15 @@ fn panel_region(
                 if is_focus {
                     lines.push(vec![Run::new(x, width, text, role).filled()]);
                 } else {
-                    lines.push(row_runs(app, side, i, row, role, x, width, text));
+                    let mut runs = row_runs(app, side, i, row, role, x, width, text);
+                    if groups && matches!(role, PanelRole::Text | PanelRole::Archive) {
+                        let group = app.row_role(side, &row.id);
+                        // The row's own runs, never a label's word.
+                        for run in runs.iter_mut().filter(|r| r.role == role) {
+                            run.group = group;
+                        }
+                    }
+                    lines.push(runs);
                 }
             }
         }
@@ -1103,7 +1131,10 @@ pub(crate) fn paint(
                 continue;
             }
             let width = run.width.min(area.right() - x);
-            let style = styles.get(run.role);
+            let style = run
+                .group
+                .and_then(|group| styles.group(group, run.role))
+                .unwrap_or_else(|| styles.get(run.role));
             if run.fill {
                 buffer.set_style(Rect::new(x, y, width, 1), style);
             }

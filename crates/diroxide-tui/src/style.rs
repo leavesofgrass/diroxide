@@ -9,14 +9,26 @@
 //! a terminal without color has always shown them. With 16 colors the
 //! terminal's own palette is unknown, so the screen keeps the terminal's
 //! colors and draws attributes only.
+//!
+//! A theme file's `[group-colors]` (`App::row_role`) draws a plain file's
+//! or an archive's row in its group's color role, as the window does: the
+//! row's words say its type and group either way, so the color is an
+//! extra, held to the theme's text floor on the row's background, and
+//! left out without color, at 16 colors and in a high contrast theme.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use diroxide_theme::check::{Requirement, minimum};
 use diroxide_theme::{
-    Attrs, ColorSupport, PanelRole, Registry, Rgb, TermColor, role_style, term_color,
+    Attrs, ColorRole, ColorSupport, PanelRole, Registry, Rgb, TermColor, ThemeKind, contrast_ratio,
+    role_style, term_color,
 };
 use ratatui::style::{Color, Modifier, Style};
+
+/// The roles a file group's color is drawn on: a plain file's row and an
+/// archive's (the window's rule, `crates/diroxide-gui/src/theme.rs`).
+const GROUP_ROLES: [PanelRole; 2] = [PanelRole::Text, PanelRole::Archive];
 
 /// The styles of one theme at one color level.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,6 +37,27 @@ pub struct Styles {
     theme: String,
     colors: BTreeMap<String, String>,
     roles: Vec<(PanelRole, Style)>,
+    /// A file group's look on a plain file's or an archive's row, by the
+    /// color role a theme file's `[group-colors]` maps the group to
+    /// (`App::row_role`, TA's request 2): the row's own style with the
+    /// role's color as its text, held to the theme's text floor on the
+    /// row's background. Empty without color, at 16 colors and in a high
+    /// contrast theme, where such rows stay plain.
+    groups: Vec<(ColorRole, PanelRole, Style)>,
+}
+
+/// `fg` when it keeps `floor` on `bg`; else the row's own text color,
+/// else black or white, whichever reads on `bg`.
+fn fit(fg: Rgb, bg: Rgb, text: Rgb, floor: f64) -> Rgb {
+    if contrast_ratio(fg, bg) >= floor {
+        fg
+    } else if contrast_ratio(text, bg) >= floor {
+        text
+    } else if contrast_ratio(Rgb::WHITE, bg) >= contrast_ratio(Rgb::BLACK, bg) {
+        Rgb::WHITE
+    } else {
+        Rgb::BLACK
+    }
 }
 
 fn color(rgb: Rgb, support: ColorSupport) -> Option<Color> {
@@ -115,12 +148,45 @@ impl Styles {
             };
             roles.push((role, style));
         }
+        // A group's color is an extra on a row that already says its
+        // type and group in words: drawn only with real colors, never in
+        // a high contrast theme, and held to the text floor.
+        let mut groups = Vec::new();
+        let colored = matches!(support, ColorSupport::Ansi256 | ColorSupport::TrueColor);
+        if colored && chosen.kind() != ThemeKind::HighContrast {
+            let floor = minimum(Requirement::Text, chosen.kind());
+            for role in GROUP_ROLES {
+                let rs = role_style(chosen, role);
+                let base = roles
+                    .iter()
+                    .find(|(r, _)| *r == role)
+                    .map_or_else(Style::default, |(_, s)| *s);
+                for group in ColorRole::ALL {
+                    let fg = fit(chosen.color(*group), rs.background, rs.foreground, floor);
+                    if let Some(fg) = color(fg, support) {
+                        groups.push((*group, role, base.fg(fg)));
+                    }
+                }
+            }
+        }
         Self {
             support,
             theme: theme.to_owned(),
             colors: colors.clone(),
             roles,
+            groups,
         }
+    }
+
+    /// The look of a row in `role` whose file group the theme maps to
+    /// `group`: `None` for any other role, and wherever groups stay plain
+    /// (no color, 16 colors, a high contrast theme), so the row keeps its
+    /// role's own style.
+    pub fn group(&self, group: ColorRole, role: PanelRole) -> Option<Style> {
+        self.groups
+            .iter()
+            .find(|(g, r, _)| *g == group && *r == role)
+            .map(|(_, _, s)| *s)
     }
 
     /// Whether these styles were made for this theme, these colors and

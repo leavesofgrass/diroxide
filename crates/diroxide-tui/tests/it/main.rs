@@ -21,6 +21,8 @@ mod stage3;
 mod saved_queue;
 // A plugin's dialogs (W4d).
 mod plugins;
+// A theme file's group colors (the fold lane, TA's request 2).
+mod group_colors;
 mod support;
 
 use std::ffi::OsString;
