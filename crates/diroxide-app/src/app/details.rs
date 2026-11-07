@@ -565,8 +565,8 @@ impl App {
                     Ok(rows) => {
                         let first = rows.first().map(|r| r.key.clone());
                         let line = format!(
-                            "{} more, from ExifTool",
-                            count(rows.len() as u64, "tag", "tags")
+                            "{}, from ExifTool",
+                            count(rows.len() as u64, "more tag", "more tags")
                         );
                         shown.more = More::Rows(rows);
                         self.refresh_details(first.as_deref());

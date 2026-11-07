@@ -178,7 +178,7 @@ fn show_all_adds_exiftools_tags_and_copy_leaves_the_place_out() {
     assert_eq!(focused_row(&s), "Show all: every tag, read by ExifTool");
     let said = s.key("enter");
     assert!(
-        said.contains(&"2 tags more, from ExifTool".to_owned()),
+        said.contains(&"2 more tags, from ExifTool".to_owned()),
         "{said:?}"
     );
     assert_eq!(said.last().unwrap(), "Make (EXIF): Example Camera");

@@ -788,9 +788,10 @@ fn a_song_waits_for_preview_when_auto_preview_is_off() {
     let entry = bench.entry(&song);
     let mut said = bench.view.preview_now(&song, &entry, bench.at(100));
     said.extend(bench.view.settle(bench.at(100), Duration::from_secs(5)));
-    let said = texts(&said);
-    assert_eq!(said.len(), 1, "{said:?}");
-    assert!(said[0].starts_with("Preview: song.mp3, MP3, "), "{said:?}");
+    assert_eq!(
+        texts(&said),
+        ["Preview: song.mp3, MP3, 3 sec, 129 kbps, stereo"]
+    );
     assert_eq!(tools.ran(), ["ffprobe"]);
     let rows: Vec<String> = bench
         .view
@@ -816,7 +817,13 @@ fn auto_preview_runs_ffprobe_after_the_wait() {
     bench.view.set_tools(tools.clone());
     let song = bench.file("song.mp3", b"ID3 not really sound");
     let said = bench.on(&song);
-    assert!(said[1].starts_with("Preview: song.mp3, MP3, "), "{said:?}");
+    assert_eq!(
+        said,
+        [
+            "Quick view on",
+            "Preview: song.mp3, MP3, 3 sec, 129 kbps, stereo"
+        ]
+    );
     assert_eq!(tools.ran(), ["ffprobe"]);
 }
 
@@ -829,8 +836,7 @@ fn packages_and_rtf_are_read_by_their_readers() {
     let mut bench = Bench::new(options);
     let report = bench.file("report.docx", &docx());
     let said = bench.on(&report);
-    assert!(said[1].starts_with("Preview: report.docx, "), "{said:?}");
-    assert!(said[1].ends_with("1 heading"), "{said:?}");
+    assert_eq!(said[1], "Preview: report.docx, DOCX, 1 heading");
     let view = bench.view.view().unwrap();
     assert_eq!(view.rows()[0].text, "Crows");
     let big = bench.file("big.docx", &vec![0u8; 1024 * 1024 + 1]);
@@ -842,7 +848,10 @@ fn packages_and_rtf_are_read_by_their_readers() {
     );
     bench.move_to(&rtf, 2000);
     let said = bench.settle(2500);
-    assert!(said[0].starts_with("Preview: letter.rtf, RTF"), "{said:?}");
+    assert!(
+        said[0].starts_with("Preview: letter.rtf, RTF, "),
+        "{said:?}"
+    );
     assert!(
         bench
             .view

@@ -218,8 +218,13 @@ fn preview_turns_the_quick_view_on_and_runs_the_tool_backed_previewer() {
     s.focus("song.mp3");
     let mut said = s.command(ids::PREVIEW_FILE);
     said.extend(settle_quick(&mut s));
-    assert_eq!(said[0], "Quick view on", "{said:?}");
-    assert!(said[1].starts_with("Preview: song.mp3, MP3, "), "{said:?}");
+    assert_eq!(
+        said,
+        [
+            "Quick view on",
+            "Preview: song.mp3, MP3, 3 sec, 129 kbps, stereo"
+        ]
+    );
     assert_eq!(s.tools.ran(), ["ffprobe"]);
     assert!(s.app.quick_view_on());
 }
