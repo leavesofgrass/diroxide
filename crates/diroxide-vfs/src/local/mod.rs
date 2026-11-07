@@ -491,6 +491,17 @@ impl Provider for LocalProvider {
     fn as_extended(&self) -> Option<&dyn crate::ExtendedAttributes> {
         Some(self)
     }
+
+    /// Who may do what, asked of the system for this one entry (the
+    /// `sys` module's `acl.rs` and `windows_access.rs`).
+    fn access(
+        &self,
+        place: &Place,
+        ctx: &OpContext,
+    ) -> Result<crate::access::AccessFacts, VfsError> {
+        ctx.check()?;
+        sys::access_facts(&Self::path_of(place)?)
+    }
 }
 
 /// The path as the trash sees it: the parent folder with its links and

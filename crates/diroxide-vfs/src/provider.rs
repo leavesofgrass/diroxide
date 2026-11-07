@@ -514,6 +514,23 @@ pub trait Provider: Send + Sync + fmt::Debug {
         None
     }
 
+    /// Who may do what with the entry at `place`: the facts behind the
+    /// access details view (alpha.7, R29 part 4), read for the focused
+    /// row only and off the input thread. The default gives what
+    /// [`Provider::stat`]'s entry holds, read only (SFTP's numeric ids and
+    /// mode, an archive's mode), or nothing for a place that keeps no
+    /// permissions ([`AccessFacts::from_entry`](crate::access::AccessFacts::from_entry));
+    /// the local provider asks the system.
+    fn access(
+        &self,
+        place: &Place,
+        ctx: &OpContext,
+    ) -> Result<crate::access::AccessFacts, VfsError> {
+        Ok(crate::access::AccessFacts::from_entry(
+            &self.stat(place, ctx)?,
+        ))
+    }
+
     /// The container extensions this provider claims inside archive
     /// places, lowercase with the dot (`.iso`, `.vhd`): a plugin's
     /// `[[provider]] extensions` (the claim route, alpha.7, R29 1.2).

@@ -19,6 +19,7 @@
 //! The local provider ([`LocalProvider`], Wave 1, W1a) is complete on the
 //! Wave 1 contract: see its module for what each method does, per place.
 
+pub mod access;
 pub mod archive;
 pub mod cancel;
 pub mod capabilities;

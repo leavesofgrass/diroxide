@@ -96,9 +96,11 @@ fn check_possible(change: &AttributeChange, is_link: bool) -> Result<(), VfsErro
         }
     }
     if cfg!(windows) && (change.owner.is_some() || change.group.is_some()) {
+        // Not a gap to fill later: Windows changes owners in its own
+        // Security dialog, which the app hands off to (R29 4.3).
         return Err(VfsError::unsupported(
             "file",
-            "change the owner on Windows yet",
+            "change the owner here; Windows does it in its Security dialog",
         ));
     }
     Ok(())
@@ -298,5 +300,21 @@ mod tests {
             check_possible(&wrong, false),
             Err(VfsError::Unsupported { .. })
         ));
+        let owner = AttributeChange {
+            owner: Some(Principal {
+                id: "0".to_owned(),
+                name: None,
+            }),
+            ..AttributeChange::default()
+        };
+        let result = check_possible(&owner, false).map_err(|error| error.to_string());
+        if cfg!(windows) {
+            assert_eq!(
+                result,
+                Err("the file provider cannot change the owner here; Windows does it in its Security dialog".to_owned())
+            );
+        } else {
+            assert_eq!(result, Ok(()));
+        }
     }
 }
