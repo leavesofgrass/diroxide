@@ -159,6 +159,20 @@ A watched folder runs something on each file that arrives, with nobody there. [W
 - A task's state, ledger and log are kept in the state folder, never in the file you write, and nothing in them leaves your computer.
 - A task is not a lock on what a program can do with the files. A script or a recipe you approve can do what it says. The approval sentence is there so you hear it first.
 
+## Encryption and signatures
+
+The File menu's Encryption submenu encrypts, decrypts and signs files and checks signatures. [Encryption and signatures](encryption.md) is the guide, and these are the rules behind it:
+
+- A passphrase is asked in diroxide's own hidden field. It reaches gpg on gpg's standard input only, never in an argument or an environment variable, and it is written to no file, setting, message or log. The age plugin wipes its copy when the command ends. For gpg, the request that carries the passphrase to the program does not wipe its copy yet, which is a known limit.
+- An age identity file and a minisign public key are asked by their path or pasted each time, and are not remembered.
+- gpg runs in batch mode with no terminal, and it is told never to look a key up on a server, because a lookup sends an address away. diroxide never fetches a key and never changes how far gpg trusts one: a recipient key you have not certified is not used.
+- Encryption never writes over a file and never removes an original. It writes a new file under a temporary name and renames it into place last. After an encryption diroxide asks about moving the original to the trash, starting on No, and says that the trash is not secure.
+- A good signature says "Good means the key fits, not who holds it." A match against a checksum list that is not signed says only that the files are not damaged. Nothing is called safe or genuine.
+- What a key's owner wrote, such as a name on a key, is cleaned of hidden characters, cut at 120 characters and said only after "key ending" and the last four digits. A file name with a hidden character in it is said with the character spelled out.
+- An age file that asks for much more work than a passphrase should is refused from its header, before anything is asked and before the work starts.
+- gpg is the program your computer has, found the way every helper is found. diroxide trusts it as much as it trusts any program you run: it can do what you can.
+- age is a plugin because two security advisories, RUSTSEC-2026-0387 and RUSTSEC-2026-0374, sit in libraries it uses. The plugin refuses the keys that would reach the first, and the second runs only while the plugin is built. [ADR-0015](adr/0015-encryption.md) has the record.
+
 ## Optional components
 
 - Integrity is the pins: size and SHA-256 from the list that is part of each build. The transport is for privacy and does not vouch for a file. A file that does not match is refused and removed, whoever served it.
@@ -188,6 +202,7 @@ If you find a way for a plugin to get past a limit on this page, such as an anno
 - [Remote places over SFTP](remote-places.md)
 - [Hooks](hooks.md)
 - [Watched folders](watched-folders.md)
+- [Encryption and signatures](encryption.md)
 - [The transfer queue](transfer-queue.md)
 - [Privacy](privacy.md)
 - [Known limits](known-limits.md)
