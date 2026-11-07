@@ -24,11 +24,15 @@
 //! - The report ([`report`]): failures first, the last 20 kept in the
 //!   state folder, a file only on request with names only; the undo
 //!   record names every output, so Ctrl+Z trashes what the job made.
+//! - carta, the built-in tool ([`carta`]): its writers, its readers with
+//!   includes left out, in process or in a `diro` child the engine can
+//!   kill.
 //! - The spool: a source that is not on this computer is copied into the
 //!   state folder's spool first, and an output for a place that is not
 //!   is made there and written through the place's committing writer.
 
 pub mod book;
+pub mod carta;
 pub mod placeholders;
 pub mod plan;
 pub mod recipe;
@@ -43,6 +47,7 @@ pub mod tools;
 pub mod typing;
 
 pub use book::RecipeBook;
+pub use carta::{CHILD_ARGUMENT, CartaRunner, serve_child};
 pub use plan::{ConvertError, ConvertItem, ConvertPlan, ConvertRequest};
 pub use recipe::{ConverterOutput, ConverterParts, Recipe, RecipeError, RecipeShape, RecipeSource};
 pub use report::{ConvertReport, KeptReport, ReportShelf};

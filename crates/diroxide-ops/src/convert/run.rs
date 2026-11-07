@@ -25,11 +25,13 @@ use diroxide_core::{
     ConflictAction, ConflictKind, ConflictPolicy, Entry, ErrorAction, JobKind, JobState, Place,
 };
 use diroxide_vfs::names::unused_name;
+use diroxide_vfs::runner::seconds_words;
 use diroxide_vfs::{
     CancelToken, OpContext, Provider, RunLimits, Split, ToolRequest, ToolRunError, ToolStream,
     VfsError, WriteMode,
 };
 
+use super::carta::{CartaEnd, CartaJob};
 use super::placeholders::{Fill, dash_guarded, expand};
 use super::plan::{ConvertItem, ConvertPlan, extension_of, said, stem_of};
 use super::report::ConvertReport;
@@ -470,6 +472,9 @@ impl Engine {
             Ok(args) => args,
             Err(name) => return Ran::Failed(format!("{name} has no value here")),
         };
+        if recipe.tool == "carta" {
+            return self.run_carta(shared, &args);
+        }
         let args = tools::hardened(&recipe.tool, args);
         let request = ToolRequest::new(recipe.tool.clone(), args)
             .with_limits(RunLimits::new(recipe.timeout, OUTPUT_CAP))
@@ -525,6 +530,24 @@ impl Engine {
                     None => format!("{tool} {code}"),
                 })
             }
+        }
+    }
+
+    /// Runs carta for one file, in process or in its child.
+    fn run_carta(&self, shared: &Shared<'_>, args: &[OsString]) -> Ran {
+        let job = match CartaJob::from_args(args) {
+            Ok(job) => job,
+            Err(cause) => return Ran::Failed(cause),
+        };
+        let limit = shared.plan.recipe.timeout;
+        match shared.plan.carta.run(&job, limit, &shared.control.cancel) {
+            CartaEnd::Done => Ran::Done,
+            CartaEnd::Failed(cause) => Ran::Failed(cause),
+            CartaEnd::Cancelled => Ran::Cancelled,
+            CartaEnd::TimedOut => Ran::Failed(format!(
+                "carta took longer than {} and was stopped",
+                seconds_words(&limit.as_secs())
+            )),
         }
     }
 

@@ -627,3 +627,40 @@ fn undo_trashes_the_files_the_job_made() {
     assert_eq!(names(&bin), ["a (2).jpg", "b.jpg"]);
     assert_eq!(names(&input), ["a.png", "b.png"]);
 }
+
+/// carta needs no tool on the machine: a carta recipe plans and runs with
+/// nothing installed, in process, staged and renamed in like any tool.
+#[test]
+fn a_carta_recipe_runs_with_nothing_installed() {
+    let root = scratch();
+    fs::write(
+        root.path().join("note.md"),
+        b"# Note\n\nHello from *Ada Example*.\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.path().join("out")).unwrap();
+    let markdown_to_org = r#"
+[[recipe]]
+id = "markdown-to-org"
+name = "Markdown to Org"
+from = ["md"]
+to = "org"
+tool = "carta"
+args = ["--from", "markdown", "--to", "org", "{input}", "{output}"]
+"#;
+    let engine = engine(Arc::new(FakeTools::with(&[])));
+    let req = request(
+        &[&root.path().join("note.md")],
+        &root.path().join("out"),
+        markdown_to_org,
+    );
+    let plan = engine
+        .plan_convert(&req, &ByExtension, &JobControl::new())
+        .unwrap();
+    assert_eq!(plan.tool_name, "carta, built in");
+    let report = engine.run_convert(&plan, &JobControl::new(), &Script::default());
+    assert_eq!(report.made.len(), 1, "{:?}", report.job.failed);
+    let org = fs::read_to_string(root.path().join("out").join("note.org")).unwrap();
+    assert!(org.contains("Ada Example"), "{org}");
+    assert_eq!(names(&root.path().join("out")), ["note.org"]);
+}

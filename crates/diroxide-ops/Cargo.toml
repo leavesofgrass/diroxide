@@ -8,6 +8,11 @@ homepage.workspace = true
 publish.workspace = true
 
 [dependencies]
+# carta's writers for conversions (alpha 4, lane CL, with the
+# orchestrator's go): whole documents (`standalone`), and plain text, GFM
+# and CommonMark beside the root's AsciiDoc, Typst, LaTeX, MediaWiki, Org,
+# DOCX and EPUB writers. No Typst reader; includes neutralized.
+carta = { workspace = true, features = ["standalone", "write-plain", "write-gfm", "write-commonmark"] }
 # The split sidecar's CRC-32 (W2c).
 crc32fast.workspace = true
 diroxide-core.workspace = true

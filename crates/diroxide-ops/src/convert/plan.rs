@@ -23,6 +23,7 @@ use diroxide_core::{ConflictPolicy, Entry, EntryKind, JobId, JobOrigin, JobState
 use diroxide_vfs::names::{is_unfinished, unused_name};
 use diroxide_vfs::{OpContext, Provider, ToolRequest, VfsError, facts};
 
+use super::carta::CartaRunner;
 use super::recipe::Recipe;
 use super::staging::is_staging_name;
 use super::tools;
@@ -90,6 +91,10 @@ pub struct ConvertRequest {
     /// local is made (R28 5.3, step 2). Without it such files are
     /// refused.
     pub spool: Option<PathBuf>,
+    /// Where carta runs for a carta recipe: in process by default; the
+    /// app and the command line give unattended jobs a `diro` child they
+    /// can kill ([`CartaRunner::child`]).
+    pub carta: CartaRunner,
 }
 
 impl ConvertRequest {
@@ -106,7 +111,14 @@ impl ConvertRequest {
             origin: JobOrigin::User,
             recursive: false,
             spool: None,
+            carta: CartaRunner::InProcess,
         }
+    }
+
+    /// The same request running carta this way.
+    pub fn carta(mut self, runner: CartaRunner) -> Self {
+        self.carta = runner;
+        self
     }
 
     /// The same request answering name clashes this way.
@@ -178,6 +190,8 @@ pub struct ConvertPlan {
     pub origin: JobOrigin,
     /// The spool folder, when the request gave one.
     pub spool: Option<PathBuf>,
+    /// Where carta runs.
+    pub carta: CartaRunner,
     /// Files refused, each with its reason in words.
     pub refused: Vec<(Place, String)>,
     /// Files skipped, each with its reason.
@@ -670,6 +684,7 @@ impl Engine {
                 errors: request.errors,
                 origin: request.origin.clone(),
                 spool: request.spool.clone(),
+                carta: request.carta.clone(),
                 refused: Vec::new(),
                 skipped: Vec::new(),
                 left_out: 0,
