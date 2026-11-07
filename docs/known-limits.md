@@ -267,7 +267,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The helper components were pinned by a job on the project's build machine, 23 files with the publishers' own digests. No helper component has been installed and run on a computer yet.
 - Some helper files are held: ExifTool for Windows, 7-Zip for Windows and FFmpeg for Linux, each for a reason [optional components](components.md) gives. ImageMagick on Linux and macOS, and FFmpeg on macOS, are package commands.
 - After a helper is installed, the library runs its version command, and the program does not say the line yet: "pandoc: 3.13, from components" shows in `diro doctor`, and the end of an install says "Ready".
-- The first-run list on Windows offers 7-Zip, which has no file for Windows yet, and says "no build for this computer, 0 bytes".
+- The first-run list on Windows offers 7-Zip, which has no file for Windows yet, and gives its size as 0 bytes.
 - The `diro doctor` of the command line does not say what a missing tool would download, as the Tools list in the program does.
 
 ## File types and groups
