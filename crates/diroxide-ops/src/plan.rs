@@ -934,7 +934,7 @@ mod tests {
             .iter()
             .map(|place| Step::SetAttributes {
                 place: p(place),
-                change: diroxide_vfs::AttributeChange::default(),
+                change: AttributeChange::default(),
             })
             .collect();
         let mut plan = Plan::new(
