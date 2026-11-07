@@ -100,6 +100,7 @@ These guides are not written yet, because the features they describe are not bui
 - [Building](dev/building.md): the toolchain, the checks, the profiles and the tasks.
 - [The plugin protocol reference](dev/plugin-protocol.md): every request and notification of protocol 1, generated from the code.
 - [Docker](dev/docker.md): the Linux container for builds and tests, and its three stages: dev, gui and tools.
+- [Components](dev/components.md): the definitions and the pins of the optional components, every field of a component and its files, `cargo xtask components` and its flags, the pin job and the monthly run.
 - [The bench](dev/bench.md): the speed measurements that gate a change.
 - [The clean-room rule](dev/clean-room.md): how diroxide stays a reimplementation of Worker's behavior, never a port of its code.
 - [Fuzzing](dev/fuzzing.md): the fuzz targets in five workspaces, running one, and the nightly run.
