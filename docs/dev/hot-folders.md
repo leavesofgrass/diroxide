@@ -8,7 +8,7 @@ The engine is in `crates/diroxide-ops/src/hot/`, with the task file's reader in 
 
 - `task`: a task file's keys checked into a `Task`. Every problem is a sentence that names the task first. Unknown keys are refused with their line.
 - `refuse`: the literal-path rules and the folders a task may never name. A path is written out in full: no wildcard, no variable, no `~`, no bare drive letter, no `.` or `..`, no device prefix, no hidden character. A drive root, the home folder itself, diroxide's own settings and state folders, a trash, a system folder and the folder the program lives in are refused.
-- `check`: the tasks together. A shared `in` folder and a loop between two tasks are refused, and at most 50 tasks are read.
+- `check`: the tasks together. A shared `in` folder and a loop between two tasks are refused, and at most 50 tasks may be on at once, a starting value.
 - `words`: the task as one sentence, the same in the list, the approval question and `diro watch --list`. `lines`: what a running task says, each line within 40 cells.
 - `approval`: the approval key, a SHA-256 of the task as checked together with what its action resolves to: the recipe's tool, arguments, time limit and the tool's version, the script file's hash, or the plugin's id and version. A comment or a blank line in the task file changes nothing.
 - `store`: a task's state in its own folder under the state folder's `hot`, never in the task file. Small TOML files, written whole to a new name and renamed into place, so a crash leaves the old file or the new one.
