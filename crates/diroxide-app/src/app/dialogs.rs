@@ -484,6 +484,8 @@ impl App {
                 effects.push(self.say(Message::info("Nothing was searched.")));
             }
             Purpose::Results => effects.extend(self.results_closed()),
+            // The details list's field read stops with it (lane MA).
+            Purpose::Details(_) => self.request(Request::StopDetails),
             _ => {}
         }
         effects

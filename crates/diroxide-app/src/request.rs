@@ -474,6 +474,9 @@ pub enum Request {
     /// Settings Tools page (alpha 4, R30 commit 42); answered as
     /// [`AppEvent::ToolsReported`](crate::AppEvent::ToolsReported).
     ToolsReport(SharedRegistry),
+    /// Stop the details list's field read: the list closed (VA's request
+    /// 6, the app's half).
+    StopDetails,
     /// A metadata command's work on a worker (alpha 4, lane MA): a
     /// checksum, a verify, a strip, a check or the internet mark, as a job
     /// in the jobs line that Cancel stops; answered as

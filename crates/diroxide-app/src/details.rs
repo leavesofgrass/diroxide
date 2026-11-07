@@ -140,9 +140,16 @@ pub enum DetailsNote {
 
 /// Carries out a details request on the runtime's worker.
 pub fn answer(registry: &Registry, ask: &DetailsAsk) -> DetailsNote {
+    answer_with(registry, ask, &CancelToken::new())
+}
+
+/// Carries out a details request, its fields read under `cancel`: the
+/// list closing or a newer request trips it, and the readers stop at
+/// their next read (VA's request 6, the app's half).
+pub fn answer_with(registry: &Registry, ask: &DetailsAsk, cancel: &CancelToken) -> DetailsNote {
     match ask.wanted {
         Wanted::Fields => {
-            let (rows, unread) = read_fields(registry, ask);
+            let (rows, unread) = read_fields_with(registry, ask, cancel);
             DetailsNote::Fields {
                 generation: ask.generation,
                 place: ask.place.clone(),
@@ -178,6 +185,16 @@ pub fn pipeline(tools: &SharedTools) -> Pipeline {
 /// each reader under the pipeline's guard: the rows in the groups' order,
 /// and what could not be read.
 pub fn read_fields(registry: &Registry, ask: &DetailsAsk) -> (Vec<DetailRow>, Vec<String>) {
+    read_fields_with(registry, ask, &CancelToken::new())
+}
+
+/// [`read_fields`] under a cancel token: a cancel stops between readers
+/// and inside a read, and the rows read so far come back.
+pub fn read_fields_with(
+    registry: &Registry,
+    ask: &DetailsAsk,
+    cancel: &CancelToken,
+) -> (Vec<DetailRow>, Vec<String>) {
     let provider = match registry.resolve(&ask.place) {
         Ok(provider) => provider,
         Err(error) => return (Vec::new(), vec![format!("the file, {error}")]),
@@ -189,7 +206,9 @@ pub fn read_fields(registry: &Registry, ask: &DetailsAsk) -> (Vec<DetailRow>, Ve
         type_id: ask.file_type.as_ref().map(|t| t.id.as_str()),
         group: ask.file_type.as_ref().and_then(|t| t.group.as_deref()),
     };
-    let ctx = OpContext::new().with_tools(Arc::clone(&ask.tools.0));
+    let ctx = OpContext::new()
+        .with_tools(Arc::clone(&ask.tools.0))
+        .with_cancel(cancel.clone());
     let quick = ReadLimits::default();
     let slow = ReadLimits {
         deadline: ON_DEMAND_DEADLINE,
@@ -417,6 +436,33 @@ mod tests {
 
     fn row(key: &str, label: &str, value: &str, group: DetailGroup) -> DetailRow {
         DetailRow::new(key, label, value, group)
+    }
+
+    /// VA's request 6, the app's half: a cancelled field read stops
+    /// before its readers, and says nothing it could not read.
+    #[test]
+    fn a_cancelled_field_read_stops_quietly() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("notes.txt");
+        std::fs::write(&path, b"one\ntwo\n").unwrap();
+        let place = Place::parse(path.to_str().unwrap()).unwrap();
+        let ask = DetailsAsk {
+            generation: 1,
+            place: place.clone(),
+            entry: Entry::new("notes.txt", diroxide_core::EntryKind::File),
+            file_type: None,
+            tools: SharedTools(Arc::new(diroxide_vfs::NoTools)),
+            cache: None,
+            wanted: Wanted::Fields,
+        };
+        let registry = Registry::with_local();
+        let (rows, _) = read_fields(&registry, &ask);
+        assert!(rows.iter().any(|r| r.key == "text.lines"), "{rows:?}");
+        let cancel = CancelToken::new();
+        cancel.cancel();
+        let (rows, unread) = read_fields_with(&registry, &ask, &cancel);
+        assert!(!rows.iter().any(|r| r.key == "text.lines"), "{rows:?}");
+        assert!(unread.is_empty(), "{unread:?}");
     }
 
     #[test]

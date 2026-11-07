@@ -526,6 +526,9 @@ pub struct Runtime {
     /// The metadata commands' jobs running, each with its cancel token
     /// (alpha 4, lane MA).
     meta_runs: Arc<Mutex<HashMap<JobId, CancelToken>>>,
+    /// The details list's field read running: a newer one or the list
+    /// closing stops it.
+    details_run: Option<CancelToken>,
     engine: Engine,
     shared: Arc<Shared>,
     receiver: Receiver<AppEvent>,
@@ -652,6 +655,7 @@ impl Runtime {
             components: components::ComponentRuntime::default(),
             picture_runs: Arc::default(),
             meta_runs: Arc::default(),
+            details_run: None,
             components_source: String::new(),
             registry,
             shared,
@@ -1511,10 +1515,21 @@ impl Runtime {
             }
             Request::Details(ask) => {
                 let registry = Arc::clone(&self.registry);
+                let cancel = CancelToken::new();
+                if ask.wanted == crate::details::Wanted::Fields
+                    && let Some(older) = self.details_run.replace(cancel.clone())
+                {
+                    older.cancel();
+                }
                 self.worker(move |shared| {
-                    let note = crate::details::answer(&registry, &ask);
+                    let note = crate::details::answer_with(&registry, &ask, &cancel);
                     shared.send(AppEvent::Details(Box::new(note)));
                 });
+            }
+            Request::StopDetails => {
+                if let Some(running) = self.details_run.take() {
+                    running.cancel();
+                }
             }
             Request::PictureText { job, place, tools } => {
                 let registry = Arc::clone(&self.registry);
