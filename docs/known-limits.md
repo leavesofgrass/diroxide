@@ -348,6 +348,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - A passphrase typed for gpg passes through the request that starts gpg, as bytes that are not wiped when the request is dropped. It is never printed, logged or said. The age plugin wipes its copy.
 - On Windows, gpg's agent is stopped with each run, so a passphrase is not remembered from one command to the next, and a command that needs the agent waited about six seconds on the one computer it was measured on.
 - A minisign public key is asked every time and kept nowhere. Verify checksum does not check a list's minisign signature.
+- The commands are in the program only. No `diro` command encrypts, decrypts, signs or checks a signature from a shell yet.
 - Not tried: a real gpg program started by the program's own commands, a hardware token, a real signed download, Gpg4win, macOS, Linux natively and a screen reader. From the program, the age commands were tried only against a test plugin standing in for the real one, and the gpg commands only against a fake gpg. The plugin's own tests run the real age library, and gpg was run for the spikes in throwaway homes, through the tools registry.
 - Nothing about how the dialogs and verdicts read on a Braille display has been heard.
 
@@ -420,7 +421,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - A burst needs a camera and a date taken in the picture's own details. The Taken column says the date to the minute, and bursts read it to the second from the Exif block.
 - Review's Label keeps the same picture, so one more key goes on.
 - Move into month folders is planned by the program and run by the job engine, so a plugin's before-move hook does not run for it.
-- The helpers read the pictures of one folder, never subfolders, and never draw a picture. A grid of thumbnails comes in a later alpha.
+- The helpers read the pictures of one folder, never subfolders, and never draw a picture. A grid of thumbnails comes in a later alpha. They are in the program only, with no `diro` command for a shell.
 - Real camera files, a screen reader and a Braille display were not tried. The tests use small pictures made at test time, with dates and cameras written for the test.
 
 ## Split and join

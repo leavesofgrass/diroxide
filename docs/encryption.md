@@ -200,6 +200,7 @@ gpg keeps a small helper, its agent, that remembers a passphrase for a while. On
 - ASCII armor is offered for age only. gpg's armor is not offered, so every gpg result is `.gpg` or `.sig`.
 - A passphrase typed for gpg passes through the request that starts gpg, as bytes that are not wiped when the request is dropped. The age plugin wipes its copy.
 - SSH keys, plugin keys and hardware keys are refused for age. The age program is not used as a road for them.
+- The commands are in the program only. No `diro` command encrypts, decrypts, signs or checks a signature from a shell yet.
 - A gpg run that needs its agent is slow on Windows, as above, and a passphrase is not remembered between commands there.
 - A minisign public key is asked every time, and Verify checksum does not check a list's minisign signature.
 - Nothing about how these dialogs and verdicts read on a Braille display has been heard yet.

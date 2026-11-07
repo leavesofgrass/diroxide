@@ -92,6 +92,7 @@ No says "Nothing moved." Yes runs it as one job with one result, and Ctrl+Z puts
 - The month folders' moves are planned by the program and run by the job engine, so a plugin's before-move hook does not run for them.
 - No picture is drawn and there are no thumbnails; a picture grid comes in a later alpha.
 - The helpers read the pictures of one folder. They do not go into subfolders.
+- They are in the program only. No `diro` command does them from a shell yet.
 - Real camera files were not tried: the tests use small pictures made at test time, with their dates and cameras written for the test.
 - Nothing about how the review's list and the day lines read on a Braille display has been heard yet.
 
