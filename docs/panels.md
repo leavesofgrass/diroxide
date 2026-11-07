@@ -39,7 +39,7 @@ A row puts its meaning first: the name, then the kind, the size and the modified
 - An empty cell says a word such as "not set". It is never a blank or a lone dash.
 - Hidden entries are not listed until you show them.
 
-By default the columns are type, size and modified time. The `columns` setting lists the details said after each name and their order: type, size, modified, created, accessed, changed, permissions, mode, octal, owner, group, attributes, link and extension.
+By default the columns are type, size and modified time. The `columns` setting lists the details said after each name and their order: type, size, modified, created, accessed, changed, permissions, mode, octal, owner, group, attributes, link and extension. A key with a dot, such as `audio.artist`, adds a column read from inside the files, and `custom.note` adds your own note. [Columns, notes and fields](columns.md) says how they are read and sorted.
 
 Permissions are read in words first. On Linux and macOS the permissions column says who can do what: "read: everyone; write: owner". A folder says "list and enter: everyone; change: owner". The octal number is a separate column, never the first thing said. On Windows the column uses words such as read-only, hidden, system, compressed, encrypted and online only. You can change permissions with Change permissions in the File menu; [links, permissions and times](links-permissions.md) describes it.
 
@@ -176,6 +176,7 @@ When you quit, diroxide remembers each panel's folder, the focused row, the sort
 
 ## See also
 
+- [Columns, notes and fields](columns.md)
 - [Operations and undo](operations.md)
 - [Volumes and the trash](volumes-trash.md)
 - [Remote places over SFTP](remote-places.md)
