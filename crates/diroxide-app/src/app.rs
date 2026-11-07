@@ -2020,6 +2020,10 @@ impl App {
         if let Some(effects) = self.details_dispatch(command) {
             return effects;
         }
+        // Preview, in the quick view (alpha 4, lane VA).
+        if let Some(effects) = self.preview_file_dispatch(command) {
+            return effects;
+        }
         // Typed actions and the lists of file types (lane TA).
         if let Some(effects) = self.type_actions_dispatch(command) {
             return effects;

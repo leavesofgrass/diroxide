@@ -166,7 +166,10 @@ impl App {
     /// starts a real program; without one, the app's tools registry runs
     /// them (alpha 4, lane VA).
     pub fn set_tool_runner(&mut self, runner: Arc<dyn ToolRunner>) {
-        self.preview.runner = Some(SharedTools(runner));
+        self.preview.runner = Some(SharedTools(Arc::clone(&runner)));
+        if let Some(view) = self.preview.view.as_mut() {
+            view.set_tools(runner);
+        }
     }
 
     /// The tools registry the Settings Tools page and "Open in textweaver"
@@ -282,6 +285,9 @@ impl App {
                 .unwrap_or_else(Registry::with_local);
             let mut view = QuickView::new(registry, options);
             view.set_types(self.types.as_ref().clone());
+            // The previewers' tools and cache (alpha 4, lane VA).
+            view.set_tools(self.tool_runner().0);
+            view.set_cache(Arc::clone(&self.preview.cache.0));
             let session = self
                 .highlighter
                 .get_or_insert_with(crate::viewer::highlight::Session::new)
@@ -296,6 +302,66 @@ impl App {
             None => Vec::new(),
         };
         self.preview_said(said, false)
+    }
+
+    /// The Preview command; `None` for other commands.
+    pub(super) fn preview_file_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
+        if command.id != ids::PREVIEW_FILE {
+            return None;
+        }
+        if !self.dialogs.is_empty() {
+            return Some(vec![self.say(Message::status("Close this dialog first."))]);
+        }
+        Some(self.preview_file())
+    }
+
+    /// Preview (alpha 4, R30 commit 43): the focused file in the quick
+    /// view at once, turning it on, with the tool-backed previewers
+    /// (ffprobe, pdftotext) whatever auto-preview says; in the preview
+    /// region, the file it shows. A type's own Preview action runs
+    /// instead when it has one (lane TA's typed slots). Its line is said
+    /// when it is ready: "Preview: song.mp3, MP3, 3 min 41 sec, 320
+    /// kbps, stereo".
+    fn preview_file(&mut self) -> Vec<Effect> {
+        if !self.in_preview()
+            && let Some(effects) = self.typed_slot(crate::typing::Slot::Preview)
+        {
+            return effects;
+        }
+        let target = if self.in_preview() {
+            self.quick_view().and_then(QuickView::shown).map(|shown| {
+                let mut entry =
+                    diroxide_core::Entry::new(shown.name.clone(), diroxide_core::EntryKind::File);
+                entry.size = shown.size;
+                (shown.place.clone(), entry)
+            })
+        } else {
+            let panel = self.panel(self.active);
+            panel.focused_place().zip(panel.focused_entry().cloned())
+        };
+        let Some((place, entry)) = target else {
+            let empty = self.panel(self.active).list().empty_text().to_owned();
+            return vec![self.say(Message::status(empty))];
+        };
+        if !matches!(
+            entry.kind,
+            diroxide_core::EntryKind::File | diroxide_core::EntryKind::Archive
+        ) {
+            let text = format!("Not a file: {}", entry.display_name());
+            return vec![self.say(Message::info(text))];
+        }
+        let mut effects = Vec::new();
+        if !self.quick_view_on() {
+            effects.extend(self.toggle_quick_view());
+        }
+        let said = self
+            .preview
+            .view
+            .as_mut()
+            .map(|view| view.preview_now(&place, &entry, Instant::now()))
+            .unwrap_or_default();
+        effects.extend(self.preview_said(said, false));
+        effects
     }
 
     /// After a command or an event: the quick view follows the active

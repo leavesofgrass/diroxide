@@ -183,3 +183,65 @@ fn open_in_textweaver_runs_tw_with_no_shell_or_says_how_to_install() {
     );
     assert_eq!(run.args, [work.join("links.md").into_os_string()]);
 }
+
+/// ffprobe's answer for an MP3, spike FP1's fixture (lane VL).
+fn ffprobe_song() -> Vec<u8> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../diroxide-preview/tests/fixtures/ffprobe/song-mp3.json");
+    fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// Preview (alpha 4, lane VA): the focused song in the quick view at
+/// once, through ffprobe, although auto-preview is off in screen reader
+/// mode; a cursor move to it with the quick view on runs nothing.
+#[test]
+fn preview_turns_the_quick_view_on_and_runs_the_tool_backed_previewer() {
+    let dir = temp();
+    let work = folder(dir.path());
+    fs::write(work.join("song.mp3"), b"ID3 not really sound").unwrap();
+    fs::write(work.join("tune.mp3"), b"ID3 not really sound").unwrap();
+    let recorder = Arc::new(Recorder::default());
+    let mut s = session(&work, &recorder);
+    s.tools.answer("ffprobe", &ffprobe_song());
+    s.focus("tune.mp3");
+    let mut said = s.key("shift+f3");
+    said.extend(settle_quick(&mut s));
+    assert_eq!(
+        said,
+        [
+            "Quick view on",
+            "Preview on request: tune.mp3, MP3 audio, 20 bytes"
+        ]
+    );
+    assert!(s.tools.ran().is_empty(), "{:?}", s.tools.ran());
+    s.key("shift+f3");
+    s.focus("song.mp3");
+    let mut said = s.command(ids::PREVIEW_FILE);
+    said.extend(settle_quick(&mut s));
+    assert_eq!(said[0], "Quick view on", "{said:?}");
+    assert!(said[1].starts_with("Preview: song.mp3, MP3, "), "{said:?}");
+    assert_eq!(s.tools.ran(), ["ffprobe"]);
+    assert!(s.app.quick_view_on());
+}
+
+/// Without ffprobe, Preview says so in the quick view's words.
+#[test]
+fn preview_without_ffprobe_says_it_is_not_found() {
+    let dir = temp();
+    let work = folder(dir.path());
+    fs::write(work.join("song.mp3"), b"ID3 not really sound").unwrap();
+    let recorder = Arc::new(Recorder::default());
+    let mut s = session(&work, &recorder);
+    s.focus("song.mp3");
+    let mut said = s.command(ids::PREVIEW_FILE);
+    said.extend(settle_quick(&mut s));
+    assert_eq!(
+        said,
+        ["Quick view on", "No preview: song.mp3, ffprobe not found"]
+    );
+    s.focus("notes.txt");
+    let said = s.command(ids::PREVIEW_FILE);
+    let mut said = said;
+    said.extend(settle_quick(&mut s));
+    assert_eq!(said, ["Preview: notes.txt, 2 lines"]);
+}

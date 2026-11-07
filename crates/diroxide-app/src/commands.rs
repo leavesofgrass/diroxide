@@ -693,6 +693,9 @@ pub mod ids {
         /// The Tools list: each helper program, its version and where it
         /// was found, or how to get it (Settings' Tools page).
         TOOLS_LIST = "app.tools";
+        /// Preview the focused file now, in the quick view, the helper
+        /// programs' previews included.
+        PREVIEW_FILE = "file.preview";
     }
 }
 
@@ -718,7 +721,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 246] = [
+pub static CATALOG: [CommandInfo; 247] = [
     command(
         ids::QUIT,
         "Quit",
@@ -2415,6 +2418,14 @@ pub static CATALOG: [CommandInfo; 246] = [
         Global,
         &["shift+f3"],
         &["shift+f3"],
+    ),
+    command(
+        ids::PREVIEW_FILE,
+        "Preview",
+        "Shows the focused file in the quick view at once, turning it on: sound and video through ffprobe and a PDF's text through pdftotext, which run by themselves only when auto-preview is on.",
+        Global,
+        &[],
+        &[],
     ),
     command(
         ids::OPEN_IN_TEXTWEAVER,
