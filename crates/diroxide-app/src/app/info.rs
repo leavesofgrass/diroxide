@@ -69,6 +69,24 @@ impl App {
         })
     }
 
+    /// The active place as the menus see it: what it can do, and whether
+    /// diroxide changes it by rewriting it. Inside a zip on this computer,
+    /// not inside another archive, Make folder, Rename and Delete rewrite
+    /// the archive (lane AW), so the File menu offers them (lane AE).
+    pub(super) fn menu_place(&self) -> crate::menu::MenuPlace {
+        use diroxide_archive::ArchiveFormat;
+        let place = self.active_panel().place();
+        let rewrites = place.archive().is_some_and(|(container, _)| {
+            container.archive().is_none()
+                && container.local_path().is_some()
+                && container.name().and_then(ArchiveFormat::from_name) == Some(ArchiveFormat::Zip)
+        });
+        crate::menu::MenuPlace {
+            caps: self.active_capabilities(),
+            rewrites,
+        }
+    }
+
     /// Say Status: in a dialog, the dialog's focus; in a panel the
     /// selection first when there is one ("3 selected, 4.2 MB.
     /// Documents, 40 items"), then the focus and its position, any
@@ -314,7 +332,7 @@ impl App {
     pub(super) fn context_menu(&mut self) -> Vec<Effect> {
         let side = self.active;
         let targets = self.panel(side).targets();
-        let caps = self.active_capabilities();
+        let caps = self.menu_place();
         let Some(file) = self.menus.list("file", &self.keymap, &caps) else {
             return Vec::new();
         };
@@ -399,7 +417,7 @@ impl App {
     }
 
     pub(super) fn open_menu(&mut self, id: &str) -> Vec<Effect> {
-        let caps = self.active_capabilities();
+        let caps = self.menu_place();
         // The enabled plugins' commands join the menus (W4d).
         let Some(list) = self.menu_list_for(id, &caps) else {
             return vec![self.say(Message::info(format!("No menu is named {id}.")))];

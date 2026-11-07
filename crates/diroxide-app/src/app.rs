@@ -1531,7 +1531,7 @@ impl App {
     /// own items and wherever `menus.toml` names one (lane A4, for the
     /// GUI's native menus). `None` when no menu has this id.
     pub fn menu_list(&self, id: &str) -> Option<diroxide_core::ListModel> {
-        let caps = self.active_capabilities();
+        let caps = self.menu_place();
         self.menu_list_for(id, &caps)
     }
 

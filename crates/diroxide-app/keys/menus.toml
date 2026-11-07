@@ -10,7 +10,9 @@
 # and banks.toml use. The label is the command's name unless given. The
 # access key is one letter, unique in its menu. when = "trash" shows the
 # item only where the place has a trash; the other conditions are
-# writable, no_trash, restore, links and attributes. Every item shows its
+# writable, no_trash, restore, links and attributes, and edits and
+# removes, which are writable and trash that also hold inside a zip
+# diroxide rewrites. Every item shows its
 # key from the live keymap, so a menu never shows a key that is not bound.
 
 [[menu]]
@@ -81,15 +83,17 @@ command = "file.convert-reports"
 command = "file.context-menu"
 access = "c"
 
+# Make folder, Rename and Delete show inside a zip too, which diroxide
+# rewrites (edits and removes; lane AE).
 [[menu.item]]
 command = "folder.make"
 access = "m"
-when = "writable"
+when = "edits"
 
 [[menu.item]]
 command = "file.rename"
 access = "r"
-when = "writable"
+when = "edits"
 
 [[menu.item]]
 command = "file.duplicate"
@@ -99,12 +103,12 @@ when = "writable"
 [[menu.item]]
 command = "file.trash"
 access = "t"
-when = "trash"
+when = "removes"
 
 [[menu.item]]
 command = "file.delete-permanently"
 access = "g"
-when = "writable"
+when = "edits"
 
 [[menu.item]]
 command = "file.split"

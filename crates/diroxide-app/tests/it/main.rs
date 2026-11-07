@@ -86,6 +86,8 @@ mod watching;
 mod watched_folders;
 // Delete, Rename and Make folder inside a zip (alpha 4, lane AW).
 mod zip_edits;
+// The File menu inside a zip (alpha 4, lane AE, AW's request 1).
+mod zip_menus;
 
 use diroxide_app::{App, AppEvent, AppOptions, Runtime};
 use diroxide_core::{Effect, Key, Place, Side};
