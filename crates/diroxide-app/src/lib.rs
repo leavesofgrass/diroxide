@@ -54,6 +54,8 @@ pub mod state;
 pub mod tools_page;
 // Watch this folder (W3t).
 pub mod tracker;
+// Watched folders in the app and the command line (alpha 4, lane AW).
+pub mod watched;
 // File types in the app: the background check (alpha 4, lane TA).
 pub mod typing;
 pub mod viewer;
