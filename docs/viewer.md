@@ -10,6 +10,8 @@ F3 opens the focused file in the viewer, on top of the panels. It works on a fil
 
 The viewer is for reading. Editing is F4, which hands the file to your editor ([operations and undo](operations.md) describes it).
 
+In the window, F3 on a picture says once "Enter shows the picture.", and Enter opens the window's picture view. That is the Show picture command; [the GUI](gui.md#the-picture-view) has it. A terminal has no picture view and says "Show picture works only in the window."
+
 The title puts the file's name first, then where it is: "notes.txt, in D:\demo". Inside an archive it names both: "notes.txt, in course.zip", and for a member in a folder of the archive, "a.txt, in course.zip!week1". [Archives](archives.md) explains the member form.
 
 ## A file is a list of lines
