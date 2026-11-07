@@ -212,4 +212,5 @@ The exit codes are the family's: 0 when everything was done, 1 when the task cou
 - [Operations and undo](operations.md)
 - [Privacy](privacy.md)
 - [Known limits](known-limits.md)
+- [The hot-folder engine](dev/hot-folders.md), for how it works and what the spikes found
 - [The documentation index](README.md)
