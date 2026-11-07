@@ -38,7 +38,7 @@ The length of the pasted value picks the algorithm:
 
 - 64 digits are tried as SHA-256 and as BLAKE3, both already computed. If it is BLAKE3's, you hear "Match: example-tool.zip, BLAKE3" and then "Matches BLAKE3, not SHA-256".
 - 128 digits are SHA-512, 32 are MD5 and 8 are CRC-32. diroxide computes that one now, says "Computing the SHA-512 of example-tool.zip", and then judges.
-- A match for MD5 adds "MD5 is old, not safe against tampering." A CRC-32 only finds damage, not tampering, and says so.
+- A match for MD5 adds "MD5 is old, not safe against tampering." A match for CRC-32 adds "CRC-32 is for damage, not tampering."
 
 ### Save as SHA256SUMS
 

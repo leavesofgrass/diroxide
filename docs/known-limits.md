@@ -335,7 +335,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 - A signature beside a checksum list is named and not checked yet: "Signature not checked: SHA256SUMS.asc". "List is signed" is not said anywhere.
 - SHA-1 lines in an old list are read and said as not checked, because diroxide computes no SHA-1.
-- A CRC-32 or MD5 match carries the cautions "finds damage, not tampering" and "old, not safe against tampering".
+- A CRC-32 or MD5 match carries the cautions "CRC-32 is for damage, not tampering." and "MD5 is old, not safe against tampering.".
 - The Checksum row of the details view holds this session's values only.
 
 ## Privacy before sharing

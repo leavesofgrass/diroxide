@@ -711,7 +711,7 @@ pub mod ids {
     }
 
     // Conversions in the app (alpha 4, lane AW, R30 commit 62). No
-    // default keys: Shift+F5 is copy with options.
+    // default keys: Shift+F5 is Duplicate.
     ids! {
         /// Convert the selection with a recipe, into the other panel.
         CONVERT = "file.convert";

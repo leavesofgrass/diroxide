@@ -4,7 +4,7 @@
 //! - **Algorithms** ([`Algorithm`]): SHA-256 and SHA-512 (`sha2`),
 //!   BLAKE3 (the native gate's allowed entry, answer 45), MD5 (labeled
 //!   "old, not safe against tampering"), CRC-32 (for `.sfv` lists,
-//!   "finds damage, not tampering"). SHA-1 lines are read from old lists
+//!   "for damage, not tampering"). SHA-1 lines are read from old lists
 //!   and said as not checked: no SHA-1 crate is in the workspace.
 //! - **Computing** ([`compute`], [`compute_reader`]): the file read
 //!   through its provider in 1 MiB steps, every algorithm asked for in
@@ -136,12 +136,12 @@ impl Algorithm {
     }
 
     /// The caution said beside it, or `None`: "old, not safe against
-    /// tampering" for MD5 and SHA-1, "finds damage, not tampering" for
+    /// tampering" for MD5 and SHA-1, "for damage, not tampering" for
     /// CRC-32.
     pub const fn caution(self) -> Option<&'static str> {
         match self {
             Algorithm::Md5 | Algorithm::Sha1 => Some("old, not safe against tampering"),
-            Algorithm::Crc32 => Some("finds damage, not tampering"),
+            Algorithm::Crc32 => Some("for damage, not tampering"),
             _ => None,
         }
     }
@@ -672,6 +672,10 @@ mod tests {
         assert_eq!(
             Algorithm::Md5.caution(),
             Some("old, not safe against tampering")
+        );
+        assert_eq!(
+            Algorithm::Crc32.caution(),
+            Some("for damage, not tampering")
         );
         assert_eq!(
             progress_words("report.pdf", 40, Some(100)),

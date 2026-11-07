@@ -544,6 +544,26 @@ mod tests {
         .unwrap()
     }
 
+    /// A match on a weak algorithm says its caution after the verdict, as
+    /// one sentence with the algorithm as its subject.
+    #[test]
+    fn a_match_on_a_weak_algorithm_says_its_caution_after_the_verdict() {
+        let matched = diroxide_meta::checksum::Comparison::Match;
+        let lines = verdict_lines(&matched, "checksums.sfv", Algorithm::Crc32);
+        assert_eq!(
+            lines.last().unwrap(),
+            "CRC-32 is for damage, not tampering."
+        );
+        assert_eq!(lines.last().unwrap().chars().count(), 36);
+        let lines = verdict_lines(&matched, "files.md5", Algorithm::Md5);
+        assert_eq!(
+            lines.last().unwrap(),
+            "MD5 is old, not safe against tampering."
+        );
+        let lines = verdict_lines(&matched, "report.pdf", Algorithm::Sha256);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+    }
+
     #[test]
     fn the_computed_line_is_the_value_s_start() {
         let d = digests(b"abc");

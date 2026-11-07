@@ -10,7 +10,7 @@
 //! each report's rows failures first. Undo trashes what the job made.
 //! carta runs in the `diro` child the frontend gives the runtime.
 //!
-//! No default key: Shift+F5 is copy with options. The lists are hosted
+//! No default key: Shift+F5 is Duplicate. The lists are hosted
 //! under the Organize purpose so the window's test of every purpose keeps
 //! its count; a purpose of their own is for the fold lane (CR5).
 
