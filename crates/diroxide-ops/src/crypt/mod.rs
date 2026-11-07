@@ -16,6 +16,12 @@
 //!   [`Engine::plan_gpg`](crate::Engine::plan_gpg) and
 //!   [`Engine::run_gpg`](crate::Engine::run_gpg), with the options in
 //!   [`GpgOptions`], never in `JobRequest`.
+//! - [`minisign`]: minisign signatures checked in process by
+//!   `minisign-verify`, the data streamed.
+//! - [`verify`]: one [`verify_signature`] over gpg and minisign giving a
+//!   [`SignatureVerdict`], the sidecars to look for
+//!   ([`signature_sidecars`]), and the chain's sentences over a verdict
+//!   and a checksum list's counts ([`chain_lines`]).
 //! - [`lines`]: every word said, meaning first.
 
 pub mod gpg;
@@ -23,7 +29,14 @@ pub mod job;
 #[cfg(test)]
 mod job_tests;
 pub mod lines;
+pub mod minisign;
 pub mod status;
+pub mod verify;
 
 pub use gpg::{Outcome, Trust, Verified};
 pub use job::{GpgAction, GpgError, GpgItem, GpgOptions, GpgPlan, GpgReport, GpgRequest};
+pub use minisign::MinisignKey;
+pub use verify::{
+    Sidecar, SignatureCheck, SignatureVerdict, Signer, chain_lines, sidecars_present,
+    signature_sidecars, verify_signature,
+};

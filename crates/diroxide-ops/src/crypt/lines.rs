@@ -194,10 +194,10 @@ pub mod chain {
         format!("List not signed: {matched} of {files} match")
     }
 
-    /// A signature that is there and is not good: "List signature not
-    /// good: 12 of 12 match" (39).
+    /// A signature that is there and not good, or cannot be checked:
+    /// "List not verified: 12 of 12 match" (33), after the verdict.
     pub fn not_good(matched: usize, files: usize) -> String {
-        format!("List signature not good: {matched} of {files} match")
+        format!("List not verified: {matched} of {files} match")
     }
 
     /// What a match without a good signature shows, and what it does not.
@@ -261,7 +261,7 @@ mod tests {
             (verdict::REVOKED.to_owned(), 36),
             (chain::signed(12, 12), 36),
             (chain::not_signed(12, 12), 31),
-            (chain::not_good(12, 12), 39),
+            (chain::not_good(12, 12), 33),
             (plan_for_recipients(3, 1), 31),
         ];
         for (line, cells) in cases {
