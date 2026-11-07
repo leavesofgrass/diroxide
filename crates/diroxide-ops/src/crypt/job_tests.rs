@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 
 use diroxide_core::{JobId, JobKind, Place, Secret, SecretKind, SecretRequest};
 use diroxide_vfs::{
-    CancelToken, Registry, SecretSource, ToolInput, ToolOutput, ToolRequest, ToolRunError,
-    ToolRunner, ToolStream,
+    CancelToken, Registry, SecretSource, ToolOutput, ToolRequest, ToolRunError, ToolRunner,
+    ToolStream,
 };
 
 use super::job::{GpgAction, GpgError, GpgOptions, GpgRequest};
@@ -97,10 +97,17 @@ impl FakeGpg {
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
         self.runs.lock().unwrap().push(args.clone());
-        let stdin = match &request.input {
-            ToolInput::Bytes(bytes) => bytes.clone(),
-            _ => Vec::new(),
-        };
+        // Every gpg run gets the C locale (E's request 6).
+        assert!(
+            request.env.iter().any(|(k, v)| k == "LC_ALL" && v == "C"),
+            "{:?}",
+            request.env
+        );
+        let stdin = request
+            .input
+            .bytes()
+            .map(<[u8]>::to_vec)
+            .unwrap_or_default();
         self.inputs.lock().unwrap().push(stdin.clone());
         let has = |word: &str| args.iter().any(|a| a == word);
         let output = args

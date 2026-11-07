@@ -123,6 +123,11 @@ impl ToolRegistry {
         if let Some(folder) = &request.folder {
             spec = spec.cwd(folder);
         }
+        // The request's own variables come after diroxide's: 7-Zip's
+        // LANG=C.UTF-8, gpg's LC_ALL=C.
+        for (name, value) in &request.env {
+            spec = spec.env(name.clone(), value.clone());
+        }
         let mut limited = Limited::new(
             Some(request.limits.timeout),
             Caps::shared(request.limits.max_output_bytes as u64),
@@ -131,6 +136,14 @@ impl ToolRegistry {
             ToolInput::Closed => {}
             ToolInput::Bytes(bytes) => {
                 limited = limited.with_input(Box::new(Cursor::new(bytes.clone())));
+            }
+            // The secret is read from its own wiped copy, never copied
+            // into a plain buffer.
+            ToolInput::Secret(secret) => {
+                limited = limited.with_input(Box::new(SecretReader {
+                    secret: secret.clone(),
+                    at: 0,
+                }));
             }
             ToolInput::File(path) => {
                 let file = File::open(path).map_err(|e| ToolRunError::NotStarted {
@@ -144,6 +157,24 @@ impl ToolRegistry {
             }
         }
         Ok((spec, limited))
+    }
+}
+
+/// A secret's bytes as a program's standard input, read from the secret
+/// itself, which is wiped when the run drops it.
+struct SecretReader {
+    secret: diroxide_core::Secret,
+    at: usize,
+}
+
+impl std::io::Read for SecretReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let bytes = self.secret.expose().as_bytes();
+        let rest = bytes.get(self.at..).unwrap_or_default();
+        let n = rest.len().min(buffer.len());
+        buffer[..n].copy_from_slice(&rest[..n]);
+        self.at += n;
+        Ok(n)
     }
 }
 
@@ -230,6 +261,9 @@ mod tests {
                 let mut text = String::new();
                 std::io::stdin().read_to_string(&mut text).unwrap();
                 writeln!(out, "read:{}", text.trim()).unwrap();
+                if let Ok(lang) = env::var("TEST_LOCALE") {
+                    writeln!(out, "lang:{lang}").unwrap();
+                }
                 writeln!(err, "a warning").unwrap();
             }
             "lines" => {
@@ -290,6 +324,26 @@ mod tests {
         ];
         args.extend(extra.iter().map(|a| (*a).to_owned()));
         ToolRequest::new("pandoc", args)
+    }
+
+    /// A secret input reaches the program's standard input and nowhere
+    /// else, and the request's environment is the program's (7-Zip's and
+    /// gpg's locale).
+    #[test]
+    fn a_secret_input_and_the_requests_environment_reach_the_program() {
+        let (_folder, tools) = fake_pandoc();
+        let secret = diroxide_core::Secret::new("canary-7f3a".to_owned());
+        let request = request("echo", &[])
+            .with_input(ToolInput::secret_line(&secret))
+            .with_env("TEST_LOCALE", "C.UTF-8");
+        assert!(
+            !format!("{request:?}").contains("canary"),
+            "a request's Debug never shows the secret"
+        );
+        let done = ToolRunner::run(&tools, &request, &CancelToken::new()).unwrap();
+        let text = String::from_utf8_lossy(&done.stdout);
+        assert!(text.contains("read:canary-7f3a"), "{text}");
+        assert!(text.contains("lang:C.UTF-8"), "{text}");
     }
 
     /// Through the context, as the job engine calls it: the arguments

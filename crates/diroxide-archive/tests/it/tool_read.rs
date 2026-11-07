@@ -45,38 +45,7 @@ impl ToolRunner for Program {
         request: &ToolRequest,
         _cancel: &CancelToken,
     ) -> Result<ToolOutput, ToolRunError> {
-        let mut command = Command::new(&self.0);
-        command
-            .args(&request.args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .stdin(match request.input {
-                ToolInput::Closed => Stdio::null(),
-                _ => Stdio::piped(),
-            });
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x0800_0000);
-        }
-        let mut child = command.spawn().map_err(|e| ToolRunError::NotStarted {
-            name: "7-Zip".to_owned(),
-            message: e.to_string(),
-        })?;
-        if let (ToolInput::Bytes(bytes), Some(mut stdin)) = (&request.input, child.stdin.take()) {
-            let _ = stdin.write_all(bytes);
-        }
-        let output = child
-            .wait_with_output()
-            .map_err(|e| ToolRunError::NotStarted {
-                name: "7-Zip".to_owned(),
-                message: e.to_string(),
-            })?;
-        Ok(ToolOutput::new(
-            output.status.code(),
-            output.stdout,
-            output.stderr,
-        ))
+        run_seven_zip(&self.0, request, false)
     }
 
     fn run_streaming(
@@ -87,6 +56,87 @@ impl ToolRunner for Program {
     ) -> Result<ToolOutput, ToolRunError> {
         self.run(request, cancel)
     }
+}
+
+/// The same 7-Zip on a computer whose language is C: no `LC_ALL` or
+/// `LC_CTYPE`, `LANG=C`, then the request's own variables, as the tools
+/// registry sets them after its own.
+pub struct CLocale(pub PathBuf);
+
+impl ToolRunner for CLocale {
+    fn has(&self, tool: &str) -> bool {
+        tool == "7z"
+    }
+
+    fn name_of(&self, _tool: &str) -> String {
+        "7-Zip".to_owned()
+    }
+
+    fn run(
+        &self,
+        request: &ToolRequest,
+        _cancel: &CancelToken,
+    ) -> Result<ToolOutput, ToolRunError> {
+        run_seven_zip(&self.0, request, true)
+    }
+
+    fn run_streaming(
+        &self,
+        request: &ToolRequest,
+        cancel: &CancelToken,
+        _record: &mut dyn FnMut(ToolStream, &str) -> std::ops::ControlFlow<()>,
+    ) -> Result<ToolOutput, ToolRunError> {
+        self.run(request, cancel)
+    }
+}
+
+/// Runs 7-Zip as a plain process: the arguments whole, the request's
+/// environment, standard input as asked, no window; under a C language
+/// first when `c_locale` says so.
+fn run_seven_zip(
+    program: &Path,
+    request: &ToolRequest,
+    c_locale: bool,
+) -> Result<ToolOutput, ToolRunError> {
+    let mut command = Command::new(program);
+    if c_locale {
+        command
+            .env_remove("LC_ALL")
+            .env_remove("LC_CTYPE")
+            .env("LANG", "C");
+    }
+    command
+        .args(&request.args)
+        .envs(request.env.iter().map(|(k, v)| (k, v)))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(match request.input {
+            ToolInput::Closed => Stdio::null(),
+            _ => Stdio::piped(),
+        });
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let mut child = command.spawn().map_err(|e| ToolRunError::NotStarted {
+        name: "7-Zip".to_owned(),
+        message: e.to_string(),
+    })?;
+    if let (Some(bytes), Some(mut stdin)) = (request.input.bytes(), child.stdin.take()) {
+        let _ = stdin.write_all(bytes);
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| ToolRunError::NotStarted {
+            name: "7-Zip".to_owned(),
+            message: e.to_string(),
+        })?;
+    Ok(ToolOutput::new(
+        output.status.code(),
+        output.stdout,
+        output.stderr,
+    ))
 }
 
 /// The 7-Zip these tests run, with its version: the one `DIRO_TEST_7Z`
@@ -195,6 +245,36 @@ fn without_7_zip_each_format_says_what_it_needs() {
         "RAR needs 7-Zip: not installed"
     );
     assert_eq!(read_with_line("Backup.rar"), "Backup.rar, read with 7-Zip");
+}
+
+/// A member name outside ASCII lists whole on a computer whose language
+/// is C (Z's request 3): every 7-Zip run carries `LANG=C.UTF-8`, so the
+/// raw bytes of a cpio member's name are read as UTF-8. The name is only
+/// inside the archive's bytes; the archive's own name is plain.
+#[test]
+fn a_member_name_outside_ascii_lists_under_a_c_locale() {
+    if !cfg!(unix) {
+        // Windows' 7-Zip reads names without a locale; the test runs in
+        // the development container and on CI's Linux and macOS.
+        eprintln!("the C locale listing is a Unix test: not run here");
+        return;
+    }
+    let Some((program, version)) = seven_zip() else {
+        eprintln!("7-Zip not found: the C locale listing did not run");
+        return;
+    };
+    eprintln!("7-Zip {} at {}", version.words(), program.display());
+    let dir = scratch();
+    let (_registry, provider, ctx) = world(dir.path(), Arc::new(CLocale(program)));
+    let name = "caf\u{e9}-\u{65e5}\u{672c}.txt";
+    let path = dir.path().join("names.cpio");
+    std::fs::write(&path, cpio(&[(name, &b"crow"[..])])).unwrap();
+    let root = place_of(&path).into_archive();
+    let listing = provider
+        .list_folder(&root, &ctx, Allowances::default())
+        .unwrap();
+    let names: Vec<String> = listing.entries.iter().map(|e| e.name.clone()).collect();
+    assert_eq!(names, [name]);
 }
 
 #[test]
