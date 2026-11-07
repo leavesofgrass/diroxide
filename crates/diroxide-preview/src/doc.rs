@@ -641,7 +641,19 @@ pub struct DocView {
     outline: Vec<Symbol>,
     tables: Vec<DocTable>,
     links: Vec<DocLink>,
+    /// The code blocks, the notes and the summary words, kept in a box
+    /// so the view stays small where an enum carries it (the app's
+    /// render answer); written as the view's own fields.
+    #[serde(flatten)]
+    more: Box<More>,
+}
+
+/// What a view carries besides its rows, outline, tables and links.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+struct More {
+    #[serde(default)]
     code_blocks: Vec<CodeBlock>,
+    #[serde(default)]
     notes: Vec<String>,
     /// What the announcement says after the kind when the reader knows
     /// better than the counts: "3 sheets, 1,204 rows" (alpha 4).
@@ -665,9 +677,7 @@ impl DocView {
             outline: Vec::new(),
             tables: Vec::new(),
             links: Vec::new(),
-            code_blocks: Vec::new(),
-            notes: Vec::new(),
-            said: None,
+            more: Box::default(),
         }
     }
 
@@ -714,20 +724,20 @@ impl DocView {
 
     /// The code blocks, in order.
     pub fn code_blocks(&self) -> &[CodeBlock] {
-        &self.code_blocks
+        &self.more.code_blocks
     }
 
     /// What the reader said about the file in its own words, once each:
     /// "An include directive was left out, so the file it names is not
     /// read."
     pub fn notes(&self) -> &[String] {
-        &self.notes
+        &self.more.notes
     }
 
     /// Sets what the announcement says after the kind, in place of the
     /// counts: "3 sheets, 1,204 rows".
     pub fn set_summary_words(&mut self, words: impl Into<String>) {
-        self.said = Some(words.into());
+        self.more.said = Some(words.into());
     }
 
     /// Adds a paragraph row after the last row, a block of its own: what
@@ -746,8 +756,8 @@ impl DocView {
     /// Adds a note in the reader's own words, once.
     pub fn add_note(&mut self, note: impl Into<String>) {
         let note = note.into();
-        if !self.notes.contains(&note) {
-            self.notes.push(note);
+        if !self.more.notes.contains(&note) {
+            self.more.notes.push(note);
         }
     }
 
@@ -767,7 +777,7 @@ impl DocView {
             return Vec::new();
         };
         if let RowKind::Code { block } = r.kind
-            && let Some(code) = self.code_blocks.get(block)
+            && let Some(code) = self.more.code_blocks.get(block)
             && code.rows.start == row
         {
             let mut said = vec!["code".to_owned()];
@@ -914,7 +924,7 @@ impl DocView {
     /// "12 headings" for a document with headings, else its rows ("1,204
     /// lines"), or "empty".
     pub fn summary_words(&self) -> String {
-        if let Some(said) = &self.said {
+        if let Some(said) = &self.more.said {
             return said.clone();
         }
         if self.rows.is_empty() {
