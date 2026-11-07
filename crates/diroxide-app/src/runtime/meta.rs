@@ -72,8 +72,14 @@ impl ProgressSink for JobSink {
 /// Cancel until the answer.
 pub(super) fn job_of(ask: &MetaAsk) -> Option<JobId> {
     match ask {
-        MetaAsk::Checksums { job, .. } | MetaAsk::Verify { job, .. } => Some(*job),
-        MetaAsk::SaveList { .. } => None,
+        MetaAsk::Checksums { job, .. }
+        | MetaAsk::Verify { job, .. }
+        | MetaAsk::Strip { job, .. }
+        | MetaAsk::RemoveMark { job, .. } => Some(*job),
+        MetaAsk::SaveList { .. }
+        | MetaAsk::Check { .. }
+        | MetaAsk::ReadMark { .. }
+        | MetaAsk::RestoreMark { .. } => None,
     }
 }
 
@@ -92,6 +98,30 @@ pub(super) fn run(shared: &Arc<Shared>, registry: &Registry, ask: MetaAsk, cance
         MetaAsk::Verify { job, place, list } => MetaNote::Verified {
             outcome: verify(shared, registry, job, &place, list.as_deref(), &cancel),
             job,
+            place,
+        },
+        MetaAsk::Strip { job, places } => strip(shared, registry, job, &places, &cancel),
+        MetaAsk::Check { places, tools } => MetaNote::Checked {
+            reports: check(registry, &places, &tools, &cancel),
+        },
+        MetaAsk::ReadMark { place } => MetaNote::Mark {
+            result: with_provider(registry, &place, |provider, ctx| {
+                diroxide_meta::origin::read_mark(provider, &place, ctx)
+                    .map(|mark| mark.map(|m| m.field().line()))
+            }),
+            place,
+        },
+        MetaAsk::RemoveMark { job, place } => MetaNote::MarkRemoved {
+            result: with_provider(registry, &place, |provider, ctx| {
+                diroxide_meta::origin::remove_internet_mark(provider, &place, ctx)
+            }),
+            job,
+            place,
+        },
+        MetaAsk::RestoreMark { place, removal } => MetaNote::MarkRestored {
+            result: with_provider(registry, &place, |provider, ctx| {
+                diroxide_meta::origin::restore_internet_mark(provider, &place, &removal, ctx)
+            }),
             place,
         },
     };
@@ -157,6 +187,141 @@ fn checksums(
         results,
         cancelled,
     }
+}
+
+/// Runs `work` with the place's provider and a plain context; the error
+/// in words.
+fn with_provider<T>(
+    registry: &Registry,
+    place: &Place,
+    work: impl FnOnce(&dyn diroxide_vfs::Provider, &OpContext) -> Result<T, diroxide_meta::MetaError>,
+) -> Result<T, String> {
+    let provider = registry.resolve(place).map_err(|e| e.to_string())?;
+    work(provider.as_ref(), &OpContext::new()).map_err(|e| e.to_string())
+}
+
+/// Strip metadata into a copy, picture by picture: the copy beside it as
+/// `NAME-clean.EXT`, or the first numbered name no entry has (nor an
+/// earlier copy of this job), never over a file; the originals stay.
+fn strip(
+    shared: &Arc<Shared>,
+    registry: &Registry,
+    job: JobId,
+    places: &[Place],
+    cancel: &CancelToken,
+) -> MetaNote {
+    let ctx = OpContext::new().with_cancel(cancel.clone());
+    let mut taken: std::collections::HashMap<Place, Vec<String>> = Default::default();
+    let mut results = Vec::new();
+    let mut cancelled = false;
+    for (done, place) in places.iter().enumerate() {
+        if cancel.is_cancelled() {
+            cancelled = true;
+            break;
+        }
+        let name = place.name().unwrap_or_default().to_owned();
+        shared.send(AppEvent::JobProgress {
+            job,
+            progress: JobProgress {
+                kind: JobKind::StripMetadata,
+                state: JobState::Running,
+                items_done: done as u64,
+                items_total: places.len() as u64,
+                bytes_done: 0,
+                bytes_total: None,
+                bytes_per_second: None,
+                seconds_left: None,
+                current: Some(name.clone()),
+                waits_for: None,
+            },
+        });
+        let result =
+            (|| -> Result<(Place, diroxide_meta::strip::StripReport), diroxide_meta::MetaError> {
+                let folder = place
+                    .parent()
+                    .ok_or_else(|| diroxide_meta::MetaError::unreadable("it has no folder"))?;
+                let provider = registry.resolve(place)?;
+                if !taken.contains_key(&folder) {
+                    let names = provider
+                        .list(&folder, &ctx)?
+                        .into_iter()
+                        .map(|e| e.name)
+                        .collect();
+                    taken.insert(folder.clone(), names);
+                }
+                let names = taken.entry(folder.clone()).or_default();
+                let wanted = diroxide_meta::strip::clean_copy_name(&name);
+                let free = if names.iter().any(|n| n.eq_ignore_ascii_case(&wanted)) {
+                    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+                    diroxide_vfs::names::unused_name(&wanted, &refs).ok_or_else(|| {
+                        diroxide_meta::MetaError::unreadable("no free name is left")
+                    })?
+                } else {
+                    wanted
+                };
+                let target = folder
+                    .join(&free)
+                    .map_err(|e| diroxide_meta::MetaError::unreadable(e.to_string()))?;
+                let report =
+                    diroxide_meta::strip::strip_into_copy(provider.as_ref(), place, &target, &ctx)?;
+                names.push(free);
+                Ok((target, report))
+            })();
+        match result {
+            Err(diroxide_meta::MetaError::Place(VfsError::Cancelled)) => {
+                cancelled = true;
+                break;
+            }
+            other => results.push((place.clone(), other.map_err(|e| e.to_string()))),
+        }
+    }
+    MetaNote::Stripped {
+        job,
+        results,
+        cancelled,
+    }
+}
+
+/// Check before sharing: each file's private details, read by the
+/// details' readers under their guard; read only.
+fn check(
+    registry: &Registry,
+    places: &[Place],
+    tools: &crate::request::SharedTools,
+    cancel: &CancelToken,
+) -> Vec<diroxide_meta::privacy::PrivacyReport> {
+    let pipeline = crate::details::pipeline(tools);
+    let ctx = OpContext::new()
+        .with_cancel(cancel.clone())
+        .with_tools(Arc::clone(&tools.0));
+    places
+        .iter()
+        .map(|place| {
+            let name = place.name().unwrap_or_default();
+            let provider = match registry.resolve(place) {
+                Ok(provider) => provider,
+                Err(error) => {
+                    return diroxide_meta::privacy::report_of(name, &[], vec![error.to_string()]);
+                }
+            };
+            let entry = provider.stat(place, &ctx).unwrap_or_else(|_| {
+                diroxide_core::Entry::new(name, diroxide_core::EntryKind::File)
+            });
+            let request = diroxide_meta::ReadRequest {
+                place,
+                entry: &entry,
+                type_id: None,
+                group: None,
+            };
+            diroxide_meta::privacy::check(
+                &pipeline,
+                provider.as_ref(),
+                &request,
+                &diroxide_meta::ReadLimits::default(),
+                &ctx,
+            )
+        })
+        .collect()
 }
 
 /// Verify checksum: the list chosen, the file itself when it is a list,

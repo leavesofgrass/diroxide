@@ -226,7 +226,7 @@ impl App {
 
     /// The newest job in the undo log, 0 for none: label changes and jobs
     /// are undone newest first between them.
-    fn newest_job(&self) -> u64 {
+    pub(super) fn newest_job(&self) -> u64 {
         self.undo
             .last()
             .and_then(|record| record.job)

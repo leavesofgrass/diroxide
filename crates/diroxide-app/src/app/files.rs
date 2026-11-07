@@ -605,6 +605,11 @@ impl App {
     }
 
     pub(super) fn undo(&mut self) -> Vec<Effect> {
+        // A removed internet mark newer than the last job and the last
+        // label change is put back first (lane MA).
+        if let Some(effects) = self.undo_mark_removal() {
+            return effects;
+        }
         // A label change newer than the last job is undone first (W3l).
         if let Some(effects) = self.undo_label_change() {
             return effects;
@@ -1168,10 +1173,11 @@ impl App {
                     Some(JobKind::Pack) => "pack",
                     Some(JobKind::Split) => "split",
                     Some(JobKind::Join) => "join",
+                    Some(JobKind::StripMetadata) => "strip",
                     _ => "job",
                 };
                 let how = match kind {
-                    Some(JobKind::Copy | JobKind::Duplicate) => {
+                    Some(JobKind::Copy | JobKind::Duplicate | JobKind::StripMetadata) => {
                         format!("{} in the trash", count(done, "copy is", "copies are"))
                     }
                     Some(JobKind::Unpack | JobKind::Pack | JobKind::Split | JobKind::Join) => {

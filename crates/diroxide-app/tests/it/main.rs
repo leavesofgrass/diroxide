@@ -48,6 +48,7 @@ mod plugin_keys;
 // Plugins and script commands (W4d).
 mod plugins;
 mod preview;
+mod privacy;
 // Saved searches, the Space list, sizes and newest files (W3a).
 mod search_tools;
 // Search, its dialog and its results (W3a).

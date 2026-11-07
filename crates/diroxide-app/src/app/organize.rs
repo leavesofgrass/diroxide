@@ -378,6 +378,7 @@ impl App {
         match wants {
             Wants::RemoveBookmark { side, place } => self.remove_bookmark(side, &place),
             Wants::ReadColumns { side, fill } => self.start_fill(side, fill),
+            Wants::Meta(wants) => self.meta_yes(wants),
             _ => Vec::new(),
         }
     }
@@ -392,6 +393,7 @@ impl App {
             Wants::ReadColumns { .. } => {
                 vec![self.say(Message::info("Nothing read; the order stays."))]
             }
+            Wants::Meta(wants) => self.meta_escape(wants),
             Wants::BookmarkForm { side, .. } => self.refresh_bookmarks_list(side),
             Wants::BookmarkText { side, place, .. } => self.bookmark_form(side, place, None),
             _ => Vec::new(),

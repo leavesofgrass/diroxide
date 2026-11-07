@@ -57,6 +57,15 @@ command = "file.checksum"
 command = "file.verify-checksum"
 
 [[menu.item]]
+command = "file.strip-metadata"
+
+[[menu.item]]
+command = "file.check-before-sharing"
+
+[[menu.item]]
+command = "file.remove-internet-mark"
+
+[[menu.item]]
 command = "file.actions"
 
 [[menu.item]]

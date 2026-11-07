@@ -357,6 +357,8 @@ pub fn command() -> Command {
         )
         .subcommand(components_command())
         .subcommand(doctor_command())
+        .subcommand(info_command())
+        .subcommand(sum_command())
         .subcommand(no_help(
             Command::new("serve")
                 .about("Serve the app over JSON-RPC on standard input and output")
@@ -559,6 +561,49 @@ fn components_command() -> Command {
                 .about("Install from a zip file or a folder")
                 .arg(named("id", "The component"))
                 .arg(named("path", "The zip file or folder").value_hint(ValueHint::AnyPath)),
+        )
+}
+
+/// `diro info` as `cmd/info.rs` reads it (alpha 4's lane MA), for
+/// completion only.
+fn info_command() -> Command {
+    Command::new("info")
+        .about("A file's details as plain lines, the name first")
+        .arg(
+            Arg::new("path")
+                .required(true)
+                .num_args(1..)
+                .value_hint(ValueHint::AnyPath)
+                .help("The files"),
+        )
+}
+
+/// `diro sum` as `cmd/sum.rs` reads it (alpha 4's lane MA), for
+/// completion only.
+fn sum_command() -> Command {
+    Command::new("sum")
+        .about("Checksums as plain lines, the name first; --check checks a list")
+        .arg(
+            flag(
+                "check",
+                "Check every file the list names, the verdict first",
+            )
+            .short('c'),
+        )
+        .arg(flag("list", "Print the lines a list holds, HASH  NAME"))
+        .arg(
+            Arg::new("algorithm")
+                .long("algorithm")
+                .short('a')
+                .value_parser(["sha256", "sha512", "blake3", "md5", "crc32"])
+                .help("The algorithm; sha256 by default"),
+        )
+        .arg(
+            Arg::new("file")
+                .required(true)
+                .num_args(1..)
+                .value_hint(ValueHint::FilePath)
+                .help("The files, or with --check the list"),
         )
 }
 

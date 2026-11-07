@@ -719,6 +719,15 @@ pub mod ids {
         /// Check the focused file against the checksum list beside it, or
         /// every file a focused list names, the verdict first.
         VERIFY_CHECKSUM = "file.verify-checksum";
+        /// Copy the marked pictures, or the focused one, without their
+        /// private metadata, each beside its original.
+        STRIP_METADATA = "file.strip-metadata";
+        /// Say what the marked files, or the focused one, carry that could
+        /// say who made them, where or with what; read only.
+        CHECK_BEFORE_SHARING = "file.check-before-sharing";
+        /// Remove the focused file's internet mark, after asking; Undo
+        /// puts it back.
+        REMOVE_INTERNET_MARK = "file.remove-internet-mark";
     }
 }
 
@@ -744,7 +753,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 253] = [
+pub static CATALOG: [CommandInfo; 256] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1549,6 +1558,30 @@ pub static CATALOG: [CommandInfo; 253] = [
         ids::VERIFY_CHECKSUM,
         "Verify checksum",
         "Checks the focused file against the checksum list beside it (its own .sha256 first, then SHA256SUMS and the others), or every file a focused list names, reading each again; the verdict comes first, the failures next.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::STRIP_METADATA,
+        "Strip metadata into a copy",
+        "Copies the marked JPEG, PNG and WebP pictures, or the focused one, without their place, camera, people, comments and other private details, each beside its original as NAME-clean, after asking; the originals stay, and Undo puts the copies in the trash.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::CHECK_BEFORE_SHARING,
+        "Check before sharing",
+        "Says what the marked files, or the focused one, carry that could say who made them, where or with what, places to two decimals, and what a strip cannot reach; it reads only, and nothing is sent anywhere.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::REMOVE_INTERNET_MARK,
+        "Remove the internet mark",
+        "Removes the mark the system keeps on a downloaded file, after asking, so the system stops warning when it opens; Undo puts the mark back.",
         Panel,
         &[],
         &[],
