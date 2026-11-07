@@ -68,6 +68,12 @@ impl App {
         if !self.dialogs.is_empty() {
             return Some(vec![self.say(Message::status("Close this dialog first."))]);
         }
+        // A file whose type has a convert action runs it (R30 commit 64).
+        if command.id == ids::CONVERT
+            && let Some(effects) = self.typed_slot(crate::typing::Slot::Convert)
+        {
+            return Some(effects);
+        }
         Some(if command.id == ids::CONVERT {
             self.convert_selection()
         } else {
@@ -106,6 +112,36 @@ impl App {
             target,
         })));
         Vec::new()
+    }
+
+    /// A type's convert action, or any action naming a recipe: the
+    /// focused file planned with that recipe into the other panel, the
+    /// plan's question next (R30 commit 64).
+    pub(super) fn convert_with_recipe(&mut self, recipe: &str, place: Place) -> Vec<Effect> {
+        let side = self.active;
+        let job = self.next_job_id();
+        self.flows.insert(
+            job,
+            Flow {
+                side,
+                note: None,
+                then: Then::Report,
+                confirm: true,
+                kind: JobKind::Convert,
+            },
+        );
+        let tools = self.tool_runner();
+        let types = SharedTypes(std::sync::Arc::clone(&self.types));
+        let destination = self.panel(side.other()).place().clone();
+        self.request(Request::Convert(Box::new(ConvertAsk::Plan {
+            job,
+            sources: vec![place],
+            destination,
+            recipe: recipe.to_owned(),
+            types,
+            tools,
+        })));
+        vec![self.say(Message::status("Planning the conversion"))]
     }
 
     /// What the runtime answered the Convert command.

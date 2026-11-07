@@ -186,3 +186,94 @@ fn a_file_no_recipe_takes_says_so() {
     s.focus("blob.qqq");
     assert_eq!(s.command(ids::CONVERT), ["No recipe takes these files"]);
 }
+
+/// An app over two made-up folders whose `notes` type converts with a
+/// recipe (R30 commit 64), its listing given by hand; nothing on disk.
+fn typed_app() -> diroxide_app::App {
+    use diroxide_app::{App, AppEvent, AppOptions};
+    use diroxide_core::{Effect, Entry, EntryKind, Place};
+    let filetypes = diroxide_config::FileTypesConfig::from_toml(
+        r#"
+[[type]]
+id = "mynotes"
+name = "Notes file"
+short = "Notes"
+extensions = ["notes"]
+
+[[type.actions]]
+name = "To Org"
+slot = "convert"
+recipe = "markdown-to-org"
+"#,
+    )
+    .unwrap();
+    let local = |p: &str| Place::parse_with(p, diroxide_core::place::PathStyle::Unix).unwrap();
+    let mut options = AppOptions::new(local("/work"), local("/other")).in_utc();
+    options.types = diroxide_filetype::TypeRegistry::builtin().with_config(&filetypes);
+    options.startup.type_slots = diroxide_app::typing::TypeSlots::from_config(&filetypes);
+    let mut app = App::new(options);
+    for effect in app.start() {
+        if let Effect::List { request, place } = effect {
+            let entries = if place == local("/work") {
+                ["day.notes", "plain.txt"]
+                    .into_iter()
+                    .map(|n| Entry::new(n, EntryKind::File).with_size(10))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            app.handle(AppEvent::Listed {
+                request,
+                place,
+                result: Ok(entries),
+            });
+        }
+    }
+    app.take_requests();
+    app
+}
+
+#[test]
+fn a_type_s_recipe_action_plans_at_once_and_actions_offer_convert() {
+    use diroxide_app::conversions::ConvertAsk;
+    use diroxide_app::request::Request;
+    use diroxide_core::{Command, Side};
+    let mut app = typed_app();
+    assert!(app.focus_name(Side::Left, "day.notes"));
+    app.dispatch(&Command::new(ids::CONVERT));
+    let asked: Vec<Request> = app.take_requests();
+    assert!(
+        asked.iter().any(|r| matches!(
+            r,
+            Request::Convert(ask) if matches!(
+                ask.as_ref(),
+                ConvertAsk::Plan { recipe, .. } if recipe == "markdown-to-org"
+            )
+        )),
+        "{asked:?}"
+    );
+    // A type with no convert action: Actions for this file lists Convert,
+    // which opens the recipes list.
+    assert!(app.focus_name(Side::Left, "plain.txt"));
+    app.dispatch(&Command::new(ids::FILE_ACTIONS));
+    let Some((_, Dialog::Choose { list, .. })) = app.dialog() else {
+        panic!("no actions list");
+    };
+    let at = list
+        .rows()
+        .iter()
+        .position(|r| r.label == "Convert")
+        .expect("a Convert row");
+    for _ in 0..at {
+        app.dispatch(&Command::new(ids::LIST_DOWN));
+    }
+    app.dispatch(&Command::new(ids::ACCEPT));
+    let asked: Vec<Request> = app.take_requests();
+    assert!(
+        asked.iter().any(|r| matches!(
+            r,
+            Request::Convert(ask) if matches!(ask.as_ref(), ConvertAsk::Recipes { .. })
+        )),
+        "{asked:?}"
+    );
+}

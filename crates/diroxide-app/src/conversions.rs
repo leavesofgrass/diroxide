@@ -145,7 +145,7 @@ pub fn recipes_for(
     let most = counts.iter().copied().max().unwrap_or(0);
     let wanted = if any_folder && files.is_empty() {
         0
-    } else if counts.iter().any(|n| *n == files.len()) {
+    } else if counts.contains(&files.len()) {
         files.len()
     } else {
         most

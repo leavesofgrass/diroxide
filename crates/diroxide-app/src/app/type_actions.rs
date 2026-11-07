@@ -58,6 +58,10 @@ const OPEN_ROW: &str = "open";
 /// The Actions list's row for the built-in viewer.
 const VIEW_ROW: &str = "view";
 
+/// The Actions list's row for the Convert command, when the type has no
+/// convert action (lane AW, R30 commit 64).
+const CONVERT_ROW: &str = "convert";
+
 /// A typed action's row id: its place in the type's list.
 const TYPED_ROW: &str = "typed:";
 
@@ -221,6 +225,8 @@ impl App {
             ActionTarget::Tool { tool, args } => {
                 return self.run_tool_action(&action.name, tool, args, entry, &place);
             }
+            // A recipe converts the file into the other panel (lane AW).
+            ActionTarget::Recipe(recipe) => return self.convert_with_recipe(recipe, place),
         };
         let Some(id) = command else {
             return Vec::new();
@@ -335,6 +341,9 @@ impl App {
         if !has_view && !rows_have(&rows) {
             rows.push(ListRow::new(VIEW_ROW, "View").with_details(["the built-in viewer"]));
         }
+        if !offered.iter().any(|o| o.slot == Slot::Convert) {
+            rows.push(ListRow::new(CONVERT_ROW, "Convert").with_details(["the recipes list"]));
+        }
         let mut list =
             ListModel::new(format!("Actions for {}", entry.display_name())).with_rows(rows);
         list.set_help("Up and Down choose, Enter runs the action, Escape closes.");
@@ -371,6 +380,10 @@ impl App {
                 } else if row == VIEW_ROW {
                     self.running_typed = true;
                     effects.extend(self.dispatch(&Command::new(ids::VIEW)));
+                    self.running_typed = false;
+                } else if row == CONVERT_ROW {
+                    self.running_typed = true;
+                    effects.extend(self.dispatch(&Command::new(ids::CONVERT)));
                     self.running_typed = false;
                 } else if let Some(i) = row
                     .strip_prefix(TYPED_ROW)
