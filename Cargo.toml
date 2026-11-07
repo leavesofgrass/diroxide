@@ -108,7 +108,7 @@ bzip2 = "0.6.1"
 crc32fast = "1.5.2"
 # The local provider's `sys` module (research/file-operations.md C6):
 # safe Unix wrappers, the Windows calls, and copy-on-write clones.
-rustix = { version = "1.1.5", features = ["fs"] }
+rustix = { version = "1.1.6", features = ["fs"] }
 # Alpha 4's contract step (P4) adds the features of the calls its lanes
 # make, names read in windows-sys 0.61.2's own modules: alternate data
 # streams (FindFirstStreamW and FindNextStreamW, in Storage_FileSystem,
