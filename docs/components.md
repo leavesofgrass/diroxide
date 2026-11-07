@@ -213,7 +213,7 @@ Says what this diro has and finds, one fact a line, the name first: the program,
 
 ```text
 Tools: 13 of 22 found
-ImageMagick: not found
+ImageMagick: not found, 12.1 MB to download
 Install: winget install ImageMagick.ImageMagick
 pandoc: 3.9.0.2, on PATH
 7-Zip: 24.08, in Program Files

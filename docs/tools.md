@@ -96,7 +96,7 @@ Every report line puts the tool's name first, then one fact. The same lines serv
 - A tool found, with its version and where: "ImageMagick: 7.1.2-35, on PATH".
 - A program with no version command, such as the system opener on Windows: "the system opener: found, on PATH".
 - A program whose version command said nothing readable, or did not finish in time: "Tesseract: version not read, in Program Files".
-- A tool not found: "pandoc: not found". The next line is the next step.
+- A tool not found: "pandoc: not found". When a helper component would bring it, the line says what that would download for your computer: "pandoc: not found, 43.0 MB to download". The next line is the next step.
 - carta: "carta: 0.0.13, built in".
 - The count, which comes first in a list: "Tools: 13 of 22 found".
 
@@ -165,7 +165,7 @@ A sample, from a computer with ImageMagick missing and FFmpeg turned off:
 
 ```text
 Tools: 13 of 22 found
-ImageMagick: not found
+ImageMagick: not found, 12.1 MB to download
 Install: winget install ImageMagick.ImageMagick
 pandoc: 3.9.0.2, on PATH
 7-Zip: 24.08, in Program Files
