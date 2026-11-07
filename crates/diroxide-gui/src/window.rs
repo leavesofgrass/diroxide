@@ -689,6 +689,14 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     let mut frontend = Frontend::new(app, runtime, options.title.clone());
     // The picture view's read wakes the loop as the workers do.
     frontend.set_waker(Arc::clone(&wake));
+    // On Wayland, copied text goes through the window's own connection,
+    // since the runner's clipboard is X11's only (R30 commit 113).
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if let Some(mut clipboard) =
+        crate::platform::wayland::Clipboard::open(event_loop.owned_display_handle())
+    {
+        frontend.set_clipboard_writer(Box::new(move |text| clipboard.set_text(text)));
+    }
     // The system's appearance: read while following it, and elsewhere
     // than Windows (whose high contrast mode is read on every step) for
     // its high contrast setting. A few milliseconds, at most half a

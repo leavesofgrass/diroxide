@@ -19,6 +19,9 @@
 //!   closed.
 //! - On Windows, text put on the clipboard ([`clipboard`]), with the
 //!   cause in words when another program holds it.
+//! - On Linux under Wayland, text put on the clipboard through the
+//!   window's own Wayland connection ([`wayland`]), where the window
+//!   runner's X11 clipboard does nothing.
 //! - On Windows, the system's high contrast colors ([`contrast`]), which
 //!   the window draws with while that mode is on.
 //! - On Windows, winit's helper window named ([`helper`]), so a screen
@@ -417,6 +420,67 @@ pub(crate) mod helper {
             }
         }
         true
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos"), feature = "gui"))]
+pub(crate) mod wayland {
+    //! Copied text on Wayland (alpha 4, R30 commit 113; alpha 3's known
+    //! gap). The window runner opens only the X11 clipboard, which does
+    //! nothing where there is no XWayland; here the window's own Wayland
+    //! connection gets a clipboard through copypasta's Wayland half
+    //! (smithay-clipboard, libwayland opened at run time), the crate the
+    //! runner already uses, as Alacritty does with winit.
+    //!
+    //! A Wayland compositor gives the selection only to a client that has
+    //! had an input event, so the clipboard must share the window's
+    //! connection: a second connection could not set it. The connection is
+    //! kept alive by the event loop's owned display handle, held here and
+    //! dropped after the clipboard, whose drop joins its thread, so the
+    //! clipboard never outlives the display it was made on.
+
+    use copypasta::ClipboardProvider;
+    use copypasta::wayland_clipboard::{Clipboard as Selection, create_clipboards_from_external};
+    use masonry_winit::winit::event_loop::OwnedDisplayHandle;
+    use masonry_winit::winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+
+    /// The clipboard on the window's Wayland connection.
+    pub(crate) struct Clipboard {
+        // Field order is drop order: the selection (and its thread) goes
+        // before the display handle that keeps the connection open.
+        selection: Selection,
+        _display: OwnedDisplayHandle,
+    }
+
+    impl Clipboard {
+        /// The clipboard for the event loop's display, when it is a
+        /// Wayland display; `None` on X11, where the runner's clipboard
+        /// serves.
+        pub(crate) fn open(display: OwnedDisplayHandle) -> Option<Self> {
+            let raw = match display.display_handle().ok()?.as_raw() {
+                RawDisplayHandle::Wayland(handle) => handle.display.as_ptr(),
+                _ => return None,
+            };
+            // SAFETY: `raw` is the `wl_display` of the event loop's own
+            // Wayland connection, a valid display; `display`, kept in the
+            // returned value and dropped after the selection, holds that
+            // connection open for as long as the selection (and the thread
+            // it starts, joined when it drops) uses it. The primary
+            // selection made with it is dropped at once.
+            let (_primary, selection) = unsafe { create_clipboards_from_external(raw) };
+            Some(Self {
+                selection,
+                _display: display,
+            })
+        }
+
+        /// Puts `text` on the clipboard; the cause in words when it could
+        /// not.
+        pub(crate) fn set_text(&mut self, text: &str) -> Result<(), String> {
+            self.selection
+                .set_contents(text.to_owned())
+                .map_err(|e| e.to_string())
+        }
     }
 }
 

@@ -132,3 +132,38 @@ fn copied_text_goes_to_the_system_clipboard() {
     );
     assert_eq!(rig.f.clipboard_texts().len(), 2);
 }
+
+/// R30 commit 113: on Linux under Wayland the window hands copied text to
+/// its own Wayland clipboard rather than the runner's, which does nothing
+/// there. The road is the frontend's writer, shown here with a recording
+/// one; a writer that fails is said in words, and the window goes on.
+#[test]
+fn copied_text_goes_through_the_windows_own_clipboard_when_it_has_one() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    let dir = fixture(&["notes.txt"], &[]);
+    let (app, runtime) = app_on(dir.path(), dir.path());
+    let mut rig = Rig::new(app, runtime);
+    assert!(rig.f.app_mut().focus_name(Side::Left, "notes.txt"));
+    rig.refresh();
+    let written = Rc::new(RefCell::new(Vec::new()));
+    let into = Rc::clone(&written);
+    rig.f.set_clipboard_writer(Box::new(move |text| {
+        into.borrow_mut().push(text.to_owned());
+        Ok(())
+    }));
+    rig.run("file.copy-name");
+    assert_eq!(*written.borrow(), ["notes.txt"]);
+    // The host's clipboard is not used.
+    assert_eq!(rig.h.clipboard_contents(), "");
+    assert!(rig.spoken().iter().any(|s| s == "Name copied: notes.txt"));
+    // A clipboard that refuses is said, after the app's own line.
+    rig.f
+        .set_clipboard_writer(Box::new(|_| Err("the compositor refused it".to_owned())));
+    rig.run("file.copy-name");
+    let last = rig.spoken().last().cloned().unwrap();
+    assert!(
+        last.contains("Could not copy to the clipboard: the compositor refused it."),
+        "{last}"
+    );
+}

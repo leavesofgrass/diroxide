@@ -333,7 +333,13 @@ pub struct Frontend {
     hinted: Option<(PictureFrom, diroxide_core::Place)>,
     /// What wakes the window's loop when a picture is read.
     waker: Option<diroxide_app::runtime::Waker>,
+    /// Where copied text goes instead of the host's clipboard: the
+    /// window's Wayland clipboard on Linux under Wayland (R30 commit 113).
+    clipboard_writer: Option<ClipboardWriter>,
 }
+
+/// Puts copied text on a system clipboard, or says why not in words.
+pub type ClipboardWriter = Box<dyn FnMut(&str) -> Result<(), String>>;
 
 /// A message waiting for the live region.
 #[derive(Clone, Debug)]
@@ -407,7 +413,15 @@ impl Frontend {
             picture_count: 0,
             hinted: None,
             waker: None,
+            clipboard_writer: None,
         }
+    }
+
+    /// Copied text goes through `writer` from now on, not the host's
+    /// clipboard: the window's own Wayland clipboard on Linux under
+    /// Wayland, where the window runner's does nothing (R30 commit 113).
+    pub fn set_clipboard_writer(&mut self, writer: ClipboardWriter) {
+        self.clipboard_writer = Some(writer);
     }
 
     /// What wakes the window's loop when a picture the view reads is in:
@@ -1939,7 +1953,11 @@ impl Frontend {
         // Copied text to the system clipboard; a clipboard another program
         // holds is said, after the app's own line.
         for text in std::mem::take(&mut self.to_copy) {
-            if let Err(cause) = host.set_clipboard(text) {
+            let written = match self.clipboard_writer.as_mut() {
+                Some(write) => write(&text),
+                None => host.set_clipboard(text),
+            };
+            if let Err(cause) = written {
                 let message = Message::could_not(
                     "copy",
                     "to the clipboard",
