@@ -26,6 +26,9 @@ gui = [
     "dep:accesskit_winit",
     "dep:fontique",
     "dep:tracing",
+    # The Wayland clipboard (Linux only; the dependency is the Linux
+    # target's).
+    "dep:copypasta",
 ]
 
 # The viewer's syntax set, as the CLI forwards it to the app: the tests'
@@ -55,6 +58,10 @@ tracing = { workspace = true, optional = true }
 # serve then.
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 fontique = { workspace = true, optional = true, features = ["fontconfig-dlopen"] }
+# Copied text on Wayland, through the window's own Wayland connection
+# (src/platform.rs): the window runner's clipboard is X11's only, which
+# does nothing where there is no XWayland (R30 commit 113).
+copypasta = { workspace = true, optional = true }
 
 # The console a window program was started from, the native menu bar and
 # the clipboard (src/platform.rs, the one

@@ -1759,6 +1759,7 @@ dependencies = [
  "accesskit",
  "accesskit_consumer",
  "accesskit_winit",
+ "copypasta",
  "diroxide-app",
  "diroxide-core",
  "diroxide-preview",
