@@ -120,6 +120,13 @@ Folders typed by name only. Folders where diroxide never reads a file's first by
 - Holds: a list of names.
 - Default: `[]`.
 
+### photos.burst_gap_seconds
+
+Burst gap. The longest time between two pictures from one camera that Select the bursts counts as one burst.
+
+- Holds: a number of seconds, 1 to 60.
+- Default: `2`.
+
 ## Keys
 
 ### single_letters

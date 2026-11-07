@@ -506,6 +506,23 @@ pub struct CheckSettings {
     pub skip: Vec<String>,
 }
 
+/// The `[photos]` table (alpha.7, lane AP; R29 5.5): the photo helpers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PhotoSettings {
+    /// The longest time between two pictures from one camera that Select
+    /// the bursts counts as one burst, in seconds (R23's starting value).
+    pub burst_gap_seconds: u64,
+}
+
+impl Default for PhotoSettings {
+    fn default() -> Self {
+        Self {
+            burst_gap_seconds: 2,
+        }
+    }
+}
+
 /// One mebibyte, for the `_mib` settings.
 pub const MIB: u64 = 1 << 20;
 /// One gibibyte, for the `_gib` settings.
@@ -772,6 +789,8 @@ pub struct Settings {
     pub filetypes: FileTypeSettings,
     /// Where contents are never read to find a type (alpha.7).
     pub check: CheckSettings,
+    /// The photo helpers (alpha.7, lane AP).
+    pub photos: PhotoSettings,
     /// Keys this version does not know, kept as they were.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, Value>,
@@ -832,6 +851,7 @@ impl Default for Settings {
             plugins: PluginSettings::default(),
             filetypes: FileTypeSettings::default(),
             check: CheckSettings::default(),
+            photos: PhotoSettings::default(),
             unknown: BTreeMap::new(),
         }
     }
@@ -1026,6 +1046,7 @@ impl Settings {
             "archives",
             "filetypes",
             "check",
+            "photos",
         ] {
             if table.get(parent).is_some_and(|v| !v.is_table()) {
                 problems.push(ConfigProblem::new(
