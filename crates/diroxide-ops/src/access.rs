@@ -18,6 +18,15 @@
 use diroxide_core::format::count;
 use diroxide_core::{Attributes, EntryKind, Timestamp, UtcOffset};
 
+// The access details view in words (alpha.7, R30's commits 74 to 77):
+// the rows a provider's access facts read as.
+mod rows;
+pub use rows::{
+    FULL_CONTROL, LINK_HAS_NONE, MASK_HELP, MASK_NOTE, NO_PERMISSIONS, RightsWords, YOU_CAN_HELP,
+    access_rows, acl_entry_line, applies_to, canonical, label_words, map_generic, mask_line,
+    merged_entries, rights_phrase, special_words, windows_entry_line, windows_rights, you_can_row,
+};
+
 // The edit's types moved into core with P2b (W2c's request 3), so a job
 // request carries them; they are re-exported here under their old paths.
 pub use diroxide_core::access::{
