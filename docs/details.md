@@ -53,7 +53,7 @@ The private rows themselves are listed in their groups, with the other facts. Th
 
 ## The Checksum row
 
-"Checksum: not computed". The details view does not compute it. The Checksum command does.
+"Checksum: not computed". The details view does not compute it, and no command in the program does yet. The checksum engine is built, and the command that asks for it is not in the program yet.
 
 ## Show all
 

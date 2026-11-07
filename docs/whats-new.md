@@ -2,6 +2,53 @@
 
 This page says in plain words what each alpha added. [The changelog](../CHANGELOG.md) has the full list, by area, and [known limits](known-limits.md) says what is still missing.
 
+## Alpha 4
+
+What alpha 4 adds so far. The alpha is still being built, and this section grows with each pass that reaches the program. A part that is built in the library and not yet in the program says so.
+
+Tools and `diro doctor`.
+
+- diroxide knows 22 helper programs, 23 on macOS: ImageMagick, FFmpeg, pandoc, 7-Zip, Tesseract, git and the rest. It looks for each in `tools.toml`, in the installed components, on PATH and in the folders the program's own installer uses, and says which step found it: "pandoc: 3.9.0.2, on PATH". A feature that needs a program says so, names it and says how to get it. Nothing runs an install command. [Tools and diro doctor](tools.md) is the new guide.
+- The Tools list, in Settings, the Tools menu and the palette, shows each program and where it was found, or what it would download. `diro doctor` says what this `diro` has and finds, one fact a line, name first. Its exit codes are 0, 1 when a tool you need is missing, and 2 for wrong use. `tools.toml` gives a program a path, turns it off, or marks it needed.
+- Helper programs are optional components now. pandoc, 7-Zip, FFmpeg, ImageMagick and GitHub CLI come from their publishers, each pinned by size and checksum, where a file exists for your computer. Where none does, you hear the install command for your system. A few files are held for now, ExifTool for Windows among them. [Optional components](components.md) lists them.
+
+File types and groups.
+
+- Every row names its file's type. The type comes from the name at once and from the file's first 64 bytes in the background, so a row can say "type pending" for a moment and then change quietly. When the two disagree, the details say so: "Name says PNG; contents say JPEG".
+- 178 types come built in, in 8 groups: images, music, video, documents, archives, code, text and screenshots. A screenshot is in two groups. A file you add in `filetypes.toml` can be a type or a group of your own. The Groups list in the Select menu selects a group's files, Select by kind lists your groups, and `group:` in a panel's filter takes them. A search still goes by extension, with seven groups.
+- A retro pack of 40 old formats is built in and off (`filetypes.retro`). `check.skip` names slow folders whose files are typed by their names alone.
+- A type can name what Enter, View, Preview and Convert do, and ten numbered actions. Actions for this file, in the File menu, lists them. Open with lists the programs each system has for a file, and on Windows hands "Choose another program" to the system's own dialog.
+- The viewer and the quick view have an encoding chooser: "Encoding of legacy.txt", the automatic choice first, then 29 encodings grouped by language.
+- A theme file can give a group a color with `[group-colors]`, drawn in the window. The window also reads your theme files now, and says "Unknown theme NAME. Galaxy is in use." once for a name it does not know.
+- [File types and groups](file-types.md) is the new guide.
+
+The details view.
+
+- Alt+Enter lists every fact about the focused entry in ten groups, the most important first. A file always has a Privacy row ("Privacy: nothing private found") and a Checksum row ("Checksum: not computed"). The facts read from inside the file join the list a moment later: "Read 9 more details". An archive says "Entries: 8 files, 2 folders" before its size.
+- Show all asks ExifTool for every tag. Say details, Copy details and Copy all details take a file's details without opening the list, and Copy details leaves the private rows out.
+- [The details view](details.md) is the new guide.
+
+Previews.
+
+- The quick view reads more: pictures said in words from their headers, SVG drawings read as a screen reader reads them, sound and video through ffprobe, archive listings, PDF, Word, EPUB, OpenDocument, RTF, spreadsheets and delimited text, each with caps that keep a hostile file from stalling it. Nothing is played.
+- Preview, in the View menu, runs the helper programs on the focused file at once. The setting `quick_view.auto_preview` decides whether they also run by themselves, and it is off in screen reader mode. Read text in picture has Tesseract read the words in a picture, as a job Cancel stops.
+- The window has a picture view. On a picture, Enter in the viewer or the preview shows it, Plus and Minus zoom, 0 fits and 1 shows the actual size.
+- Copied text now reaches the clipboard on Wayland. A paste under Wayland with no XWayland still reads nothing.
+- [Previews and the quick view's formats](previews.md) is the new guide.
+
+Disk images, git and plugins.
+
+- A disk image opens like a folder, read only: ISO, raw disks, VHD, VHDX, VDI, VMDK, QCOW2 and squashfs, with their partitions as folders, through the new disk image plugin. It uses 7-Zip and qemu-img when they are there. [Disk images](disk-images.md) is the guide.
+- The git plugin puts the branch and the number of changes in the title line and a Git column, lists the changed files, stages, commits, stashes, fetches, pulls and pushes, and shows the log, blame and diffs, and its questions start on No. A repository you did not make is asked about before git runs anything from its own configuration. [Git](git.md) is the guide.
+- Both are optional components. Plugins can now ask a form of several fields, show two texts in the compare screens, describe a folder for the title line, and claim the disk images found inside other places. [Writing a plugin](writing-a-plugin.md) says how.
+
+Built in the library, not yet in the program.
+
+- Metadata. The readers for the facts inside a file, photos, sound tags, PDF, Word, OpenDocument and EPUB properties, zip contents, the internet mark and extended attributes, feed the details view. Checksum lists in four forms, and stripping a picture's private data into a copy, are built and wait for their commands.
+- Conversions. A Convert engine with 31 built-in recipes writes new files and never replaces one, and the journal can undo it.
+- Hot folders. An engine for folders that run a recipe on each file that arrives is built, with approvals, a ledger and a log.
+- Who can do what. The library reads a file's owner, group and mode, Linux access lists and labels, macOS flags, and a Windows owner and access list, and can answer "You can: read and write". It can also plan changing an owner. The details view and an owner dialog show them in a later pass.
+
 ## Alpha 3
 
 What alpha 3 added, released on Tuesday, November 3, 2026.
@@ -112,6 +159,12 @@ The first alpha is a terminal file manager for local folders and archives, built
 - [Known limits](known-limits.md)
 - [The GUI](gui.md)
 - [Themes and colors](themes.md)
+- [Tools and diro doctor](tools.md)
+- [File types and groups](file-types.md)
+- [The details view](details.md)
+- [Previews and the quick view's formats](previews.md)
+- [Disk images](disk-images.md)
+- [Git](git.md)
 - [Quick start](quickstart.md)
 - [Plugins](plugins.md)
 - [Remote places over SFTP](remote-places.md)
