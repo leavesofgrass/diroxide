@@ -9,7 +9,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out an icon on macOS, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
 - Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
 - More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. An ISO image and the virtual disk formats open through the disk image plugin, an optional component; [Disk images](disk-images.md) says what they do not do yet. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
-- The quick view reads Markdown, plain text, code, the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira), pictures, sound and video, archives, PDF, Word and other documents, and spreadsheets. [Previews](previews.md) says what it reads.
+- The quick view reads Markdown, plain text, code, the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira), pictures, sound and video, archives, PDF, Word and other documents, and spreadsheets. [Previews](#previews) below says what it does not do.
 - Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. The library for changing an owner is built, and the dialog is not. There is no Change times command yet, although copies keep dates.
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
 - Tools, previews, the file type model, disk images and the git plugin are in alpha 4, and the sections below say what they do not do. Conversions, the metadata and checksum commands, hot folders and the access dialogs are built in the library, and reach the program in a later pass.
@@ -255,6 +255,85 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Raw HTML in Markdown keeps its text and drops its tags. A front-matter title or an Org `#+TITLE` becomes the document's title, not a heading row.
 - Open in textweaver hands over files on this computer only, not a file inside an archive.
 
+## Tools and diro doctor
+
+[Tools and diro doctor](tools.md) describes the registry, the Tools list and `diro doctor`, and [optional components](components.md) the helper programs. These are the limits.
+
+- Nothing here has been heard on a screen reader or read on a Braille display. The "Install:" lines and the "Built in:" line pass 40 cells, so they pan on a Braille display, the name first.
+- Several install commands were written from each package manager's usual names and not checked against a live one: pacman's `pandoc-cli`, several of the dnf names, the Gpg4win folders on Windows, and winget's Poppler id, which is a community build. There is no winget package for xorriso, minisign or wget.
+- macOS has not been run. The Homebrew folders and `mdls` were never compiled by the lane that wrote the lookup. System32's `convert.exe` and `tw --version` were left alone on purpose.
+- The registry's tests use stand-in programs. The version commands were run against the real programs in the project's Linux container and on one Windows computer.
+- `7za` and `7zr` read no RAR, so the lookup tries `7z` and `7zz` first.
+- The helper components were pinned by a job on the project's build machine, 23 files with the publishers' own digests. No helper component has been installed and run on a computer yet.
+- Some helper files are held: ExifTool for Windows, 7-Zip for Windows and FFmpeg for Linux, each for a reason [optional components](components.md) gives. ImageMagick on Linux and macOS, and FFmpeg on macOS, are package commands.
+- After a helper is installed, the library runs its version command, and the program does not say the line yet: "pandoc: 3.13, from components" shows in `diro doctor`, and the end of an install says "Ready".
+- The first-run list on Windows offers 7-Zip, which has no file for Windows yet, and says "no build for this computer, 0 bytes".
+- The `diro doctor` of the command line does not say what a missing tool would download, as the Tools list in the program does.
+
+## File types and groups
+
+[File types and groups](file-types.md) describes the model. These are the limits.
+
+- 178 types come built in, not the hundred or so first planned. `tar` is typed by its name only, because its marker is past the first 64 bytes. `.ts` is TypeScript, and transport streams are `.mts` and `.m2ts`.
+- Only a file's first 64 bytes are read. Of the zip-based files, EPUB, JAR and an APK whose manifest comes first are told apart by their head, and so are Office files whose own folder comes first. Office files that start with `[Content_Types].xml` read as "Office Open XML file", OpenDocument is cut short, XPS and CBZ are typed by name only, and an old-style APK reads as a JAR. With its real name, the more exact type wins.
+- The contents speak first: a `.py` file that starts with `#!/bin/sh` is a shell script.
+- MediaWiki, DokuWiki and Jira files have no entry in the table, so their rows say "file". Org and reStructuredText files have one.
+- A type of yours that names a parent with an extension and no signature hides a child known by its own extension, because the tree reaches a child only through its parent. When two types of yours share an id, the first wins.
+- The Preview and Convert slots of a type run from Actions for this file only, and no command calls them yet. The ten numbered user actions have no key.
+- A theme's group colors are drawn by the window. The terminal does not draw them yet.
+- Open with on Windows does not read Explorer's own order, and a Store app, Edge or Chrome starts by its class through the shell without COM set up first. "Choose another program" hands the file to Windows' own dialog, which has not been tried. That dialog read well with NVDA when it was looked at, and JAWS has not been tried.
+- Open with on Linux leaves out programs that run in a terminal, and gives a program's `%u` a path. On macOS a binary `Info.plist` is skipped and counted, the default program is not read, and the code was compiled only in the project's CI.
+- The encoding chooser has Cyrillic IBM866 as its only DOS code page. The others need an encoding type of their own.
+- Not tried: Linux natively, macOS at all, a network share, and starting any program from the Open with list.
+
+## Previews
+
+[Previews and the quick view's formats](previews.md) says what each preview reads. These are the limits.
+
+- A TIFF's page count and a JPEG XL's size are not read. For raw and HEIF pictures the Exif data is looked for in the first 1 MiB and 16 MiB.
+- RTF: bold and italic are not said, and deleted revisions are left out.
+- A spreadsheet's formulas are not worked out again. A part nested deeper than 256 levels is read as flattened text, with a note.
+- Preview and auto-preview gate the whole PDF preview in the quick view, its properties line included. A PDF off this computer gives its properties and no text, because Poppler's standard-input mode has not been tried.
+- A picture that is not on a local disk goes to Tesseract on standard input, up to 64 MiB. A details read is not cancelled when the list closes.
+- The window's picture view has no command of its own yet and is not on the keyboard page. It has not been tried on a picture inside an archive or on an SFTP site, with a decode past its ten-second deadline, on a real Wayland compositor, or on NVDA or JAWS.
+- Not tried: macOS, Linux natively, a real XLS, camera raw, HEIC or AVIF file, and a real Tesseract, ExifTool or ffprobe run inside a test. Nothing in the previews has been heard on a screen reader.
+
+## The details view and access facts
+
+[The details view](details.md) describes the list. These are the limits.
+
+- A details read cannot be cancelled when you close the list. Its own time limits bound it, and the answer is dropped.
+- Show all needs a file on a local disk. Folder sizes are not computed, and a folder has no Privacy row and no Checksum row.
+- "Checksum: not computed" stays so: the checksum engine is built, and no command asks for it yet.
+- Nothing about the order of rows, "Read 9 more details" or how Show all pans on a Braille display has been heard.
+- Who can do what, built in the library and not yet in the program: the details view does not show a file's mode, access list, flags such as immutable, or "You can" answer yet, and no dialog changes an owner. "You can" is advice from the system's own check, not a promise. A macOS access list reads "Access list: not read on this system". Not tried: macOS and the BSDs, a network share, a system with SELinux on, a non-owner account on Windows, Explorer's Effective Access tab, a real FAT disk for time rounding, and the immutable flag set.
+
+## Disk images
+
+[Disk images](disk-images.md) describes the plugin. These are the limits.
+
+- Images are read only. Writing to one, making one and formatting are a later alpha. Open as raw disk image, which would show a hybrid ISO's partitions, is not built, and a hybrid ISO opens as the ISO.
+- A BitLocker or LUKS partition is shown and never opened. An encrypted image through 7-Zip says "it is encrypted, and this plugin asks no password".
+- An NTFS file that NTFS compressed or encrypted is listed, and reading a compressed one says that only 7-Zip reads it. The plugin does not hand such a file to 7-Zip yet.
+- A member of an image that 7-Zip must unpack, over about 6 MB, needs 7-Zip 25.01 or later, and a listing over about 7 MB from 7-Zip is refused. An older 7-Zip says "7-Zip 24.08 is too old: needs 25.01".
+- The partition rows say "partition-2, folder" in the panel, and the partition words, such as "Partition 2, home, ext4, 40.0 GB", are heard in the Volumes list only. The panel's rows and Say Details do not say them yet.
+- The plugin keeps at most sixteen images open, because the program does not tell it when an image's last use ends.
+- A plugin's own next step is replaced by "Try again; if it keeps failing, check the disk." for every refusal except unsupported and too large.
+- Not tried: macOS, p7zip, UDF, HFS+, APFS and exFAT through 7-Zip (no image could be made), an ext4 image made by `mke2fs` (small ext2 and ext4 volumes written by the tests stand in), an NTFS-compressed file, and a password prompt. The tools image has no `e2fsprogs` or `exfatprogs` yet.
+
+## Git
+
+[Git](git.md) describes the plugin. These are the limits.
+
+- Blame asks for the line number, because a plugin command is not given the viewer's cursor line.
+- The title line can stay stale until the folder is listed again. A commit made in a terminal shows after the next reload, because nothing tells the plugin that a folder changed.
+- Add to .gitignore gets the program's own question, "Replace .gitignore? It cannot be undone.", because the program has no way to append to a file for a plugin.
+- Names that are not UTF-8 cannot be staged or compared, and non-UTF-8 text shows stand-ins in diffs.
+- An untrusted repository's question appears when the panel enters it.
+- Not built: a diff between any two revisions, a list of linked worktrees, and counts by kind in the status list's title. The Git column is declared and the panels do not show a plugin's columns yet.
+- Git 2.30, the oldest it accepts, has not been tried. It was tried on 2.54.0 natively and 2.47.3 in the project's Linux container.
+- Not tried: macOS, a real repository git refuses for dubious ownership (a refusal was faked), cancelling a running clone (a partial clone was faked), and any screen reader.
+
 ## Split and join
 
 - A read error partway through a join fails the whole join. Run it again.
@@ -381,6 +460,12 @@ Menus and the mouse:
 - [Archives](archives.md)
 - [The viewer](viewer.md)
 - [The quick view](quick-view.md)
+- [Previews and the quick view's formats](previews.md)
+- [The details view](details.md)
+- [File types and groups](file-types.md)
+- [Tools and diro doctor](tools.md)
+- [Disk images](disk-images.md)
+- [Git](git.md)
 - [Split and join](split-join.md)
 - [Links, permissions and times](links-permissions.md)
 - [Search and the filter language](search.md)
