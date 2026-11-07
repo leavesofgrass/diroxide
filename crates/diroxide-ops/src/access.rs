@@ -468,6 +468,47 @@ pub fn undo_owner_line(
 /// The undo line for owners put back: what it needs, first.
 pub const UNDO_NEEDS_ADMINISTRATOR: &str = "Undo needs an administrator: it puts the owners back.";
 
+/// What the Change owner command does at a place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum OwnerCommand {
+    /// The app's own dialog: the place keeps owners or groups (Unix,
+    /// SFTP by number).
+    Dialog,
+    /// Windows: the owner is shown, and the command hands off to the
+    /// system's own Security dialog.
+    SecurityDialog,
+    /// The place keeps no owners: the command is unavailable, with
+    /// [`OWNER_NOT_HERE`] as its reason.
+    NotHere,
+}
+
+/// Which Change owner the app offers at a place: its own dialog where
+/// the capabilities say owners or groups can change, Windows' Security
+/// dialog on the local disk of Windows, else none.
+pub fn owner_command(capabilities: &diroxide_vfs::Capabilities, scheme: &str) -> OwnerCommand {
+    let access = capabilities.access;
+    if access.owner.is_possible() || access.group.is_possible() {
+        OwnerCommand::Dialog
+    } else if cfg!(windows) && scheme == "file" {
+        OwnerCommand::SecurityDialog
+    } else {
+        OwnerCommand::NotHere
+    }
+}
+
+/// Why Change owner is unavailable at a place that keeps no owners.
+pub const OWNER_NOT_HERE: &str = "Change owner: this place keeps no owners";
+
+/// The hand-off's line while Windows opens its dialog: "Opening the
+/// Security dialog for report.pdf".
+pub fn security_dialog_line(name: &str) -> String {
+    format!("Opening the Security dialog for {name}")
+}
+
+/// The hand-off's failure, with what to do instead (Microsoft marks the
+/// call that opens the dialog as one that may change or go away).
+pub const SECURITY_DIALOG_FAILED: &str = "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security.";
+
 /// What an attribute plan knows beyond its steps: the edit, and its rows
 /// in words, the recursion first.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -847,5 +888,37 @@ mod tests {
             undo_owner_line(&back(Some("0"), None), &Caller::administrator()),
             None
         );
+    }
+
+    #[test]
+    fn change_owner_is_a_dialog_a_hand_off_or_unavailable() {
+        use diroxide_vfs::{Can, Capabilities};
+        let mut unix = Capabilities::read_only();
+        unix.access.owner = Can::WithAdministrator;
+        unix.access.group = Can::Yes;
+        assert_eq!(owner_command(&unix, "file"), OwnerCommand::Dialog);
+        let none = Capabilities::read_only();
+        assert_eq!(
+            owner_command(&none, "file"),
+            if cfg!(windows) {
+                OwnerCommand::SecurityDialog
+            } else {
+                OwnerCommand::NotHere
+            }
+        );
+        assert_eq!(owner_command(&none, "s3"), OwnerCommand::NotHere);
+        assert_eq!(
+            security_dialog_line("report.pdf"),
+            "Opening the Security dialog for report.pdf"
+        );
+        assert!(within_cells(
+            SECURITY_DIALOG_FAILED,
+            "Could not open the Security dialog"
+        ));
+        assert_eq!(OWNER_NOT_HERE.len(), 40);
+        assert!(within_cells(
+            OWNER_NOT_HERE,
+            "Change owner: this place keeps no"
+        ));
     }
 }
