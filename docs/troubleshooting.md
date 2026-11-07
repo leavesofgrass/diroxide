@@ -108,11 +108,19 @@ The archive holds a member whose name would write outside the folder you chose, 
 
 ## "Archives are read only here."
 
-You tried to change something inside an archive: copy into it, move, rename, delete, or make a folder. Alpha 1 cannot do that, on purpose. Use Pack to make a new archive, or unpack the archive, change the files, and pack again.
+You tried to change something inside an archive that diroxide does not edit: copy or move a file into any archive, or rename, delete or make a folder in a 7z, a tar or an archive read through 7-Zip. That is on purpose. Only a zip can be edited, with Delete, Rename and Make folder, which rewrite it ([Archives](archives.md#editing-inside-a-zip) says how). For anything else, use Pack to make a new archive, or unpack the archive, change the files, and pack again.
 
 ## An archive will not open
 
-The message says why, in the cause after the name: "Could not open a.rar: it uses the RAR format, which is not supported." The formats diroxide reads are zip, 7z, tar, tar.gz, tar.xz and xz. [Known limits](known-limits.md) lists the rest. If you think the file is an archive with the wrong name, try Open as archive in the palette, which goes by the file's bytes.
+The message says why, in the cause after the name. "Could not open a.zst: it uses Zstandard compression, which is not supported." means diroxide does not read that format at all. "Could not open Backup.rar: it needs 7-Zip. Get it from Manage optional components, then try again." means the format is one that 7-Zip reads for diroxide, and 7-Zip is not installed. The formats diroxide reads itself are zip, 7z, tar, tar.gz, tar.xz and xz; RAR, CAB, ARJ, LZH, RPM, cpio, ar, spanned zip sets and disk images go through 7-Zip. [Archives](archives.md#formats-read-through-7-zip) and [known limits](known-limits.md) say more. If you think the file is an archive with the wrong name, try Open as archive in the palette, which goes by the file's bytes.
+
+## "7-Zip 24.08 is too old: needs 25.01"
+
+The archive is one that 7-Zip reads, and the 7-Zip on this computer is older than the one that unpacks safely. The archive still opens, and you can read one member at a time. Unpacking to disk needs 7-Zip 25.01 or later. Install a newer 7-Zip, or let diroxide offer its own from Manage optional components. [Tools and diro doctor](tools.md) shows which 7-Zip diroxide found.
+
+## "Could not replace course.zip: another program has it open"
+
+You deleted, renamed or made a folder inside a zip, and the zip is held open by another program, so diroxide could not give the new zip its name. Nothing was changed: the old zip is as it was, and the line says "course.zip is unchanged". Close the other program and try again.
 
 ## "Part 004 is missing. Nothing was joined."
 
@@ -208,7 +216,7 @@ Escape stops it: "Stopped at 214 found." Search reads each folder in turn and ha
 
 ## A label is gone, or Ctrl+1 does nothing
 
-- A file that was renamed or moved loses its label, because a label belongs to the file's path. The Labels list counts the item as missing, the label's results list it as "gone since this list was made", and the trash key (F8 or Delete) there takes the label off. Label the file again at its new place.
+- A file that another program renamed or moved loses its label, because a label belongs to the file's path. A rename or a move that diroxide does, or undoes, takes the labels, note and fields along, and a copy does not. For the other program's move, the Labels list counts the item as missing, the label's results list it as "gone since this list was made", and the trash key (F8 or Delete) there takes the label off. Label the file again at its new place.
 - A label step can be undone only in the same session.
 - Many Unix terminals do not send Ctrl with a digit. Use the Edit menu, Labels submenu (Alt+E, then B), then 1 to 7. [Labels and bookmarks](labels-bookmarks.md) has the rest.
 - A label with a color diroxide does not offer, such as red or green, is reported at start and left out. Use blue, orange, purple, yellow, gray or brown.
@@ -218,6 +226,25 @@ Escape stops it: "Stopped at 214 found." Search reads each folder in turn and ha
 Same text means the text is the same once what is left out is left out. Line endings are left out by default. The next lines of the report say what else differs: a byte-order mark, another encoding, a missing final line break, or "Ignoring changes in case." Turn the ignore options off to see every difference: they are the `compare.ignore_` settings in the Compare group of Settings. A hidden character, a tab for spaces, and the same letters in another Unicode form are listed as changes with the reason: "Changed line 3, hidden character U+200B added". [Compare files](compare.md) lists the nine cases.
 
 "Changed while comparing" means a file was written to during the run. Compare again when it stops changing. "Too large to compare as text" asks you to choose: the first 16 MiB as text, byte by byte, or cancel.
+
+## Convert offers no recipe, or a recipe is unavailable
+
+- "No recipe takes these files": no recipe, built in or yours, takes the type of the marked files. The Convert list is made by the files' names. [Conversions](conversions.md) lists the 31 built-in recipes and says how to write your own in `conversions.toml`.
+- A recipe listed last and unavailable says what it needs, "Markdown to Word, needs pandoc" or "Video to MP4, needs libx264". Install the program, or an FFmpeg with that encoder. The Tools list in Settings, or `diro doctor`, shows what diroxide found and the install command for your system ([Tools and diro doctor](tools.md)).
+- "Refused: a.webp, a.png makes the same a.jpg": two files would make one output. The plan refuses both and says why before anything is written.
+- A conversion never writes over a file. A taken name gets a number: `report (2).pdf`.
+- "Recipe png-to-jpeg: {size} is not a placeholder." at start: a recipe of yours was left out. The sentence names the recipe and the fault first.
+
+## A watched folder does nothing, or says it paused
+
+- "Not run: the task is not approved." Turn the task on from the Watched folders list (Alt+T, then W) and say yes to the question. With nobody at the terminal, `diro watch --task` answers No: "Answered no: there is no terminal to ask." Approve it once first.
+- "Task scans: home has a wildcard." A task with a problem never runs. The Watched folders list and `diro watch --list` say each problem, the fault first. Fix the task file.
+- "Scans paused: pdftotext is not installed" means a tool is missing. Install it, then choose Resume in the task's actions. The task paused so that nothing would fail file after file.
+- "Scans paused: 10 failures in a row" means ten files failed for one cause, which is almost always a wrong recipe. Show log says what the tool said. Fix the cause, then Put failed back and Resume.
+- Files waiting in `in` that were never processed: the first turn-on asks about them, and No leaves them. A task acts on files that arrive after it is on.
+- Ctrl+Z does not undo a task. To take back a conversion, delete the file it made, and put the original back from `processed`.
+
+[Watched folders](watched-folders.md) has the rest.
 
 ## Watch this folder does not say a file arrived
 
@@ -263,6 +290,8 @@ If a key is involved, add what `diro keys test` said. If an accessibility proble
 - [Compare files](compare.md)
 - [Customizing keys](customizing-keys.md)
 - [Watching a folder](watching.md)
+- [Watched folders](watched-folders.md)
+- [Conversions](conversions.md)
 - [Known limits](known-limits.md)
 - [Privacy](privacy.md)
 - [The documentation index](README.md)
