@@ -6,12 +6,30 @@ Linux builds and tests run in a container from day one, beside the native Window
 
 - Debian trixie with Rust 1.96 (the official `rust` image), rustfmt and clippy.
 - cargo-nextest, for the tests.
-- ImageMagick, FFmpeg and pandoc, for the tools registry's real-tool tests.
+- ImageMagick, FFmpeg, pandoc and poppler-utils (`pdftotext` and `pdfinfo`), for the tools registry's real-tool tests and the previews'.
+- git, for the git plugin's tests, and Python 3.
 - 7-Zip (Debian's `7zip` package, the successor of p7zip: 7-Zip 25.01, with `7z`, `7za` and `7zr`), for cross-checking archives the archive provider writes.
 - The classic archivers, `xz-utils`, `bzip2`, `zip`, `unzip` and `libarchive-tools` (`bsdtar`), for the same cross-checks.
 - `curl` and `wget`, the components downloader's fallbacks, for their tests (approved by the owner on Sunday, October 11, 2026).
 - An OpenSSH server, for the SFTP plugin's tests (not started by default).
 - A non-root user, `builder`, who runs everything.
+
+## The three stages
+
+One Dockerfile builds three stages, and `compose.yaml` has a service for each. The `dev` stage above is the base of the other two.
+
+- `dev`: the image above. The service `dev` runs it.
+- `gui`: the window's accessibility checks on Linux (the owner's answer 107, Monday, November 2, 2026). It adds a virtual display (Xvfb), a D-Bus session and the AT-SPI bus, Mesa's software Vulkan and GL, Python's AT-SPI binding and `accessibility-cli` built from a pinned commit. The service `gui` runs it.
+- `tools`: the helper programs of alpha 4, for tests only (the owner's answer 118, Thursday, November 5, 2026). Nothing in it is on the owner's computer. It adds Tesseract, for Read text in picture; ExifTool, for the metadata readers' fallback; GnuPG with `gpgv`, age and minisign, for encryption and signatures; `dosfstools` and `mtools` for FAT, `squashfs-tools`, `ntfs-3g` for `mkntfs` and `xorriso` for ISO 9660, which make the disk image plugin's fixtures; and `qemu-utils`, for `qemu-img`. The image is `diroxide-tools`, and the service `tools` has the same mounts and limits as `dev`.
+
+Build and use the tools stage like the dev image:
+
+```bash
+MSYS_NO_PATHCONV=1 docker compose build tools
+MSYS_NO_PATHCONV=1 DIRO_AGENT=p4 docker compose run --rm tools scripts/dev-check.sh
+```
+
+Two scripts run a plugin's own tests in the image, with nothing downloaded and nothing of the owner's read. `docker/disk/run-tests.sh` runs the disk image plugin's tests in the tools stage, where 7-Zip 25.01 and `qemu-img` are, so the tests that only check words elsewhere run the real programs here. `docker/git/run-tests.sh` runs the git plugin's tests in the dev stage, against Debian's git 2.47.3.
 
 ## Building the image
 
