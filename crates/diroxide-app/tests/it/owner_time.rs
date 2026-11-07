@@ -302,7 +302,7 @@ fn change_owner_asks_or_refuses_whole_or_hands_off_on_windows() {
 #[cfg(target_os = "linux")]
 #[test]
 fn change_owner_refuses_the_systems_folders_first() {
-    let usr = std::path::Path::new("/usr");
+    let usr = Path::new("/usr");
     let mut s = Session::open(
         place(usr),
         place(usr),
