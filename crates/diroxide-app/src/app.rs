@@ -270,8 +270,8 @@ pub enum AppEvent {
     /// Tesseract read the text in a picture, or the line that says why
     /// not (alpha 4).
     PictureText {
-        /// The request's number.
-        generation: u64,
+        /// The job.
+        job: JobId,
         /// The picture.
         place: Place,
         /// The text, or the line to say.
@@ -1853,11 +1853,9 @@ impl App {
             AppEvent::ArchiveEntries { place, line } => self.archive_entries_counted(&place, line),
             AppEvent::Details(note) => self.details_note(*note),
             AppEvent::ToolsReported(report) => self.tools_reported(*report),
-            AppEvent::PictureText {
-                generation,
-                place,
-                result,
-            } => self.picture_text_read(generation, &place, result),
+            AppEvent::PictureText { job, place, result } => {
+                self.picture_text_read(job, &place, result)
+            }
             AppEvent::ViewerSource {
                 request,
                 place,

@@ -50,8 +50,8 @@ pub(super) struct DetailsState {
     copy: Option<Copying>,
     /// A Say Details waiting for its summary.
     summary: Option<u64>,
-    /// A Read text in picture waiting for Tesseract.
-    picture: Option<u64>,
+    /// A Read text in picture waiting for Tesseract: its job.
+    picture: Option<diroxide_core::JobId>,
     /// How many words Tesseract read in each picture this session, for
     /// the details row (alpha 4, R30 commit 44).
     picture_words: std::collections::HashMap<Place, usize>,
@@ -691,16 +691,24 @@ impl App {
             let line = format!("Not a file: {}", entry.display_name());
             return vec![self.say(Message::info(line))];
         }
-        let generation = self.next_details();
-        self.details.picture = Some(generation);
-        let tools = self.tool_runner();
-        self.request(Request::PictureText {
-            generation,
-            place,
-            tools,
-        });
+        let job = self.next_job_id();
         let line = format!("Reading the text in {}", entry.display_name());
-        vec![self.say(Message::status(line))]
+        let now = self.now();
+        self.jobs
+            .begin(job, diroxide_core::JobKind::Convert, line.clone(), now);
+        self.details.picture = Some(job);
+        let tools = self.tool_runner();
+        self.request(Request::PictureText { job, place, tools });
+        vec![
+            Effect::Redraw(Redraw::JobsLine),
+            self.say(Message::status(line)),
+        ]
+    }
+
+    /// Cancel's words while Tesseract reads: "Read text in picture:
+    /// cancelling".
+    pub(super) fn picture_cancel_words(&self, job: diroxide_core::JobId) -> Option<String> {
+        (self.details.picture == Some(job)).then(|| "Read text in picture: cancelling".to_owned())
     }
 
     /// Tesseract's answer: the viewer over the text, its title said first
@@ -708,17 +716,33 @@ impl App {
     /// line that says why not ("No text: tesseract not found").
     pub(super) fn picture_text_read(
         &mut self,
-        generation: u64,
+        job: diroxide_core::JobId,
         place: &Place,
         result: Result<crate::picture_text::PictureText, String>,
     ) -> Vec<Effect> {
-        if self.details.picture != Some(generation) {
-            return Vec::new();
+        let summary = match &result {
+            Ok(text) => text.detail_line(),
+            Err(line) => line.clone(),
+        };
+        self.jobs.finished(crate::jobs::FinishedJob {
+            job,
+            kind: diroxide_core::JobKind::Convert,
+            summary,
+            failed: result.as_ref().err().cloned().into_iter().collect(),
+            ..crate::jobs::FinishedJob::default()
+        });
+        if self.details.picture != Some(job) {
+            return vec![Effect::Redraw(Redraw::JobsLine)];
         }
         self.details.picture = None;
         let text = match result {
             Ok(text) => text,
-            Err(line) => return vec![self.say(Message::info(line))],
+            Err(line) => {
+                return vec![
+                    Effect::Redraw(Redraw::JobsLine),
+                    self.say(Message::info(line)),
+                ];
+            }
         };
         self.details.picture_words.insert(place.clone(), text.words);
         let name = place
@@ -749,7 +773,10 @@ impl App {
             siblings: Vec::new(),
             last_follow: None,
         });
-        let mut effects = vec![Effect::Redraw(Redraw::All)];
+        let mut effects = vec![
+            Effect::Redraw(Redraw::All),
+            Effect::Redraw(Redraw::JobsLine),
+        ];
         for message in said {
             effects.push(self.say(message));
         }

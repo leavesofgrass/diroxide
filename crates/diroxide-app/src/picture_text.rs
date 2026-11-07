@@ -266,9 +266,10 @@ pub fn read(
             .with_input(ToolInput::Bytes(bytes)),
     }
     .with_limits(LIMITS);
-    let output = runner
-        .run(&request, cancel)
-        .map_err(|e| could_not(&e.to_string()))?;
+    let output = runner.run(&request, cancel).map_err(|e| match e {
+        diroxide_vfs::ToolRunError::Cancelled => format!("Stopped reading the text in {name}"),
+        other => could_not(&other.to_string()),
+    })?;
     if !output.succeeded() && output.stdout.is_empty() {
         return Err(could_not("Tesseract could not read the picture"));
     }
@@ -357,6 +358,51 @@ mod tests {
             arguments("photo.png", "eng"),
             ["photo.png", "stdout", "-l", "eng", "--psm", "3", "tsv"]
         );
+    }
+
+    /// A runner that knows Tesseract, names English, and is cancelled
+    /// while it reads.
+    struct Cancelled;
+
+    impl ToolRunner for Cancelled {
+        fn has(&self, _tool: &str) -> bool {
+            true
+        }
+
+        fn run(
+            &self,
+            request: &ToolRequest,
+            _cancel: &CancelToken,
+        ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+            if request.args.first().is_some_and(|a| a == "--list-langs") {
+                return Ok(diroxide_vfs::ToolOutput::new(
+                    Some(0),
+                    b"List of available languages in \"x\" (1):\neng\n".to_vec(),
+                    Vec::new(),
+                ));
+            }
+            Err(diroxide_vfs::ToolRunError::Cancelled)
+        }
+
+        fn run_streaming(
+            &self,
+            request: &ToolRequest,
+            cancel: &CancelToken,
+            _record: &mut dyn FnMut(diroxide_vfs::ToolStream, &str) -> std::ops::ControlFlow<()>,
+        ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+            self.run(request, cancel)
+        }
+    }
+
+    #[test]
+    fn a_cancelled_reading_says_it_stopped() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("sign.gif");
+        std::fs::write(&file, b"GIF89a and the rest").unwrap();
+        let place = Place::parse(file.to_str().unwrap()).unwrap();
+        let tools = SharedTools(std::sync::Arc::new(Cancelled));
+        let said = read(&Registry::with_local(), &place, &tools, &CancelToken::new());
+        assert_eq!(said, Err("Stopped reading the text in sign.gif".to_owned()));
     }
 
     #[test]

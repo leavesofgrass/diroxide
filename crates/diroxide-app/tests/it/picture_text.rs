@@ -105,6 +105,30 @@ fn the_text_in_a_picture_opens_in_the_viewer_as_machine_read() {
     );
 }
 
+/// The reading is a job in the jobs line: Cancel stops it in words, and
+/// the runtime stops Tesseract with its children.
+#[test]
+fn reading_is_a_job_that_cancel_stops() {
+    let dir = temp();
+    let (mut s, _) = session(dir.path());
+    s.focus("sign.png");
+    let effects = s
+        .app
+        .dispatch(&diroxide_core::Command::new(ids::READ_PICTURE_TEXT));
+    let said = s.run_quiet(effects);
+    assert_eq!(said, ["Reading the text in sign.png"]);
+    assert_eq!(s.app.jobs().len(), 1);
+    let effects = s.app.dispatch(&diroxide_core::Command::new(ids::CANCEL));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, diroxide_core::Effect::CancelJob(_))),
+        "{effects:?}"
+    );
+    let said = s.run_quiet(effects);
+    assert_eq!(said, ["Read text in picture: cancelling"]);
+}
+
 #[test]
 fn without_tesseract_nothing_runs_and_it_says_so() {
     let dir = temp();
