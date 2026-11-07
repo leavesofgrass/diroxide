@@ -356,6 +356,10 @@ pub struct ActionConfig {
     pub args: Vec<String>,
     /// A plugin to call.
     pub plugin: Option<String>,
+    /// A conversion recipe's id (alpha.7, R30 commit 64): the action
+    /// converts the file with it into the other panel's folder, after the
+    /// plan's question.
+    pub recipe: Option<String>,
     /// Which slot it fills (alpha.7, R28 4.3): `enter`, `view`,
     /// `preview`, `convert`, or `user0` to `user9`; none for a named
     /// action listed by "Actions for NAME".
