@@ -39,10 +39,10 @@ fn same(current: Option<&str>, principal: &Principal) -> bool {
     })
 }
 
-/// A sentence for `OpsError::Refused`, which the app follows with its own
-/// next step: the words up to the last period.
+/// An owner refusal, said whole with its own next step (AX's request 1):
+/// `OpsError::OwnerRefused`, to which the app adds nothing.
 fn refused(sentence: String) -> OpsError {
-    OpsError::Refused(sentence.trim_end_matches('.').to_owned())
+    OpsError::OwnerRefused(sentence)
 }
 
 #[cfg(test)]
@@ -758,7 +758,7 @@ mod owner_tests {
 
     fn refusal(result: Result<crate::plan::Plan, OpsError>) -> String {
         match result {
-            Err(OpsError::Refused(sentence)) => sentence,
+            Err(OpsError::OwnerRefused(sentence)) => sentence,
             other => panic!("not refused: {other:?}"),
         }
     }
@@ -774,7 +774,7 @@ mod owner_tests {
         });
         assert_eq!(
             sentence,
-            "Could not change the owner of b.txt: only an administrator can. Start diro as administrator, then try again"
+            "Could not change the owner of b.txt: only an administrator can. Start diro as administrator, then try again."
         );
         let theirs = AttributeEdit::new(Recursion::ThisItem).with_group("4345");
         let sentence = as_caller(me.clone(), || {
@@ -782,7 +782,7 @@ mod owner_tests {
         });
         assert_eq!(
             sentence,
-            "Could not change the group of b.txt: you are not in group 4345. Choose one of your groups"
+            "Could not change the group of b.txt: you are not in group 4345. Choose one of your groups."
         );
         // One of the caller's own groups is planned.
         let mine = AttributeEdit::new(Recursion::ThisItem).with_group("4344");
@@ -812,7 +812,7 @@ mod owner_tests {
         });
         assert_eq!(
             sentence,
-            "Could not change the owner of b.txt: there is no user named no-such-user-here here. Type a user name or a number"
+            "Could not change the owner of b.txt: there is no user named no-such-user-here here. Type a user name or a number."
         );
         let top = AttributeEdit::new(Recursion::ThisItem).with_owner("0");
         let sentence = as_caller(Caller::administrator(), || {
@@ -821,7 +821,7 @@ mod owner_tests {
         assert!(
             sentence.starts_with("Could not change the owner of ")
                 && sentence
-                    .ends_with(": the top of a drive is protected. Use the system's own tools"),
+                    .ends_with(": the top of a drive is protected. Use the system's own tools."),
             "{sentence}"
         );
         // The plain fake keeps no owners: on Windows that is the local
@@ -834,9 +834,9 @@ mod owner_tests {
             refusal(engine.plan_attributes(&request(&["/w/a.txt"], group)))
         });
         let expected = if cfg!(windows) {
-            "Could not change the group of a.txt: Windows does it in its Security dialog. Open the Security dialog instead"
+            "Could not change the group of a.txt: Windows does it in its Security dialog. Open the Security dialog instead."
         } else {
-            "Could not change the group of a.txt: this place keeps no groups"
+            "Could not change the group of a.txt: this place keeps no groups."
         };
         assert_eq!(sentence, expected);
     }

@@ -748,7 +748,8 @@ impl App {
                     // missing. Nothing was joined."
                     OpsError::CannotJoin(sentence)
                     | OpsError::TooManyParts(sentence)
-                    | OpsError::CannotLink(sentence) => Message::error(sentence.clone()),
+                    | OpsError::CannotLink(sentence)
+                    | OpsError::OwnerRefused(sentence) => Message::error(sentence.clone()),
                     // The read-only refusal is a sentence of its own (P2b).
                     OpsError::Vfs(inner) if inner.sentence().is_some() => {
                         Message::error(inner.sentence().unwrap_or_default())
