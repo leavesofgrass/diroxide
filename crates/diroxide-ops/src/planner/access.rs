@@ -912,7 +912,7 @@ mod owner_tests {
             let sentence = refusal(engine.plan_attributes(&request(owner)));
             assert_eq!(
                 sentence,
-                "Could not change the owner of mine.txt: only an administrator can. Start diro as administrator, then try again"
+                "Could not change the owner of mine.txt: only an administrator can. Start diro as administrator, then try again."
             );
         }
     }
