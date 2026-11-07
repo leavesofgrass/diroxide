@@ -82,7 +82,7 @@ A key that does not belong to the kind is refused: "recipe is not used by a move
 
 ### `[say]`
 
-`announce` says how much the task speaks: `summary` (the default) is one polite line for everything since the last, `each` is a line for each file, `failures` only failures, and `off` nothing. The log and the Watched folders list still say it.
+`announce` says how much the task speaks. `summary` (the default) is one polite line for everything since the last, at most every ten seconds. `each` is a line for each file, with at least 2 seconds between lines, and the files that come faster are counted into the summary. `failures` says only the failures, counted into the summary, and `off` says nothing. The log and the Watched folders list still say it.
 
 ### When a task has a problem
 
@@ -122,7 +122,7 @@ Turn on asks the approval question, starting on No: "Turn on Notes? No is the de
 
 Yes asks about the files already waiting in `in`, the first time only, unless the task's `catch-up` is `all` or `none`: "Process the 2 files in Notes? No is the default. y or n". Yes processes them. No leaves them where they are, and the task watches for new ones. Your answer is kept. Then diroxide says "Hot folder Notes is on".
 
-Turn off says "Hot folder Notes is off". A task keeps its on or off state across restarts, and an approved task that is on starts with the program.
+Turn off says "Hot folder Notes is off". A task keeps its on or off state across restarts, and an approved task that is on starts with the program. A headless command such as `diro run` starts none.
 
 ### What a task says
 
@@ -131,7 +131,7 @@ A running task never opens a dialog and never interrupts. Its lines go to the li
 - The polite summary, at most every ten seconds: "Scans: 3 done, 1 failed".
 - A pause at once, with the reason: "Scans paused: pdftotext is not installed".
 - A change of state: "Hot folder Notes is on", "Hot folder Notes is paused".
-- A file's own line is not said. It is in the log, and in the status line, which is never spoken: "Scans: 3 waiting".
+- With the default `announce`, a file's own line is not said. It is in the log. The status line holds what waits, and is never spoken: "Scans: 3 waiting". With `announce = "each"` a line is said for each file, and with `failures` only the failures.
 
 Say Status adds each running task's tally to its line: ". Notes: 2 done, 1 failed".
 
@@ -144,7 +144,7 @@ Ctrl+Z never undoes a task's work. Its jobs do not reach the undo log. To take b
 3. The action runs. A conversion writes under a temporary name in `out` and renames it only when the tool succeeded.
 4. The task writes a line in the ledger, then moves the original. If diroxide stops between the two, the next start moves the original and runs nothing twice: "Done: scan.pdf, finished after a restart".
 
-The task says what happened in the log, outcome first: "Done: scan-004.pdf, 3 seconds", "Failed: scan-004.pdf, unreadable", "Skipped scan-004.pdf: output exists", "Moved across drives: scan-004.pdf" (a move from one drive to another copies and then removes the original), and "Changed during the run: scan-004.pdf", after which the file settles and runs again.
+A file's own line puts the outcome first. `diro watch --task NAME --once` prints one for each file, and `announce = "each"` says them as they come: "Done: scan-004.pdf, 3 seconds", "Failed: scan-004.pdf, unreadable", "Skipped scan-004.pdf: output exists", "Moved across drives: scan-004.pdf" (a move from one drive to another copies and then removes the original), and "Changed during the run: scan-004.pdf", after which the file settles and runs again.
 
 ### When something goes wrong
 
@@ -163,7 +163,7 @@ A paused task keeps its files in `in`. Resume it from its actions when you have 
 Each task has a folder under `hot` in the state folder, with `state.toml`, a ledger, a log and a lock. Nothing in them leaves the computer.
 
 - The ledger has one line for each file handled, written after its output is made and before its original moves, so nothing is done twice. It is capped at 1 MiB.
-- The log has the outcome first and the time last, and spells out hidden characters in a name as `[U+202E]`. It rotates at 1 MiB and keeps five. A failure line carries the tool's own words after the name.
+- The log is `log.txt`, one line a file. The outcome word comes first, the fields follow with two spaces between them, and the time comes last, so the first 40 cells of a Braille line say what happened. Hidden characters in a name are spelled out as `[U+202E]`. It rotates at 1 MiB and keeps five, `log.1.txt` the newest and `log.5.txt` the oldest, and diroxide removes the oldest when it rotates. A failure carries the tool's own words after the name. Show log in the Watched folders list reads the newest lines.
 - The lock means one diro runs a task at a time. A second says "Scans is run by another diro".
 
 A folder that cannot be watched, such as a network share, is checked every 30 seconds: "Scans: checking every 30 seconds".
