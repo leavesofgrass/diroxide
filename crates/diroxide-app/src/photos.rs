@@ -42,6 +42,45 @@ pub const NO_DATE: &str = "no date taken";
 /// Said where a picture's moment is its modified time (34 cells).
 pub const NO_DATE_LINE: &str = "No date taken: using modified time";
 
+/// A helper in a folder without pictures.
+pub const NO_PICTURES: &str = "No pictures here";
+/// Next day past the last date.
+pub const NO_LATER_DAY: &str = "No later day here";
+/// Previous day before the first date.
+pub const NO_EARLIER_DAY: &str = "No earlier day here";
+/// Select the screenshots where there are none.
+pub const NO_SCREENSHOTS: &str = "No screenshots here";
+/// Select pictures with no date where every picture has one.
+pub const ALL_DATED: &str = "Every picture here has a date taken";
+/// Back on the review's first picture.
+pub const FIRST_PICTURE: &str = "This is the first picture";
+/// No to the month folders' question.
+pub const NOTHING_MOVED: &str = "Nothing moved.";
+
+/// "Reading 14 pictures", while the dates are read.
+pub fn reading_line(pictures: usize) -> String {
+    format!("Reading {}", count(pictures as u64, "picture", "pictures"))
+}
+
+/// "No bursts here: no pictures from one camera within 2 seconds".
+pub fn no_bursts_line(gap: u64) -> String {
+    format!(
+        "No bursts here: no pictures from one camera within {}",
+        count(gap, "second", "seconds")
+    )
+}
+
+/// "Cannot make 2026-10: a file has that name. Nothing moved."
+pub fn month_taken_line(month: &str) -> String {
+    format!("Cannot make {month}: a file has that name. Nothing moved.")
+}
+
+/// "Selected 4 screenshots. 4 selected.": what was selected, then the
+/// count of the marks.
+pub fn selected_line(what: &str, total: usize) -> String {
+    format!("Selected {what}. {total} selected.")
+}
+
 /// One of the photo columns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PhotoField {
@@ -655,5 +694,39 @@ mod tests {
             Some("Canon EOS R5")
         );
         assert_eq!(camera_words(Some(" "), None), None);
+    }
+
+    /// Every other line the helpers say, its meaning in its first 40
+    /// cells.
+    #[test]
+    fn the_helpers_other_lines_say_their_meaning_first() {
+        for (line, meaning) in [
+            (NO_PICTURES.to_owned(), NO_PICTURES),
+            (NO_LATER_DAY.to_owned(), NO_LATER_DAY),
+            (NO_EARLIER_DAY.to_owned(), NO_EARLIER_DAY),
+            (NO_SCREENSHOTS.to_owned(), NO_SCREENSHOTS),
+            (ALL_DATED.to_owned(), ALL_DATED),
+            (FIRST_PICTURE.to_owned(), FIRST_PICTURE),
+            (NOTHING_MOVED.to_owned(), NOTHING_MOVED),
+            (reading_line(14), "Reading 14 pictures"),
+            (no_bursts_line(2), "No bursts here"),
+            (month_taken_line("2026-10"), "Cannot make 2026-10"),
+            (
+                selected_line("3 bursts, 17 pictures", 17),
+                "Selected 3 bursts, 17 pictures",
+            ),
+            (
+                selected_line("12 pictures with no date taken", 12),
+                "Selected 12 pictures with no date taken",
+            ),
+            (selected_line("4 screenshots", 4), "Selected 4 screenshots"),
+        ] {
+            assert!(within_cells(&line, meaning), "{line}");
+        }
+        assert_eq!(reading_line(1), "Reading 1 picture");
+        assert_eq!(
+            no_bursts_line(1),
+            "No bursts here: no pictures from one camera within 1 second"
+        );
     }
 }

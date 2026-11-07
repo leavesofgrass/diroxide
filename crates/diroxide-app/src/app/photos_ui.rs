@@ -47,6 +47,7 @@ use crate::columns::ColumnCell;
 use crate::commands::ids;
 use crate::dialog::{Dialog, with_default_no};
 use crate::entry::{CompletionSource, EntryField};
+use crate::photos as words;
 use crate::photos::{
     Kind, Moment, NO_DATE, NO_DATE_LINE, PhotoAsk, PhotoFact, PhotoField, PhotoNote, Picture,
     TAKEN, burst_line, bursts, day_line, fallback_note, month_question, month_row, months,
@@ -307,12 +308,9 @@ impl App {
             .filter_map(|(_, entry, _)| folder.join(&entry.name).ok())
             .collect();
         if places.is_empty() {
-            return vec![self.say(Message::info("No pictures here"))];
+            return vec![self.say(Message::info(words::NO_PICTURES))];
         }
-        let line = format!(
-            "Reading {}",
-            count(places.len() as u64, "picture", "pictures")
-        );
+        let line = words::reading_line(places.len());
         self.photos.pending = Some(Pending {
             side,
             listing,
@@ -415,7 +413,7 @@ impl App {
     fn step_day(&mut self, side: Side, forward: bool) -> Vec<Effect> {
         let found = self.pictures(side);
         if found.is_empty() {
-            return vec![self.say(Message::info("No pictures here"))];
+            return vec![self.say(Message::info(words::NO_PICTURES))];
         }
         let offset = self.clock.offset();
         let panel = self.panel(side);
@@ -435,9 +433,9 @@ impl App {
         let pictures: Vec<Picture> = found.iter().map(|(_, p)| p.clone()).collect();
         let Some((first, day, n)) = step_day(&pictures, from, forward) else {
             let line = if forward {
-                "No later day here"
+                words::NO_LATER_DAY
             } else {
-                "No earlier day here"
+                words::NO_EARLIER_DAY
             };
             return vec![self.say(Message::info(line))];
         };
@@ -456,7 +454,7 @@ impl App {
     fn sort_by_taken(&mut self, side: Side) -> Vec<Effect> {
         let found = self.pictures(side);
         if found.is_empty() {
-            return vec![self.say(Message::info("No pictures here"))];
+            return vec![self.say(Message::info(words::NO_PICTURES))];
         }
         let words: HashMap<&str, String> = found
             .iter()
@@ -530,12 +528,12 @@ impl App {
             .map(|(_, entry, _)| entry.name)
             .collect();
         if chosen.is_empty() {
-            return vec![self.say(Message::info("No screenshots here"))];
+            return vec![self.say(Message::info(words::NO_SCREENSHOTS))];
         }
         let total = self.select_names(side, &chosen);
-        let line = format!(
-            "Selected {}. {total} selected.",
-            count(chosen.len() as u64, "screenshot", "screenshots")
+        let line = words::selected_line(
+            &count(chosen.len() as u64, "screenshot", "screenshots"),
+            total,
         );
         vec![self.redraw_panel(side), self.say(Message::info(line))]
     }
@@ -547,10 +545,7 @@ impl App {
         let gap = self.settings.photos.burst_gap_seconds;
         let runs = bursts(&pictures, gap);
         if runs.is_empty() {
-            let line = format!(
-                "No bursts here: no pictures from one camera within {}",
-                count(gap, "second", "seconds")
-            );
+            let line = words::no_bursts_line(gap);
             return vec![self.say(Message::info(line))];
         }
         let chosen: HashSet<String> = runs
@@ -561,10 +556,13 @@ impl App {
         let total = self.select_names(side, &chosen);
         let line = match runs.as_slice() {
             [one] => format!("{}. {total} selected.", burst_line(&pictures, one)),
-            many => format!(
-                "Selected {}, {}. {total} selected.",
-                count(many.len() as u64, "burst", "bursts"),
-                count(chosen.len() as u64, "picture", "pictures")
+            many => words::selected_line(
+                &format!(
+                    "{}, {}",
+                    count(many.len() as u64, "burst", "bursts"),
+                    count(chosen.len() as u64, "picture", "pictures")
+                ),
+                total,
             ),
         };
         vec![self.redraw_panel(side), self.say(Message::info(line))]
@@ -579,13 +577,14 @@ impl App {
             .map(|(_, p)| p.name)
             .collect();
         if chosen.is_empty() {
-            return vec![self.say(Message::info("Every picture here has a date taken"))];
+            return vec![self.say(Message::info(words::ALL_DATED))];
         }
         let total = self.select_names(side, &chosen);
-        let line = format!(
-            "Selected {} with no date taken. {total} selected.",
+        let what = format!(
+            "{} with no date taken",
             count(chosen.len() as u64, "picture", "pictures")
         );
+        let line = words::selected_line(&what, total);
         vec![self.redraw_panel(side), self.say(Message::info(line))]
     }
 
@@ -610,7 +609,7 @@ impl App {
                 .collect()
         };
         if chosen.is_empty() {
-            return vec![self.say(Message::info("No pictures here"))];
+            return vec![self.say(Message::info(words::NO_PICTURES))];
         }
         let at = chosen
             .iter()
@@ -683,7 +682,7 @@ impl App {
             }
             "back" => {
                 if review.at == 0 {
-                    effects.push(self.say(Message::status("This is the first picture")));
+                    effects.push(self.say(Message::status(words::FIRST_PICTURE)));
                     effects.extend(self.show_review(review));
                     return effects;
                 }
@@ -812,7 +811,7 @@ impl App {
             .filter(|p| marked.is_empty() || marked.contains(&p.name))
             .collect();
         if pictures.is_empty() {
-            return vec![self.say(Message::info("No pictures here"))];
+            return vec![self.say(Message::info(words::NO_PICTURES))];
         }
         let folder = self.panel(side).place().clone();
         let by_month = months(&pictures);
@@ -826,7 +825,7 @@ impl App {
             match existing {
                 Some(EntryKind::Folder) => {}
                 Some(_) => {
-                    let line = format!("Cannot make {month}: a file has that name. Nothing moved.");
+                    let line = words::month_taken_line(month);
                     return vec![self.say(Message::error(line))];
                 }
                 None => steps.push(Step::MakeFolder {
@@ -917,7 +916,7 @@ impl App {
                 vec![self.say(Message::info(line))]
             }
             PhotoWants::ReviewMove(review) => self.show_review_at(*review),
-            PhotoWants::Months(_) => vec![self.say(Message::info("Nothing moved."))],
+            PhotoWants::Months(_) => vec![self.say(Message::info(words::NOTHING_MOVED))],
         }
     }
 

@@ -58,6 +58,27 @@ use crate::request::Request;
 /// The help of both dialogs.
 const FORM_HELP: &str = "Up and Down move through the settings, Enter changes one, Enter on the first row plans the change, Escape closes.";
 
+/// Change time with nothing to set (33 cells).
+const NO_TIME_TO_SET: &str = "Nothing to change: no time to set";
+
+/// "Set to:" asked for the other panel's file where it has none.
+const NO_OTHER_FILE: &str = "No file in the other panel to copy times from";
+
+/// Change owner planned with neither a new owner nor a new group.
+const NO_OWNER_CHOSEN: &str = "Nothing to change: choose a new owner or group.";
+
+/// "Could not change the times of main.rs: this place does not keep
+/// them."
+fn times_not_kept(name: &str) -> String {
+    format!("Could not change the times of {name}: this place does not keep them.")
+}
+
+/// "Could not change the owner of latest: links are changed through
+/// their targets."
+fn link_has_no_owner(name: &str) -> String {
+    format!("Could not change the owner of {name}: links are changed through their targets.")
+}
+
 /// What the access dialogs' jobs wait for.
 #[derive(Clone, Debug, Default)]
 pub(super) struct AccessState {
@@ -458,10 +479,7 @@ impl App {
         };
         let access = self.access_capabilities(side).access;
         if !access.times.is_possible() {
-            let text = format!(
-                "Could not change the times of {}: this place does not keep them.",
-                first.display_name()
-            );
+            let text = times_not_kept(&first.display_name());
             return vec![self.say(Message::error(text))];
         }
         let form = TimeForm {
@@ -510,7 +528,7 @@ impl App {
             "go" => {
                 let values = form.values(self.now());
                 if values.is_empty() {
-                    let line = "Nothing to change: no time to set";
+                    let line = NO_TIME_TO_SET;
                     effects.push(self.say(Message::info(line)));
                     effects.extend(self.show_time_form(form, Some(row)));
                     return effects;
@@ -550,7 +568,7 @@ impl App {
                     TimeSource::Now => match self.other_times(form.side) {
                         Some(other) => other,
                         None => {
-                            let line = "No file in the other panel to copy times from";
+                            let line = NO_OTHER_FILE;
                             effects.push(self.say(Message::info(line)));
                             TimeSource::Now
                         }
@@ -653,10 +671,7 @@ impl App {
             }
         }
         if first.kind == EntryKind::Link {
-            let text = format!(
-                "Could not change the owner of {}: links are changed through their targets.",
-                first.display_name()
-            );
+            let text = link_has_no_owner(&first.display_name());
             return vec![self.say(Message::error(text))];
         }
         let form = OwnerForm {
@@ -695,7 +710,7 @@ impl App {
         match row {
             "go" => {
                 if form.owner.is_none() && form.group.is_none() {
-                    let line = "Nothing to change: choose a new owner or group.";
+                    let line = NO_OWNER_CHOSEN;
                     effects.push(self.say(Message::info(line)));
                     effects.extend(self.show_owner_form(form, Some("owner")));
                     return effects;
@@ -966,6 +981,32 @@ mod tests {
             "all three and created only need a created time"
         );
         assert_eq!(TimeSet::choices(true).len(), 5);
+    }
+
+    /// Every other line the two dialogs say, its meaning in its first 40
+    /// cells.
+    #[test]
+    fn the_dialogs_other_lines_say_their_meaning_first() {
+        for (line, meaning) in [
+            (NO_TIME_TO_SET.to_owned(), "Nothing to change"),
+            (NO_OTHER_FILE.to_owned(), "No file in the other panel"),
+            (NO_OWNER_CHOSEN.to_owned(), "Nothing to change"),
+            (
+                times_not_kept("main.rs"),
+                "Could not change the times of main.rs",
+            ),
+            (
+                link_has_no_owner("latest"),
+                "Could not change the owner of latest",
+            ),
+            (TimeSet::ModifiedAccessed.words().to_owned(), "modified"),
+        ] {
+            assert!(within_cells(&line, meaning), "{line}");
+        }
+        assert_eq!(
+            times_not_kept("main.rs"),
+            "Could not change the times of main.rs: this place does not keep them."
+        );
     }
 
     #[test]
