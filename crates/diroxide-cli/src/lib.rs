@@ -166,6 +166,7 @@ pub fn help_text() -> String {
         "diro join PART            join a split file's parts back into one file",
         "diro diff BEFORE AFTER    compare two files: the verdict first, then each change",
         "diro watch [PATH]         say each file that settles in a folder; Ctrl+C stops",
+        "diro watch --task NAME    run a task's watched folder; --once, --dry-run, --list",
         "diro plugin list          list the plugins and scripts: name, state, kind",
         "diro plugin run NAME [-- PATH...]  run a plugin or script once on PATH",
         "diro run COMMAND [NAME=VALUE...]  run one command headless and say what it says",
@@ -534,7 +535,6 @@ mod tests {
         for (line, words) in [
             (&["info", "a.jpg"][..], "diro info"),
             (&["sum", "--check", "SHA256SUMS"], "diro sum"),
-            (&["watch", "--task", "scans", "--once"], "diro watch --task"),
         ] {
             let mut out = Vec::new();
             let mut err = Vec::new();
