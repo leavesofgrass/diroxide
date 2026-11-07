@@ -485,6 +485,12 @@ impl Provider for LocalProvider {
     fn as_resumable(&self) -> Option<&dyn ResumableWrite> {
         Some(self)
     }
+
+    /// Streams on Windows, extended attributes on Unix (the `sys`
+    /// module's `extended.rs`).
+    fn as_extended(&self) -> Option<&dyn crate::ExtendedAttributes> {
+        Some(self)
+    }
 }
 
 /// The path as the trash sees it: the parent folder with its links and

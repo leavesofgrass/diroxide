@@ -1,8 +1,8 @@
 //! Fuzzes the checksum-list parser (`SHA256SUMS`, BSD tagged lists,
-//! `.sfv`) with arbitrary bytes: it must never panic, and a name that
-//! climbs out of its folder must never be read. A stub from alpha 4's
-//! contract step until the checksum engine is built. Run with `cargo fuzz
-//! run meta_checksum_list`.
+//! one-file lists, `.sfv`) with arbitrary bytes: it must never panic, a
+//! name that climbs out of its folder or is absolute must never be
+//! taken, and a list written from what was read must read back with the
+//! same names. Run with `cargo fuzz run meta_checksum_list`.
 
 #![no_main]
 

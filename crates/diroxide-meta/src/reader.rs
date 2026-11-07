@@ -85,6 +85,31 @@ pub enum MetaError {
     /// The read could not reach the file.
     #[error(transparent)]
     Place(#[from] VfsError),
+    /// The reader panicked or its thread could not start; the guard kept
+    /// the program running.
+    #[error("the reader failed")]
+    ReaderFailed,
+    /// The guard already runs its most readers, some of them left past
+    /// their deadline: refused at once rather than starting another.
+    #[error("busy with an earlier file")]
+    Busy,
+}
+
+impl MetaError {
+    /// A file the reader cannot read, with why in words.
+    pub fn unreadable(why: impl Into<String>) -> Self {
+        MetaError::Unreadable(why.into())
+    }
+
+    /// An I/O error from a reader's source, in words: a short read is a
+    /// damaged or cut-off file.
+    pub fn from_io(error: &std::io::Error) -> Self {
+        match error.kind() {
+            std::io::ErrorKind::UnexpectedEof => MetaError::unreadable("the file ends too soon"),
+            std::io::ErrorKind::InvalidData => MetaError::unreadable("the file is damaged"),
+            _ => MetaError::unreadable(error.to_string().to_lowercase()),
+        }
+    }
 }
 
 /// A reader of one kind of file's fields.
@@ -94,6 +119,14 @@ pub trait Reader: Send + Sync {
 
     /// Its cost class.
     fn cost(&self) -> Cost;
+
+    /// The keys of the fields it can give, for the column chooser and for
+    /// a cell's words when it fails ("unreadable: REASON" for its keys,
+    /// "not available" for the rest). Empty by default: such a reader's
+    /// failure names no column.
+    fn keys(&self) -> &'static [&'static str] {
+        &[]
+    }
 
     /// Whether it reads this file, by its type, group or name, without
     /// reading the file.
