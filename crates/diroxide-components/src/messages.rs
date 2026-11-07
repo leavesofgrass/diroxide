@@ -37,7 +37,8 @@ pub const NO_BUILD: &str = "No build for this computer.";
 /// The feature a key names, in words, for "X needs ...": `examples` is
 /// "Getting example plugins", `sftp` "Opening SFTP places", `disk`
 /// "Opening a disk image", `git` "Git in the panels", `rar` "Reading a
-/// RAR file"; for the helpers, `metadata` "Reading file metadata" and
+/// RAR file", `archives` "Reading this archive" (CAB, ARJ, LZH, RPM, cpio
+/// and ar through 7-Zip); for the helpers, `metadata` "Reading file metadata" and
 /// `github` "Working with GitHub". An unknown key is "This feature".
 pub fn feature_words(feature: &str) -> &'static str {
     match feature {
@@ -46,6 +47,7 @@ pub fn feature_words(feature: &str) -> &'static str {
         "disk" => "Opening a disk image",
         "git" => "Git in the panels",
         "rar" => "Reading a RAR file",
+        "archives" => "Reading this archive",
         "iso" => "Reading an ISO image",
         "previews" => "This preview",
         "conversions" => "This conversion",
@@ -872,6 +874,7 @@ mod tests {
             ]
         );
         assert_eq!(feature_words("metadata"), "Reading file metadata");
+        assert_eq!(feature_words("archives"), "Reading this archive");
         assert_eq!(feature_words("github"), "Working with GitHub");
     }
 
