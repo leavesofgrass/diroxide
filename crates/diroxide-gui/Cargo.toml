@@ -36,6 +36,9 @@ syntax-set = ["diroxide-app/syntax-set"]
 [dependencies]
 diroxide-app.workspace = true
 diroxide-core.workspace = true
+# The picture view's header reader and decoder behind the one pixel guard
+# (alpha 4, R30 commit 112): `images::read_header`, `PixelGuard::decode`.
+diroxide-preview.workspace = true
 # The theme's roles for the viewer's token classes (and G3's themes).
 diroxide-theme.workspace = true
 thiserror.workspace = true

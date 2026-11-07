@@ -117,9 +117,17 @@ pub const ALLOWED: [(&str, &[&str]); 20] = [
         "diroxide-tui",
         &["diroxide-core", "diroxide-app", "diroxide-theme"],
     ),
+    // The window's picture view decodes through the preview crate's one
+    // pixel guard (alpha 4, R30 commit 112; the orchestrator's word to
+    // lane G5b, Friday, November 6, 2026), so no second guard is written.
     (
         "diroxide-gui",
-        &["diroxide-core", "diroxide-app", "diroxide-theme"],
+        &[
+            "diroxide-core",
+            "diroxide-app",
+            "diroxide-theme",
+            "diroxide-preview",
+        ],
     ),
     (
         "diroxide-cli",

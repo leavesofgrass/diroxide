@@ -1761,6 +1761,7 @@ dependencies = [
  "accesskit_winit",
  "diroxide-app",
  "diroxide-core",
+ "diroxide-preview",
  "diroxide-theme",
  "diroxide-vfs",
  "fontique",
