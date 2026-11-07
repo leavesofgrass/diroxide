@@ -1,0 +1,13 @@
+Window "work - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        Label "work, 8 items, in <dir>" live=polite
+      Dialog "Open report.pdf with:"
+        GenericContainer ""
+          Label "Up and Down choose, Enter opens the file with it, Escape closes."
+        ListBox "Open report.pdf with:"
+          ListBoxOption "Default program, Example Reader" 1 of 4 FOCUS
+          ListBoxOption "Example Reader, the default" 2 of 4
+          ListBoxOption "Example Editor" 3 of 4
+          ListBoxOption "Choose another program" 4 of 4

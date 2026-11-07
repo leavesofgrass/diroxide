@@ -1,0 +1,14 @@
+Window "work - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        Label "work, 9 items, in <dir>" live=polite
+      Dialog "1 differs, 1 missing, 1 match"
+        GenericContainer ""
+          Label "Enter on Show the matches lists them. Escape closes."
+        ListBox "1 differs, 1 missing, 1 match"
+          ListBoxOption "Does not match: notes.txt, SHA-256" 1 of 5 FOCUS
+          ListBoxOption "Missing: gone.txt" 2 of 5
+          ListBoxOption "List not signed: 1 of 3 match" 3 of 5
+          ListBoxOption "This shows the files are not damaged. It does not show who made them." 4 of 5
+          ListBoxOption "Show the 1 match" 5 of 5

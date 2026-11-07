@@ -1132,8 +1132,10 @@ fn checksums(root: &Path) -> Option<Rig> {
 /// Verify checksum on a list naming three files: one matches, one
 /// differs, one is missing.
 fn verify_report(root: &Path) -> Option<Rig> {
-    let mut rig = window(root, |_| {});
+    // The list is there before the window lists the folder, so no
+    // watcher's line joins the golden's tree.
     let work = root.join("work");
+    std::fs::create_dir_all(&work).unwrap();
     std::fs::write(
         work.join("SHA256SUMS"),
         format!(
@@ -1142,7 +1144,7 @@ fn verify_report(root: &Path) -> Option<Rig> {
         ),
     )
     .unwrap();
-    rig.run("panel.reload");
+    let mut rig = window(root, |_| {});
     focus(&mut rig, "SHA256SUMS");
     rig.run("file.verify-checksum");
     rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("VerifyReport"));
@@ -1525,6 +1527,61 @@ fn every_purpose_is_opened_or_said_why_not() {
     for absent in MAY_BE_ABSENT {
         assert!(names.contains(*absent), "{absent} is no purpose");
     }
+}
+
+/// The new lists of alpha 4 as a screen reader's tree walk finds them,
+/// held against golden files (R30's commit 114): the details list, the
+/// Convert recipes, Verify checksum's report, the Watched folders list
+/// and Open with. Each opens as its purpose's scenario does, on a clock
+/// and file times fixed so the words are the same on every run.
+#[test]
+fn the_new_lists_dump_to_their_goldens() {
+    let goldens: [(&str, &str); 5] = [
+        ("Details", "details-list"),
+        ("ConvertRecipes", "convert-recipes"),
+        ("VerifyReport", "verify-report"),
+        ("WatchedFolders", "watched-folders"),
+        ("OpenWith", "open-with"),
+    ];
+    let scenarios = scenarios();
+    for (purpose, golden) in goldens {
+        let root = tempfile::Builder::new()
+            .prefix("gui-it-golden-")
+            .tempdir()
+            .unwrap();
+        let open = scenarios
+            .iter()
+            .find(|(p, _, _)| *p == purpose)
+            .map(|(_, _, open)| *open)
+            .unwrap();
+        let rig = if purpose == "Details" {
+            fixed_details(root.path())
+        } else {
+            open(root.path()).unwrap()
+        };
+        assert_eq!(rig.f.app().dialog_purpose(), Some(purpose));
+        let text = crate::goldens::dump(&rig, root.path());
+        crate::goldens::check(golden, &text);
+    }
+}
+
+/// The details of lesson.txt inside course.zip, on the app's clock fixed
+/// (Saturday, October 10, 2026, 22:09 UTC): a member's facts come from
+/// the archive, its time written in it, so the golden holds on every
+/// system, with no owner, access list or account name of the machine's.
+fn fixed_details(root: &Path) -> Rig {
+    use diroxide_core::{FixedClock, Timestamp, UtcOffset};
+    let at = Timestamp::from_civil(2026, 10, 10, 22, 9, 0, UtcOffset::UTC).unwrap();
+    let mut rig = window(root, |options| {
+        options.clock = Arc::new(FixedClock::new(at, UtcOffset::UTC));
+    });
+    focus(&mut rig, "course.zip");
+    rig.run("panel.enter");
+    wait_listed(&mut rig, "lesson.txt");
+    focus(&mut rig, "lesson.txt");
+    rig.run("file.details");
+    wait(&mut rig);
+    rig
 }
 
 /// The parts the purposes are opened in, each its own test.

@@ -1,0 +1,23 @@
+Window "course.zip - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        Label "work, 8 items, in <dir>" live=polite
+        Label "Opened course.zip: 2 items, 16 bytes." live=polite
+      Dialog "Details of lesson.txt"
+        GenericContainer ""
+          Label "Up and Down read, Enter on Show all asks ExifTool for every tag, Escape closes."
+        ListBox "Details of lesson.txt"
+          ListBoxOption "Type: text file" 1 of 13 FOCUS
+          ListBoxOption "Name: lesson.txt" 2 of 13
+          ListBoxOption "File group: Text" 3 of 13
+          ListBoxOption "Lines: 1" 4 of 13
+          ListBoxOption "Size: 11 bytes" 5 of 13
+          ListBoxOption "Modified: Tuesday, January 1, 1980, 12:00 AM" 6 of 13
+          ListBoxOption "This place has no permissions" 7 of 13
+          ListBoxOption "Privacy: nothing private found" 8 of 13
+          ListBoxOption "Path: <dir>/work/course.zip!lesson.txt" 9 of 13
+          ListBoxOption "Encoding: ASCII" 10 of 13
+          ListBoxOption "Line endings: Unix, LF" 11 of 13
+          ListBoxOption "Checksum: not computed" 12 of 13
+          ListBoxOption "Show all: every tag, read by ExifTool" 13 of 13
