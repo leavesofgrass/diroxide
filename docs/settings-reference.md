@@ -112,7 +112,6 @@ Retro file types. Knows the old formats too: Amiga and tracker music, PowerPacke
 
 - Holds: true or false.
 - Default: `false`.
-- Comes with a later alpha.
 
 ### check.skip
 
@@ -120,7 +119,6 @@ Folders typed by name only. Folders where diroxide never reads a file's first by
 
 - Holds: a list of names.
 - Default: `[]`.
-- Comes with a later alpha.
 
 ## Keys
 
@@ -546,7 +544,6 @@ Quick view documents up to. The largest Word, EPUB or spreadsheet file the quick
 
 - Holds: a number of MB, 1 to 1024.
 - Default: `64`.
-- Comes with a later alpha.
 
 ### quick_view.auto_preview
 

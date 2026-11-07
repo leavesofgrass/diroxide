@@ -1013,7 +1013,8 @@ pub const SCHEMA: [SettingInfo; 109] = [
         },
         default: "64",
         help: "The largest Word, EPUB or spreadsheet file the quick view opens whole. Past it, the quick view says the file's size and shows nothing more.",
-        arrives: Some("alpha.7"),
+        // Used since lane VA (alpha 4): no longer reserved (VA's request 5).
+        arrives: None,
     },
     SettingInfo {
         key: "quick_view.auto_preview",
@@ -1031,7 +1032,8 @@ pub const SCHEMA: [SettingInfo; 109] = [
         kind: K::Flag,
         default: "false",
         help: "Knows the old formats too: Amiga and tracker music, PowerPacker and the like. Off, they read as unknown files.",
-        arrives: Some("alpha.7"),
+        // Used since lane TA (alpha 4).
+        arrives: None,
     },
     SettingInfo {
         key: "check.skip",
@@ -1040,7 +1042,8 @@ pub const SCHEMA: [SettingInfo; 109] = [
         kind: K::Names,
         default: "[]",
         help: "Folders where diroxide never reads a file's first bytes to find its type, such as a slow share. Files there are typed by their names.",
-        arrives: Some("alpha.7"),
+        // Used since lane TA (alpha 4).
+        arrives: None,
     },
     // The archive limits (alpha.2, W2a; research/archives.md section 6,
     // R7's starting numbers, plan question 11 of R20).
