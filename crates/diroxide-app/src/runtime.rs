@@ -51,6 +51,8 @@ use diroxide_vfs::{
 mod archive_jobs;
 // Optional components (W4d).
 mod components;
+// Conversions on workers (alpha 4, lane AW).
+mod converting;
 // Plugins and script commands (W4d).
 mod plugins;
 // Hooks through the plugin hosts (lane A2, R25 commit 81).
@@ -1429,6 +1431,7 @@ impl Runtime {
                     archive_jobs::plan_pack_job(shared, &registry, job, &request, tools);
                 });
             }
+            Request::Convert(ask) => self.convert(*ask),
             Request::PlanRewrite(ask) => {
                 let Some(archives) = self.archives.clone() else {
                     self.queue.push_back(AppEvent::ArchivePlanned {

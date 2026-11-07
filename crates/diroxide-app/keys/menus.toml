@@ -57,6 +57,12 @@ command = "file.actions"
 command = "file.open-with"
 
 [[menu.item]]
+command = "file.convert"
+
+[[menu.item]]
+command = "file.convert-reports"
+
+[[menu.item]]
 command = "file.context-menu"
 access = "c"
 

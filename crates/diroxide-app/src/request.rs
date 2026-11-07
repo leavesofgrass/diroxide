@@ -467,6 +467,9 @@ pub enum Request {
     /// Plan a rewrite of a zip on a worker (Delete, Rename and Make folder
     /// inside it, lane AW); answered like [`Request::PlanUnpack`].
     PlanRewrite(Box<RewriteAsk>),
+    /// One of the Convert command's asks (alpha 4, lane AW); answered as
+    /// [`AppEvent::Convert`](crate::AppEvent::Convert).
+    Convert(Box<crate::conversions::ConvertAsk>),
     /// Run an archive job the user confirmed, exactly as planned; its end
     /// comes as [`AppEvent::ArchiveFinished`](crate::AppEvent::ArchiveFinished).
     RunArchive(Box<ArchivePlan>),

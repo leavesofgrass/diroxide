@@ -117,6 +117,9 @@ pub(super) enum Wants {
     /// this file, Open with, the encoding chooser. Hosted here so the
     /// window's test of every purpose keeps its count.
     Types(super::type_actions::TypeWants),
+    /// The Convert command's lists and question (alpha 4, lane AW),
+    /// hosted here for the same reason.
+    Convert(super::converting::ConvertWants),
 }
 
 impl Wants {
@@ -338,6 +341,7 @@ impl App {
             },
             Wants::RemoveBookmark { .. } => self.dialog_escape(),
             Wants::Types(wants) => self.type_lists_accept(wants, row),
+            Wants::Convert(wants) => self.convert_accept(wants, row),
         }
     }
 
@@ -345,6 +349,7 @@ impl App {
     pub(super) fn organize_yes(&mut self, wants: Wants) -> Vec<Effect> {
         match wants {
             Wants::RemoveBookmark { side, place } => self.remove_bookmark(side, &place),
+            Wants::Convert(wants) => self.convert_yes(wants),
             _ => Vec::new(),
         }
     }
@@ -358,6 +363,7 @@ impl App {
             }
             Wants::BookmarkForm { side, .. } => self.refresh_bookmarks_list(side),
             Wants::BookmarkText { side, place, .. } => self.bookmark_form(side, place, None),
+            Wants::Convert(wants) => self.convert_escape(wants),
             _ => Vec::new(),
         }
     }

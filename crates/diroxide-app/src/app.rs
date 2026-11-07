@@ -24,6 +24,8 @@ mod bookmarking;
 mod comparing;
 // Optional components (W4d).
 mod component_ui;
+// The Convert command and the conversion reports (alpha 4, lane AW).
+mod converting;
 // The details view, Say Details and Copy details (alpha 4, lane VA).
 mod details;
 mod dialogs;
@@ -511,6 +513,8 @@ pub enum AppEvent {
         /// The programs.
         list: Box<crate::typing::OpenWithRows>,
     },
+    /// What the runtime answered the Convert command (alpha 4, lane AW).
+    Convert(Box<crate::conversions::ConvertNote>),
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -1951,6 +1955,7 @@ impl App {
                 answers,
             } => self.types_checked(side, listing, answers),
             AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
+            AppEvent::Convert(note) => self.convert_note(*note),
         }
     }
 
@@ -2047,6 +2052,10 @@ impl App {
         }
         // Preview, in the quick view (alpha 4, lane VA).
         if let Some(effects) = self.preview_file_dispatch(command) {
+            return effects;
+        }
+        // Convert and the conversion reports (alpha 4, lane AW).
+        if let Some(effects) = self.convert_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).

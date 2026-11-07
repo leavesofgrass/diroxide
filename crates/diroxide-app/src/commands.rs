@@ -700,6 +700,15 @@ pub mod ids {
         /// viewer.
         READ_PICTURE_TEXT = "file.read-text-in-picture";
     }
+
+    // Conversions in the app (alpha 4, lane AW, R30 commit 62). No
+    // default keys: Shift+F5 is copy with options.
+    ids! {
+        /// Convert the selection with a recipe, into the other panel.
+        CONVERT = "file.convert";
+        /// The last conversion reports; Enter reads one.
+        CONVERT_REPORTS = "file.convert-reports";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -724,7 +733,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 248] = [
+pub static CATALOG: [CommandInfo; 250] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1546,6 +1555,22 @@ pub static CATALOG: [CommandInfo; 248] = [
         "Groups",
         "Lists the file groups, yours among them, with how many files of each are here; the chosen group's files are selected.",
         Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::CONVERT,
+        "Convert",
+        "Lists the recipes that take the selection, then converts it into the other panel's folder after a plan you answer, which starts on No.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::CONVERT_REPORTS,
+        "Conversion reports",
+        "Lists the last 20 conversion reports, newest first; the chosen one is read, its failures first.",
+        Global,
         &[],
         &[],
     ),

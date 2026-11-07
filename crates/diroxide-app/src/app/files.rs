@@ -1169,13 +1169,20 @@ impl App {
                     Some(JobKind::Split) => "split",
                     Some(JobKind::Join) => "join",
                     Some(JobKind::Rewrite) => "zip change",
+                    Some(JobKind::Convert) => "conversion",
                     _ => "job",
                 };
                 let how = match kind {
                     Some(JobKind::Copy | JobKind::Duplicate) => {
                         format!("{} in the trash", count(done, "copy is", "copies are"))
                     }
-                    Some(JobKind::Unpack | JobKind::Pack | JobKind::Split | JobKind::Join) => {
+                    Some(
+                        JobKind::Unpack
+                        | JobKind::Pack
+                        | JobKind::Split
+                        | JobKind::Join
+                        | JobKind::Convert,
+                    ) => {
                         format!("{} in the trash", count(done, "item is", "items are"))
                     }
                     Some(JobKind::MakeFolder) => {
