@@ -122,7 +122,7 @@ impl Runtime {
                     let verdict = verify_signature(tools.as_ref(), &check, &CancelToken::new());
                     shared.send(note(CryptNote::Verified {
                         file,
-                        check: Box::new(check),
+                        check,
                         verdict: Box::new(verdict),
                     }));
                 });

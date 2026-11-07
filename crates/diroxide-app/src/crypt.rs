@@ -39,7 +39,7 @@ pub enum CryptAsk {
         /// The file the owner chose, for the words.
         file: Place,
         /// What to check.
-        check: SignatureCheck,
+        check: Box<SignatureCheck>,
     },
 }
 

@@ -345,7 +345,10 @@ impl App {
 
     /// Asks the runtime to check a signature.
     fn request_verify(&mut self, file: Place, check: SignatureCheck) -> Vec<Effect> {
-        self.request(Request::Crypt(Box::new(CryptAsk::Verify { file, check })));
+        self.request(Request::Crypt(Box::new(CryptAsk::Verify {
+            file,
+            check: Box::new(check),
+        })));
         vec![self.say(Message::status("Checking the signature"))]
     }
 
