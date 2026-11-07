@@ -156,11 +156,12 @@ A theme file can map a group to one of its existing color roles with a `[group-c
 
 ## What Enter and View do for a type
 
-Each type has actions. An action is one of three things: a command of diroxide's, a tool from [the tools list](tools.md) run with arguments, or a command of a plugin. They are never a shell string. A type gives an action a slot, or no slot, and the slot says when it runs.
+Each type has actions. An action is one of four things: a command of diroxide's, a tool from [the tools list](tools.md) run with arguments, a command of a plugin, or a conversion recipe. They are never a shell string. A type gives an action a slot, or no slot, and the slot says when it runs.
 
 - `enter`: what Enter runs on a file of this type. With none, Enter opens the file in the system's default program, as before.
 - `view`: what View (F3) runs. With none, the built-in viewer.
-- `preview` and `convert`: reserved for the Preview and Convert commands. For now they run from the Actions list only.
+- `preview`: what the Preview command runs on a file of this type, instead of showing it in the quick view. With none, Preview does what [the previews guide](previews.md) says.
+- `convert`: what the Convert command runs on a file of this type. With none, Convert lists the recipes that take the file. An action with a `recipe` key makes Convert plan with that recipe at once; see below and [Conversions](conversions.md).
 - `user0` to `user9`: the ten numbered user actions. The commands User action 0 to User action 9 run them. They have no key until you bind one in `keymap.toml`. A file whose type has none says "notes.txt has no user action 3."
 - No slot: a named action, listed by Actions for this file.
 
@@ -187,7 +188,7 @@ tool = "magick"
 args = ["{file}", "thumb.png"]
 ```
 
-An action names one of `command` (a command id), `tool` (a tool's id, with `args`) or `plugin` (a plugin's name, with its command as the first of `args`). A tool's arguments are filled one at a time, so a name with spaces or quotes arrives whole:
+An action names one of `command` (a command id), `recipe` (a conversion recipe's id), `tool` (a tool's id, with `args`) or `plugin` (a plugin's name, with its command as the first of `args`). A recipe is meant for the `convert` slot: the focused file is planned with it into the other panel's folder, and the plan's question starts on No, as [Conversions](conversions.md) describes. A recipe action in any other slot, or with no slot, does the same when you run it from Actions for this file. A tool's arguments are filled one at a time, so a name with spaces or quotes arrives whole:
 
 - `{file}`: the focused file's full path.
 - `{name}`: the focused file's bare name. A name that starts with a dash gets `./` in front, so a tool never reads it as an option.
@@ -208,7 +209,7 @@ Make thumbnail, unavailable, user action 3, Needs ImageMagick, not found
 Say hello
 ```
 
-A tool action whose tool is missing is shown unavailable, with why: "Needs ImageMagick, not found." or "Needs ImageMagick, off in tools.toml." Running one gives the same words. Running one that is here says "Running To text on report.pdf".
+A tool action whose tool is missing is shown unavailable, with why: "Needs ImageMagick, not found." or "Needs ImageMagick, off in tools.toml." Running one gives the same words. Running one that is here says "Running To text on report.pdf". A file whose type has no convert action gets a last row, Convert, with "the recipes list" after it, which opens the list [Conversions](conversions.md) describes.
 
 The program matches an action to its slot by the action's name, so give each action of a type a name of its own.
 
@@ -250,7 +251,6 @@ The choice lasts for that file in that session. Outside the viewer and the quick
 - A zip-based file is told apart from the 64-byte head alone only for EPUB, JAR and an APK whose manifest comes first, and for Office files whose own folder comes first. Office files that start with `[Content_Types].xml` read as "Office Open XML file", and OpenDocument is cut short. XPS and CBZ are typed by name only. An old-style APK reads as a JAR by its head. With its real name the more exact type wins every time.
 - A type's child is tried only through its parent. A type of yours with an extension and no signature, used as a parent, can hide a child that is known by its own extension.
 - An action's slot is matched by the action's name, so each action of a type needs a name of its own.
-- The Preview and Convert slots run from the Actions list only, for now.
 - Group colors in a theme file are drawn by the window and not yet by the terminal.
 - Windows: Explorer's own order of programs is not read, and Store apps, Edge and Chrome start by class through the shell. Explorer also lists shell verbs that other programs add, which the list does not read.
 - Linux: programs that run in a terminal are left out of Open with.
@@ -263,6 +263,8 @@ The choice lasts for that file in that session. Outside the viewer and the quick
 - [Operations and undo](operations.md)
 - [The viewer](viewer.md) and [the quick view](quick-view.md), which take the encoding chooser
 - [Tools and diro doctor](tools.md), for the tools an action can run
+- [Conversions](conversions.md), for the recipe an action can name
+- [Previews and the quick view's formats](previews.md), for the Preview command
 - [Themes and colors](themes.md)
 - [Settings and where the files live](settings.md)
 - [Known limits](known-limits.md)
