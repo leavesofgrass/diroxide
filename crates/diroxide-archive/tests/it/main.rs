@@ -18,6 +18,7 @@ mod pack_zip;
 mod passwords;
 mod prompt;
 mod registration;
+mod rewrite;
 mod roundtrip;
 mod seeds;
 mod sevenz_read;

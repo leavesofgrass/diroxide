@@ -111,6 +111,9 @@ pub struct PackPlan {
     /// The room on the destination's drive.
     pub room: Room,
     pub(crate) write_items: Vec<WriteItem>,
+    /// A rewrite's source: the old archive's records the items are read
+    /// from, in place of the items' places ([`crate::rewrite`]).
+    pub(crate) rewrite: Option<crate::rewrite::FromIndex>,
 }
 
 /// The format's short name, as the rows say it: "zip", "tar.gz".
@@ -408,6 +411,7 @@ pub fn plan_pack(
             drive: drive_of(&folder),
         },
         write_items,
+        rewrite: None,
     })
 }
 

@@ -579,7 +579,7 @@ impl ArchiveProvider {
         }
     }
 
-    fn registry(&self) -> Result<Arc<Registry>, VfsError> {
+    pub(crate) fn registry(&self) -> Result<Arc<Registry>, VfsError> {
         self.registry
             .read()
             .ok()

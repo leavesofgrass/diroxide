@@ -38,7 +38,15 @@ pub fn fake_folder() -> Place {
 impl World {
     /// A world with these limits.
     pub fn new(limits: Limits) -> Self {
-        let fake = FakeProvider::new();
+        Self::built(FakeProvider::new(), limits)
+    }
+
+    /// A world over this fake disk (its switches set), the default limits.
+    pub fn with_fake(fake: FakeProvider) -> Self {
+        Self::built(fake, Limits::default())
+    }
+
+    fn built(fake: FakeProvider, limits: Limits) -> Self {
         let root = fake_folder();
         fake.add_folder(&root);
         let provider = Arc::new(ArchiveProvider::new(limits));

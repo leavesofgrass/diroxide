@@ -38,6 +38,7 @@ mod read_tar;
 mod read_xz;
 mod read_zip;
 pub mod request;
+pub mod rewrite;
 pub mod run_pack;
 pub mod run_unpack;
 pub mod secrets;
@@ -65,6 +66,7 @@ pub use names::{
 pub use pack::{PackItem, PackPlan, format_row, is_pack_temp, plan_pack};
 pub use provider::{ArchiveProvider, Listing, Opened, Visitor, capabilities_for};
 pub use request::{CompressionLevel, FolderRule, PackRequest, StorePaths, UnpackRequest, pack};
+pub use rewrite::{REWRITTEN, RewriteOutcome, RewritePlan, ZIP_ONLY, plan_rewrite, run_rewrite};
 pub use run_pack::{PackOutcome, run_pack};
 pub use run_unpack::{UnpackOutcome, run_unpack, safe_mode};
 pub use secrets::{JobSecrets, new_password_request};
