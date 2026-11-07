@@ -163,7 +163,9 @@ Ctrl+Z undoes the last job. What it can reverse:
 - a change inside a zip: the new zip is moved aside, the old copy comes back from the trash, and the new one goes to the trash: "Undid zip change: the old copy is back";
 - removing the internet mark: the mark is written back, while it is the last thing you did and in the same session: "Put back the internet mark on setup.exe";
 - a link: the link goes to the trash, and a changed link target goes back to the old link from the trash;
-- a change of permissions, attributes or times: the old values are put back, for each entry that is still as the job left it;
+- a change of permissions, attributes, times or owners: the old values are put back, for each entry that is still as the job left it: "Undid time change: 1 item is back". Putting an owner back can need an administrator, and the change says so when it would;
+- an encryption, a decryption or a signature: the new files go to the trash, and the originals were never touched. Moving an original to the trash after an encryption is its own job and its own step. The record of an age command lives for the session only;
+- a move into month folders: every picture goes back and the folders the job made are removed, in one step. The moves and the trash of Review pictures are jobs of their own, one step each;
 - a label step (set, toggle or clear), and setting a note or a field: the labels go back: "Undid label urgent on 3 items", "Undid note on report.pdf". This lasts for the session only. A job's undo survives a restart; a label's does not.
 
 What it cannot reverse: a permanent delete, a move across drives, and anything a watched folder did. A task's jobs never reach Undo; [Watched folders](watched-folders.md) says how to take one back. Before it reverses each step, diroxide checks that the entry is as the job left it. If it changed since, that step is skipped and the undo says why. If there is nothing to undo, diroxide says "Nothing to undo".
@@ -218,6 +220,8 @@ Every prompt you type into has completion, with the same keys.
 - [Archives](archives.md)
 - [Conversions](conversions.md)
 - [Privacy before sharing](before-sharing.md)
+- [Encryption and signatures](encryption.md)
+- [Photos](photos.md)
 - [Split and join](split-join.md)
 - [Links, permissions and times](links-permissions.md)
 - [Search and the filter language](search.md)

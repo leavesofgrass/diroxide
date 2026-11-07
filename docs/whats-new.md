@@ -32,7 +32,7 @@ Previews.
 
 - The quick view reads more: pictures said in words from their headers, SVG drawings read as a screen reader reads them, sound and video through ffprobe, archive listings, PDF, Word, EPUB, OpenDocument, RTF, spreadsheets and delimited text, each with caps that keep a hostile file from stalling it. Nothing is played.
 - Preview, in the View menu, runs the helper programs on the focused file at once. The setting `quick_view.auto_preview` decides whether they also run by themselves, and it is off in screen reader mode. Read text in picture has Tesseract read the words in a picture, as a job Cancel stops.
-- The window has a picture view. On a picture, Enter in the viewer or the preview shows it, Plus and Minus zoom, 0 fits and 1 shows the actual size.
+- The window has a picture view. Show picture, in the View menu and the palette, opens it, and Enter does the same on a picture in the viewer or the preview. Plus and Minus zoom, 0 fits and 1 shows the actual size. A terminal says "Show picture works only in the window."
 - Copied text now reaches the clipboard on Wayland. A paste under Wayland with no XWayland still reads nothing.
 - [Previews and the quick view's formats](previews.md) is the new guide.
 
@@ -53,7 +53,7 @@ Columns, notes and fields.
 Checksums.
 
 - Checksum computes a file's SHA-256, with BLAKE3 in the same read, and lists the value to read, copy, compare with a pasted one, or save as `SHA256SUMS`, never over a file. A pasted value of another length computes that algorithm.
-- Verify checksum finds the list beside a download, or checks every file a list names, the verdict first. A match tells you the file is not damaged, never that it is safe, and a list signature is named and not yet checked.
+- Verify checksum finds the list beside a download, or checks every file a list names, the verdict first. A match tells you the file is not damaged, never that it is safe. When a signature sits beside the list it is checked too, and the verdict says whether the list is signed.
 - `diro sum` does the same from a shell, with `--algorithm`, `--list` and `--check`, and `diro info` prints a file's details as plain lines.
 - [Checksums and verifying](checksums.md) is the new guide.
 
@@ -78,11 +78,26 @@ Watched folders.
 Archives.
 
 - RAR, CAB, ARJ, LZH, RPM, cpio, ar, spanned zip sets and disk images no plugin takes are read through 7-Zip, read only. Unpacking to disk needs 7-Zip 25.01 or later, and an older one says so. diroxide never writes RAR.
-- Delete, Rename and Make folder work inside a zip. Each rewrites the zip beside the old one, tests it, and only then sends the old copy to the trash, so Undo restores it. The question says the cost and what a rewrite loses, starting on No. [Archives](archives.md) has the words.
+- Delete, Rename and Make folder work inside a zip. Each rewrites the zip beside the old one, tests it, and only then sends the old copy to the trash, so Undo restores it. The question says the cost and what a rewrite loses, starting on No. The File menu lists Make folder, Rename, Move to trash and Delete for good inside a zip. [Archives](archives.md) has the words.
 
-Built in the library, not yet in the program.
+Encryption and signatures.
 
-- Who can do what. The library reads a file's owner, group and mode, Linux access lists and labels, macOS flags, and a Windows owner and access list, and can answer "You can: read and write". It can also plan changing an owner. The details view and an owner dialog show them in a later pass.
+- The File menu has an Encryption submenu (Alt+F, then Y). Encrypt with a passphrase, Encrypt for a recipient and Decrypt use age, through the new Encryption plugin, an optional component. Encrypt with gpg, Decrypt with gpg and Sign with gpg use your own GnuPG. A passphrase is typed in a hidden field and kept nowhere. Encryption never writes over a file and never removes an original: it asks about moving the original to the trash, starting on No, and says the trash is not secure.
+- Verify signature checks a signature beside a file, with gpg or minisign, the verdict first: "Signature good: key ending 8469", then "Good means the key fits, not who holds it." diroxide never fetches a key.
+- Verify checksum checks the signature beside a list and says "List is signed: 12 of 12 files match", "List not signed: 12 of 12 match", or the signature's verdict and "List not verified: 12 of 12 match".
+- [Encryption and signatures](encryption.md) is the new guide.
+
+Who can do what, times and owners.
+
+- The details view says who can do what with the focused file: "You can: read and write", then the owner, the group and the others, the mode, Linux access lists and flags, and on Windows the entries of the access list with where each comes from. "You can" is advice, and the list's help says so.
+- Change time sets the modified, accessed or created time to now, to a date you type, or to the other panel's file's, said with its weekday, after asking, and Undo puts the old times back. Change owner changes the owner and group on Linux and macOS, never as an administrator. On Windows it hands the file to the system's Security dialog, which this build cannot open yet.
+- [Links, permissions and times](links-permissions.md) has both.
+
+Photos.
+
+- Four photo columns, `photo.taken`, `photo.camera`, `photo.pixels` and `photo.kind`, and Sort by date taken, with the modified time standing in where a picture has no date taken, and saying so.
+- Next day and Previous day move through the dates. Select the screenshots, Select the bursts and Select pictures with no date mark them. Review pictures goes through them one key an answer, and Move into month folders files them under `2026-10` style folders, as one job with one Undo.
+- [Photos](photos.md) is the new guide.
 
 ## Alpha 3
 

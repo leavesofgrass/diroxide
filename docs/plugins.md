@@ -340,11 +340,12 @@ A missing program, a wrong number of marked items and a name that a script canno
 
 ## Plugins that come as components
 
-Three process plugins of the project come as optional components. Downloading one never turns it on: you turn it on in Manage plugins, after the question. [Optional components](components.md) says how to get them.
+Four process plugins of the project come as optional components. Downloading one never turns it on: you turn it on in Manage plugins, after the question. [Optional components](components.md) says how to get them.
 
 - SFTP places (plugin id `sftp`, component `diro-sftp`): opens folders on other computers over SSH. [Remote places over SFTP](remote-places.md) is its guide.
 - Disk images (plugin id `disk`, component `diro-disk`): opens ISO images and virtual disks as folders, read only. It reads the image you open and may use 7-Zip and qemu-img when they are there. Its consent question says it uses no network. [Disk images](disk-images.md) is its guide.
 - Git (plugin id `git`, component `diro-git`): shows the branch and the changes in the title line and the Git column, and runs git's commands from the Plugins menu, always starting on No. Under "The plugin states, unchecked:" it says that it uses git's own remotes when you fetch, pull, push or clone, that it touches your repositories through git and `.gitignore` through diroxide, and that it starts git only, where a commit runs the repository's hooks as in a terminal. [Git](git.md) is its guide.
+- Encryption (plugin id `crypt`, component `diro-crypt`): encrypts and decrypts files with age, as the first three commands of the File menu's Encryption submenu, asking every secret in a hidden field and keeping none. Under "The plugin states, unchecked:" it says what its manifest declares: no network, no programs, and that its files are the files you choose, each result written beside its file. [Encryption and signatures](encryption.md) is its guide.
 
 ## The example plugins
 

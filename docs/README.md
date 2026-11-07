@@ -4,7 +4,7 @@ diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, key
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files, archives, disk images and previews, columns, checksums, privacy before sharing, conversions and watched folders, finding things, plugins, git, hooks, scripts and optional components, keys, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files, archives, disk images and previews, columns, checksums, encryption and signatures, photos, privacy before sharing, conversions and watched folders, finding things, plugins, git, hooks, scripts and optional components, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -50,12 +50,14 @@ If you are new, begin with the [quick start](quickstart.md).
 - [The quick view](quick-view.md): a live preview of the focused file in the other panel, by heading, table and link, and the formats it reads.
 - [Conversions](conversions.md): Convert and its recipe list, the plan you answer first, a report and Undo, the 31 built-in recipes, a file type that names its recipe, your own `conversions.toml`, and `diro convert`.
 - [Previews and the quick view's formats](previews.md): what pictures, drawings, sound and video, archives, PDF, Word, EPUB, RTF and spreadsheets say, the Preview command and auto-preview, Read text in picture, and the limits that protect the quick view.
-- [The details view](details.md): Alt+Enter, the facts in their order, the Privacy and Checksum rows, Show all with ExifTool, Say details, Copy details and Copy all details.
+- [The details view](details.md): Alt+Enter, the facts in their order, who can do what, the Privacy and Checksum rows, Show all with ExifTool, Say details, Copy details and Copy all details.
 - [File types and groups](file-types.md): what a row says about a file, how a type is found, the eight groups and the screenshot names, the retro pack, your own `filetypes.toml`, typed actions, Open with on each system, and the encoding chooser.
 - [Privacy before sharing](before-sharing.md): Check before sharing says what a file carries that could say who made it, where or with what, Strip metadata into a copy for JPEG, PNG and WebP, and Remove the internet mark with Undo.
 - [Checksums and verifying](checksums.md): Checksum with the value to read, copy, compare with a pasted one or save as `SHA256SUMS`, Verify checksum against the list beside a download, the verdict first and what a match does and does not show, and `diro sum`.
+- [Encryption and signatures](encryption.md): the File menu's Encryption submenu: age with a passphrase or a key through the Encryption plugin, gpg to encrypt, decrypt and sign, Verify signature for gpg and minisign, the originals and the trash, what is never stored, and the signature sentences in Verify checksum.
+- [Photos](photos.md): the photo columns, Sort by date taken, Next day and Previous day, selecting the screenshots, the bursts and the pictures with no date, Review pictures with one key an answer, and Move into month folders with one Undo.
 - [Split and join](split-join.md): cutting a big file into parts for mail, GitHub, a disc or FAT32, joining them back, the checksum file, `diro split` and `diro join`.
-- [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, times, and the details list.
+- [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, who can do what on each system, Change time with a typed date, Change owner and its refusals, and the details list.
 
 ### Finding, remembering and comparing
 
@@ -71,7 +73,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Hooks](hooks.md): a plugin asked before a copy, move, delete, rename or new folder, and told afterward; what a stop says; the Folder guard example.
 - [Script commands](script-commands.md): a command from one file in bash, Python or PowerShell: the header, what the script is given, directives, output modes, exit codes, which program runs it on each system, and `--explain`.
 - [Writing a plugin](writing-a-plugin.md): `diro plugin new`, the manifest, the protocol in a page, the services diroxide offers, lists of rows that are not files, places, previewers and converters, and the conformance checks.
-- [Optional components](components.md): helper programs, plugins and data packs, among them the SFTP places, disk image and git plugins and the helper programs, fetched only after you say yes, checked before use, offered once in a first-run list, installed from a file with no network, and removed by a list. Includes `diro components`.
+- [Optional components](components.md): helper programs, plugins and data packs, among them the SFTP places, disk image, git and encryption plugins and the helper programs, fetched only after you say yes, checked before use, offered once in a first-run list, installed from a file with no network, and removed by a list. Includes `diro components`.
 - [Git](git.md): the git plugin: the branch and the changes in the title line and the Git column, the status list, staging and committing, diffs, the log and blame, branches and stashes, fetch, pull and push, clone, and the trust rule for a repository you did not make.
 - [Tools and diro doctor](tools.md): the helper programs diroxide can use (ImageMagick, FFmpeg, pandoc and the rest), how each is found, `tools.toml`, the Tools list in the program, the install command for each system, and `diro doctor` with its sections and exit codes.
 - [Security](security.md): what diroxide checks, what it protects, and what a plugin could still do.
@@ -88,7 +90,6 @@ If you are new, begin with the [quick start](quickstart.md).
 
 These guides are not written yet, because the features they describe are not built, or are built in the library and not yet in the program. Each arrives with the alpha that ships its feature.
 
-- Encryption and signatures, who can do what with a file (access rows and an owner dialog), and the photo helpers: alpha 4 builds them, and their guides come as each reaches the program.
 - Tabs and the folder tree, comparing and synchronizing two folders, tasks other than watched folders such as synchronizing and renaming, duplicates, batch rename, thumbnails, writing to disk images, and GitHub.
 
 ## For people who build diroxide
@@ -98,9 +99,11 @@ These guides are not written yet, because the features they describe are not bui
 - [Building](dev/building.md): the toolchain, the checks, the profiles and the tasks.
 - [The plugin protocol reference](dev/plugin-protocol.md): every request and notification of protocol 1, generated from the code.
 - [Docker](dev/docker.md): the Linux container for builds and tests, and its three stages: dev, gui and tools.
+- [Components](dev/components.md): the definitions and the pins of the optional components, every field of a component and its files, `cargo xtask components` and its flags, the pin job and the monthly run.
+- [The hot-folder engine](dev/hot-folders.md): the modules behind watched folders, one file from start to end, what a failure means, how a file still being written is told on each system, and the exit codes.
 - [The bench](dev/bench.md): the speed measurements that gate a change.
 - [The clean-room rule](dev/clean-room.md): how diroxide stays a reimplementation of Worker's behavior, never a port of its code.
-- [Fuzzing](dev/fuzzing.md): the fuzz targets in four workspaces, running one, and the nightly run.
+- [Fuzzing](dev/fuzzing.md): the fuzz targets in five workspaces, running one, and the nightly run.
 - [Vendored code](dev/vendoring.md): the two folders of third-party Rust code under `third_party/`, copied from textweaver, and the patches they carry.
 - [The changelog](../CHANGELOG.md): what changed in each alpha.
 

@@ -21,19 +21,19 @@ Every row is one fact, "Dimensions: 4032 by 3024", the label first. The list is 
 1. What it is: "Type: PNG", "Name: photo.png", and "File group: Images". For a type that is also in a second group: "File group: Images, Screenshots". A row that a plugin made, such as a partition in a disk image, adds the plugin's own words: "About: Partition 2, home, ext4".
 2. What is in it: "Dimensions: 4 by 3" for a picture, the length of a song, the pages of a document, the entries of an archive: "Entries: 8 files, 2 folders".
 3. Its size: "Size: 48 KB (49,152 bytes)", the words first and the exact bytes after. A file under 1,000 bytes says "512 bytes" and no more. A folder says "Size: folder size not computed".
-4. Its dates: "Modified:", "Created:" and "Accessed:", each with the date and time in words, where the system has them.
-5. Flags: "Attributes:", "Hidden: yes", the privacy row, and the line that says when a file's name and its contents disagree, "Name says PNG; contents say JPEG".
+4. Its dates: "Modified:", "Created:" and "Accessed:", each with the date and time in words, where the system has them. The weekday comes first, as in "Saturday, October 10, 2026".
+5. Flags: "Attributes:", "Hidden: yes", who can do what with it, the privacy row, and the line that says when a file's name and its contents disagree, "Name says PNG; contents say JPEG". The rows for who can do what start with "You can: read and write" and go on with the owner, the group and the others, the mode, an access list and any file flags, or on Windows the entries of its access list. [Links, permissions and times](links-permissions.md#who-may-do-what) lists them for each system.
 6. Yours: "Labels:", the labels you put on the file, then your note and your fields, "Note: call about the invoice" and "Project: Apollo". [Columns, notes and fields](columns.md) says how to set them.
 7. Place: "Path:", the full path with any hidden character spelled out, and "Link to:" for a link.
 8. Technical facts, such as a codec, a bit depth or an encoding.
-9. What the system keeps: "Owner:", "Group:" and "Checksum:".
+9. What the system keeps: "Owner:", "Group:" and "Checksum:". On Windows "Owner: BUILTIN\Administrators" is the owner from the access facts, and on Linux a security label is here too: "Label: user_home_t (SELinux)". Where the access rows say the owner and the group in full, the panel's own "Owner:" and "Group:" rows give way, so each is said once.
 10. Where it came from, and how it was read: facts about the program or device that made it, and the "Not read" rows.
 
 A fact the file does not have is not listed. The two exceptions are Privacy and Checksum, which are always there for a file or an archive, because "nothing private found" and "not computed" are answers. A folder has neither, and has no Show all.
 
 A name that needs care adds its reason and the name spelled out in the first group.
 
-Rows from inside the file, such as a photo's camera, a song's tags or a document's author, join their groups as they are read. A sound or video file's details run ffprobe when you open them, if it is installed, because you asked; they never run by themselves while you move through a folder. A reader of the file itself is given two seconds and 64 MiB, and ffprobe, which is a program, is given 12 seconds. A picture's words come from its header alone and run nothing.
+Rows from inside the file, such as a photo's camera, a song's tags or a document's author, join their groups as they are read. The rows for who can do what are read the same way, for the focused file or folder only, never for every row of a panel, and a folder gets them though it gets no other facts read. F1 on the list says what "You can" means and what an access list's mask does. A sound or video file's details run ffprobe when you open them, if it is installed, because you asked; they never run by themselves while you move through a folder. A reader of the file itself is given two seconds and 64 MiB, and ffprobe, which is a program, is given 12 seconds. A picture's words come from its header alone and run nothing.
 
 When a reader cannot read something, the last group says so, with the reader in words first and then why: "Not read: picture facts, the file ends too soon". The readers are named as "archive facts", "sound tags", "sound properties", "PDF properties", "document properties", "book properties", "photo facts", "text facts", "picture facts" and "sound and video facts".
 
@@ -96,6 +96,8 @@ The exit codes are 0 when every file was read, 1 when a file could not be, and 2
 - Closing the list stops the read of the file's facts between readers and at the next read. A program already running, such as ffprobe, finishes within its own time limit, and its answer is dropped.
 - Show all needs a file on a local disk.
 - Folder sizes are not computed here. Nothing in the details view walks a folder.
+- "You can" is advice: it is what the system answers now for this account, and another program using the file can still stop a change.
+- On macOS the access list is not read in this alpha: "Access list: not read on this system". macOS, a system with SELinux turned on and a real Windows account that is not the owner were not tried.
 - Nothing about the order of rows, "Read 9 more details" or how Show all pans on a Braille display has been heard yet.
 
 ## See also

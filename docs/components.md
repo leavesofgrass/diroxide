@@ -1,6 +1,6 @@
 # Optional components
 
-This guide covers optional components: the plugins, helper programs and data packs that diroxide can use but does not ship inside itself. It covers what a component is, the four components of the project's own and the helper programs from their publishers, the question diroxide asks before it fetches anything, how every file is checked, `diro components` and the Manage optional components screen, the list that opens once at the first start, installing from a file with no network, removing, and where the files come from.
+This guide covers optional components: the plugins, helper programs and data packs that diroxide can use but does not ship inside itself. It covers what a component is, the five components of the project's own and the helper programs from their publishers, the question diroxide asks before it fetches anything, how every file is checked, `diro components` and the Manage optional components screen, the list that opens once at the first start, installing from a file with no network, removing, and where the files come from.
 
 The short version: diroxide never fetches a component without your yes, checks every file against a size and a SHA-256 hash before it uses it, and takes away only the files it put there.
 
@@ -16,24 +16,25 @@ Each has an id, a title that says what it is for, a version, a size, a license, 
 
 diroxide stays small and pure Rust because these are optional. A component comes only when you ask for it, and only after the question below.
 
-The list has four components of the project's own, and the helper programs below them:
+The list has five components of the project's own, and the helper programs below them:
 
 - Example plugins (id `diro-examples`): a data pack of the eleven example plugins and scripts, about 124 KB, license Apache-2.0 OR MIT. It unpacks into a folder of its own, with one folder or script for each example. Volume actions, which unmounts, ejects and mounts for the Volumes list, is one of them. Installing the pack turns nothing on. The pack is not published with a release yet. Until it is, get it from a folder with `--source`, or install it from a file, as below.
 - SFTP places plugin (id `diro-sftp`, version 0.1.0-alpha.3): the plugin that opens folders on other computers over SSH, license Apache-2.0 OR MIT. It needs the OpenSSH program on your computer; [remote places over SFTP](remote-places.md) says more. It is in the list of the release files, because the release builds the program for each computer below and pins it. A build you made from source does not have it in its list, because there is no program to pin. Build the plugin yourself, as that guide says.
 - Disk image places plugin (id `diro-disk`, version 0.1.0-alpha.3): the plugin that opens ISO images and virtual disks like folders, license Apache-2.0 OR MIT. It needs no other program, and it uses 7-Zip and qemu-img when they are there; [disk images](disk-images.md) says more. Like the SFTP plugin it is in the release files' list and not in a build made from source.
 - Git plugin (id `diro-git`, version 0.1.0-alpha.3): the plugin that shows a repository's branch and changes in the panels and runs git commands, license Apache-2.0 OR MIT. It needs the git program on your computer, version 2.30 or newer; [git in the panels](git.md) says more. It too is in the release files' list only.
+- Encryption plugin (id `diro-crypt`, version 0.1.0-alpha.3, plugin id `crypt`): the plugin that encrypts and decrypts files with age, asking every secret in a hidden field and keeping none, license Apache-2.0 OR MIT. It needs no other program, because age runs inside it. The gpg commands of the same submenu use your own GnuPG instead ([Tools and diro doctor](tools.md)). [Encryption and signatures](encryption.md) says more, and why age is a plugin and not part of `diro`. It too is in the release files' list only.
 
 `diro components list` always shows what this build knows. The list is part of each build, so a component newer than your diroxide arrives with your next update.
 
 ### Which computers have a build
 
-The SFTP places plugin, the disk image places plugin and the Git plugin each have a build for three kinds of computer:
+The SFTP places plugin, the disk image places plugin, the Git plugin and the Encryption plugin each have a build for three kinds of computer:
 
 - Windows on x86-64.
 - Linux on x86-64 (glibc).
 - macOS, Apple silicon and Intel, as one universal file.
 
-Windows on ARM and Linux on ARM have no build of these three plugins yet. The helper programs follow what their publishers make, listed below. The Example plugins pack is the same everywhere, but its Volume actions plugin needs Python 3 and the system's own tools; [volumes and the trash](volumes-trash.md) lists them.
+Windows on ARM and Linux on ARM have no build of these four plugins yet. The helper programs follow what their publishers make, listed below. The Example plugins pack is the same everywhere, but its Volume actions plugin needs Python 3 and the system's own tools; [volumes and the trash](volumes-trash.md) lists them.
 
 ## Helper programs
 
@@ -338,6 +339,7 @@ Whatever the source, a file is accepted only when it matches the pin. A source i
 - [Tools and diro doctor](tools.md)
 - [Disk images](disk-images.md)
 - [Git in the panels](git.md)
+- [Encryption and signatures](encryption.md)
 - [Remote places over SFTP](remote-places.md)
 - [Volumes and the trash](volumes-trash.md)
 - [Writing a plugin](writing-a-plugin.md)

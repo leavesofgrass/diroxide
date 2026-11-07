@@ -129,8 +129,7 @@ Four settings and one file cover how diroxide knows what a file is, which helper
 - Retro file types (`filetypes.retro`, off; in the Panels group): knows the old formats too, such as Amiga and tracker music. Off, those files read as unknown. The last row of the Groups list turns it on and off. [File types and groups](file-types.md#the-retro-pack) describes the pack.
 - Folders typed by name only (`check.skip`, none; in the Panels group): folders where diroxide never reads a file's first bytes to find its type, such as a slow share. A folder in the list covers everything below it. [File types and groups](file-types.md#folders-that-are-not-read) says more.
 - Auto-preview (`quick_view.auto_preview`, auto): whether the quick view runs ffprobe and pdftotext by itself after its wait. `auto` is on, except in screen reader mode.
-- Quick view documents up to (`quick_view.max_document_mb`, 64; 1 to 1024): the largest Word, EPUB or spreadsheet file the quick view opens whole.
-- `tools.toml`, in the config folder: a `path`, `disabled` and `needed` for any helper program, by its id. The Tools list, in Settings, shows what was found. [Tools and diro doctor](tools.md) has the keys and the words each choice produces.
+- Quick view documents up to (`quick_view.max_document_mb`, 64; 1 to 1024): the largest Word, EPUB or spreadsheet file the quick view opens whole.- `tools.toml`, in the config folder: a `path`, `disabled` and `needed` for any helper program, by its id. The Tools list, in Settings, shows what was found. [Tools and diro doctor](tools.md) has the keys and the words each choice produces.
 
 ```toml
 [check]
@@ -163,6 +162,12 @@ wait_ms = 800
 ```
 
 Thumbnails are kept now and do nothing yet. The reference marks them as coming with a later alpha. Hiding the menu bar works on Windows in the window, and focus mode works in the window too ([the GUI](gui.md#focus-mode-and-full-screen) says how). Focus mode is also a command, in the View menu and the palette, and the command and the Settings switch say the same words, "Focus mode on: the bars fade after three seconds." and "Focus mode off." Full screen is a command too, on F11 in the window.
+
+### Photos
+
+One setting is for the photo helpers. [The settings reference](settings-reference.md) lists it under Panels.
+
+- Burst gap (`photos.burst_gap_seconds`, 2; 1 to 60): the longest time between two pictures from one camera that Select the bursts counts as one burst. [Photos](photos.md#select-the-screenshots-the-bursts-and-the-pictures-with-no-date) says more.
 
 ## Themes and colors
 
@@ -217,7 +222,18 @@ diro keys test
 
 ## Menus and banks
 
-`menus.toml` uses the same command ids as the keymap. Add an item with a command id, remove or reorder items, and add submenus. Each menu has an access key, the letter after Alt, and diroxide reports unknown items in words. A menu item can be shown only where it makes sense, for example only where the place has a trash.
+`menus.toml` uses the same command ids as the keymap. Add an item with a command id, remove or reorder items, and add submenus. Each menu has an access key, the letter after Alt, and diroxide reports unknown items in words. A menu item can be shown only where it makes sense, for example only where the place has a trash. An item's `when` says where, by one of these names:
+
+- `writable`: the place can be changed.
+- `trash`: the place has a trash.
+- `no_trash`: the place can be changed and has no trash.
+- `restore`: trashed items can be restored.
+- `links`: links can be made.
+- `attributes`: permissions or attributes can be changed.
+- `edits`: entries can be made, renamed and deleted. This holds inside a zip too, which diroxide rewrites.
+- `removes`: entries can be removed with Delete. This holds inside a zip too, where the old copy of the zip goes to the trash.
+
+The built-in File menu uses `edits` and `removes` for Make folder, Rename, Move to trash and Delete for good, so they show inside a zip. [Archives](archives.md#editing-inside-a-zip) says what a rewrite does.
 
 A bank is a named bar of command buttons. The default bank is the function key bar. A button runs one command.
 

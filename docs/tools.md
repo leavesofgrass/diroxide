@@ -23,10 +23,10 @@ The registry knows 22 tools on Windows and Linux, and 23 on macOS, where `mdls` 
 - Tesseract (`tesseract`): reading text in pictures.
 - qemu-img (`qemu-img`): converting disk images.
 - xorriso (`xorriso`): making ISO images.
-- GnuPG (`gpg`): OpenPGP encryption and signatures.
-- gpgv (`gpgv`): checking OpenPGP signatures. It comes with GnuPG.
-- age (`age`): age encryption.
-- minisign (`minisign`): checking minisign signatures.
+- GnuPG (`gpg`): OpenPGP encryption and signatures. The Encryption submenu runs it ([Encryption and signatures](encryption.md)).
+- gpgv (`gpgv`): checking OpenPGP signatures. It comes with GnuPG. Nothing in this build runs it: gpg checks the signatures.
+- age (`age`): age encryption. Nothing in this build runs it: the Encryption plugin does age's work itself.
+- minisign (`minisign`): checking minisign signatures. Nothing in this build runs it: diroxide checks a minisign signature inside itself, so the program is not needed.
 - git (`git`): git status and commands.
 - GitHub CLI (`gh`): GitHub from git places, and private component sources.
 - The system opener (`open`): opening files in their default programs. It is Explorer on Windows, `open` on macOS and `xdg-open` on Linux.
@@ -212,6 +212,7 @@ These names were written from each package manager's usual names. They have not 
 - [Optional components](components.md), for helper components and `diro components`
 - [Settings and where the files live](settings.md), for the config folder
 - [The quick view](quick-view.md), which calls some of these programs
+- [Encryption and signatures](encryption.md), which runs gpg
 - [Troubleshooting](troubleshooting.md)
 - [Known limits](known-limits.md)
 - [The documentation index](README.md)

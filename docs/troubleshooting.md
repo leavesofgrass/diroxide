@@ -138,6 +138,29 @@ The joined file's checksum is not the one in the `.crc` file. A part was damaged
 
 Windows lets only a program with the right to make symbolic links do so. Turn on Developer Mode in Windows Settings (System, then For developers), or start diroxide as an administrator. For a folder, diroxide offers "Make a junction instead? No is the default. y or n". A junction needs no right and points by the full path. On a FAT or exFAT drive no link is possible: "Cannot link here: this place holds no links".
 
+## Encryption or Verify signature cannot go on
+
+[Encryption and signatures](encryption.md) is the guide. These are the stops, each with what to do:
+
+- "Encrypting with age needs a plugin. Manage optional components gets it." The three age commands need the Encryption plugin. Answer its question, then turn it on in Manage plugins; until then a command says "Encryption is not enabled. Enable it in Manage plugins."
+- "gpg not found. Install GnuPG first." The gpg commands need GnuPG on your computer. `diro doctor --check gpg` says where diroxide looked, and [Tools and diro doctor](tools.md) has the install command for your system.
+- "Key not certified: sign it in your key tool, or choose another". gpg will not encrypt to a key you have not certified, and diroxide never changes how far gpg trusts a key. Certify the key in your own key tool, or choose another recipient.
+- "Cannot check: public key is missing", then "diroxide does not fetch keys." Import the signer's key into your keyring yourself, then check again. A lookup on a server would send an address away.
+- "Gave up on report.pdf.age: 3 wrong tries", or for gpg "Could not decrypt report.pdf.gpg: wrong passphrase 3 times". A passphrase is asked three times for one file. Start the command again with the right one.
+- "Could not decrypt report.pdf.age", then "It asks for more work than diroxide allows. It may be hostile." The file is refused on purpose, before anything is asked, because opening it would take far longer than a passphrase should.
+- A list's signature says "Cannot check: no public key given". Verify checksum cannot check a minisign signature. Focus the list and use Verify signature, which asks for the key.
+- On Windows a gpg command waits several seconds for gpg's agent, and asks for a passphrase again in the next command. [Encryption and signatures](encryption.md#on-windows) says why.
+
+## Change owner or Change time refuses
+
+- "Could not change the owner of notes.txt: only an administrator can. Start diro as administrator, then try again." Giving a file to another owner takes an administrator, and diroxide never starts as one for you.
+- "Could not change the owner of /usr/bin: system folders are protected. Use the system's own tools." The system's folders and everything in them are never changed.
+- "Could not set the change time: the system sets it. Set the modified time instead." The change time is the system's, and no program can set it.
+- On Windows, Change owner says "Opening the Security dialog for notes.txt" and then "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." This build cannot open that dialog yet, so use File Explorer.
+- "Modified time rounded by the disk" is not an error. The disk, a FAT disk for example, keeps a time less exactly than it was asked for.
+
+[Links, permissions and times](links-permissions.md) has the dialogs.
+
 ## F3, or another new key, does nothing
 
 - F3 may not reach diroxide. Run the key test, or use View in the File menu (Alt+F, then V) or the palette. The viewer's own keys are in the View menu's Viewer submenu (Alt+V, then V) and in the palette. [Terminals](terminals.md) lists the keys terminals keep. If Shift+F3 does nothing, your terminal may send it as F15. Quick view in the View menu (Alt+V, then Q) and in the palette turns the quick view on. [The quick view](quick-view.md) has the rest.
@@ -284,6 +307,7 @@ If a key is involved, add what `diro keys test` said. If an accessibility proble
 - [Archives](archives.md)
 - [Split and join](split-join.md)
 - [The viewer](viewer.md)
+- [Encryption and signatures](encryption.md)
 - [Links, permissions and times](links-permissions.md)
 - [Search and the filter language](search.md)
 - [Labels and bookmarks](labels-bookmarks.md)

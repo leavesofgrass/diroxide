@@ -150,7 +150,7 @@ A 7-Zip that hangs is stopped by a time limit, and the words say so: "7-Zip took
 
 Delete, Rename and Make folder work inside an open zip. A zip cannot be changed in place, so each one rewrites the whole archive: it writes a new zip beside the old one, tests it, and only then sends the old one to the trash and gives the new one the old name. If anything fails or you cancel, the old archive is untouched.
 
-Open the zip, focus a member, and use the usual keys: Delete for Delete, F2 for Rename, F7 for Make folder. The File menu does not list Delete, Rename and Make folder inside a zip yet, though their keys and the palette work. A 7z, a tar and an archive read through 7-Zip keep the read-only sentence.
+Open the zip, focus a member, and use the usual keys: Delete for Delete, F2 for Rename, F7 for Make folder. The File menu lists them too, inside a zip: Make folder (M), Rename (R), Move to trash (T) and Delete for good (G), each with its key beside it. Duplicate stays hidden there, and so do Cut, Paste and Move in the Edit menu, because a rewrite of a zip does not do them. A zip opened by its bytes with Open as archive, such as a `.docx`, is not a zip by its name, so its menus stay hidden there while the keys still work. A 7z, a tar and an archive read through 7-Zip hide every change and keep the read-only sentence. [Settings](settings.md#menus-and-banks) says how the menus decide what to show.
 
 ### The question and its rows
 

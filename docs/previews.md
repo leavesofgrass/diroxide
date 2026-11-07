@@ -139,7 +139,7 @@ The window can show a picture, as one graphic. It is the window's own: the termi
 - The pixel guard stands in front of the pixels, with the numbers above. A picture past it is said and never opened: "PNG, 20000 by 20000, too large to open", "PNG, file too large to open" past 256 MiB, or "PNG, unreadable: file is cut short".
 - PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are shown. The other formats say that they need a component.
 
-The picture view has no command of its own yet, so it is not on [the keyboard page](keyboard.md), and Enter is the window's own key for it. The window's picture view has not been heard on a screen reader.
+The command is Show picture, in the View menu and the palette, with Enter as its key in the viewer and in the preview on a picture. It is on [the keyboard page](keyboard.md) as `view.picture`. [The GUI](gui.md#the-picture-view) says what it answers in a terminal, with nothing shown and on a file that is not a picture. The window's picture view has not been heard on a screen reader.
 
 ## The limits
 
