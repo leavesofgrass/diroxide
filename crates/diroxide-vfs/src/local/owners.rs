@@ -14,6 +14,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use crate::provider::Principal;
+
 /// How long a read of the two files is trusted.
 const KEEP_FOR: Duration = Duration::from_secs(30);
 
@@ -22,6 +24,9 @@ const KEEP_FOR: Duration = Duration::from_secs(30);
 pub(crate) struct Owners {
     users: HashMap<u32, String>,
     groups: HashMap<u32, String>,
+    /// Users' full names, the first part of the description field, where
+    /// one is given and differs from the name.
+    full_names: HashMap<u32, String>,
 }
 
 impl Owners {
@@ -29,10 +34,45 @@ impl Owners {
     /// `name:password:gid:members` per group line. Comments, blank lines
     /// and malformed lines are skipped; the first name for a number wins.
     pub(crate) fn parse(passwd: &str, group: &str) -> Self {
+        let users = by_number(passwd);
+        let full_names = full_names(passwd, &users);
         Self {
-            users: by_number(passwd),
+            users,
             groups: by_number(group),
+            full_names,
         }
+    }
+
+    /// A user's full name, where the account's description gives one
+    /// that differs from the name: "Ada Example".
+    pub(crate) fn full_name(&self, uid: u32) -> Option<&str> {
+        self.full_names.get(&uid).map(String::as_str)
+    }
+
+    /// A user or group by name or number, for a change of owner: the
+    /// number as the id and the name where known. A number this computer
+    /// has no name for is still a principal (an owner can be any number);
+    /// an unknown name is `None`.
+    pub(crate) fn principal(&self, text: &str, group: bool) -> Option<Principal> {
+        let (number, name) = if let Ok(number) = text.parse::<u32>() {
+            let name = if group {
+                self.groups.get(&number)
+            } else {
+                self.users.get(&number)
+            };
+            (number, name.cloned())
+        } else {
+            let number = if group {
+                self.group_number(text)
+            } else {
+                self.user_number(text)
+            }?;
+            (number, Some(text.to_owned()))
+        };
+        Some(Principal {
+            id: number.to_string(),
+            name,
+        })
     }
 
     /// The user's name, or the number when no name is known.
@@ -88,6 +128,34 @@ impl Owners {
     }
 }
 
+/// The full names in a password file's description fields (the part
+/// before the first comma), kept only where one is given and differs from
+/// the user's name.
+fn full_names(passwd: &str, users: &HashMap<u32, String>) -> HashMap<u32, String> {
+    let mut map = HashMap::new();
+    for line in passwd.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.split(':').collect();
+        let (Some(name), Some(number), Some(description)) =
+            (fields.first(), fields.get(2), fields.get(4))
+        else {
+            continue;
+        };
+        let Ok(number) = number.parse::<u32>() else {
+            continue;
+        };
+        let full = description.split(',').next().unwrap_or("").trim();
+        if full.is_empty() || full == *name || users.get(&number).map(String::as_str) != Some(*name)
+        {
+            continue;
+        }
+        map.entry(number).or_insert_with(|| full.to_owned());
+    }
+    map
+}
+
 fn by_number(text: &str) -> HashMap<u32, String> {
     let mut map = HashMap::new();
     for line in text.lines() {
@@ -128,5 +196,28 @@ mod tests {
         assert_eq!(owners.user_number("ada"), Some(1000));
         assert_eq!(owners.group_number("staff"), Some(50));
         assert_eq!(owners.group_number("nobody"), None);
+        assert_eq!(owners.full_name(1000), Some("Ada Example"));
+        assert_eq!(owners.full_name(0), None, "root's description is its name");
+    }
+
+    #[test]
+    fn a_principal_is_found_by_name_or_number() {
+        let owners = Owners::parse(
+            "ada:x:1000:1000:Ada Example,,,:/home/ada:/bin/bash\n",
+            "staff:x:50:ada\n",
+        );
+        let ada = owners.principal("ada", false).expect("ada is known");
+        assert_eq!(
+            (ada.id.as_str(), ada.name.as_deref()),
+            ("1000", Some("ada"))
+        );
+        let by_number = owners.principal("1000", false).expect("a number");
+        assert_eq!(by_number.name.as_deref(), Some("ada"));
+        let unknown_number = owners.principal("4242", false).expect("any number");
+        assert_eq!(unknown_number.name, None);
+        assert_eq!(owners.principal("bob", false), None);
+        let staff = owners.principal("staff", true).expect("a group");
+        assert_eq!(staff.id, "50");
+        assert_eq!(owners.principal("ada", true), None, "not a group");
     }
 }
