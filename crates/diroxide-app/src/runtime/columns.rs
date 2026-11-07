@@ -168,6 +168,8 @@ fn read_cells(
         entry: &entry,
         type_id: item.type_id.as_deref(),
         group: item.group.as_deref(),
+        cancel: Some(&ctx.cancel),
+        tools: Some(&ctx.tools),
     };
     let mut costs: Vec<Cost> = item
         .keys

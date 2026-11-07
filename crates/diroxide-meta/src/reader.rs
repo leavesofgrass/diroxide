@@ -4,10 +4,11 @@
 //! commits 33 and 35), and the pipeline's body adds the guard and the
 //! cost classes without changing the trait.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use diroxide_core::{Entry, Place};
-use diroxide_vfs::{ReadSeek, VfsError};
+use diroxide_vfs::{CancelToken, ReadSeek, ToolRunner, VfsError};
 
 use crate::field::Field;
 
@@ -35,9 +36,11 @@ impl Cost {
     }
 }
 
-/// What a reader is asked about: the file, its entry, and what its type
-/// check found.
-#[derive(Clone, Copy, Debug)]
+/// What a reader is asked about: the file, its entry, what its type
+/// check found, and what a reader that starts a program needs: the
+/// asking read's cancel token and the runner of helper programs (MA's
+/// request 1, VL's 1).
+#[derive(Clone, Copy)]
 pub struct ReadRequest<'a> {
     /// The file's place.
     pub place: &'a Place,
@@ -47,6 +50,43 @@ pub struct ReadRequest<'a> {
     pub type_id: Option<&'a str>,
     /// Its group, when known: `images`.
     pub group: Option<&'a str>,
+    /// The token that cancels the read that asks, when it has one: a
+    /// reader that runs a program stops it when the token is set. The
+    /// pipeline gives every reader its read's token.
+    pub cancel: Option<&'a CancelToken>,
+    /// The runner of helper programs the asking read goes through (the
+    /// app's tools registry, a test's double), when it gives one: a
+    /// reader that runs a program uses it before any runner of its own.
+    /// An `Arc`, so the pipeline can hand it to the reader's thread.
+    pub tools: Option<&'a Arc<dyn ToolRunner>>,
+}
+
+impl std::fmt::Debug for ReadRequest<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReadRequest")
+            .field("place", &self.place)
+            .field("entry", &self.entry)
+            .field("type_id", &self.type_id)
+            .field("group", &self.group)
+            .field("cancel", &self.cancel)
+            .field("tools", &self.tools.map(|_| "a runner"))
+            .finish()
+    }
+}
+
+impl<'a> ReadRequest<'a> {
+    /// A request for a file with nothing else known: no type, no group,
+    /// no cancel token and no runner.
+    pub fn new(place: &'a Place, entry: &'a Entry) -> Self {
+        Self {
+            place,
+            entry,
+            type_id: None,
+            group: None,
+            cancel: None,
+            tools: None,
+        }
+    }
 }
 
 /// The limits a read is held to.

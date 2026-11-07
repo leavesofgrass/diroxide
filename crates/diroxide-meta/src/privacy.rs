@@ -297,6 +297,8 @@ mod tests {
                 entry: &entry,
                 type_id: None,
                 group: None,
+                cancel: None,
+                tools: None,
             };
             reports.push(check(&pipeline, &provider, &request, &limits, &ctx));
         }

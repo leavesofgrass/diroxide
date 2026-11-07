@@ -838,6 +838,8 @@ pub(crate) mod tests {
             entry: &entry,
             type_id: None,
             group: None,
+            cancel: None,
+            tools: None,
         };
         assert!(reader.accepts(&request), "{name}");
         reader
@@ -896,6 +898,8 @@ pub(crate) mod tests {
             entry: &entry,
             type_id: Some("pdf"),
             group: None,
+            cancel: None,
+            tools: None,
         };
         let limits = ReadLimits {
             max_bytes: 10,

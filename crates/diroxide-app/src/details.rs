@@ -207,11 +207,15 @@ pub fn read_fields_with(
         Err(error) => return (Vec::new(), vec![format!("the file, {error}")]),
     };
     let pipeline = pipeline(&ask.tools);
+    // The readers get the cancel token and the runner too, so one that
+    // starts a program (ffprobe) stops it on a cancel (MA's request 1).
     let request = ReadRequest {
         place: &ask.place,
         entry: &ask.entry,
         type_id: ask.file_type.as_ref().map(|t| t.id.as_str()),
         group: ask.file_type.as_ref().and_then(|t| t.group.as_deref()),
+        cancel: Some(cancel),
+        tools: Some(&ask.tools.0),
     };
     let ctx = OpContext::new()
         .with_tools(Arc::clone(&ask.tools.0))
