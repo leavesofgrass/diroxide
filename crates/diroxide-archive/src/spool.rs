@@ -141,7 +141,12 @@ pub(crate) fn spool_to_file(
     free: Option<u64>,
     cancel: &CancelToken,
 ) -> Result<SpoolFile, ArchiveError> {
-    fill(Vec::new(), reader, limits, dir, budget, free, cancel)
+    let mut spooled = fill(Vec::new(), reader, limits, dir, budget, free, cancel)?;
+    // Held for reading only from here: 7-Zip on Windows opens what it
+    // reads with read sharing alone, which a handle that may write would
+    // refuse ("being used by another process").
+    spooled.file = File::open(&spooled.path).map_err(VfsError::from)?;
+    Ok(spooled)
 }
 
 /// Writes `held`, then the rest of `reader`, into a new spool file in

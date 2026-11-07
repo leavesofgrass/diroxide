@@ -310,3 +310,125 @@ fn find(dir: &Path, name: &str) -> PathBuf {
     }
     panic!("{name} not under {}", dir.display());
 }
+
+/// A 7-Zip that hangs, or stops on a signal: the runner's limits turn
+/// either into words.
+struct Broken(bool);
+
+impl ToolRunner for Broken {
+    fn has(&self, _tool: &str) -> bool {
+        true
+    }
+
+    fn run(
+        &self,
+        _request: &ToolRequest,
+        _cancel: &CancelToken,
+    ) -> Result<ToolOutput, ToolRunError> {
+        if self.0 {
+            Err(ToolRunError::TimedOut {
+                name: "7-Zip".to_owned(),
+                seconds: 300,
+            })
+        } else {
+            Ok(ToolOutput::new(None, Vec::new(), Vec::new()))
+        }
+    }
+
+    fn run_streaming(
+        &self,
+        request: &ToolRequest,
+        cancel: &CancelToken,
+        _record: &mut dyn FnMut(ToolStream, &str) -> std::ops::ControlFlow<()>,
+    ) -> Result<ToolOutput, ToolRunError> {
+        self.run(request, cancel)
+    }
+}
+
+#[test]
+fn a_hang_or_a_crash_of_7_zip_becomes_words() {
+    for (hangs, words) in [
+        (true, "7-Zip took longer than 300 seconds and was stopped"),
+        (false, "7-Zip stopped unexpectedly"),
+    ] {
+        let dir = scratch();
+        let (_registry, provider, ctx) = world(dir.path(), Arc::new(Broken(hangs)));
+        let path = dir.path().join("Backup.rar");
+        std::fs::write(&path, rar5(&MEMBERS)).unwrap();
+        let error = provider
+            .list_folder(&place_of(&path).into_archive(), &ctx, Allowances::default())
+            .unwrap_err();
+        assert_eq!(error.to_string(), words);
+    }
+}
+
+#[test]
+fn a_rar_inside_a_zip_is_spooled_for_7_zip() {
+    let Some((program, _version)) = seven_zip() else {
+        eprintln!("7-Zip not found: the nested test did not run");
+        return;
+    };
+    let dir = scratch();
+    let (_registry, provider, ctx) = world(dir.path(), Arc::new(Program(program)));
+    let outer = dir.path().join("outer.zip");
+    let rar = rar5(&MEMBERS);
+    std::fs::write(&outer, crate::build::zip_of(&[("Backup.rar", &rar)])).unwrap();
+    let inner = Place::parse(&format!("{}!Backup.rar", outer.display())).unwrap();
+    let listing = provider
+        .list_folder(&inner.clone().into_archive(), &ctx, Allowances::default())
+        .unwrap();
+    let names: Vec<String> = listing.entries.iter().map(|e| e.name.clone()).collect();
+    assert_eq!(names, ["docs", "readme.txt"]);
+    // The spool copy is the provider's while the archive is open.
+    provider.forget(&place_of(&outer));
+}
+
+#[test]
+fn an_iso_no_plugin_claims_is_read_through_7_zip() {
+    let Some((program, version)) = seven_zip() else {
+        eprintln!("7-Zip not found: the ISO test did not run");
+        return;
+    };
+    let dir = scratch();
+    let source = dir.path().join("iso-source");
+    std::fs::create_dir_all(source.join("docs")).unwrap();
+    std::fs::write(source.join("docs").join("notes.txt"), b"in the image").unwrap();
+    let iso = dir.path().join("disk.iso");
+    let made = Command::new("bsdtar")
+        .arg("--format")
+        .arg("iso9660")
+        .arg("-cf")
+        .arg(&iso)
+        .arg("-C")
+        .arg(&source)
+        .arg("docs")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    if !made.is_ok_and(|s| s.success()) {
+        eprintln!("bsdtar not found: the ISO test did not run");
+        return;
+    }
+    let (_registry, provider, ctx) = world(dir.path(), Arc::new(Program(program)));
+    let root = place_of(&iso).into_archive();
+    let listing = provider
+        .list_folder(&root, &ctx, Allowances::default())
+        .unwrap();
+    let names: Vec<String> = listing.entries.iter().map(|e| e.name.clone()).collect();
+    assert_eq!(names, ["docs"]);
+    assert!(
+        provider
+            .title(&root)
+            .starts_with("disk.iso, read with 7-Zip")
+    );
+    if version.extracts() {
+        let notes = root.join("docs").unwrap().join("notes.txt").unwrap();
+        let mut text = String::new();
+        provider
+            .read_member(&notes, &ctx, Allowances::default(), None)
+            .unwrap()
+            .read_to_string(&mut text)
+            .unwrap();
+        assert_eq!(text, "in the image");
+    }
+}
