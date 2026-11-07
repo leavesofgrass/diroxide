@@ -198,7 +198,7 @@ jobs:
           max_len=""
           case "$TARGET" in
             archive_zip|archive_7z|archive_roundtrip) max_len=-max_len=1048576 ;;
-            archive_stream|archive_xz) max_len=-max_len=262144 ;;
+            archive_stream|archive_xz|archive_slt) max_len=-max_len=262144 ;;
             preview_image_header|preview_container) max_len=-max_len=1048576 ;;
             highlight_hang) timeout=2 ;;
           esac
