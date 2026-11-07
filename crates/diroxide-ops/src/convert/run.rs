@@ -38,8 +38,9 @@ use super::report::ConvertReport;
 use super::staging::{spool_input_name, staging_name, token};
 use super::tools::{self, FfmpegProgress};
 use crate::engine::{Conflict, Engine, ItemError, JobControl, JobSink};
+use crate::journal::JournalWriter;
 use crate::progress::JobProgress;
-use crate::undo::LeftAs;
+use crate::undo::{LeftAs, UndoRecord};
 
 /// How much output a tool may write on its two streams before it is
 /// stopped: FFmpeg's progress for a ten-hour film stays well under it.
@@ -80,6 +81,9 @@ struct Shared<'a> {
     asking: Mutex<Option<ConflictAction>>,
     /// Error classes answered "Skip all like this".
     skip_all: AtomicBool,
+    /// The undo journal, when the engine keeps one: a step per file, so
+    /// Undo works after a restart and an interrupted run is said.
+    journal: Mutex<Option<JournalWriter>>,
 }
 
 impl Shared<'_> {
@@ -95,6 +99,25 @@ impl Shared<'_> {
             progress.clone()
         };
         self.sink.progress(&snapshot);
+    }
+
+    /// Appends a step to the undo journal: what it made.
+    fn journal_step(&self, step: u64, outcome: &str, created: Vec<Place>) {
+        if let Some(journal) = Self::lock(&self.journal).as_mut() {
+            let delta = UndoRecord {
+                created,
+                ..UndoRecord::default()
+            };
+            let _ = journal.step(step, outcome, &delta);
+        }
+    }
+
+    /// Notes in the undo journal which staging file belongs to which
+    /// output, so a crash's leftover is said at the next start.
+    fn journal_writing(&self, output: &Place, staging: &Place) {
+        if let Some(journal) = Self::lock(&self.journal).as_mut() {
+            let _ = journal.writing(output, staging);
+        }
     }
 
     fn stopped(&self) -> bool {
@@ -145,6 +168,16 @@ impl Engine {
             halted: AtomicBool::new(false),
             asking: Mutex::new(None),
             skip_all: AtomicBool::new(false),
+            journal: Mutex::new(self.journal().and_then(|journal| {
+                journal
+                    .start(
+                        plan.job,
+                        JobKind::Convert,
+                        &plan.origin,
+                        plan.work.len() as u64,
+                    )
+                    .ok()
+            })),
         };
         shared.say(|_| {});
         self.make_folders(&shared);
@@ -165,6 +198,15 @@ impl Engine {
             .into_inner()
             .unwrap_or_else(PoisonError::into_inner);
         report.job.cancelled = cancelled;
+        if let Some(journal) = shared
+            .journal
+            .into_inner()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_mut()
+        {
+            let how = if cancelled { "cancelled" } else { "finished" };
+            let _ = journal.end(how, &report.job.undo.left);
+        }
         report
     }
 
@@ -185,6 +227,7 @@ impl Engine {
                     .undo
                     .created
                     .push(folder.clone());
+                shared.journal_step(0, "folder made", vec![folder.clone()]);
             }
         }
     }
@@ -206,6 +249,7 @@ impl Engine {
             }
             shared.say(|p| p.current = Some(said(&item.source)));
             let outcome = self.one_with_retries(shared, item);
+            let step = index as u64 + 1;
             let mut report = Shared::lock(&shared.report);
             match outcome {
                 Outcome::Made(output, entry) => {
@@ -214,10 +258,15 @@ impl Engine {
                     report.job.done.push(output.clone());
                     report.job.undo.created.push(output.clone());
                     report.job.undo.left.push(LeftAs::of(&output, &entry));
+                    shared.journal_step(step, "done", vec![output]);
                 }
-                Outcome::Skipped(reason) => report.job.skipped.push((item.source.clone(), reason)),
+                Outcome::Skipped(reason) => {
+                    report.job.skipped.push((item.source.clone(), reason));
+                    shared.journal_step(step, "skipped", Vec::new());
+                }
                 Outcome::Failed(cause) => {
                     report.job.failed.push((item.source.clone(), cause));
+                    shared.journal_step(step, "failed", Vec::new());
                     if shared.plan.errors == ErrorPolicy::StopAtFirst {
                         report.job.stopped = true;
                         shared.halted.store(true, Ordering::SeqCst);
@@ -401,6 +450,9 @@ impl Engine {
                 }
             }
         };
+        if let Staged::Beside(place) = &staged {
+            shared.journal_writing(&item.output, place);
+        }
         let ran = self.run_tool(shared, item, &input, &staging, &out_folder);
         // A staging file is removed with a fresh context: the job's own is
         // cancelled when Cancel is why it goes.

@@ -664,3 +664,28 @@ args = ["--from", "markdown", "--to", "org", "{input}", "{output}"]
     assert!(org.contains("Ada Example"), "{org}");
     assert_eq!(names(&root.path().join("out")), ["note.org"]);
 }
+
+/// The undo journal holds a conversion's record, so Undo works after a
+/// restart, and a finished run is not said as interrupted.
+#[test]
+fn the_undo_journal_keeps_what_the_run_made() {
+    let (root, input, out) = folders();
+    let journal = crate::journal::Journal::new(root.path().join("state"));
+    let engine = engine(Arc::new(FakeTools::with(&["magick"]))).with_journal(journal.clone());
+    let req = request(
+        &[&input.join("a.png"), &input.join("b.png")],
+        &out,
+        IMAGE_TO_JPEG,
+    );
+    let plan = engine
+        .plan_convert(&req, &ByExtension, &JobControl::new())
+        .unwrap();
+    engine.run_convert(&plan, &JobControl::new(), &Script::default());
+    let records = journal.records();
+    assert_eq!(records.len(), 1);
+    let mut made = records[0].created.clone();
+    made.sort_by_key(|p| p.to_string());
+    assert_eq!(made, [place(&out.join("a.jpg")), place(&out.join("b.jpg"))]);
+    assert_eq!(records[0].kind, Some(JobKind::Convert));
+    assert!(journal.interrupted().is_empty());
+}
