@@ -208,6 +208,9 @@ pub struct FakeTools {
     pub found: Mutex<Vec<String>>,
     /// The output each tool gives, by registry id.
     pub answers: Mutex<HashMap<String, diroxide_vfs::ToolOutput>>,
+    /// The output a tool gives when its first argument is this one, by
+    /// registry id and that argument (`tesseract --list-langs`).
+    pub by_first: Mutex<HashMap<(String, String), diroxide_vfs::ToolOutput>>,
     /// Every run asked for, in order.
     pub runs: Mutex<Vec<diroxide_vfs::ToolRequest>>,
 }
@@ -225,6 +228,16 @@ impl FakeTools {
     pub fn answer_with(&self, tool: &str, output: diroxide_vfs::ToolOutput) {
         self.found.lock().unwrap().push(tool.to_owned());
         self.answers.lock().unwrap().insert(tool.to_owned(), output);
+    }
+
+    /// Makes a tool found, answering its runs whose first argument is
+    /// `first` with this standard output.
+    pub fn answer_first(&self, tool: &str, first: &str, stdout: &[u8]) {
+        self.found.lock().unwrap().push(tool.to_owned());
+        self.by_first.lock().unwrap().insert(
+            (tool.to_owned(), first.to_owned()),
+            diroxide_vfs::ToolOutput::new(Some(0), stdout.to_vec(), Vec::new()),
+        );
     }
 
     /// The tools run so far, by id, in order.
@@ -249,6 +262,19 @@ impl diroxide_vfs::ToolRunner for FakeTools {
         _cancel: &diroxide_vfs::CancelToken,
     ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
         self.runs.lock().unwrap().push(request.clone());
+        let first = request
+            .args
+            .first()
+            .map(|a| a.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if let Some(output) = self
+            .by_first
+            .lock()
+            .unwrap()
+            .get(&(request.tool.clone(), first))
+        {
+            return Ok(output.clone());
+        }
         self.answers
             .lock()
             .unwrap()

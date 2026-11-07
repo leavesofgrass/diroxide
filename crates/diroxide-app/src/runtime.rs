@@ -1495,6 +1495,22 @@ impl Runtime {
                     shared.send(AppEvent::Details(Box::new(note)));
                 });
             }
+            Request::PictureText {
+                generation,
+                place,
+                tools,
+            } => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let result =
+                        crate::picture_text::read(&registry, &place, &tools, &CancelToken::new());
+                    shared.send(AppEvent::PictureText {
+                        generation,
+                        place,
+                        result,
+                    });
+                });
+            }
             Request::ToolsReport(tools) => {
                 self.worker(move |shared| {
                     let report = tools.0.report();

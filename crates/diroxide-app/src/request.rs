@@ -462,6 +462,18 @@ pub enum Request {
     /// Settings Tools page (alpha 4, R30 commit 42); answered as
     /// [`AppEvent::ToolsReported`](crate::AppEvent::ToolsReported).
     ToolsReport(SharedRegistry),
+    /// Read the text in a picture with Tesseract on a worker (alpha 4,
+    /// R30 commit 44); answered as
+    /// [`AppEvent::PictureText`](crate::AppEvent::PictureText).
+    PictureText {
+        /// The request's number, so a late answer to an older one is
+        /// dropped.
+        generation: u64,
+        /// The picture.
+        place: Place,
+        /// The runner Tesseract goes through.
+        tools: SharedTools,
+    },
     /// Drop the passwords an archive job's plan holds: its confirmation
     /// said no, or it was never run.
     DropArchiveJob(JobId),

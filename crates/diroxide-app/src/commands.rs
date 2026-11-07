@@ -696,6 +696,9 @@ pub mod ids {
         /// Preview the focused file now, in the quick view, the helper
         /// programs' previews included.
         PREVIEW_FILE = "file.preview";
+        /// Read the text in the focused picture with Tesseract, into the
+        /// viewer.
+        READ_PICTURE_TEXT = "file.read-text-in-picture";
     }
 }
 
@@ -721,7 +724,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 247] = [
+pub static CATALOG: [CommandInfo; 248] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1510,6 +1513,14 @@ pub static CATALOG: [CommandInfo; 247] = [
         ids::COPY_ALL_DETAILS,
         "Copy all details",
         "Puts every detail of the focused file on the clipboard, the private ones too.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::READ_PICTURE_TEXT,
+        "Read text in picture",
+        "Reads the text in the focused picture with Tesseract and shows it in the viewer, titled as machine read, since the words are a machine's guess.",
         Panel,
         &[],
         &[],

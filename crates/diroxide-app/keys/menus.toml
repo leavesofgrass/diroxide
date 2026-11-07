@@ -48,6 +48,9 @@ command = "file.copy-details"
 command = "file.copy-all-details"
 
 [[menu.item]]
+command = "file.read-text-in-picture"
+
+[[menu.item]]
 command = "file.actions"
 
 [[menu.item]]

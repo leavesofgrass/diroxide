@@ -35,6 +35,8 @@ mod labels;
 // Full screen, focus mode and the themes (lane A6).
 mod look;
 mod palette;
+// Read text in picture (alpha 4, lane VA).
+mod picture_text;
 // The queue's settings, messages and questions (lane A2).
 mod queue;
 // The queue saved across restarts and its interrupted jobs (lane Q2).

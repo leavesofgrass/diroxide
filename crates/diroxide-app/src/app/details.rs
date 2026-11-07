@@ -50,6 +50,11 @@ pub(super) struct DetailsState {
     copy: Option<Copying>,
     /// A Say Details waiting for its summary.
     summary: Option<u64>,
+    /// A Read text in picture waiting for Tesseract.
+    picture: Option<u64>,
+    /// How many words Tesseract read in each picture this session, for
+    /// the details row (alpha 4, R30 commit 44).
+    picture_words: std::collections::HashMap<Place, usize>,
 }
 
 /// The details list's facts.
@@ -207,6 +212,12 @@ impl App {
     /// theirs.
     pub(super) fn details_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
         let id = &command.id;
+        if *id == ids::READ_PICTURE_TEXT {
+            if !self.dialogs.is_empty() {
+                return Some(vec![self.say(Message::status("Close this dialog first."))]);
+            }
+            return Some(self.read_picture_text());
+        }
         if *id != ids::SAY_DETAILS && *id != ids::COPY_DETAILS && *id != ids::COPY_ALL_DETAILS {
             return None;
         }
@@ -376,6 +387,16 @@ impl App {
             diroxide_core::names::spell_out(&place.to_string()),
             DetailGroup::Place,
         ));
+        // What Tesseract read in it this session (R30 commit 44): "Text
+        // in picture (machine read): 14 words".
+        if let Some(words) = self.details.picture_words.get(place) {
+            rows.push(DetailRow::new(
+                "picture.text",
+                crate::picture_text::TITLE,
+                count(*words as u64, "word", "words"),
+                DetailGroup::Content,
+            ));
+        }
         if let Some(owner) = &entry.owner {
             rows.push(DetailRow::new(
                 "file.owner",
@@ -657,6 +678,82 @@ impl App {
     ) -> Vec<Effect> {
         let rows = assemble(&copy.base, Some(&rows), None, true, &unread);
         self.put_details(&copy.title, &rows, copy.all)
+    }
+
+    /// Read text in picture (R30 commit 44): Tesseract reads the focused
+    /// picture on a worker; the viewer shows the text when it comes.
+    fn read_picture_text(&mut self) -> Vec<Effect> {
+        let (entry, place, _) = match self.details_target() {
+            Ok(target) => target,
+            Err(empty) => return vec![self.say(Message::status(empty))],
+        };
+        if !file_like(&entry) {
+            let line = format!("Not a file: {}", entry.display_name());
+            return vec![self.say(Message::info(line))];
+        }
+        let generation = self.next_details();
+        self.details.picture = Some(generation);
+        let tools = self.tool_runner();
+        self.request(Request::PictureText {
+            generation,
+            place,
+            tools,
+        });
+        let line = format!("Reading the text in {}", entry.display_name());
+        vec![self.say(Message::status(line))]
+    }
+
+    /// Tesseract's answer: the viewer over the text, its title said first
+    /// ("Text in picture (machine read), photo.png, 14 words"); or the
+    /// line that says why not ("No text: tesseract not found").
+    pub(super) fn picture_text_read(
+        &mut self,
+        generation: u64,
+        place: &Place,
+        result: Result<crate::picture_text::PictureText, String>,
+    ) -> Vec<Effect> {
+        if self.details.picture != Some(generation) {
+            return Vec::new();
+        }
+        self.details.picture = None;
+        let text = match result {
+            Ok(text) => text,
+            Err(line) => return vec![self.say(Message::info(line))],
+        };
+        self.details.picture_words.insert(place.clone(), text.words);
+        let name = place
+            .name()
+            .map(diroxide_core::names::display_name)
+            .unwrap_or_default()
+            .into_owned();
+        if !self.dialogs.is_empty() || self.viewer_open() {
+            let line = format!("{}, in {name}", text.detail_line());
+            return vec![self.say(Message::info(line))];
+        }
+        let title = format!(
+            "{}, {name}, {}",
+            crate::picture_text::TITLE,
+            text.words_line()
+        );
+        let options =
+            crate::viewer::ViewerOptions::from_settings(&self.settings, self.screen_reader);
+        let (viewer, said) =
+            match crate::viewer::Viewer::from_text(place.clone(), title, text.text(), options) {
+                Ok(opened) => opened,
+                Err(error) => return vec![self.say(error.message(&name))],
+            };
+        self.viewing = Some(super::viewing::Viewing {
+            viewer: Box::new(viewer),
+            side: self.active,
+            row: place.name().unwrap_or_default().to_owned(),
+            siblings: Vec::new(),
+            last_follow: None,
+        });
+        let mut effects = vec![Effect::Redraw(Redraw::All)];
+        for message in said {
+            effects.push(self.say(message));
+        }
+        effects
     }
 
     /// Puts rows on the clipboard and says how many: "Copied 14 details,

@@ -278,6 +278,10 @@ pub struct Viewer {
     /// The encoding the owner chose for this file, for this session
     /// (lane TA); `None` reads by the automatic choice.
     chosen: Option<&'static Encoding>,
+    /// Whether its text was made by diroxide rather than read from its
+    /// place (Read text in picture, alpha 4): Reload does not read the
+    /// place again.
+    made: bool,
 }
 
 impl fmt::Debug for Viewer {
@@ -343,10 +347,34 @@ impl Viewer {
             job: None,
             point: 0,
             chosen: None,
+            made: false,
         };
         viewer.load()?;
         let said = viewer.opening_lines();
         Ok((viewer, said))
+    }
+
+    /// A viewer over text diroxide made, not read from its place: Read
+    /// text in picture's result (alpha 4), its title said first ("Text in
+    /// picture (machine read), photo.png, 14 words"). Reload does not read
+    /// the place again ([`Viewer::is_made`]).
+    pub fn from_text(
+        place: Place,
+        title: String,
+        text: String,
+        options: ViewerOptions,
+    ) -> Result<(Self, Vec<Message>), ViewerError> {
+        let (mut viewer, _) =
+            Self::from_source(place, ViewerSource::bytes(text.into_bytes()), options)?;
+        viewer.title = title;
+        viewer.made = true;
+        let said = viewer.opening_lines();
+        Ok((viewer, said))
+    }
+
+    /// Whether its text was made by diroxide ([`Viewer::from_text`]).
+    pub fn is_made(&self) -> bool {
+        self.made
     }
 
     /// Reads the start of the source: the text form, the binary check and

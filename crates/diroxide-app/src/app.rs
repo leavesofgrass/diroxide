@@ -267,6 +267,16 @@ pub enum AppEvent {
     /// The tools registry's report for the Settings Tools page: each
     /// helper program's line, found or not (alpha 4).
     ToolsReported(Box<diroxide_tools::ToolsReport>),
+    /// Tesseract read the text in a picture, or the line that says why
+    /// not (alpha 4).
+    PictureText {
+        /// The request's number.
+        generation: u64,
+        /// The picture.
+        place: Place,
+        /// The text, or the line to say.
+        result: Result<crate::picture_text::PictureText, String>,
+    },
     /// A file's bytes for the viewer were read, or could not be (the
     /// sentence says why).
     ViewerSource {
@@ -1843,6 +1853,11 @@ impl App {
             AppEvent::ArchiveEntries { place, line } => self.archive_entries_counted(&place, line),
             AppEvent::Details(note) => self.details_note(*note),
             AppEvent::ToolsReported(report) => self.tools_reported(*report),
+            AppEvent::PictureText {
+                generation,
+                place,
+                result,
+            } => self.picture_text_read(generation, &place, result),
             AppEvent::ViewerSource {
                 request,
                 place,
