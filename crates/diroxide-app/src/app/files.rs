@@ -1166,49 +1166,7 @@ impl App {
                     diroxide_core::names::display_name(new)
                 )
             }
-            Then::Undid(kind) if clean => {
-                let noun = match kind {
-                    Some(JobKind::Trash) => "trash",
-                    Some(JobKind::Move) => "move",
-                    Some(JobKind::Rename) => "rename",
-                    Some(JobKind::Copy) => "copy",
-                    Some(JobKind::Duplicate) => "duplicate",
-                    Some(JobKind::MakeFolder) => "make folder",
-                    Some(JobKind::Unpack) => "unpack",
-                    Some(JobKind::Pack) => "pack",
-                    Some(JobKind::Split) => "split",
-                    Some(JobKind::Join) => "join",
-                    Some(JobKind::Rewrite) => "zip change",
-                    Some(JobKind::Convert) => "conversion",
-                    Some(JobKind::StripMetadata) => "strip",
-                    // What a plugin committed (lane AE).
-                    Some(JobKind::PluginCommand) => "plugin command",
-                    Some(JobKind::SetTimes) => "time change",
-                    _ => "job",
-                };
-                let how = match kind {
-                    Some(JobKind::Copy | JobKind::Duplicate | JobKind::StripMetadata) => {
-                        format!("{} in the trash", count(done, "copy is", "copies are"))
-                    }
-                    Some(
-                        JobKind::Unpack
-                        | JobKind::Pack
-                        | JobKind::Split
-                        | JobKind::Join
-                        | JobKind::Convert
-                        | JobKind::PluginCommand,
-                    ) => {
-                        format!("{} in the trash", count(done, "item is", "items are"))
-                    }
-                    Some(JobKind::MakeFolder) => {
-                        format!("{} removed", count(done, "folder", "folders"))
-                    }
-                    // The new archive to the trash, the old one back (lane AW).
-                    Some(JobKind::Rewrite) => "the old copy is back".to_owned(),
-                    _ => format!("{} back", count(done, "item is", "items are")),
-                };
-                format!("Undid {noun}: {how}")
-            }
+            Then::Undid(kind) if clean => undo_words(kind.as_ref(), done),
             _ if cancel_line.is_some() => cancel_line.clone().unwrap_or_default(),
             _ if clean && report.kind == JobKind::Trash => catalog::moved_to_trash(done).text,
             _ if self.finish_lines.is_some() => {
@@ -1462,6 +1420,105 @@ impl App {
                 }
                 Vec::new()
             }
+        }
+    }
+}
+
+/// The line after an undo, "Undid NOUN: HOW": the noun from the job's
+/// kind and the how from where its items went (made files to the trash,
+/// moved ones back, a rewritten archive's old copy back, a made folder
+/// removed).
+pub(crate) fn undo_words(kind: Option<&JobKind>, done: u64) -> String {
+    let noun = match kind {
+        Some(JobKind::Trash) => "trash",
+        Some(JobKind::Move) => "move",
+        Some(JobKind::Rename) => "rename",
+        Some(JobKind::Copy) => "copy",
+        Some(JobKind::Duplicate) => "duplicate",
+        Some(JobKind::MakeFolder) => "make folder",
+        Some(JobKind::Unpack) => "unpack",
+        Some(JobKind::Pack) => "pack",
+        Some(JobKind::Split) => "split",
+        Some(JobKind::Join) => "join",
+        Some(JobKind::Rewrite) => "zip change",
+        Some(JobKind::Convert) => "conversion",
+        Some(JobKind::StripMetadata) => "strip",
+        // What a plugin committed (lane AE).
+        Some(JobKind::PluginCommand) => "plugin command",
+        Some(JobKind::SetTimes) => "time change",
+        // gpg's jobs make files beside their sources (lane AE; the
+        // words after D3's reading).
+        Some(JobKind::Encrypt) => "encrypt",
+        Some(JobKind::Decrypt) => "decrypt",
+        Some(JobKind::Sign) => "sign",
+        _ => "job",
+    };
+    let how = match kind {
+        Some(JobKind::Copy | JobKind::Duplicate | JobKind::StripMetadata) => {
+            format!("{} in the trash", count(done, "copy is", "copies are"))
+        }
+        Some(
+            JobKind::Unpack
+            | JobKind::Pack
+            | JobKind::Split
+            | JobKind::Join
+            | JobKind::Convert
+            | JobKind::PluginCommand
+            | JobKind::Encrypt
+            | JobKind::Decrypt
+            | JobKind::Sign,
+        ) => {
+            format!("{} in the trash", count(done, "item is", "items are"))
+        }
+        Some(JobKind::MakeFolder) => {
+            format!("{} removed", count(done, "folder", "folders"))
+        }
+        // The new archive to the trash, the old one back (lane AW).
+        Some(JobKind::Rewrite) => "the old copy is back".to_owned(),
+        _ => format!("{} back", count(done, "item is", "items are")),
+    };
+    format!("Undid {noun}: {how}")
+}
+
+#[cfg(test)]
+mod undo_words_tests {
+    use super::*;
+
+    /// The undo line names the job and says where its items went, within
+    /// 40 cells for the common counts.
+    #[test]
+    fn the_undo_line_names_the_job_and_where_its_items_went() {
+        assert_eq!(
+            undo_words(Some(&JobKind::Encrypt), 1),
+            "Undid encrypt: 1 item is in the trash"
+        );
+        assert_eq!(
+            undo_words(Some(&JobKind::Decrypt), 2),
+            "Undid decrypt: 2 items are in the trash"
+        );
+        assert_eq!(
+            undo_words(Some(&JobKind::Sign), 1),
+            "Undid sign: 1 item is in the trash"
+        );
+        assert_eq!(
+            undo_words(Some(&JobKind::Convert), 1),
+            "Undid conversion: 1 item is in the trash"
+        );
+        assert_eq!(
+            undo_words(Some(&JobKind::Rewrite), 1),
+            "Undid zip change: the old copy is back"
+        );
+        assert_eq!(
+            undo_words(Some(&JobKind::Move), 3),
+            "Undid move: 3 items are back"
+        );
+        assert_eq!(undo_words(None, 1), "Undid job: 1 item is back");
+        for line in [
+            "Undid encrypt: 1 item is in the trash",
+            "Undid decrypt: 2 items are in the trash",
+            "Undid sign: 1 item is in the trash",
+        ] {
+            assert!(line.chars().count() <= 40, "{line}");
         }
     }
 }
