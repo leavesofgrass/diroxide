@@ -1,6 +1,6 @@
 # Encryption and signatures
 
-This guide covers the Encryption submenu of the File menu: three commands that encrypt and decrypt files with age, three that do the same with gpg or sign with it, and Verify signature, which checks a signature against its file. It also covers the sentences Verify checksum adds when the checksum list is signed.
+This guide covers the Encryption submenu of the File menu: three commands that use age to encrypt and decrypt files, three that use gpg to encrypt, decrypt and sign them, and Verify signature, which checks a signature against its file. It also covers the sentences Verify checksum adds when the checksum list is signed.
 
 The short version: Encryption makes a new file beside each file you choose and leaves the original where it is. A passphrase is typed in a hidden field and is never kept. A good signature means the key fits the file; it never means you know who holds the key. diroxide never fetches a key, and it never calls a file safe or genuine.
 
@@ -34,7 +34,7 @@ This is age with a passphrase. A form opens, titled "Encrypt with a passphrase" 
 
 - The first row is the default button, "Encrypt", with its summary after it. The summary is the plan, "Encrypt 3 files with a passphrase", and then a warning: "Typing is hidden. A lost passphrase cannot be got back, so note it where you keep such things."
 - "Passphrase" and "Repeat the passphrase", both hidden fields.
-- "ASCII armor", off unless you turn it on. Armor makes the result text, so it can go in a mail.
+- "ASCII armor", off unless you turn it on. Turned on, it writes the result as text instead of bytes.
 
 Typing a passphrase twice is how a typing mistake is caught. If the two differ, the form comes back with "The two passphrases differ. Nothing was changed. Try again." An empty one says "A passphrase cannot be empty." After three tries that do not fit, the command stops with "Cancelled; nothing more was done". Escape on the form stops it too, and nothing is done.
 
@@ -82,7 +82,7 @@ When a file cannot be decrypted, the line says "Could not decrypt report.pdf.age
 
 A folder is passed over: "Skipped Photos: it is a folder", then "Pack the folder first, then encrypt the archive." A file that is not on this computer says "Skipped NAME: not on this computer", because the plugin works on local files. With nothing marked, "Nothing to do: mark the files first".
 
-With several files, a count comes before the closing sentence, such as "Decrypted 2 of 3 files; 1 failed".
+With several files, in an encryption or a decryption, a count comes before the closing sentence: "Encrypted 3 of 3 files", or "Decrypted 2 of 3 files; 1 failed".
 
 ## After an encryption: the originals and the trash
 
@@ -119,7 +119,7 @@ diroxide runs gpg with a fixed set of rules, so the program cannot surprise you:
 
 ## Decrypt with gpg
 
-Decrypt with gpg has no field. It plans, asks "Decrypt 1 file? No is the default. y or n", and then runs. A key that gpg's own agent already holds asks nothing. Otherwise the hidden prompt says "Passphrase for key ending 4E7B (hidden):", with the last four digits of the key. A wrong passphrase asks again, three tries in all, and then "Gave up on report.pdf.gpg: 3 wrong tries".
+Decrypt with gpg has no field. It plans, asks "Decrypt 1 file? No is the default. y or n", and then runs. A key that gpg's own agent already holds asks nothing. Otherwise the hidden prompt says "Passphrase for key ending 4E7B (hidden):", with the last four digits of the key. A wrong passphrase asks "Try again?", starting on No, the way a wrong archive password does, and Yes shows the hidden prompt again. After three wrong ones the file fails: "Could not decrypt report.pdf.gpg: wrong passphrase 3 times".
 
 A file for a key you do not have says "No secret key for it: key ending 4E7B". A file that is not OpenPGP data says "Could not decrypt report.pdf: it is not an OpenPGP file". A good result says "Decrypted report.pdf.gpg to report.pdf." and, once, "This does not prove who made it."
 
