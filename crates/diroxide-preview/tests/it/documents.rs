@@ -73,3 +73,19 @@ fn markdown_previews_as_rows_and_a_broken_drawing_as_its_text() {
     );
     assert_eq!(broken.lines, ["<svg><title>cut"]);
 }
+
+#[test]
+fn rich_text_previews_with_its_table() {
+    let rtf = br"{\rtf1\ansi{\info{\title Bird count}}\pard Before\par\trowd\trhdr\intbl Bird\cell Seen\cell\row\trowd\intbl Crow\cell 12\cell\row\pard After\par}";
+    let preview = preview_of("count.rtf", rtf, "rtf");
+    assert_eq!(preview.summary, "RTF, Bird count, 4 rows");
+    assert_eq!(
+        preview.lines,
+        ["Before", "Bird | Seen", "Crow | 12", "After"]
+    );
+    let view = preview.document.unwrap();
+    assert_eq!(
+        view.tables()[0].cell_words(1, 0),
+        "Bird: Crow, row 2 of 2, column 1"
+    );
+}

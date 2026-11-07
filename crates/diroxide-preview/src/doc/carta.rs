@@ -8,7 +8,7 @@
 //! read path ([`super::package`]), checked member by member, and carta
 //! reads their bytes as they are; every other format is decoded first.
 //! RTF is not carta's: its reader drops every table (spike C2), so RTF
-//! has a reader of its own. The format tables, the include
+//! has a reader of its own ([`super::rtf`]). The format tables, the include
 //! neutralizer, the decode-first step and the writer list are carried
 //! from textweaver's carta bridge (`carta.rs`) under the owner's
 //! relicensing (answer 41); its loader shell, its priority and its

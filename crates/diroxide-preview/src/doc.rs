@@ -33,9 +33,11 @@
 //! docs, to docs/index.md".
 //!
 //! The readers ([`read`]): Markdown ([`markdown`]), carta's five formats
-//! ([`carta`], through the HTML-fragment reader [`html`]), SVG drawings
-//! ([`svg`], alpha 4), and plain text and code ([`text`]), with bytes that
-//! are not text refused to hex. A reader takes bytes and a name, never a
+//! ([`carta`], through the HTML-fragment reader [`html`]), and since
+//! alpha 4 SVG drawings ([`svg`]), spreadsheets ([`sheet`]), Rich Text
+//! Format ([`rtf`]) and the zip packages through the container read path
+//! ([`package`], [`read_seekable`]); and plain text and code ([`text`]),
+//! with bytes that are not text refused to hex. A reader takes bytes and a name, never a
 //! path, so it cannot read another file; every reader but plain text runs
 //! under the [`guard`], on a thread with an 8 MiB stack, with a catch and
 //! a deadline. An XML part's nesting is cut before it is parsed
@@ -48,6 +50,7 @@ pub mod guard;
 pub mod html;
 pub mod markdown;
 pub mod package;
+pub mod rtf;
 pub mod sheet;
 pub mod svg;
 #[cfg(test)]
@@ -121,6 +124,9 @@ pub enum Reader {
     Svg,
     /// A spreadsheet, through `calamine` (alpha 4).
     Sheet(SheetFormat),
+    /// Rich Text Format, through the reader carried from textweaver
+    /// (alpha 4).
+    Rtf,
     /// Plain text and code, or hex for bytes that are not text.
     Text,
 }
@@ -148,6 +154,8 @@ impl Reader {
             Reader::Carta(format)
         } else if ext == "svg" {
             Reader::Svg
+        } else if ext == "rtf" {
+            Reader::Rtf
         } else if let Some(format) = SheetFormat::from_name(name) {
             Reader::Sheet(format)
         } else {
@@ -162,6 +170,7 @@ impl Reader {
         match file_type.map(|t| t.id.as_str()) {
             Some("markdown") => Reader::Markdown,
             Some("svg") => Reader::Svg,
+            Some("rtf") => Reader::Rtf,
             Some(id) => match SheetFormat::from_type(id) {
                 Some(format) => Reader::Sheet(format),
                 None => {
@@ -208,7 +217,10 @@ pub fn read_as(
     bytes: Vec<u8>,
     options: &ReadOptions,
 ) -> Result<DocView, DocError> {
-    if binary_kind(&bytes).is_some() {
+    // RTF is text, though the sniffer names its signature among the
+    // binary kinds (for the viewer's hex choice): it goes to its reader.
+    let rtf_text = reader == Reader::Rtf && rtf::is_rtf(&bytes);
+    if !rtf_text && binary_kind(&bytes).is_some() {
         return Ok(text::read_hex(&bytes, options.hex_row));
     }
     match reader {
@@ -217,6 +229,7 @@ pub fn read_as(
             .run(move || markdown::read(&decode(&bytes, None).text)),
         Reader::Carta(format) => options.guard.run(move || carta::read(format, &bytes))?,
         Reader::Svg => options.guard.run(move || svg::read(&bytes))?,
+        Reader::Rtf => options.guard.run(move || rtf::read(&bytes))?,
         Reader::Sheet(format) => {
             let caps = package::ContainerCaps::default();
             options
