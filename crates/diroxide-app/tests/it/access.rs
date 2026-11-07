@@ -37,10 +37,28 @@ fn details_list_the_detail_rows_and_an_archives_entries() {
         said[0].starts_with("Details of course.zip, Type: "),
         "{said:?}"
     );
+    // The order of facts (alpha 4, R28 3.2): what it is, what is in it,
+    // then its size; the zip's own reader counts its files and folders,
+    // and the privacy and checksum rows are always there.
     let rows = rows(&s);
-    assert!(rows[1].starts_with("Size: "), "{rows:?}");
-    assert!(rows[1].contains(" bytes)"), "{rows:?}");
-    assert_eq!(rows[2], "Entries: 10 items", "{rows:?}");
+    let at = |start: &str| {
+        rows.iter()
+            .position(|r| r.starts_with(start))
+            .unwrap_or_else(|| panic!("no {start}: {rows:?}"))
+    };
+    assert_eq!(at("Type: "), 0, "{rows:?}");
+    assert!(at("Entries: ") < at("Size: "), "{rows:?}");
+    assert!(rows[at("Size: ")].contains(" bytes)"), "{rows:?}");
+    assert!(at("Size: ") < at("Modified: "), "{rows:?}");
+    assert!(at("Modified: ") < at("Privacy: "), "{rows:?}");
+    assert!(at("Privacy: ") < at("Path: "), "{rows:?}");
+    assert!(at("Path: ") < at("Checksum: "), "{rows:?}");
+    assert_eq!(rows[at("Checksum: ")], "Checksum: not computed");
+    assert_eq!(rows[at("Privacy: ")], "Privacy: nothing private found");
+    assert_eq!(
+        rows.last().map(String::as_str),
+        Some("Show all: every tag, read by ExifTool")
+    );
     s.key("escape");
 }
 

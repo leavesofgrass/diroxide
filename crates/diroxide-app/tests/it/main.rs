@@ -14,6 +14,9 @@ mod commands;
 mod components;
 // Compare files (W3a).
 mod comparing;
+// The details view, Say Details, Copy details and Show all (alpha 4,
+// lane VA).
+mod details;
 mod dialogs;
 // The panel filter on the filter language (W3a).
 mod filtering;

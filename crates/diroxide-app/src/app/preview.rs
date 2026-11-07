@@ -18,18 +18,21 @@
 //! timer runs on [`Instant::now`]: the frontend calls
 //! [`App::quick_view_tick`] while [`App::quick_view_wants_tick`] says so.
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use diroxide_core::{Command, CommandId, Effect, Importance, Key, Layer, Message, Move, Redraw};
 use diroxide_tools::ToolRegistry;
-use diroxide_vfs::{Registry, WatchEvent};
+use diroxide_vfs::{Registry, ToolRunner, WatchEvent};
 
 use super::{Action, App, Purpose};
 use crate::commands::ids;
+use crate::details::SharedCache;
 use crate::dialog::{Dialog, with_default_no};
 use crate::entry::{CompletionSource, EntryField};
 use crate::keymap::Lookup;
 use crate::quickview::{Outcome, QuickView, QuickViewOptions, QuickViewRequest};
+use crate::request::SharedTools;
 use crate::request::{Request, SpawnKind};
 
 /// A command of the preview layer.
@@ -129,10 +132,18 @@ pub(crate) struct Preview {
     /// The registry it reads through: the runtime's, given by the
     /// frontend; the local provider alone without one.
     pub registry: Option<Registry>,
-    /// The tools, for "Open in textweaver".
+    /// The tools, for "Open in textweaver" and the Settings Tools page;
+    /// the app's own registry without them.
     pub tools: Option<ToolRegistry>,
     /// Whether Tab put the focus in the preview region.
     pub focused: bool,
+    /// The runner the tool-backed work goes through (ffprobe, pdftotext,
+    /// ExifTool, tesseract): given by a test as a recording runner; the
+    /// app's tools registry without one (alpha 4, lane VA).
+    pub runner: Option<SharedTools>,
+    /// The previews' cache, shared by the quick view, Say Details and the
+    /// Preview command (VL's `PreviewCache`, in memory only).
+    pub cache: SharedCache,
 }
 
 impl App {
@@ -143,10 +154,38 @@ impl App {
         self.preview.registry = Some(registry);
     }
 
-    /// Gives "Open in textweaver" the tools, with the user's `tools.toml`;
-    /// the built-in entries on the path without it.
+    /// Gives "Open in textweaver" and the Settings Tools page the tools,
+    /// with the user's `tools.toml`; the app's own registry without it.
     pub fn set_tools(&mut self, tools: ToolRegistry) {
         self.preview.tools = Some(tools);
+    }
+
+    /// Gives the tool-backed work its runner: the quick view's ffprobe and
+    /// pdftotext, the details list's, Show all's ExifTool, Read text in
+    /// picture's tesseract. A test gives a recording runner, so no test
+    /// starts a real program; without one, the app's tools registry runs
+    /// them (alpha 4, lane VA).
+    pub fn set_tool_runner(&mut self, runner: Arc<dyn ToolRunner>) {
+        self.preview.runner = Some(SharedTools(runner));
+    }
+
+    /// The tools registry the Settings Tools page and "Open in textweaver"
+    /// read: the frontend's or a test's, else the app's own (`tools.toml`,
+    /// the installed helper components, PATH and the known folders).
+    pub(super) fn tools_registry(&self) -> ToolRegistry {
+        self.preview
+            .tools
+            .clone()
+            .unwrap_or_else(|| self.tool_registry())
+    }
+
+    /// The runner tool-backed work goes through: the one given, else the
+    /// app's tools registry.
+    pub(super) fn tool_runner(&self) -> SharedTools {
+        self.preview
+            .runner
+            .clone()
+            .unwrap_or_else(|| SharedTools(Arc::new(self.tools_registry())))
     }
 
     /// The quick view while it is on, for the frontend to draw its

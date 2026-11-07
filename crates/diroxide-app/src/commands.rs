@@ -679,6 +679,18 @@ pub mod ids {
         /// Run user action 9 of the focused file's type.
         TYPE_USER_9 = "type.user9";
     }
+
+    // The details view and previews in the app (alpha 4, lane VA, R30
+    // commits 41 to 44). Say Details and Copy details have no default
+    // key (R30 7.2): the palette, the File menu and a bank button.
+    ids! {
+        /// Say the focused file's summary; the focus stays.
+        SAY_DETAILS = "file.say-details";
+        /// Copy the focused file's details, private ones left out.
+        COPY_DETAILS = "file.copy-details";
+        /// Copy every detail of the focused file, private ones too.
+        COPY_ALL_DETAILS = "file.copy-all-details";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -703,7 +715,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 242] = [
+pub static CATALOG: [CommandInfo; 245] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1471,6 +1483,30 @@ pub static CATALOG: [CommandInfo; 242] = [
         Panel,
         &["alt+enter"],
         &["alt+enter"],
+    ),
+    command(
+        ids::SAY_DETAILS,
+        "Say details",
+        "Says what the focused file is in one line, such as its picture's size or its song's length; the focus stays.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COPY_DETAILS,
+        "Copy details",
+        "Puts the focused file's details on the clipboard, one a line, leaving out the private ones such as a location.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COPY_ALL_DETAILS,
+        "Copy all details",
+        "Puts every detail of the focused file on the clipboard, the private ones too.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::ENCODING,

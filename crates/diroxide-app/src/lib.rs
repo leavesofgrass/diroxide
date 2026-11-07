@@ -27,6 +27,8 @@ pub mod bookmarks;
 pub mod commands;
 // Optional components in the app (W4d).
 pub mod components;
+// The details view's reading and words (alpha 4, lane VA).
+pub mod details;
 pub mod dialog;
 pub mod entry;
 pub mod jobs;

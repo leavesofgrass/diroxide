@@ -498,36 +498,10 @@ impl App {
         place: &Place,
         line: Result<String, Message>,
     ) -> Vec<Effect> {
-        let Some(Purpose::Details(shown)) = self.opens.last().map(|o| o.purpose.clone()) else {
-            return Vec::new();
-        };
-        if &shown != place {
-            return Vec::new();
-        }
         let line = match line {
             Ok(line) => line,
             Err(message) => format!("Entries: {}", message.text),
         };
-        if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.last_mut() {
-            let mut rows = list.rows().to_vec();
-            let at = rows
-                .iter()
-                .position(|r| r.label.starts_with("Size: "))
-                .map_or(rows.len().min(2), |i| i + 1);
-            rows.insert(at, ListRow::new("entries", line.clone()));
-            let focus = list.focused().map(|r| r.id.clone());
-            let title = list.title().to_owned();
-            let help = list.help().to_owned();
-            let mut updated = ListModel::new(title).with_rows(rows);
-            updated.set_help(help);
-            if let Some(focus) = focus {
-                updated.focus_id(&focus);
-            }
-            *list = updated;
-        }
-        vec![
-            Effect::Redraw(diroxide_core::Redraw::All),
-            self.say(Message::status(line)),
-        ]
+        self.details_entries_counted(place, line)
     }
 }

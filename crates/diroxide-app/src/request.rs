@@ -260,6 +260,26 @@ impl PartialEq for SharedClock {
     }
 }
 
+/// The runner the app's tool-backed work goes through (alpha 4: the
+/// details list's ffprobe and ExifTool, Say Details, Read text in
+/// picture), handed to a worker: the tools registry in the program, a
+/// recording runner in tests, so no test starts a real program. Two are
+/// equal when they are the same runner.
+#[derive(Clone)]
+pub struct SharedTools(pub std::sync::Arc<dyn diroxide_vfs::ToolRunner>);
+
+impl fmt::Debug for SharedTools {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SharedTools")
+    }
+}
+
+impl PartialEq for SharedTools {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// A request from the app to its runtime. See the module documentation.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
@@ -420,6 +440,11 @@ pub enum Request {
     /// Count an archive's entries for the details list, on a worker;
     /// answered as [`AppEvent::ArchiveEntries`](crate::AppEvent::ArchiveEntries).
     ArchiveEntries(Place),
+    /// Read a file's details on a worker: its fields for the details list
+    /// or Copy details, the preview's summary for Say Details, or every
+    /// tag ExifTool reads for Show all (alpha 4, R30 commit 41); answered
+    /// as [`AppEvent::Details`](crate::AppEvent::Details).
+    Details(Box<crate::details::DetailsAsk>),
     /// Drop the passwords an archive job's plan holds: its confirmation
     /// said no, or it was never run.
     DropArchiveJob(JobId),

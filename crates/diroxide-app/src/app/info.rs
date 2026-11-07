@@ -1,5 +1,5 @@
 //! What the app says and lists: Say Status, Say Other Panel, the key bar,
-//! help, details, the context menu, the menus and the palette, settings
+//! help, the context menu, the menus and the palette, settings
 //! with set and reset, the layout and theme, config problems, the job
 //! history, the key test, the run-command prompt, shell here, the editor,
 //! and quit.
@@ -8,7 +8,7 @@ use diroxide_config::{Layout, SettingKind};
 use diroxide_core::format::count;
 use diroxide_core::{
     Command, CommandId, Effect, Key, KeyColumn, Layer, ListModel, ListRow, Message, Place,
-    PlaceKind, Redraw, Side, Timestamp,
+    PlaceKind, Redraw, Side,
 };
 use diroxide_vfs::Capabilities;
 
@@ -53,14 +53,6 @@ fn local_folder(place: &Place) -> Option<Place> {
             .and_then(|archive| archive.parent()),
         PlaceKind::Remote => None,
     }
-}
-
-fn time_words(time: Option<Timestamp>, clock: &dyn diroxide_core::Clock) -> String {
-    time.map(|t| {
-        let civil = t.to_civil(clock.offset());
-        format!("{}, {}", civil.long_date(), civil.clock_time())
-    })
-    .unwrap_or_else(|| "not known".to_owned())
 }
 
 impl App {
@@ -311,98 +303,6 @@ impl App {
             "Up and Down read, a letter jumps to a command by name, Enter runs it, Escape closes.",
         );
         list
-    }
-
-    /// Details of the focused entry, one fact a row, each said first.
-    pub(super) fn details(&mut self) -> Vec<Effect> {
-        let side = self.active;
-        let panel = self.panel(side);
-        let (Some(entry), Some(place)) = (panel.focused_entry(), panel.focused_place()) else {
-            let empty = panel.list().empty_text().to_owned();
-            return vec![self.say(Message::status(empty))];
-        };
-        let clock = self.clock.as_ref();
-        let name = entry.display_name().into_owned();
-        // The item information list (plan commit 66): the preview's detail
-        // rows first, the type and the size in words with the exact bytes,
-        // then the name and what the panel knows.
-        // The type the background check settled on, else the name's (lane
-        // TA).
-        let file_type = self.types.by_index(entry.type_index).or_else(|| {
-            self.types
-                .detect(&entry.name, &[])
-                .and_then(|d| self.types.get(&d.type_id))
-        });
-        let mut lines: Vec<String> = diroxide_preview::detail_rows(entry, file_type)
-            .into_iter()
-            .map(|row| format!("{}: {}", row.label, row.value))
-            .collect();
-        // The file's groups, its type's first ("File group: Images,
-        // Screenshots"), and the line when its name and its first bytes
-        // disagree, said here on request (R28 4.3).
-        if let Ok(groups) = self.types.groups_of(entry, clock)
-            && !groups.is_empty()
-        {
-            let names: Vec<&str> = groups.iter().map(|g| g.name.as_str()).collect();
-            lines.push(format!("File group: {}", names.join(", ")));
-        }
-        if let Some(line) = panel.disagreement(&entry.name) {
-            lines.push(line.to_owned());
-        }
-        let archive = entry.kind == diroxide_core::EntryKind::Archive;
-        lines.push(format!("Name: {name}"));
-        if entry.needs_care {
-            let issues = diroxide_vfs::check_name(&entry.name, &panel.names());
-            for issue in issues {
-                lines.push(issue.line());
-            }
-            lines.push(format!(
-                "Spelled out: {}",
-                diroxide_core::names::spell_out(&entry.name)
-            ));
-        }
-        if entry.kind == diroxide_core::EntryKind::Folder {
-            lines.push("Size: folder size not computed".to_owned());
-        } else if entry.size.is_none() {
-            lines.push("Size: not known".to_owned());
-        }
-        lines.push(format!("Modified: {}", time_words(entry.modified, clock)));
-        lines.push(format!("Created: {}", time_words(entry.created, clock)));
-        lines.push(format!("Accessed: {}", time_words(entry.accessed, clock)));
-        if let Some(attributes) = entry.attributes {
-            lines.push(format!("Attributes: {}", attributes.words(entry.kind)));
-        }
-        if let Some(owner) = &entry.owner {
-            lines.push(format!("Owner: {owner}"));
-        }
-        if let Some(group) = &entry.group {
-            lines.push(format!("Group: {group}"));
-        }
-        if let Some(link) = &entry.link {
-            lines.push(format!(
-                "Link to: {}",
-                diroxide_core::names::display_name(&link.target)
-            ));
-        }
-        if entry.hidden {
-            lines.push("Hidden: yes".to_owned());
-        }
-        lines.push(format!(
-            "Path: {}",
-            diroxide_core::names::spell_out(&place.to_string())
-        ));
-        let list = read_list(format!("Details of {name}"), text_rows(lines));
-        let effects = self.open_dialog(
-            Dialog::Choose {
-                list,
-                on_enter: Command::new(ids::DETAILS),
-            },
-            Purpose::Details(place.clone()),
-        );
-        if archive {
-            self.request(Request::ArchiveEntries(place));
-        }
-        effects
     }
 
     /// The context menu as a list: what the File menu offers here, and the

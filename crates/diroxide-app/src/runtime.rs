@@ -1488,6 +1488,13 @@ impl Runtime {
                     shared.send(AppEvent::ArchiveEntries { place, line });
                 });
             }
+            Request::Details(ask) => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let note = crate::details::answer(&registry, &ask);
+                    shared.send(AppEvent::Details(Box::new(note)));
+                });
+            }
             Request::DropArchiveJob(job) => {
                 // Dropping the job's secrets wipes its password.
                 lock(&self.archive_secrets).remove(&job);

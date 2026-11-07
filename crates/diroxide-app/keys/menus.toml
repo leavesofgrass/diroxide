@@ -39,6 +39,15 @@ command = "file.details"
 access = "d"
 
 [[menu.item]]
+command = "file.say-details"
+
+[[menu.item]]
+command = "file.copy-details"
+
+[[menu.item]]
+command = "file.copy-all-details"
+
+[[menu.item]]
 command = "file.actions"
 
 [[menu.item]]

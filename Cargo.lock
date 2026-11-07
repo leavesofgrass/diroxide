@@ -1612,6 +1612,7 @@ dependencies = [
  "diroxide-core",
  "diroxide-diff",
  "diroxide-filetype",
+ "diroxide-meta",
  "diroxide-ops",
  "diroxide-plugins",
  "diroxide-preview",
