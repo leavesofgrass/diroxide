@@ -94,6 +94,14 @@ The undo journal lists the paths of the last jobs so that Undo can reverse them,
 - Strip metadata writes a copy and leaves the original as it was. Check before sharing writes nothing. Remove the internet mark changes one file, after asking, and Undo puts the mark back.
 - A watched folder's ledger and log list the names of the files it handled, what happened to each and when, in the state folder. Nothing in them leaves your computer. A conversion's report stays there too, the last 20 of them. [Watched folders](watched-folders.md) and [conversions](conversions.md) say what each holds.
 
+## Encryption, signatures and keys
+
+- Encrypt, Decrypt, Sign with gpg and Verify signature read the files you choose, on this computer, and send nothing anywhere. [Encryption and signatures](encryption.md) is the guide.
+- A passphrase, an age identity file and a minisign public key are asked each time and stored nowhere: not in a setting, the state folder, the log or the system's keyring.
+- gpg is started so that it never looks a key up on a server, because a lookup would send an email address away. A key you need has to be in your own keyring already. When it is not, you hear "Cannot check: public key is missing" and "diroxide does not fetch keys."
+- A signature check says the key's last four digits first. The name of the key's owner is said only after them, because it is text the key's maker chose.
+- Encryption makes a new file beside the original and leaves the original alone. The trash is not a secure delete, and diroxide says so when it offers it.
+
 ## Plugins and script commands
 
 A plugin runs with your own rights and can read what you can read, so turn on only plugins you trust. [Security](security.md) says what that means.
@@ -122,6 +130,7 @@ When you report a problem, say what you did, what you heard or saw, the output o
 
 - [Remote places over SFTP](remote-places.md)
 - [Privacy before sharing](before-sharing.md)
+- [Encryption and signatures](encryption.md)
 - [Watched folders](watched-folders.md)
 - [Conversions](conversions.md)
 - [Hooks](hooks.md)
