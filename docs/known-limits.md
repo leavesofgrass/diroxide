@@ -1,18 +1,18 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view, disk images and git are here, and grow as the alpha does. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view, columns, checksums, privacy before sharing, conversions, watched folders, disk images and git are here, and grow as the alpha does. Where a limit has a workaround, the workaround comes first.
 
 ## What is not in alpha 4 yet
 
 Each item below is still to come. None of them is dated: a feature that is not in alpha 4 yet arrives in a later pass or a later alpha.
 
 - Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out an icon on macOS, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
-- Changing an archive. Alpha 1 reads zip, 7z, tar, tar.gz, tar.xz and xz, and packs a new archive from a selection, but it cannot add to, delete from or rename inside an existing one. Copy, move, rename, delete and make folder inside an archive say "Archives are read only here. Use Pack to make a new one." Editing inside an archive comes in a later alpha.
-- More archive formats. bzip2 or Zstandard compression on their own, lzip, RAR and a spanned zip set (`.z01`, `.z02`) are not read. diroxide says which one it met and that it is not supported. They are planned for a later alpha, through the 7z program when it is installed. An ISO image and the virtual disk formats open through the disk image plugin, an optional component; [Disk images](disk-images.md) says what they do not do yet. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
+- Changing an archive further. A zip can be edited: Delete, Rename and Make folder inside it rewrite it. Adding files to an existing archive is not built, and a 7z, a tar and an archive read through 7-Zip are never changed. Copy into one, rename, delete and make folder say "Archives are read only here. Use Pack to make a new one."
+- More archive formats. bzip2 or Zstandard compression on their own, and lzip, are not read. diroxide says which one it met and that it is not supported. RAR, CAB, ARJ, LZH, RPM, cpio, ar and a spanned zip set (`.z01`, `.z02`) are read, read only, through 7-Zip when it is installed. An ISO image and the virtual disk formats open through the disk image plugin, an optional component, or through 7-Zip; [Disk images](disk-images.md) says what they do not do yet. diroxide does not pack to `.gz`, bzip2, Zstandard or RAR.
 - The quick view reads Markdown, plain text, code, the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira), pictures, sound and video, archives, PDF, Word and other documents, and spreadsheets. [Previews](#previews) below says what it does not do.
 - Changing the owner and group of a file, and a dialog for typing a file time, come in a later alpha. The library for changing an owner is built, and the dialog is not. There is no Change times command yet, although copies keep dates.
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
-- Tools, previews, the file type model, disk images and the git plugin are in alpha 4, and the sections below say what they do not do. Conversions, the metadata and checksum commands, hot folders and the access dialogs are built in the library, and reach the program in a later pass.
+- Tools, previews, the file type model, columns, checksums, the privacy commands, conversions, watched folders, disk images and the git plugin are in alpha 4, and the sections below say what they do not do. Encryption and signatures, the access rows and dialogs, and the photo helpers reach the program in a later pass.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
 - Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
@@ -32,7 +32,8 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/format` and `column/changed` (the host can answer for a page of cells, and the panels show no plugin column yet), `completion/query`, `fs/stage` and `fs/commit`. `place/describe`, `ui/form` and `ui/show_diff` are served since alpha 4. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare the shapes and will be called when the feature that needs them arrives.
 - A plugin's form or diff has few limits checked yet: nothing stops 5,000 fields, a default of 1 MB, a label of 90 cells or a title of 120 cells, and an empty id or label is not refused. Unknown keys are dropped in silence, and a title that already names the plugin gets the name twice. Binary content cannot travel in JSON, so a diff side with NUL bytes is read as text and compared byte by byte, and `encoding` and `place` on a diff side are dropped.
 - Watching a folder through a plugin's place is a shape without a working end-to-end test. SFTP cannot watch a folder, so a remote panel does not refresh by itself; open the folder again to see changes.
-- The preview region and the conversions dialog come in a later alpha. Until then `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
+- The Convert command does not list a plugin's converters yet, and the quick view does not call a plugin's previewer. `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
+- A plugin's command run by a watched folder's task pauses the task: "plugin commands are not available here".
 - Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
 - A plugin's columns are declared and not shown in the panels yet.
 - A plugin list opens inside a panel. These lists still open over the panels, as dialogs: the Volumes list, the trash browser, the Jobs list, search results, and the results of a script in `lister` mode.
@@ -62,6 +63,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The first-run list of components opens once, at the first start, and only when the list holds something besides the example plugins: that is, the helper programs in every build, and the three plugins in the release files. `diro run`, `diro serve` and a plain listing on a pipe never open it. The list never covers a dialog that is open at the start; Ask first-run choices again, in the Tools menu, opens it later, and says "No optional components to choose from yet" when there is nothing to choose.
 - A no to a download is not remembered. Get example plugins asks again each time.
 - Installing from a zip file or a folder says "Not downloaded" when it finds none of the files, which is the wrong word for an install.
+- After a helper is installed, diroxide runs it once to see that it starts. The line that says so, "Installed pandoc, but it did not start.", is built and is not said yet by the program or by `diro components`.
 
 ## Remote places over SFTP
 
@@ -132,9 +134,10 @@ Each item below is still to come. None of them is dated: a feature that is not i
 
 - A label step can be undone only in the same session. A job's undo survives a restart.
 - There is no command to rename, recolor, reorder or delete a label. Edit `labels.toml` by hand. The favorite keys follow the order in the file.
-- A file that is renamed or moved loses its label, even when diroxide did it, because a label belongs to the file's path. A label's results show the old place as gone until you take the label off.
+- A label, a note and a field belong to the file's path. They follow a file that diroxide moves or renames, and an undo of that, but a copy does not take them, and a file moved by another program loses them. A label's results show the old place as gone until you take the label off.
+- A note is one line of at most 300 characters. A field name is at most 24 characters, in small letters, digits, `-` and `_`.
 - Ctrl+1 to Ctrl+7, the favorite labels, do not arrive in many Unix terminals. The Edit menu's Labels submenu is the sure way.
-- No command sets a panel's columns yet, so a saved view keeps the columns in use when you saved it.
+- No command sets one panel's columns yet, so a saved view keeps the columns in use when you saved it. The Columns setting changes both panels.
 - Typing in the Bookmarks list does not narrow it. An alias letter jumps, and any other letter moves by name.
 - Ctrl+B is tmux's prefix key, so inside tmux it arrives only when pressed twice. Alt+B and the Go menu open the bookmarks.
 
@@ -236,6 +239,11 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Debug builds of diroxide are slow on archives with a million entries. A release build opens one in a few seconds. This matters only to people who build it.
 - A local file whose name holds an archive marker, such as `a.zip!b.txt`, is listed but has no place, so diroxide cannot act on it. The row is not yet flagged "name needs care".
 - What diroxide writes was read back by other programs in the project's Linux container: 7-Zip 25.01, GNU tar 1.35, xz, unzip, gzip, bzip2 and zip. On Windows, bsdtar and unzip read it. Other versions and other archivers have not been tried.
+- Archives read through 7-Zip: a listing runs without `-ba`, so a member's "Read 3.2 GB first" question counts the bytes ahead only when the archive is solid. A hostile member name with a line break could add a fake row to the listing, though a name that climbs out of the archive is still refused. A non-ASCII member name under a C locale on Linux may not be found, which has not been checked. Members over 64 MiB are unpacked alone into the spool first.
+- Archives read through 7-Zip, tried: 7-Zip 25.01 in the project's Linux container listed, read and unpacked every format. Not tried: macOS, p7zip, a network place, 7-Zip 26.05, a RAR 5 with a password, a real compressed RAR file from WinRAR, and a separate program holding an archive open. Debian's 7-Zip 25.01 read a RAR made for the test, though a Debian package is said to leave RAR out.
+- Editing inside a zip rewrites the whole zip, so a big one takes time: 1.2 GB of made content took about 52 seconds. A rewrite loses zip comments and extra fields and redoes the compression, with stored members kept stored. An encrypted zip needs its password to read and to write, and ZipCrypto members become AES-256.
+- The File menu does not list Delete, Rename and Make folder inside a zip yet, and its conditions hide them. Their keys and the palette reach them.
+- The old copy goes to the trash after the new zip passes its test. The trash step was tested on a test trash, not on the real Windows Recycle Bin. Where there is no trash the old copy is not kept, and the line says so.
 
 ## The viewer and the quick view
 
@@ -294,7 +302,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - RTF: bold and italic are not said, and deleted revisions are left out.
 - A spreadsheet's formulas are not worked out again. A part nested deeper than 256 levels is read as flattened text, with a note.
 - Preview and auto-preview gate the whole PDF preview in the quick view, its properties line included. A PDF off this computer gives its properties and no text, because Poppler's standard-input mode has not been tried.
-- A picture that is not on a local disk goes to Tesseract on standard input, up to 64 MiB. A details read is not cancelled when the list closes.
+- A picture that is not on a local disk goes to Tesseract on standard input, up to 64 MiB.
 - The window's picture view has no command of its own yet and is not on the keyboard page. It has not been tried on a picture inside an archive or on an SFTP site, with a decode past its ten-second deadline, on a real Wayland compositor, or on NVDA or JAWS.
 - Not tried: macOS, Linux natively, a real XLS, camera raw, HEIC or AVIF file, and a real Tesseract, ExifTool or ffprobe run inside a test. Nothing in the previews has been heard on a screen reader.
 
@@ -302,11 +310,69 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 [The details view](details.md) describes the list. These are the limits.
 
-- A details read cannot be cancelled when you close the list. Its own time limits bound it, and the answer is dropped.
+- Closing the list stops the read of a file's facts between readers and at the next read. A program already running, such as ffprobe, finishes within its own time limit, and the answer is dropped.
 - Show all needs a file on a local disk. Folder sizes are not computed, and a folder has no Privacy row and no Checksum row.
-- "Checksum: not computed" stays so: the checksum engine is built, and no command asks for it yet.
+- The Checksum row shows only the values the Checksum command computed in this session, while the file is as it was. Otherwise it says "Checksum: not computed".
+- `diro info` knows the built-in file types and the built-in tools list, and does not read your `filetypes.toml` or `tools.toml`.
 - Nothing about the order of rows, "Read 9 more details" or how Show all pans on a Braille display has been heard.
 - Who can do what, built in the library and not yet in the program: the details view does not show a file's mode, access list, flags such as immutable, or "You can" answer yet, and no dialog changes an owner. "You can" is advice from the system's own check, not a promise. A macOS access list reads "Access list: not read on this system". Not tried: macOS and the BSDs, a network share, a system with SELinux on, a non-owner account on Windows, Explorer's Effective Access tab, a real FAT disk for time rounding, and the immutable flag set.
+
+## Columns, notes and fields
+
+[Columns, notes and fields](columns.md) describes them. These are the limits.
+
+- A background column reads only the rows around the focus. A row elsewhere says "reading" until the focus comes near or Fill columns reads it.
+- Sorting is by a cell's words, so a duration sorts as text. There is no sort value on a field yet.
+- A file says "reading" for a column until the readers have been through it, even for a kind of file that no reader takes for that key, such as `audio.artist` on a zip. Its cell is then left out. The program does not yet know in advance which readers take a file.
+- The window shows a field column in each row's words and has no header or grid for it.
+- A saved view keeps the columns in use when it was saved.
+- The reading of cells was measured with 100,000 entries and three columns, warm, on one machine. A cold disk and a network share were not tried.
+- Not tried: the real git plugin's program started from the app, a real ExifTool, ffprobe or Tesseract run for a column, Linux natively and macOS.
+
+## Checksums and verifying
+
+[Checksums and verifying](checksums.md) describes them. These are the limits.
+
+- A signature beside a checksum list is named and not checked yet: "Signature not checked: SHA256SUMS.asc". "List is signed" is not said anywhere.
+- SHA-1 lines in an old list are read and said as not checked, because diroxide computes no SHA-1.
+- A CRC-32 or MD5 match carries the cautions "finds damage, not tampering" and "old, not safe against tampering".
+- The Checksum row of the details view holds this session's values only.
+
+## Privacy before sharing
+
+[Privacy before sharing](before-sharing.md) describes them. These are the limits.
+
+- Check before sharing is not a job you can cancel. The readers' own time limits bound it.
+- Strip takes JPEG, PNG and WebP pictures only, up to 256 MiB. It does not crop or rename.
+- A removed internet mark comes back with Ctrl+Z only in the same session, and only while no job or label change has come after it.
+- The test for Remove the internet mark skips itself on a drive that keeps no extended attributes, so nothing is known there.
+
+## Conversions
+
+[Conversions](conversions.md) describes them. These are the limits.
+
+- The app's jobs line uses the job engine's general progress words. "Converting 5 of 13 images" is said only by `diro convert`, on standard error.
+- The Convert list types files by their names, and the plan types them by their contents.
+- The program has no Save report command. `diro convert --report FILE` writes one, with names only.
+- A plugin's converters are not in the Convert list yet. `diro plugin convert` runs one on a single file.
+- A report keeps no hash of the files, and a plan names no tool version.
+- carta reads UTF-8 text only, and a deeply nested Org file can take minutes. Nothing is made as PDF. Opus keeps no cover art, and percent progress for sound and video needs ffprobe.
+- Not tried: macOS, Linux natively, HEIC, ImageMagick natively and a real network place for the spool.
+
+## Watched folders
+
+[Watched folders](watched-folders.md) describes them. These are the limits.
+
+- A task's four folders, `in`, `out`, `processed` and `failed`, are made by you. The engine can make them, and nothing in the program or in `diro watch --task` asks it to yet. A missing folder pauses the task.
+- A script task and a plugin task are built, and have not been run through the real script host or a real plugin. A plugin's command pauses the task.
+- A task's filter is read by the program, and the count in the catch-up question ignores it.
+- On Linux and macOS a writer that does not lock its file is seen only by its quiet period. On Windows diroxide looks again through a share-mode open and never locks a file in `in`.
+- `online-only = "fetch"` downloads a cloud placeholder.
+- `diro watch --task` answers the first start's catch-up question No when nobody is at the terminal. `--once` gives up on a file still changing after 2 minutes.
+- The Watched folders list's "done today" counts come from each task's log, while Say Status counts this session's notes.
+- A task cannot watch an existing folder such as Downloads in place. It watches the `in` folder of its home, and there is no key yet for a queue folder outside `home/in`.
+- The form for making a task without writing the file is planned for the final alpha.
+- A hot folder was run for seconds in tests, never for hours. APFS, a network share, macOS, Linux natively and Windows long paths were not tried.
 
 ## Disk images
 

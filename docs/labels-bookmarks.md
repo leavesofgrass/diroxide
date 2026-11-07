@@ -22,7 +22,7 @@ Alt+L is Set label. It acts on the marked rows, or on the focused row when nothi
 2. Press Enter on a label, or type a new name and press Enter. diroxide says "Label urgent added to 3 items". If some already had it: "Label urgent added to 1 item; 1 already had it".
 3. A new name makes a new label. It takes a color no label has yet, or the next in turn when all six are used, and says it: "Label taxes added to report.pdf; a new label, blue".
 
-Toggle label adds a label, or takes it off when every item has it: "Label urgent removed from report.pdf". Clear labels takes every label off: "Labels cleared from 2 items". Both are in the palette and in the Edit menu under Labels (Alt+E, then B): s Set, t Toggle, c Clear and l Labels list.
+Toggle label adds a label, or takes it off when every item has it: "Label urgent removed from report.pdf". Clear labels takes every label off: "Labels cleared from 2 items". Both are in the palette and in the Edit menu under Labels (Alt+E, then B): s Set, t Toggle, c Clear, l Labels list, n Set note and f Set field. The last two are described under [notes and fields](#notes-and-fields) below.
 
 Ctrl+Z undoes the last label step: "Undid label urgent on 3 items". Label undo lasts for the session. A job's undo survives a restart, but a label's does not.
 
@@ -40,11 +40,15 @@ Labels list, in the palette and in the Edit menu, lists the labels: "Labels, 6 l
 - A label that no item has says "No item has the label urgent."
 - With no labels at all: "No labels. Set label makes one."
 
+### Notes and fields
+
+Two more things are kept with a label's file, in the same `labels.toml`: a note, one line of your own words, and named fields such as `project: Apollo`. Set note and Set field, in the Labels submenu, set them. They show in the details view, in the Yours group, and as the columns `custom.note` and `custom.project`. [Columns, notes and fields](columns.md) has the words, the limits and the columns.
+
 ### What a label is tied to
 
-A label belongs to a place, the full path of the file. diroxide keeps the labels in `labels.toml` in the state folder.
+A label belongs to a place, the full path of the file. diroxide keeps the labels, notes and fields in `labels.toml` in the state folder.
 
-- A file that is renamed or moved loses its label, even when diroxide itself did it. Label it again. The Labels list counts the old place as missing, and the label's results list it as gone, until you take the label off.
+- A file that diroxide renames or moves keeps its labels, note and fields: they move with it in the same step, and so do those of everything inside a moved folder. Undoing the rename or move takes them back. A copy does not take them. A file that another program renamed or moved loses them. Label it again. The Labels list counts the old place as missing, and the label's results list it as gone, until you take the label off.
 - A label works in a filter: `label urgent`, `label urgent, waiting` for either, or `labeled` for anything with a label. [Search and the filter language](search.md) has the rest. Sort by label is in the Sort list.
 - A label never changes the file itself.
 
@@ -94,7 +98,7 @@ From then on, each time you enter the folder, diroxide applies it and says so af
 
 Forget this folder's view, in the View menu (Alt+V, then G) and the palette, stops it: "View forgotten for work. The usual view returns on leaving." In a folder with none: "work has no saved view."
 
-A saved view's filter is read in the filter language. A filter that reads file contents is not applied on entering, because it would have to ask first. The views are in `folder-views.toml` in the state folder. A view keeps the columns that were in use when you saved it, because no command sets a panel's columns yet. Nothing is removed on its own.
+A saved view's filter is read in the filter language. A filter that reads file contents is not applied on entering, because it would have to ask first. The views are in `folder-views.toml` in the state folder. A view keeps the columns that were in use when you saved it, because no command sets one panel's columns yet; the Columns setting changes both panels. Nothing is removed on its own.
 
 ## Saved searches
 
@@ -108,6 +112,7 @@ A saved search is a different kind of memory: a filter and a scope, run again wh
 
 ## See also
 
+- [Columns, notes and fields](columns.md)
 - [Search and the filter language](search.md)
 - [The panels](panels.md)
 - [Operations and undo](operations.md)

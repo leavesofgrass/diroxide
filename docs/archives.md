@@ -1,6 +1,6 @@
 # Archives
 
-This guide covers archives: opening one like a folder, copying files out of it, unpacking, packing a selection into a new archive, testing, passwords, split archives, the limits that protect you, and the `diro archive` command.
+This guide covers archives: opening one like a folder, copying files out of it, unpacking, packing a selection into a new archive, testing, passwords, split archives, the RAR and other formats that 7-Zip reads, deleting, renaming and making folders inside a zip, the limits that protect you, and the `diro archive` command.
 
 What this guide says about the dialogs and the spoken lines comes from their design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so every "you should hear" line is what diroxide is built to say. If your experience differs, that is a finding.
 
@@ -11,8 +11,9 @@ What this guide says about the dialogs and the spoken lines comes from their des
 - Zip: zip64 archives are read. Passwords are AES-256 when diroxide writes one. Archives that use the old ZipCrypto password are read, with a warning.
 - 7z: solid archives, and archives with encrypted names, are read. diroxide writes 7z with AES-256 and encrypted names.
 - A split archive, such as `backup.7z.001` with its parts beside it, opens as one archive. See [split and join](split-join.md).
-- Disk images: an ISO image and the virtual disk formats (VHD, VHDX, VDI, VMDK and QCOW2) open like archives, through the disk image plugin, an optional component. [Disk images](disk-images.md) says what opens and how. Without the plugin, Enter on an ISO says it needs the plugin or 7-Zip.
-- Not read: bzip2 or Zstandard compression on its own, lzip, RAR and spanned zip sets (`.z01`, `.z02`). diroxide says why in words, for example "it uses the RAR format, which is not supported". These come later, through the 7z program when it is installed. [Known limits](known-limits.md) lists them.
+- Disk images: an ISO image and the virtual disk formats (VHD, VHDX, VDI, VMDK and QCOW2) open like archives, through the disk image plugin, an optional component. [Disk images](disk-images.md) says what opens and how. Without the plugin, an image opens through 7-Zip when it is installed, and otherwise Enter says "ISO needs the disk plugin or 7-Zip".
+- Read only, through 7-Zip: RAR, CAB, ARJ, LZH, RPM, cpio and ar, a spanned zip set (`.z01`, `.z02`) and a disk image no plugin takes. diroxide reads these and never writes them. [Formats read through 7-Zip](#formats-read-through-7-zip) below says how.
+- Not read: bzip2 or Zstandard compression on its own, and lzip. diroxide says why in words, for example "it uses Zstandard compression, which is not supported". [Known limits](known-limits.md) lists them.
 
 The format comes from the file's first bytes, not only its name. A zip named `data.dat` opens as a zip. When the bytes and the name disagree, the title says which format it found: "a.zip, 7z archive, in D:\docs". Open as archive opens a file by its bytes even when its name says nothing. It is in the File menu under Archive (Alt+F, then A, then O) and in the palette, and it has no key of its own.
 
@@ -39,11 +40,11 @@ A member's row says its name first, then what it is, then its size, and its posi
 
 Junk that archive tools add, such as `__MACOSX` folders and `._` files, is marked hidden. A name that would leave the archive, such as `../x`, is never listed as a member. When you unpack, it is named and skipped: "Skipped ../x: name leaves the archive."
 
-## Archives are read only here
+## Changing an archive
 
-Nothing can be changed inside an archive in alpha 1. Copy into it, move into it, rename, delete and make folder all give the same answer: "Archives are read only here. Use Pack to make a new one."
+A zip can be edited in three ways: Delete, Rename and Make folder inside an open zip rewrite it. [Editing inside a zip](#editing-inside-a-zip) below says how. Everything else is read only here. Copying or moving a file into an archive, and any change to a 7z, a tar or an archive that 7-Zip reads, all give the same answer: "Archives are read only here. Use Pack to make a new one."
 
-To get a changed archive, pack a new one. Adding to an archive, deleting from it and renaming inside it come in a later alpha.
+To add files to an archive, or to change a 7z or a tar, pack a new one. Adding a file to an existing archive is not built yet.
 
 ## Copy a file out
 
@@ -124,6 +125,71 @@ Pack runs the same test on its own result, which is where "Checked 2 of 2 entrie
 - An archive with ZipCrypto, the old zip password, is read, with a warning: "Weak encryption in a.zip (ZipCrypto)." diroxide never writes it.
 - One password serves a whole job, and diroxide forgets it when the job ends. Leaving a locked 7z makes diroxide forget its password, and entering it again asks again. A password is never written to the log, the jobs list, a script or the undo record, and it is never taken on a command line. [Privacy](privacy.md) has more.
 
+## Formats read through 7-Zip
+
+RAR, CAB, ARJ, LZH, RPM, cpio and ar archives, a spanned zip set, and a disk image that no disk plugin takes are read by the 7-Zip program. diroxide starts it for each job with a list of arguments, never through a shell. These archives open like any other, read only.
+
+- The title says so: "Backup.rar, read with 7-Zip, in D:\docs". The format still comes from the file's first bytes, not only its name.
+- diroxide never writes them. Delete, rename and make folder inside one say "RAR is read only: diroxide never writes it", and Pack never offers RAR.
+- Any 7-Zip lists an archive and reads one member at a time. Unpacking to disk needs 7-Zip 25.01 or later, which fixed two bugs in how older versions make links. With an older one, the archive still opens, a line after the opening says "7-Zip 24.08 is too old: needs 25.01", and an unpack says "Could not unpack Backup.rar: 7-Zip 24.08 is too old: needs 25.01."
+- Without 7-Zip, opening says "Could not open Backup.rar: it needs 7-Zip. Get it from Manage optional components, then try again." An unpack or an edit says the format first: "RAR needs 7-Zip: not installed", then the same way to get it. The components list asks before it fetches anything, and for RAR it adds that diroxide never writes the format. [Optional components](components.md) says how to get 7-Zip on each system.
+- These archives are read one member at a time, and a solid one can only be read from its start, so the question "Read 3.2 GB first to open note.txt? No is the default. y or n" applies.
+- A password goes to 7-Zip on its standard input, from the masked prompt, and never on a command line or in a log. That road was tested with 7-Zip's own formats. A locked RAR 5 was not tried.
+- Every limit of [the section below](#limits-and-the-questions-they-ask) applies. A member's link is never followed, and an unpack's staging folder is checked: "it was refused: 7-Zip made a link in the staging folder".
+
+What goes wrong is said after "Could not open Backup.rar:":
+
+- "it needs a 7-Zip that reads RAR": the 7-Zip found is a reduced one, such as 7za, which reads no RAR.
+- "it is damaged: 7-Zip found damaged data".
+- "7-Zip stopped with exit code 2", or "7-Zip stopped unexpectedly".
+- "it needs 7-Zip 25.01; 24.08 is too old", when unpacking needs the newer program.
+
+A 7-Zip that hangs is stopped by a time limit, and the words say so: "7-Zip took longer than 300 seconds and was stopped".
+
+## Editing inside a zip
+
+Delete, Rename and Make folder work inside an open zip. A zip cannot be changed in place, so each one rewrites the whole archive: it writes a new zip beside the old one, tests it, and only then sends the old one to the trash and gives the new one the old name. If anything fails or you cancel, the old archive is untouched.
+
+Open the zip, focus a member, and use the usual keys: Delete for Delete, F2 for Rename, F7 for Make folder. The File menu does not list Delete, Rename and Make folder inside a zip yet, though their keys and the palette work. A 7z, a tar and an archive read through 7-Zip keep the read-only sentence.
+
+### The question and its rows
+
+Each one asks first, and the question starts on No: "Remove notes.txt from course.zip? No is the default. y or n". The others are "Rename a.txt in course.zip?", "Make folder drafts in course.zip?", and for a mix or a bigger change "Remove 2 members from course.zip?" or "Change 3 members of course.zip?". The rows under the question say the change again, then what it costs and what it loses:
+
+- The cost: "Rewrites all of course.zip: 1.2 GB". Every byte of the zip is written again, so a big zip takes time. A 1.2 GB zip of made content took about 52 seconds to rewrite, and a zip of 1,000 small members under a second.
+- "Removes 52 members in all", when removing a folder takes its members with it.
+- "Zip comments and extra fields are lost".
+- "Compression redone: stored stays stored". A member kept stored stays stored and in its place, so an EPUB's or an OpenDocument file's first member, which a reader needs, stays valid. The order of members is kept, and a link stays a link.
+- "Password: asked once, kept for the job", for a locked zip. "ZipCrypto members become AES-256" says the old weak encryption is not written again.
+- What is dropped because it could not be kept safe: "Older copies of 1 name are dropped", "1 file under a folder's name dropped", "2 special entries dropped", "3 unsafe names dropped".
+- Where the old copy goes: "Old copy: to the trash, Undo restores", or "Old copy: not kept, no trash here".
+
+A locked zip asks for its password once, in the masked prompt: "Password for locked.zip (hidden):". The same password reads the old members and locks the new ones, and it is forgotten when the job ends.
+
+### What you hear after
+
+- "Removed notes.txt from course.zip", "Renamed a.txt in course.zip" or "Made folder drafts in course.zip".
+- The check of the new zip: "Checked 998 of 998 entries, all good."
+- "Old copy of course.zip is in the trash", or "Old copy of course.zip was not kept" where there is no trash.
+
+Ctrl+Z undoes it: "Undid zip change: the old copy is back". The new archive is moved aside first, the old copy comes back under its name, and the new one goes to the trash, so nothing is lost either way.
+
+### What is refused
+
+Each refusal is said whole, before anything is written:
+
+- "Zip only: 7z and tar are not rewritten".
+- "Nested archives are not rewritten": a zip inside another archive.
+- "Split archives are not rewritten".
+- "Nothing to change in course.zip".
+- "nope.txt is not in course.zip".
+- "WEEK1 is in course.zip already": a name that differs only by case counts as taken.
+- "../x is not a safe name in course.zip".
+- "x.bin cannot be read, so course.zip stays as it is".
+- "Needs 1.2 GB, only 300 MB free on D:."
+
+If the rewrite fails while it runs, the old zip stays as it was, and the line says why: "Could not replace course.zip: another program has it open", "Could not change course.zip: it changed since it was listed", "course.zip is unchanged", or after Escape, "Cancelled: course.zip is unchanged".
+
 ## Archives inside archives
 
 A zip inside a zip opens like a folder, to four levels. A fifth level is refused in words. diroxide keeps an inner archive in memory up to 64 MiB, and past that in a `spool` folder in the state folder, never in the system's temporary folder. The most one operation may write there is 4 GiB, after a free-space check. The settings are `archives.max_nesting`, `archives.spool_memory_mib`, `archives.spool_disk_gib` and `archives.spool_folder`.
@@ -182,7 +248,7 @@ The Archives and split group of [the settings reference](settings-reference.md) 
 
 ## Known gaps
 
-[Known limits](known-limits.md) lists everything alpha 1 does not do with archives. The ones you are most likely to meet: no adding to or changing an existing archive, no RAR, no progress line while a big tar.xz is listed, zip times read as UTC, and the names of older zips in Shift-JIS and other legacy encodings are not chosen yet.
+[Known limits](known-limits.md) lists everything diroxide does not do yet with archives. The ones you are most likely to meet: no adding files to an existing archive, no editing of a 7z, a tar or a RAR, a zip rewrite that loses zip comments and extra fields, no progress line while a big tar.xz is listed, zip times read as UTC, and the names of older zips in Shift-JIS and other legacy encodings are not chosen yet.
 
 ## See also
 

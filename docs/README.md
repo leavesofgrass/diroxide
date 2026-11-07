@@ -4,7 +4,7 @@ diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, key
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files, archives, disk images and previews, finding things, plugins, git, hooks, scripts and optional components, keys, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files, archives, disk images and previews, columns, checksums, privacy before sharing, conversions and watched folders, finding things, plugins, git, hooks, scripts and optional components, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -33,6 +33,7 @@ If you are new, begin with the [quick start](quickstart.md).
 ### Using the panels
 
 - [The panels](panels.md): the three layouts, what a row says, moving, going to a path or a place (with its site, volume and trash rows), path jump, sorting, filtering and marking rows.
+- [Columns, notes and fields](columns.md): a song's artist or a document's pages said in the row, your own notes and fields, a pattern over the name, a plugin's column, the three loading modes, sorting by a column, and Fill columns.
 - [Operations and undo](operations.md): copy, move, rename, make folder, duplicate, the trash, deleting for good, the file clipboard, prompts with completion, jobs, progress and undo. [The transfer queue](transfer-queue.md) goes further into jobs.
 - [Volumes and the trash](volumes-trash.md): the Volumes list with its state-first rows, free space, Open, Mount, Unmount, Eject and Hide, the Volume actions plugin, the trash browser with Restore, Delete for good and Empty the trash, and free space in the copy plan and in Say Status.
 
@@ -43,13 +44,16 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Archives, files and previews
 
-- [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, the limits that protect you, and `diro archive`.
+- [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, RAR and the other formats that 7-Zip reads, deleting, renaming and making folders inside a zip with the old copy kept in the trash, the limits that protect you, and `diro archive`.
 - [Disk images](disk-images.md): opening an ISO, a raw disk or a virtual disk like a folder, its partitions, copying files out, what the plugin reads itself and what it hands to 7-Zip, the limits that protect you, and what it does not do yet.
 - [The viewer](viewer.md): F3, lines, wrap, jump, search, hex mode, following a log, large files, and code read by ear.
 - [The quick view](quick-view.md): a live preview of the focused file in the other panel, by heading, table and link, and the formats it reads.
+- [Conversions](conversions.md): Convert and its recipe list, the plan you answer first, a report and Undo, the 31 built-in recipes, a file type that names its recipe, your own `conversions.toml`, and `diro convert`.
 - [Previews and the quick view's formats](previews.md): what pictures, drawings, sound and video, archives, PDF, Word, EPUB, RTF and spreadsheets say, the Preview command and auto-preview, Read text in picture, and the limits that protect the quick view.
 - [The details view](details.md): Alt+Enter, the facts in their order, the Privacy and Checksum rows, Show all with ExifTool, Say details, Copy details and Copy all details.
 - [File types and groups](file-types.md): what a row says about a file, how a type is found, the eight groups and the screenshot names, the retro pack, your own `filetypes.toml`, typed actions, Open with on each system, and the encoding chooser.
+- [Privacy before sharing](before-sharing.md): Check before sharing says what a file carries that could say who made it, where or with what, Strip metadata into a copy for JPEG, PNG and WebP, and Remove the internet mark with Undo.
+- [Checksums and verifying](checksums.md): Checksum with the value to read, copy, compare with a pasted one or save as `SHA256SUMS`, Verify checksum against the list beside a download, the verdict first and what a match does and does not show, and `diro sum`.
 - [Split and join](split-join.md): cutting a big file into parts for mail, GitHub, a disc or FAT32, joining them back, the checksum file, `diro split` and `diro join`.
 - [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, times, and the details list.
 
@@ -59,6 +63,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Labels and bookmarks](labels-bookmarks.md): labels on files, bookmarks on folders, the History list, a view saved for one folder, and saved searches.
 - [Compare files](compare.md): what two files differ in, said in words first, the change list, the cases that sound the same, binary and large files, and `diro diff`.
 - [Watching a folder](watching.md): hearing when a new file has finished arriving, in the program and with `diro watch`.
+- [Watched folders](watched-folders.md): a folder that converts, moves, copies or notes each file that arrives, its task file, the approval you give first, the Watched folders list, retries and pauses, and `diro watch --task`.
 
 ### Plugins, scripts and optional components
 
@@ -83,8 +88,8 @@ If you are new, begin with the [quick start](quickstart.md).
 
 These guides are not written yet, because the features they describe are not built, or are built in the library and not yet in the program. Each arrives with the alpha that ships its feature.
 
-- Conversions, metadata in the panels' columns, checksums and hot folders: alpha 4 builds them, and their guides come as each reaches the program.
-- Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, writing to disk images, and GitHub.
+- Encryption and signatures, who can do what with a file (access rows and an owner dialog), and the photo helpers: alpha 4 builds them, and their guides come as each reaches the program.
+- Tabs and the folder tree, comparing and synchronizing two folders, tasks other than watched folders such as synchronizing and renaming, duplicates, batch rename, thumbnails, writing to disk images, and GitHub.
 
 ## For people who build diroxide
 

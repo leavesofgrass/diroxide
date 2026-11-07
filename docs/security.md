@@ -147,6 +147,18 @@ A hook lets a plugin you turned on be asked before a copy, a move, a delete, a r
 - A plugin with a hook is told the paths of the jobs it hooks, and the folder you enter and the selection, for navigation hooks. [Privacy](privacy.md) says so.
 - A hook is not a lock. A plugin that is turned on can do anything you can do, and an example such as Folder guard protects you from your own slips, not from a program that means harm.
 
+## Watched folders
+
+A watched folder runs something on each file that arrives, with nobody there. [Watched folders](watched-folders.md) is the guide, and these are the rules that make that safe to turn on:
+
+- A task runs only after you have heard it in words and said yes, and the question starts on No. Any change to the task, to its recipe or the version of the tool the recipe runs, to a script's contents or to a plugin's version turns it off until you say yes again.
+- A task never replaces a file and never removes one. A taken name gets a number, and a task that asks to overwrite, to ask, or to delete is refused with its reason.
+- A task's folders are written out in full and checked: no wildcard, no variable, no `~`, no drive root, no home folder, no system folder, and nothing that holds diroxide's own settings. Two tasks may not share an input folder or loop into each other.
+- A script a task runs must promise that it never asks and always ends, and runs with nobody to ask. A plugin's command in a task is not run yet.
+- Ten failures in a row with one cause pause a task, and a missing tool, a full drive or a missing folder pauses it with the reason. A paused task keeps its files where they are.
+- A task's state, ledger and log are kept in the state folder, never in the file you write, and nothing in them leaves your computer.
+- A task is not a lock on what a program can do with the files. A script or a recipe you approve can do what it says. The approval sentence is there so you hear it first.
+
 ## Optional components
 
 - Integrity is the pins: size and SHA-256 from the list that is part of each build. The transport is for privacy and does not vouch for a file. A file that does not match is refused and removed, whoever served it.
@@ -175,6 +187,7 @@ If you find a way for a plugin to get past a limit on this page, such as an anno
 - [Optional components](components.md)
 - [Remote places over SFTP](remote-places.md)
 - [Hooks](hooks.md)
+- [Watched folders](watched-folders.md)
 - [The transfer queue](transfer-queue.md)
 - [Privacy](privacy.md)
 - [Known limits](known-limits.md)

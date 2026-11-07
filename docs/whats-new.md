@@ -42,11 +42,46 @@ Disk images, git and plugins.
 - The git plugin puts the branch and the number of changes in the title line and a Git column, lists the changed files, stages, commits, stashes, fetches, pulls and pushes, and shows the log, blame and diffs, and its questions start on No. A repository you did not make is asked about before git runs anything from its own configuration. [Git](git.md) is the guide.
 - Both are optional components. Plugins can now ask a form of several fields, show two texts in the compare screens, describe a folder for the title line, and claim the disk images found inside other places. [Writing a plugin](writing-a-plugin.md) says how.
 
+Columns, notes and fields.
+
+- A key such as `audio.artist`, `doc.pages` or `image.dimensions` in the `columns` setting adds a column read from inside the files. Each row says its cell after its label, "artist Ada Example", and a cell not read yet says so, "artist reading". Sound tags are read for the whole folder, other facts for the rows around the focus, and a few only when you ask with Fill columns. Nothing is read on a remote place, inside an archive or in a folder named in `check.skip`.
+- Sorting by a column reads the files first, and above 200 files it asks, starting on No, with an estimate: "Read 12,000 files to sort by Artist? About 40 seconds."
+- `[regex_columns]` makes a column from a pattern over the name. A plugin can fill a column too: the git plugin's Git column.
+- Set note and Set field, in the Labels menu, keep your own words about a file in `labels.toml`, never in the file. A label, a note and a field now follow a file that diroxide moves or renames, and an undo of that.
+- [Columns, notes and fields](columns.md) is the new guide.
+
+Checksums.
+
+- Checksum computes a file's SHA-256, with BLAKE3 in the same read, and lists the value to read, copy, compare with a pasted one, or save as `SHA256SUMS`, never over a file. A pasted value of another length computes that algorithm.
+- Verify checksum finds the list beside a download, or checks every file a list names, the verdict first. A match tells you the file is not damaged, never that it is safe, and a list signature is named and not yet checked.
+- `diro sum` does the same from a shell, with `--algorithm`, `--list` and `--check`, and `diro info` prints a file's details as plain lines.
+- [Checksums and verifying](checksums.md) is the new guide.
+
+Privacy before sharing.
+
+- Check before sharing says what a file carries that could say who made it, where or with what, and what a strip cannot reach. Strip metadata into a copy makes a `NAME-clean` copy of a JPEG, PNG or WebP picture without them, and Undo puts the copy in the trash. Remove the internet mark asks first, and Undo writes the mark back.
+- [Privacy before sharing](before-sharing.md) is the new guide.
+
+Conversions.
+
+- Convert lists the recipes that take the selected files, plans the conversion into the other panel's folder, and asks first, starting on No. 31 recipes come built in, through ImageMagick, FFmpeg, pandoc and pdftotext, and 11 need nothing installed because carta, a converter written in Rust, runs them. A conversion never replaces a file, its report is kept with the last 20, and Undo puts what it made in the trash.
+- A file type can name a recipe for its Convert action, and your own recipes go in `conversions.toml`. `diro convert` does it from a shell, with `--to`, `--recipe`, `--out`, `--conflicts`, `--recursive`, `--dry-run`, `--report`, `--json`, `--print0` and `--list`, and the family's exit codes, 0 to 3.
+- [Conversions](conversions.md) is the new guide.
+
+Watched folders.
+
+- A folder can convert, move, copy or note each file that arrives, from a task file in the `tasks` folder. You hear what the task will do in words and say yes first, and again after any change. It never replaces or removes a file, and Ctrl+Z never undoes it.
+- The Watched folders list, in the Tools menu, shows each task with what it did today, and turns it on or off, pauses it, previews it, shows its log, puts failed files back, says its rule and opens its file. A task says one polite line at a time, pauses with its reason, retries a file after 10 seconds, then 1 minute, then 10 minutes, and pauses after ten failures in a row for one cause.
+- `diro watch --task NAME` runs one from a shell, with `--once` for a catch-up scan that a scheduler can run, `--dry-run` and `--list`.
+- [Watched folders](watched-folders.md) is the new guide.
+
+Archives.
+
+- RAR, CAB, ARJ, LZH, RPM, cpio, ar, spanned zip sets and disk images no plugin takes are read through 7-Zip, read only. Unpacking to disk needs 7-Zip 25.01 or later, and an older one says so. diroxide never writes RAR.
+- Delete, Rename and Make folder work inside a zip. Each rewrites the zip beside the old one, tests it, and only then sends the old copy to the trash, so Undo restores it. The question says the cost and what a rewrite loses, starting on No. [Archives](archives.md) has the words.
+
 Built in the library, not yet in the program.
 
-- Metadata. The readers for the facts inside a file, photos, sound tags, PDF, Word, OpenDocument and EPUB properties, zip contents, the internet mark and extended attributes, feed the details view. Checksum lists in four forms, and stripping a picture's private data into a copy, are built and wait for their commands.
-- Conversions. A Convert engine with 31 built-in recipes writes new files and never replaces one, and the journal can undo it.
-- Hot folders. An engine for folders that run a recipe on each file that arrives is built, with approvals, a ledger and a log.
 - Who can do what. The library reads a file's owner, group and mode, Linux access lists and labels, macOS flags, and a Windows owner and access list, and can answer "You can: read and write". It can also plan changing an owner. The details view and an owner dialog show them in a later pass.
 
 ## Alpha 3
@@ -163,6 +198,12 @@ The first alpha is a terminal file manager for local folders and archives, built
 - [File types and groups](file-types.md)
 - [The details view](details.md)
 - [Previews and the quick view's formats](previews.md)
+- [Columns, notes and fields](columns.md)
+- [Checksums and verifying](checksums.md)
+- [Privacy before sharing](before-sharing.md)
+- [Conversions](conversions.md)
+- [Watched folders](watched-folders.md)
+- [Archives](archives.md)
 - [Disk images](disk-images.md)
 - [Git](git.md)
 - [Quick start](quickstart.md)

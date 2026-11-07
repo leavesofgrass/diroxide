@@ -18,12 +18,12 @@ The list already holds what the panel knows, with "Privacy: reading" and "Checks
 
 Every row is one fact, "Dimensions: 4032 by 3024", the label first. The list is in a fixed order, in ten groups. The groups are not headings, only the order the rows come in, so the most important facts are at the start.
 
-1. What it is: "Type: PNG", "Name: photo.png", and "File group: Images". For a type that is also in a second group: "File group: Images, Screenshots".
+1. What it is: "Type: PNG", "Name: photo.png", and "File group: Images". For a type that is also in a second group: "File group: Images, Screenshots". A row that a plugin made, such as a partition in a disk image, adds the plugin's own words: "About: Partition 2, home, ext4".
 2. What is in it: "Dimensions: 4 by 3" for a picture, the length of a song, the pages of a document, the entries of an archive: "Entries: 8 files, 2 folders".
 3. Its size: "Size: 48 KB (49,152 bytes)", the words first and the exact bytes after. A file under 1,000 bytes says "512 bytes" and no more. A folder says "Size: folder size not computed".
 4. Its dates: "Modified:", "Created:" and "Accessed:", each with the date and time in words, where the system has them.
 5. Flags: "Attributes:", "Hidden: yes", the privacy row, and the line that says when a file's name and its contents disagree, "Name says PNG; contents say JPEG".
-6. Yours: "Labels:", the labels you put on the file.
+6. Yours: "Labels:", the labels you put on the file, then your note and your fields, "Note: call about the invoice" and "Project: Apollo". [Columns, notes and fields](columns.md) says how to set them.
 7. Place: "Path:", the full path with any hidden character spelled out, and "Link to:" for a link.
 8. Technical facts, such as a codec, a bit depth or an encoding.
 9. What the system keeps: "Owner:", "Group:" and "Checksum:".
@@ -53,7 +53,7 @@ The private rows themselves are listed in their groups, with the other facts. Th
 
 ## The Checksum row
 
-"Checksum: not computed". The details view does not compute it, and no command in the program does yet. The checksum engine is built, and the command that asks for it is not in the program yet.
+"Checksum: not computed". The details view never computes a checksum itself. The Checksum command does, and then the row holds what it found, for as long as the file stays as it was: "Checksum: SHA-256: ba78 16bf, ending 15ad". The row keeps only this session's values. [Checksums and verifying](checksums.md) describes the command.
 
 ## Show all
 
@@ -79,9 +79,21 @@ Both put the details on the clipboard, one fact a line, with the title first: "D
 
 Say details, Copy details and Copy all details have no key. They are in the File menu and the palette, and you can give any of them a key in `keymap.toml` ([Customizing keys](customizing-keys.md)) or a button in a bank.
 
+## From a shell
+
+`diro info` prints a file's details as plain lines, for scripts and for a Braille display. The first line is the name, a colon and the one-line summary that Say details says, such as "PNG, 4 by 3, 8-bit RGBA" with the size after it. Then each detail comes one a line, label first, in the order above.
+
+```bash
+diro info notes.txt photo.png
+```
+
+Several paths are told apart by a blank line. Private details are included, since you asked for that file. Nothing is written. A file that cannot be read says "NAME: could not be read" with the reason, and the others still go on.
+
+The exit codes are 0 when every file was read, 1 when a file could not be, and 2 for wrong use. `diro info --help` shows the usage. `diro info` knows the built-in file types and the built-in tools list, and does not read your `filetypes.toml` or `tools.toml`.
+
 ## Known limits
 
-- A details read cannot be cancelled when you close the list. It is bounded by its own time limits, and the answer is dropped.
+- Closing the list stops the read of the file's facts between readers and at the next read. A program already running, such as ffprobe, finishes within its own time limit, and its answer is dropped.
 - Show all needs a file on a local disk.
 - Folder sizes are not computed here. Nothing in the details view walks a folder.
 - Nothing about the order of rows, "Read 9 more details" or how Show all pans on a Braille display has been heard yet.
@@ -89,6 +101,9 @@ Say details, Copy details and Copy all details have no key. They are in the File
 ## See also
 
 - [Panels](panels.md), which lists what a row says
+- [Columns, notes and fields](columns.md)
+- [Checksums and verifying](checksums.md)
+- [Privacy before sharing](before-sharing.md)
 - [Links, permissions and times](links-permissions.md)
 - [File types and groups](file-types.md), for "Type:" and "File group:"
 - [Tools and diro doctor](tools.md), for ExifTool and ffprobe
