@@ -14,6 +14,8 @@ use diroxide_core::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use super::approval::Approval;
+use super::ledger::{LEDGER_FILE, Ledger};
+use super::log::{LOG_FILE, TaskLog};
 use super::task::CatchUpChoice;
 use crate::convert::recipe::is_plain_id;
 
@@ -146,6 +148,16 @@ impl TaskStore {
     /// The path of a file in the task's folder.
     pub fn file(&self, name: &str) -> PathBuf {
         self.folder.join(name)
+    }
+
+    /// The task's ledger, read.
+    pub fn ledger(&self) -> Result<Ledger, StoreError> {
+        Ok(Ledger::open(self.file(LEDGER_FILE))?)
+    }
+
+    /// The task's log.
+    pub fn log(&self) -> TaskLog {
+        TaskLog::new(self.file(LOG_FILE))
     }
 
     /// Writes a file in the task's folder whole: to `NAME.new`, flushed,
