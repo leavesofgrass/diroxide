@@ -348,7 +348,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - A passphrase typed for gpg passes through the request that starts gpg, as bytes that are not wiped when the request is dropped. It is never printed, logged or said. The age plugin wipes its copy.
 - On Windows, gpg's agent is stopped with each run, so a passphrase is not remembered from one command to the next, and a command that needs the agent waited about six seconds on the one computer it was measured on.
 - A minisign public key is asked every time and kept nowhere. Verify checksum does not check a list's minisign signature.
-- Not tried: a real gpg or age program started by the program's own commands, a hardware token, a real signed download, Gpg4win, macOS, Linux natively and a screen reader. The plugin ran only as a test plugin, and the age and gpg paths were tested against their own libraries and a fake gpg.
+- Not tried: a real gpg program started by the program's own commands, a hardware token, a real signed download, Gpg4win, macOS, Linux natively and a screen reader. From the program, the age commands were tried only against a test plugin standing in for the real one, and the gpg commands only against a fake gpg. The plugin's own tests run the real age library, and gpg was run for the spikes in throwaway homes, through the tools registry.
 - Nothing about how the dialogs and verdicts read on a Braille display has been heard.
 
 ## Privacy before sharing
