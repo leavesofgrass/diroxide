@@ -933,6 +933,81 @@ mod tests {
         assert_eq!(on_disk, manifest::EMBEDDED);
     }
 
+    /// The helper entries (R30 commit 111, answer 116): each reads as the
+    /// list will, names its programs and the members it keeps, and is in
+    /// the list only once the pin job has pinned it; held ones say why.
+    #[test]
+    fn the_helper_entries_are_whole_and_wait_for_their_pins() {
+        use diroxide_components::messages;
+        use diroxide_core::format::within_cells;
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let defs = definitions(root).unwrap();
+        let helpers: Vec<&Definition> = defs
+            .component
+            .iter()
+            .filter(|d| d.kind == "helper")
+            .collect();
+        let ids: Vec<&str> = helpers.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["pandoc", "7zip", "ffmpeg", "imagemagick", "exiftool", "gh"]
+        );
+        let built = build(root).unwrap();
+        for d in &helpers {
+            let files = d
+                .file
+                .iter()
+                .map(|f| f.pin_with(1, "0".repeat(64)))
+                .collect();
+            let c = d.component(files, 1).unwrap();
+            assert_eq!(c.check(), Ok(()), "{}", d.id);
+            assert!(!c.tools.is_empty(), "{}", d.id);
+            assert_eq!(c.action, Action::Unpack, "{}", d.id);
+            for f in &d.file {
+                assert!(f.is_external(), "{}: {} packs nothing", d.id, f.name);
+                assert!(f.exec.is_some(), "{}: {} names its program", d.id, f.name);
+                assert!(!f.keep.is_empty(), "{}: {} keeps", d.id, f.name);
+                let url = f.url.as_deref().unwrap();
+                assert!(
+                    url.ends_with(&f.name) || url.ends_with("/download"),
+                    "{url}"
+                );
+                let listed = built.manifest.get(&d.id).is_some_and(|c| {
+                    c.files
+                        .iter()
+                        .any(|p| p.name == f.name && p.target == f.target)
+                });
+                let said = built.notes.iter().any(|n| {
+                    n == &format!(
+                        "{}: {} is not pinned yet; the pin job pins it.",
+                        d.id, f.name
+                    ) || n.starts_with(&format!("{}: {} held, left out: ", d.id, f.name))
+                        || n.starts_with(&format!("{}: held, left out of the list: ", d.id))
+                });
+                assert!(listed != said, "{}: {} is listed or said", d.id, f.name);
+            }
+        }
+        assert!(
+            built
+                .notes
+                .iter()
+                .any(|n| n.starts_with("exiftool: held, left out of the list: perl532.dll"))
+        );
+        // The unRAR sentence, said in the ask line at 40 cells.
+        let seven = defs.component.iter().find(|d| d.id == "7zip").unwrap();
+        let files = seven
+            .file
+            .iter()
+            .map(|f| f.pin_with(1_600_000, "0".repeat(64)))
+            .collect();
+        let c = seven.component(files, 1).unwrap();
+        let ask = messages::ask_first(&c, Some("rar"), "x86_64-unknown-linux-gnu");
+        assert_eq!(ask.lines[0], "Reading a RAR file needs 7-Zip 26.05.");
+        assert_eq!(ask.lines[2], "unRAR terms: diroxide never writes RAR.");
+        assert!(within_cells(&ask.lines[2], "never writes RAR"));
+    }
+
     /// A root with one helper's definition and, when given, the pin file.
     fn helper_root(pins_text: Option<&str>) -> tempfile::TempDir {
         let tmp = tempfile::tempdir().unwrap();

@@ -179,3 +179,301 @@ pack = [
   { from = "plugins/diro-git/plugin.toml", as = "" },
   { asset = "universal-apple-darwin/diro-git", as = "" },
 ]
+
+# The helper programs (alpha 4; R28 1.4; the owner's answers 116 and 117).
+# Each file is the publisher's own, at the publisher's own address, and
+# this project hosts no copy (the owner's private mirror keeps old pins).
+# A helper file has a url and no pack; its size and SHA-256 come from
+# packaging/components/pins.toml, which cargo xtask components --pin ID
+# writes on CI's runner (.github/workflows/pin.yml), never typed. A file
+# not pinned yet is left out of the list with a line.
+#
+# Per component, beside the fields above: tools, the tools registry's ids
+# of its programs, whose version line is said after install; notice, a
+# sentence the ask-first question says; held, why it stays out of the
+# list for now. Per file: keep, the members unpacked, as patterns on the
+# path after strip (* within a name, ** for folders); rename, pairs of a
+# member's path and its plain new path; also_exec, more programs;
+# checksums, the publisher's checksums file where GitHub shows no digest;
+# held, why the file stays out for now. Member names marked "to verify"
+# in R28 are checked by the pin job's first run, which unpacks each file
+# as the program does and fails when a program is missing.
+
+# pandoc 3.13, all three systems (GitHub release assets).
+[[component]]
+id = "pandoc"
+title = "pandoc"
+kind = "helper"
+version = "3.13"
+license = "GPL-2.0-or-later"
+credit = "John MacFarlane and the pandoc contributors"
+features = ["conversions"]
+tools = ["pandoc"]
+action = "unpack"
+
+[[component.file]]
+name = "pandoc-3.13-windows-x86_64.zip"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-windows-x86_64.zip"
+strip = 1
+keep = ["pandoc.exe", "COPYING*"]
+exec = "pandoc.exe"
+
+[[component.file]]
+name = "pandoc-3.13-linux-amd64.tar.gz"
+target = "x86_64-unknown-linux-gnu"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-linux-amd64.tar.gz"
+strip = 1
+keep = ["bin/pandoc"]
+exec = "bin/pandoc"
+
+[[component.file]]
+name = "pandoc-3.13-linux-arm64.tar.gz"
+target = "aarch64-unknown-linux-gnu"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-linux-arm64.tar.gz"
+strip = 1
+keep = ["bin/pandoc"]
+exec = "bin/pandoc"
+
+[[component.file]]
+name = "pandoc-3.13-arm64-macOS.zip"
+target = "aarch64-apple-darwin"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-arm64-macOS.zip"
+strip = 1
+keep = ["bin/pandoc"]
+exec = "bin/pandoc"
+
+[[component.file]]
+name = "pandoc-3.13-x86_64-macOS.zip"
+target = "x86_64-apple-darwin"
+url = "https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-x86_64-macOS.zip"
+strip = 1
+keep = ["bin/pandoc"]
+exec = "bin/pandoc"
+
+# 7-Zip 26.05 (GitHub release assets, where 7-zip.org links). It reads
+# RAR through code under the unRAR restriction, so its ask line carries
+# the unRAR sentence; diroxide reads RAR and never writes it. Spike T2:
+# the pure-Rust reader opens extra.7z whole, and T1 found every member
+# plain. The Windows files are held: extra.7z's 7za reads no RAR, ISO or
+# disk image (K's finding), and the full 7-Zip for Windows is inside the
+# installer, which the unpack does not open; the owner decides.
+[[component]]
+id = "7zip"
+title = "7-Zip"
+kind = "helper"
+version = "26.05"
+license = "LGPL-2.1-or-later AND BSD-3-Clause"
+credit = "Igor Pavlov"
+features = ["rar"]
+tools = ["7z"]
+notice = "unRAR terms: diroxide never writes RAR."
+action = "unpack"
+
+[[component.file]]
+name = "7z2605-extra.7z"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-extra.7z"
+keep = ["x64/7za.exe", "License.txt"]
+exec = "x64/7za.exe"
+held = "its 7za reads no RAR, ISO or disk image; the owner decides"
+
+[[component.file]]
+name = "7z2605-extra.7z"
+target = "aarch64-pc-windows-msvc"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-extra.7z"
+keep = ["arm64/7za.exe", "License.txt"]
+exec = "arm64/7za.exe"
+held = "its 7za reads no RAR, ISO or disk image; the owner decides"
+
+[[component.file]]
+name = "7z2605-linux-x64.tar.xz"
+target = "x86_64-unknown-linux-gnu"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-linux-x64.tar.xz"
+keep = ["7zz", "License.txt"]
+exec = "7zz"
+
+[[component.file]]
+name = "7z2605-linux-arm64.tar.xz"
+target = "aarch64-unknown-linux-gnu"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-linux-arm64.tar.xz"
+keep = ["7zz", "License.txt"]
+exec = "7zz"
+
+[[component.file]]
+name = "7z2605-mac.tar.xz"
+target = "universal-apple-darwin"
+url = "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-mac.tar.xz"
+keep = ["7zz", "License.txt"]
+exec = "7zz"
+
+# FFmpeg 9.0.2, the LGPL build (no H.264 encoder), shared where it exists,
+# from BtbN's last build of October 2026, which BtbN keeps two years
+# (daily builds go after 14 days). The Linux files are held: the shared
+# build's libraries may be links, which the unpack never makes; the pin
+# job's first run lists them.
+[[component]]
+id = "ffmpeg"
+title = "FFmpeg"
+kind = "helper"
+version = "9.0.2"
+license = "LGPL-2.1-or-later"
+credit = "The FFmpeg developers; built by BtbN"
+features = ["previews", "conversions"]
+tools = ["ffmpeg", "ffprobe"]
+action = "unpack"
+
+[[component.file]]
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip"
+strip = 1
+keep = ["bin/ffmpeg.exe", "bin/ffprobe.exe", "bin/*.dll", "LICENSE.txt"]
+exec = "bin/ffmpeg.exe"
+also_exec = ["bin/ffprobe.exe"]
+
+[[component.file]]
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-winarm64-lgpl-shared-9.0.zip"
+target = "aarch64-pc-windows-msvc"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-winarm64-lgpl-shared-9.0.zip"
+strip = 1
+keep = ["bin/ffmpeg.exe", "bin/ffprobe.exe", "bin/*.dll", "LICENSE.txt"]
+exec = "bin/ffmpeg.exe"
+also_exec = ["bin/ffprobe.exe"]
+
+[[component.file]]
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-shared-9.0.tar.xz"
+target = "x86_64-unknown-linux-gnu"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-shared-9.0.tar.xz"
+strip = 1
+keep = ["bin/ffmpeg", "bin/ffprobe", "lib/*.so*", "LICENSE.txt"]
+exec = "bin/ffmpeg"
+also_exec = ["bin/ffprobe"]
+held = "its libraries may be links, which the unpack never makes"
+
+[[component.file]]
+name = "ffmpeg-n9.0.2-39-g7adfbe40dc-linuxarm64-lgpl-shared-9.0.tar.xz"
+target = "aarch64-unknown-linux-gnu"
+url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linuxarm64-lgpl-shared-9.0.tar.xz"
+strip = 1
+keep = ["bin/ffmpeg", "bin/ffprobe", "lib/*.so*", "LICENSE.txt"]
+exec = "bin/ffmpeg"
+also_exec = ["bin/ffprobe"]
+held = "its libraries may be links, which the unpack never makes"
+
+# ImageMagick 7.1.2-35, the portable build for Windows (GitHub release
+# assets, where imagemagick.org links). Spikes T1 and T2: the pure-Rust
+# reader opens the .7z whole and every member is plain; it holds eight
+# copies of one 32 MB program, so keep takes magick.exe and the files it
+# reads beside it, 33 MB of 261. Linux stays a package command: its
+# AppImage spike has not run.
+[[component]]
+id = "imagemagick"
+title = "ImageMagick"
+kind = "helper"
+version = "7.1.2-35"
+license = "ImageMagick"
+credit = "ImageMagick Studio LLC"
+features = ["previews", "conversions"]
+tools = ["magick"]
+action = "unpack"
+
+[[component.file]]
+name = "ImageMagick-7.1.2-35-portable-Q16-HDRI-x64.7z"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-35/ImageMagick-7.1.2-35-portable-Q16-HDRI-x64.7z"
+keep = ["magick.exe", "*.xml", "sRGB.icc", "LICENSE.txt", "NOTICE.txt"]
+exec = "magick.exe"
+
+[[component.file]]
+name = "ImageMagick-7.1.2-35-portable-Q16-HDRI-arm64.7z"
+target = "aarch64-pc-windows-msvc"
+url = "https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-35/ImageMagick-7.1.2-35-portable-Q16-HDRI-arm64.7z"
+keep = ["magick.exe", "*.xml", "sRGB.icc", "LICENSE.txt", "NOTICE.txt"]
+exec = "magick.exe"
+
+# ExifTool 13.61 for Windows, where exiftool.org links (SourceForge, which
+# keeps old versions; exiftool.org keeps only the newest), compared with
+# exiftool.org's checksums file. Spike T1: two members are not plain;
+# rename takes exiftool(-k).exe to exiftool.exe, but perl532.dll loads
+# exiftool_files/libstdc++-6.dll by that name, whose plus sign the
+# plain-name rule refuses. Held until the owner decides.
+[[component]]
+id = "exiftool"
+title = "ExifTool"
+kind = "helper"
+version = "13.61"
+license = "Artistic-1.0-Perl OR GPL-1.0-or-later"
+credit = "Phil Harvey"
+features = ["metadata"]
+tools = ["exiftool"]
+action = "unpack"
+held = "perl532.dll needs libstdc++-6.dll, not a plain name; the owner decides"
+
+[[component.file]]
+name = "exiftool-13.61_64.zip"
+target = "x86_64-pc-windows-msvc"
+url = "https://sourceforge.net/projects/exiftool/files/exiftool-13.61_64.zip/download"
+checksums = "https://exiftool.org/checksums-13.61.txt"
+strip = 1
+keep = ["exiftool*.exe", "exiftool_files/**"]
+rename = [["exiftool(-k).exe", "exiftool.exe"]]
+exec = "exiftool.exe"
+
+# GitHub CLI 2.103.3, all three systems (GitHub release assets).
+[[component]]
+id = "gh"
+title = "GitHub CLI"
+kind = "helper"
+version = "2.103.3"
+license = "MIT"
+credit = "GitHub, Inc."
+features = ["github"]
+tools = ["gh"]
+action = "unpack"
+
+[[component.file]]
+name = "gh_2.103.3_windows_amd64.zip"
+target = "x86_64-pc-windows-msvc"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_windows_amd64.zip"
+keep = ["bin/gh.exe", "LICENSE"]
+exec = "bin/gh.exe"
+
+[[component.file]]
+name = "gh_2.103.3_windows_arm64.zip"
+target = "aarch64-pc-windows-msvc"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_windows_arm64.zip"
+keep = ["bin/gh.exe", "LICENSE"]
+exec = "bin/gh.exe"
+
+[[component.file]]
+name = "gh_2.103.3_linux_amd64.tar.gz"
+target = "x86_64-unknown-linux-gnu"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_amd64.tar.gz"
+strip = 1
+keep = ["bin/gh", "LICENSE"]
+exec = "bin/gh"
+
+[[component.file]]
+name = "gh_2.103.3_linux_arm64.tar.gz"
+target = "aarch64-unknown-linux-gnu"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_arm64.tar.gz"
+strip = 1
+keep = ["bin/gh", "LICENSE"]
+exec = "bin/gh"
+
+[[component.file]]
+name = "gh_2.103.3_macOS_arm64.zip"
+target = "aarch64-apple-darwin"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_macOS_arm64.zip"
+strip = 1
+keep = ["bin/gh", "LICENSE"]
+exec = "bin/gh"
+
+[[component.file]]
+name = "gh_2.103.3_macOS_amd64.zip"
+target = "x86_64-apple-darwin"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_macOS_amd64.zip"
+strip = 1
+keep = ["bin/gh", "LICENSE"]
+exec = "bin/gh"
