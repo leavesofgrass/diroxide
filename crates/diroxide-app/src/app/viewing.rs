@@ -404,6 +404,8 @@ impl App {
                     siblings,
                     last_follow: None,
                 });
+                // A picture says what shows it, in the window (lane AE).
+                said.extend(self.picture_hint(&place));
                 said
             }
             SourceFor::Show => match self.viewing.as_mut() {

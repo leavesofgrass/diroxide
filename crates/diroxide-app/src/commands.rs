@@ -741,6 +741,14 @@ pub mod ids {
         /// puts it back.
         REMOVE_INTERNET_MARK = "file.remove-internet-mark";
     }
+
+    // Show picture (alpha 4, lane AE, G5b's request): the window's
+    // picture view as the app's command, Enter in the GUI column's viewer.
+    ids! {
+        /// Show the picture in the viewer or the preview in the window's
+        /// picture view.
+        VIEW_PICTURE = "view.picture";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -765,7 +773,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 259] = [
+pub static CATALOG: [CommandInfo; 260] = [
     command(
         ids::QUIT,
         "Quit",
@@ -2286,6 +2294,14 @@ pub static CATALOG: [CommandInfo; 259] = [
         Viewer,
         &["escape", "q"],
         &["escape", "q"],
+    ),
+    command(
+        ids::VIEW_PICTURE,
+        "Show picture",
+        "Shows the picture in the viewer or the preview in the window's picture view, where Plus and Minus zoom, 0 fits, 1 is the actual size and Escape goes back; a terminal has no picture view.",
+        Viewer,
+        &[],
+        &["enter"],
     ),
     command(
         ids::VIEWER_LEFT,

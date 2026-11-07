@@ -69,6 +69,8 @@ mod type_checks;
 mod columns_ui;
 // The metadata commands in the app (alpha 4, lane MA).
 mod metadata_ui;
+// Show picture, the window's picture view (alpha 4, lane AE).
+pub mod picture_view;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -1050,6 +1052,8 @@ pub struct App {
     columns: columns_ui::ColumnsState,
     /// The metadata commands' jobs and lists (lane MA).
     meta: metadata_ui::MetaState,
+    /// The picture Show picture asked the window to show (lane AE).
+    picture_ask: Option<picture_view::PictureAsk>,
     /// The slots of the owner's type actions (lane TA).
     type_slots: crate::typing::TypeSlots,
     /// A typed action's command is running: Enter and View run their
@@ -1393,6 +1397,7 @@ impl App {
             type_checks: type_checks::TypeChecks::default(),
             columns: columns_ui::ColumnsState::default(),
             meta: metadata_ui::MetaState::default(),
+            picture_ask: None,
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,
@@ -2047,6 +2052,11 @@ impl App {
         // Full screen and focus mode, everywhere: the viewer, the quick
         // view and a plugin's list keep them (lane A6).
         if let Some(effects) = self.look_dispatch(command) {
+            return effects;
+        }
+        // Show picture, everywhere: the viewer and the preview keep it
+        // (alpha 4, lane AE).
+        if let Some(effects) = self.picture_dispatch(command) {
             return effects;
         }
         // A plugin list in the panel takes its own commands, and refuses

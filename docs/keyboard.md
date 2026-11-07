@@ -267,6 +267,7 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Save view for this folder. Keeps this folder's sort, filter, hidden files and columns, applied each time it opens. (view.save-view)
 - Forget this folder's view. Stops applying this folder's saved view; the usual view returns on leaving it. (view.forget-view)
 - Watch this folder. Says each new file in this folder once it stops changing; again stops watching. (view.watch-folder)
+- Show picture. Shows the picture in the viewer or the preview in the window's picture view, where Plus and Minus zoom, 0 fits, 1 is the actual size and Escape goes back; a terminal has no picture view. (view.picture)
 - Show in folder. Closes the viewer with the file's row focused in its folder. (viewer.show-in-folder)
 - Copy viewed file's path. Puts the viewed file's full path on the system clipboard. (viewer.copy-path)
 - Copy viewed file's name. Puts the viewed file's name on the system clipboard. (viewer.copy-name)
@@ -386,6 +387,7 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 ### In the viewer
 
 - Escape or Q: Close viewer. Closes the viewer and goes back to the file's row. (viewer.close)
+- Enter: Show picture. Shows the picture in the viewer or the preview in the window's picture view, where Plus and Minus zoom, 0 fits, 1 is the actual size and Escape goes back; a terminal has no picture view. (view.picture)
 - Left: Previous token. Moves to the token before, or the byte before in hex mode, and says it. (viewer.left)
 - Right: Next token. Moves to the next token, or the next byte in hex mode, and says it. (viewer.right)
 - W: Wrap lines. Wraps long lines at the screen's width, or stops wrapping. (viewer.wrap)

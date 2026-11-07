@@ -43,9 +43,6 @@ pub const HELP_LINE: &str = "Plus, Minus zoom; 0 fits; Escape closes";
 /// The second help line, drawn under the first.
 pub const MORE_HELP_LINE: &str = "1 actual size; arrows move when zoomed";
 
-/// What the window says when the viewer opens a picture it can show.
-pub const ENTER_HINT: &str = "Enter shows the picture.";
-
 /// How much one Plus or Minus zooms.
 pub const ZOOM_STEP: f64 = 1.25;
 
@@ -329,7 +326,7 @@ mod tests {
 
     #[test]
     fn the_lines_fit_a_braille_line_with_their_meaning_first() {
-        for line in [HELP_LINE, MORE_HELP_LINE, ENTER_HINT] {
+        for line in [HELP_LINE, MORE_HELP_LINE] {
             assert!(fits_braille(line), "{line}: {}", line.chars().count());
         }
         assert_eq!(HELP_LINE.chars().count(), 39);

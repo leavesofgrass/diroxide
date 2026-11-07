@@ -9,7 +9,11 @@
 
 use diroxide_core::Side;
 use diroxide_core::format::BRAILLE_CELLS;
-use diroxide_gui::picture::{ENTER_HINT, HELP_LINE, MORE_HELP_LINE};
+use diroxide_gui::picture::{HELP_LINE, MORE_HELP_LINE};
+
+/// What the app says as the viewer opens a picture: Show picture's key,
+/// Enter in the window (lane AE).
+const ENTER_HINT: &str = "Enter shows the picture.";
 use masonry::accesskit::Role;
 
 use crate::rig::{Rig, app_on, fixture, name_of};
