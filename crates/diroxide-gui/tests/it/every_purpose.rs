@@ -125,7 +125,7 @@ fn purpose_variants() -> BTreeSet<String> {
 
 /// A stored (uncompressed) zip archive of `files`, written by hand, so
 /// the test needs no archive crate.
-fn stored_zip(files: &[(&str, &[u8])]) -> Vec<u8> {
+pub fn stored_zip(files: &[(&str, &[u8])]) -> Vec<u8> {
     fn crc32(bytes: &[u8]) -> u32 {
         let mut crc = !0u32;
         for byte in bytes {
@@ -1153,7 +1153,7 @@ fn verify_report(root: &Path) -> Option<Rig> {
 
 /// A small JPEG made in memory with a comment and XMP data, the app
 /// test's beach picture.
-fn beach_jpeg() -> Vec<u8> {
+pub fn beach_jpeg() -> Vec<u8> {
     let segments: [(u8, &[u8]); 2] = [
         (0xE1, b"http://ns.adobe.com/xap/1.0/\0<x/>"),
         (0xFE, b"from the beach"),
@@ -1257,7 +1257,7 @@ fn review(root: &Path) -> Option<Rig> {
 }
 
 /// A PNG of one gray pixel, written by hand.
-fn one_pixel_png() -> Vec<u8> {
+pub fn one_pixel_png() -> Vec<u8> {
     fn crc32(bytes: &[u8]) -> u32 {
         let mut crc = !0u32;
         for byte in bytes {
