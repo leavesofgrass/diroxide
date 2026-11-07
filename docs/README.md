@@ -4,7 +4,7 @@ diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, key
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files and archives, finding things, plugins, hooks, scripts and optional components, keys, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files, archives, disk images and previews, finding things, plugins, git, hooks, scripts and optional components, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -44,6 +44,7 @@ If you are new, begin with the [quick start](quickstart.md).
 ### Archives, files and previews
 
 - [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, the limits that protect you, and `diro archive`.
+- [Disk images](disk-images.md): opening an ISO, a raw disk or a virtual disk like a folder, its partitions, copying files out, what the plugin reads itself and what it hands to 7-Zip, the limits that protect you, and what it does not do yet.
 - [The viewer](viewer.md): F3, lines, wrap, jump, search, hex mode, following a log, large files, and code read by ear.
 - [The quick view](quick-view.md): a live preview of the focused file in the other panel, by heading, table and link, and the formats it reads.
 - [Previews and the quick view's formats](previews.md): what pictures, drawings, sound and video, archives, PDF, Word, EPUB, RTF and spreadsheets say, the Preview command and auto-preview, Read text in picture, and the limits that protect the quick view.
@@ -65,7 +66,8 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Hooks](hooks.md): a plugin asked before a copy, move, delete, rename or new folder, and told afterward; what a stop says; the Folder guard example.
 - [Script commands](script-commands.md): a command from one file in bash, Python or PowerShell: the header, what the script is given, directives, output modes, exit codes, which program runs it on each system, and `--explain`.
 - [Writing a plugin](writing-a-plugin.md): `diro plugin new`, the manifest, the protocol in a page, the services diroxide offers, lists of rows that are not files, places, previewers and converters, and the conformance checks.
-- [Optional components](components.md): helper programs, plugins and data packs, among them the SFTP places plugin, fetched only after you say yes, checked before use, offered once in a first-run list, installed from a file with no network, and removed by a list. Includes `diro components`.
+- [Optional components](components.md): helper programs, plugins and data packs, among them the SFTP places, disk image and git plugins and the helper programs, fetched only after you say yes, checked before use, offered once in a first-run list, installed from a file with no network, and removed by a list. Includes `diro components`.
+- [Git](git.md): the git plugin: the branch and the changes in the title line and the Git column, the status list, staging and committing, diffs, the log and blame, branches and stashes, fetch, pull and push, clone, and the trust rule for a repository you did not make.
 - [Tools and diro doctor](tools.md): the helper programs diroxide can use (ImageMagick, FFmpeg, pandoc and the rest), how each is found, `tools.toml`, the Tools list in the program, the install command for each system, and `diro doctor` with its sections and exit codes.
 - [Security](security.md): what diroxide checks, what it protects, and what a plugin could still do.
 
@@ -79,20 +81,22 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Coming in later alphas
 
-These guides are not written yet, because the features they describe are not built. Each arrives with the alpha that ships its feature.
+These guides are not written yet, because the features they describe are not built, or are built in the library and not yet in the program. Each arrives with the alpha that ships its feature.
 
-- Tools and conversions, previews of more kinds of document, and git.
-- Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, disk images and GitHub.
+- Conversions, metadata in the panels' columns, checksums and hot folders: alpha 4 builds them, and their guides come as each reaches the program.
+- Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, writing to disk images, and GitHub.
 
 ## For people who build diroxide
 
 - [The plan](plan.md): what diroxide is, its architecture, the alphas and the waves. Its alpha names are the plan's own stages; the first three ship together as alpha 1.
 - [Architecture](dev/architecture.md): the crates, what each does, and which way dependencies point.
 - [Building](dev/building.md): the toolchain, the checks, the profiles and the tasks.
-- [Docker](dev/docker.md): the Linux container for builds and tests.
+- [The plugin protocol reference](dev/plugin-protocol.md): every request and notification of protocol 1, generated from the code.
+- [Docker](dev/docker.md): the Linux container for builds and tests, and its three stages: dev, gui and tools.
 - [The bench](dev/bench.md): the speed measurements that gate a change.
 - [The clean-room rule](dev/clean-room.md): how diroxide stays a reimplementation of Worker's behavior, never a port of its code.
-- [Fuzzing](dev/fuzzing.md): the fuzz targets, running one, and the nightly run.
+- [Fuzzing](dev/fuzzing.md): the fuzz targets in four workspaces, running one, and the nightly run.
+- [Vendored code](dev/vendoring.md): the two folders of third-party Rust code under `third_party/`, copied from textweaver, and the patches they carry.
 - [The changelog](../CHANGELOG.md): what changed in each alpha.
 
 ## Decisions
@@ -108,6 +112,11 @@ Each architecture decision record keeps one decision: the context, the choice, t
 - [ADR-0007: Frontends over one core](adr/0007-frontends-over-one-core.md): the terminal, the GUI and the headless server over one app core.
 - [ADR-0008: Safety rules](adr/0008-safety-rules.md): lists before deletes, literal paths, the trash by default and confirmations that start on No.
 - [ADR-0009: Secrets and the masked prompt](adr/0009-secrets-and-the-masked-prompt.md): one secret type that is wiped and never logged, and a password prompt that says what it is for.
+- [ADR-0010: The optional components](adr/0010-the-optional-components.md): plugins, helper programs and data packs that come only after a yes.
+- [ADR-0011: The keyring and stored secrets](adr/0011-the-keyring-and-stored-secrets.md): where stored secrets live.
+- [ADR-0012: SFTP over the OpenSSH client](adr/0012-sftp-over-the-openssh-client.md): the SFTP places plugin and the askpass helper.
+- [ADR-0013: The job queue and resume](adr/0013-the-job-queue-and-resume.md): the job queue, the connection gate and resume.
+- [ADR-0014: Software drawing and the Windows subsystem](adr/0014-software-drawing-and-the-windows-subsystem.md): drawing without a graphics card, and one console program on Windows.
 
 ## See also
 
