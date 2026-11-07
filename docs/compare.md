@@ -1,6 +1,6 @@
 # Compare files
 
-This guide covers Compare files: what two files differ in, said in words before any change is shown. It describes which two files diroxide compares, what you hear and in what order, how to walk the changes, the options that leave differences out, binary and large files, and `diro diff` for the command line. Comparing two folders comes in a later alpha.
+This guide covers Compare files: what two files differ in, said in words before any change is shown. It describes which two files diroxide compares, the texts a plugin can hand over to compare, what you hear and in what order, how to walk the changes, the options that leave differences out, binary and large files, and `diro diff` for the command line. Comparing two folders comes in a later alpha.
 
 What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
 
@@ -21,6 +21,18 @@ Before it starts, the status line says which two. For two marked files: "Compari
 The direction is from the first file to the second. For one file in each panel, that is from the other panel's file to this panel's, and the report says so: "From the other panel to this panel." For two marked files it names them: "From old.txt to report.txt." Swap turns it around and says so: "Swapped. From this panel to the other panel." Nothing is compared again when you swap.
 
 Two folders, a folder and a file, or a file inside an archive are not compared in alpha 1. The message says what to do: "Could not compare D:/diro-demo: it is not a file. Choose two files to compare." or "Mark two files, or focus a file in each panel, to compare." or "No file to compare report.txt with in the other panel. Focus one there, or mark two here."
+
+## Texts from a plugin
+
+A plugin can hand diroxide two texts to compare, such as a file as git last committed it and the same file in your folder. The git plugin does this for Git: show the changes. The texts open in these same screens, in the same order, so everything on this page applies. These are the differences:
+
+- The two sides are named by the titles the plugin gives them, where files would say their names: "2 changes between HEAD and working tree". The direction says them too: "From HEAD to working tree." Swap says "Swapped. From working tree to HEAD."
+- The view's title comes last, with the plugin's name: "hello.txt (Git)". The count line says it at the end: "2 changes between HEAD and working tree. Changed 1, added 1. From HEAD to working tree. hello.txt (Git)."
+- Nothing is written to disk. The texts are compared in memory, on the plugin's own worker, under your compare settings, and the input stays free.
+- Two texts that look binary, with a NUL or many control characters, are compared byte by byte: "Binary, 1 byte differs: HEAD and working tree. Both 9 bytes; 1 byte differs in 1 run. First difference at byte 8."
+- A text has no file behind it, so the view key, F3, cannot open the viewer at a change: "No file to view: hello.txt (Git)". The change list, one change in full and the unified view work as they do for files.
+
+[Writing a plugin](writing-a-plugin.md#forms-diffs-and-the-title-line) says how a plugin asks for this.
 
 ## What you hear, in order
 
@@ -181,6 +193,8 @@ The exit codes are 0 for the same, 1 for different, and 2 for wrong use or troub
 - [The viewer](viewer.md)
 - [Search and the filter language](search.md)
 - [The panels](panels.md)
+- [Git](git.md)
+- [Writing a plugin](writing-a-plugin.md)
 - [Customizing keys](customizing-keys.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Settings and where the files live](settings.md)
