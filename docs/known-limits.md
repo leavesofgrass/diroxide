@@ -363,6 +363,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 [Watched folders](watched-folders.md) describes them. These are the limits.
 
+- A task's four folders, `in`, `out`, `processed` and `failed`, are made by you. The engine can make them, and nothing in the program or in `diro watch --task` asks it to yet. A missing folder pauses the task.
 - A script task and a plugin task are built, and have not been run through the real script host or a real plugin. A plugin's command pauses the task.
 - A task's filter is read by the program, and the count in the catch-up question ignores it.
 - On Linux and macOS a writer that does not lock its file is seen only by its quiet period. On Windows diroxide looks again through a share-mode open and never locks a file in `in`.

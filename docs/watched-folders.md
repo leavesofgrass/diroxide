@@ -43,7 +43,7 @@ Most keys have a default, so a short task works: a name, the recipe it needs, an
 
 ### The folders
 
-`home` holds four folders that you make: `in`, `out`, `processed` and `failed`. Put files in `in`. The results go to `out`. The original goes to `processed` when the action worked and to `failed` when it did not. Nothing but the files that arrive goes into `in`.
+`home` holds four folders that you make: `in`, `out`, `processed` and `failed`. diroxide does not make them for you yet. A folder that is missing pauses the task, "Scans paused: folder is missing", and the task goes on by itself when the folder comes back. Put files in `in`. The results go to `out`. The original goes to `processed` when the action worked and to `failed` when it did not. Nothing but the files that arrive goes into `in`.
 
 - Every folder is written out in full, as the system writes it: no wildcard, no variable such as `$HOME` or `%TEMP%`, no `~`, no `.` or `..`, no bare drive letter such as `C:`, and no address. Use single quotes in TOML so a backslash stays as typed.
 - A task refuses a drive root, your home folder itself, a folder that holds diroxide's settings or state or lies inside one, a trash folder, a system folder and the folder the program lives in. Downloads is allowed, because it is not a drive root.
@@ -120,7 +120,7 @@ Enter on a task opens its actions, titled "Notes actions":
 
 Turn on asks the approval question, starting on No: "Turn on Notes? No is the default. y or n", with the task's sentence under it. No says "Nothing changed."
 
-Yes asks about the files already waiting in `in`, the first time only, unless the task's `catch-up` is `all` or `none`: "Process the 2 files in Notes? No is the default. y or n". Yes processes them. No leaves them where they are, and the task watches for new ones. Your answer is kept. Then diroxide says "Hot folder Notes is on".
+Yes asks about the files already waiting in `in`, when there are any, the first time only, unless the task's `catch-up` is `all` or `none`: "Process the 2 files in Notes? No is the default. y or n". Yes processes them. No leaves them where they are, and the task watches for new ones. Your answer is kept. Then diroxide says "Hot folder Notes is on".
 
 Turn off says "Hot folder Notes is off". A task keeps its on or off state across restarts, and an approved task that is on starts with the program. A headless command such as `diro run` starts none.
 
