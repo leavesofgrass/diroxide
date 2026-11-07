@@ -37,7 +37,7 @@ Background, filled for the rows on screen and two pages either side:
 
 - Sound properties: `audio.length`, `audio.bitrate`, `audio.sample_rate`, `audio.channels`, `audio.bit_depth`, `audio.cover` and `audio.format`.
 - Documents, from PDF, Word, OpenDocument and EPUB files: `doc.title`, `doc.author`, `doc.subject`, `doc.keywords`, `doc.comments`, `doc.category`, `doc.last_saved_by`, `doc.revision`, `doc.created`, `doc.modified`, `doc.application`, `doc.producer`, `doc.pages`, `doc.words`, `doc.slides`, `doc.company`, `doc.manager`, `doc.template`, `doc.language`, `doc.publisher`, `doc.published`, `doc.identifier`, `doc.rights`, `doc.pdf_version`, `doc.encrypted`, `doc.custom` and `doc.review_comments`. Which of them a file has depends on its kind.
-- Photos, from the file's own tags: `image.taken`, `image.camera`, `image.lens`, `image.software`, `image.gps`, `image.serial`, `image.lens_serial`, `image.owner`, `image.artist`, `image.copyright`, `image.comment`, `image.thumbnail`, `image.xmp`, `image.iptc` and `image.more_pictures`. Several of these are private.
+- Photos, from the file's own tags: `image.taken`, `image.camera`, `image.lens`, `image.software`, `image.gps`, `image.serial`, `image.lens_serial`, `image.owner`, `image.artist`, `image.copyright`, `image.comment`, `image.thumbnail`, `image.xmp`, `image.iptc` and `image.more_pictures`. Several of these are private, and [privacy before sharing](before-sharing.md) says how to find and remove them.
 - Pictures, from the header alone: `image.description`, `image.dimensions`, `image.shape`, `image.color`, `image.animation`, `image.sizes`, `image.stored_size`, `image.orientation`, `image.profile` and `image.shown`.
 - Zip archives: `archive.entries`, `archive.unpacked`, `archive.encrypted` and `archive.comment`.
 - What the system keeps about the file: `file.origin`, `file.tags`, `file.comment` and `file.extended`.
@@ -150,6 +150,7 @@ A plugin that declares a column in its manifest (`[[column]]`) can fill it. The 
 - [The panels](panels.md)
 - [Labels and bookmarks](labels-bookmarks.md)
 - [The details view](details.md)
+- [Privacy before sharing](before-sharing.md)
 - [File types and groups](file-types.md)
 - [Tools and diro doctor](tools.md)
 - [Git](git.md)

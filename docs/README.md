@@ -51,6 +51,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Previews and the quick view's formats](previews.md): what pictures, drawings, sound and video, archives, PDF, Word, EPUB, RTF and spreadsheets say, the Preview command and auto-preview, Read text in picture, and the limits that protect the quick view.
 - [The details view](details.md): Alt+Enter, the facts in their order, the Privacy and Checksum rows, Show all with ExifTool, Say details, Copy details and Copy all details.
 - [File types and groups](file-types.md): what a row says about a file, how a type is found, the eight groups and the screenshot names, the retro pack, your own `filetypes.toml`, typed actions, Open with on each system, and the encoding chooser.
+- [Privacy before sharing](before-sharing.md): Check before sharing says what a file carries that could say who made it, where or with what, Strip metadata into a copy for JPEG, PNG and WebP, and Remove the internet mark with Undo.
 - [Checksums and verifying](checksums.md): Checksum with the value to read, copy, compare with a pasted one or save as `SHA256SUMS`, Verify checksum against the list beside a download, the verdict first and what a match does and does not show, and `diro sum`.
 - [Split and join](split-join.md): cutting a big file into parts for mail, GitHub, a disc or FAT32, joining them back, the checksum file, `diro split` and `diro join`.
 - [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, times, and the details list.
