@@ -18,13 +18,13 @@ PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are read from their headers alone. No pi
 
 - "PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB".
 - "JPEG, 3024 by 4032, portrait, 3.1 MB".
-- "JPEG, 4032 by 3024, has location, 3.1 MB". A photo with a place in it says so, and nothing more about where. The details view and Check before sharing say the rest.
+- "JPEG, 4032 by 3024, has location, 3.1 MB". A photo with a place in it says so, and nothing more about where. The details view says the rest.
 - "GIF, 3 frames, 48 by 27, " and the size, for an animation. The frames are counted from the file's blocks.
 - "ICO, 2 sizes, largest 32 by 32".
 - "JPEG, 20000 by 20000, too large to open", for a picture over the pixel guard, below.
 - "PNG, unreadable: file is cut short", for a file whose header ends too soon.
 
-HEIC, AVIF, JPEG XL, JPEG 2000, Photoshop and camera raw files are named and sized where that is cheap, and say that they need a component to be shown: "HEIC, 4032 by 3024, needs a component". Nothing draws a picture in this alpha, here or in the window; the sentence is the preview.
+HEIC, AVIF, JPEG XL, JPEG 2000, Photoshop and camera raw files are named and sized where that is cheap, and say that they need a component to be shown: "HEIC, 4032 by 3024, needs a component". The quick view and the terminal never draw a picture: the sentence is the preview. The window has a picture view, below.
 
 The details view lists the picture's rows, each in words:
 
@@ -128,6 +128,19 @@ Read text in picture has Tesseract read the words in the focused picture, and sh
 - Reload in the viewer does not read the picture's bytes as text. It says "This text was read from the picture. Read text in picture reads it again."
 - The details view then has a row, "Text in picture (machine read): 9 words", for the rest of the session.
 
+## The picture view in the window
+
+The window can show a picture, as one graphic. It is the window's own: the terminal has none.
+
+- In the viewer (F3) or in the quick view's preview, on a picture, the window says once "Enter shows the picture." Enter opens it. While it reads, a picture that takes more than half a second says "Opening picture photo.png".
+- A screen reader finds one graphic named by the file, "photo.png", and described by the same sentence the quick view says, "PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB". JAWS may need its describe key to read the description.
+- Plus, Equals or the keypad's plus zoom in. Minus zooms out. 0 fits the picture to the window and 1 shows it at actual size. The arrows move a zoomed picture and say nothing. Escape goes back to the viewer or the preview. The window says what each key did: "Fit to the window, 42 percent", "Actual size, 100 percent", "Zoom 125 percent". Two help lines are drawn and said as the picture opens: "Plus, Minus zoom; 0 fits; Escape closes" and "1 actual size; arrows move when zoomed".
+- An animation shows its first frame still, and says "Animation: 12 frames, not playing". Nothing plays.
+- The pixel guard stands in front of the pixels, with the numbers above. A picture past it is said and never opened: "PNG, 20000 by 20000, too large to open", "PNG, file too large to open" past 256 MiB, or "PNG, unreadable: file is cut short".
+- PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are shown. The other formats say that they need a component.
+
+The picture view has no command of its own yet, so it is not on [the keyboard page](keyboard.md), and Enter is the window's own key for it. The window's picture view has not been heard on a screen reader.
+
 ## The limits
 
 Every limit protects the quick view. A file that is past one says so in words and shows what it can.
@@ -143,7 +156,8 @@ The previews are kept in memory so that moving back to a file is instant: up to 
 
 ## Known limits
 
-- A picture is not drawn, only said. The window has no picture view yet.
+- In the quick view and the terminal a picture is only said, never drawn. The window's picture view draws PNG, JPEG, GIF, WebP, BMP, TIFF and ICO.
+- The picture view has not been tried on a picture inside an archive or on an SFTP site.
 - A TIFF's page count and a JPEG XL's size are not read. For raw and HEIF pictures, the Exif data is looked for in the first 1 MiB and 16 MiB.
 - RTF: bold and italic are not said, and deleted revisions are left out.
 - A spreadsheet's formulas are not worked out again. A cell says what the file last saved.
