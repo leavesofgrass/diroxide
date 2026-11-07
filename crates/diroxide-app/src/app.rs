@@ -946,6 +946,10 @@ pub struct App {
     tabbed: Option<String>,
     places: Vec<LocalPlace>,
     first_run: bool,
+    /// A command run with no one to answer (`diro run`): the first-run
+    /// components list and the ask-again list are not opened at start,
+    /// since nothing could close them and they would block the command.
+    headless: bool,
     session: Option<diroxide_config::SessionState>,
     restore: [Option<String>; 2],
     kept: Vec<Kept>,
@@ -1317,6 +1321,7 @@ impl App {
             tabbed: None,
             places: Vec::new(),
             first_run: startup.first_run,
+            headless: false,
             session: startup.session,
             restore: [None, None],
             kept: Vec::new(),
@@ -1544,6 +1549,13 @@ impl App {
     /// decides it from the setting and its own detection.
     pub fn set_screen_reader(&mut self, on: bool) {
         self.screen_reader = on;
+    }
+
+    /// Marks a headless run (`diro run`): no first-run or ask-again
+    /// components list opens at start, since no one is there to close it
+    /// and it would block the one command. Set before [`App::start`].
+    pub fn set_headless(&mut self, on: bool) {
+        self.headless = on;
     }
 
     /// The config problems found at start and since.

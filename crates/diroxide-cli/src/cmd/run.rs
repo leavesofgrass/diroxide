@@ -174,6 +174,8 @@ pub fn run_in(
     };
     let (mut app, mut runtime) = build(&options, folders, here)?;
     app.set_screen_reader(true);
+    // No one is here to close a first-run list, so none opens.
+    app.set_headless(true);
     let start = app.start();
     let _ = runtime.run_until_idle(&mut app, start);
     let mut failed = false;

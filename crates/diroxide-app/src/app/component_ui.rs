@@ -118,6 +118,9 @@ impl App {
     /// start (answer 93), or when the "Ask about components again" setting
     /// is on; it opens when it arrives, if it holds something.
     pub(super) fn components_start(&mut self) {
+        if self.headless {
+            return;
+        }
         let first = self.first_run && !self.settings.components_first_run_shown;
         if first || self.settings.components_ask_again {
             self.components.next = Some(Next::AtStart);
