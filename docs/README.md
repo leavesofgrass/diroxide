@@ -63,6 +63,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Labels and bookmarks](labels-bookmarks.md): labels on files, bookmarks on folders, the History list, a view saved for one folder, and saved searches.
 - [Compare files](compare.md): what two files differ in, said in words first, the change list, the cases that sound the same, binary and large files, and `diro diff`.
 - [Watching a folder](watching.md): hearing when a new file has finished arriving, in the program and with `diro watch`.
+- [Watched folders](watched-folders.md): a folder that converts, moves, copies or notes each file that arrives, its task file, the approval you give first, the Watched folders list, retries and pauses, and `diro watch --task`.
 
 ### Plugins, scripts and optional components
 

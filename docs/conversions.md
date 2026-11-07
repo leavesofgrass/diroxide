@@ -181,6 +181,7 @@ The exit codes are the family's: 0 when everything was done, 1 when nothing coul
 
 - [File types and groups](file-types.md)
 - [Tools and diro doctor](tools.md)
+- [Watched folders](watched-folders.md), which run a recipe on each file that arrives
 - [Operations and undo](operations.md)
 - [Optional components](components.md)
 - [Writing a plugin](writing-a-plugin.md)

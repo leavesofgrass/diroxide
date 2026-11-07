@@ -33,7 +33,7 @@ Other lines:
 - "Gave up waiting for app.log". A file that kept changing for an hour, such as a log. The watch goes on with the others.
 - "Close this dialog first." The watch needs the panel, not a dialog.
 
-Watching lasts for the session. Nothing is saved, moved or run. A rule that does something with each arrival comes in a later alpha.
+Watching lasts for the session. Nothing is saved, moved or run. A folder that does something with each arrival, such as converting it or filing it, is a task. [Watched folders](watched-folders.md) describes tasks, and `diro watch --task` runs one.
 
 ### What is never an arrival
 
@@ -74,6 +74,7 @@ The exit codes are 0 when watched until stopped, 1 when the folder could not be 
 
 ## See also
 
+- [Watched folders](watched-folders.md)
 - [Operations and undo](operations.md)
 - [The panels](panels.md)
 - [Search and the filter language](search.md)
