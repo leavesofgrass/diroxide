@@ -204,7 +204,228 @@ fn the_submenu_is_on_the_file_menu() {
         ids::ENCRYPT_PASSPHRASE,
         ids::ENCRYPT_RECIPIENT,
         ids::DECRYPT,
+        ids::GPG_ENCRYPT,
+        ids::GPG_DECRYPT,
+        ids::SIGN,
+        ids::VERIFY_SIGNATURE,
     ] {
         assert_eq!(menus.holder_of(&id), Some("Encryption"), "{id}");
     }
+}
+
+/// A plain session on the fixture, its tools the test's own.
+fn plain() -> (tempfile::TempDir, std::path::PathBuf, Session) {
+    let dir = temp();
+    let work = fixture(dir.path());
+    let s = Session::open(
+        place(&work),
+        place(&work),
+        diroxide_vfs::Registry::with_local(),
+        Setup::default(),
+    );
+    (dir, work, s)
+}
+
+#[test]
+fn encrypt_with_gpg_asks_the_keys_then_a_plan_starting_on_no() {
+    let (_dir, work, mut s) = plain();
+    s.tools.answer("gpg", b"[GNUPG:] END_ENCRYPTION\n");
+    s.focus("notes.txt");
+    s.command(ids::GPG_ENCRYPT);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Encrypt for gpg keys (empty: passphrase)")
+    );
+    s.type_text("4E7B");
+    s.key("enter");
+    let Some(Dialog::Confirm {
+        question, listing, ..
+    }) = s.dialog().cloned()
+    else {
+        panic!("no plan: {:?}", s.dialog());
+    };
+    assert_eq!(
+        question.text,
+        "Encrypt 1 file for 1 recipient? No is the default. y or n"
+    );
+    assert_eq!(listing, ["notes.txt to notes.txt.gpg"]);
+    // Planning ran nothing.
+    assert!(s.tools.ran().is_empty(), "{:?}", s.tools.ran());
+    let said = s.key("n");
+    assert!(said.contains(&"Nothing changed.".to_owned()), "{said:?}");
+    // Yes runs gpg; this fake makes no file, so the file fails in words
+    // and nothing is left beside it.
+    s.command(ids::GPG_ENCRYPT);
+    s.type_text("4E7B");
+    s.key("enter");
+    let said = s.key("y");
+    let all = s.said.iter().map(|m| m.text.clone()).collect::<Vec<_>>();
+    assert!(
+        all.iter()
+            .any(|l| l == "Encrypt started: 1 file for 1 recipient"),
+        "{said:?}"
+    );
+    assert!(
+        all.iter()
+            .any(|l| l.contains("Could not encrypt notes.txt: gpg made no file")),
+        "{all:?}"
+    );
+    let args: Vec<String> = s.tools.runs.lock().unwrap()[0]
+        .args
+        .iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.contains(&"--batch".to_owned()), "{args:?}");
+    assert!(!args.iter().any(|a| a.contains("passphrase ")), "{args:?}");
+    let left: Vec<_> = fs::read_dir(&work)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().starts_with(".diro-part-"))
+        .collect();
+    assert!(left.is_empty());
+}
+
+#[test]
+fn a_gpg_passphrase_is_typed_twice_hidden_and_never_reaches_an_argument() {
+    let (_dir, _work, mut s) = plain();
+    s.tools.answer("gpg", b"[GNUPG:] END_ENCRYPTION\n");
+    s.focus("notes.txt");
+    s.command(ids::GPG_ENCRYPT);
+    s.key("enter");
+    let Some(Dialog::Confirm { question, .. }) = s.dialog().cloned() else {
+        panic!("no plan: {:?}", s.dialog());
+    };
+    assert!(
+        question
+            .text
+            .starts_with("Encrypt 1 file with a passphrase"),
+        "{}",
+        question.text
+    );
+    s.key("y");
+    // The masked prompt, twice; two that differ ask again.
+    let canary = "canary-5e1d-not-a-passphrase";
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("New passphrase for notes.txt")
+    );
+    assert!(matches!(s.dialog(), Some(Dialog::Secret { .. })));
+    s.type_text(canary);
+    s.key("enter");
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Same passphrase again for notes.txt")
+    );
+    s.type_text("something else");
+    s.key("enter");
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Not the same. New passphrase for notes.txt")
+    );
+    s.type_text(canary);
+    s.key("enter");
+    s.type_text(canary);
+    s.key("enter");
+    let runs = s.tools.runs.lock().unwrap().clone();
+    assert_eq!(runs.len(), 1, "{:?}", s.said);
+    for arg in &runs[0].args {
+        assert!(!arg.to_string_lossy().contains(canary), "{arg:?}");
+    }
+    assert!(
+        runs[0]
+            .args
+            .iter()
+            .any(|a| a.to_string_lossy() == "--passphrase-fd"),
+        "the passphrase goes on standard input"
+    );
+    for message in &s.said {
+        assert!(!message.text.contains(canary), "{}", message.text);
+    }
+}
+
+#[test]
+fn without_gpg_the_plan_says_how_to_get_it() {
+    let (_dir, _work, mut s) = plain();
+    s.focus("notes.txt");
+    let said = s.command(ids::GPG_DECRYPT);
+    assert!(
+        said.contains(&"gpg not found. Install GnuPG first.".to_owned()),
+        "{said:?}"
+    );
+    assert!(s.dialog().is_none());
+}
+
+#[test]
+fn verify_signature_says_the_verdict_first_and_what_good_means() {
+    let (_dir, work, mut s) = plain();
+    fs::write(
+        work.join("notes.txt.asc"),
+        "-----BEGIN PGP SIGNATURE-----\n",
+    )
+    .unwrap();
+    s.command(ids::RELOAD);
+    s.tools.answer(
+        "gpg",
+        b"[GNUPG:] NEWSIG\n[GNUPG:] GOODSIG 168B6F650E9C8469 Ada Example <ada@example.invalid>\n[GNUPG:] VALIDSIG x\n[GNUPG:] TRUST_UNDEFINED 0 pgp\n",
+    );
+    s.focus("notes.txt");
+    s.command(ids::VERIFY_SIGNATURE);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Signature good: key ending 8469")
+    );
+    match s.dialog() {
+        Some(Dialog::Read { lines, .. }) => {
+            assert_eq!(
+                lines.last().map(String::as_str),
+                Some("Good means the key fits, not who holds it.")
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+    // The focused signature checks its own file the same way.
+    s.key("escape");
+    s.focus("notes.txt.asc");
+    s.command(ids::VERIFY_SIGNATURE);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Signature good: key ending 8469")
+    );
+    // A file with no signature beside it says so.
+    s.key("escape");
+    s.focus("report.pdf");
+    let said = s.command(ids::VERIFY_SIGNATURE);
+    assert!(
+        said.contains(&"No signature beside report.pdf".to_owned()),
+        "{said:?}"
+    );
+}
+
+#[test]
+fn a_minisign_signature_asks_its_public_key() {
+    let (_dir, work, mut s) = plain();
+    fs::write(work.join("notes.txt.minisig"), "untrusted comment: x\n").unwrap();
+    s.command(ids::RELOAD);
+    s.focus("notes.txt");
+    s.command(ids::VERIFY_SIGNATURE);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("minisign public key: a file or pasted")
+    );
+    let said = s.key("enter");
+    assert!(
+        said.contains(&"No public key given; nothing was checked.".to_owned()),
+        "{said:?}"
+    );
+    // A key file that is not a key: the verdict says it, in words.
+    fs::write(work.join("minisign.pub"), "not a key\n").unwrap();
+    s.command(ids::VERIFY_SIGNATURE);
+    s.type_text("minisign.pub");
+    let said = s.key("enter");
+    let all = s.said.iter().map(|m| m.text.clone()).collect::<Vec<_>>();
+    assert!(
+        all.iter().any(|l| l.starts_with("Cannot check")),
+        "{said:?} {all:?}"
+    );
+    assert!(s.tools.ran().is_empty(), "minisign never runs gpg");
 }

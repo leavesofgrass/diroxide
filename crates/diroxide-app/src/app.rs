@@ -546,6 +546,9 @@ pub enum AppEvent {
     },
     /// What the runtime answered the Convert command (alpha 4, lane AW).
     Convert(Box<crate::conversions::ConvertNote>),
+    /// What the runtime answered the gpg commands or Verify signature
+    /// (alpha 4, lane AE).
+    Crypt(Box<crate::crypt::CryptNote>),
     /// What the runtime answered the Watched folders list, or what a
     /// running task told (alpha 4, lane AW).
     HotFolder(Box<crate::watched::WatchedNote>),
@@ -2022,6 +2025,7 @@ impl App {
             } => self.columns_read(side, listing, cells, plugin, ask),
             AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
             AppEvent::Convert(note) => self.convert_note(*note),
+            AppEvent::Crypt(note) => self.crypt_note(*note),
             AppEvent::HotFolder(note) => self.watched_note(*note),
         }
     }

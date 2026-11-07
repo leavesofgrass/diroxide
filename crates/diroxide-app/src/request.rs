@@ -482,6 +482,9 @@ pub enum Request {
     /// One of the Convert command's asks (alpha 4, lane AW); answered as
     /// [`AppEvent::Convert`](crate::AppEvent::Convert).
     Convert(Box<crate::conversions::ConvertAsk>),
+    /// One of the gpg commands' asks or a signature check (alpha 4, lane
+    /// AE); answered as [`AppEvent::Crypt`](crate::AppEvent::Crypt).
+    Crypt(Box<crate::crypt::CryptAsk>),
     /// One of the Watched folders list's asks (alpha 4, lane AW); answered
     /// as [`AppEvent::HotFolder`](crate::AppEvent::HotFolder).
     Watched(Box<crate::watched::WatchedRequest>),

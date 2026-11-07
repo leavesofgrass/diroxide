@@ -16,7 +16,128 @@
 //!   the verdict first). A passphrase goes through the masked prompt,
 //!   never a command line.
 
-use diroxide_core::{CommandId, Place};
+use diroxide_core::{CommandId, JobId, Place};
+use diroxide_ops::crypt::{GpgOptions, GpgPlan, GpgReport, SignatureCheck, SignatureVerdict};
+
+/// What the gpg commands and Verify signature ask of the runtime.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CryptAsk {
+    /// Plan a gpg job on a worker; answered with [`CryptNote::Planned`].
+    Plan {
+        /// The job.
+        job: JobId,
+        /// The files.
+        sources: Vec<Place>,
+        /// What to do.
+        options: GpgOptions,
+    },
+    /// Run a plan the owner confirmed; answered with
+    /// [`CryptNote::Finished`].
+    Run(GpgToRun),
+    /// Check one signature; answered with [`CryptNote::Verified`].
+    Verify {
+        /// The file the owner chose, for the words.
+        file: Place,
+        /// What to check.
+        check: SignatureCheck,
+    },
+}
+
+/// A gpg plan the owner confirmed; two are equal when they are the same
+/// job's.
+#[derive(Clone, Debug)]
+pub struct GpgToRun(pub Box<GpgPlan>);
+
+impl PartialEq for GpgToRun {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.job == other.0.job
+    }
+}
+
+impl Eq for GpgToRun {}
+
+/// What the runtime answers the gpg commands and Verify signature.
+#[derive(Debug)]
+pub enum CryptNote {
+    /// A plan, or the sentence why there is none.
+    Planned {
+        /// The job.
+        job: JobId,
+        /// The plan, or why not.
+        result: Result<Box<GpgPlan>, String>,
+    },
+    /// A gpg job ended.
+    Finished(Box<GpgReport>),
+    /// A signature's verdict.
+    Verified {
+        /// The file the owner chose.
+        file: Place,
+        /// What was checked.
+        check: Box<SignatureCheck>,
+        /// The verdict.
+        verdict: Box<SignatureVerdict>,
+    },
+}
+
+/// The field for Encrypt with gpg: the recipients, or empty for a
+/// passphrase (40 cells).
+pub const RECIPIENTS_LABEL: &str = "Encrypt for gpg keys (empty: passphrase)";
+
+/// The field for Sign with gpg (39 cells).
+pub const SIGNER_LABEL: &str = "Sign with gpg key (empty: your default)";
+
+/// The field for a minisign public key (37 cells).
+pub const MINISIGN_KEY_LABEL: &str = "minisign public key: a file or pasted";
+
+/// The keys typed in the recipients field: split at commas, semicolons
+/// and spaces, empty parts dropped.
+pub fn recipients_of(text: &str) -> Vec<String> {
+    text.split([',', ';', ' ', '\t'])
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// A minisign key as typed: a pasted key (minisign's base64 starts
+/// "RW") or a file's path, relative to `folder` when it is not whole.
+pub fn minisign_key_of(
+    text: &str,
+    folder: Option<&std::path::Path>,
+) -> diroxide_ops::crypt::MinisignKey {
+    use diroxide_ops::crypt::MinisignKey;
+    let text = text.trim();
+    if text.starts_with("RW") && !text.contains(['/', '\\']) {
+        return MinisignKey::Text(text.to_owned());
+    }
+    let path = std::path::PathBuf::from(text);
+    match folder {
+        Some(folder) if path.is_relative() => MinisignKey::File(folder.join(path)),
+        _ => MinisignKey::File(path),
+    }
+}
+
+/// Said when a file has no signature beside it: "No signature beside
+/// report.pdf".
+pub fn no_signature(name: &str) -> String {
+    format!("No signature beside {name}")
+}
+
+/// Said after the verdict when the signature checked is the checksum
+/// list's, not the file's own.
+pub fn list_signature(list: &str) -> String {
+    format!("That signature is on {list}; Verify checksum uses it.")
+}
+
+/// The line when a gpg plan cannot be made: gpg missing is a sentence of
+/// its own ("gpg not found. Install GnuPG first."), the rest "Could not
+/// encrypt: no recipient was given."
+pub fn plan_refused(verb: &str, error: &diroxide_ops::crypt::GpgError) -> String {
+    match error {
+        diroxide_ops::crypt::GpgError::Missing => error.to_string(),
+        other => format!("Could not {verb}: {other}."),
+    }
+}
 
 /// The encryption plugin's id: its commands are `crypt.encrypt_passphrase`,
 /// `crypt.encrypt_recipient` and `crypt.decrypt`.
@@ -133,6 +254,42 @@ mod tests {
         assert_eq!(
             plugin_command("decrypt").map(|c| c.to_string()),
             Some("crypt.decrypt".to_owned())
+        );
+        for line in [RECIPIENTS_LABEL, SIGNER_LABEL, MINISIGN_KEY_LABEL] {
+            assert!(line.chars().count() <= BRAILLE_CELLS, "{line}");
+        }
+        assert_eq!(no_signature("report.pdf"), "No signature beside report.pdf");
+        assert_eq!(
+            plan_refused("encrypt", &diroxide_ops::crypt::GpgError::Missing),
+            "gpg not found. Install GnuPG first."
+        );
+        assert_eq!(
+            plan_refused("encrypt", &diroxide_ops::crypt::GpgError::NoRecipient),
+            "Could not encrypt: no recipient was given."
+        );
+    }
+
+    #[test]
+    fn recipients_and_keys_are_read_as_typed() {
+        assert_eq!(
+            recipients_of(" 4E7B, ada@example.invalid;B0B "),
+            ["4E7B", "ada@example.invalid", "B0B"]
+        );
+        assert!(recipients_of("  ").is_empty());
+        use diroxide_ops::crypt::MinisignKey;
+        assert_eq!(
+            minisign_key_of(
+                "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
+                None
+            ),
+            MinisignKey::Text(
+                "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3".to_owned()
+            )
+        );
+        let folder = std::path::Path::new("work");
+        assert_eq!(
+            minisign_key_of("minisign.pub", Some(folder)),
+            MinisignKey::File(folder.join("minisign.pub"))
         );
     }
 

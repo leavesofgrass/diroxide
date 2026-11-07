@@ -760,6 +760,14 @@ pub mod ids {
         ENCRYPT_RECIPIENT = "file.encrypt-recipient";
         /// Decrypt age files, asking a passphrase or an identity file.
         DECRYPT = "file.decrypt";
+        /// Encrypt the marked files with gpg, for keys or a passphrase.
+        GPG_ENCRYPT = "file.gpg-encrypt";
+        /// Decrypt OpenPGP files with gpg.
+        GPG_DECRYPT = "file.gpg-decrypt";
+        /// Make a detached gpg signature of each marked file.
+        SIGN = "file.sign";
+        /// Check the focused file's signature, or the focused signature.
+        VERIFY_SIGNATURE = "file.verify-signature";
     }
 }
 
@@ -785,7 +793,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 263] = [
+pub static CATALOG: [CommandInfo; 267] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1638,6 +1646,38 @@ pub static CATALOG: [CommandInfo; 263] = [
         ids::DECRYPT,
         "Decrypt",
         "Decrypts the marked age files, or the focused one, asking the passphrase in a hidden field or an identity file by its path each time; nothing is kept. Needs the Encryption plugin.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::GPG_ENCRYPT,
+        "Encrypt with gpg",
+        "Encrypts the marked files, or the focused one, with gpg for the keys you type, or with a passphrase typed twice when you type none, each into NAME.gpg beside it after a plan you answer, which starts on No; gpg must be installed.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::GPG_DECRYPT,
+        "Decrypt with gpg",
+        "Decrypts the marked OpenPGP files, or the focused one, with gpg; a key gpg's agent holds asks nothing, otherwise its passphrase is asked in a hidden field, never on a command line.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SIGN,
+        "Sign with gpg",
+        "Makes a detached signature, NAME.sig, of the marked files, or the focused one, with the gpg key you type or your default key, its passphrase asked in a hidden field.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VERIFY_SIGNATURE,
+        "Verify signature",
+        "Checks the focused file's signature beside it (NAME.asc, NAME.sig, NAME.minisig or SHA256SUMS.asc), or the focused signature against its file, with gpg or minisign; the verdict first. A good signature means the key fits, not who holds it; diroxide never fetches a key.",
         Panel,
         &[],
         &[],

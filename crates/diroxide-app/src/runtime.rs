@@ -57,6 +57,8 @@ mod meta;
 mod components;
 // Conversions on workers (alpha 4, lane AW).
 mod converting;
+// The gpg jobs and signature checks (alpha 4, lane AE).
+mod crypt;
 // The watched folders' tasks (alpha 4, lane AW).
 mod watched;
 // Plugins and script commands (W4d).
@@ -1471,6 +1473,7 @@ impl Runtime {
                 });
             }
             Request::Convert(ask) => self.convert(*ask),
+            Request::Crypt(ask) => self.crypt(*ask),
             Request::Watched(request) => self.watched(*request),
             Request::PlanRewrite(ask) => {
                 let Some(archives) = self.archives.clone() else {

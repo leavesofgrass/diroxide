@@ -199,6 +199,23 @@ access = "r"
 command = "file.decrypt"
 access = "d"
 
+# gpg, the program the tools registry finds (lane AE).
+[[menu.item]]
+command = "file.gpg-encrypt"
+access = "g"
+
+[[menu.item]]
+command = "file.gpg-decrypt"
+access = "e"
+
+[[menu.item]]
+command = "file.sign"
+access = "s"
+
+[[menu.item]]
+command = "file.verify-signature"
+access = "v"
+
 [[menu]]
 id = "edit"
 title = "Edit"
