@@ -29,9 +29,9 @@ The plan is made before anything is touched. Its rows come in this order:
 3. What is left out: "Left out: 1 file it does not take".
 4. The work, one row a file: "notes.md to notes.txt".
 5. The tool: "Tool: ImageMagick", or "Tool: carta, built in" for a recipe that needs no program.
-6. The input's size, and a warning when the target is short of room: "Low space: 1.2 GB free, input 3.0 GB".
+6. The input, "Input: 13 files, 4.2 MB", and a warning when the target is short of room: "Low space: 1.2 GB free, input 3.0 GB".
 
-The title row says the count, "Convert plan: 2 files". If nothing can be converted, the plan says why instead of asking.
+If nothing can be converted, there is no question. Convert says the count and why, such as "Convert plan: 0 files, 1 skipped. Skipped b.png: output exists." or "Convert plan: 0 files. Nothing to convert."
 
 ### Names are never replaced
 
