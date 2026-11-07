@@ -19,12 +19,14 @@ The config folder holds these files:
 - `banks.toml` holds the banks of command buttons, including the function key bar.
 - `filetypes.toml` holds your own file types and groups, added to the ones that come with diroxide. You write it when you want one. [File types and groups](file-types.md) has its keys.
 - `tools.toml` holds, for each helper program, a path to use instead of looking, a switch to turn it off, and whether you need it. [Tools and diro doctor](tools.md) has its keys.
+- `conversions.toml` holds your own conversion recipes, added to the 31 that come with diroxide; a recipe with a built-in id replaces it. You write it when you want one. [Conversions](conversions.md) has its keys.
+- A `tasks` folder holds your watched folders, one `NAME.toml` file each. [Watched folders](watched-folders.md) has the format.
 - A `themes` folder holds your own theme files.
 - A `plugins` folder holds your plugins, one folder each, and its `scripts` folder holds your script commands. [Plugins](plugins.md) and [script commands](script-commands.md) describe them.
 
 Later alphas add more files. They are described when they arrive.
 
-The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. It also holds `labels.toml` (your labels and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now. A `plugins` folder holds what you turned on (`consent.toml`), a folder for each plugin with its log and its data, and a `runs` folder for the short-lived files of a running script. The SFTP places plugin keeps `sites.toml`, the list of your sites, in its folder there. `partials.json` holds the partial files a lost network left, so a copy can go on from them ([the transfer queue](transfer-queue.md) says how). A `components` folder holds the optional components you installed, one folder each. [Optional components](components.md) describes them.
+The state folder holds each panel's folder, focused row, sort and history, and the layout, from your last session (`session.toml`); the history of each prompt (the `history` folder); the folders path jump learned from; the list of recent jobs for Undo; `terminal.log`; and a `spool` folder, where an archive inside another archive is kept while it is open when it is too big for memory. diroxide uses it instead of the system's temporary folder, and the `archives.spool_folder` setting can name another place. It also holds `labels.toml` (your labels, notes and fields, and where they are), `bookmarks.toml`, `folder-views.toml` (the view saved for a folder) and a `saved` folder with one file for each saved search. [Labels and bookmarks](labels-bookmarks.md) describes the first three. Nothing in it needs editing, though the label file is the one place to rename or recolor a label for now. A `plugins` folder holds what you turned on (`consent.toml`), a folder for each plugin with its log and its data, and a `runs` folder for the short-lived files of a running script. The SFTP places plugin keeps `sites.toml`, the list of your sites, in its folder there. `partials.json` holds the partial files a lost network left, so a copy can go on from them ([the transfer queue](transfer-queue.md) says how). A `components` folder holds the optional components you installed, one folder each. [Optional components](components.md) describes them. A `conversions` folder keeps the last 20 conversion reports, and a `hot` folder keeps a folder for each watched folder, with its state, its ledger and its log. [Watched folders](watched-folders.md) says what each holds.
 
 ## How diroxide treats these files
 
@@ -62,7 +64,7 @@ Names are in code type. Defaults are in parentheses.
 - Single letters (`single_letters`): what a key without Control or Alt does in a panel. `type_ahead` (default) jumps to a name, `commands` lets letters run commands, which the vim-style key preset needs ([customizing keys](customizing-keys.md)), and `off` does nothing. The Filter command still filters when it is off. Turn it off if you use dictation software.
 - Hidden files (`show_hidden`, off).
 - Sorting: what a new panel sorts by (`sort.key`: name by default, or extension, size, modified, created, accessed, kind, attributes, owner, label or unsorted), the direction (`sort.direction`), where folders go (`sort.folders`: first by default, mixed or last), capitals (`sort.case`: ignore by default, or respect) and numbers in names (`sort.natural`, on, so `file2` comes before `file10`).
-- Columns (`columns`): the details said after each name, in order. The default is type, size and modified.
+- Columns (`columns`): the details said after each name, in order. The default is type, size and modified. A key such as `audio.artist` adds a column read from the files, and `regex_columns` makes a column from a pattern over the name. [Columns, notes and fields](columns.md) has the keys.
 - Confirmations (`confirm.copy`, `confirm.move`, `confirm.trash` and `confirm.quit_with_jobs`, all on): whether those four questions are asked. Every question that is asked starts on No, and deleting for good always asks.
 - Trash (`trash`, system) and the drives that use it (`trash_drives`, fixed): on Windows only fixed drives keep trashed files safely. Elsewhere the delete is listed and asks before it deletes for good. Replaced files go to the trash first (`replace_to_trash`, on), so Undo can bring them back. The trash browser lists what is in the system's trash; [volumes and the trash](volumes-trash.md) describes it.
 - Hidden volumes (`hidden_volumes`, none; in the Panels group): the volumes the Volumes list leaves out, by device or place, as its Hide action keeps them. Remove an entry to list the volume again.
@@ -234,6 +236,9 @@ To go back to the defaults, move the config folder aside by renaming it, and sta
 - [Customizing keys](customizing-keys.md)
 - [Search and the filter language](search.md)
 - [Labels and bookmarks](labels-bookmarks.md)
+- [Columns, notes and fields](columns.md)
+- [Conversions](conversions.md)
+- [Watched folders](watched-folders.md)
 - [Plugins](plugins.md)
 - [The transfer queue](transfer-queue.md)
 - [Remote places over SFTP](remote-places.md)
