@@ -125,6 +125,7 @@ Nothing is requested before your yes. The tests check this: they record every re
 - A file that does not match is refused and removed: "Not installed: a file did not match." and then "Get it again, or check the source."
 - A file is fetched into a staging folder and checked there. Nothing moves into the component's folder until every file has matched, so the folder never holds a file that did not.
 - The list of components is part of your diroxide. It is made at build time from the real files, with their sizes and hashes computed and never typed. diroxide fetches no list from the network.
+- The pins of the helper programs are written by a job on the project's build machine, never on yours. The job downloads each file from its publisher, checks it against the publisher's own checksum, unpacks it the way diroxide will, and records its size and SHA-256. It runs by hand and on the third of each month. The project's own checks also fail when a pinned address answers that the file is not found or gone, so a dead link is found by the project and not by you.
 - A list from your own source may add components. It can never change the pins of a component diroxide already knows: "already known; a list cannot change its pins".
 - A downloaded program gets the right to run only if the list names it as the program. Nothing it contains is run by the download.
 
