@@ -800,12 +800,18 @@ mod tests {
             "Keyboard enhancement: the terminal answered no.",
             "Color: TrueColor.",
             "FFmpeg: turned off in tools.toml",
-            "pandoc: not found",
             "Install: winget install JohnMacFarlane.Pandoc",
             "Startup problems: keymap.toml: 1 problem",
         ] {
             assert!(lines.iter().any(|l| l == wanted), "{wanted}: {lines:#?}");
         }
+        // pandoc's line carries its helper's download size once pins exist
+        // ("pandoc: not found, 43.0 MB to download"), so only its start is
+        // fixed.
+        assert!(
+            lines.iter().any(|l| l.starts_with("pandoc: not found")),
+            "pandoc: {lines:#?}"
+        );
         assert!(!lines.iter().any(|l| l.starts_with("Terminal size:")));
     }
 }
