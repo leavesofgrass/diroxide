@@ -150,7 +150,7 @@ In a terminal the keypad's plus, minus and star arrive as the main row's charact
 
 ## Details and the context menu
 
-- Alt+Enter lists the details of the focused entry, one fact a row: the type, then the size in words with the exact bytes (a folder says "folder size not computed", and an archive adds "Entries: 10 items"), the modified, created and accessed times in words, attributes, owner, group, link target, whether it is hidden, and the full path. A name that needs care adds the reason and the name spelled out. Windows Terminal keeps Alt+Enter; the File menu has Details.
+- Alt+Enter lists the details of the focused entry, one fact a row: the type, then what is in it (an archive says "Entries: 8 files, 2 folders"), then the size in words with the exact bytes (a folder says "folder size not computed"), the modified, created and accessed times in words, attributes, owner, group, link target, whether it is hidden, and the full path. A name that needs care adds the reason and the name spelled out. Windows Terminal keeps Alt+Enter; the File menu has Details. [The details view](details.md) has the whole order, the facts read from inside the file, and Show all.
 - Shift+F10 or the Menu key opens the context menu: "Actions for report.pdf", a list of what the File menu offers here plus copy, cut, copy to the other panel and move to the other panel, each with its key. On Windows the Menu key never reaches a terminal program, so Shift+F10 is the way there.
 
 ## Plugin lists

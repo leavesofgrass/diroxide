@@ -85,7 +85,7 @@ These lines show what diroxide says for each key. The status line says the same 
 
 - Split, from File, Split file: a list, "Split into, Email attachment, 18 MB, Parts of 18,000,000 bytes, 1 of 9". The plan says "4 parts of 18 MB, the last 6 MB", "60 MB in all" and "Enough space: 12 GB free on D:", then the question. The job says "Split started: 1 item to out", then "Splitting 4 of 4 parts, 60.0 of 60.0 MB", then "Split finished: 5 done."
 - Join, from any part: "Join 4 parts into big.bin, 60.0 MB? No is the default. y or n". A gap is named first, "Part 003 is missing. Nothing was joined." The verdict: "Joined big.bin: checksum matches." Then "Move the 4 parts to the trash? No is the default. y or n". Answer n and it says "The parts stay where they are."
-- Details, Alt+Enter on an archive: "Details of course.zip, Type: zip archive, 1 of 8", then the size, then "Entries: 10 items".
+- Details, Alt+Enter on an archive: "Details of course.zip, Type: zip archive", then "Entries: 8 files, 2 folders", then the size.
 - Change permissions, from File: "Permissions, Change permissions of main.rs, 1 of 4". Permissions in words first: "Owner can read and write, group can read, others can read (644)". The octal number is second.
 - Make symbolic link, from File: "Make link, Make a link to main.rs in out, 1 of 4". The job says "Link finished: 1 done." On Windows without Developer Mode: "Cannot link: needs developer mode."
 - Shift+F5 (Duplicate): "Duplicate main.rs as: main (2).rs".
@@ -278,7 +278,7 @@ If you build from source, `cargo xtask demo` followed by a new or empty folder o
 16. Move to `notes.org`: "Preview: notes.org, Org, 2 headings". In the panel its row says "file". Edit `report.md` in another program and save: "Preview updated: report.md changed", once. Press Shift+F3: "Quick view off".
 17. Put the cursor on `big.bin`, with the right panel on `out`. Run Split file from the File menu. You hear "Split into, Email attachment, 18 MB, Parts of 18,000,000 bytes, 1 of 9". Press Enter: the plan lists "4 parts of 18 MB, the last 6 MB" and "Enough space", and the question starts on No. Answer y: "Split started: 1 item to out", then "Split finished: 5 done." In `out` are the four parts, then `big.bin.crc`. Press F3 on the `.crc` file: three lines, "filename=big.bin", "size=60000000" and a "crc32=" line.
 18. Rename `big.bin.003` and run Join files from `big.bin.001`: "Part 003 is missing. Nothing was joined." Rename it back. Join from `big.bin.002`: "Join 4 parts into big.bin, 60.0 MB? No is the default. y or n". Answer y: "Joined big.bin: checksum matches." and "Move the 4 parts to the trash? No is the default. y or n". Answer n: "The parts stay where they are."
-19. Press Alt+Enter on `course.zip`: "Details of course.zip, Type: zip archive", then the size, then "Entries: 10 items".
+19. Press Alt+Enter on `course.zip`: "Details of course.zip, Type: zip archive", then "Entries: 8 files, 2 folders", then the size.
 20. Run Change permissions on `main.rs`: "Permissions, Change permissions of main.rs, 1 of 4".
 21. Run Make symbolic link on `main.rs`: "Make link, Make a link to main.rs in out, 1 of 4". Answer y: "Link finished: 1 done." On Windows without Developer Mode: "Cannot link: needs developer mode."
 22. Press Shift+F5 on `main.rs`: "Duplicate main.rs as: main (2).rs". Press Escape.
