@@ -22,6 +22,15 @@ use crate::convert::recipe::is_plain_id;
 /// The state file's name in a task's folder.
 pub const STATE_FILE: &str = "state.toml";
 
+/// The lock file's name in a task's folder.
+pub const LOCK_FILE: &str = "lock";
+
+/// A task's lock, held while it lives ([`TaskStore::lock`]).
+#[derive(Debug)]
+pub struct TaskLock {
+    _file: fs::File,
+}
+
 /// What a task's state file holds.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
@@ -160,6 +169,26 @@ impl TaskStore {
         TaskLog::new(self.file(LOG_FILE))
     }
 
+    /// Takes the task's lock (R16 2.10): an exclusive lock on
+    /// `hot/NAME/lock`, held for as long as the returned [`TaskLock`]
+    /// lives. A second runner, in this program or another `diro`, gets
+    /// `Ok(None)`. The lock is the open file, not its existence, so a
+    /// crashed runner never leaves a stale one.
+    pub fn lock(&self) -> Result<Option<TaskLock>, StoreError> {
+        fs::create_dir_all(&self.folder)?;
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(self.file(LOCK_FILE))?;
+        match file.try_lock() {
+            Ok(()) => Ok(Some(TaskLock { _file: file })),
+            Err(fs::TryLockError::WouldBlock) => Ok(None),
+            Err(fs::TryLockError::Error(error)) => Err(error.into()),
+        }
+    }
+
     /// Writes a file in the task's folder whole: to `NAME.new`, flushed,
     /// then renamed into place. The folder is made when missing.
     pub(crate) fn write_whole(&self, name: &str, bytes: &[u8]) -> io::Result<()> {
@@ -207,6 +236,17 @@ mod tests {
         assert!(!store.file("state.toml.new").exists());
         assert!(TaskStore::new(dir.path(), "../up").is_err());
         assert!(TaskStore::new(dir.path(), "").is_err());
+    }
+
+    #[test]
+    fn a_second_runner_finds_the_task_locked_until_the_first_ends() {
+        let dir = scratch();
+        let store = TaskStore::new(dir.path(), "scans").unwrap();
+        let first = store.lock().unwrap();
+        assert!(first.is_some());
+        assert!(store.lock().unwrap().is_none());
+        drop(first);
+        assert!(store.lock().unwrap().is_some());
     }
 
     #[test]

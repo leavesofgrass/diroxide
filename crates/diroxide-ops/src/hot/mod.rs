@@ -10,7 +10,8 @@
 //!   rules and the folders a task may never name; [`check`]: the tasks
 //!   together, a shared `in` and loops refused.
 //! - [`words`]: the task as one sentence ("Say rule"), the same in the
-//!   list, the approval question and `diro watch --list`.
+//!   list, the approval question and `diro watch --list`; [`lines`]: what
+//!   a running task says, each line within 40 cells.
 //! - [`approval`]: the approval key, a hash of the task and what its
 //!   action resolves to; [`store`]: the task's state, beside its ledger,
 //!   log and lock, under the state folder's `hot`.
@@ -18,12 +19,28 @@
 //!   committed and before the input moves, so nothing is done twice;
 //!   [`log`]: the outcome first and the time last, rotated at 1 MiB with
 //!   five kept.
+//! - [`runner`]: one task's queue around the arrival tracker, stepped
+//!   with the time; [`retry`]: what a failure means, and the circuit
+//!   breaker; [`probe`]: the look again before the original moves;
+//!   [`actions`]: what the frontend gives (recipes, types, the filter,
+//!   the plugin host); [`spawn`]: a task on its own thread over a real
+//!   watch; [`once`]: `diro watch --task NAME --once` and the dry run,
+//!   with the family's exit codes.
 
+pub mod actions;
 pub mod approval;
 pub mod check;
 pub mod ledger;
+pub mod lines;
 pub mod log;
+pub mod once;
+pub mod probe;
 pub mod refuse;
+pub mod retry;
+pub mod runner;
+#[cfg(test)]
+mod runner_tests;
+pub mod spawn;
 pub mod store;
 pub mod task;
 #[cfg(test)]
@@ -32,12 +49,21 @@ mod task_tests;
 mod testing;
 pub mod words;
 
+pub use actions::{ActionResult, ActionRun, NoActions, TaskActions};
 pub use approval::{Approval, Resolved, approval_key};
 pub use check::{Checked, MOST_TASKS, check_set, check_tasks};
 pub use ledger::{Identity, Ledger, Line, Outcome};
 pub use log::{TaskLog, log_line, log_time};
+pub use once::{
+    DryRun, EXIT_COULD_NOT_RUN, EXIT_DONE, EXIT_PARTLY, EXIT_WRONG_USE, OnceReport, run_once,
+};
 pub use refuse::Surroundings;
-pub use store::{StoreError, TaskState, TaskStore};
+pub use runner::{
+    Checkpoint, CheckpointFn, FileNote, FileOutcome, HotNote, Interrupter, RunnerOptions,
+    StartError, TaskRunner, Totals,
+};
+pub use spawn::{TaskRun, spawn_task};
+pub use store::{StoreError, TaskLock, TaskState, TaskStore};
 pub use task::{
     After, Announce, CatchUpChoice, OnlineOnly, Task, TaskAction, TaskFolders, TaskProblem,
     TaskShape,

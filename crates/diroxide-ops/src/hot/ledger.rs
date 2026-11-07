@@ -310,8 +310,12 @@ impl Ledger {
         &self.path
     }
 
-    /// Appends a line and flushes it to the disk before returning, so a
-    /// crash after it never loses it.
+    /// Appends a line. A made line is flushed to the disk before this
+    /// returns, so a crash after it never loses it and the original is
+    /// moved, not converted again; the other lines are written and left
+    /// to the system, since losing one costs at most a second look (a made
+    /// line with no done line after it finds its original moved and is
+    /// closed).
     pub fn append(&mut self, line: Line) -> io::Result<()> {
         if let Some(folder) = self.path.parent() {
             fs::create_dir_all(folder)?;
@@ -322,7 +326,9 @@ impl Ledger {
             .open(&self.path)?;
         let start = if self.cut_short { "\n" } else { "" };
         file.write_all(format!("{start}{}\n", line.text()).as_bytes())?;
-        file.sync_data()?;
+        if line.outcome == Outcome::Made {
+            file.sync_data()?;
+        }
         self.cut_short = false;
         self.newest.insert(line.name.clone(), line);
         Ok(())
