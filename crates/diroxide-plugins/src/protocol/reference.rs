@@ -145,7 +145,20 @@ pub fn page() -> String {
          - For `column/format`, file panels call `Host::plugin_columns` for the columns enabled \
          plugins declare, keyed `PLUGIN.COLUMN`, and `Host::column_page` for a page of cells, \
          \"pending\" where unanswered and \"unavailable: plugin stopped\" when the plugin \
-         cannot answer.\n",
+         cannot answer.\n\
+         - `fs/stage` takes `{\"place\": OUTPUT}`, a file the plugin is about to create in a \
+         folder on this computer, its name free and portable, and answers `{\"stage\": ID, \
+         \"path\": PATH}`: a `.diro-part-` name with eight hexadecimal digits and the output's \
+         extension in the output's folder, where the engine's own jobs stage, which the arrival \
+         tracker and hot folders ignore. The plugin writes the whole output to `PATH` itself. At \
+         most 64 stages are open at once. Served since alpha 4.\n\
+         - `fs/commit` takes `{\"stage\": ID}` and moves the staged file into place with the \
+         rename that never replaces; a name taken meanwhile is numbered as copies are \
+         (\"report.pdf (2).age\"). It answers `{\"committed\": true, \"place\": PLACE, \"name\": \
+         NAME}`, and the app records the file as made by the plugin's running command, so Undo \
+         puts it in the trash (`HostServices::committed`). A stage that holds no plain file is \
+         refused; a stage never committed is removed when the plugin's session ends. Served \
+         since alpha 4.\n",
     );
 
     out.push_str("\n## Index by direction\n\n");

@@ -82,6 +82,8 @@ pub mod services;
 pub mod session;
 pub mod shapes;
 pub mod spool;
+// Staged outputs, `fs/stage` and `fs/commit` (alpha 4, lane AE).
+pub mod staging;
 pub mod supervisor;
 pub mod testing;
 pub mod tools;

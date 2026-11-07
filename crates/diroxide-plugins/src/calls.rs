@@ -110,6 +110,9 @@ impl Calls {
             | methods::FS_COPY
             | methods::FS_MOVE
             | methods::FS_DELETE => self.fs_job(method, params, cancel),
+            // Staged outputs (lane AE).
+            methods::FS_STAGE => self.files.stage(params, &ctx()),
+            methods::FS_COMMIT => self.fs_commit(params, &ctx()),
             methods::UI_ASK => self.ask(&request.params),
             methods::UI_FORM => self.form(&request.params),
             methods::UI_SHOW_TEXT => self.show_text(&request.params),
@@ -209,6 +212,16 @@ impl Calls {
             }
         }
         self.files.write(params, &place, exists, ctx)
+    }
+
+    /// `fs/commit`: the staged output in place, and the job told to the
+    /// app for its undo (lane AE).
+    fn fs_commit(&self, params: &Params, ctx: &diroxide_vfs::OpContext) -> Outcome {
+        let (answer, report) = self.files.commit(params, ctx)?;
+        if let Some(services) = &self.services {
+            services.committed(&report);
+        }
+        Ok(answer)
     }
 
     /// The job methods: each request becomes the engine's job, run by the
@@ -943,6 +956,76 @@ pub(crate) mod tests {
         host.shutdown_all(QUIT_BUDGET);
     }
 
+    /// `fs/stage` and `fs/commit` (lane AE): a staging name in the
+    /// output's folder, the output renamed in never over a file, numbered
+    /// when its name was taken meanwhile, and the job told to the app
+    /// with the file as made, for Undo's trash.
+    #[test]
+    fn a_staged_output_is_committed_as_a_made_file_never_over_one() {
+        let root = tempfile::tempdir().unwrap();
+        let services = RecordingServices::new();
+        let (host, work) = files_host(&services, root.path(), WRITE);
+        let output = work.join("a.txt.age").unwrap().to_string();
+        let staged = call(&host, methods::FS_STAGE, json!({"place": output}));
+        let path = std::path::PathBuf::from(staged["path"].as_str().unwrap());
+        let id = staged["stage"].as_str().unwrap().to_owned();
+        let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+        assert!(
+            diroxide_ops::convert::staging::is_staging_name(&name),
+            "{name}"
+        );
+        assert!(name.ends_with(".age"), "{name}");
+        assert_eq!(path.parent().unwrap(), root.path().join("work"));
+        // Nothing written yet: the commit is refused, and the stage gone.
+        let empty = call(&host, methods::FS_COMMIT, json!({"stage": id}));
+        assert_eq!(
+            empty["error"]["message"],
+            "nothing was written to the stage"
+        );
+        let staged = call(&host, methods::FS_STAGE, json!({"place": output}));
+        let path = std::path::PathBuf::from(staged["path"].as_str().unwrap());
+        std::fs::write(&path, b"sealed").unwrap();
+        let committed = call(&host, methods::FS_COMMIT, json!({"stage": staged["stage"]}));
+        assert_eq!(committed["committed"], true, "{committed}");
+        assert_eq!(committed["name"], "a.txt.age");
+        assert_eq!(
+            std::fs::read(root.path().join("work").join("a.txt.age")).unwrap(),
+            b"sealed"
+        );
+        assert!(!path.exists());
+        let reports = services.committed();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].undo.created, [work.join("a.txt.age").unwrap()]);
+        assert_eq!(
+            reports[0].undo.origin,
+            diroxide_core::JobOrigin::Plugin("Line counter".into())
+        );
+        // A name taken now is refused at the stage; taken meanwhile, it is
+        // numbered at the commit.
+        let taken = call(&host, methods::FS_STAGE, json!({"place": output}));
+        assert_eq!(taken["error"]["code"], -32011, "{taken}");
+        let later = work.join("b.txt").unwrap().to_string();
+        let staged = call(&host, methods::FS_STAGE, json!({"place": later}));
+        std::fs::write(staged["path"].as_str().unwrap(), b"new").unwrap();
+        std::fs::write(root.path().join("work").join("b.txt"), b"old").unwrap();
+        let committed = call(&host, methods::FS_COMMIT, json!({"stage": staged["stage"]}));
+        assert_eq!(committed["name"], "b (2).txt", "{committed}");
+        assert_eq!(
+            std::fs::read(root.path().join("work").join("b.txt")).unwrap(),
+            b"old"
+        );
+        // A name no plugin may make, and a stage never handed out.
+        let odd = call(
+            &host,
+            methods::FS_STAGE,
+            json!({"place": format!("{}.", work.join("odd").unwrap())}),
+        );
+        assert_eq!(odd["error"]["code"], -32016);
+        let unknown = call(&host, methods::FS_COMMIT, json!({"stage": "0badf00d"}));
+        assert_eq!(unknown["error"]["message"], "no stage is named 0badf00d");
+        host.shutdown_all(QUIT_BUDGET);
+    }
+
     #[test]
     fn file_calls_need_their_permission_and_never_loop_back() {
         let root = tempfile::tempdir().unwrap();
@@ -1213,11 +1296,10 @@ pub(crate) mod tests {
         let (host, _) = host_with(&services, "");
         let backwards = call(&host, methods::COMMAND_RUN, json!({}));
         assert_eq!(backwards["error"]["code"], -32601);
+        // fs/stage is served since lane AE: without its permission it is
+        // the manifest's refusal, no longer "not served".
         let stage = call(&host, methods::FS_STAGE, json!({}));
-        assert_eq!(
-            stage["error"]["message"],
-            "the host does not serve fs/stage yet"
-        );
+        assert_eq!(stage["error"]["code"], -32030);
         // ui/show_diff is served (the host-pieces lane): a call with no
         // documents is refused in words, and services with no compare
         // screens say so.

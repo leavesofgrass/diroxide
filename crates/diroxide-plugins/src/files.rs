@@ -106,6 +106,8 @@ pub(crate) struct Files {
     pub(crate) spool: Option<Arc<Spool>>,
     pub(crate) own_schemes: Vec<String>,
     pub(crate) plugin: String,
+    /// The outputs staged and not yet committed (`fs/stage`, lane AE).
+    pub(crate) stages: crate::staging::Stages,
 }
 
 fn invalid(message: impl Into<String>) -> RpcError {
@@ -531,6 +533,7 @@ mod tests {
             spool: Some(Arc::new(Spool::create(root.join("spool")).unwrap())),
             own_schemes: vec!["memfs".to_owned()],
             plugin: "Line counter".to_owned(),
+            stages: Default::default(),
         };
         let base = Place::parse(&root.join("work").display().to_string()).unwrap();
         std::fs::create_dir_all(root.join("work")).unwrap();
