@@ -27,6 +27,7 @@ pub mod error;
 pub mod files;
 pub mod paths;
 pub mod presets;
+pub mod recipes;
 pub mod schema;
 pub mod session;
 pub mod settings;
@@ -190,7 +191,11 @@ pub fn load(paths: &Paths) -> Config {
     let menus = read_typed::<MenusConfig>(paths, Paths::MENUS, &mut problems);
     let filetypes = read_typed(paths, Paths::FILETYPES, &mut problems).unwrap_or_default();
     let banks = read_typed(paths, Paths::BANKS, &mut problems).unwrap_or_default();
-    let conversions = read_typed(paths, Paths::CONVERSIONS, &mut problems).unwrap_or_default();
+    // Recipe by recipe, so one the engine cannot use is said and the rest
+    // load (alpha 4, lane CL).
+    let conversions = read_checked(paths, Paths::CONVERSIONS, &mut problems)
+        .map(|text| recipes::read_conversions(&text, &mut problems))
+        .unwrap_or_default();
     let tools = read_typed(paths, Paths::TOOLS, &mut problems).unwrap_or_default();
     Config {
         settings: settings.value,

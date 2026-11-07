@@ -5,5 +5,17 @@
 //! the `ToolRunner` of `diroxide-vfs` an operation's context
 //! carries, so this crate never depends on the tools registry.
 //!
-//! Declared empty by the contract step (P4) so the conversion lane fills
-//! it without editing this crate's `lib.rs`.
+//! - [`recipe`]: the one recipe shape, for the built-in recipes, the
+//!   owner's `conversions.toml` and a plugin's `[[converter]]`, checked
+//!   when it loads.
+//! - [`placeholders`]: `{input}`, `{typed_input}`, `{output}`, `{stem}`
+//!   and the typed actions' names, filled per argument, never a shell.
+//! - [`book`]: the recipes in use, the owner's replacing the built-in
+//!   ones by id, every problem a sentence.
+
+pub mod book;
+pub mod placeholders;
+pub mod recipe;
+
+pub use book::RecipeBook;
+pub use recipe::{ConverterOutput, ConverterParts, Recipe, RecipeError, RecipeShape, RecipeSource};
