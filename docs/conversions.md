@@ -12,7 +12,7 @@ Convert is in the File menu and the palette, and has no key until you give it on
 
 Mark the files you want to convert, or leave the focus on one, and put the folder the new files should go to in the other panel. Run Convert.
 
-1. A list opens, titled "Convert notes.md" for one file or "Convert 13 items" for several. Each row is a recipe: its name first, then its sentence. A recipe that cannot run here, because its program is missing, is listed last and unavailable, with what it needs in place of the sentence: "Markdown to Word, needs pandoc". If some of the files have no recipe, the first row says "Some files have no recipe", and the list shows the recipes that take the most of them.
+1. A list opens, titled "Convert notes.md" for one file or "Convert 13 items" for several. Each row is a recipe: its name first, then its sentence. A recipe that cannot run here, because its program is missing, is listed last and cannot be chosen, and its row says what it needs after the name: "Markdown to Word, needs pandoc". If some of the files have no recipe, the first row says "Some files have no recipe", and the list shows the recipes that take the most of them.
 2. Enter on a recipe makes the plan: "Planning the conversion".
 3. The plan's question starts on No: "Convert 13 files to JPEG? No is the default. y or n". Under it, the plan's rows say what will happen, below.
 4. Yes starts the job: "Convert started: 13 files to JPEG". It is a job in the jobs line and Cancel stops it. No says "Nothing changed."
