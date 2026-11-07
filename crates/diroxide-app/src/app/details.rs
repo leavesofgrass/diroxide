@@ -720,8 +720,12 @@ impl App {
         let job = self.next_job_id();
         let line = format!("Reading the text in {}", entry.display_name());
         let now = self.now();
-        self.jobs
-            .begin(job, diroxide_core::JobKind::Convert, line.clone(), now);
+        self.jobs.begin(
+            job,
+            diroxide_core::JobKind::ReadPictureText,
+            line.clone(),
+            now,
+        );
         self.details.picture = Some(job);
         let tools = self.tool_runner();
         self.request(Request::PictureText { job, place, tools });
@@ -752,7 +756,7 @@ impl App {
         };
         self.jobs.finished(crate::jobs::FinishedJob {
             job,
-            kind: diroxide_core::JobKind::Convert,
+            kind: diroxide_core::JobKind::ReadPictureText,
             summary,
             failed: result.as_ref().err().cloned().into_iter().collect(),
             ..crate::jobs::FinishedJob::default()
