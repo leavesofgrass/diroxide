@@ -266,7 +266,9 @@ The window can show a picture. The terminal cannot, so this is the window's own.
 - An animation shows its first frame, still, and says so in words. Nothing plays.
 - A picture past the pixel guard is said and never opened. PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are shown, and the other formats say that they need a component.
 
-The picture view has no command of its own yet, so it is not on [the keyboard page](keyboard.md), and Enter is the window's own key for it. [Previews](previews.md#the-picture-view-in-the-window) has the exact words, the numbers of the pixel guard and the limits.
+Show picture is the command that opens the picture view. It is in the View menu and the palette, and it is on [the keyboard page](keyboard.md) as `view.picture`. Enter is its key in the viewer. In the quick view's preview Enter is Open link, and a picture's lines carry no link, so Enter on a picture shows the picture instead. Because it is a command, you can give it another key in the Keys list or in `keymap.toml` ([Customizing keys](customizing-keys.md)). The hint, "Enter shows the picture.", says the key you have, and it is not said at all if you took the key away.
+
+Show picture works only in the window. In a terminal it says "Show picture works only in the window." With no viewer or preview showing a file, it says "Show picture needs the viewer or preview", and on a file that is not a picture, "Not a picture: notes.txt". A picture is a file whose type is in the Images group ([File types and groups](file-types.md)). [Previews](previews.md#the-picture-view-in-the-window) has the exact words, the numbers of the pixel guard and the limits.
 
 ## The dialogs
 
