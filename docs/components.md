@@ -37,7 +37,7 @@ Windows on ARM and Linux on ARM have no build of these three plugins yet. The he
 
 ## Helper programs
 
-A helper component is a program from its publisher, such as pandoc or FFmpeg, that a feature can use. diroxide keeps no copy of it. Each file comes from the publisher's own address and is pinned by its size and SHA-256 like every other component. The pins are written by a job on the project's build machine, not typed, so a helper is in the list only once it is pinned. Nothing a helper's archive holds is run by the download, and only the files the helper needs are kept: ImageMagick's portable archive holds 261 MB, and 33 MB of it is kept.
+A helper component is a program from its publisher, such as pandoc or FFmpeg, that a feature can use. diroxide keeps no copy of it. Each file comes from the publisher's own address and is pinned by its size and SHA-256 like every other component. The pins are written by a job on the project's build machine, not typed, so a helper is in the list only once it is pinned. Nothing a helper's archive holds is run by the download, and only the files the helper needs are kept: ImageMagick's portable archive for x86-64 holds 261 MB, and 33 MB of it is kept.
 
 The helpers in the list, with the computers that have a file:
 
