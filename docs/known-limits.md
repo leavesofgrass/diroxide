@@ -323,7 +323,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 - A background column reads only the rows around the focus. A row elsewhere says "reading" until the focus comes near or Fill columns reads it.
 - Sorting is by a cell's words, so a duration sorts as text. There is no sort value on a field yet.
-- A file that no reader takes still says "reading" for a moment in a background column, for a kind such as a zip, and then its cell is left out. The engine does not yet say in advance which readers take a file.
+- A file says "reading" for a column until the readers have been through it, even for a kind of file that no reader takes for that key, such as `audio.artist` on a zip. Its cell is then left out. The program does not yet know in advance which readers take a file.
 - The window shows a field column in each row's words and has no header or grid for it.
 - A saved view keeps the columns in use when it was saved.
 - The reading of cells was measured with 100,000 entries and three columns, warm, on one machine. A cold disk and a network share were not tried.
