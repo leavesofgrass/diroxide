@@ -234,7 +234,9 @@ pub fn parse_slt(text: &str) -> SltListing {
             "Symbolic Link" if !value.is_empty() => current.link = Some(value.to_owned()),
             "Hard Link" if !value.is_empty() => current.hard_link = true,
             "Encrypted" => current.encrypted = value == "+",
-            "CRC" => current.crc32 = u32::from_str_radix(value, 16).ok(),
+            // Eight hex digits are a CRC-32; LZH lists a CRC-16 in four,
+            // which the limiter chain must not hold a CRC-32 to.
+            "CRC" if value.len() == 8 => current.crc32 = u32::from_str_radix(value, 16).ok(),
             _ => {}
         }
     }
@@ -849,6 +851,9 @@ mod tests {
         assert_eq!(notes.mode, Some(0o644));
         assert_eq!(notes.modified, Some(1_793_969_323));
         assert_eq!(listing.items[2].link.as_deref(), Some("docs"));
+        // An LZH's CRC-16 is not taken for a CRC-32.
+        let lzh = parse_slt("----------\nPath = a.txt\nSize = 1\nCRC = 1A2B\n");
+        assert_eq!(lzh.items[0].crc32, None);
         let index = index_of(&listing, &Limits::default()).unwrap();
         assert_eq!(index.summary().members, 2);
         let id = index.find("docs/notes.txt").unwrap();

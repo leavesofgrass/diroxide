@@ -673,9 +673,49 @@ pub fn roundtrip(data: &[u8]) {
     assert_eq!(listed, files, "nothing more than was written");
 }
 
+/// `archive_slt`: a `7z l -slt` listing as 7-Zip might print it, or as a
+/// hostile name inside an archive might twist it: parsed, then indexed
+/// under the strict limits. The properties: nothing panics; every record
+/// that points at a listing item points at one that exists; no indexed
+/// path climbs out, starts at a root or holds a control character.
+pub fn slt(data: &[u8]) {
+    let text = String::from_utf8_lossy(data);
+    let listing = crate::read_tool::parse_slt(&text);
+    let Ok(index) = crate::read_tool::index_of(&listing, &Limits::strict()) else {
+        return;
+    };
+    for id in 0..index.len() as u32 {
+        if let Some(record) = index.record(id)
+            && let crate::index::Locator::Tool(n) = record.locator
+        {
+            assert!((n as usize) < listing.items.len());
+        }
+        assert_safe(&index.path(id));
+    }
+}
+
+/// Listings for the `archive_slt` target's tests and its first corpus:
+/// DS3's shapes, CR LF, hostile names and broken keys.
+pub const SLT_SAMPLES: [&str; 5] = [
+    "\n7-Zip 25.01 (x64) : Copyright\n\n--\nPath = a.rar\nType = Rar5\nSolid = +\n\n----------\nPath = docs\nFolder = +\n\nPath = docs/notes.txt\nSize = 13\nCRC = 0A1B2C3D\nEncrypted = +\n",
+    "----------\r\nPath = ..\\..\\x\r\nSize = 1\r\n\r\nPath = C:\\win\\x.dll\r\nSize = 2\r\n",
+    "----------\nPath = a\nPath = b\nSize = 18446744073709551616\nModified = 0000-00-00 99:99:99\n",
+    "----------\nPath = link\nSymbolic Link = ../../etc/passwd\n\nPath = hard\nHard Link = x\n",
+    "Path = no separator\nSize = 1\n\n\n = \n=\nPath = \u{1}ctl\n",
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_slt_samples_hold() {
+        for sample in SLT_SAMPLES {
+            slt(sample.as_bytes());
+        }
+        slt(b"");
+        slt(&[0xFF, 0xFE, b'\n']);
+    }
 
     #[test]
     fn the_name_seeds_hold() {
