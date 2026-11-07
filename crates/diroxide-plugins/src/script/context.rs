@@ -17,6 +17,11 @@
 //!   run and removed when the run ends, after checking that it lies
 //!   inside the folder of runs; the cancel file appears in it when the
 //!   owner cancels, for a script to poll before the job kill comes.
+//! - **What started it.** A run that no person started says so: a hot
+//!   folder's task sets `DIRO_TRIGGER` to `hot-folder` and `DIRO_HOT_RULE`
+//!   to the task's name, beside `DIRO_UNATTENDED=1` ([`RunContext::for_task`]),
+//!   so a script can tell a file that arrived from a file the owner
+//!   picked. A run from a key, a menu or the palette has neither.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -100,10 +105,30 @@ pub struct RunContext {
     pub dry_run: bool,
     /// An unattended run (a hot folder, a task).
     pub unattended: bool,
+    /// What started a run no person started: `DIRO_TRIGGER` and, for a
+    /// hot folder, `DIRO_HOT_RULE`.
+    pub trigger: Option<Trigger>,
     /// The owner's locale.
     pub locale: String,
     /// The host's version.
     pub version: String,
+}
+
+/// What started a run that no person started.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Trigger {
+    /// A hot folder's task, by its name: a file arrived in its folder.
+    HotFolder(String),
+}
+
+impl Trigger {
+    /// The word `DIRO_TRIGGER` holds: `hot-folder`.
+    pub fn word(&self) -> &'static str {
+        match self {
+            Trigger::HotFolder(_) => "hot-folder",
+        }
+    }
 }
 
 impl RunContext {
@@ -120,9 +145,22 @@ impl RunContext {
             input: None,
             dry_run: false,
             unattended: false,
+            trigger: None,
             locale: "en-US".to_owned(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
         }
+    }
+
+    /// The context a hot folder's task runs a script command in: the file
+    /// that arrived marked, its folder the active place, the task's `out`
+    /// folder the other, unattended, and the trigger naming the task.
+    pub fn for_task(task: &str, file: Place, out: Place) -> Self {
+        let folder = file.parent().unwrap_or_else(|| file.clone());
+        let mut context = Self::new(folder, out);
+        context.marked = vec![Picked::new(file, EntryKind::File)];
+        context.unattended = true;
+        context.trigger = Some(Trigger::HotFolder(task.to_owned()));
+        context
     }
 }
 
@@ -510,6 +548,12 @@ pub fn prepare(
     if context.unattended {
         set("DIRO_UNATTENDED", "1".into());
     }
+    if let Some(trigger) = &context.trigger {
+        set("DIRO_TRIGGER", trigger.word().into());
+        match trigger {
+            Trigger::HotFolder(task) => set("DIRO_HOT_RULE", task.clone().into()),
+        }
+    }
     if let Some(input) = &context.input {
         set("DIRO_INPUT", input.clone().into());
     }
@@ -841,6 +885,77 @@ mod tests {
         prepared.folder.remove().unwrap();
         assert!(!run.exists());
         assert!(root.path().join("runs").is_dir());
+    }
+
+    #[test]
+    fn a_hot_folders_run_names_its_task_and_a_persons_run_does_not() {
+        // Under the build's own folder, never the system's temporary one.
+        let exe = std::env::current_exe().unwrap();
+        let base = exe
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("context-unit-tmp");
+        fs::create_dir_all(&base).unwrap();
+        let root = tempfile::Builder::new()
+            .prefix("context-")
+            .tempdir_in(&base)
+            .unwrap();
+        let unattended = command("# diro: unattended = \"ok\"\n# diro: timeout = \"1m\"\n");
+        let context = RunContext::for_task(
+            "scans",
+            place("/srv/scans/in/scan-004.pdf"),
+            place("/srv/scans/out"),
+        );
+        let prepared = prepare(
+            &unattended,
+            &context,
+            &folders(root.path()),
+            false,
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let env = &prepared.env;
+        assert_eq!(value(env, "DIRO_TRIGGER").unwrap(), "hot-folder");
+        assert_eq!(value(env, "DIRO_HOT_RULE").unwrap(), "scans");
+        assert_eq!(value(env, "DIRO_UNATTENDED").unwrap(), "1");
+        assert_eq!(
+            value(env, "DIRO_ACTIVE").unwrap(),
+            place("/srv/scans/in").to_string().as_str()
+        );
+        assert_eq!(
+            value(env, "DIRO_OTHER").unwrap(),
+            place("/srv/scans/out").to_string().as_str()
+        );
+        assert_eq!(value(env, "DIRO_SELECTION_COUNT").unwrap(), "1");
+        let list = fs::read(value(env, "DIRO_SELECTION_FILE0").unwrap()).unwrap();
+        assert_eq!(
+            list,
+            list_bytes(
+                &[place("/srv/scans/in/scan-004.pdf").to_string()],
+                ListForm::Nul
+            )
+            .unwrap()
+        );
+        prepared.folder.remove().unwrap();
+        // A run the owner starts has neither.
+        let prepared = prepare(
+            &command(""),
+            &context_for_person(),
+            &folders(root.path()),
+            false,
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        assert!(value(&prepared.env, "DIRO_TRIGGER").is_none());
+        assert!(value(&prepared.env, "DIRO_HOT_RULE").is_none());
+        prepared.folder.remove().unwrap();
+        assert_eq!(Trigger::HotFolder("scans".into()).word(), "hot-folder");
+    }
+
+    fn context_for_person() -> RunContext {
+        context()
     }
 
     #[test]
