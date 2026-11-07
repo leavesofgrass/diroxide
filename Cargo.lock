@@ -869,6 +869,7 @@ dependencies = [
  "carta-core",
  "carta-readers",
  "carta-writers",
+ "serde_json",
  "stacker",
 ]
 
@@ -1796,6 +1797,7 @@ dependencies = [
 name = "diroxide-ops"
 version = "0.1.0-alpha.3"
 dependencies = [
+ "carta",
  "crc32fast",
  "diroxide-core",
  "diroxide-vfs",
@@ -1805,6 +1807,7 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
+ "toml",
 ]
 
 [[package]]

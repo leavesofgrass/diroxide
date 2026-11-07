@@ -72,7 +72,7 @@ impl<'a> Planner<'a> {
             request,
             control,
             sink,
-            ctx: OpContext::new().with_cancel(control.cancel.clone()),
+            ctx: engine.context(&control.cancel),
             plan: Plan::new(request.id, request.kind, Vec::new(), request.conflicts),
             counted: 0,
         }

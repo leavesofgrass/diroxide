@@ -309,7 +309,7 @@ impl<'a> Run<'a> {
             control,
             sink,
             shared,
-            ctx: OpContext::new().with_cancel(control.cancel.clone()),
+            ctx: engine.context(&control.cancel),
             report,
             answers: HashMap::new(),
             skip_classes: HashSet::new(),

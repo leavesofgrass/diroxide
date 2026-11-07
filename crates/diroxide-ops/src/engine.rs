@@ -19,7 +19,7 @@ use diroxide_core::{
     Clock, ConflictAction, ConflictAnswer, ConflictKind, Entry, ErrorAction, JobId, JobKind,
     JobState, Message, Place,
 };
-use diroxide_vfs::{CancelToken, Registry, TrashBin, VfsError};
+use diroxide_vfs::{CancelToken, NoTools, OpContext, Registry, ToolRunner, TrashBin, VfsError};
 
 use crate::error::OpsError;
 use crate::gate::{ConnectionAnswer, ConnectionQuestion, Gates};
@@ -551,6 +551,18 @@ pub struct Engine {
     limiter: Arc<Limiter>,
     hooks: Option<Arc<dyn HookRunner>>,
     trash: Option<Arc<dyn TrashBin>>,
+    tools: Tools,
+}
+
+/// The engine's tool runner, said by name only in the engine's debug
+/// form: the runner itself need not be `Debug`.
+#[derive(Clone)]
+struct Tools(Arc<dyn ToolRunner>);
+
+impl std::fmt::Debug for Tools {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ToolRunner")
+    }
 }
 
 impl Engine {
@@ -568,7 +580,32 @@ impl Engine {
             limiter: Arc::new(Limiter::new()),
             hooks: None,
             trash: None,
+            tools: Tools(Arc::new(NoTools)),
         }
+    }
+
+    /// The same engine running helper programs through this runner (K's
+    /// request 4, K4): the tools registry in the app and the command line,
+    /// a fake in tests. Every job's context carries it, so a conversion, a
+    /// signature check or the 7z reader reaches the tools without this
+    /// crate depending on the registry. Without one, [`NoTools`] finds
+    /// nothing.
+    pub fn with_tools(mut self, tools: Arc<dyn ToolRunner>) -> Self {
+        self.tools = Tools(tools);
+        self
+    }
+
+    /// The runner the engine's jobs run helper programs through.
+    pub fn tools(&self) -> &Arc<dyn ToolRunner> {
+        &self.tools.0
+    }
+
+    /// A context for one job's provider calls: its cancel token and the
+    /// engine's tool runner.
+    pub(crate) fn context(&self, cancel: &CancelToken) -> OpContext {
+        OpContext::new()
+            .with_cancel(cancel.clone())
+            .with_tools(Arc::clone(&self.tools.0))
     }
 
     /// The same engine listing, restoring and purging through this trash
@@ -937,6 +974,136 @@ mod tests {
             report.reconciliation.as_ref().unwrap().summary(),
             "Checked 2 of 2: 1 missing"
         );
+    }
+
+    /// A runner that finds one tool and runs nothing.
+    struct OnlyMagick;
+
+    impl ToolRunner for OnlyMagick {
+        fn has(&self, tool: &str) -> bool {
+            tool == "magick"
+        }
+
+        fn run(
+            &self,
+            _request: &diroxide_vfs::ToolRequest,
+            _cancel: &CancelToken,
+        ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+            Ok(diroxide_vfs::ToolOutput::new(
+                Some(0),
+                Vec::new(),
+                Vec::new(),
+            ))
+        }
+
+        fn run_streaming(
+            &self,
+            request: &diroxide_vfs::ToolRequest,
+            cancel: &CancelToken,
+            _record: &mut dyn FnMut(diroxide_vfs::ToolStream, &str) -> std::ops::ControlFlow<()>,
+        ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+            self.run(request, cancel)
+        }
+    }
+
+    /// The fake provider, noting on every stat and write whether the
+    /// context it was given carries the engine's tools.
+    #[derive(Debug)]
+    struct Noting {
+        inner: crate::fake::FakeProvider,
+        seen: Mutex<Vec<(&'static str, bool)>>,
+    }
+
+    impl Noting {
+        fn note(&self, call: &'static str, ctx: &OpContext) {
+            self.seen
+                .lock()
+                .unwrap()
+                .push((call, ctx.tools.has("magick")));
+        }
+    }
+
+    impl diroxide_vfs::Provider for Noting {
+        fn scheme(&self) -> &str {
+            self.inner.scheme()
+        }
+        fn capabilities(&self, place: &Place) -> diroxide_vfs::Capabilities {
+            self.inner.capabilities(place)
+        }
+        fn list(&self, place: &Place, ctx: &OpContext) -> Result<Vec<Entry>, VfsError> {
+            self.inner.list(place, ctx)
+        }
+        fn stat(&self, place: &Place, ctx: &OpContext) -> Result<Entry, VfsError> {
+            self.note("stat", ctx);
+            self.inner.stat(place, ctx)
+        }
+        fn read(
+            &self,
+            place: &Place,
+            ctx: &OpContext,
+        ) -> Result<Box<dyn std::io::Read + Send>, VfsError> {
+            self.inner.read(place, ctx)
+        }
+        fn write(
+            &self,
+            place: &Place,
+            mode: diroxide_vfs::WriteMode,
+            ctx: &OpContext,
+        ) -> Result<Box<dyn diroxide_vfs::FileWriter>, VfsError> {
+            self.note("write", ctx);
+            self.inner.write(place, mode, ctx)
+        }
+        fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+            self.inner.create_dir(place, ctx)
+        }
+        fn rename(&self, from: &Place, to: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+            self.inner.rename(from, to, ctx)
+        }
+        fn remove(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
+            self.inner.remove(place, ctx)
+        }
+        fn set_attributes(
+            &self,
+            place: &Place,
+            change: &diroxide_vfs::AttributeChange,
+            ctx: &OpContext,
+        ) -> Result<diroxide_vfs::AttributeChange, VfsError> {
+            self.inner.set_attributes(place, change, ctx)
+        }
+    }
+
+    /// K4: the runner given to the engine reaches the provider calls of
+    /// the planner and of the run, so a job can run a helper program.
+    #[test]
+    fn the_planner_and_the_run_carry_the_engines_tools() {
+        let fake = crate::fake::FakeProvider::new();
+        fake.add_file(&testing::p("/a/x"), b"x");
+        fake.add_folder(&testing::p("/b"));
+        let noting = Arc::new(Noting {
+            inner: fake,
+            seen: Mutex::new(Vec::new()),
+        });
+        let mut registry = Registry::new();
+        registry.set_local(noting.clone());
+        let bare = Engine::new(Arc::new(registry.clone()));
+        assert!(!bare.tools().has("magick"));
+        let engine = Engine::new(Arc::new(registry)).with_tools(Arc::new(OnlyMagick));
+        assert!(engine.tools().has("magick"));
+        let request = JobRequest::new(JobId::new(4), JobKind::Copy, vec![testing::p("/a/x")])
+            .to(testing::p("/b"));
+        let plan = engine.plan(&request).unwrap();
+        let planning: Vec<_> = noting.seen.lock().unwrap().drain(..).collect();
+        assert!(!planning.is_empty());
+        assert!(planning.iter().all(|(_, carried)| *carried), "{planning:?}");
+        let report = engine.run(&plan, &JobControl::new(), &Recorder::default());
+        assert_eq!(report.done.len(), 1, "{:?}", report.failed);
+        // The run's own calls carry them; the reconciliation's fresh read
+        // after the run needs no tools and takes a plain context.
+        let seen = noting.seen.lock().unwrap();
+        let writes: Vec<_> = seen.iter().filter(|(call, _)| *call == "write").collect();
+        assert_eq!(writes.len(), 1, "{seen:?}");
+        assert!(writes.iter().all(|(_, carried)| *carried), "{seen:?}");
+        assert!(format!("{engine:?}").contains("ToolRunner"));
     }
 
     #[test]
