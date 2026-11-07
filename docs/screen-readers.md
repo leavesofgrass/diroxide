@@ -204,6 +204,9 @@ What each line shows in its first 40 characters:
 - Progress: "Copying 30 percent, 2 minutes left". The percent and the estimate sit inside the first 40 cells.
 - An archive's title: "course.zip, archive, in D:\docs". A member: "notes.txt, text file, 3 KB, 5 of 10". A locked one: "secret.docx, locked, Word, 40 KB".
 - A password prompt: "Password for course.zip (hidden):". A wrong one: "Wrong password for course.zip. Try again? No is the default. y or n".
+- A passphrase for encryption, in the same hidden prompt: "Passphrase for key ending 4E7B (hidden):". A new one is typed twice: "New passphrase for notes.txt (hidden):", then "Same passphrase again for notes.txt (hidden):". [Encryption and signatures](encryption.md) has the rest.
+- A signature, the verdict first: "Signature good: key ending 8469", then "Good means the key fits, not who holds it."
+- A day of photos: "Next day: October 12, 3 pictures, Monday", with the weekday last. The review: "Review: 2 of 6, IMG_0002.jpg, photo". [Photos](photos.md) has the rest.
 - A hex row, eight bytes: `000010: 48 65 6c 6c 6f 20 77 6f Hello wo`, exactly 40 characters.
 - The quick view's line: "Preview: report.md, 12 headings".
 - A split plan: "12 parts of 20 MB, the last 3.1 MB". A gap: "Part 004 is missing. Nothing was joined."
@@ -435,6 +438,8 @@ Questions to answer: Did the menu bar show and read? Was every row read once, na
 - [The viewer](viewer.md)
 - [The quick view](quick-view.md)
 - [Split and join](split-join.md)
+- [Encryption and signatures](encryption.md)
+- [Photos](photos.md)
 - [Search and the filter language](search.md)
 - [Labels and bookmarks](labels-bookmarks.md)
 - [Compare files](compare.md)
