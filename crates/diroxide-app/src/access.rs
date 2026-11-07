@@ -256,7 +256,14 @@ mod tests {
             .unwrap();
         let kept = Timestamp::from_unix(modified.unix_seconds(), 0);
         // Asked for what the file has: nothing to say.
-        assert!(read_back(&registry, &[place.clone()], &[(TimeKind::Modified, kept)]).is_empty());
+        assert!(
+            read_back(
+                &registry,
+                std::slice::from_ref(&place),
+                &[(TimeKind::Modified, kept)]
+            )
+            .is_empty()
+        );
         // Asked for a second later than it kept: rounded, said once for
         // two places.
         let asked = kept.plus_seconds(1);

@@ -16,6 +16,8 @@
 //! Wave 1 (W1d) owns this module.
 
 mod access_dialogs;
+// Change time and Change owner (alpha 4, lane AP).
+mod access_ui;
 mod archive;
 mod archive_forms;
 mod archive_jobs;
@@ -543,6 +545,9 @@ pub enum AppEvent {
     /// What the runtime answered the Watched folders list, or what a
     /// running task told (alpha 4, lane AW).
     HotFolder(Box<crate::watched::WatchedNote>),
+    /// What the runtime answered Change time and Change owner (alpha 4,
+    /// lane AP).
+    Access(Box<crate::access::AccessNote>),
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -1050,6 +1055,8 @@ pub struct App {
     columns: columns_ui::ColumnsState,
     /// The metadata commands' jobs and lists (lane MA).
     meta: metadata_ui::MetaState,
+    /// Change time's and Change owner's jobs (lane AP).
+    access: access_ui::AccessState,
     /// The slots of the owner's type actions (lane TA).
     type_slots: crate::typing::TypeSlots,
     /// A typed action's command is running: Enter and View run their
@@ -1393,6 +1400,7 @@ impl App {
             type_checks: type_checks::TypeChecks::default(),
             columns: columns_ui::ColumnsState::default(),
             meta: metadata_ui::MetaState::default(),
+            access: access_ui::AccessState::default(),
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,
@@ -2011,6 +2019,7 @@ impl App {
             AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
             AppEvent::Convert(note) => self.convert_note(*note),
             AppEvent::HotFolder(note) => self.watched_note(*note),
+            AppEvent::Access(note) => self.access_note(*note),
         }
     }
 
@@ -2124,6 +2133,10 @@ impl App {
         }
         // Checksum, Verify, Strip, Check and the internet mark (lane MA).
         if let Some(effects) = self.meta_dispatch(command) {
+            return effects;
+        }
+        // Change time and Change owner (lane AP).
+        if let Some(effects) = self.access_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).

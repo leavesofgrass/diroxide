@@ -1181,6 +1181,7 @@ impl App {
                     Some(JobKind::Rewrite) => "zip change",
                     Some(JobKind::Convert) => "conversion",
                     Some(JobKind::StripMetadata) => "strip",
+                    Some(JobKind::SetTimes) => "time change",
                     _ => "job",
                 };
                 let how = match kind {
@@ -1238,6 +1239,8 @@ impl App {
         effects.push(Effect::Redraw(Redraw::JobsLine));
         effects.push(self.say(message));
         effects.extend(self.refresh_jobs_list());
+        // Change time reads back what the disk kept (lane AP).
+        effects.extend(self.access_job_ended(&report));
         // A job that never started changed nothing: no panel is read again.
         if never_ran {
             return effects;

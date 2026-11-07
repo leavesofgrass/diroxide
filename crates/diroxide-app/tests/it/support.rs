@@ -338,6 +338,16 @@ pub struct Recorder {
     pub started_with: Mutex<Vec<(String, PathBuf)>>,
     /// The files handed to the system's Open with dialog (lane TA).
     pub chosen_another: Mutex<Vec<PathBuf>>,
+    /// The files handed to Windows' Security dialog (lane AP), which no
+    /// test opens.
+    pub security: Mutex<Vec<PathBuf>>,
+}
+
+impl diroxide_app::runtime::SecurityDialog for Recorder {
+    fn open(&self, file: &Path) -> Result<(), String> {
+        self.security.lock().unwrap().push(file.to_owned());
+        Ok(())
+    }
 }
 
 /// Open with's two programs in tests: Reader, the default, and Writer.
@@ -507,6 +517,7 @@ impl Session {
             .with_launcher(setup.recorder.clone())
             .with_opener(setup.recorder.clone())
             .with_open_with(setup.recorder.clone())
+            .with_security_dialog(setup.recorder.clone())
             .with_components_offline()
             .with_tool_runner(setup.tools.clone());
         if let Some(paths) = paths {

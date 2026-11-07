@@ -145,6 +145,9 @@ pub(super) enum Wants {
     },
     /// A list or a field of the metadata commands (alpha 4, lane MA).
     Meta(super::metadata_ui::MetaWants),
+    /// A list or a field of Change time and Change owner (alpha 4, lane
+    /// AP).
+    Access(super::access_ui::AccessWants),
 }
 
 impl Wants {
@@ -378,6 +381,7 @@ impl App {
             Wants::Field { side, places, one } => self.field_typed(side, places, one, &text),
             Wants::ReadColumns { .. } => self.dialog_escape(),
             Wants::Meta(wants) => self.meta_accept(wants, row, &text),
+            Wants::Access(wants) => self.access_accept(wants, row, &text),
         }
     }
 
@@ -404,6 +408,7 @@ impl App {
                 vec![self.say(Message::info("Nothing read; the order stays."))]
             }
             Wants::Meta(wants) => self.meta_escape(wants),
+            Wants::Access(wants) => self.access_escape(wants),
             Wants::BookmarkForm { side, .. } => self.refresh_bookmarks_list(side),
             Wants::BookmarkText { side, place, .. } => self.bookmark_form(side, place, None),
             Wants::Convert(wants) => self.convert_escape(wants),

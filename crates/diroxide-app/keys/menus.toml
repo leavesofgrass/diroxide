@@ -130,6 +130,14 @@ access = "w"
 when = "attributes"
 
 [[menu.item]]
+command = "file.change-time"
+when = "attributes"
+
+[[menu.item]]
+command = "file.change-owner"
+when = "attributes"
+
+[[menu.item]]
 command = "file.run-command"
 access = "n"
 

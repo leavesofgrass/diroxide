@@ -741,6 +741,17 @@ pub mod ids {
         /// puts it back.
         REMOVE_INTERNET_MARK = "file.remove-internet-mark";
     }
+
+    // Change time and Change owner (alpha 4, lane AP, R30 commits 78 and
+    // 79), none with a default key: the File menu and the palette.
+    ids! {
+        /// Set the times of the marked entries, or the focused one: now, a
+        /// typed date, or the other panel's file's.
+        CHANGE_TIME = "file.change-time";
+        /// Change the owner and group of the marked entries, or the
+        /// focused one; on Windows, the system's Security dialog.
+        CHANGE_OWNER = "file.change-owner";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -765,7 +776,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 259] = [
+pub static CATALOG: [CommandInfo; 261] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1146,6 +1157,22 @@ pub static CATALOG: [CommandInfo; 259] = [
         ids::PERMISSIONS,
         "Change permissions",
         "Changes who may read, write and run the selection, after a list of its settings.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::CHANGE_TIME,
+        "Change time",
+        "Sets the modified, accessed or created time of the selection to now, a date you type, or the other panel's file's, after a list of its settings; Undo puts the old times back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::CHANGE_OWNER,
+        "Change owner",
+        "Changes the owner and group of the selection, after a list of its settings, never as administrator; on Windows it opens the system's Security dialog for the focused item.",
         Panel,
         &[],
         &[],

@@ -53,6 +53,10 @@ mod archive_jobs;
 mod columns;
 // The metadata commands' workers (alpha 4, lane MA).
 mod meta;
+// Change time's read-back and the Security dialog's hand-off (alpha 4,
+// lane AP).
+mod access;
+pub use access::{SecurityDialog, SystemSecurityDialog};
 // Optional components (W4d).
 mod components;
 // Conversions on workers (alpha 4, lane AW).
@@ -598,6 +602,9 @@ pub struct Runtime {
     open_with: Arc<dyn OpenWithPrograms>,
     /// The watched folders' running tasks (alpha 4, lane AW).
     hot: watched::WatchedRuntime,
+    /// Windows' Security dialog for Change owner (lane AP): the system's,
+    /// or a recorder in tests.
+    security: Arc<dyn SecurityDialog>,
 }
 
 impl fmt::Debug for Runtime {
@@ -694,6 +701,7 @@ impl Runtime {
             column_readers: columns::ColumnReaders::default(),
             open_with: Arc::new(SystemOpenWith),
             hot: watched::WatchedRuntime::default(),
+            security: Arc::new(SystemSecurityDialog),
         }
     }
 
@@ -959,6 +967,13 @@ impl Runtime {
     /// in tests, which never starts a program).
     pub fn with_open_with(mut self, programs: Arc<dyn OpenWithPrograms>) -> Self {
         self.open_with = programs;
+        self
+    }
+
+    /// The same runtime with another Security dialog (a recorder in
+    /// tests, which never opens one; lane AP).
+    pub fn with_security_dialog(mut self, dialog: Arc<dyn SecurityDialog>) -> Self {
+        self.security = dialog;
         self
     }
 
@@ -1614,6 +1629,12 @@ impl Runtime {
                         lock(&runs).remove(&job);
                     }
                 });
+            }
+            // Change time's read-back, Change owner's hand-off (lane AP).
+            Request::Access(ask) => {
+                let registry = Arc::clone(&self.registry);
+                let security = Arc::clone(&self.security);
+                self.worker(move |shared| access::run(shared, &registry, &security, *ask));
             }
             Request::ToolsReport(tools) => {
                 self.worker(move |shared| {
