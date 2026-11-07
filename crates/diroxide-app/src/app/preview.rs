@@ -407,7 +407,9 @@ impl App {
             .unwrap_or_default();
         let text: Vec<&str> = said.iter().map(|m| m.text.as_str()).collect();
         let line = Message::info(text.join(", "));
-        self.preview_said(vec![line], false)
+        // A picture says what shows it, in the window (lane AE).
+        let hint = self.preview_picture_hint();
+        self.preview_said(std::iter::once(line).chain(hint).collect(), false)
     }
 
     /// Tab or Escape in the preview: back to the panel, the cursor on its
@@ -618,6 +620,11 @@ impl App {
             C::PreviousFile => view.previous_file(now),
             C::OpenLink => {
                 let Some(id) = view.link_here() else {
+                    // A picture's lines carry no link: Enter shows it
+                    // (lane AE).
+                    if self.preview_picture_hint().is_some() {
+                        return self.show_picture();
+                    }
                     return vec![self.say(Message::status("No link on this line"))];
                 };
                 let said = view.open_link(&id);

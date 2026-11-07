@@ -893,7 +893,7 @@ pub const ALL: [Method; 66] = [
         A::Services,
         "permissions.fs = write",
         "Hands out a staging path for an output the plugin creates.",
-        LATER,
+        NOW,
     ),
     method(
         FS_COMMIT,
@@ -902,7 +902,7 @@ pub const ALL: [Method; 66] = [
         A::Services,
         "permissions.fs = write",
         "Moves a staged output into place as a job.",
-        LATER,
+        NOW,
     ),
     method(
         TOOLS_RUN,

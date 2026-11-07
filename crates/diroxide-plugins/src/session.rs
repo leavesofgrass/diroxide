@@ -657,9 +657,16 @@ mod tests {
                 .contains(&"ui/announce".to_owned())
         );
         // A shape-only service is never offered (`ui/form` is served since
-        // alpha 4's host-pieces lane; `fs/stage` is still shape only).
+        // alpha 4's host-pieces lane, `fs/stage` since lane AE;
+        // `column/changed` is still shape only).
         assert!(
             !params
+                .host_capabilities
+                .services
+                .contains(&"column/changed".to_owned())
+        );
+        assert!(
+            params
                 .host_capabilities
                 .services
                 .contains(&"fs/stage".to_owned())

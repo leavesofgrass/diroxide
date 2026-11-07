@@ -56,7 +56,6 @@ use diroxide_plugins::script::directives::Directive;
 use diroxide_plugins::script::runner::RunReport;
 use diroxide_plugins::script::words::{self as script_words, Ending};
 use diroxide_search::SearchHit;
-use diroxide_vfs::Capabilities;
 use serde_json::Value;
 
 use super::{Action, App, Flow, Purpose, Then, route};
@@ -379,7 +378,11 @@ impl App {
     /// A menu's list for the active place, with the enabled plugins'
     /// commands: in the Plugins menu after its own items, and wherever
     /// `menus.toml` names one.
-    pub(super) fn menu_list_for(&self, id: &str, caps: &Capabilities) -> Option<ListModel> {
+    pub(super) fn menu_list_for(
+        &self,
+        id: &str,
+        caps: &crate::menu::MenuPlace,
+    ) -> Option<ListModel> {
         let context = self.plugin_context();
         let catalog = &self.plugins.catalog;
         let keymap = &self.keymap;
@@ -722,6 +725,7 @@ impl App {
             } => self.lister_rows_came(&plugin, &lister, rows, refresh),
             PluginEvent::ListerNoRows { plugin, lister } => self.lister_no_rows(&plugin, &lister),
             PluginEvent::Note(message) => vec![self.say(message)],
+            PluginEvent::Committed { plugin, report } => self.plugin_committed(&plugin, *report),
             PluginEvent::Described {
                 request,
                 side,
@@ -2226,7 +2230,7 @@ impl App {
 
     // ---- Jobs and their ends ----
 
-    fn running_of(&self, plugin: &str) -> Option<JobId> {
+    pub(super) fn running_of(&self, plugin: &str) -> Option<JobId> {
         self.plugins
             .running
             .iter()
@@ -2336,6 +2340,13 @@ impl App {
             return Vec::new();
         };
         let job = finished.job;
+        // The outputs it staged and committed: one undo record; what an
+        // encryption command made, from its answer (lane AE).
+        let committed = self.commits_ended(job);
+        let made = match &finished.outcome {
+            Outcome::Process(Ok(value)) => crate::crypt::made_by(&running.command, value),
+            _ => None,
+        };
         if running.refresh == Refresh::Devices {
             return self.devices_finished(job, &running, finished);
         }
@@ -2487,6 +2498,8 @@ impl App {
         }
         // A volume action ended: an open Volumes list follows (lane A3).
         effects.extend(self.volume_command_ended(&running.command));
+        // Undo for what it made, and the trash offered (lane AE).
+        effects.extend(self.crypt_made(made, committed));
         effects
     }
 

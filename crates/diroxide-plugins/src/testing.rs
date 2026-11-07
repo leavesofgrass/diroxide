@@ -79,6 +79,10 @@ pub enum Mode {
     /// `call.params`) and answers the command with what the host answered,
     /// under `host` or `host_error`.
     Call,
+    /// Stages `NAME.out` beside the command's first file (`fs/stage`),
+    /// writes it, commits it (`fs/commit`), and answers with what the
+    /// host answered the commit (lane AE).
+    Stage,
 }
 
 /// Starts in-process fake plugins in a mode, over memory transports, and
@@ -207,6 +211,7 @@ pub struct RecordingServices {
     jobs: Mutex<Vec<JobRequest>>,
     plans: Mutex<Vec<Plan>>,
     listers: Mutex<Vec<crate::listers::ListerView>>,
+    committed: Mutex<Vec<JobReport>>,
 }
 
 /// A job sink that skips every conflict and every error, for the stand-in
@@ -305,6 +310,11 @@ impl RecordingServices {
     pub fn plans(&self) -> Vec<Plan> {
         locked(&self.plans).clone()
     }
+
+    /// The staged outputs committed, as the jobs the app heard (lane AE).
+    pub fn committed(&self) -> Vec<JobReport> {
+        locked(&self.committed).clone()
+    }
 }
 
 impl HostServices for RecordingServices {
@@ -359,6 +369,10 @@ impl HostServices for RecordingServices {
         Ok(engine.run(&plan, &control, &SkippingSink))
     }
 
+    fn committed(&self, report: &JobReport) {
+        locked(&self.committed).push(report.clone());
+    }
+
     fn set_panel(&self, change: &PanelChange) -> Result<(), RpcError> {
         locked(&self.changes).push(change.clone());
         Ok(())
@@ -372,6 +386,20 @@ impl HostServices for RecordingServices {
         locked(&self.executed).push((command.to_string(), args.clone()));
         Ok(Value::Null)
     }
+}
+
+/// The place of a command's first selected entry, or its cursor's.
+fn first_selected(params: &Params) -> Option<String> {
+    let context = params.get("context")?;
+    let first = context
+        .get("selection")
+        .and_then(Value::as_array)
+        .and_then(|s| s.first())
+        .or_else(|| context.get("cursor").filter(|c| !c.is_null()))?;
+    first
+        .get("place")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
 }
 
 /// What the fake plugin saw.
@@ -590,6 +618,17 @@ impl FakePlugin {
                 result
             }
             methods::COMMAND_RUN if self.mode == Mode::CancelDeaf => return Vec::new(),
+            methods::COMMAND_RUN
+                if self.mode == Mode::Stage && first_selected(&request.params).is_some() =>
+            {
+                let first = first_selected(&request.params).unwrap_or_default();
+                let mut params = Params::new();
+                params.insert("place".into(), json!(format!("{first}.out")));
+                self.calls += 1;
+                let id = Id::Text(format!("host-{}", self.calls));
+                self.waiting = Some((request.id, id.clone()));
+                return vec![answer(Request::new(id, methods::FS_STAGE, params))];
+            }
             methods::COMMAND_RUN if self.mode == Mode::Call => {
                 let call = request
                     .params
@@ -662,6 +701,22 @@ impl FakePlugin {
         if response.id.as_ref() != Some(&call) {
             self.waiting = Some((command, call));
             return Vec::new();
+        }
+        // The stage mode writes the staged output, then commits it.
+        if self.mode == Mode::Stage
+            && let Some(result) = &response.result
+            && let (Some(stage), Some(path)) = (
+                result.get("stage").and_then(Value::as_str),
+                result.get("path").and_then(Value::as_str),
+            )
+        {
+            let _ = std::fs::write(path, b"staged by the fake plugin\n");
+            let mut params = Params::new();
+            params.insert("stage".into(), json!(stage));
+            self.calls += 1;
+            let id = Id::Text(format!("host-{}", self.calls));
+            self.waiting = Some((command, id.clone()));
+            return vec![answer(Request::new(id, methods::FS_COMMIT, params))];
         }
         let mut value = json!({"done": 1, "skipped": 0, "failed": []});
         if let Some(fields) = value.as_object_mut() {

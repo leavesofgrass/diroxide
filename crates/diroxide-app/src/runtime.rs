@@ -57,6 +57,8 @@ mod meta;
 mod components;
 // Conversions on workers (alpha 4, lane AW).
 mod converting;
+// The gpg jobs and signature checks (alpha 4, lane AE).
+mod crypt;
 // The watched folders' tasks (alpha 4, lane AW).
 mod watched;
 // Plugins and script commands (W4d).
@@ -1471,6 +1473,7 @@ impl Runtime {
                 });
             }
             Request::Convert(ask) => self.convert(*ask),
+            Request::Crypt(ask) => self.crypt(*ask),
             Request::Watched(request) => self.watched(*request),
             Request::PlanRewrite(ask) => {
                 let Some(archives) = self.archives.clone() else {
@@ -1608,8 +1611,10 @@ impl Runtime {
                     lock(&self.meta_runs).insert(job, token.clone());
                 }
                 let runs = Arc::clone(&self.meta_runs);
+                // A list's signature is checked through the tools (lane AE).
+                let tools = Arc::clone(self.engine.tools());
                 self.worker(move |shared| {
-                    meta::run(shared, &registry, *ask, token);
+                    meta::run(shared, &registry, tools.as_ref(), *ask, token);
                     if let Some(job) = job {
                         lock(&runs).remove(&job);
                     }

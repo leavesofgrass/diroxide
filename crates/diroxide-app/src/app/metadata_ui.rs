@@ -21,9 +21,11 @@
 //!   ("SHA256SUMS, 12 files"). Each file is read again, as a job Cancel
 //!   stops. The verdict comes first ("All 12 files match SHA256SUMS", "1
 //!   differs, 1 missing, 1 match"), the failures next, "Matches BLAKE3,
-//!   not SHA-256" where a value named no algorithm, then one line on the
-//!   signature ("List not signed.") and what a match shows; the matches
-//!   only on request. A match is never called safe or genuine.
+//!   not SHA-256" where a value named no algorithm, then the chain over
+//!   the list's signature, checked (lane AE: "List is signed: 12 of 12
+//!   files match", or "List not signed: 12 of 12 match" and what a match
+//!   shows); the matches only on request. A match is never called safe
+//!   or genuine.
 //!
 //! - **Strip metadata into a copy** asks first, starting on No ("Strip 3
 //!   photos into copies?"), then copies each JPEG, PNG or WebP picture

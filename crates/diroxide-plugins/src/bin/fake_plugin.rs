@@ -83,6 +83,10 @@ const MODES: &[(&str, &str)] = &[
         "call",
         "Makes the host call its command's args.call and answers with the result.",
     ),
+    (
+        "stage",
+        "Stages NAME.out beside its first file, writes it, then commits it.",
+    ),
     ("provider", "Serves the toy file system memfs://box."),
     (
         "lost",
@@ -163,6 +167,7 @@ fn main() {
         "stray" => Mode::Stray,
         "call" | "reentrant" | "escape" => Mode::Call,
         "lost" => Mode::Lost,
+        "stage" => Mode::Stage,
         _ => Mode::Echo,
     };
     let mut plugin = FakePlugin::new(mode);

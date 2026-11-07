@@ -412,6 +412,27 @@ impl App {
         self.components.listing.as_ref()?.row(id).cloned()
     }
 
+    /// The ask-first question for the component a feature needs, when the
+    /// list has one that is not installed (lane AE: the Encryption
+    /// submenu with no plugin); its words when it has no build here;
+    /// `None` when the list has no such component or it is installed.
+    pub(super) fn ask_for_feature(&mut self, feature: &str) -> Option<Vec<Effect>> {
+        let row = self
+            .components
+            .listing
+            .as_ref()?
+            .for_feature(feature)?
+            .clone();
+        match row.status {
+            Status::Installed => None,
+            Status::NoBuild => Some(vec![self.say(Message::info(row.no_build.join(" ")))]),
+            _ => {
+                let ask = row.ask_for_feature.clone().unwrap_or(row.ask.clone());
+                Some(self.ask_first(&row.id, &ask))
+            }
+        }
+    }
+
     /// Starts a download or an install as a job in the jobs line.
     fn component_job(&mut self, id: &str, from: Option<std::path::PathBuf>) -> Vec<Effect> {
         let title = self

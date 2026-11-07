@@ -22,6 +22,8 @@ mod converting;
 // lane VA).
 mod details;
 mod dialogs;
+// The Encryption submenu (alpha 4, lane AE).
+mod encryption;
 // The panel filter on the filter language (W3a).
 mod filtering;
 // What a frontend reaches beside keys and commands (lane A5).
@@ -41,12 +43,16 @@ mod look;
 mod palette;
 // Read text in picture (alpha 4, lane VA).
 mod picture_text;
+// Show picture, the window's picture view (alpha 4, lane AE).
+mod picture_view;
 // The queue's settings, messages and questions (lane A2).
 mod queue;
 // The queue saved across restarts and its interrupted jobs (lane Q2).
 mod saved_queue;
 // A plugin's keys in keymap.toml and the Keys list (lane A2).
 mod plugin_keys;
+// Outputs a plugin staged and committed (alpha 4, lane AE).
+mod staged;
 // Plugins and script commands (W4d).
 mod plugins;
 mod preview;
@@ -84,6 +90,8 @@ mod watching;
 mod watched_folders;
 // Delete, Rename and Make folder inside a zip (alpha 4, lane AW).
 mod zip_edits;
+// The File menu inside a zip (alpha 4, lane AE, AW's request 1).
+mod zip_menus;
 
 use diroxide_app::{App, AppEvent, AppOptions, Runtime};
 use diroxide_core::{Effect, Key, Place, Side};

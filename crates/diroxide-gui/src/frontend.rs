@@ -329,8 +329,6 @@ pub struct Frontend {
     picture_size: (f64, f64),
     /// Counts the pictures shown, so each is a new image.
     picture_count: u64,
-    /// The source the "Enter shows the picture" line was said for.
-    hinted: Option<(PictureFrom, diroxide_core::Place)>,
     /// What wakes the window's loop when a picture is read.
     waker: Option<diroxide_app::runtime::Waker>,
     /// Where copied text goes instead of the host's clipboard: the
@@ -411,7 +409,6 @@ impl Frontend {
             ),
             picture_size: (640.0, 480.0),
             picture_count: 0,
-            hinted: None,
             waker: None,
             clipboard_writer: None,
         }
@@ -803,9 +800,9 @@ impl Frontend {
             self.menu_requests.push(enter);
             return;
         }
-        if self.picture_key(&key, now) {
-            // The picture view's own keys, or Enter opening it (the
-            // window's keys until the app has a command for the view).
+        if self.picture_key(&key) {
+            // The picture view's own keys; Enter opening it is the app's
+            // Show picture (view.picture, lane AE).
             self.after(now);
             self.refresh(host);
             return;
@@ -971,49 +968,22 @@ impl Frontend {
         });
     }
 
-    /// The picture the viewer or the preview region shows now, which the
-    /// window's Enter opens in the picture view: its place, its name, and
-    /// where it is shown. Only where Enter is the app's for nothing else
-    /// there: no command in the viewer, and in the preview only Open
-    /// link, which a picture's words never carry.
-    fn picture_source(&self) -> Option<(diroxide_core::Place, String, PictureFrom)> {
-        use diroxide_app::Lookup;
-        use diroxide_core::Layer;
-        if self.app.dialog().is_some() || self.app.key_test_active() {
-            return None;
+    /// The picture the app's Show picture asked for (view.picture, lane
+    /// AE), read for the picture view; one at a time, so an ask while a
+    /// picture is read or shown waits for nothing.
+    fn take_picture_ask(&mut self, now: Instant) {
+        use diroxide_app::app::picture_view::PictureSource;
+        let Some(ask) = self.app.take_picture_ask() else {
+            return;
+        };
+        if self.reading.is_some() || self.picture.is_some() {
+            return;
         }
-        let enter = Key::plain(KeyCode::Enter);
-        if self.app.in_preview() {
-            let shown = self.app.quick_view()?.shown()?;
-            if !crate::picture::is_picture(&shown.name) {
-                return None;
-            }
-            let layers = [Layer::Preview, Layer::List, Layer::Global];
-            let free = match self.app.keymap().lookup(&layers, &enter) {
-                Lookup::NoMatch => true,
-                Lookup::Command(id) => id == ids::PREVIEW_OPEN_LINK,
-            };
-            return free.then(|| {
-                (
-                    shown.place.clone(),
-                    shown.name.clone(),
-                    PictureFrom::Preview,
-                )
-            });
-        }
-        let viewer = self.app.viewer()?;
-        if !crate::picture::is_picture(viewer.name()) {
-            return None;
-        }
-        let layers = [Layer::Viewer, Layer::List, Layer::Global];
-        match self.app.keymap().lookup(&layers, &enter) {
-            Lookup::NoMatch => Some((
-                viewer.place().clone(),
-                diroxide_core::names::display_name(viewer.name()).into_owned(),
-                PictureFrom::Viewer,
-            )),
-            Lookup::Command(_) => None,
-        }
+        let from = match ask.from {
+            PictureSource::Viewer => PictureFrom::Viewer,
+            PictureSource::Preview => PictureFrom::Preview,
+        };
+        self.read_picture(ask.place, ask.name, from, now);
     }
 
     /// Whether the viewer or the preview still shows the picture at
@@ -1034,11 +1004,11 @@ impl Frontend {
         }
     }
 
-    /// The picture view's keys, or Enter opening it; true when the key
-    /// was the view's. In the view: Plus and Minus zoom, 0 fits, 1 shows
-    /// the actual size, the arrows move a zoomed picture, Escape closes;
-    /// every other key is the app's.
-    fn picture_key(&mut self, key: &Key, now: Instant) -> bool {
+    /// The picture view's keys; true when the key was the view's. In the
+    /// view: Plus and Minus zoom, 0 fits, 1 shows the actual size, the
+    /// arrows move a zoomed picture, Escape closes; every other key is
+    /// the app's.
+    fn picture_key(&mut self, key: &Key) -> bool {
         if self.app.key_test_active() || self.app.capturing_key() || self.app.dialog().is_some() {
             return false;
         }
@@ -1058,16 +1028,6 @@ impl Frontend {
                 _ => return false,
             }
             return true;
-        }
-        if key.code == KeyCode::Enter && plain {
-            if self.reading.is_some() {
-                // One picture at a time: a second Enter waits for the first.
-                return true;
-            }
-            if let Some((place, name, from)) = self.picture_source() {
-                self.read_picture(place, name, from, now);
-                return true;
-            }
         }
         false
     }
@@ -1235,27 +1195,6 @@ impl Frontend {
         let scale = open.view.zoom.scale(size, dims);
         if open.view.zoom != Zoom::Fit {
             open.view.center = crate::picture::pan(open.view.center, by, scale, size, dims);
-        }
-    }
-
-    /// Says once, as the viewer or the preview comes to a picture the
-    /// window can show, that Enter shows it.
-    fn hint_picture(&mut self) {
-        if self.app.dialog().is_some() || self.app.key_test_active() {
-            // A prompt over the viewer (a search, a jump) leaves the hint
-            // said: it is not said again when the prompt closes.
-            return;
-        }
-        match self.picture_source() {
-            Some((place, _, from)) => {
-                let key = (from, place);
-                if self.picture.is_none() && self.hinted.as_ref() != Some(&key) {
-                    self.hinted = Some(key);
-                    self.say_window(Message::info(crate::picture::ENTER_HINT));
-                }
-            }
-            None if self.picture.is_none() && self.reading.is_none() => self.hinted = None,
-            None => {}
         }
     }
 
@@ -1751,6 +1690,8 @@ impl Frontend {
             self.full_screen = full_screen;
             self.full_screen_asked = Some(full_screen);
         }
+        // Show picture is the app's too (view.picture, lane AE).
+        self.take_picture_ask(now);
         match (self.app.key_test_active(), self.key_test_since) {
             (true, None) => self.key_test_since = Some(now),
             (false, Some(_)) => self.key_test_since = None,
@@ -1888,13 +1829,12 @@ impl Frontend {
         self.shown.viewing = viewing;
         // The picture view in the body's place while a picture is open; it
         // closes with its source (the viewer closed, or moved to another
-        // file), and Enter's hint is said as a source comes to a picture.
+        // file); the app says what shows a picture (lane AE).
         if let Some(open) = &self.picture
             && !self.still_shown(open.from, &open.place)
         {
             self.picture = None;
         }
-        self.hint_picture();
         let body = if self.picture.is_some() {
             Body::Picture
         } else if viewing {

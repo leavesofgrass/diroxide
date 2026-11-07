@@ -378,6 +378,14 @@ pub enum PluginEvent {
     /// A sentence of the runtime's about plugins: "Enabled: Line
     /// counter.", "Could not save the consent: ...".
     Note(Message),
+    /// A staged output the host moved into place for a plugin
+    /// (`fs/commit`, lane AE): the job, its undo record naming the file.
+    Committed {
+        /// The plugin's id.
+        plugin: String,
+        /// The job's report; its id is the app's to give.
+        report: Box<JobReport>,
+    },
     /// What the plugins said about a folder for the title line.
     Described {
         /// The app's number for the request.

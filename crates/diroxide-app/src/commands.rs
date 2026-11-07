@@ -741,6 +741,34 @@ pub mod ids {
         /// puts it back.
         REMOVE_INTERNET_MARK = "file.remove-internet-mark";
     }
+
+    // Show picture (alpha 4, lane AE, G5b's request): the window's
+    // picture view as the app's command, Enter in the GUI column's viewer.
+    ids! {
+        /// Show the picture in the viewer or the preview in the window's
+        /// picture view.
+        VIEW_PICTURE = "view.picture";
+    }
+
+    // The Encryption submenu (alpha 4, lane AE, R29 3.2): the File menu
+    // and the palette, no default keys.
+    ids! {
+        /// Encrypt the marked files, or the focused one, with a passphrase
+        /// typed twice (age, the encryption plugin).
+        ENCRYPT_PASSPHRASE = "file.encrypt-passphrase";
+        /// Encrypt them for a pasted age public key or a recipients file.
+        ENCRYPT_RECIPIENT = "file.encrypt-recipient";
+        /// Decrypt age files, asking a passphrase or an identity file.
+        DECRYPT = "file.decrypt";
+        /// Encrypt the marked files with gpg, for keys or a passphrase.
+        GPG_ENCRYPT = "file.gpg-encrypt";
+        /// Decrypt OpenPGP files with gpg.
+        GPG_DECRYPT = "file.gpg-decrypt";
+        /// Make a detached gpg signature of each marked file.
+        SIGN = "file.sign";
+        /// Check the focused file's signature, or the focused signature.
+        VERIFY_SIGNATURE = "file.verify-signature";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -765,7 +793,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 259] = [
+pub static CATALOG: [CommandInfo; 267] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1599,6 +1627,62 @@ pub static CATALOG: [CommandInfo; 259] = [
         &[],
     ),
     command(
+        ids::ENCRYPT_PASSPHRASE,
+        "Encrypt with a passphrase",
+        "Encrypts the marked files, or the focused one, with age and a passphrase you type twice in hidden fields, each into NAME.age beside it; the originals stay, and nothing you type is kept. Needs the Encryption plugin.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::ENCRYPT_RECIPIENT,
+        "Encrypt for a recipient",
+        "Encrypts the marked files, or the focused one, with age for a pasted public key starting age1 or a recipients file you name by its path, each into NAME.age beside it; the originals stay. Needs the Encryption plugin.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::DECRYPT,
+        "Decrypt",
+        "Decrypts the marked age files, or the focused one, asking the passphrase in a hidden field or an identity file by its path each time; nothing is kept. Needs the Encryption plugin.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::GPG_ENCRYPT,
+        "Encrypt with gpg",
+        "Encrypts the marked files, or the focused one, with gpg for the keys you type, or with a passphrase typed twice when you type none, each into NAME.gpg beside it after a plan you answer, which starts on No; gpg must be installed.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::GPG_DECRYPT,
+        "Decrypt with gpg",
+        "Decrypts the marked OpenPGP files, or the focused one, with gpg; a key gpg's agent holds asks nothing, otherwise its passphrase is asked in a hidden field, never on a command line.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SIGN,
+        "Sign with gpg",
+        "Makes a detached signature, NAME.sig, of the marked files, or the focused one, with the gpg key you type or your default key, its passphrase asked in a hidden field.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VERIFY_SIGNATURE,
+        "Verify signature",
+        "Checks the focused file's signature beside it (NAME.asc, NAME.sig, NAME.minisig or SHA256SUMS.asc), or the focused signature against its file, with gpg or minisign; the verdict first. A good signature means the key fits, not who holds it; diroxide never fetches a key.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
         ids::READ_PICTURE_TEXT,
         "Read text in picture",
         "Reads the text in the focused picture with Tesseract and shows it in the viewer, titled as machine read, since the words are a machine's guess.",
@@ -2286,6 +2370,14 @@ pub static CATALOG: [CommandInfo; 259] = [
         Viewer,
         &["escape", "q"],
         &["escape", "q"],
+    ),
+    command(
+        ids::VIEW_PICTURE,
+        "Show picture",
+        "Shows the picture in the viewer or the preview in the window's picture view, which zooms, fits the window and goes back with its own keys, said as it opens; a terminal has no picture view.",
+        Viewer,
+        &[],
+        &["enter"],
     ),
     command(
         ids::VIEWER_LEFT,

@@ -324,7 +324,7 @@ impl App {
     /// elsewhere the focus jumps to the next row starting with it.
     fn list_letter(&mut self, letter: char) -> Vec<Effect> {
         if let Some(Purpose::Menu(id)) = self.top_purpose().cloned() {
-            let caps = self.active_capabilities();
+            let caps = self.menu_place();
             let item = self
                 .menus
                 .item_by_access(&id, letter, &caps)

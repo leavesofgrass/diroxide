@@ -1180,6 +1180,8 @@ impl App {
                     Some(JobKind::Rewrite) => "zip change",
                     Some(JobKind::Convert) => "conversion",
                     Some(JobKind::StripMetadata) => "strip",
+                    // What a plugin committed (lane AE).
+                    Some(JobKind::PluginCommand) => "plugin command",
                     _ => "job",
                 };
                 let how = match kind {
@@ -1191,7 +1193,8 @@ impl App {
                         | JobKind::Pack
                         | JobKind::Split
                         | JobKind::Join
-                        | JobKind::Convert,
+                        | JobKind::Convert
+                        | JobKind::PluginCommand,
                     ) => {
                         format!("{} in the trash", count(done, "item is", "items are"))
                     }

@@ -47,17 +47,26 @@ pub enum When {
     Links,
     /// Permissions or attributes can be changed.
     Attributes,
+    /// Entries can be made, renamed and deleted: the place can be
+    /// changed, or it is a zip diroxide rewrites (lane AE, AW's request
+    /// 1).
+    Edits,
+    /// Entries can be removed with Delete: the place has a trash, or it
+    /// is a zip diroxide rewrites, the old copy going to the trash.
+    Removes,
 }
 
 impl When {
     /// Every condition, by its name in `menus.toml`.
-    pub const ALL: [(When, &'static str); 6] = [
+    pub const ALL: [(When, &'static str); 8] = [
         (When::Writable, "writable"),
         (When::Trash, "trash"),
         (When::NoTrash, "no_trash"),
         (When::Restore, "restore"),
         (When::Links, "links"),
         (When::Attributes, "attributes"),
+        (When::Edits, "edits"),
+        (When::Removes, "removes"),
     ];
 
     /// A condition by name.
@@ -71,13 +80,52 @@ impl When {
     /// Whether the place allows it.
     pub fn holds(self, place: &Capabilities) -> bool {
         match self {
-            When::Writable => place.writable,
-            When::Trash => place.trash,
+            When::Writable | When::Edits => place.writable,
+            When::Trash | When::Removes => place.trash,
             When::NoTrash => place.writable && !place.trash,
             When::Restore => place.restore,
             When::Links => place.links,
             When::Attributes => place.attributes,
         }
+    }
+
+    /// Whether the place allows it, a zip diroxide rewrites allowing
+    /// [`When::Edits`] and [`When::Removes`].
+    pub fn holds_in(self, place: &MenuPlace) -> bool {
+        match self {
+            When::Edits | When::Removes if place.rewrites => true,
+            _ => self.holds(&place.caps),
+        }
+    }
+}
+
+/// A place as the menus' conditions see it: what it can do, and whether
+/// diroxide changes it by rewriting it whole (inside a zip, Make folder,
+/// Rename and Delete rewrite the archive; lane AW).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MenuPlace {
+    /// What the place can do.
+    pub caps: Capabilities,
+    /// Whether its entries are changed by rewriting it.
+    pub rewrites: bool,
+}
+
+/// What the menus read about a place to show an item: its capabilities
+/// alone, or a [`MenuPlace`].
+pub trait MenuFacts {
+    /// Whether the place allows an item with this condition.
+    fn allows(&self, when: When) -> bool;
+}
+
+impl MenuFacts for Capabilities {
+    fn allows(&self, when: When) -> bool {
+        when.holds(self)
+    }
+}
+
+impl MenuFacts for MenuPlace {
+    fn allows(&self, when: When) -> bool {
+        when.holds_in(self)
     }
 }
 
@@ -226,7 +274,7 @@ impl Menus {
                         Some(when) => Some(when),
                         None => {
                             problems.push(format!(
-                                "Unknown condition in {place}: {name}. Use writable, trash, no_trash, restore, links or attributes."
+                                "Unknown condition in {place}: {name}. Use writable, trash, no_trash, restore, links, attributes, edits or removes."
                             ));
                             continue;
                         }
@@ -341,13 +389,13 @@ impl Menus {
         &self,
         menu: &str,
         letter: char,
-        place: &Capabilities,
+        place: &(impl MenuFacts + ?Sized),
     ) -> Option<&MenuItem> {
         let letter = letter.to_lowercase().next()?;
         self.menu(menu)?
             .items
             .iter()
-            .find(|i| i.access == Some(letter) && i.when.is_none_or(|w| w.holds(place)))
+            .find(|i| i.access == Some(letter) && i.when.is_none_or(|w| place.allows(w)))
     }
 
     /// The menu bar as a list: each row a menu's title, then its key from
@@ -377,7 +425,12 @@ impl Menus {
     /// One menu as a list for a place: each row an item's label, then its
     /// key from the live keymap ("Copy to other panel, F5"); a submenu says
     /// "submenu". Items the place does not allow are left out.
-    pub fn list(&self, id: &str, keymap: &Keymap, place: &Capabilities) -> Option<ListModel> {
+    pub fn list(
+        &self,
+        id: &str,
+        keymap: &Keymap,
+        place: &(impl MenuFacts + ?Sized),
+    ) -> Option<ListModel> {
         self.list_with(id, keymap, place, &|_| None)
     }
 
@@ -389,14 +442,14 @@ impl Menus {
         &self,
         id: &str,
         keymap: &Keymap,
-        place: &Capabilities,
+        place: &(impl MenuFacts + ?Sized),
         plugin: &dyn Fn(&CommandId) -> Option<ListRow>,
     ) -> Option<ListModel> {
         let menu = self.menu(id)?;
         let rows = menu
             .items
             .iter()
-            .filter(|item| item.when.is_none_or(|w| w.holds(place)))
+            .filter(|item| item.when.is_none_or(|w| place.allows(w)))
             .filter_map(|item| {
                 if let ItemAction::Command(command) = &item.action
                     && commands::info(command).is_none()
@@ -876,7 +929,7 @@ access = \"F\"
             [
                 "Unknown command in menu File: file.copi.",
                 "Unknown submenu in menu File: nowhere.",
-                "Unknown condition in menu File: sometimes. Use writable, trash, no_trash, restore, links or attributes.",
+                "Unknown condition in menu File: sometimes. Use writable, trash, no_trash, restore, links, attributes, edits or removes.",
                 "Access key must be one letter: \"mv\" in menu File.",
                 "Label too long in menu File: 52 cells, at most 40.",
                 "Access key V twice in menu File: View and Edit.",

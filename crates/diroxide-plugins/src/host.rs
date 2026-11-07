@@ -163,6 +163,15 @@ pub trait HostServices: Send + Sync {
         ))
     }
 
+    /// `fs/commit`: a staged output the host moved into place, as a
+    /// finished job of the plugin's whose undo record names the file made
+    /// (lane AE): the app keeps it with the plugin's running command, so
+    /// Undo puts the file in the trash. The report's job id is the app's
+    /// to give. The default keeps nothing.
+    fn committed(&self, report: &JobReport) {
+        let _ = report;
+    }
+
     /// `lister/open`: shows a plugin's lister in a panel, its rows item
     /// rows that no file command takes. Enter runs
     /// [`ListerView::activate`], keys run [`ListerView::action_for`];
@@ -965,6 +974,7 @@ impl Host {
                         .map(|p| p.scheme.clone())
                         .collect(),
                     plugin: name.clone(),
+                    stages: Default::default(),
                 },
                 tools: self.tools.clone(),
             },

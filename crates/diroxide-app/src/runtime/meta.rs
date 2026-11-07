@@ -83,8 +83,15 @@ pub(super) fn job_of(ask: &MetaAsk) -> Option<JobId> {
     }
 }
 
-/// Carries out one ask on the worker it runs on.
-pub(super) fn run(shared: &Arc<Shared>, registry: &Registry, ask: MetaAsk, cancel: CancelToken) {
+/// Carries out one ask on the worker it runs on; `tools` checks a
+/// checksum list's signature (lane AE).
+pub(super) fn run(
+    shared: &Arc<Shared>,
+    registry: &Registry,
+    tools: &dyn diroxide_vfs::ToolRunner,
+    ask: MetaAsk,
+    cancel: CancelToken,
+) {
     let note = match ask {
         MetaAsk::Checksums {
             job,
@@ -96,7 +103,15 @@ pub(super) fn run(shared: &Arc<Shared>, registry: &Registry, ask: MetaAsk, cance
             folder,
         },
         MetaAsk::Verify { job, place, list } => MetaNote::Verified {
-            outcome: verify(shared, registry, job, &place, list.as_deref(), &cancel),
+            outcome: verify(
+                shared,
+                registry,
+                tools,
+                job,
+                &place,
+                list.as_deref(),
+                &cancel,
+            ),
             job,
             place,
         },
@@ -332,6 +347,7 @@ fn check(
 fn verify(
     shared: &Arc<Shared>,
     registry: &Registry,
+    tools: &dyn diroxide_vfs::ToolRunner,
     job: JobId,
     place: &Place,
     chosen: Option<&str>,
@@ -419,15 +435,33 @@ fn verify(
         parsed,
         &ctx,
     ) {
+        // The chain (lane AE, R29 3.5 step 6): the list's own signature
+        // beside it, checked through gpg or minisign.
         Ok(report) => Ok(Verified::Report {
             report: Box::new(report),
-            signature: crate::metadata::signature_names(&list_name)
-                .iter()
-                .find_map(|candidate| found(candidate)),
+            signature: list_signature(tools, &folder, &list_name, &names, cancel),
         }),
         Err(diroxide_meta::MetaError::Place(VfsError::Cancelled)) => Ok(Verified::Cancelled),
         Err(error) => Err(error.to_string()),
     }
+}
+
+/// The verdict on the list's own signature beside it (`SHA256SUMS.asc`,
+/// `.sig` or `.minisig`), when one is there (lane AE).
+fn list_signature(
+    tools: &dyn diroxide_vfs::ToolRunner,
+    folder: &Place,
+    list: &str,
+    names: &[String],
+    cancel: &CancelToken,
+) -> Option<Box<diroxide_ops::crypt::SignatureVerdict>> {
+    use diroxide_ops::crypt::{SignatureCheck, sidecars_present, verify_signature};
+    let siblings: Vec<&str> = names.iter().map(String::as_str).collect();
+    let sidecar = sidecars_present(list, &siblings)
+        .into_iter()
+        .find(|sidecar| sidecar.signs == list)?;
+    let check = SignatureCheck::detached(folder.join(&sidecar.name).ok()?, folder.join(list).ok()?);
+    Some(Box::new(verify_signature(tools, &check, cancel)))
 }
 
 /// Reads and parses a list in a folder, at most 16 MiB.

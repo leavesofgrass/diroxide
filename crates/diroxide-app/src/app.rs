@@ -69,6 +69,12 @@ mod type_checks;
 mod columns_ui;
 // The metadata commands in the app (alpha 4, lane MA).
 mod metadata_ui;
+// The Encryption submenu (alpha 4, lane AE).
+mod crypt_ui;
+// Show picture, the window's picture view (alpha 4, lane AE).
+pub mod picture_view;
+// Outputs a plugin staged and committed (alpha 4, lane AE).
+mod staged;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -540,6 +546,9 @@ pub enum AppEvent {
     },
     /// What the runtime answered the Convert command (alpha 4, lane AW).
     Convert(Box<crate::conversions::ConvertNote>),
+    /// What the runtime answered the gpg commands or Verify signature
+    /// (alpha 4, lane AE).
+    Crypt(Box<crate::crypt::CryptNote>),
     /// What the runtime answered the Watched folders list, or what a
     /// running task told (alpha 4, lane AW).
     HotFolder(Box<crate::watched::WatchedNote>),
@@ -1050,6 +1059,10 @@ pub struct App {
     columns: columns_ui::ColumnsState,
     /// The metadata commands' jobs and lists (lane MA).
     meta: metadata_ui::MetaState,
+    /// The picture Show picture asked the window to show (lane AE).
+    picture_ask: Option<picture_view::PictureAsk>,
+    /// The files each running plugin command committed (lane AE).
+    staged: staged::StagedState,
     /// The slots of the owner's type actions (lane TA).
     type_slots: crate::typing::TypeSlots,
     /// A typed action's command is running: Enter and View run their
@@ -1393,6 +1406,8 @@ impl App {
             type_checks: type_checks::TypeChecks::default(),
             columns: columns_ui::ColumnsState::default(),
             meta: metadata_ui::MetaState::default(),
+            picture_ask: None,
+            staged: staged::StagedState::default(),
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,
@@ -1526,7 +1541,7 @@ impl App {
     /// own items and wherever `menus.toml` names one (lane A4, for the
     /// GUI's native menus). `None` when no menu has this id.
     pub fn menu_list(&self, id: &str) -> Option<diroxide_core::ListModel> {
-        let caps = self.active_capabilities();
+        let caps = self.menu_place();
         self.menu_list_for(id, &caps)
     }
 
@@ -2010,6 +2025,7 @@ impl App {
             } => self.columns_read(side, listing, cells, plugin, ask),
             AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
             AppEvent::Convert(note) => self.convert_note(*note),
+            AppEvent::Crypt(note) => self.crypt_note(*note),
             AppEvent::HotFolder(note) => self.watched_note(*note),
         }
     }
@@ -2047,6 +2063,11 @@ impl App {
         // Full screen and focus mode, everywhere: the viewer, the quick
         // view and a plugin's list keep them (lane A6).
         if let Some(effects) = self.look_dispatch(command) {
+            return effects;
+        }
+        // Show picture, everywhere: the viewer and the preview keep it
+        // (alpha 4, lane AE).
+        if let Some(effects) = self.picture_dispatch(command) {
             return effects;
         }
         // A plugin list in the panel takes its own commands, and refuses
@@ -2124,6 +2145,10 @@ impl App {
         }
         // Checksum, Verify, Strip, Check and the internet mark (lane MA).
         if let Some(effects) = self.meta_dispatch(command) {
+            return effects;
+        }
+        // The Encryption submenu (lane AE).
+        if let Some(effects) = self.crypt_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).

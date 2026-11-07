@@ -216,6 +216,10 @@ struct Driver {
     /// Progress kinds per token, in order.
     progress: HashMap<String, Vec<String>>,
     folder: String,
+    /// Where staged outputs go: the suite's own scratch folder (lane AE).
+    scratch: std::path::PathBuf,
+    /// The stages handed out and not yet committed: each one's output.
+    stages: HashMap<String, String>,
 }
 
 /// What a wait for an answer found.
@@ -378,6 +382,21 @@ impl Driver {
                 methods::LISTER_OPEN => json!({"opened": true, "rows": 0}),
                 methods::TOOLS_FIND => json!({"found": false, "path": null, "version": null}),
                 methods::COMMAND_EXECUTE => Value::Null,
+                // Staged outputs (lane AE): a path in the suite's own
+                // scratch folder, and a commit of a stage it handed out.
+                methods::FS_STAGE | methods::FS_COMMIT => {
+                    let outcome = if method == methods::FS_STAGE {
+                        self.stand_in_stage(&request.params)
+                    } else {
+                        self.stand_in_commit(&request.params)
+                    };
+                    let response = match outcome {
+                        Ok(value) => Response::success(request.id, value),
+                        Err(error) => Response::failure(Some(request.id), error),
+                    };
+                    self.send(&response);
+                    return;
+                }
                 _ => {
                     let response = Response::failure(
                         Some(request.id),
@@ -396,6 +415,67 @@ impl Driver {
             Err(error) => Response::failure(Some(request.id), error),
         };
         self.send(&response);
+    }
+}
+
+impl Driver {
+    /// `fs/stage` as the suite answers it: a staging path in its scratch
+    /// folder for an output with a name.
+    fn stand_in_stage(&mut self, params: &Params) -> Result<Value, crate::protocol::RpcError> {
+        let output = params
+            .get("place")
+            .and_then(Value::as_str)
+            .filter(|p| !p.trim().is_empty())
+            .ok_or_else(|| {
+                self.outside
+                    .push("staged an output with no place and name".to_owned());
+                crate::protocol::RpcError::new(ErrorKind::InvalidParams, "place is missing")
+            })?
+            .to_owned();
+        // Numbered by the stages asked so far, this one included.
+        let asked = self
+            .called
+            .iter()
+            .filter(|m| *m == methods::FS_STAGE)
+            .count();
+        let id = format!("{asked:08x}");
+        let path = self.scratch.join(format!(".diro-part-{id}.part"));
+        self.stages.insert(id.clone(), output);
+        Ok(json!({"stage": id, "path": path.display().to_string()}))
+    }
+
+    /// `fs/commit` as the suite answers it: only a stage it handed out,
+    /// once, and only after something was written there.
+    fn stand_in_commit(&mut self, params: &Params) -> Result<Value, crate::protocol::RpcError> {
+        let id = params
+            .get("stage")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let Some(output) = self.stages.remove(&id) else {
+            self.outside.push(format!(
+                "committed {id:?}, a stage the host never handed out"
+            ));
+            return Err(crate::protocol::RpcError::new(
+                ErrorKind::NotFound,
+                format!("no stage is named {id}"),
+            ));
+        };
+        let path = self.scratch.join(format!(".diro-part-{id}.part"));
+        if !path.is_file() {
+            self.outside
+                .push("committed a stage it wrote nothing to".to_owned());
+            return Err(crate::protocol::RpcError::new(
+                ErrorKind::NotFound,
+                "nothing was written to the stage",
+            ));
+        }
+        let name = output
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        Ok(json!({"committed": true, "place": output, "name": name}))
     }
 }
 
@@ -611,6 +691,8 @@ fn drive(info: &PluginInfo, state: &Path, startup_floor: Duration) -> Vec<(Group
         outside: Vec::new(),
         progress: HashMap::new(),
         folder: folder_place.to_string(),
+        scratch: state.to_path_buf(),
+        stages: HashMap::new(),
     };
 
     // Lifecycle, part one: -32002 before initialize, then the handshake.
@@ -947,6 +1029,8 @@ fn drive(info: &PluginInfo, state: &Path, startup_floor: Duration) -> Vec<(Group
             outside: Vec::new(),
             progress: HashMap::new(),
             folder: d.folder.clone(),
+            scratch: d.scratch.clone(),
+            stages: HashMap::new(),
         };
         p.send(&Request::new(
             init_id.clone(),

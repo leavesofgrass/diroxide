@@ -10,7 +10,9 @@
 # and banks.toml use. The label is the command's name unless given. The
 # access key is one letter, unique in its menu. when = "trash" shows the
 # item only where the place has a trash; the other conditions are
-# writable, no_trash, restore, links and attributes. Every item shows its
+# writable, no_trash, restore, links and attributes, and edits and
+# removes, which are writable and trash that also hold inside a zip
+# diroxide rewrites. Every item shows its
 # key from the live keymap, so a menu never shows a key that is not bound.
 
 [[menu]]
@@ -25,6 +27,11 @@ access = "o"
 [[menu.item]]
 menu = "archive"
 access = "a"
+
+# Encrypt, decrypt, sign and verify (lane AE).
+[[menu.item]]
+menu = "encryption"
+access = "y"
 
 [[menu.item]]
 command = "file.view"
@@ -81,15 +88,17 @@ command = "file.convert-reports"
 command = "file.context-menu"
 access = "c"
 
+# Make folder, Rename and Delete show inside a zip too, which diroxide
+# rewrites (edits and removes; lane AE).
 [[menu.item]]
 command = "folder.make"
 access = "m"
-when = "writable"
+when = "edits"
 
 [[menu.item]]
 command = "file.rename"
 access = "r"
-when = "writable"
+when = "edits"
 
 [[menu.item]]
 command = "file.duplicate"
@@ -99,12 +108,12 @@ when = "writable"
 [[menu.item]]
 command = "file.trash"
 access = "t"
-when = "trash"
+when = "removes"
 
 [[menu.item]]
 command = "file.delete-permanently"
 access = "g"
-when = "writable"
+when = "edits"
 
 [[menu.item]]
 command = "file.split"
@@ -170,6 +179,42 @@ access = "t"
 [[menu.item]]
 command = "archive.open-as"
 access = "o"
+
+# The Encryption submenu (lane AE): age through the Encryption plugin.
+[[menu]]
+id = "encryption"
+title = "Encryption"
+access = "y"
+bar = false
+
+[[menu.item]]
+command = "file.encrypt-passphrase"
+access = "p"
+
+[[menu.item]]
+command = "file.encrypt-recipient"
+access = "r"
+
+[[menu.item]]
+command = "file.decrypt"
+access = "d"
+
+# gpg, the program the tools registry finds (lane AE).
+[[menu.item]]
+command = "file.gpg-encrypt"
+access = "g"
+
+[[menu.item]]
+command = "file.gpg-decrypt"
+access = "e"
+
+[[menu.item]]
+command = "file.sign"
+access = "s"
+
+[[menu.item]]
+command = "file.verify-signature"
+access = "v"
 
 [[menu]]
 id = "edit"
@@ -352,6 +397,10 @@ access = "r"
 [[menu.item]]
 menu = "viewer"
 access = "v"
+
+# The window's picture view (lane AE).
+[[menu.item]]
+command = "view.picture"
 
 [[menu.item]]
 command = "view.quick-view"

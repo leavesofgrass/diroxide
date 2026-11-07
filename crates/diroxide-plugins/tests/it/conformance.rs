@@ -128,6 +128,35 @@ fn volumes_and_places_are_checked_when_declared() {
     }
 }
 
+/// `fs/stage` and `fs/commit` (lane AE): a plugin that stages an output,
+/// writes it and commits it passes the services group with both named;
+/// without `permissions.fs = "write"` both are calls outside its
+/// manifest.
+#[test]
+fn staging_and_committing_an_output_is_checked() {
+    let root = tempfile::tempdir().unwrap();
+    let write = "\n[permissions]\nfs = \"write\"\n";
+    let report = run(&fake(root.path(), "stage", write));
+    match report.verdict(Group::Services) {
+        Some(Verdict::Pass(notes)) => {
+            let note = notes.join(" ");
+            assert!(note.contains("fs/stage"), "{note}");
+            assert!(note.contains("fs/commit"), "{note}");
+        }
+        other => panic!("{other:?}\n{}", report.text()),
+    }
+    assert!(report.passed(), "{}", report.text());
+    let other = root.path().join("no-permission");
+    let report = run(&fake(&other, "stage", ""));
+    match report.verdict(Group::Services) {
+        Some(Verdict::Fail(problems)) => assert!(
+            problems.contains(&"called fs/stage without its permission".to_owned()),
+            "{problems:?}"
+        ),
+        other => panic!("{other:?}"),
+    }
+}
+
 #[test]
 fn a_manifest_only_plugin_and_a_broken_manifest() {
     let root = tempfile::tempdir().unwrap();

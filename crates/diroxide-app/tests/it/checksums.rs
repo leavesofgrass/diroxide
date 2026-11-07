@@ -253,7 +253,7 @@ fn verify_finds_the_list_beside_a_file_and_says_the_verdict_first() {
     // Only its own line is checked; the list opens on the verdict.
     assert_eq!(
         said.last().unwrap(),
-        "1 file matches SHA256SUMS, List not signed., 1 of 3"
+        "1 file matches SHA256SUMS, List not signed: 1 of 1 match, 1 of 3"
     );
     assert_eq!(
         s.dialog_title().as_deref(),
@@ -262,7 +262,7 @@ fn verify_finds_the_list_beside_a_file_and_says_the_verdict_first() {
     assert_eq!(
         spoken_rows(&s),
         [
-            "List not signed.",
+            "List not signed: 1 of 1 match",
             "This shows the files are not damaged. It does not show who made them.",
             "Show the 1 match",
         ]
@@ -288,7 +288,7 @@ fn verify_finds_the_list_beside_a_file_and_says_the_verdict_first() {
     let rows = spoken_rows(&s);
     assert_eq!(rows[0], "Does not match: notes.txt, SHA-256");
     assert_eq!(rows[1], "Missing: gone.txt");
-    assert_eq!(rows[2], "List not signed.");
+    assert_eq!(rows[2], "List not signed: 1 of 3 match");
     for row in &rows[..3] {
         assert!(within_cells(row, row), "{row}");
     }

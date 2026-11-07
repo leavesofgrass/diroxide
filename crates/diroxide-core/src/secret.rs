@@ -171,7 +171,11 @@ impl SecretRequest {
         } else {
             format!("{word} for")
         };
-        let room = BRAILLE_CELLS.saturating_sub(lead.chars().count() + 12);
+        // The space after the lead and " (hidden):" after the subject; the
+        // prompt's last space is no cell's meaning, so "Passphrase for key
+        // ending 4E7B (hidden):" keeps its key whole in 40 (lane AE, E's
+        // request 4).
+        let room = BRAILLE_CELLS.saturating_sub(lead.chars().count() + 11);
         format!("{lead} {}", self.short_subject(room))
     }
 
@@ -247,7 +251,11 @@ mod tests {
         let line = request.prompt_line();
         assert!(within_cells(&line, "Password for the-"));
         assert!(line.contains("...") && line.contains(".zip (hidden)"));
-        assert!(line.chars().count() <= 40, "{line}");
+        assert!(line.trim_end().chars().count() <= 40, "{line}");
+        // A gpg key's ending is said whole (E's request 4).
+        let key = SecretRequest::new(SecretKind::FilePassphrase, "key ending 4E7B");
+        assert_eq!(key.title(), "Passphrase for key ending 4E7B");
+        assert_eq!(key.prompt_line().trim_end().chars().count(), 40);
         let host = SecretRequest {
             user: Some("ada".into()),
             ..SecretRequest::new(SecretKind::HostPassword, "example.org")

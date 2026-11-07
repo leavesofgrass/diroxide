@@ -40,6 +40,13 @@ pub enum Act {
     Crash,
     /// Never answers; a cancel is answered -32800.
     Hang,
+    /// Stages this output (`fs/stage`), writes it, commits it
+    /// (`fs/commit`), says what the host answered, then answers (lane
+    /// AE).
+    Stage(&'static str),
+    /// Answers with this result, as the encryption plugin answers what
+    /// it made (lane AE).
+    Answer(Value),
 }
 
 /// Starts the test plugin over a memory transport.
@@ -169,6 +176,16 @@ fn serve(
                         return;
                     }
                     Act::Hang => hanging = id,
+                    Act::Answer(result) => {
+                        write(&peer, json!({"jsonrpc": "2.0", "id": id, "result": result}));
+                    }
+                    Act::Stage(output) => {
+                        write(
+                            &peer,
+                            json!({"jsonrpc": "2.0", "id": "stage-1", "method": "fs/stage", "params": {"place": output}}),
+                        );
+                        waiting = id;
+                    }
                 }
             }
             Some("$/cancel_request") => {
@@ -253,6 +270,17 @@ fn serve(
                         json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "no method"}}),
                     );
                 }
+            }
+            // The stage handed out (lane AE): the output written there,
+            // then committed.
+            None if message["id"] == "stage-1" && message.get("result").is_some() => {
+                let result = &message["result"];
+                let path = result["path"].as_str().unwrap_or_default();
+                let _ = fs::write(path, b"made by the test plugin\n");
+                write(
+                    &peer,
+                    json!({"jsonrpc": "2.0", "id": "commit-1", "method": "fs/commit", "params": {"stage": result["stage"]}}),
+                );
             }
             None => {
                 if let Some(command) = waiting.take() {
