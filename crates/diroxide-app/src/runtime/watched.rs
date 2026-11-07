@@ -32,6 +32,10 @@ use crate::watched::{
 /// interval's default).
 const PACE: Duration = Duration::from_secs(10);
 
+/// How many times a start waits for a lock a stopping run still holds,
+/// 50 milliseconds each.
+const LOCK_TRIES: u32 = 10;
+
 /// The tasks running in this runtime, and how they run.
 #[derive(Debug, Default)]
 pub(super) struct WatchedRuntime {
@@ -242,15 +246,35 @@ impl Runtime {
             return;
         }
         let task_sentence = sentence(runner.task());
-        let shared = Arc::clone(&self.shared);
-        let owner = name.to_owned();
-        let sink = Box::new(move |hot| {
-            shared.send(note(WatchedNote::Hot {
-                name: owner.clone(),
-                note: hot,
-            }));
-        });
-        match spawn_task(runner, Arc::clone(&request.clock.0), sink) {
+        let mut runner = Some(runner);
+        let mut tries = 0;
+        let started = loop {
+            let Some(this) = runner.take() else {
+                return;
+            };
+            let shared = Arc::clone(&self.shared);
+            let owner = name.to_owned();
+            let sink = Box::new(move |hot| {
+                shared.send(note(WatchedNote::Hot {
+                    name: owner.clone(),
+                    note: hot,
+                }));
+            });
+            match spawn_task(this, Arc::clone(&request.clock.0), sink) {
+                // A run this runtime just stopped may hold the lock for a
+                // moment longer, while its thread ends.
+                Err(StartError::Locked(_)) if tries < LOCK_TRIES => {
+                    tries += 1;
+                    std::thread::sleep(Duration::from_millis(50));
+                    match self.task_runner(name, request) {
+                        Ok(again) => runner = Some(again),
+                        Err(why) => break Err(StartError::Cannot(why)),
+                    }
+                }
+                other => break other,
+            }
+        };
+        match started {
             Ok(run) => {
                 self.hot.runs.insert(name.to_owned(), run);
             }

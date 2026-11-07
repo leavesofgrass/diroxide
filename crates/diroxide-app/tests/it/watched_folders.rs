@@ -252,3 +252,30 @@ fn a_running_task_converts_what_waits_and_ctrl_z_leaves_it() {
     assert!(made.exists());
     action(&mut s, "Turn off");
 }
+
+#[test]
+fn put_failed_back_asks_then_moves_the_files_and_the_task_goes_on() {
+    let dir = temp();
+    let (home, paths) = task_home(dir.path());
+    fs::write(home.join("failed").join("c.md"), "# C\n").unwrap();
+    let mut s = session(dir.path(), &paths);
+    action(&mut s, "Turn on");
+    s.key("y");
+    s.key("n");
+    let said = action(&mut s, "Put failed back");
+    assert_eq!(
+        said.last().map(String::as_str),
+        Some("Put back 1 file from failed? No is the default. y or n")
+    );
+    match s.dialog() {
+        Some(Dialog::Confirm { listing, .. }) => assert_eq!(listing, &["c.md"]),
+        other => panic!("{other:?}"),
+    }
+    let said = s.key("y");
+    assert!(said.iter().any(|l| l == "Put back: c.md"), "{said:?}");
+    assert!(home.join("in").join("c.md").exists());
+    s.command(ids::WATCHED_FOLDERS);
+    assert_eq!(labels(&s), ["Notes, on"]);
+    s.key("escape");
+    action(&mut s, "Turn off");
+}
