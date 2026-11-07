@@ -779,6 +779,21 @@ impl Previewer for ImagePreviewer {
     }
 }
 
+/// The keys of the fields the image words give, for the column chooser
+/// and a failed read's cells (VL's request 2, built in lane VA).
+pub const FIELD_KEYS: [&str; 10] = [
+    "image.description",
+    "image.dimensions",
+    "image.shape",
+    "image.color",
+    "image.animation",
+    "image.sizes",
+    "image.stored_size",
+    "image.orientation",
+    "image.profile",
+    "image.shown",
+];
+
 /// The image words as a metadata reader (R30 commit 12's joint): the
 /// same rows as fields, in the background class, since each file costs
 /// one small read.
@@ -802,6 +817,10 @@ impl diroxide_meta::Reader for ImageFields {
 
     fn cost(&self) -> Cost {
         Cost::Background
+    }
+
+    fn keys(&self) -> &'static [&'static str] {
+        &FIELD_KEYS
     }
 
     fn accepts(&self, request: &ReadRequest<'_>) -> bool {

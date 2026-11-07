@@ -488,6 +488,36 @@ mod tests {
         }
     }
 
+    /// VL's request 2: the image words and ffprobe's reader name their
+    /// keys, so a column finds its cost class and a failed read's cells
+    /// say why.
+    #[test]
+    fn the_preview_readers_name_their_keys() {
+        let pipeline = pipeline(&SharedTools(Arc::new(diroxide_vfs::NoTools)));
+        assert_eq!(pipeline.cost_of("image.dimensions"), Some(Cost::Background));
+        assert_eq!(
+            pipeline.cost_of("image.orientation"),
+            Some(Cost::Background)
+        );
+        assert_eq!(pipeline.cost_of("media.audio.1"), Some(Cost::OnDemand));
+        assert_eq!(pipeline.cost_of("media.bit_rate"), Some(Cost::OnDemand));
+        let keys = pipeline.keys();
+        assert!(keys.contains(&("image.shown", Cost::Background, "image")));
+        assert!(keys.contains(&("media.duration", Cost::OnDemand, "media")));
+        let outcomes: Vec<Outcome> = vec![(
+            "image",
+            Err(MetaError::unreadable("the file ends too soon")),
+        )];
+        assert_eq!(
+            pipeline.cell("image.dimensions", &outcomes).words(),
+            "unreadable: the file ends too soon"
+        );
+        assert_eq!(
+            pipeline.cell("media.duration", &outcomes).words(),
+            "not available"
+        );
+    }
+
     #[test]
     fn an_unread_reader_is_said_by_what_it_reads() {
         let outcomes: Vec<Outcome> = vec![

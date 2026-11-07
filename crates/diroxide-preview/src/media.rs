@@ -699,6 +699,23 @@ impl Previewer for MediaPreviewer {
     }
 }
 
+/// The keys of the fields ffprobe's reader gives, each stream's first
+/// of its kind among them, for the column chooser and a failed read's
+/// cells (VL's request 2, built in lane VA).
+pub const FIELD_KEYS: [&str; 11] = [
+    "media.title",
+    "media.artist",
+    "media.album",
+    "media.duration",
+    "media.dimensions",
+    "media.video.1",
+    "media.audio.1",
+    "media.subtitles.1",
+    "media.cover_picture.1",
+    "media.data.1",
+    "media.bit_rate",
+];
+
 /// The ffprobe reader as a metadata reader (R30 commit 12's joint), on
 /// demand, since it starts a program. The reader holds its runner: the
 /// trait's `read` carries no context.
@@ -733,6 +750,10 @@ impl diroxide_meta::Reader for MediaFields {
 
     fn cost(&self) -> Cost {
         Cost::OnDemand
+    }
+
+    fn keys(&self) -> &'static [&'static str] {
+        &FIELD_KEYS
     }
 
     fn accepts(&self, request: &ReadRequest<'_>) -> bool {
