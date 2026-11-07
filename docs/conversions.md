@@ -43,7 +43,7 @@ Each output is written under a temporary name in the target folder, `.diro-part-
 
 The report lists what happened, failures first. diroxide keeps the last 20 reports.
 
-- Conversion reports (File menu and palette) lists the last 20, newest first, each row its summary with when it ended. The title says how many: "Conversion reports: 1 kept". Enter reads one: "Made: notes.org from notes.md", the failures, and "Finished:" with the date and time. With none: "No conversion reports yet".
+- Conversion reports (File menu and palette) lists the last 20, newest first, each row its summary with when it ended. The title says how many: "Conversion reports: 1 kept". Enter reads one: the summary, then the failures, the refusals, the skips and any notes, then what was made, "Made: notes.org from notes.md", then "Recipe:" and "Tool:", and last "Finished:" with the date and time. With none: "No conversion reports yet".
 - Ctrl+Z undoes the whole conversion: "Undid conversion: 1 item is in the trash". The files it made go to the trash, and any folder it made that is now empty is removed. Undo of a conversion works after a restart.
 - The report holds names, never full paths. There is no Save report command in the program; `diro convert --report FILE` writes one.
 
