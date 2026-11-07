@@ -180,6 +180,49 @@ pack = [
   { asset = "universal-apple-darwin/diro-git", as = "" },
 ]
 
+# The encryption plugin (alpha 4; R29 part 3, ADR-0015): age's encrypt and
+# decrypt in process, built by the release workflow from its own
+# workspace in plugins/diro-crypt, as the git plugin is, and left out of
+# the list without its assets. It needs no tool: age runs inside it.
+[[component]]
+id = "diro-crypt"
+title = "Encryption plugin"
+kind = "plugin"
+version = "0.1.0-alpha.3"
+license = "Apache-2.0 OR MIT"
+credit = "The diroxide project"
+features = ["encryption"]
+protocol = 1
+min_diro = "0.1.0-alpha.3"
+action = "unpack"
+
+[[component.file]]
+name = "diro-crypt-0.1.0-alpha.3-x86_64-pc-windows-msvc.zip"
+target = "x86_64-pc-windows-msvc"
+exec = "diro-crypt.exe"
+pack = [
+  { from = "plugins/diro-crypt/plugin.toml", as = "" },
+  { asset = "x86_64-pc-windows-msvc/diro-crypt.exe", as = "" },
+]
+
+[[component.file]]
+name = "diro-crypt-0.1.0-alpha.3-x86_64-unknown-linux-gnu.zip"
+target = "x86_64-unknown-linux-gnu"
+exec = "diro-crypt"
+pack = [
+  { from = "plugins/diro-crypt/plugin.toml", as = "" },
+  { asset = "x86_64-unknown-linux-gnu/diro-crypt", as = "" },
+]
+
+[[component.file]]
+name = "diro-crypt-0.1.0-alpha.3-universal-apple-darwin.zip"
+target = "universal-apple-darwin"
+exec = "diro-crypt"
+pack = [
+  { from = "plugins/diro-crypt/plugin.toml", as = "" },
+  { asset = "universal-apple-darwin/diro-crypt", as = "" },
+]
+
 # The helper programs (alpha 4; R28 1.4; the owner's answers 116 and 117).
 # Each file is the publisher's own, at the publisher's own address, and
 # this project hosts no copy (the owner's private mirror keeps old pins).

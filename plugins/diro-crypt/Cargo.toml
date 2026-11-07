@@ -1,0 +1,91 @@
+# The encryption plugin (alpha 4; R29 part 3, R30 commit 71): age's
+# Encrypt with a passphrase, Encrypt for a recipient and Decrypt, in
+# process, every secret asked through diroxide's own hidden fields. A
+# workspace of its own, outside the main one (plan section 5.8, item 3):
+# spike ES1 found `cargo deny` not clean on age's tree, so by the owner's
+# answer 115 age lives here and never in the main binary
+# (docs/adr/0015-encryption.md).
+#
+#   cargo build --manifest-path plugins/diro-crypt/Cargo.toml
+#
+# age 0.12.1 with `armor` only: `ssh` (the rsa crate's open timing
+# advisory, RUSTSEC-2023-0071), `plugin`, `async` and `cli-common` stay
+# off. Pure Rust, no C build (`cargo tree -i cc --target all` finds none).
+#
+# Two advisories ride on age's tree, as ES1 found, and are why age is not
+# in the main workspace: crypto-bigint 0.5.5 (through p256 and
+# elliptic-curve 0.13, under hpke, for the tag recipients this plugin
+# only encrypts to) and basic-toml (unmaintained, a build-time dependency
+# of the translation macros). Neither touches the passphrase or the X25519
+# path the plugin decrypts with. Fixed by an age release on the RustCrypto
+# 0.14 elliptic curves and a translation stack without basic-toml; the
+# plugin moves to it when it is published (ADR-0015).
+[workspace]
+
+[package]
+name = "diro-crypt"
+description = "The encryption plugin of diroxide: age's encrypt and decrypt in process, every secret asked in hidden fields."
+version = "0.1.0-alpha.3"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+publish = false
+
+[dependencies]
+age = { version = "=0.12.1", default-features = false, features = ["armor"] }
+diroxide-core = { path = "../../crates/diroxide-core", version = "0.1.0-alpha.3" }
+# The wire types, the session's lifecycle and the error kinds, shared with
+# the host so the two never drift (pure Rust).
+diroxide-plugins = { path = "../../crates/diroxide-plugins", version = "0.1.0-alpha.3" }
+# The local provider's committing writer: an unfinished name in the target
+# folder and a rename that never replaces (the engine's own road).
+diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.3" }
+# The envelopes' serialization, as the host's and the other plugins'.
+serde = "1.0.228"
+serde_json = "1.0.146"
+# Wipes a decrypted identity file's bytes from memory; already in age's
+# tree.
+zeroize = "1.8.1"
+
+[dev-dependencies]
+proptest = "1.11.0"
+tempfile = "3.27.0"
+
+[[bin]]
+name = "diro-crypt"
+path = "src/main.rs"
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_qualifications = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "warn"
+expect_used = "warn"
+
+# Lean debug builds that share a cache, as the main workspace's; scrypt
+# runs at full speed in tests, where a passphrase is derived.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false
+
+[profile.dev.package.scrypt]
+opt-level = 3
+
+[profile.dev.package.salsa20]
+opt-level = 3
+
+[profile.dev.package.pbkdf2]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3
