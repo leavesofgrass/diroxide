@@ -21,7 +21,7 @@ use std::io::{self, Cursor, Read, SeekFrom, Write};
 
 use diroxide_vfs::ReadSeek;
 
-use super::xmldepth::{MAX_NESTING, NESTING_NOTE, limit_depth};
+use super::xmldepth::{FLAT_ELEMENT, MAX_NESTING, NESTING_NOTE, deepest, limit_depth_with};
 use super::{DocError, DocView, ReadOptions};
 
 /// The caps of the container read path. See the module documentation.
@@ -153,9 +153,12 @@ pub fn check(bytes: Vec<u8>, caps: &ContainerCaps, what: &str) -> Result<Checked
             let count = part.len() as u64;
             if count <= cap.min(left)
                 && let Ok(text) = String::from_utf8(part)
-                && let Some(flattened) = limit_depth(&text, caps.max_nesting)
+                && deepest(&text) > caps.max_nesting
             {
-                flat.push((n, name, flattened));
+                let (open, close) = flat_wrapper(&name, &text);
+                if let Some(flattened) = limit_depth_with(&text, caps.max_nesting, &open, &close) {
+                    flat.push((n, name, flattened));
+                }
             }
             count
         } else {
@@ -192,6 +195,55 @@ pub fn check(bytes: Vec<u8>, caps: &ContainerCaps, what: &str) -> Result<Checked
         members,
         unpacked,
     })
+}
+
+/// The prefix of an XML part's root element: `w` for `<w:document>`.
+fn root_prefix(text: &str) -> Option<&str> {
+    let mut rest = text;
+    loop {
+        let at = rest.find('<')?;
+        rest = &rest[at + 1..];
+        if rest.starts_with(['?', '!']) {
+            continue;
+        }
+        let name = rest
+            .split(|c: char| c.is_whitespace() || c == '>' || c == '/')
+            .next()?;
+        return name.split_once(':').map(|(prefix, _)| prefix);
+    }
+}
+
+/// The prefix a part binds to a namespace: `text` for OpenDocument's
+/// text namespace.
+fn prefix_of<'a>(text: &'a str, namespace: &str) -> Option<&'a str> {
+    let at = text.find(&format!("=\"{namespace}\""))?;
+    let before = &text[..at];
+    let start = before.rfind("xmlns:")? + "xmlns:".len();
+    Some(&before[start..]).filter(|p| !p.is_empty() && !p.contains(char::is_whitespace))
+}
+
+/// The wrapper a flattened part's leaves go in, so the format's reader
+/// takes them as its own text: a Word part's in a paragraph and a run, an
+/// OpenDocument part's in a paragraph, a page's in a paragraph; any other
+/// part's in [`FLAT_ELEMENT`].
+fn flat_wrapper(name: &str, text: &str) -> (String, String) {
+    const ODF_TEXT: &str = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
+    let lower = name.to_ascii_lowercase();
+    if lower.starts_with("word/") {
+        let w = root_prefix(text).unwrap_or("w");
+        return (format!("<{w}:p><{w}:r>"), format!("</{w}:r></{w}:p>"));
+    }
+    if lower == "content.xml" || lower.ends_with("/content.xml") {
+        let t = prefix_of(text, ODF_TEXT).unwrap_or("text");
+        return (format!("<{t}:p>"), format!("</{t}:p>"));
+    }
+    if [".xhtml", ".html", ".htm"]
+        .iter()
+        .any(|e| lower.ends_with(e))
+    {
+        return ("<p>".to_owned(), "</p>".to_owned());
+    }
+    (format!("<{FLAT_ELEMENT}>"), format!("</{FLAT_ELEMENT}>"))
 }
 
 /// The package with the flattened parts written in place of the deep

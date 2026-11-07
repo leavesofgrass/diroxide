@@ -143,9 +143,11 @@ fn a_deep_part_is_flattened_and_the_package_rewritten() {
         .unwrap()
         .read_to_string(&mut part)
         .unwrap();
-    // The document node, the flat wrapper, a leaf and its text.
-    assert!(depth(&part) <= MAX_NESTING + 4, "{}", depth(&part));
+    // The document node, the wrapper's paragraph and run, a leaf and its
+    // text: a Word part's leaves go in a paragraph, so carta reads them.
+    assert!(depth(&part) <= MAX_NESTING + 5, "{}", depth(&part));
     assert!(part.contains("<w:t>deep</w:t>"));
+    assert!(part.contains("<w:p><w:r>"));
     let mut copied = Vec::new();
     zip.by_name("word/media/image1.png")
         .unwrap()

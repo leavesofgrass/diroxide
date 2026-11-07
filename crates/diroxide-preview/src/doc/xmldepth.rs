@@ -38,21 +38,29 @@ fn after(bytes: &[u8], from: usize, pattern: &[u8]) -> Option<usize> {
         .map(|at| from + at + pattern.len())
 }
 
-/// The part as tokens: each a kind and its byte range. Markup left open
-/// at the end is text, which the parser then refuses as it would anyway.
-fn tokens(text: &str) -> Vec<(Token, usize, usize)> {
-    let b = text.as_bytes();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < b.len() {
+/// The part's tokens, one at a time: each a kind and its byte range.
+/// Markup left open at the end is text, which the parser then refuses as
+/// it would anyway.
+struct Tokens<'a> {
+    b: &'a [u8],
+    i: usize,
+}
+
+impl Iterator for Tokens<'_> {
+    type Item = (Token, usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (b, i) = (self.b, self.i);
+        if i >= b.len() {
+            return None;
+        }
         if b[i] != b'<' {
             let end = b[i..]
                 .iter()
                 .position(|&c| c == b'<')
                 .map_or(b.len(), |p| i + p);
-            out.push((Token::Text, i, end));
-            i = end;
-            continue;
+            self.i = end;
+            return Some((Token::Text, i, end));
         }
         let rest = &b[i..];
         let found = if rest.starts_with(b"<!--") {
@@ -97,26 +105,69 @@ fn tokens(text: &str) -> Vec<(Token, usize, usize)> {
         };
         match found {
             Some((kind, end)) => {
-                out.push((kind, i, end));
-                i = end;
+                self.i = end;
+                Some((kind, i, end))
             }
             None => {
-                out.push((Token::Text, i, b.len()));
-                break;
+                self.i = b.len();
+                Some((Token::Text, i, b.len()))
             }
         }
     }
-    out
+}
+
+fn tokens(text: &str) -> Tokens<'_> {
+    Tokens {
+        b: text.as_bytes(),
+        i: 0,
+    }
+}
+
+/// How deep the part's elements nest, read in one pass that keeps
+/// nothing: what the container read path checks every XML part with
+/// before it pays for a rewrite.
+pub fn deepest(text: &str) -> usize {
+    let mut open = 0usize;
+    let mut deepest = 0usize;
+    for (kind, ..) in tokens(text) {
+        match kind {
+            Token::Open { empty: false } => {
+                open += 1;
+                deepest = deepest.max(open);
+            }
+            Token::Close => open = open.saturating_sub(1),
+            Token::Open { empty: true } | Token::Text | Token::Other => {}
+        }
+    }
+    deepest
 }
 
 /// The part rewritten so no element nests deeper than `limit` (plus the
-/// flat wrapper and its leaves), or `None` when it already does not.
+/// flat wrapper and its leaves), or `None` when it already does not. The
+/// leaves go inside one [`FLAT_ELEMENT`].
 pub fn limit_depth(text: &str, limit: usize) -> Option<String> {
-    let tokens = tokens(text);
-    // First pass: the deepest nesting, and which elements hold elements.
+    let open = format!("<{FLAT_ELEMENT}>");
+    let close = format!("</{FLAT_ELEMENT}>");
+    limit_depth_with(text, limit, &open, &close)
+}
+
+/// [`limit_depth`] with the wrapper's own open and close tags, so a
+/// format's reader takes the leaves as its own text: a Word part's leaves
+/// inside a paragraph and a run (`<w:p><w:r>`), an OpenDocument part's
+/// inside a paragraph (`<text:p>`).
+pub fn limit_depth_with(
+    text: &str,
+    limit: usize,
+    open_tag: &str,
+    close_tag: &str,
+) -> Option<String> {
+    if deepest(text) <= limit {
+        return None;
+    }
+    let tokens: Vec<(Token, usize, usize)> = tokens(text).collect();
+    // First pass: which elements hold elements.
     let mut holds = vec![false; tokens.len()];
     let mut open: Vec<usize> = Vec::new();
-    let mut deepest = 0usize;
     for (n, &(kind, ..)) in tokens.iter().enumerate() {
         match kind {
             Token::Open { empty } => {
@@ -125,7 +176,6 @@ pub fn limit_depth(text: &str, limit: usize) -> Option<String> {
                 }
                 if !empty {
                     open.push(n);
-                    deepest = deepest.max(open.len());
                 }
             }
             Token::Close => {
@@ -133,9 +183,6 @@ pub fn limit_depth(text: &str, limit: usize) -> Option<String> {
             }
             Token::Text | Token::Other => {}
         }
-    }
-    if deepest <= limit {
-        return None;
     }
     // Second pass: copy, leaving out the tags of holders below the limit.
     let mut out = String::with_capacity(text.len());
@@ -150,9 +197,7 @@ pub fn limit_depth(text: &str, limit: usize) -> Option<String> {
                     true
                 } else {
                     if !flat {
-                        out.push('<');
-                        out.push_str(FLAT_ELEMENT);
-                        out.push('>');
+                        out.push_str(open_tag);
                         flat = true;
                     }
                     // Leaves only: they hold no elements, so what is kept
@@ -173,9 +218,7 @@ pub fn limit_depth(text: &str, limit: usize) -> Option<String> {
                 let level = kept.len();
                 let was_kept = kept.pop().unwrap_or(true);
                 if level == limit && flat {
-                    out.push_str("</");
-                    out.push_str(FLAT_ELEMENT);
-                    out.push('>');
+                    out.push_str(close_tag);
                     flat = false;
                 }
                 if was_kept {
@@ -188,9 +231,7 @@ pub fn limit_depth(text: &str, limit: usize) -> Option<String> {
         }
     }
     if flat {
-        out.push_str("</");
-        out.push_str(FLAT_ELEMENT);
-        out.push('>');
+        out.push_str(close_tag);
     }
     Some(out)
 }
@@ -229,6 +270,22 @@ mod tests {
     #[test]
     fn a_shallow_part_is_left_alone() {
         assert_eq!(limit_depth(&nested(5, "<t>x</t>"), 8), None);
+        assert_eq!(deepest(&nested(5, "<t>x</t><br/>")), 7);
+        assert_eq!(deepest("<a><!-- <b> --><![CDATA[<c>]]></a>"), 1);
+    }
+
+    #[test]
+    fn a_word_part_keeps_its_deep_text_in_a_paragraph() {
+        let mut part = String::from("<w:body>");
+        part.push_str(&"<w:sdt>".repeat(300));
+        part.push_str("<w:p><w:r><w:t>deep</w:t></w:r></w:p>");
+        part.push_str(&"</w:sdt>".repeat(300));
+        part.push_str("</w:body>");
+        let out = limit_depth_with(&part, 10, "<w:p><w:r>", "</w:r></w:p>").unwrap();
+        let at = out.find("<w:p><w:r>").unwrap();
+        assert!(out[at..].contains("<w:t>deep</w:t>"), "{out}");
+        assert!(out[at..].contains("</w:r></w:p>"), "{out}");
+        assert!(deepest(&out) <= 13);
     }
 
     #[test]
