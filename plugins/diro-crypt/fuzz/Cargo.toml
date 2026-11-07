@@ -1,0 +1,46 @@
+# The encryption plugin's fuzz targets (R30 commit 71), a workspace of its
+# own: libFuzzer is C++, so it never enters the plugin's own build. Run on
+# a nightly toolchain, from plugins/diro-crypt:
+#
+#   cargo fuzz run header fuzz/corpus/header
+#
+# Each target's body is a plain function in diro_crypt::fuzzing, which the
+# plugin's own tests replay on seeds made at test time, cut and bent
+# (tests/it/fuzz.rs).
+
+[workspace]
+
+[package]
+name = "diro-crypt-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+diro-crypt = { path = ".." }
+
+[[bin]]
+name = "recipients"
+path = "fuzz_targets/recipients.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "form_answer"
+path = "fuzz_targets/form_answer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "header"
+path = "fuzz_targets/header.rs"
+test = false
+doc = false
+bench = false
