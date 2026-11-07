@@ -135,7 +135,7 @@ fn removing_two_members_asks_says_the_cost_and_trashes_the_old() {
         ]
     );
     assert_fits(&outcome.lines);
-    assert_eq!(world.fake.trash_contents(), [old.clone()]);
+    assert_eq!(world.fake.trash_contents(), std::slice::from_ref(&old));
     let new = world.fake.contents(&archive).unwrap();
     assert_eq!(
         names(&new),
@@ -155,8 +155,8 @@ fn removing_two_members_asks_says_the_cost_and_trashes_the_old() {
     }
     assert!(world.fake.unfinished().is_empty());
     // The undo record holds the new archive and the old one in the trash.
-    assert_eq!(outcome.report.undo.created, [archive.clone()]);
-    assert_eq!(outcome.report.undo.trashed, [archive.clone()]);
+    assert_eq!(outcome.report.undo.created, std::slice::from_ref(&archive));
+    assert_eq!(outcome.report.undo.trashed, std::slice::from_ref(&archive));
     // The panel reads the new archive, not a stale index.
     assert!(world.rows(&archive.clone().into_archive()).unwrap().len() == 2);
 }
