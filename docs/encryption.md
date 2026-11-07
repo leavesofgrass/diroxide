@@ -173,7 +173,7 @@ Verify checksum looks for `NAME.asc`, `NAME.sig` and `NAME.minisig` beside the l
 
 ## What is never stored
 
-- A passphrase is typed into a hidden field, kept in memory while a command needs it, wiped when the command ends, and written nowhere: not a setting, a file, a log, a message or the system's keyring.
+- A passphrase is typed into a hidden field, kept in memory while a command needs it, and written nowhere: not a setting, a file, a log, a message or the system's keyring. The age plugin wipes it when the command ends. For gpg, diroxide wipes its own copy, but the bytes it hands gpg on its standard input travel in a request that does not wipe its copy yet. That is a known limit, and the request is never printed, logged or said.
 - An age identity file is asked for by its path each time, read for that one command, and not remembered.
 - A minisign public key is asked for each time.
 - gpg gets a passphrase on its standard input only, never in a command line or an environment variable. One passphrase that worked is held for the rest of that job, once for each key, so ten files for one key ask once.
@@ -198,6 +198,7 @@ gpg keeps a small helper, its agent, that remembers a passphrase for a while. On
 
 - The age commands need the Encryption plugin, and the plugin writes the files itself. The program records the new files for Undo from the plugin's answer, and that record lives for the session only: it does not survive a restart.
 - ASCII armor is offered for age only. gpg's armor is not offered, so every gpg result is `.gpg` or `.sig`.
+- A passphrase typed for gpg passes through the request that starts gpg, as bytes that are not wiped when the request is dropped. The age plugin wipes its copy.
 - SSH keys, plugin keys and hardware keys are refused for age. The age program is not used as a road for them.
 - A gpg run that needs its agent is slow on Windows, as above, and a passphrase is not remembered between commands there.
 - A minisign public key is asked every time, and Verify checksum does not check a list's minisign signature.
