@@ -456,14 +456,20 @@ impl<'a> Planner<'a> {
             None
         };
         let not_local = place.local_path().is_none();
-        let through_spool = not_local || misread_by(&recipe.tool, &entry.name);
+        let misread = misread_by(&recipe.tool, &entry.name);
+        let through_spool = not_local || misread;
         if (through_spool || self.request.destination.local_path().is_none())
             && self.request.spool.is_none()
         {
-            self.plan.refused.push((
-                place.clone(),
-                "not on this computer, and no spool folder".to_owned(),
-            ));
+            let why = if misread && !not_local {
+                format!(
+                    "{} misreads its name, and no spool folder",
+                    self.plan.tool_name
+                )
+            } else {
+                "not on this computer, and no spool folder".to_owned()
+            };
+            self.plan.refused.push((place.clone(), why));
             return;
         }
         let base = format!("{}.{}", stem_of(&entry.name), recipe.to);

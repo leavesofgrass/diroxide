@@ -128,10 +128,7 @@ pub fn read_conversions(text: &str, problems: &mut Vec<ConfigProblem>) -> Conver
         if kept.iter().any(|earlier| earlier.id == recipe.id) {
             say(
                 problems,
-                format!(
-                    "Recipe {}: its id is used twice, so the second is left out.",
-                    recipe.id
-                ),
+                format!("Recipe {}: id used twice, the second left out.", recipe.id),
             );
             continue;
         }
@@ -200,7 +197,7 @@ argv = ["{typed_input}", "{output}"]
                 "Recipe png-to-jpeg: {size} is not a placeholder.",
                 "Recipe listless: invalid type: string \"{input} {output}\", expected a sequence.",
                 "Recipe 4: it has no id.",
-                "Recipe image-to-jpeg: its id is used twice, so the second is left out.",
+                "Recipe image-to-jpeg: id used twice, the second left out.",
             ]
         );
         assert!(problems.iter().all(|p| p.file == Paths::CONVERSIONS));

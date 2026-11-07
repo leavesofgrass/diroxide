@@ -747,7 +747,7 @@ impl Engine {
             ConflictAction::Replace | ConflictAction::ReplaceIfNewer => {
                 Shared::lock(&shared.report).job.warnings.push((
                     item.source.clone(),
-                    "Conversions never replace a file: kept both".to_owned(),
+                    "kept both, since a conversion never replaces a file".to_owned(),
                 ));
                 keep.map_or_else(
                     || Answer::Stop(Outcome::Failed("no free name was found".to_owned())),

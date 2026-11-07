@@ -91,7 +91,8 @@ impl ConvertReport {
     /// The report's rows, failures first: the summary; each failure
     /// ("Failed: scan-004.pdf, ImageMagick is not installed"); each
     /// refusal; each skip ("Skipped song.flac: output exists"); each
-    /// warning; each output made ("Made: song.mp3 from song.flac"); then
+    /// note ("Note: a.png, kept both, since a conversion never replaces a
+    /// file"); each output made ("Made: song.mp3 from song.flac"); then
     /// the recipe, the tool and when it ended, in full.
     pub fn lines(&self, clock: &dyn Clock) -> Vec<String> {
         let mut out = vec![self.summary()];
@@ -105,7 +106,7 @@ impl ConvertReport {
             out.push(format!("Skipped {}: {reason}", said(place)));
         }
         for (place, warning) in &self.job.warnings {
-            out.push(format!("{warning}: {}", said(place)));
+            out.push(format!("Note: {}, {warning}", said(place)));
         }
         for (source, output) in &self.made {
             out.push(format!("Made: {} from {}", said(output), said(source)));

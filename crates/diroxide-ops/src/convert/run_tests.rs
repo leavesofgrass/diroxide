@@ -472,7 +472,18 @@ fn the_ask_policy_asks_and_an_answer_to_replace_keeps_both() {
     assert_eq!(report.made[0].1.name(), Some("a (2).jpg"));
     assert_eq!(
         report.job.warnings[0].1,
-        "Conversions never replace a file: kept both"
+        "kept both, since a conversion never replaces a file"
+    );
+    let clock = diroxide_core::FixedClock::new(
+        diroxide_core::Timestamp::from_unix(1_794_015_600, 0),
+        diroxide_core::UtcOffset::from_seconds(-8 * 3600),
+    );
+    let lines = report.lines(&clock);
+    assert!(
+        lines.contains(
+            &"Note: a.png, kept both, since a conversion never replaces a file".to_owned()
+        ),
+        "{lines:?}"
     );
     // A hot folder's job never asks: keep both, at the plan.
     let unattended = req.from(JobOrigin::HotFolder("scans".into()));
