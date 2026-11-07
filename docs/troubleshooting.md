@@ -146,7 +146,7 @@ Windows lets only a program with the right to make symbolic links do so. Turn on
 - "gpg not found. Install GnuPG first." The gpg commands need GnuPG on your computer. `diro doctor --check gpg` says where diroxide looked, and [Tools and diro doctor](tools.md) has the install command for your system.
 - "Key not certified: sign it in your key tool, or choose another". gpg will not encrypt to a key you have not certified, and diroxide never changes how far gpg trusts a key. Certify the key in your own key tool, or choose another recipient.
 - "Cannot check: public key is missing", then "diroxide does not fetch keys." Import the signer's key into your keyring yourself, then check again. A lookup on a server would send an address away.
-- "Gave up on report.pdf.age: 3 wrong tries". A passphrase is asked three times for one file. Start the command again with the right one.
+- "Gave up on report.pdf.age: 3 wrong tries", or for gpg "Could not decrypt report.pdf.gpg: wrong passphrase 3 times". A passphrase is asked three times for one file. Start the command again with the right one.
 - "Could not decrypt report.pdf.age", then "It asks for more work than diroxide allows. It may be hostile." The file is refused on purpose, before anything is asked, because opening it would take far longer than a passphrase should.
 - A list's signature says "Cannot check: no public key given". Verify checksum cannot check a minisign signature. Focus the list and use Verify signature, which asks for the key.
 - On Windows a gpg command waits several seconds for gpg's agent, and asks for a passphrase again in the next command. [Encryption and signatures](encryption.md#on-windows) says why.
