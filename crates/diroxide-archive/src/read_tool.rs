@@ -173,6 +173,10 @@ pub struct SltListing {
     pub items: Vec<SltItem>,
 }
 
+/// The archive types, as 7-Zip names them, whose `CRC` is a CRC-32 of
+/// the member's bytes.
+const CRC32_TYPES: [&str; 6] = ["Rar", "Rar5", "Arj", "zip", "7z", "Cab"];
+
 /// The line that ends the archive's own block and starts the items.
 const ITEMS_START: &str = "----------";
 
@@ -304,6 +308,13 @@ pub fn slt_time(text: &str) -> Option<i64> {
 /// by number, so a member is asked for by the path 7-Zip printed.
 pub(crate) fn index_of(listing: &SltListing, limits: &Limits) -> Result<Index, ArchiveError> {
     let mut builder = IndexBuilder::new(*limits);
+    // Only these types list a CRC-32 the limiter chain may hold a member
+    // to: an LZH lists its CRC-16 and a cpio its own sum in the same key.
+    let crc32_kept = listing.kind.as_deref().is_some_and(|kind| {
+        CRC32_TYPES
+            .iter()
+            .any(|known| kind.eq_ignore_ascii_case(known))
+    });
     for (n, item) in listing.items.iter().enumerate() {
         let kind = if item.folder {
             RecordKind::Folder
@@ -329,7 +340,7 @@ pub(crate) fn index_of(listing: &SltListing, limits: &Limits) -> Result<Index, A
             packed: item.packed,
             modified: item.modified,
             mode: item.mode,
-            crc32: item.crc32,
+            crc32: item.crc32.filter(|_| crc32_kept),
             link_target: item.link.clone(),
             locator: if kind == RecordKind::File {
                 Locator::Tool(n as u32)
@@ -851,9 +862,22 @@ mod tests {
         assert_eq!(notes.mode, Some(0o644));
         assert_eq!(notes.modified, Some(1_793_969_323));
         assert_eq!(listing.items[2].link.as_deref(), Some("docs"));
-        // An LZH's CRC-16 is not taken for a CRC-32.
+        // An LZH's CRC-16 is not taken for a CRC-32, however it is
+        // printed, and a type not known to list CRC-32 is not trusted.
         let lzh = parse_slt("----------\nPath = a.txt\nSize = 1\nCRC = 1A2B\n");
         assert_eq!(lzh.items[0].crc32, None);
+        let padded =
+            parse_slt("--\nType = Lzh\n\n----------\nPath = a.txt\nSize = 1\nCRC = 00001A2B\n");
+        assert_eq!(padded.items[0].crc32, Some(0x1A2B));
+        let index = index_of(&padded, &Limits::default()).unwrap();
+        let id = index.find("a.txt").unwrap();
+        assert!(
+            !index
+                .record(id)
+                .unwrap()
+                .flags
+                .contains(RecordFlags::HAS_CRC)
+        );
         let index = index_of(&listing, &Limits::default()).unwrap();
         assert_eq!(index.summary().members, 2);
         let id = index.find("docs/notes.txt").unwrap();
