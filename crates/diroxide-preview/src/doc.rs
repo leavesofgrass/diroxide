@@ -132,8 +132,10 @@ pub enum Reader {
 }
 
 impl Reader {
-    /// Whether the reader reads a zip package through the container read
-    /// path ([`read_seekable`]) rather than the first bytes.
+    /// Whether the reader reads the whole file through a seekable source
+    /// ([`read_seekable`]) rather than its first bytes: the zip packages
+    /// through the container read path, and the old Excel workbooks,
+    /// which are not zip packages, within the same cap.
     pub fn is_package(self) -> bool {
         match self {
             Reader::Carta(format) => format.is_package(),

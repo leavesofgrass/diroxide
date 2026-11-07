@@ -99,7 +99,7 @@ impl Listing {
         }
         if self.locked > 0 {
             rows.push(DetailRow::new(
-                "archive.locked",
+                "archive.encrypted",
                 "Locked",
                 count_words(self.locked, "entry", "entries"),
                 DetailGroup::Flags,

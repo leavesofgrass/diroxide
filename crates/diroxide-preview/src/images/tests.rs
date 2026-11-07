@@ -219,29 +219,27 @@ fn a_turned_photo_says_its_shown_size_and_its_orientation() {
     let said = rows(&f);
     assert!(said.contains(&"Dimensions: 3024 by 4032, as shown".to_owned()));
     assert!(said.contains(&"Stored size: 4032 by 3024".to_owned()));
-    assert!(said.contains(&"Orientation: rotated a quarter turn clockwise".to_owned()));
+    assert!(said.contains(&"Orientation: turned right".to_owned()));
     assert!(said.contains(&"Shape: portrait, about 3 to 4".to_owned()));
 }
 
 #[test]
-fn a_location_and_a_description_are_read_and_the_location_is_private() {
+fn a_location_and_a_description_are_read_and_the_place_is_left_to_the_photo_reader() {
     let exif = exif_block(Some("Ada Example\n at the\u{202E} harbor"), 1, true);
     let f = facts(jpeg_header(4032, 3024, Some(&exif))).unwrap();
     assert_eq!(f.description.as_deref(), Some("Ada Example at the? harbor"));
     let line = f.sentence(Some(3_100_000), &PixelGuard::DEFAULT);
     assert_eq!(line, "JPEG, 4032 by 3024, has location, 3.1 MB");
     assert_eq!(line.chars().count(), 40);
+    assert_eq!(f.location.as_deref(), Some("45.50 north, 122.68 west"));
     let fields = f.fields(&PixelGuard::DEFAULT);
-    let location = fields.iter().find(|f| f.key == "image.location").unwrap();
-    assert!(location.private);
-    assert_eq!(location.value, "45.50 north, 122.68 west");
-    let privacy = fields.iter().find(|f| f.key == "image.privacy").unwrap();
-    assert_eq!(privacy.line(), "Privacy: location");
-    assert!(
-        !privacy.private,
-        "the row says what is private, not the value"
-    );
     assert_eq!(fields[0].line(), "Description: Ada Example at the? harbor");
+    assert!(
+        fields
+            .iter()
+            .all(|f| !f.key.contains("gps") && !f.key.contains("location")),
+        "the place is the photo reader's field"
+    );
 }
 
 #[test]
@@ -281,6 +279,7 @@ fn the_eight_orientations_say_what_the_image_crate_does() {
         f.height = 2;
         f.orientation = value;
         assert_eq!(f.shown_size(), shown.dimensions(), "{value}");
+        fits(&format!("Orientation: {}", orientation_row(value)));
     }
 }
 
@@ -494,6 +493,9 @@ fn shapes_and_colors_in_words() {
         rgba.words(),
         "Color: full color, 16 bits, transparency".to_owned(),
         "Color: CMYK, 16 bits, transparency".to_owned(),
+        "Color: palette, 8 bits, transparency".to_owned(),
+        "Animation: animated, frames not counted".to_owned(),
+        "Stored size: 32768 by 32768".to_owned(),
         "Shape: landscape, about 16 to 9".to_owned(),
         "Dimensions: 32768 by 32768, as shown".to_owned(),
         "Privacy: location, camera serial".to_owned(),

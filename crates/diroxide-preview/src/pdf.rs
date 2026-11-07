@@ -119,9 +119,9 @@ impl PdfProperties {
     pub fn fields(&self) -> Vec<Field> {
         let mut out = Vec::new();
         for (key, label, value) in [
-            ("pdf.title", "Title", &self.title),
-            ("pdf.author", "Author", &self.author),
-            ("pdf.subject", "Subject", &self.subject),
+            ("doc.title", "Title", &self.title),
+            ("doc.author", "Author", &self.author),
+            ("doc.subject", "Subject", &self.subject),
         ] {
             if let Some(value) = value {
                 out.push(Field::new(key, label, value, DetailGroup::Content));
@@ -129,7 +129,7 @@ impl PdfProperties {
         }
         if self.pages > 0 {
             out.push(Field::new(
-                "pdf.pages",
+                "doc.pages",
                 "Pages",
                 diroxide_core::format::grouped(u64::from(self.pages)),
                 DetailGroup::Content,
@@ -137,15 +137,15 @@ impl PdfProperties {
         }
         if self.encrypted {
             out.push(Field::new(
-                "pdf.encrypted",
+                "doc.encrypted",
                 "Encrypted",
                 "yes",
                 DetailGroup::Flags,
             ));
         }
         for (key, label, value) in [
-            ("pdf.creator", "Made with", &self.creator),
-            ("pdf.producer", "Written by", &self.producer),
+            ("doc.application", "Made with", &self.creator),
+            ("doc.producer", "Written by", &self.producer),
         ] {
             if let Some(value) = value {
                 out.push(Field::new(key, label, value, DetailGroup::Source));
@@ -153,7 +153,7 @@ impl PdfProperties {
         }
         if !self.version.is_empty() {
             out.push(Field::new(
-                "pdf.version",
+                "doc.pdf_version",
                 "PDF version",
                 &self.version,
                 DetailGroup::Technical,
@@ -340,7 +340,7 @@ impl Previewer for PdfPreviewer {
                 rows.push(DetailRow::new(
                     "pdf.text",
                     "Text",
-                    "not read here, the file is not on a local disk",
+                    "not read, not on a local disk",
                     DetailGroup::Technical,
                 ));
                 Err(TextError::Failed(String::new()))

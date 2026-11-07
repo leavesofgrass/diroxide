@@ -560,7 +560,7 @@ impl MediaFacts {
             *n += 1;
             let key = format!(
                 "media.{}.{}",
-                label.to_ascii_lowercase().replace(' ', "-"),
+                label.to_ascii_lowercase().replace(' ', "_"),
                 *n
             );
             out.push(Field::new(
@@ -576,7 +576,7 @@ impl MediaFacts {
         }
         if let Some(bits) = self.bit_rate {
             out.push(Field::new(
-                "media.bit-rate",
+                "media.bit_rate",
                 "Bit rate",
                 bit_rate_words(bits),
                 DetailGroup::Technical,
@@ -657,7 +657,7 @@ impl Previewer for MediaPreviewer {
                 [DetailRow::new(
                     "media.tool",
                     "Details",
-                    "ffprobe not found, install FFmpeg",
+                    "ffprobe not found",
                     DetailGroup::Technical,
                 )],
             ));

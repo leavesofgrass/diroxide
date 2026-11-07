@@ -5,8 +5,9 @@
 //! "PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB"; "JPEG, 3024 by 4032, has
 //! location, 3.1 MB"; "GIF, 24 frames, 480 by 270, 1.2 MB"; "JPEG, 20000
 //! by 20000, too large to open". The rows say the author's description,
-//! the shape, the color, the animation and the orientation in words, and
-//! mark a location and a camera's serial number private.
+//! the shape, the color, the animation and the orientation in words; the
+//! camera, the place and the serial number are the metadata crate's
+//! photo reader's rows, so the details view says each once.
 //!
 //! **The pixel guard** ([`PixelGuard`]) stands in front of every path
 //! that could decode pixels: 100 megapixels to open, 32,768 on a side,
@@ -246,12 +247,12 @@ impl Color {
     }
 
     /// The row's words: "full color, 8 bits, transparency", "gray, 8
-    /// bits", "indexed color, 8 bits", "CMYK, 8 bits".
+    /// bits", "palette, 8 bits", "CMYK, 8 bits".
     pub fn words(&self) -> String {
         let model = match self.model {
             ColorModel::Rgb => "full color",
             ColorModel::Gray => "gray",
-            ColorModel::Indexed => "indexed color",
+            ColorModel::Indexed => "palette",
             ColorModel::Cmyk => "CMYK",
         };
         let bits = count_words(u64::from(self.bits), "bit", "bits");
@@ -407,9 +408,13 @@ impl ImageFacts {
         parts.join(", ")
     }
 
-    /// The facts as metadata fields, in the order of facts: the
-    /// description, then what is in it, then privacy, then where it came
-    /// from, then the technical facts.
+    /// The picture's own facts as metadata fields, in the order of facts:
+    /// the description, then what is in it, then the technical facts. The
+    /// camera, the place and the serial number are the metadata crate's
+    /// photo reader's fields (`image.camera`, `image.gps`,
+    /// `image.serial`), read from the same Exif, so the details view
+    /// lists each once; the facts keep them for the sentence's "has
+    /// location" and for the formats that reader does not take.
     pub fn fields(&self, guard: &PixelGuard) -> Vec<Field> {
         let mut out = Vec::new();
         if let Some(text) = &self.description {
@@ -482,48 +487,9 @@ impl ImageFacts {
                 DetailGroup::Content,
             ));
         }
-        let mut private = Vec::new();
-        if self.location.is_some() {
-            private.push("location");
-        }
-        if self.camera_serial.is_some() {
-            private.push("camera serial");
-        }
-        if !private.is_empty() {
-            out.push(Field::new(
-                "image.privacy",
-                "Privacy",
-                private.join(", "),
-                DetailGroup::Flags,
-            ));
-        }
-        if let Some(camera) = &self.camera {
-            out.push(Field::new(
-                "image.camera",
-                "Camera",
-                camera,
-                DetailGroup::Source,
-            ));
-        }
-        if let Some(serial) = &self.camera_serial {
-            out.push(
-                Field::new(
-                    "image.camera-serial",
-                    "Camera serial",
-                    serial,
-                    DetailGroup::Source,
-                )
-                .private(),
-            );
-        }
-        if let Some(place) = &self.location {
-            out.push(
-                Field::new("image.location", "Location", place, DetailGroup::Source).private(),
-            );
-        }
         if self.turned() && self.has_size() {
             out.push(Field::new(
-                "image.stored-size",
+                "image.stored_size",
                 "Stored size",
                 format!("{} by {}", self.width, self.height),
                 DetailGroup::Technical,
@@ -533,7 +499,7 @@ impl ImageFacts {
             out.push(Field::new(
                 "image.orientation",
                 "Orientation",
-                orientation_words(self.orientation).to_lowercase(),
+                orientation_row(self.orientation),
                 DetailGroup::Technical,
             ));
         }
@@ -577,6 +543,23 @@ pub fn orientation_words(orientation: u8) -> &'static str {
         7 => "Quarter turn counterclockwise, mirrored",
         8 => "Rotated a quarter turn counterclockwise",
         _ => "Upright, as stored",
+    }
+}
+
+/// The orientation's row value, short enough that "Orientation:" and
+/// it fit 40 cells: "turned right", "turned left, mirrored", "turned
+/// upside down", "mirrored left to right". A quarter turn is the only
+/// turn Exif writes, so "right" is a quarter turn clockwise.
+pub fn orientation_row(orientation: u8) -> &'static str {
+    match orientation {
+        2 => "mirrored left to right",
+        3 => "turned upside down",
+        4 => "mirrored top to bottom",
+        5 => "turned right, mirrored",
+        6 => "turned right",
+        7 => "turned left, mirrored",
+        8 => "turned left",
+        _ => "upright",
     }
 }
 
