@@ -149,7 +149,14 @@ pub fn answer(registry: &Registry, ask: &DetailsAsk) -> DetailsNote {
 pub fn answer_with(registry: &Registry, ask: &DetailsAsk, cancel: &CancelToken) -> DetailsNote {
     match ask.wanted {
         Wanted::Fields => {
-            let (rows, unread) = read_fields_with(registry, ask, cancel);
+            // A folder's own fields are not read, its access rows are
+            // (alpha 4, lane AP: the focused entry's, under this token).
+            let (mut rows, unread) = if crate::columns::file_like(&ask.entry) {
+                read_fields_with(registry, ask, cancel)
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            rows.extend(crate::access::rows_with(registry, &ask.place, cancel));
             DetailsNote::Fields {
                 generation: ask.generation,
                 place: ask.place.clone(),

@@ -348,7 +348,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 109] = [
+pub const SCHEMA: [SettingInfo; 110] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -1043,6 +1043,20 @@ pub const SCHEMA: [SettingInfo; 109] = [
         default: "[]",
         help: "Folders where diroxide never reads a file's first bytes to find its type, such as a slow share. Files there are typed by their names.",
         // Used since lane TA (alpha 4).
+        arrives: None,
+    },
+    // The photo helpers (alpha 4, lane AP; R29 5.5).
+    SettingInfo {
+        key: "photos.burst_gap_seconds",
+        name: "Burst gap",
+        group: G::Panels,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 60,
+            unit: "seconds",
+        },
+        default: "2",
+        help: "The longest time between two pictures from one camera that Select the bursts counts as one burst.",
         arrives: None,
     },
     // The archive limits (alpha.2, W2a; research/archives.md section 6,

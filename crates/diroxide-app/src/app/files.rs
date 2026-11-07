@@ -748,7 +748,8 @@ impl App {
                     // missing. Nothing was joined."
                     OpsError::CannotJoin(sentence)
                     | OpsError::TooManyParts(sentence)
-                    | OpsError::CannotLink(sentence) => Message::error(sentence.clone()),
+                    | OpsError::CannotLink(sentence)
+                    | OpsError::OwnerRefused(sentence) => Message::error(sentence.clone()),
                     // The read-only refusal is a sentence of its own (P2b).
                     OpsError::Vfs(inner) if inner.sentence().is_some() => {
                         Message::error(inner.sentence().unwrap_or_default())
@@ -1182,6 +1183,7 @@ impl App {
                     Some(JobKind::StripMetadata) => "strip",
                     // What a plugin committed (lane AE).
                     Some(JobKind::PluginCommand) => "plugin command",
+                    Some(JobKind::SetTimes) => "time change",
                     _ => "job",
                 };
                 let how = match kind {
@@ -1240,6 +1242,8 @@ impl App {
         effects.push(Effect::Redraw(Redraw::JobsLine));
         effects.push(self.say(message));
         effects.extend(self.refresh_jobs_list());
+        // Change time reads back what the disk kept (lane AP).
+        effects.extend(self.access_job_ended(&report));
         // A job that never started changed nothing: no panel is read again.
         if never_ran {
             return effects;

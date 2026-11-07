@@ -150,7 +150,47 @@ fn assemble(
             .enumerate()
             .map(|(i, line)| words::unread_row(i, line)),
     );
-    words::ordered(rows)
+    without_said_twice(words::ordered(rows))
+}
+
+/// The panel's own owner, group and mode rows, left out once the access
+/// rows came, which say them in full (alpha 4, lane AP): "Owner can read
+/// and write (ada)" says the owner's name, so "Owner: ada" goes; the
+/// mode's sentence goes where the access rows give the mode. On Windows
+/// the attributes row stays (read-only, hidden), and the owner row is the
+/// access facts' own.
+fn without_said_twice(mut rows: Vec<DetailRow>) -> Vec<DetailRow> {
+    let has = |key: &str| rows.iter().any(|r| r.key == key);
+    let mode = has("access.mode");
+    let owner = has("access.owner");
+    let group = has("access.group");
+    rows.retain(|row| match row.key.as_str() {
+        "file.attributes" => !mode,
+        "file.owner" => !owner,
+        "file.owner-group" => !group,
+        _ => true,
+    });
+    rows
+}
+
+/// The details list's help: how to read it, and what the access rows
+/// mean when they are there ("You can" is advice; the mask).
+fn help_for(rows: &[DetailRow], file: bool) -> String {
+    let mut help = if file {
+        "Up and Down read, Enter on Show all asks ExifTool for every tag, Escape closes."
+    } else {
+        "Up and Down read, Escape closes."
+    }
+    .to_owned();
+    if rows.iter().any(|r| r.key == "access.you-can") {
+        help.push(' ');
+        help.push_str(diroxide_ops::access::YOU_CAN_HELP);
+    }
+    if rows.iter().any(|r| r.key == "access.mask-note") {
+        help.push(' ');
+        help.push_str(diroxide_ops::access::MASK_HELP);
+    }
+    help
 }
 
 impl Shown {
@@ -177,8 +217,9 @@ impl Shown {
     /// The list: each row its words, the label first; Show all last,
     /// then the tags it read.
     fn list(&self) -> ListModel {
-        let mut list_rows: Vec<ListRow> = self
-            .rows()
+        let rows = self.rows();
+        let help = help_for(&rows, self.file);
+        let mut list_rows: Vec<ListRow> = rows
             .iter()
             .map(|row| ListRow::new(row.key.clone(), words::row_text(row)))
             .collect();
@@ -201,11 +242,7 @@ impl Shown {
             }
         }
         let mut list = ListModel::new(self.title.clone()).with_rows(list_rows);
-        list.set_help(if self.file {
-            "Up and Down read, Enter on Show all asks ExifTool for every tag, Escape closes."
-        } else {
-            "Up and Down read, Escape closes."
-        });
+        list.set_help(help);
         list
     }
 }
@@ -473,18 +510,16 @@ impl App {
         };
         let base = self.base_rows(&entry, &place, file_type.as_ref());
         let file = file_like(&entry);
-        let generation = if file {
-            self.ask_details(&entry, &place, file_type, Wanted::Fields)
-        } else {
-            self.next_details()
-        };
+        // Every entry's access rows are read on the worker, a folder's
+        // too (alpha 4, lane AP); a file's own fields with them.
+        let generation = self.ask_details(&entry, &place, file_type, Wanted::Fields);
         let shown = Shown {
             place: place.clone(),
             title: format!("Details of {}", entry.display_name()),
             file,
             generation,
             base,
-            read: (!file).then(Vec::new),
+            read: None,
             unread: Vec::new(),
             entries: None,
             more: More::NotAsked,

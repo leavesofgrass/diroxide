@@ -33,6 +33,13 @@ pub enum OpsError {
     /// "Refused: this is a drive root, D:\".
     #[error("{0}")]
     Refused(String),
+    /// A change of owner or group refused before anything was listed,
+    /// said whole, its own next step included: "Could not change the
+    /// owner of a.txt: only an administrator can. Start diro as
+    /// administrator, then try again." (AX's request 1: the app adds no
+    /// next step of its own, as it does to [`OpsError::Refused`].)
+    #[error("{0}")]
+    OwnerRefused(String),
     /// A folder would be copied or moved into itself or a folder inside
     /// it; the name is the folder's.
     #[error("{0} cannot go inside itself")]
@@ -96,6 +103,7 @@ impl OpsError {
         match self {
             OpsError::NoTrashList => Some(diroxide_vfs::TRASH_NOT_LISTED.to_owned()),
             OpsError::TrashEmpty => Some("The trash is empty.".to_owned()),
+            OpsError::OwnerRefused(sentence) => Some(sentence.clone()),
             OpsError::Vfs(inner) => inner.sentence(),
             _ => None,
         }
@@ -112,6 +120,7 @@ impl Explain for OpsError {
             OpsError::NotBuilt(_)
             | OpsError::NothingToUndo
             | OpsError::HookStopped(_)
+            | OpsError::OwnerRefused(_)
             | OpsError::NoTrashList
             | OpsError::TrashEmpty => String::new(),
             OpsError::TrashNotConfirmed(_) => {
@@ -162,5 +171,16 @@ mod tests {
             Some("The trash is empty.")
         );
         assert_eq!(OpsError::NothingSelected.sentence(), None);
+    }
+
+    /// AX's request 1: an owner refusal is said whole, its own next step
+    /// in it, with nothing added.
+    #[test]
+    fn an_owner_refusal_is_said_whole() {
+        let line = "Could not change the owner of a.txt: only an administrator can. Start diro as administrator, then try again.";
+        let refused = OpsError::OwnerRefused(line.into());
+        assert_eq!(refused.sentence().as_deref(), Some(line));
+        assert_eq!(refused.next_step(), "");
+        assert!(within_cells(line, "Could not change the owner of a.txt"));
     }
 }

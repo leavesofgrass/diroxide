@@ -41,25 +41,9 @@ pub const LINK_HAS_NONE: &str = "Permissions: a link has none of its own";
 
 /// A right's or a class's words on a file or a folder (R11 6.1): "read
 /// and write"; on a folder "list, enter and change contents"; "no
-/// access".
+/// access". Core's own table, so the rows and the mode's words agree.
 pub fn rights_phrase(rights: Rights, folder: bool) -> &'static str {
-    match (rights.bits(), folder) {
-        (0o4, false) => "read",
-        (0o6, false) => "read and write",
-        (0o5, false) => "read and run",
-        (0o7, false) => "read, write and run",
-        (0o1, false) => "run only",
-        (0o3, false) => "write and run",
-        (0o2, false) => "write only",
-        (0o4, true) => "list names only",
-        (0o6, true) => "list names only (changing needs enter)",
-        (0o5, true) => "list and enter",
-        (0o7, true) => "list, enter and change contents",
-        (0o1, true) => "enter only, not list",
-        (0o3, true) => "enter and change contents, not list",
-        (0o2, true) => "no usable access (changing needs enter)",
-        _ => "no access",
-    }
+    diroxide_core::entry::class_phrase(rights.bits(), folder)
 }
 
 /// "Owner can read and write (ada)"; "Others have no access".

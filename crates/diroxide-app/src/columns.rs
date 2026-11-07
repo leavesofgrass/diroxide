@@ -88,6 +88,11 @@ pub enum Source {
     Regex(Option<Arc<regex::Regex>>),
     /// A plugin's declared column.
     Plugin(PluginColumn),
+    /// A photo column (`photo.taken`, `photo.camera`, `photo.pixels`,
+    /// `photo.kind`; alpha 4, lane AP): read by the picture readers in the
+    /// background class, then said in the photo helpers' words
+    /// ([`crate::photos`]).
+    Photo(crate::photos::PhotoField),
     /// A key nothing gives: its cells stay empty.
     Unknown,
 }
@@ -108,6 +113,7 @@ impl FieldColumn {
     pub fn cost(&self) -> Option<Cost> {
         match self.source {
             Source::Meta(cost) => Some(cost),
+            Source::Photo(_) => Some(Cost::Background),
             _ => None,
         }
     }
@@ -151,6 +157,7 @@ impl FieldColumn {
                 Cost::OnDemand => NOT_COMPUTED,
                 Cost::Fast | Cost::Background => READING,
             }),
+            Source::Photo(_) if reads_here && file_like(entry) => Some(READING),
             Source::Plugin(_) if plugins_here => Some(PENDING),
             _ => None,
         }
@@ -161,7 +168,9 @@ impl FieldColumn {
     /// answered for.
     pub fn waits(&self, entry: &Entry) -> bool {
         match self.source {
-            Source::Meta(_) => file_like(entry) && !entry.extra.contains_key(&self.key),
+            Source::Meta(_) | Source::Photo(_) => {
+                file_like(entry) && !entry.extra.contains_key(&self.key)
+            }
             Source::Plugin(_) => !entry.extra.contains_key(&self.key),
             _ => false,
         }
@@ -216,6 +225,8 @@ pub fn resolve(
             let (label, source) =
                 if let Some((_, cost, _)) = keys.iter().find(|(k, _, _)| *k == key) {
                     (key_label(key), Source::Meta(*cost))
+                } else if let Some(field) = crate::photos::PhotoField::of(key) {
+                    (field.label().to_owned(), Source::Photo(field))
                 } else if key == crate::labels::NOTE_KEY {
                     ("Note".to_owned(), Source::Owner)
                 } else if let Some(name) = key.strip_prefix(crate::labels::CUSTOM_PREFIX) {

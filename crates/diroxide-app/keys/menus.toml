@@ -139,6 +139,14 @@ access = "w"
 when = "attributes"
 
 [[menu.item]]
+command = "file.change-time"
+when = "attributes"
+
+[[menu.item]]
+command = "file.change-owner"
+when = "attributes"
+
+[[menu.item]]
 command = "file.run-command"
 access = "n"
 
@@ -668,6 +676,10 @@ access = "i"
 command = "view.fill-columns"
 access = "f"
 
+[[menu.item]]
+command = "sort.date-taken"
+access = "d"
+
 [[menu]]
 id = "go"
 title = "Go"
@@ -752,6 +764,14 @@ access = "r"
 [[menu.item]]
 command = "go.forget-place"
 access = "g"
+
+[[menu.item]]
+command = "photo.next-day"
+access = "x"
+
+[[menu.item]]
+command = "photo.previous-day"
+access = "y"
 
 # Search (W3a): Find files and what it finds.
 [[menu]]
@@ -900,6 +920,18 @@ command = "select.groups"
 access = "k"
 
 [[menu.item]]
+command = "select.screenshots"
+access = "o"
+
+[[menu.item]]
+command = "select.bursts"
+access = "b"
+
+[[menu.item]]
+command = "select.no-date-taken"
+access = "t"
+
+[[menu.item]]
 command = "select.by-size"
 access = "z"
 
@@ -959,6 +991,14 @@ access = "o"
 [[menu.item]]
 command = "components.first-run"
 access = "f"
+
+[[menu.item]]
+command = "photo.review"
+access = "r"
+
+[[menu.item]]
+command = "photo.month-folders"
+access = "m"
 
 [[menu]]
 id = "keys"

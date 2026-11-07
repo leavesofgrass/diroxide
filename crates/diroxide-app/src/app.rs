@@ -16,6 +16,8 @@
 //! Wave 1 (W1d) owns this module.
 
 mod access_dialogs;
+// Change time and Change owner (alpha 4, lane AP).
+mod access_ui;
 mod archive;
 mod archive_forms;
 mod archive_jobs;
@@ -75,6 +77,8 @@ mod crypt_ui;
 pub mod picture_view;
 // Outputs a plugin staged and committed (alpha 4, lane AE).
 mod staged;
+// The photo helpers (alpha 4, lane AP).
+mod photos_ui;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -552,6 +556,11 @@ pub enum AppEvent {
     /// What the runtime answered the Watched folders list, or what a
     /// running task told (alpha 4, lane AW).
     HotFolder(Box<crate::watched::WatchedNote>),
+    /// What the runtime answered Change time and Change owner (alpha 4,
+    /// lane AP).
+    Access(Box<crate::access::AccessNote>),
+    /// What the runtime read for the photo helpers (alpha 4, lane AP).
+    Photos(Box<crate::photos::PhotoNote>),
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -1063,6 +1072,10 @@ pub struct App {
     picture_ask: Option<picture_view::PictureAsk>,
     /// The files each running plugin command committed (lane AE).
     staged: staged::StagedState,
+    /// Change time's and Change owner's jobs (lane AP).
+    access: access_ui::AccessState,
+    /// The photo helpers' facts and what waits for them (lane AP).
+    photos: photos_ui::PhotoState,
     /// The slots of the owner's type actions (lane TA).
     type_slots: crate::typing::TypeSlots,
     /// A typed action's command is running: Enter and View run their
@@ -1408,6 +1421,8 @@ impl App {
             meta: metadata_ui::MetaState::default(),
             picture_ask: None,
             staged: staged::StagedState::default(),
+            access: access_ui::AccessState::default(),
+            photos: photos_ui::PhotoState::default(),
             type_slots: startup.type_slots,
             running_typed: false,
             tool_overrides: startup.tools,
@@ -2027,6 +2042,8 @@ impl App {
             AppEvent::Convert(note) => self.convert_note(*note),
             AppEvent::Crypt(note) => self.crypt_note(*note),
             AppEvent::HotFolder(note) => self.watched_note(*note),
+            AppEvent::Access(note) => self.access_note(*note),
+            AppEvent::Photos(note) => self.photo_note(*note),
         }
     }
 
@@ -2149,6 +2166,14 @@ impl App {
         }
         // The Encryption submenu (lane AE).
         if let Some(effects) = self.crypt_dispatch(command) {
+            return effects;
+        }
+        // Change time and Change owner (lane AP).
+        if let Some(effects) = self.access_dispatch(command) {
+            return effects;
+        }
+        // The photo helpers (lane AP).
+        if let Some(effects) = self.photo_dispatch(command) {
             return effects;
         }
         // Typed actions and the lists of file types (lane TA).

@@ -769,6 +769,38 @@ pub mod ids {
         /// Check the focused file's signature, or the focused signature.
         VERIFY_SIGNATURE = "file.verify-signature";
     }
+
+    // Change time and Change owner (alpha 4, lane AP, R30 commits 78 and
+    // 79), none with a default key: the File menu and the palette.
+    ids! {
+        /// Set the times of the marked entries, or the focused one: now, a
+        /// typed date, or the other panel's file's.
+        CHANGE_TIME = "file.change-time";
+        /// Change the owner and group of the marked entries, or the
+        /// focused one; on Windows, the system's Security dialog.
+        CHANGE_OWNER = "file.change-owner";
+    }
+
+    // The photo helpers (alpha 4, lane AP, R30 commits 83 to 85), none
+    // with a default key: the menus and the palette.
+    ids! {
+        /// Move to the first picture of the next date.
+        NEXT_DAY = "photo.next-day";
+        /// Move to the first picture of the date before.
+        PREVIOUS_DAY = "photo.previous-day";
+        /// Sort the pictures by the date taken, else the modified time.
+        SORT_DATE_TAKEN = "sort.date-taken";
+        /// Select the files of the screenshots group.
+        SELECT_SCREENSHOTS = "select.screenshots";
+        /// Select the pictures from one camera within the burst gap.
+        SELECT_BURSTS = "select.bursts";
+        /// Select the pictures with no date taken.
+        SELECT_NO_DATE = "select.no-date-taken";
+        /// Step through the pictures, one key an answer.
+        REVIEW_PICTURES = "photo.review";
+        /// Move the pictures into folders by month, one job.
+        MONTH_FOLDERS = "photo.month-folders";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -793,7 +825,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 267] = [
+pub static CATALOG: [CommandInfo; 277] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1179,6 +1211,22 @@ pub static CATALOG: [CommandInfo; 267] = [
         &[],
     ),
     command(
+        ids::CHANGE_TIME,
+        "Change time",
+        "Sets the modified, accessed or created time of the selection to now, a date you type, or the other panel's file's, after a list of its settings; Undo puts the old times back.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::CHANGE_OWNER,
+        "Change owner",
+        "Changes the owner and group of the selection, after a list of its settings, never as administrator; on Windows it opens the system's Security dialog for the focused item.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
         ids::COPY_PATH,
         "Copy path",
         "Puts the focused entry's full path on the system clipboard.",
@@ -1414,6 +1462,30 @@ pub static CATALOG: [CommandInfo; 267] = [
         ids::SELECT_BY_KIND,
         "Select by kind",
         "Lists the kinds and file-type groups, to select every entry of one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_SCREENSHOTS,
+        "Select the screenshots",
+        "Selects the pictures whose names are a screenshot's, by the screenshots group; the marks before can be restored.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_BURSTS,
+        "Select the bursts",
+        "Selects the pictures from one camera taken within the burst gap of each other, 2 seconds unless the setting says otherwise, and says each burst.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SELECT_NO_DATE,
+        "Select pictures with no date",
+        "Selects the pictures whose own data has no date taken, which the photo helpers place by their modified time.",
         Panel,
         &[],
         &[],
@@ -1686,6 +1758,38 @@ pub static CATALOG: [CommandInfo; 267] = [
         ids::READ_PICTURE_TEXT,
         "Read text in picture",
         "Reads the text in the focused picture with Tesseract and shows it in the viewer, titled as machine read, since the words are a machine's guess.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::NEXT_DAY,
+        "Next day",
+        "Moves to the first picture of the next date, by the date taken or else the modified time, and says the date, how many pictures it has and its weekday.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::PREVIOUS_DAY,
+        "Previous day",
+        "Moves to the first picture of the date before, as Next day does.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::REVIEW_PICTURES,
+        "Review pictures",
+        "Steps through the marked pictures, or every picture here, from the focused one, each answered with one key: K keeps, L labels, M moves to a place you pick, T sends to the trash, S skips, B goes back; closing the list ends it and says what was done.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::MONTH_FOLDERS,
+        "Move into month folders",
+        "Moves the marked pictures, or every picture here, into folders named by year and month such as 2026-10, after a plan you answer, which starts on No; nothing is moved over a file, and one Undo puts them all back.",
         Panel,
         &[],
         &[],
@@ -2070,6 +2174,14 @@ pub static CATALOG: [CommandInfo; 267] = [
         ids::FILL_COLUMNS,
         "Fill columns",
         "Reads every column of this folder from its files now, those read only on request too, asking first when many files wait; nothing is read on a remote place.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SORT_DATE_TAKEN,
+        "Sort by date taken",
+        "Sorts the panel by each picture's date taken, its modified time where it has none, and says how many use it; again, the other way.",
         Panel,
         &[],
         &[],

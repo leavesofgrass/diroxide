@@ -147,6 +147,12 @@ pub(super) enum Wants {
     Meta(super::metadata_ui::MetaWants),
     /// A question of the Encryption submenu (alpha 4, lane AE).
     Crypt(super::crypt_ui::CryptWants),
+    /// A list or a field of Change time and Change owner (alpha 4, lane
+    /// AP).
+    Access(super::access_ui::AccessWants),
+    /// The review, its move field and the month folders' question (alpha
+    /// 4, lane AP).
+    Photos(super::photos_ui::PhotoWants),
 }
 
 impl Wants {
@@ -317,6 +323,8 @@ impl App {
                 let place = row.and_then(|r| Place::parse(&r).ok())?;
                 Some(self.forget_place(&place))
             }
+            // The review's one-key answers (lane AP).
+            Wants::Photos(wants) => self.photo_key(&wants, key),
             _ => None,
         }
     }
@@ -381,6 +389,8 @@ impl App {
             Wants::ReadColumns { .. } => self.dialog_escape(),
             Wants::Meta(wants) => self.meta_accept(wants, row, &text),
             Wants::Crypt(wants) => self.crypt_accept(wants, &text),
+            Wants::Access(wants) => self.access_accept(wants, row, &text),
+            Wants::Photos(wants) => self.photo_accept(wants, row, &text),
         }
     }
 
@@ -393,6 +403,7 @@ impl App {
             Wants::ReadColumns { side, fill } => self.start_fill(side, fill),
             Wants::Meta(wants) => self.meta_yes(wants),
             Wants::Crypt(wants) => self.crypt_yes(wants),
+            Wants::Photos(wants) => self.photo_yes(wants),
             _ => Vec::new(),
         }
     }
@@ -409,6 +420,8 @@ impl App {
             }
             Wants::Meta(wants) => self.meta_escape(wants),
             Wants::Crypt(wants) => self.crypt_escape(wants),
+            Wants::Access(wants) => self.access_escape(wants),
+            Wants::Photos(wants) => self.photo_escape(wants),
             Wants::BookmarkForm { side, .. } => self.refresh_bookmarks_list(side),
             Wants::BookmarkText { side, place, .. } => self.bookmark_form(side, place, None),
             Wants::Convert(wants) => self.convert_escape(wants),

@@ -635,6 +635,20 @@ impl Plan {
         }
     }
 
+    /// Whether an attributes plan changes only owners and groups, its
+    /// times and permissions untouched (AX's request 2).
+    fn owners_only(&self) -> bool {
+        self.facts.attributes.as_ref().is_some_and(|facts| {
+            let edit = &facts.edit;
+            edit.changes_owner()
+                && edit.mode.is_none()
+                && edit.windows.is_none()
+                && edit.modified.is_none()
+                && edit.created.is_none()
+                && edit.accessed.is_none()
+        })
+    }
+
     /// The plan in one line, meaning first: "Copy 3 items to D:\backup,
     /// 4.0 GB", "Delete 12 items for good, 2.3 GB, 2 read-only", "Move 3
     /// items to the trash".
@@ -679,6 +693,22 @@ impl Plan {
             JobKind::Restore => format!("Restore {items} from the trash"),
             JobKind::Purge if self.facts.emptying => format!("Empty the trash, {items}"),
             JobKind::Purge => format!("Delete {items} from the trash for good"),
+            // An owner-only plan says so (AX's request 2): "Change owner of
+            // 3 items to root", which the question asks.
+            JobKind::SetAttributes if self.owners_only() => self
+                .facts
+                .attributes
+                .as_ref()
+                .map(|facts| {
+                    crate::access::OwnerWords {
+                        owner: facts.edit.owner.as_deref(),
+                        group: facts.edit.group.as_deref(),
+                    }
+                    .question(self.entries())
+                    .trim_end_matches('?')
+                    .to_owned()
+                })
+                .unwrap_or_default(),
             JobKind::SetAttributes => format!("Change permissions of {items}"),
             JobKind::SetTimes => format!("Change the times of {items}"),
             JobKind::Join => match &self.facts.join {
@@ -893,6 +923,51 @@ mod tests {
 
     fn p(text: &str) -> Place {
         Place::parse_with(text, PathStyle::Unix).unwrap()
+    }
+
+    /// AX's request 2: a plan that changes only owners says so, and its
+    /// question is the one the Change owner dialog asks.
+    #[test]
+    fn an_owner_only_plan_says_change_owner() {
+        use crate::access::{AttributeEdit, AttributeFacts, Recursion};
+        let steps = ["/a/x.txt", "/a/y.txt", "/a/z.txt"]
+            .iter()
+            .map(|place| Step::SetAttributes {
+                place: p(place),
+                change: AttributeChange::default(),
+            })
+            .collect();
+        let mut plan = Plan::new(
+            JobId::new(1),
+            JobKind::SetAttributes,
+            steps,
+            ConflictPolicy::Ask,
+        );
+        let edit = AttributeEdit::new(Recursion::ThisItem).with_owner("root");
+        plan.facts.attributes = Some(AttributeFacts {
+            edit,
+            rows: Vec::new(),
+        });
+        assert_eq!(plan.summary(), "Change owner of 3 items to root");
+        assert_eq!(
+            plan.question().text,
+            "Change owner of 3 items to root? y or n"
+        );
+        let group = AttributeEdit::new(Recursion::ThisItem).with_group("staff");
+        plan.facts.attributes = Some(AttributeFacts {
+            edit: group,
+            rows: Vec::new(),
+        });
+        assert_eq!(plan.summary(), "Change group of 3 items to staff");
+        assert!(within_cells(&plan.summary(), "Change group of 3 items"));
+        let both = AttributeEdit::new(Recursion::ThisItem)
+            .with_owner("ada")
+            .with_mode(crate::access::ModeChange::Bits { on: 0o4, off: 0 });
+        plan.facts.attributes = Some(AttributeFacts {
+            edit: both,
+            rows: Vec::new(),
+        });
+        assert_eq!(plan.summary(), "Change permissions of 3 items");
     }
 
     #[test]

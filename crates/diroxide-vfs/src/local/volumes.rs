@@ -204,6 +204,9 @@ pub(crate) fn capabilities_for(facts: &VolumeFacts, rule: NameRule) -> Capabilit
     // Streams on NTFS and ReFS, extended attributes on Linux and macOS
     // file systems other than FAT and the disc formats.
     capabilities.extended_attributes = sys::extended_on(fs);
+    // Security labels (SELinux's `security.selinux`) are read where Linux
+    // keeps extended attributes (AX's request 3).
+    capabilities.access.labels = cfg!(target_os = "linux") && capabilities.extended_attributes;
     capabilities
 }
 
@@ -479,6 +482,13 @@ mod tests {
         assert_eq!(home.access.mode, Can::Yes);
         assert_eq!(home.access.owner, Can::WithAdministrator);
         assert!(capabilities_for(&facts(VolumeKind::Fixed, "btrfs"), STRICT).clone_copy);
+        // AX's request 3: labels are read where Linux keeps extended
+        // attributes, never on a FAT stick.
+        assert_eq!(
+            home.access.labels,
+            cfg!(target_os = "linux") && home.extended_attributes
+        );
+        assert!(!stick.access.labels);
     }
 
     #[test]

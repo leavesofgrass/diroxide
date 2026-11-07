@@ -533,6 +533,14 @@ pub enum Request {
     /// in the jobs line that Cancel stops; answered as
     /// [`AppEvent::Meta`](crate::AppEvent::Meta).
     Meta(Box<crate::metadata::MetaAsk>),
+    /// Change time's read-back and Change owner's hand-off to Windows'
+    /// Security dialog, on a worker (alpha 4, lane AP); answered as
+    /// [`AppEvent::Access`](crate::AppEvent::Access).
+    Access(Box<crate::access::AccessAsk>),
+    /// Read the date taken and the camera of a panel's pictures on a
+    /// worker, for the photo helpers (alpha 4, lane AP); answered as
+    /// [`AppEvent::Photos`](crate::AppEvent::Photos).
+    Photos(Box<crate::photos::PhotoAsk>),
     /// Read the text in a picture with Tesseract on a worker, as a job in
     /// the jobs line that Cancel stops (alpha 4, R30 commit 44); answered
     /// as [`AppEvent::PictureText`](crate::AppEvent::PictureText).
