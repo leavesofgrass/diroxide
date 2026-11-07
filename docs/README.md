@@ -48,6 +48,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Disk images](disk-images.md): opening an ISO, a raw disk or a virtual disk like a folder, its partitions, copying files out, what the plugin reads itself and what it hands to 7-Zip, the limits that protect you, and what it does not do yet.
 - [The viewer](viewer.md): F3, lines, wrap, jump, search, hex mode, following a log, large files, and code read by ear.
 - [The quick view](quick-view.md): a live preview of the focused file in the other panel, by heading, table and link, and the formats it reads.
+- [Conversions](conversions.md): Convert and its recipe list, the plan you answer first, a report and Undo, the 31 built-in recipes, a file type that names its recipe, your own `conversions.toml`, and `diro convert`.
 - [Previews and the quick view's formats](previews.md): what pictures, drawings, sound and video, archives, PDF, Word, EPUB, RTF and spreadsheets say, the Preview command and auto-preview, Read text in picture, and the limits that protect the quick view.
 - [The details view](details.md): Alt+Enter, the facts in their order, the Privacy and Checksum rows, Show all with ExifTool, Say details, Copy details and Copy all details.
 - [File types and groups](file-types.md): what a row says about a file, how a type is found, the eight groups and the screenshot names, the retro pack, your own `filetypes.toml`, typed actions, Open with on each system, and the encoding chooser.
