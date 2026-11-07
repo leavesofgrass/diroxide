@@ -217,7 +217,18 @@ diro keys test
 
 ## Menus and banks
 
-`menus.toml` uses the same command ids as the keymap. Add an item with a command id, remove or reorder items, and add submenus. Each menu has an access key, the letter after Alt, and diroxide reports unknown items in words. A menu item can be shown only where it makes sense, for example only where the place has a trash.
+`menus.toml` uses the same command ids as the keymap. Add an item with a command id, remove or reorder items, and add submenus. Each menu has an access key, the letter after Alt, and diroxide reports unknown items in words. A menu item can be shown only where it makes sense, for example only where the place has a trash. An item's `when` says where, by one of these names:
+
+- `writable`: the place can be changed.
+- `trash`: the place has a trash.
+- `no_trash`: the place can be changed and has no trash.
+- `restore`: trashed items can be restored.
+- `links`: links can be made.
+- `attributes`: permissions or attributes can be changed.
+- `edits`: entries can be made, renamed and deleted. This holds inside a zip too, which diroxide rewrites.
+- `removes`: entries can be removed with Delete. This holds inside a zip too, where the old copy of the zip goes to the trash.
+
+The built-in File menu uses `edits` and `removes` for Make folder, Rename, Move to trash and Delete for good, so they show inside a zip. [Archives](archives.md#editing-inside-a-zip) says what a rewrite does.
 
 A bank is a named bar of command buttons. The default bank is the function key bar. A button runs one command.
 
