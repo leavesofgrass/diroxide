@@ -4,7 +4,7 @@ diroxide (Directory Oxide) is a two-panel file manager written in pure Rust, key
 
 This is the index of every diroxide document, grouped by audience:
 
-- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files, archives, disk images and previews, finding things, plugins, git, hooks, scripts and optional components, keys, settings and screen readers.
+- [People who use diroxide](#for-people-who-use-diroxide): installing, the GUI, moving around, operations, volumes and the trash, remote places and the queue, files, archives, disk images and previews, columns, checksums, privacy before sharing, conversions and watched folders, finding things, plugins, git, hooks, scripts and optional components, keys, settings and screen readers.
 - [People who build diroxide](#for-people-who-build-diroxide): the plan, the architecture, building and the clean-room rule.
 - [The decisions](#decisions): the architecture decision records.
 
@@ -88,8 +88,8 @@ If you are new, begin with the [quick start](quickstart.md).
 
 These guides are not written yet, because the features they describe are not built, or are built in the library and not yet in the program. Each arrives with the alpha that ships its feature.
 
-- Conversions, metadata in the panels' columns, checksums and hot folders: alpha 4 builds them, and their guides come as each reaches the program.
-- Tabs and the folder tree, comparing and synchronizing two folders, saved tasks, duplicates, batch rename, writing to disk images, and GitHub.
+- Encryption and signatures, who can do what with a file (access rows and an owner dialog), and the photo helpers: alpha 4 builds them, and their guides come as each reaches the program.
+- Tabs and the folder tree, comparing and synchronizing two folders, tasks other than watched folders such as synchronizing and renaming, duplicates, batch rename, thumbnails, writing to disk images, and GitHub.
 
 ## For people who build diroxide
 
