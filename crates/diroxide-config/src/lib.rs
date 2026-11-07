@@ -32,6 +32,7 @@ pub mod schema;
 pub mod session;
 pub mod settings;
 pub mod store;
+pub mod task_files;
 pub mod tasks;
 pub mod theme;
 
