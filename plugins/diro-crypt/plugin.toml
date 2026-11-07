@@ -1,0 +1,70 @@
+# The encryption plugin (R29 part 3; alpha 4, R30 commit 71): age's
+# Encrypt with a passphrase, Encrypt for a recipient and Decrypt, in
+# process, every secret asked through diroxide's own hidden fields and
+# never kept. The output is made beside each file under an unfinished
+# name and renamed last, never over a file; the original always stays.
+#
+# age 0.12.1 with `armor` only. Two advisories ride on age's tree and are
+# why it lives in this plugin and not in diroxide itself (spike ES1, the
+# owner's answer 115; ADR-0015): crypto-bigint 0.5.5 through p256 and
+# elliptic-curve 0.13 under hpke (the hardware tag recipients, which the
+# plugin only encrypts to), and basic-toml, unmaintained, at build time
+# (the translation macros). Neither touches the passphrase or the X25519
+# keys the plugin decrypts with. An age release on the newer elliptic
+# curves and without basic-toml fixes both; the plugin moves to it then.
+#
+# No key, identity or passphrase is ever stored: an identity file is
+# asked by its path each time and read only for that decryption.
+
+[plugin]
+id = "crypt"
+name = "Encryption"
+version = "0.1.0-alpha.3"
+description = "Encrypts and decrypts files with age, asking every secret in hidden fields."
+license = "Apache-2.0 OR MIT"
+homepage = "https://diroxide.app"
+protocol = 1
+min_host = "0.1.0-alpha.3"
+
+[run]
+command = ["./diro-crypt"]
+start = "on_demand"
+concurrency = 4
+idle_timeout = "5m"
+
+[run.windows]
+command = ["./diro-crypt.exe"]
+
+# A large file takes as long as it takes; Cancel stops it, and the
+# unfinished output is removed.
+[timeouts]
+command = "none"
+
+# The plugin reads the files it is given and writes each result beside
+# its file itself, through the same committing writer diroxide's jobs use;
+# it asks the host for nothing but questions, forms and progress.
+[permissions.declared]
+network = "none"
+files = "the files you choose; each result is written beside its file"
+programs = "none"
+
+[[command]]
+id = "encrypt_passphrase"
+name = "Encrypt with a passphrase"
+description = "Encrypts the marked files with a passphrase you type twice; each original stays."
+selection = "any"
+places = "local"
+
+[[command]]
+id = "encrypt_recipient"
+name = "Encrypt for a recipient"
+description = "Encrypts the marked files for a pasted age public key or a recipients file."
+selection = "any"
+places = "local"
+
+[[command]]
+id = "decrypt"
+name = "Decrypt"
+description = "Decrypts the marked age files, asking a passphrase or an identity file for each."
+selection = "any"
+places = "local"
