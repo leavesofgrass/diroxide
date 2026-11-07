@@ -11,6 +11,7 @@ mod encoding;
 mod images;
 mod markdown;
 mod media;
+mod pdf;
 mod text;
 
 use diroxide_core::{Entry, EntryKind, Place};

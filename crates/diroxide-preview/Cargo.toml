@@ -27,6 +27,9 @@ encoding_rs.workspace = true
 # decoded for the words, and the pixel guard stands in front of a decode.
 image.workspace = true
 kamadak-exif.workspace = true
+# PDF properties for the PDF preview (alpha 4, R30 commit 39, answer
+# 120): the metadata reader alone, which does not load the pages.
+lopdf.workspace = true
 png.workspace = true
 pulldown-cmark.workspace = true
 # SVG drawings read as SVG-AAM exposes them (alpha 4, R30 commit 34),

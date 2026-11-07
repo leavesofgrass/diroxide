@@ -1841,6 +1841,7 @@ dependencies = [
  "encoding_rs",
  "image",
  "kamadak-exif",
+ "lopdf",
  "png",
  "proptest",
  "pulldown-cmark",
