@@ -135,7 +135,8 @@ fn change_time_sets_a_typed_date_after_asking_and_undo_puts_it_back() {
     let rows = labels(&s);
     assert_eq!(rows[1], "Change: modified only");
     assert_eq!(rows[2], "Set to: now");
-    assert!(rows[3].starts_with("Modified: "), "{rows:?}");
+    assert_eq!(rows[3], "Type a date and time");
+    assert!(rows[4].starts_with("Modified: "), "{rows:?}");
     for row in &rows {
         assert!(within_cells(row, row), "{row}");
     }
@@ -156,7 +157,21 @@ fn change_time_sets_a_typed_date_after_asking_and_undo_puts_it_back() {
         );
         s.key("home");
     }
+    // Set to steps to the other panel's file and back.
     s.key("down");
+    s.key("down");
+    let said = s.key("enter");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Change time, Set to: the times of deep.txt")),
+        "{said:?}"
+    );
+    let said = s.key("enter");
+    assert!(
+        said.iter()
+            .any(|l| l.starts_with("Change time, Set to: now")),
+        "{said:?}"
+    );
     s.key("down");
     let said = s.key("enter");
     assert!(
@@ -195,6 +210,7 @@ fn change_time_sets_a_typed_date_after_asking_and_undo_puts_it_back() {
     s.key("n");
     assert_eq!(modified_secs(&file), before);
     s.command(ids::CHANGE_TIME);
+    s.key("down");
     s.key("down");
     s.key("down");
     s.key("enter");

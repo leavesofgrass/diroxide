@@ -10,8 +10,9 @@
 //! - **Change time**: "Change the times of main.rs"; "Change: modified
 //!   only" (Enter steps to modified and accessed, accessed only, all
 //!   three, created only, where the place can set a created time); "Set
-//!   to: now" (Enter steps to a date and time typed in ISO form, then the
-//!   other panel's file's times); the times now, each with its weekday
+//!   to: now" (Enter steps to the other panel's file's times and back);
+//!   "Type a date and time", a field in ISO form, after which "Set to:"
+//!   says the date with its weekday; the times now, each with its weekday
 //!   computed from the date ("Modified: Saturday, 2026-10-10 22:09");
 //!   "Changed: set by the system" on Unix, whose Enter says why it cannot
 //!   be set; "Apply to:" for a folder. The plan reads "Modified time to
@@ -243,6 +244,7 @@ impl TimeForm {
             ListRow::new("go", format!("Change the times of {}", self.what)),
             ListRow::new("set", format!("Change: {}", self.set.words())),
             ListRow::new("source", source),
+            ListRow::new("typed", "Type a date and time"),
             ListRow::new(
                 "modified",
                 time_row(TimeKind::Modified, self.now.modified, offset, true),
@@ -508,7 +510,7 @@ impl App {
             "go" => {
                 let values = form.values(self.now());
                 if values.is_empty() {
-                    let line = "Nothing to change: no time to set from there";
+                    let line = "Nothing to change: no time to set";
                     effects.push(self.say(Message::info(line)));
                     effects.extend(self.show_time_form(form, Some(row)));
                     return effects;
@@ -541,24 +543,35 @@ impl App {
                 let at = choices.iter().position(|s| *s == form.set).unwrap_or(0);
                 form.set = choices[(at + 1) % choices.len()];
             }
-            "source" => match form.source {
-                TimeSource::Now => {
-                    let offset = self.clock.offset();
-                    let start = form.now.modified.unwrap_or_else(|| self.now());
-                    let field =
-                        EntryField::new("Set to, as 2026-10-10 22:09:", CompletionSource::None)
-                            .with_text(typed_form(start, offset));
-                    effects.extend(self.open_organize(
-                        Dialog::edit(field),
-                        Wants::Access(AccessWants::TypedTime(Box::new(form))),
-                    ));
-                    return effects;
-                }
-                TimeSource::Typed(_) => {
-                    form.source = self.other_times(form.side).unwrap_or(TimeSource::Now);
-                }
-                TimeSource::Other { .. } => form.source = TimeSource::Now,
-            },
+            // Now, then the other panel's file where it has one; a typed
+            // date goes back to now.
+            "source" => {
+                form.source = match form.source {
+                    TimeSource::Now => match self.other_times(form.side) {
+                        Some(other) => other,
+                        None => {
+                            let line = "No file in the other panel to copy times from";
+                            effects.push(self.say(Message::info(line)));
+                            TimeSource::Now
+                        }
+                    },
+                    TimeSource::Typed(_) | TimeSource::Other { .. } => TimeSource::Now,
+                };
+            }
+            "typed" => {
+                let offset = self.clock.offset();
+                let start = match form.source {
+                    TimeSource::Typed(time) => time,
+                    _ => form.now.modified.unwrap_or_else(|| self.now()),
+                };
+                let field = EntryField::new("Set to, as 2026-10-10 22:09:", CompletionSource::None)
+                    .with_text(typed_form(start, offset));
+                effects.extend(self.open_organize(
+                    Dialog::edit(field),
+                    Wants::Access(AccessWants::TypedTime(Box::new(form))),
+                ));
+                return effects;
+            }
             "changed" => {
                 effects.push(self.say(Message::info(CHANGE_TIME_REFUSAL)));
             }
@@ -791,7 +804,7 @@ impl App {
     /// back to its list, unchanged.
     pub(super) fn access_escape(&mut self, wants: AccessWants) -> Vec<Effect> {
         match wants {
-            AccessWants::TypedTime(form) => self.show_time_form(*form, Some("source")),
+            AccessWants::TypedTime(form) => self.show_time_form(*form, Some("typed")),
             AccessWants::OwnerName(form) => self.show_owner_form(*form, Some("owner")),
             AccessWants::GroupName(form) => self.show_owner_form(*form, Some("group")),
             AccessWants::TimeForm(_) | AccessWants::OwnerForm(_) => Vec::new(),
@@ -884,6 +897,7 @@ mod tests {
             "Change the times of main.rs",
             "Change: modified only",
             "Set to: now",
+            "Type a date and time",
             // October 10, 2026 is a Saturday: computed, never typed.
             "Modified: Saturday, 2026-10-10 22:09",
             "Accessed: Friday, 2026-10-16 08:00",
