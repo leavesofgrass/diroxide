@@ -222,8 +222,12 @@ impl Attributes {
     }
 }
 
-/// The rights a class has, as one phrase (permissions.md section 6.1).
-fn class_phrase(bits: u32, folder: bool) -> &'static str {
+/// The rights a class has, as one phrase (permissions.md section 6.1):
+/// "read and write"; on a folder "list, enter and change contents"; "no
+/// access". Only the low three bits of `bits` are read. Public so the
+/// access details view says a class the way the mode's words do (AX's
+/// request 4).
+pub fn class_phrase(bits: u32, folder: bool) -> &'static str {
     match (bits & 0o7, folder) {
         (0o4, false) => "read",
         (0o6, false) => "read and write",
