@@ -100,7 +100,13 @@ fn details_list_a_pictures_facts_in_the_order_of_facts() {
     assert!(places.windows(2).all(|w| w[0] < w[1]), "{rows:?}");
     assert_eq!(places.last(), Some(&(rows.len() - 1)), "{rows:?}");
     for row in &rows {
-        let label = row.split(':').next().unwrap();
+        // An access row's meaning ends where its notes start, and starts
+        // with the account the system names: "SYSTEM has full control
+        // (inherited from D:\data)", "Authenticated Users can read, write,
+        // run and delete" (alpha 4, lane AP).
+        let label = row.split(" (").next().unwrap().split(':').next().unwrap();
+        let label = label.split(" can ").next().unwrap();
+        let label = label.split(" ha").next().unwrap();
         assert!(within_cells(row, label), "{row}");
     }
     // Nothing ran: a picture's words come from its header.

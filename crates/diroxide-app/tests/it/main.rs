@@ -38,6 +38,8 @@ mod keys;
 mod labels;
 // Full screen, focus mode and the themes (lane A6).
 mod look;
+// The access rows, Change time and Change owner (alpha 4, lane AP).
+mod owner_time;
 mod palette;
 // Read text in picture (alpha 4, lane VA).
 mod picture_text;
