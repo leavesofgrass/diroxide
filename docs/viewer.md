@@ -74,7 +74,9 @@ A file that looks binary opens in hex mode and says why: "big.bin looks binary; 
 
 ## Which characters: encodings
 
-The viewer decides how to read a file from its first bytes. UTF-8 is tried first; a byte-order mark means UTF-16, and the viewer says so in words: "Encoding: UTF-16 (byte-order mark)". Older Windows text in Windows-1252 is recognized too. A file that fits none of these opens in hex mode. A chooser for other encodings comes in a later alpha.
+The viewer decides how to read a file from its first bytes. UTF-8 is tried first; a byte-order mark means UTF-16, and the viewer says so in words: "Encoding: UTF-16 (byte-order mark)". Older Windows text in Windows-1252 is recognized too. A file that fits none of these opens in hex mode.
+
+When the automatic choice is wrong, Encoding in the View menu (its Viewer submenu) and in the palette lets you choose. It opens a list titled with the file, "Encoding of legacy.txt", whose first row is "Automatic" with what was found, and then the encodings grouped by language. Enter reads the file again in that encoding and says "Encoding Windows-1251, chosen by you". The choice lasts for that file in that session. [File types and groups](file-types.md#the-encoding-chooser) has the whole list.
 
 ## The next file, and back to the folder
 
