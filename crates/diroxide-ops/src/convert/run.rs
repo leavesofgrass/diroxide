@@ -11,6 +11,8 @@
 //! an answer to replace keeps both instead and says so.
 
 use std::ffi::OsString;
+use std::fs;
+use std::io::{self, Read, Write};
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -24,13 +26,14 @@ use diroxide_core::{
 };
 use diroxide_vfs::names::unused_name;
 use diroxide_vfs::{
-    OpContext, Provider, RunLimits, Split, ToolRequest, ToolRunError, ToolStream, VfsError,
+    CancelToken, OpContext, Provider, RunLimits, Split, ToolRequest, ToolRunError, ToolStream,
+    VfsError, WriteMode,
 };
 
 use super::placeholders::{Fill, dash_guarded, expand};
-use super::plan::{ConvertItem, ConvertPlan, said, stem_of};
+use super::plan::{ConvertItem, ConvertPlan, extension_of, said, stem_of};
 use super::report::ConvertReport;
-use super::staging::{staging_name, token};
+use super::staging::{spool_input_name, staging_name, token};
 use super::tools::{self, FfmpegProgress};
 use crate::engine::{Conflict, Engine, ItemError, JobControl, JobSink};
 use crate::progress::JobProgress;
@@ -259,7 +262,7 @@ impl Engine {
                 kind: JobKind::Convert,
                 place: item.source.clone(),
                 error: VfsError::Io {
-                    kind: std::io::ErrorKind::Other,
+                    kind: io::ErrorKind::Other,
                     message: cause.clone(),
                 },
                 attempt,
@@ -286,52 +289,148 @@ impl Engine {
         }
     }
 
-    /// One file: the input on this computer, the tool run to a staging
-    /// name beside the output, and the staging file renamed in.
+    /// One file: the input on this computer (copied into the spool first
+    /// when it is not, or when the tool would misread its name), the tool
+    /// run to a staging name, and the output placed under its real name.
     fn one(&self, shared: &Shared<'_>, item: &ConvertItem) -> Outcome {
+        let ctx = self.context(&shared.control.cancel);
+        let spooled = if item.through_spool {
+            match self.spool_in(shared, item, &ctx) {
+                Ok(path) => Some(path),
+                Err(outcome) => return outcome,
+            }
+        } else {
+            None
+        };
+        let outcome = self.one_from(shared, item, spooled.as_deref(), &ctx);
+        if let Some(path) = spooled {
+            let _ = fs::remove_file(path);
+        }
+        outcome
+    }
+
+    /// Copies a source into the spool under a staging name with its own
+    /// extension, so the tool reads a local file with a plain name.
+    fn spool_in(
+        &self,
+        shared: &Shared<'_>,
+        item: &ConvertItem,
+        ctx: &OpContext,
+    ) -> Result<PathBuf, Outcome> {
+        let failed = |cause: String| Outcome::Failed(format!("it could not be copied in: {cause}"));
+        let spool = shared
+            .plan
+            .spool
+            .as_ref()
+            .ok_or_else(|| failed("there is no spool folder".to_owned()))?;
+        fs::create_dir_all(spool).map_err(|e| failed(VfsError::from(e).to_string()))?;
+        let extension = item
+            .source
+            .name()
+            .and_then(extension_of)
+            .filter(|e| e.bytes().all(|b| b.is_ascii_alphanumeric()))
+            .unwrap_or_else(|| "in".to_owned());
+        let path = (0..8)
+            .map(|_| spool.join(spool_input_name(token(), &extension)))
+            .find(|path| !path.exists())
+            .ok_or_else(|| failed("no spool name was free".to_owned()))?;
+        let copied = (|| -> Result<(), VfsError> {
+            let provider = self.registry().resolve(&item.source)?;
+            let mut reader = provider.read(&item.source, ctx)?;
+            let mut file = fs::File::create_new(&path)?;
+            copy_checked(&mut reader, &mut file, &shared.control.cancel)?;
+            Ok(())
+        })();
+        match copied {
+            Ok(()) => Ok(path),
+            Err(error) => {
+                let _ = fs::remove_file(&path);
+                if error == VfsError::Cancelled {
+                    Err(Outcome::Cancelled)
+                } else {
+                    Err(failed(error.to_string()))
+                }
+            }
+        }
+    }
+
+    /// One file from a local input: staged beside its output when the
+    /// destination is on this computer, in the spool when it is not.
+    fn one_from(
+        &self,
+        shared: &Shared<'_>,
+        item: &ConvertItem,
+        spooled: Option<&Path>,
+        ctx: &OpContext,
+    ) -> Outcome {
         let plan = shared.plan;
         let recipe = &plan.recipe;
-        let ctx = self.context(&shared.control.cancel);
-        if item.through_spool {
-            return Outcome::Failed("it needs the spool, which this run lacks".to_owned());
-        }
-        let Some(input) = local(&item.source) else {
-            return Outcome::Failed("it is not on this computer".to_owned());
+        let input = match spooled {
+            Some(path) => path.to_path_buf(),
+            None => match local(&item.source) {
+                Some(path) => path,
+                None => return Outcome::Failed("it is not on this computer".to_owned()),
+            },
         };
         let Some(folder) = item.output.parent() else {
             return Outcome::Failed("its output has no folder".to_owned());
-        };
-        let Some(out_folder) = local(&folder) else {
-            return Outcome::Failed("the target is not on this computer".to_owned());
         };
         let provider = match self.registry().resolve(&folder) {
             Ok(provider) => provider,
             Err(error) => return Outcome::Failed(error.to_string()),
         };
-        let (staging, staging_place) =
-            match fresh_staging(&*provider, &folder, &out_folder, &recipe.to, &ctx) {
-                Some(found) => found,
-                None => return Outcome::Failed("no staging name was free".to_owned()),
-            };
+        let (staging, staged, out_folder) = match local(&folder) {
+            Some(out_folder) => {
+                match fresh_staging(&*provider, &folder, &out_folder, &recipe.to, ctx) {
+                    Some((path, place)) => (path, Staged::Beside(place), out_folder),
+                    None => return Outcome::Failed("no staging name was free".to_owned()),
+                }
+            }
+            None => {
+                let Some(spool) = plan.spool.clone() else {
+                    return Outcome::Failed("the target is not on this computer".to_owned());
+                };
+                if let Err(error) = fs::create_dir_all(&spool) {
+                    return Outcome::Failed(VfsError::from(error).to_string());
+                }
+                match fresh_spool_name(&spool, &recipe.to) {
+                    Some(path) => (path.clone(), Staged::Spool(path), spool),
+                    None => return Outcome::Failed("no spool name was free".to_owned()),
+                }
+            }
+        };
         let ran = self.run_tool(shared, item, &input, &staging, &out_folder);
-        // The staging file is removed with a fresh context: the job's own
-        // is cancelled when Cancel is why it goes.
-        let failed = |cause: String| {
-            let _ = provider.remove(&staging_place, &OpContext::new());
-            Outcome::Failed(cause)
+        // A staging file is removed with a fresh context: the job's own is
+        // cancelled when Cancel is why it goes.
+        let discard = || match &staged {
+            Staged::Beside(place) => {
+                let _ = provider.remove(place, &OpContext::new());
+            }
+            Staged::Spool(path) => {
+                let _ = fs::remove_file(path);
+            }
         };
         match ran {
             Ran::Cancelled => {
-                let _ = provider.remove(&staging_place, &OpContext::new());
+                discard();
                 Outcome::Cancelled
             }
-            Ran::Failed(cause) => failed(cause),
-            Ran::Done => match provider.stat(&staging_place, &ctx) {
-                Ok(entry) if entry.size.unwrap_or(0) > 0 => {
-                    self.commit(shared, item, &*provider, &staging_place, &folder, &ctx)
+            Ran::Failed(cause) => {
+                discard();
+                Outcome::Failed(cause)
+            }
+            Ran::Done => {
+                let size = fs::metadata(&staging).map_or(0, |m| m.len());
+                if size == 0 {
+                    discard();
+                    return Outcome::Failed(format!("{} made no file", plan.tool_name));
                 }
-                _ => failed(format!("{} made no file", plan.tool_name)),
-            },
+                let outcome = self.commit(shared, item, &*provider, &staged, size, &folder, ctx);
+                if let Staged::Spool(path) = &staged {
+                    let _ = fs::remove_file(path);
+                }
+                outcome
+            }
         }
     }
 
@@ -431,7 +530,7 @@ impl Engine {
 
     /// The input's length in microseconds, from ffprobe, for FFmpeg's
     /// percent; `None` when ffprobe is not found or cannot say.
-    fn media_length(&self, input: &Path, cancel: &diroxide_vfs::CancelToken) -> Option<u64> {
+    fn media_length(&self, input: &Path, cancel: &CancelToken) -> Option<u64> {
         if !self.tools().has("ffprobe") {
             return None;
         }
@@ -446,29 +545,43 @@ impl Engine {
 
     /// Renames the staging file to the output's name, never over a file:
     /// a name taken is answered by the policy.
+    #[allow(clippy::too_many_arguments)]
     fn commit(
         &self,
         shared: &Shared<'_>,
         item: &ConvertItem,
         provider: &dyn Provider,
-        staging: &Place,
+        staged: &Staged,
+        size: u64,
         folder: &Place,
         ctx: &OpContext,
     ) -> Outcome {
+        let quiet = OpContext::new();
+        let discard = || {
+            if let Staged::Beside(place) = staged {
+                let _ = provider.remove(place, &quiet);
+            }
+        };
         let mut target = item.output.clone();
         let mut asked = !item.ask;
         for _ in 0..8 {
             if !asked && provider.stat(&target, ctx).is_ok() {
                 asked = true;
-                match self.ask(shared, item, provider, staging, &target, folder, ctx) {
+                let mut new = item.entry.clone();
+                new.size = Some(size);
+                match self.ask(shared, item, provider, new, &target, folder, ctx) {
                     Answer::Use(place) => target = place,
                     Answer::Stop(outcome) => {
-                        let _ = provider.remove(staging, &OpContext::new());
+                        discard();
                         return outcome;
                     }
                 }
             }
-            match provider.rename(staging, &target, ctx) {
+            let placed = match staged {
+                Staged::Beside(place) => provider.rename(place, &target, ctx),
+                Staged::Spool(path) => write_from_spool(provider, path, &target, ctx),
+            };
+            match placed {
                 Ok(()) => {
                     let entry = provider.stat(&target, ctx).unwrap_or_else(|_| {
                         Entry::new(
@@ -480,7 +593,7 @@ impl Engine {
                 }
                 Err(VfsError::AlreadyExists) => {
                     if shared.plan.conflicts == ConflictPolicy::Skip {
-                        let _ = provider.remove(staging, &OpContext::new());
+                        discard();
                         return Outcome::Skipped("output exists".to_owned());
                     }
                     match keep_both_place(provider, folder, &target, ctx) {
@@ -489,12 +602,12 @@ impl Engine {
                     }
                 }
                 Err(error) => {
-                    let _ = provider.remove(staging, &OpContext::new());
+                    discard();
                     return Outcome::Failed(error.to_string());
                 }
             }
         }
-        let _ = provider.remove(staging, &OpContext::new());
+        discard();
         Outcome::Failed("no free name was found for its output".to_owned())
     }
 
@@ -507,7 +620,7 @@ impl Engine {
         shared: &Shared<'_>,
         item: &ConvertItem,
         provider: &dyn Provider,
-        staging: &Place,
+        new: Entry,
         target: &Place,
         folder: &Place,
         ctx: &OpContext,
@@ -517,9 +630,6 @@ impl Engine {
         let action = match settled.clone() {
             Some(action) => action,
             None => {
-                let new = provider
-                    .stat(staging, ctx)
-                    .unwrap_or_else(|_| item.entry.clone());
                 let old = provider
                     .stat(target, ctx)
                     .unwrap_or_else(|_| item.entry.clone());
@@ -584,6 +694,16 @@ enum Ran {
     Cancelled,
 }
 
+/// Where a tool's output waits until it is placed under its real name.
+enum Staged {
+    /// Beside the output, in its folder on this computer: renamed in.
+    Beside(Place),
+    /// In the spool, for a destination that is not on this computer:
+    /// written to the output's place through its provider's committing
+    /// writer, which never replaces a file.
+    Spool(PathBuf),
+}
+
 /// What a conflict's answer means for the commit.
 enum Answer {
     /// Rename the staging file to this place.
@@ -608,6 +728,46 @@ fn fresh_staging(
             .is_err()
             .then(|| (local_folder.join(&name), place))
     })
+}
+
+/// A staging name in the spool that nothing holds yet.
+fn fresh_spool_name(spool: &Path, extension: &str) -> Option<PathBuf> {
+    (0..8)
+        .map(|_| spool.join(staging_name(token(), extension)))
+        .find(|path| !path.exists())
+}
+
+/// Copies a reader into a file a mebibyte at a time, stopping when the
+/// job is cancelled.
+fn copy_checked(
+    reader: &mut dyn Read,
+    file: &mut fs::File,
+    cancel: &CancelToken,
+) -> Result<(), VfsError> {
+    let mut buffer = vec![0u8; 1024 * 1024];
+    loop {
+        cancel.check()?;
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            return Ok(file.flush()?);
+        }
+        file.write_all(&buffer[..read])?;
+    }
+}
+
+/// Writes a spool file to a place through its provider's committing
+/// writer: nothing reaches the place before the commit, and the commit
+/// fails with `AlreadyExists` rather than replace a file.
+fn write_from_spool(
+    provider: &dyn Provider,
+    path: &Path,
+    target: &Place,
+    ctx: &OpContext,
+) -> Result<(), VfsError> {
+    let mut file = fs::File::open(path)?;
+    let mut writer = provider.write(target, WriteMode::CreateNew, ctx)?;
+    io::copy(&mut file, &mut writer)?;
+    writer.commit(true)
 }
 
 /// The keep-both place for a taken name: "photo (2).jpg", by the folder's

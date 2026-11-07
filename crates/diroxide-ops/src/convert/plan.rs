@@ -734,3 +734,23 @@ impl Engine {
         Ok(planner.plan)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Names are built in memory only: a name ending in `]` never touches
+    /// the disk in a test.
+    #[test]
+    fn names_split_and_imagemagicks_misread_names_are_known() {
+        assert_eq!(stem_of("song.flac"), "song");
+        assert_eq!(stem_of("archive.tar.gz"), "archive.tar");
+        assert_eq!(stem_of(".profile"), ".profile");
+        assert_eq!(stem_of("Makefile"), "Makefile");
+        assert_eq!(extension_of("Photo.JPG").as_deref(), Some("jpg"));
+        assert_eq!(extension_of(".profile"), None);
+        assert!(misread_by("magick", "frame[1]"));
+        assert!(!misread_by("magick", "frame[1].png"));
+        assert!(!misread_by("ffmpeg", "frame[1]"));
+    }
+}

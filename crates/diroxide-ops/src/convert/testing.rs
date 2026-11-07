@@ -252,3 +252,109 @@ pub(crate) fn recipe(text: &str) -> Recipe {
 
 /// The job id the tests use.
 pub(crate) const JOB: JobId = JobId::new(7);
+
+/// The local provider with a trash of its own in a scratch folder, so an
+/// undo test never touches the owner's recycle bin.
+#[derive(Debug)]
+pub(crate) struct ScratchBin {
+    inner: diroxide_vfs::LocalProvider,
+    bin: PathBuf,
+}
+
+impl ScratchBin {
+    /// The local provider, trashing into `bin`.
+    pub(crate) fn new(bin: PathBuf) -> Self {
+        fs::create_dir_all(&bin).unwrap();
+        Self {
+            inner: diroxide_vfs::LocalProvider::new(),
+            bin,
+        }
+    }
+}
+
+impl diroxide_vfs::Provider for ScratchBin {
+    fn scheme(&self) -> &str {
+        self.inner.scheme()
+    }
+    fn capabilities(&self, place: &Place) -> diroxide_vfs::Capabilities {
+        let mut capabilities = self.inner.capabilities(place);
+        capabilities.trash = true;
+        capabilities
+    }
+    fn list(
+        &self,
+        place: &Place,
+        ctx: &diroxide_vfs::OpContext,
+    ) -> Result<Vec<diroxide_core::Entry>, diroxide_vfs::VfsError> {
+        self.inner.list(place, ctx)
+    }
+    fn stat(
+        &self,
+        place: &Place,
+        ctx: &diroxide_vfs::OpContext,
+    ) -> Result<diroxide_core::Entry, diroxide_vfs::VfsError> {
+        self.inner.stat(place, ctx)
+    }
+    fn read(
+        &self,
+        place: &Place,
+        ctx: &diroxide_vfs::OpContext,
+    ) -> Result<Box<dyn std::io::Read + Send>, diroxide_vfs::VfsError> {
+        self.inner.read(place, ctx)
+    }
+    fn write(
+        &self,
+        place: &Place,
+        mode: diroxide_vfs::WriteMode,
+        ctx: &diroxide_vfs::OpContext,
+    ) -> Result<Box<dyn diroxide_vfs::FileWriter>, diroxide_vfs::VfsError> {
+        self.inner.write(place, mode, ctx)
+    }
+    fn create_dir(
+        &self,
+        place: &Place,
+        ctx: &diroxide_vfs::OpContext,
+    ) -> Result<(), diroxide_vfs::VfsError> {
+        self.inner.create_dir(place, ctx)
+    }
+    fn rename(
+        &self,
+        from: &Place,
+        to: &Place,
+        ctx: &diroxide_vfs::OpContext,
+    ) -> Result<(), diroxide_vfs::VfsError> {
+        self.inner.rename(from, to, ctx)
+    }
+    fn remove(
+        &self,
+        place: &Place,
+        ctx: &diroxide_vfs::OpContext,
+    ) -> Result<(), diroxide_vfs::VfsError> {
+        self.inner.remove(place, ctx)
+    }
+    fn set_attributes(
+        &self,
+        place: &Place,
+        change: &diroxide_vfs::AttributeChange,
+        ctx: &diroxide_vfs::OpContext,
+    ) -> Result<diroxide_vfs::AttributeChange, diroxide_vfs::VfsError> {
+        self.inner.set_attributes(place, change, ctx)
+    }
+    fn trash_gate(
+        &self,
+        _place: &Place,
+        _ctx: &diroxide_vfs::OpContext,
+    ) -> Result<diroxide_vfs::TrashGate, diroxide_vfs::VfsError> {
+        Ok(diroxide_vfs::TrashGate::Allowed)
+    }
+    fn trash(
+        &self,
+        place: &Place,
+        _ctx: &diroxide_vfs::OpContext,
+    ) -> Result<diroxide_vfs::TrashCheck, diroxide_vfs::VfsError> {
+        let path = PathBuf::from(place.local_path().unwrap());
+        let name = path.file_name().unwrap().to_owned();
+        fs::rename(&path, self.bin.join(name))?;
+        Ok(diroxide_vfs::TrashCheck::InTrash)
+    }
+}

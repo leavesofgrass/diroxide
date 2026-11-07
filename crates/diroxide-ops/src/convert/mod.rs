@@ -21,6 +21,12 @@
 //! - The staging names ([`staging`]), what the engine adds to FFmpeg's
 //!   and ImageMagick's runs and reads back from them ([`tools`]), and
 //!   the type registry's door for `{typed_input}` ([`typing`]).
+//! - The report ([`report`]): failures first, the last 20 kept in the
+//!   state folder, a file only on request with names only; the undo
+//!   record names every output, so Ctrl+Z trashes what the job made.
+//! - The spool: a source that is not on this computer is copied into the
+//!   state folder's spool first, and an output for a place that is not
+//!   is made there and written through the place's committing writer.
 
 pub mod book;
 pub mod placeholders;
@@ -39,5 +45,5 @@ pub mod typing;
 pub use book::RecipeBook;
 pub use plan::{ConvertError, ConvertItem, ConvertPlan, ConvertRequest};
 pub use recipe::{ConverterOutput, ConverterParts, Recipe, RecipeError, RecipeShape, RecipeSource};
-pub use report::ConvertReport;
+pub use report::{ConvertReport, KeptReport, ReportShelf};
 pub use typing::{ByExtension, FileKind, Typing};

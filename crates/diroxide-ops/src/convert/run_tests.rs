@@ -504,3 +504,126 @@ fn stop_at_first_ends_the_job_after_one_failure() {
     assert_eq!(super::run::parallel("ffmpeg"), 1);
     assert_eq!(super::run::parallel("magick"), 4);
 }
+
+/// A remote place served by the ops fake, under the `sftp` scheme.
+fn remote(path: &str) -> diroxide_core::Place {
+    diroxide_core::Place::parse(&format!("sftp://host{path}")).unwrap()
+}
+
+/// An engine whose local places are real and whose `sftp` places are the
+/// fake's.
+fn engine_with_remote(
+    tools: Arc<FakeTools>,
+    fake: &crate::fake::FakeProvider,
+) -> crate::engine::Engine {
+    let mut registry = diroxide_vfs::Registry::with_local();
+    registry.register("sftp", Arc::new(fake.clone()));
+    crate::engine::Engine::new(Arc::new(registry)).with_tools(tools)
+}
+
+#[test]
+fn a_source_not_on_this_computer_goes_through_the_spool() {
+    let root = scratch();
+    let out = root.path().join("out");
+    let spool = root.path().join("spool");
+    fs::create_dir_all(&out).unwrap();
+    let fake = crate::fake::FakeProvider::new();
+    fake.add_folder(&remote("/data"));
+    fake.add_file(&remote("/data/a.png"), b"PNG far");
+    let engine = engine_with_remote(Arc::new(FakeTools::with(&["magick"])), &fake);
+    let req = ConvertRequest::new(
+        JOB,
+        vec![remote("/data/a.png")],
+        place(&out),
+        recipe(IMAGE_TO_JPEG),
+    );
+    let refused = engine
+        .plan_convert(&req, &ByExtension, &JobControl::new())
+        .unwrap();
+    assert_eq!(
+        refused.lines()[0],
+        "Refused: a.png, not on this computer, and no spool folder"
+    );
+    let req = req.spool(&spool);
+    let plan = engine
+        .plan_convert(&req, &ByExtension, &JobControl::new())
+        .unwrap();
+    assert!(plan.work[0].through_spool);
+    let report = engine.run_convert(&plan, &JobControl::new(), &Script::default());
+    assert_eq!(report.made.len(), 1, "{:?}", report.job.failed);
+    assert_eq!(fs::read(out.join("a.jpg")).unwrap(), b"made from PNG far");
+    assert!(names(&spool).is_empty(), "{:?}", names(&spool));
+}
+
+#[test]
+fn an_output_for_a_place_not_on_this_computer_is_made_in_the_spool() {
+    let (root, input, _out) = folders();
+    let spool = root.path().join("spool");
+    let fake = crate::fake::FakeProvider::new();
+    fake.add_folder(&remote("/out"));
+    fake.add_file(&remote("/out/b.jpg"), b"old");
+    let engine = engine_with_remote(Arc::new(FakeTools::with(&["magick"])), &fake);
+    let req = request(
+        &[&input.join("a.png"), &input.join("b.png")],
+        &input,
+        IMAGE_TO_JPEG,
+    );
+    let mut req = req.spool(&spool);
+    req.destination = remote("/out");
+    let plan = engine
+        .plan_convert(&req, &ByExtension, &JobControl::new())
+        .unwrap();
+    assert_eq!(plan.lines()[1], "b.png to b (2).jpg");
+    let report = engine.run_convert(&plan, &JobControl::new(), &Script::default());
+    assert_eq!(report.made.len(), 2, "{:?}", report.job.failed);
+    assert_eq!(
+        fake.contents(&remote("/out/a.jpg")).unwrap(),
+        b"made from PNG a"
+    );
+    assert_eq!(fake.contents(&remote("/out/b.jpg")).unwrap(), b"old");
+    assert_eq!(
+        fake.contents(&remote("/out/b (2).jpg")).unwrap(),
+        b"made from PNG b"
+    );
+    assert!(names(&spool).is_empty(), "{:?}", names(&spool));
+    // Four pictures run at once, so the order they finish in varies.
+    assert!(report.job.undo.created.contains(&remote("/out/a.jpg")));
+    assert!(report.job.undo.created.contains(&remote("/out/b (2).jpg")));
+}
+
+/// Ctrl+Z after a conversion trashes the files the job made, through the
+/// undo record's made list, and leaves the sources and older files.
+#[test]
+fn undo_trashes_the_files_the_job_made() {
+    let (root, input, out) = folders();
+    fs::write(out.join("a.jpg"), b"old").unwrap();
+    let bin = root.path().join("bin");
+    let mut registry = diroxide_vfs::Registry::new();
+    registry.set_local(Arc::new(super::testing::ScratchBin::new(bin.clone())));
+    let engine = crate::engine::Engine::new(Arc::new(registry))
+        .with_tools(Arc::new(FakeTools::with(&["magick"])));
+    let req = request(
+        &[&input.join("a.png"), &input.join("b.png")],
+        &out,
+        IMAGE_TO_JPEG,
+    );
+    let plan = engine
+        .plan_convert(&req, &ByExtension, &JobControl::new())
+        .unwrap();
+    let report = engine.run_convert(&plan, &JobControl::new(), &Script::default());
+    assert_eq!(names(&out), ["a (2).jpg", "a.jpg", "b.jpg"]);
+    let mut log = crate::undo::UndoLog::new(10);
+    log.record(report.job.undo.clone());
+    let undone = engine
+        .undo_last(
+            &mut log,
+            diroxide_core::JobId::new(8),
+            &JobControl::new(),
+            &Script::default(),
+        )
+        .unwrap();
+    assert_eq!(undone.done.len(), 2, "{:?}", undone.failed);
+    assert_eq!(names(&out), ["a.jpg"]);
+    assert_eq!(names(&bin), ["a (2).jpg", "b.jpg"]);
+    assert_eq!(names(&input), ["a.png", "b.png"]);
+}

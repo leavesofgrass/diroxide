@@ -29,6 +29,13 @@ pub fn staging_name(token: u32, extension: &str) -> String {
     format!("{UNFINISHED_PREFIX}{token:08x}.{extension}")
 }
 
+/// The name of a source's copy in the spool: `in-`, eight hexadecimal
+/// digits and the source's extension, a plain name whatever the source's
+/// was, so the tool never misreads it.
+pub fn spool_input_name(token: u32, extension: &str) -> String {
+    format!("in-{token:08x}.{extension}")
+}
+
 /// Whether a name is a conversion's staging name: the prefix, eight
 /// hexadecimal digits, a dot and a plain extension.
 pub fn is_staging_name(name: &str) -> bool {
@@ -62,6 +69,8 @@ mod tests {
         assert!(!is_staging_name(".diro-part-1a2b3c4d"));
         assert!(!is_staging_name(".diro-part-1a2b3c4.jpg"));
         assert!(!is_staging_name("photo.jpg"));
+        assert_eq!(spool_input_name(0x2a, "png"), "in-0000002a.png");
+        assert!(!is_staging_name(&spool_input_name(0x2a, "png")));
         let tokens: std::collections::BTreeSet<u32> = (0..1000).map(|_| token()).collect();
         assert!(tokens.len() > 990);
     }
