@@ -69,6 +69,8 @@ pub(super) struct ColumnJob {
     pub pipeline: Arc<Pipeline>,
     /// Where the files are read from.
     pub registry: Arc<Registry>,
+    /// The app's number for this read.
+    pub ask: u64,
 }
 
 impl ColumnJob {
@@ -127,6 +129,7 @@ fn send(shared: &Arc<Shared>, job: &ColumnJob, cells: Vec<ColumnCell>) {
         listing: job.listing,
         cells,
         plugin: false,
+        ask: job.ask,
     });
 }
 
@@ -287,6 +290,7 @@ mod tests {
             urgent: 4,
             costs: vec![("text.lines".into(), Cost::OnDemand)],
             pipeline: pipeline.clone(),
+            ask: listing,
         };
         runtime.request(ask(1, items.clone()));
         runtime.request(ask(2, items[198..].to_vec()));

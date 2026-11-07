@@ -273,6 +273,7 @@ fn a_plugins_column_fills_the_rows_and_sorts_when_every_cell_is_in() {
         format!("{MANIFEST}\n[[column]]\nid = \"git\"\nheader = \"Git\"\nkind = \"text\"\n");
     let w = world(&manifest);
     enable(&w.paths);
+    fs::write(w.work.join("never.txt"), b"x").unwrap();
     let here = place(&w.work);
     let mut s = Session::open(
         here.clone(),
@@ -295,12 +296,13 @@ fn a_plugins_column_fills_the_rows_and_sorts_when_every_cell_is_in() {
         row(&s, "budget.xlsx"),
         "budget.xlsx, 300 bytes, git Ignored"
     );
-    // A cell the plugin did not answer yet says so, and is asked again.
+    // A cell the plugin did not answer says so, and is asked again.
     assert!(
-        row(&s, "notes.txt").ends_with("git pending"),
+        row(&s, "never.txt").ends_with("git pending"),
         "{}",
-        row(&s, "notes.txt")
+        row(&s, "never.txt")
     );
+    until(&mut s, |s| row(s, "notes.txt").ends_with("git Clean"));
     s.command(ids::SORT_LIST);
     let rows = match s.dialog() {
         Some(diroxide_app::Dialog::Choose { list, .. }) => list.rows().to_vec(),
@@ -325,9 +327,9 @@ fn a_plugins_column_fills_the_rows_and_sorts_when_every_cell_is_in() {
     }));
     assert_eq!(said.last().unwrap(), "Sorted by git, A to Z");
     assert!(
-        row(&s, "notes.txt").ends_with("git Clean"),
+        row(&s, "never.txt").ends_with("git pending"),
         "{}",
-        row(&s, "notes.txt")
+        row(&s, "never.txt")
     );
     let names = s.names(Side::Left);
     assert_eq!(

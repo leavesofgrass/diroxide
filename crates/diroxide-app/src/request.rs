@@ -702,6 +702,8 @@ pub enum Request {
         costs: Vec<(String, diroxide_meta::Cost)>,
         /// The pipeline the cells are read through.
         pipeline: SharedPipeline,
+        /// The app's number for this read, carried by its answers.
+        ask: u64,
     },
     /// Stop a panel's column readers: it left the folder, or nothing is
     /// left to read.

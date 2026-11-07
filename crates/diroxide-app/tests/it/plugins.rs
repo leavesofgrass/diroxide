@@ -104,7 +104,6 @@ fn serve(
 ) {
     let mut waiting: Option<Value> = None;
     let mut hanging: Option<Value> = None;
-    let mut notes_asked = false;
     while let Ok(line) = peer.from_host.recv() {
         let Ok(message) = serde_json::from_str::<Value>(&line) else {
             continue;
@@ -206,8 +205,8 @@ fn serve(
             }
             // The Git column (alpha 4, lane MA, R30 commit 53), answered
             // as diro-git answers: a word for each place it knows, "3
-            // changed inside" for a folder, and nothing yet (pending) for
-            // notes.txt the first time it is asked.
+            // changed inside" for a folder, and never an answer (pending)
+            // for never.txt.
             Some("column/format") => {
                 let mut values = serde_json::Map::new();
                 for place in message["params"]["places"].as_array().into_iter().flatten() {
@@ -217,10 +216,7 @@ fn serve(
                         "report.pdf" => "Staged, modified",
                         "Backup" => "3 changed inside",
                         "budget.xlsx" => "Ignored",
-                        "notes.txt" if !notes_asked => {
-                            notes_asked = true;
-                            continue;
-                        }
+                        "never.txt" => continue,
                         _ => "Clean",
                     };
                     values.insert(place.to_owned(), json!(word));

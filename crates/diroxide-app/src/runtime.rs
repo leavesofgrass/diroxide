@@ -1877,6 +1877,7 @@ impl Runtime {
                 urgent,
                 costs,
                 pipeline,
+                ask,
             } => {
                 let job = columns::ColumnJob {
                     side,
@@ -1890,6 +1891,7 @@ impl Runtime {
                     costs,
                     pipeline: pipeline.0,
                     registry: Arc::clone(&self.registry),
+                    ask,
                 };
                 self.worker(move |shared| columns::run(shared, &job));
             }

@@ -774,6 +774,7 @@ impl PluginRuntime {
                 folder,
                 column,
                 items,
+                ask,
             } => {
                 let Some(host) = self.hosts.get(&column.plugin).map(|h| Arc::clone(&h.host)) else {
                     return;
@@ -804,6 +805,7 @@ impl PluginRuntime {
                             listing,
                             cells,
                             plugin: true,
+                            ask,
                         });
                     }
                 };

@@ -523,6 +523,9 @@ pub enum AppEvent {
         /// Whether a plugin's column answered (a page of `column/format`)
         /// rather than the metadata readers.
         plugin: bool,
+        /// The app's number for the read it answers: only its own answers
+        /// count toward its end.
+        ask: u64,
     },
     /// The programs the system has for a file, for Open with (lane TA).
     OpenWithListed {
@@ -1978,7 +1981,8 @@ impl App {
                 listing,
                 cells,
                 plugin,
-            } => self.columns_read(side, listing, cells, plugin),
+                ask,
+            } => self.columns_read(side, listing, cells, plugin, ask),
             AppEvent::OpenWithListed { place, list } => self.open_with_listed(place, *list),
         }
     }

@@ -52,6 +52,8 @@ pub(super) struct ColumnsState {
     asked: [Option<Asked>; 2],
     /// What each panel's plugins' columns were asked (R30 commit 53).
     plugin_asked: [Option<Asked>; 2],
+    /// The number of the last read asked, of either kind.
+    asks: u64,
     /// The pipeline the columns read through, with the runner a test gave
     /// when it was made (`None`: the tools registry).
     pipeline: Option<(Option<crate::request::SharedTools>, Arc<Pipeline>)>,
@@ -60,6 +62,8 @@ pub(super) struct ColumnsState {
 /// One panel's read as last asked.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Asked {
+    /// Its number: only its own answers count toward its end.
+    ask: u64,
     /// The panel's entries it was asked for.
     listing: u64,
     /// The focused row when it was asked.
@@ -260,7 +264,10 @@ impl App {
             }
         }
         let left: usize = asks.iter().map(|(_, items)| items.len()).sum();
+        self.columns.asks += 1;
+        let ask = self.columns.asks;
         self.columns.plugin_asked[side.index()] = Some(Asked {
+            ask,
             listing,
             focus,
             left,
@@ -274,6 +281,7 @@ impl App {
                     folder: folder.clone(),
                     column,
                     items,
+                    ask,
                 },
             )));
         }
@@ -315,7 +323,10 @@ impl App {
             .as_ref()
             .is_some_and(|a| a.left > 0);
         let files = items.len();
+        self.columns.asks += 1;
+        let ask = self.columns.asks;
         self.columns.asked[side.index()] = Some(Asked {
+            ask,
             listing,
             focus,
             left: files,
@@ -336,6 +347,7 @@ impl App {
             urgent,
             costs,
             pipeline,
+            ask,
         });
         files
     }
@@ -350,6 +362,7 @@ impl App {
         listing: u64,
         cells: Vec<ColumnCell>,
         plugin: bool,
+        ask: u64,
     ) -> Vec<Effect> {
         if self.panel(side).entries_generation() != listing {
             return Vec::new();
@@ -367,6 +380,7 @@ impl App {
         };
         if let Some(asked) = asked.as_mut()
             && asked.listing == listing
+            && asked.ask == ask
             && asked.left > 0
         {
             asked.left = asked.left.saturating_sub(count);

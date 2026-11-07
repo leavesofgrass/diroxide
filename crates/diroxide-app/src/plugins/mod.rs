@@ -258,6 +258,8 @@ pub enum PluginRequest {
         column: diroxide_plugins::listers::PluginColumn,
         /// The files: each one's index in the listing and its name.
         items: Vec<(u32, String)>,
+        /// The app's number for this ask, carried by its answers.
+        ask: u64,
     },
 }
 
