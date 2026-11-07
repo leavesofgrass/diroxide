@@ -708,6 +708,9 @@ pub mod ids {
         CONVERT = "file.convert";
         /// The last conversion reports; Enter reads one.
         CONVERT_REPORTS = "file.convert-reports";
+        /// The Watched folders list: one row a task ("hot" finds it, R30
+        /// commit 70).
+        WATCHED_FOLDERS = "app.hot-folders";
     }
 }
 
@@ -733,7 +736,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 250] = [
+pub static CATALOG: [CommandInfo; 251] = [
     command(
         ids::QUIT,
         "Quit",
@@ -2700,6 +2703,14 @@ pub static CATALOG: [CommandInfo; 250] = [
         ids::TOOLS_LIST,
         "Tools list",
         "Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it.",
+        Global,
+        &[],
+        &[],
+    ),
+    command(
+        ids::WATCHED_FOLDERS,
+        "Watched folders",
+        "Lists the tasks that watch a folder, one a row with what it did today; a task's actions turn it on or off, pause it, preview it, show its log and put failed files back.",
         Global,
         &[],
         &[],

@@ -470,6 +470,9 @@ pub enum Request {
     /// One of the Convert command's asks (alpha 4, lane AW); answered as
     /// [`AppEvent::Convert`](crate::AppEvent::Convert).
     Convert(Box<crate::conversions::ConvertAsk>),
+    /// One of the Watched folders list's asks (alpha 4, lane AW); answered
+    /// as [`AppEvent::HotFolder`](crate::AppEvent::HotFolder).
+    Watched(Box<crate::watched::WatchedRequest>),
     /// Run an archive job the user confirmed, exactly as planned; its end
     /// comes as [`AppEvent::ArchiveFinished`](crate::AppEvent::ArchiveFinished).
     RunArchive(Box<ArchivePlan>),

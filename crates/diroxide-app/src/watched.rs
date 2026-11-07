@@ -321,6 +321,24 @@ pub struct TaskRow {
     pub paused: Option<String>,
     /// Its task file, for Edit.
     pub file: PathBuf,
+    /// Files it did today, by its log.
+    pub done_today: usize,
+    /// Files it filed in `failed` today, by its log.
+    pub failed_today: usize,
+}
+
+/// One of the Watched folders list's asks, with what a task runs with:
+/// the app's type registry, tools runner and clock.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WatchedRequest {
+    /// The ask.
+    pub ask: WatchedAsk,
+    /// The type registry.
+    pub types: crate::conversions::SharedTypes,
+    /// The tools runner.
+    pub tools: crate::request::SharedTools,
+    /// The app's clock.
+    pub clock: crate::request::SharedClock,
 }
 
 /// What the Watched folders list asks of the runtime.

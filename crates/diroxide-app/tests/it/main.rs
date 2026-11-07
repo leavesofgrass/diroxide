@@ -77,6 +77,8 @@ mod views;
 mod volumes;
 // Watch this folder (W3t).
 mod watching;
+// The Watched folders list (alpha 4, lane AW).
+mod watched_folders;
 // Delete, Rename and Make folder inside a zip (alpha 4, lane AW).
 mod zip_edits;
 

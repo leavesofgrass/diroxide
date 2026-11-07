@@ -570,7 +570,12 @@ pub fn build_for(
     let editor = app.settings().editor.clone();
     let mut runtime = Runtime::new(registry)
         .with_engine_options(engine)
-        .with_tool_runner(std::sync::Arc::new(tools));
+        .with_tool_runner(std::sync::Arc::new(tools.clone()))
+        .with_tool_versions(tools);
+    // The watched folders' carta runs in a diro child (lane AW).
+    if let Ok(program) = env::current_exe() {
+        runtime = runtime.with_carta_child(program);
+    }
     if options.no_plugins {
         // `--no-plugins`: nothing starts, and the Plugins menu says so
         // (W4d).

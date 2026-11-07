@@ -53,6 +53,8 @@ mod archive_jobs;
 mod components;
 // Conversions on workers (alpha 4, lane AW).
 mod converting;
+// The watched folders' tasks (alpha 4, lane AW).
+mod watched;
 // Plugins and script commands (W4d).
 mod plugins;
 // Hooks through the plugin hosts (lane A2, R25 commit 81).
@@ -582,6 +584,8 @@ pub struct Runtime {
     /// Open with's lists and starts (lane TA): the system's, or a
     /// recorder in tests.
     open_with: Arc<dyn OpenWithPrograms>,
+    /// The watched folders' running tasks (alpha 4, lane AW).
+    hot: watched::WatchedRuntime,
 }
 
 impl fmt::Debug for Runtime {
@@ -674,6 +678,7 @@ impl Runtime {
             local_volumes: None,
             type_readers: typing::TypeReaders::default(),
             open_with: Arc::new(SystemOpenWith),
+            hot: watched::WatchedRuntime::default(),
         }
     }
 
@@ -855,6 +860,22 @@ impl Runtime {
     /// job's context and the archive listings carry it (CL's K4, lane AW).
     pub fn with_tool_runner(mut self, tools: Arc<dyn diroxide_vfs::ToolRunner>) -> Self {
         self.engine = self.engine.clone().with_tools(tools);
+        self
+    }
+
+    /// The same runtime running the watched folders' carta conversions in
+    /// a child of `program`, the current `diro`, which it can stop (lane
+    /// AW); in process without it.
+    pub fn with_carta_child(mut self, program: PathBuf) -> Self {
+        self.hot.carta = diroxide_ops::convert::CartaRunner::child(program);
+        self
+    }
+
+    /// The same runtime reading a tool's version through `registry` for a
+    /// watched folder's approval (lane AW); tests give none, so no version
+    /// command runs.
+    pub fn with_tool_versions(mut self, registry: diroxide_tools::ToolRegistry) -> Self {
+        self.hot.versions = Some(registry);
         self
     }
 
@@ -1432,6 +1453,7 @@ impl Runtime {
                 });
             }
             Request::Convert(ask) => self.convert(*ask),
+            Request::Watched(request) => self.watched(*request),
             Request::PlanRewrite(ask) => {
                 let Some(archives) = self.archives.clone() else {
                     self.queue.push_back(AppEvent::ArchivePlanned {
