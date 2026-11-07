@@ -54,6 +54,9 @@ command = "file.read-text-in-picture"
 command = "file.checksum"
 
 [[menu.item]]
+command = "file.verify-checksum"
+
+[[menu.item]]
 command = "file.actions"
 
 [[menu.item]]

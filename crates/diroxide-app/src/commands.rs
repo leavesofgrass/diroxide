@@ -716,6 +716,9 @@ pub mod ids {
         /// The SHA-256 of the marked files, or the focused one, to read,
         /// copy, compare with a pasted value or save as `SHA256SUMS`.
         CHECKSUM = "file.checksum";
+        /// Check the focused file against the checksum list beside it, or
+        /// every file a focused list names, the verdict first.
+        VERIFY_CHECKSUM = "file.verify-checksum";
     }
 }
 
@@ -741,7 +744,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 252] = [
+pub static CATALOG: [CommandInfo; 253] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1538,6 +1541,14 @@ pub static CATALOG: [CommandInfo; 252] = [
         ids::CHECKSUM,
         "Checksum",
         "Computes the SHA-256 of the marked files, or the focused one, as a job Cancel stops; then lists it to read, copy, compare with a pasted value, or save as SHA256SUMS beside them.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::VERIFY_CHECKSUM,
+        "Verify checksum",
+        "Checks the focused file against the checksum list beside it (its own .sha256 first, then SHA256SUMS and the others), or every file a focused list names, reading each again; the verdict comes first, the failures next.",
         Panel,
         &[],
         &[],

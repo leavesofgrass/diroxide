@@ -16,7 +16,14 @@ use diroxide_vfs::{
 
 use super::Shared;
 use crate::app::AppEvent;
-use crate::metadata::{MetaAsk, MetaNote};
+use crate::metadata::{MetaAsk, MetaNote, Verified};
+use diroxide_meta::checksum::list::{
+    ChecksumList, MAX_LIST_BYTES, list_row, parse_list, sidecars_for,
+};
+
+/// The largest file Verify checksum reads to see whether its own lines
+/// are a list, when no list sits beside it: 1 MiB.
+const LIST_PROBE_BYTES: u64 = 1024 * 1024;
 
 /// The shortest time between two progress lines a worker sends.
 const PROGRESS_EVERY: Duration = Duration::from_millis(250);
@@ -65,7 +72,7 @@ impl ProgressSink for JobSink {
 /// Cancel until the answer.
 pub(super) fn job_of(ask: &MetaAsk) -> Option<JobId> {
     match ask {
-        MetaAsk::Checksums { job, .. } => Some(*job),
+        MetaAsk::Checksums { job, .. } | MetaAsk::Verify { job, .. } => Some(*job),
         MetaAsk::SaveList { .. } => None,
     }
 }
@@ -81,6 +88,11 @@ pub(super) fn run(shared: &Arc<Shared>, registry: &Registry, ask: MetaAsk, cance
         MetaAsk::SaveList { folder, name, text } => MetaNote::Saved {
             result: save_list(registry, &folder, &name, &text),
             folder,
+        },
+        MetaAsk::Verify { job, place, list } => MetaNote::Verified {
+            outcome: verify(shared, registry, job, &place, list.as_deref(), &cancel),
+            job,
+            place,
         },
     };
     shared.send(AppEvent::Meta(Box::new(note)));
@@ -145,6 +157,135 @@ fn checksums(
         results,
         cancelled,
     }
+}
+
+/// Verify checksum: the list chosen, the file itself when it is a list,
+/// or the list beside the file in R29's order (`NAME.sha256`, `.sha512`,
+/// `.md5`, `.blake3`, then `SHA256SUMS`, `SHA512SUMS`, `MD5SUMS`,
+/// `B3SUMS` and the same ending `.txt`); for a file, only its own line is
+/// checked. Every file is read again; nothing is written.
+fn verify(
+    shared: &Arc<Shared>,
+    registry: &Registry,
+    job: JobId,
+    place: &Place,
+    chosen: Option<&str>,
+    cancel: &CancelToken,
+) -> Result<Verified, String> {
+    let folder = place
+        .parent()
+        .ok_or_else(|| "the file has no folder".to_owned())?;
+    let name = place.name().unwrap_or_default().to_owned();
+    let provider = registry.resolve(place).map_err(|e| e.to_string())?;
+    let plain = OpContext::new().with_cancel(cancel.clone());
+    let names: Vec<String> = provider
+        .list(&folder, &plain)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    let found = |wanted: &str| {
+        names
+            .iter()
+            .find(|n| n.as_str() == wanted)
+            .or_else(|| names.iter().find(|n| n.eq_ignore_ascii_case(wanted)))
+            .cloned()
+    };
+    let (list_name, only) = match chosen {
+        Some(list) => (list.to_owned(), Some(name.clone())),
+        None if crate::metadata::is_list_name(&name) => (name.clone(), None),
+        // A small file whose own lines are all a list's, whatever its name
+        // ("checksums.txt"), is checked as one.
+        None if provider
+            .stat(place, &plain)
+            .is_ok_and(|e| e.size.is_some_and(|s| s <= LIST_PROBE_BYTES))
+            && read_list(provider.as_ref(), &folder, &name, &plain)
+                .is_ok_and(|l| !l.entries.is_empty() && l.problems.is_empty()) =>
+        {
+            (name.clone(), None)
+        }
+        None => {
+            let lists: Vec<String> = sidecars_for(&name)
+                .iter()
+                .filter_map(|candidate| found(candidate))
+                .collect();
+            match lists.as_slice() {
+                [] => return Ok(Verified::NoList),
+                [one] => (one.clone(), Some(name.clone())),
+                many => {
+                    let rows = many
+                        .iter()
+                        .map(|list| {
+                            let parsed = read_list(provider.as_ref(), &folder, list, &plain)
+                                .unwrap_or_default();
+                            (list.clone(), list_row(list, &parsed))
+                        })
+                        .collect();
+                    return Ok(Verified::Choose(rows));
+                }
+            }
+        }
+    };
+    let mut parsed = read_list(provider.as_ref(), &folder, &list_name, &plain)?;
+    if let Some(only) = &only {
+        parsed
+            .entries
+            .retain(|entry| entry.parts() == [only.as_str()]);
+        parsed.problems.clear();
+        if parsed.entries.is_empty() {
+            return Ok(Verified::NoLine(list_name));
+        }
+    }
+    let sink = Arc::new(JobSink {
+        shared: Arc::clone(shared),
+        job,
+        kind: JobKind::Verify,
+        base: AtomicU64::new(0),
+        total: None,
+        last: Mutex::new(None),
+    });
+    let ctx = OpContext::new()
+        .with_cancel(cancel.clone())
+        .with_progress(sink as Arc<dyn ProgressSink>);
+    match diroxide_meta::checksum::verify::verify_parsed(
+        provider.as_ref(),
+        &folder,
+        &list_name,
+        parsed,
+        &ctx,
+    ) {
+        Ok(report) => Ok(Verified::Report {
+            report: Box::new(report),
+            signature: crate::metadata::signature_names(&list_name)
+                .iter()
+                .find_map(|candidate| found(candidate)),
+        }),
+        Err(diroxide_meta::MetaError::Place(VfsError::Cancelled)) => Ok(Verified::Cancelled),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// Reads and parses a list in a folder, at most 16 MiB.
+fn read_list(
+    provider: &dyn diroxide_vfs::Provider,
+    folder: &Place,
+    name: &str,
+    ctx: &OpContext,
+) -> Result<ChecksumList, String> {
+    let place = folder.join(name).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(
+        &mut std::io::Read::take(
+            provider.read(&place, ctx).map_err(|e| e.to_string())?,
+            MAX_LIST_BYTES as u64 + 1,
+        ),
+        &mut bytes,
+    )
+    .map_err(|e| e.to_string())?;
+    if bytes.len() > MAX_LIST_BYTES {
+        return Err(format!("{name} is larger than 16 MiB"));
+    }
+    Ok(parse_list(&bytes, name))
 }
 
 /// Writes a list into a folder under its name, or the first numbered

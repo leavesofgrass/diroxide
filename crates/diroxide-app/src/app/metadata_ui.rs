@@ -13,6 +13,18 @@
 //!   numbered "SHA256SUMS (2)", never overwritten. A pasted value of
 //!   another length (128 digits, 32, 8) computes that algorithm first.
 //!
+//! - **Verify checksum** checks the focused file against the list beside
+//!   it, found in R29's order (`NAME.sha256`, `.sha512`, `.md5`,
+//!   `.blake3`, then `SHA256SUMS`, `SHA512SUMS`, `MD5SUMS`, `B3SUMS` and
+//!   the same ending `.txt`), only its own line; on a list it checks every
+//!   file the list names. Several lists beside a file are a Choose list
+//!   ("SHA256SUMS, 12 files"). Each file is read again, as a job Cancel
+//!   stops. The verdict comes first ("All 12 files match SHA256SUMS", "1
+//!   differs, 1 missing, 1 match"), the failures next, "Matches BLAKE3,
+//!   not SHA-256" where a value named no algorithm, then one line on the
+//!   signature ("List not signed.") and what a match shows; the matches
+//!   only on request. A match is never called safe or genuine.
+//!
 //! The lists and questions of this lane are hosted under the Organize
 //! purpose, so the window's test of every purpose keeps its count.
 
@@ -47,6 +59,8 @@ const LIST_NAME: &str = "SHA256SUMS";
 pub(super) struct MetaState {
     /// The checksum jobs running, each with what it was for.
     checksums: HashMap<JobId, Pending>,
+    /// The verify jobs running.
+    verifies: std::collections::HashSet<JobId>,
     /// The SHA-256 each file had this session, with its size and modified
     /// time then: the details' Checksum row says it while they are the
     /// same.
@@ -164,18 +178,196 @@ pub(super) enum MetaWants {
     Checksums(Box<ChecksumShown>),
     /// The field a value is pasted in, to compare with what was computed.
     Compare(Box<ChecksumShown>),
+    /// The lists found beside a file, to choose one.
+    VerifyLists {
+        /// The file.
+        place: Place,
+    },
+    /// What Verify checksum found, with the matches for the row that
+    /// lists them.
+    VerifyReport {
+        /// The matches, each "Match: a.txt, SHA-256".
+        matches: Vec<String>,
+    },
 }
 
 impl App {
     /// The metadata commands; `None` for commands that are not theirs.
     pub(super) fn meta_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
-        if command.id != ids::CHECKSUM {
+        let id = &command.id;
+        if *id != ids::CHECKSUM && *id != ids::VERIFY_CHECKSUM {
             return None;
         }
         if !self.dialogs.is_empty() {
             return Some(vec![self.say(Message::status("Close this dialog first."))]);
         }
-        Some(self.checksum_command())
+        Some(if *id == ids::CHECKSUM {
+            self.checksum_command()
+        } else {
+            self.verify_command(None)
+        })
+    }
+
+    /// Verify checksum on the focused file, with the list chosen when
+    /// several were found.
+    fn verify_command(&mut self, list: Option<(Place, String)>) -> Vec<Effect> {
+        let side = self.active;
+        let (place, list) = match list {
+            Some((place, list)) => (place, Some(list)),
+            None => {
+                let panel = self.panel(side);
+                let Some(entry) = panel.focused_entry() else {
+                    let empty = panel.list().empty_text().to_owned();
+                    return vec![self.say(Message::status(empty))];
+                };
+                if !matches!(entry.kind, EntryKind::File | EntryKind::Archive) {
+                    let line = format!(
+                        "Verify checksum works on files: {} is a folder",
+                        entry.display_name()
+                    );
+                    return vec![self.say(Message::status(line))];
+                }
+                let Some(place) = panel.focused_place() else {
+                    return Vec::new();
+                };
+                (place, None)
+            }
+        };
+        let name = place
+            .name()
+            .map(display_name)
+            .unwrap_or_default()
+            .into_owned();
+        let line = format!("Verifying {name}");
+        let job = self.next_job_id();
+        let now = self.now();
+        self.jobs.begin(job, JobKind::Verify, line.clone(), now);
+        self.meta.verifies.insert(job);
+        self.request(Request::Meta(Box::new(MetaAsk::Verify {
+            job,
+            place,
+            list,
+        })));
+        vec![
+            Effect::Redraw(Redraw::JobsLine),
+            self.say(Message::status(line)),
+        ]
+    }
+
+    /// What Verify checksum found: the verdict said and listed first.
+    fn verified(
+        &mut self,
+        job: JobId,
+        place: Place,
+        outcome: Result<crate::metadata::Verified, String>,
+    ) -> Vec<Effect> {
+        use crate::metadata::Verified;
+        self.meta.verifies.remove(&job);
+        let name = place
+            .name()
+            .map(display_name)
+            .unwrap_or_default()
+            .into_owned();
+        let (summary, failed, cancelled) = match &outcome {
+            Ok(Verified::Report { report, .. }) => (report.verdict(), report.failures(), false),
+            Ok(Verified::Cancelled) => ("Verify cancelled.".to_owned(), Vec::new(), true),
+            Ok(_) => (
+                "Verify found no list to check.".to_owned(),
+                Vec::new(),
+                false,
+            ),
+            Err(why) => (
+                format!("Could not verify {name}: {why}"),
+                vec![why.clone()],
+                false,
+            ),
+        };
+        let done = match &outcome {
+            Ok(Verified::Report { report, .. }) => report.counts().files() as u64,
+            _ => 0,
+        };
+        self.jobs.finished(FinishedJob {
+            job,
+            kind: JobKind::Verify,
+            summary,
+            failed,
+            done,
+            cancelled,
+            ..FinishedJob::default()
+        });
+        let mut effects = vec![Effect::Redraw(Redraw::JobsLine)];
+        match outcome {
+            Err(why) => {
+                effects.push(self.say(Message::error(format!("Could not verify {name}: {why}"))))
+            }
+            Ok(Verified::Cancelled) => effects.push(self.say(Message::info("Verify cancelled."))),
+            Ok(Verified::NoList) => {
+                effects.push(self.say(Message::info(crate::metadata::no_list_line(&name))));
+            }
+            Ok(Verified::NoLine(list)) => {
+                effects.push(self.say(Message::info(crate::metadata::no_line_line(&list, &name))));
+            }
+            Ok(Verified::Choose(lists)) => {
+                if !self.dialogs.is_empty() {
+                    return effects;
+                }
+                let rows = lists
+                    .into_iter()
+                    .map(|(id, row)| ListRow::new(id, row))
+                    .collect();
+                let mut list =
+                    ListModel::new(format!("Checksum lists beside {name}")).with_rows(rows);
+                list.set_help("Enter checks the file against that list. Escape closes.");
+                effects.extend(self.open_organize(
+                    Dialog::Choose {
+                        list,
+                        on_enter: Command::new(ids::ACCEPT),
+                    },
+                    Wants::Meta(MetaWants::VerifyLists { place }),
+                ));
+            }
+            Ok(Verified::Report { report, signature }) => {
+                let lines = crate::metadata::verify_lines(&report, signature.as_deref());
+                let verdict = lines.first().cloned().unwrap_or_default();
+                let message = if report.all_match() {
+                    Message::done(verdict.clone())
+                } else {
+                    Message::warning(verdict.clone())
+                };
+                // The list's title is the verdict, said when it opens; with
+                // a dialog or the viewer open, the verdict alone is said.
+                if !self.dialogs.is_empty() || self.viewer_open() {
+                    effects.push(self.say(message));
+                    return effects;
+                }
+                let matches = report.matches();
+                let mut rows: Vec<ListRow> = lines
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .map(|(i, line)| ListRow::new(format!("line:{i}"), line.clone()))
+                    .collect();
+                if !matches.is_empty() {
+                    rows.push(ListRow::new(
+                        "matches",
+                        format!(
+                            "Show the {}",
+                            count(matches.len() as u64, "match", "matches")
+                        ),
+                    ));
+                }
+                let mut list = ListModel::new(verdict).with_rows(rows);
+                list.set_help("Enter on Show the matches lists them. Escape closes.");
+                effects.extend(self.open_organize(
+                    Dialog::Choose {
+                        list,
+                        on_enter: Command::new(ids::ACCEPT),
+                    },
+                    Wants::Meta(MetaWants::VerifyReport { matches }),
+                ));
+            }
+        }
+        effects
     }
 
     /// The files a command acts on: the marked ones, or the focused one,
@@ -268,12 +460,15 @@ impl App {
         ]
     }
 
-    /// Cancel's words while a checksum job runs.
+    /// Cancel's words while a checksum or verify job runs.
     pub(super) fn meta_cancel_words(&self, job: JobId) -> Option<String> {
+        if self.meta.checksums.contains_key(&job) {
+            return Some("Checksum: cancelling".to_owned());
+        }
         self.meta
-            .checksums
-            .contains_key(&job)
-            .then(|| "Checksum: cancelling".to_owned())
+            .verifies
+            .contains(&job)
+            .then(|| "Verify checksum: cancelling".to_owned())
     }
 
     /// What a metadata worker found.
@@ -285,6 +480,11 @@ impl App {
                 cancelled,
             } => self.checksums_computed(job, results, cancelled),
             MetaNote::Saved { folder, result } => self.checksum_list_saved(&folder, result),
+            MetaNote::Verified {
+                job,
+                place,
+                outcome,
+            } => self.verified(job, place, outcome),
         }
     }
 
@@ -473,6 +673,37 @@ impl App {
                 _ => Vec::new(),
             },
             MetaWants::Compare(shown) => self.compare_pasted(*shown, text),
+            MetaWants::VerifyLists { place } => match row {
+                Some(list) => {
+                    let mut effects = self.close_top();
+                    effects.extend(self.verify_command(Some((place, list))));
+                    effects
+                }
+                None => Vec::new(),
+            },
+            MetaWants::VerifyReport { matches } => {
+                if row.as_deref() != Some("matches") {
+                    return Vec::new();
+                }
+                let rows: Vec<ListRow> = matches
+                    .iter()
+                    .enumerate()
+                    .map(|(i, line)| ListRow::new(format!("match:{i}"), line.clone()))
+                    .collect();
+                if let Some((_, Dialog::Choose { list, .. })) = self.dialogs.last_mut() {
+                    let title = format!("{}, matches", list.title());
+                    let mut shown = ListModel::new(title).with_rows(rows);
+                    shown.set_help("Escape closes.");
+                    *list = shown;
+                }
+                vec![
+                    Effect::Redraw(Redraw::All),
+                    self.say(Message::status(format!(
+                        "{} listed",
+                        count(matches.len() as u64, "match", "matches")
+                    ))),
+                ]
+            }
         }
     }
 

@@ -226,3 +226,126 @@ fn the_details_say_the_value_computed_this_session() {
         "{spoken:?} {labels:?}"
     );
 }
+
+/// The BLAKE3 of "abc".
+const ABC_BLAKE3: &str = "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85";
+
+fn spoken_rows(s: &Session) -> Vec<String> {
+    match s.dialog() {
+        Some(Dialog::Choose { list, .. }) => list.rows().iter().map(|r| r.label.clone()).collect(),
+        other => panic!("no list: {other:?}"),
+    }
+}
+
+#[test]
+fn verify_finds_the_list_beside_a_file_and_says_the_verdict_first() {
+    let dir = temp();
+    let work = work(dir.path());
+    fs::write(
+        work.join("SHA256SUMS"),
+        format!("{ABC}  example-tool.zip\n{}  notes.txt\n", "0".repeat(64)),
+    )
+    .unwrap();
+    let mut s = session(&work);
+    s.focus("example-tool.zip");
+    let said = s.command(ids::VERIFY_CHECKSUM);
+    assert_eq!(said[0], "Verifying example-tool.zip");
+    // Only its own line is checked; the list opens on the verdict.
+    assert_eq!(
+        said.last().unwrap(),
+        "1 file matches SHA256SUMS, List not signed., 1 of 3"
+    );
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("1 file matches SHA256SUMS")
+    );
+    assert_eq!(
+        spoken_rows(&s),
+        [
+            "List not signed.",
+            "This shows the files are not damaged. It does not show who made them.",
+            "Show the 1 match",
+        ]
+    );
+    s.key("escape");
+    // On the list itself, every file it names: the verdict, then the
+    // failures, the matches on request.
+    fs::write(
+        work.join("SHA256SUMS"),
+        format!(
+            "{ABC}  example-tool.zip\n{}  notes.txt\n{ABC}  gone.txt\n",
+            "0".repeat(64)
+        ),
+    )
+    .unwrap();
+    s.command(ids::RELOAD);
+    s.focus("SHA256SUMS");
+    let said = s.command(ids::VERIFY_CHECKSUM);
+    let verdict = s.dialog_title().unwrap();
+    assert!(said.last().unwrap().starts_with(&verdict), "{said:?}");
+    assert_eq!(verdict, "1 differs, 1 missing, 1 match");
+    assert_eq!(verdict.chars().count(), 29);
+    let rows = spoken_rows(&s);
+    assert_eq!(rows[0], "Does not match: notes.txt, SHA-256");
+    assert_eq!(rows[1], "Missing: gone.txt");
+    assert_eq!(rows[2], "List not signed.");
+    for row in &rows[..3] {
+        assert!(within_cells(row, row), "{row}");
+    }
+    to_row(&mut s, "matches");
+    s.key("enter");
+    assert_eq!(spoken_rows(&s), ["Match: example-tool.zip, SHA-256"]);
+    // Nothing was written.
+    assert!(!work.join("SHA256SUMS (2)").exists());
+}
+
+#[test]
+fn several_lists_are_chosen_and_an_unnamed_value_says_which_matched() {
+    let dir = temp();
+    let work = work(dir.path());
+    fs::write(work.join("example-tool.zip.sha256"), format!("{ABC}\n")).unwrap();
+    fs::write(
+        work.join("SHA256SUMS"),
+        format!("{ABC}  example-tool.zip\n"),
+    )
+    .unwrap();
+    fs::write(
+        work.join("checksums.txt"),
+        format!("{ABC_BLAKE3}  example-tool.zip\n"),
+    )
+    .unwrap();
+    let mut s = session(&work);
+    s.focus("example-tool.zip");
+    s.command(ids::VERIFY_CHECKSUM);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Checksum lists beside example-tool.zip")
+    );
+    assert_eq!(
+        spoken_rows(&s),
+        ["example-tool.zip.sha256, 1 file", "SHA256SUMS, 1 file"]
+    );
+    s.key("enter");
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("1 file matches example-tool.zip.sha256")
+    );
+    s.key("escape");
+    // A list whose name names no algorithm: 64 digits are tried as
+    // SHA-256 and BLAKE3, and the row says which matched.
+    s.focus("checksums.txt");
+    s.command(ids::VERIFY_CHECKSUM);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("1 file matches checksums.txt")
+    );
+    let rows = spoken_rows(&s);
+    assert_eq!(rows[0], "Matches BLAKE3, not SHA-256", "{rows:?}");
+    s.key("escape");
+    s.focus("notes.txt");
+    let said = s.command(ids::VERIFY_CHECKSUM);
+    assert_eq!(said.last().unwrap(), "SHA256SUMS has no line for notes.txt");
+    fs::remove_file(work.join("SHA256SUMS")).unwrap();
+    let said = s.command(ids::VERIFY_CHECKSUM);
+    assert_eq!(said.last().unwrap(), "No checksum list beside notes.txt");
+}

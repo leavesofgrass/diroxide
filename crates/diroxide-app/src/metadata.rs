@@ -16,6 +16,7 @@
 
 use diroxide_core::Place;
 use diroxide_core::names::display_name;
+use diroxide_meta::checksum::verify::VerifyReport;
 use diroxide_meta::checksum::{Algorithm, Digest};
 
 /// What the app asks the runtime to do with metadata.
@@ -41,6 +42,16 @@ pub enum MetaAsk {
         /// The list's text.
         text: String,
     },
+    /// Verify checksum: a file against the list beside it, found in R29's
+    /// order, or a list itself, every file it names read again.
+    Verify {
+        /// The job.
+        job: diroxide_core::JobId,
+        /// The file the owner chose: a file, or a list.
+        place: Place,
+        /// The list chosen when several were found.
+        list: Option<String>,
+    },
 }
 
 /// What the runtime found.
@@ -63,6 +74,97 @@ pub enum MetaNote {
         /// The name it was saved under, or the cause in words.
         result: Result<String, String>,
     },
+    /// What Verify checksum found.
+    Verified {
+        /// The job.
+        job: diroxide_core::JobId,
+        /// The file the owner chose.
+        place: Place,
+        /// What it found, or why it could not look, in words.
+        outcome: Result<Verified, String>,
+    },
+}
+
+/// What Verify checksum found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Verified {
+    /// The list's report, verdict first, and a signature file found
+    /// beside the list, not checked here.
+    Report {
+        /// The report.
+        report: Box<VerifyReport>,
+        /// A signature file beside the list (`SHA256SUMS.asc`), when one
+        /// is there.
+        signature: Option<String>,
+    },
+    /// Several lists sit beside the file: each one's name and its row,
+    /// "SHA256SUMS, 12 files", for the owner to choose.
+    Choose(Vec<(String, String)>),
+    /// No list sits beside the file.
+    NoList,
+    /// The list found names no line for the file: its name.
+    NoLine(String),
+    /// Cancel stopped it.
+    Cancelled,
+}
+
+/// Whether a name is a checksum list's: `SHA256SUMS`, `files.md5`,
+/// `report.pdf.sha256`, `checksums.sfv`.
+pub fn is_list_name(name: &str) -> bool {
+    Algorithm::from_list_name(name).is_some()
+}
+
+/// The signature files a list may have beside it, in the order looked
+/// for: `.asc`, `.sig`, `.minisig` (lane E checks them).
+pub fn signature_names(list: &str) -> [String; 3] {
+    ["asc", "sig", "minisig"].map(|ext| format!("{list}.{ext}"))
+}
+
+/// What Verify checksum's list says, the verdict first (R29 3.5; R30
+/// commit 55): the verdict, the failures, "Matches BLAKE3, not SHA-256"
+/// where a value named no algorithm, then the one line on the signature
+/// and what a match shows. Never "safe" or "genuine".
+pub fn verify_lines(report: &VerifyReport, signature: Option<&str>) -> Vec<String> {
+    let mut lines = report.lines();
+    for entry in &report.entries {
+        if let diroxide_meta::checksum::verify::EntryVerdict::Match {
+            algorithm,
+            other: Some(other),
+        } = &entry.verdict
+        {
+            lines.push(format!(
+                "Matches {}, not {}",
+                algorithm.name(),
+                other.name()
+            ));
+        }
+    }
+    lines.push(match signature {
+        // Lane E's commit 73 checks it; until then it is named, unchecked.
+        Some(file) => format!("Signature not checked: {}", display_name(file)),
+        None => "List not signed.".to_owned(),
+    });
+    if report.counts().matched > 0 {
+        lines.push(diroxide_meta::checksum::NOT_PROOF.to_owned());
+    }
+    lines
+}
+
+/// The line when no list sits beside a file: "No checksum list beside
+/// setup.exe".
+pub fn no_list_line(file: &str) -> String {
+    format!("No checksum list beside {}", display_name(file))
+}
+
+/// The line when the list names no line for the file: "SHA256SUMS has no
+/// line for setup.exe".
+pub fn no_line_line(list: &str, file: &str) -> String {
+    format!(
+        "{} has no line for {}",
+        display_name(list),
+        display_name(file)
+    )
 }
 
 /// The line said when a checksum is computed, meaning first: "SHA-256 of
