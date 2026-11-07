@@ -103,7 +103,7 @@ Shift+F5 makes a copy of the focused or marked entries in the same folder. It as
 
 ## Archives: pack, unpack and test
 
-Pack makes a new archive from the marked rows, Unpack writes an archive's members to a folder, and Test archive reads every member and checks it. They are jobs, with a plan, a question that starts on No, progress, a result list and Undo. In a terminal they are in the File menu under Archive (Alt+F, then A) and in the palette; in the graphical interface (GUI) they are Alt+F5, Alt+F9 and Alt+Shift+F9. F5 from inside an open archive unpacks the marked members, reading the archive once, with the default settings. Copying, moving, renaming or deleting inside an archive is not possible, and says "Archives are read only here. Use Pack to make a new one." [Archives](archives.md) has the dialogs, the passwords and the limits.
+Pack makes a new archive from the marked rows, Unpack writes an archive's members to a folder, and Test archive reads every member and checks it. They are jobs, with a plan, a question that starts on No, progress, a result list and Undo. In a terminal they are in the File menu under Archive (Alt+F, then A) and in the palette; in the graphical interface (GUI) they are Alt+F5, Alt+F9 and Alt+Shift+F9. F5 from inside an open archive unpacks the marked members, reading the archive once, with the default settings. Inside a zip, Delete, Rename and Make folder rewrite it, and the old copy goes to the trash so Undo restores it. Every other change inside an archive, such as copying into it or changing a 7z, a tar or a RAR, says "Archives are read only here. Use Pack to make a new one." [Archives](archives.md) has the dialogs, the passwords and the limits.
 
 ## Split and join
 
@@ -158,11 +158,15 @@ Ctrl+Z undoes the last job. What it can reverse:
 - a copy or a duplicate: the copies that diroxide made go to the trash, if they have not changed: "Undid copy: 3 copies are in the trash";
 - an overwrite: the replaced file is restored from the trash, if the job trashed it first;
 - a pack, an unpack, a split and a join: the files the job made go to the trash;
+- a conversion: the files it made go to the trash and the folders it made, if empty, are removed: "Undid conversion: 1 item is in the trash". [Conversions](conversions.md) has the rest;
+- a strip into a copy: the newest copy goes to the trash: "Undid strip: 1 copy is in the trash";
+- a change inside a zip: the new zip is moved aside, the old copy comes back from the trash, and the new one goes to the trash: "Undid zip change: the old copy is back";
+- removing the internet mark: the mark is written back, while it is the last thing you did and in the same session: "Put back the internet mark on setup.exe";
 - a link: the link goes to the trash, and a changed link target goes back to the old link from the trash;
 - a change of permissions, attributes or times: the old values are put back, for each entry that is still as the job left it;
-- a label step (set, toggle or clear): the labels go back: "Undid label urgent on 3 items". This lasts for the session only. A job's undo survives a restart; a label's does not.
+- a label step (set, toggle or clear), and setting a note or a field: the labels go back: "Undid label urgent on 3 items", "Undid note on report.pdf". This lasts for the session only. A job's undo survives a restart; a label's does not.
 
-What it cannot reverse: a permanent delete, and a move across drives. Before it reverses each step, diroxide checks that the entry is as the job left it. If it changed since, that step is skipped and the undo says why. If there is nothing to undo, diroxide says "Nothing to undo".
+What it cannot reverse: a permanent delete, a move across drives, and anything a watched folder did. A task's jobs never reach Undo; [Watched folders](watched-folders.md) says how to take one back. Before it reverses each step, diroxide checks that the entry is as the job left it. If it changed since, that step is skipped and the undo says why. If there is nothing to undo, diroxide says "Nothing to undo".
 
 An undo is not itself undone: press Ctrl+Z again and it undoes the job before. The list of recent jobs is kept in the state folder after each job, so Undo still works after a restart.
 
@@ -212,11 +216,14 @@ Every prompt you type into has completion, with the same keys.
 - [Remote places over SFTP](remote-places.md)
 - [Hooks](hooks.md)
 - [Archives](archives.md)
+- [Conversions](conversions.md)
+- [Privacy before sharing](before-sharing.md)
 - [Split and join](split-join.md)
 - [Links, permissions and times](links-permissions.md)
 - [Search and the filter language](search.md)
 - [Labels and bookmarks](labels-bookmarks.md)
 - [Watching a folder](watching.md)
+- [Watched folders](watched-folders.md)
 - [Terminals](terminals.md)
 - [Using diroxide with a screen reader](screen-readers.md)
 - [Settings and where the files live](settings.md)
