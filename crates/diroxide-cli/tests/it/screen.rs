@@ -243,6 +243,10 @@ impl Run {
 }
 
 fn session<'a>(app: &'a mut App, runtime: &'a mut Runtime) -> Session<'a, TestBackend> {
+    // These scripts read the panels' screens, not the first-run list,
+    // which the pinned helper components now fill at every first start;
+    // the app's components tests cover that list.
+    app.set_headless(true);
     let terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     let options = TuiOptions {
         screen_reader: app.screen_reader(),
