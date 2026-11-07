@@ -214,6 +214,119 @@ fn strip_drops_the_top_folder_and_leaves_out_what_is_above_it() {
     );
 }
 
+/// Spike T1's shapes (alpha 4): ExifTool's zip, whose program is
+/// `exiftool(-k).exe` beside a folder it needs, and FFmpeg's, whose top
+/// folder holds a player, headers and documentation the component does
+/// not need. `keep` unpacks only what the file names, silently; `rename`
+/// gives the one name that is not plain a plain one; what is kept and
+/// still not plain is left out with its reason.
+#[test]
+fn keep_unpacks_only_what_is_named_and_rename_makes_names_plain() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("components");
+    let bytes = zip_of(
+        &[
+            ("exiftool-13.61_64/exiftool(-k).exe", b"exe"),
+            ("exiftool-13.61_64/README.txt", b"readme"),
+            ("exiftool-13.61_64/exiftool_files/perl.exe", b"perl"),
+            (
+                "exiftool-13.61_64/exiftool_files/lib/Image/ExifTool.pm",
+                b"pm",
+            ),
+            ("exiftool-13.61_64/exiftool_files/libstdc++-6.dll", b"dll"),
+            ("exiftool-13.61_64/doc/big.html", b"doc"),
+        ],
+        &[("exiftool-13.61_64/unkept-link", "elsewhere")],
+    );
+    let mut c = pack(&bytes, 4096);
+    c.kind = crate::component::Kind::Helper;
+    let pin = &mut c.files[0];
+    pin.strip = 1;
+    pin.keep = vec!["exiftool*.exe".into(), "exiftool_files/**".into()];
+    pin.rename = vec![("exiftool(-k).exe".into(), "exiftool.exe".into())];
+    pin.exec = Some("exiftool.exe".into());
+    assert!(c.check().is_ok(), "{:?}", c.check());
+    let left_out = place_and_unpack(&root, &c, &bytes, 1000).unwrap();
+    assert_eq!(
+        tree(&root),
+        [
+            "pack/exiftool.exe",
+            "pack/exiftool_files/lib/Image/ExifTool.pm",
+            "pack/exiftool_files/perl.exe",
+            "pack/pack-0.1.0.zip.unpacked",
+        ]
+    );
+    assert_eq!(
+        left_out,
+        [(
+            "exiftool-13.61_64/exiftool_files/libstdc++-6.dll".to_owned(),
+            "libstdc++-6.dll is not a plain name".to_owned()
+        )],
+        "the unkept members, the link among them, are not said"
+    );
+    assert_eq!(c.status_in(&root, ANY_TARGET), Status::Installed);
+    assert_eq!(
+        c.programs_in(&root, ANY_TARGET),
+        [c.dir_in(&root).join("exiftool.exe")]
+    );
+}
+
+#[test]
+fn every_program_of_a_file_gets_the_executable_bit() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("components");
+    let bytes = zip_of(
+        &[
+            ("ffmpeg-n9/bin/ffmpeg", b"one"),
+            ("ffmpeg-n9/bin/ffprobe", b"two"),
+            ("ffmpeg-n9/bin/ffplay", b"player"),
+            ("ffmpeg-n9/bin/libavcodec.so.62", b"lib"),
+            ("ffmpeg-n9/include/libavcodec/avcodec.h", b"header"),
+            ("ffmpeg-n9/LICENSE.txt", b"lgpl"),
+        ],
+        &[],
+    );
+    let mut c = pack(&bytes, 4096);
+    c.kind = crate::component::Kind::Helper;
+    let pin = &mut c.files[0];
+    pin.strip = 1;
+    pin.keep = vec![
+        "bin/ffmpeg".into(),
+        "bin/ffprobe".into(),
+        "bin/*.so*".into(),
+        "LICENSE*".into(),
+    ];
+    pin.exec = Some("bin/ffmpeg".into());
+    pin.also_exec = vec!["bin/ffprobe".into()];
+    let left_out = place_and_unpack(&root, &c, &bytes, 1000).unwrap();
+    assert!(left_out.is_empty(), "{left_out:?}");
+    assert_eq!(
+        tree(&root),
+        [
+            "pack/LICENSE.txt",
+            "pack/bin/ffmpeg",
+            "pack/bin/ffprobe",
+            "pack/bin/libavcodec.so.62",
+            "pack/pack-0.1.0.zip.unpacked",
+        ]
+    );
+    let dir = c.dir_in(&root);
+    assert_eq!(
+        c.programs_in(&root, ANY_TARGET),
+        [
+            dir.join("bin").join("ffmpeg"),
+            dir.join("bin").join("ffprobe")
+        ]
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o111;
+        assert_eq!(mode(&dir.join("bin").join("ffprobe")), 0o111);
+        assert_eq!(mode(&dir.join("bin").join("libavcodec.so.62")), 0);
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn only_the_named_program_gets_the_executable_bit_and_links_are_not_followed() {

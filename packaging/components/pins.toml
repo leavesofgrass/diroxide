@@ -1,0 +1,6 @@
+# The pins of the helper files their publishers make (plan section 5.14,
+# the owner's answers 116 and 117). Written by cargo xtask components
+# --pin, which the pin job runs on CI's runner
+# (.github/workflows/pin.yml); never typed. A pin applies while the
+# component, the file's name and its address are the same.
+format = 1

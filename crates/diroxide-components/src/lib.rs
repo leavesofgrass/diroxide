@@ -36,7 +36,10 @@
 //!   `diroxide-archive` with plain names only, no links, within the list's
 //!   `unpacked_size`, and a receipt takes each archive's place
 //!   ([`unpack_in`]); [`install_from`] installs from a zip file or a folder
-//!   with the same pins, for a computer without a network.
+//!   with the same pins, for a computer without a network. A helper's
+//!   file names the members it needs and renames the few that are not
+//!   plain ([`keep`]); once it is in place, each of its programs is run
+//!   with its version arguments and its line is said ([`smoke`]).
 //!
 //! - [`messages`] holds every line the feature says, meaning first within
 //!   40 cells, and the models the app and `diro components` share.
@@ -54,12 +57,14 @@ pub mod fake;
 pub mod fetch;
 #[cfg(feature = "fetch")]
 pub mod http;
+pub mod keep;
 #[cfg(test)]
 mod loopback;
 pub mod manifest;
 pub mod messages;
 pub mod pin;
 pub mod receipt;
+pub mod smoke;
 #[cfg(test)]
 mod transport_tests;
 pub mod unpack;

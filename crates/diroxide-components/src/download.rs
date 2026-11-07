@@ -272,6 +272,11 @@ pub struct Outcome {
     /// Members of an archive that were not unpacked, each with the reason
     /// in words.
     pub left_out: Vec<(String, String)>,
+    /// For a helper installed on this computer, the version check's line
+    /// for each of its programs ([`crate::smoke`]): "pandoc: 3.13, from
+    /// components", or "Installed pandoc, but it did not start." Empty for
+    /// anything else.
+    pub started: Vec<String>,
 }
 
 /// The free space where the components live.
@@ -462,7 +467,23 @@ impl Downloader {
             events(&Event::Unpacking);
         }
         outcome.left_out = finish_with(component, &dest, &staging, &outcome.fetched, ctx)?;
+        drop(claim);
+        outcome.started = version_check(component, &self.components_dir, &self.target);
         Ok(outcome)
+    }
+}
+
+/// The version check after install, for a helper on the computer diroxide
+/// runs on; nothing for another computer's files.
+pub(crate) fn version_check(
+    component: &Component,
+    components_dir: &Path,
+    target: &str,
+) -> Vec<String> {
+    if target == host_target() {
+        crate::smoke::check_installed(component, components_dir, target)
+    } else {
+        Vec::new()
     }
 }
 
