@@ -24,6 +24,15 @@
 heavy = { max-threads = 1 }
 conformance = { max-threads = 1 }
 
+# A test that is still running after ten minutes is stopped and fails, so
+# a hang never blocks a check: on Friday, November 6, 2026 the GUI's
+# interrupted-job test sat for 78 minutes in a merge check on a loaded
+# machine (it passes alone in a tenth of a second), and the check had to
+# be killed by hand. nextest reports a test as slow after each period;
+# the tenth report ends it. The slow tests below finish well inside this.
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 10 }
+
 [[profile.default.overrides]]
 filter = 'package(diroxide-preview) & (test(five_megabyte) | test(nested_list) | test(three_thousand_deep) | test(hundred_kilobytes))'
 test-group = 'heavy'
