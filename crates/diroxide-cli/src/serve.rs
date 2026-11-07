@@ -254,6 +254,8 @@ impl Server<'_> {
             }
         };
         app.set_screen_reader(true);
+        // A served session's client takes commands, not a first-run list.
+        app.set_headless(true);
         let start = app.start();
         self.app = Some((app, runtime));
         self.carry(start)

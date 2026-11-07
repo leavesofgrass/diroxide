@@ -587,6 +587,8 @@ pub fn run_with(
 ) -> Result<i32, CliError> {
     notices(options, paths, out)?;
     let (mut app, mut runtime) = build(options, paths, here)?;
+    // One printed screen has no one to close a first-run list.
+    app.set_headless(true);
     Tui::new(tui_options(&app, options))
         .run(&mut app, &mut runtime, out)
         .map_err(|e| CliError::Failed(e.to_string()))?;
