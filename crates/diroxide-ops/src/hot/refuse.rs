@@ -150,7 +150,7 @@ pub fn literal_folder(field: &str, text: &str, style: PathStyle) -> Result<Place
         return Err(format!("{field} must be a folder, not an address"));
     }
     if text.chars().any(|c| classify(c).is_hidden()) {
-        return Err(format!("{field} holds a hidden character"));
+        return Err(format!("{field} has a hidden character"));
     }
     let windows = style == PathStyle::Windows;
     if windows {
@@ -199,7 +199,7 @@ pub fn literal_folder(field: &str, text: &str, style: PathStyle) -> Result<Place
             return Err(format!("{field} has . or .. in it"));
         }
         if windows && !part.is_empty() && (part.ends_with('.') || part.ends_with(' ')) {
-            return Err(format!("{field} has a name ending in a dot or space"));
+            return Err(format!("{field} has a dot or space ending a name"));
         }
     }
     let place =
@@ -279,8 +279,8 @@ mod tests {
             ("", "home is missing"),
             (" D:\\scans", "home has a space at its start or end"),
             ("file://D:/scans", "home must be a folder, not an address"),
-            ("D:\\sc\u{202e}ans", "home holds a hidden character"),
-            ("D:\\sc\u{f03a}ans", "home holds a hidden character"),
+            ("D:\\sc\u{202e}ans", "home has a hidden character"),
+            ("D:\\sc\u{f03a}ans", "home has a hidden character"),
             ("\\\\?\\D:\\scans", "home has a device prefix"),
             ("\\\\.\\PhysicalDrive0", "home has a device prefix"),
             ("D:\\scans\\*", "home has a wildcard"),
@@ -297,8 +297,8 @@ mod tests {
             ("\\scans", "home is not a full path"),
             ("D:\\scans\\..\\x", "home has . or .. in it"),
             ("D:\\.\\scans", "home has . or .. in it"),
-            ("D:\\scans.", "home has a name ending in a dot or space"),
-            ("D:\\scans \\in", "home has a name ending in a dot or space"),
+            ("D:\\scans.", "home has a dot or space ending a name"),
+            ("D:\\scans \\in", "home has a dot or space ending a name"),
         ];
         for (text, words) in refused {
             assert_eq!(

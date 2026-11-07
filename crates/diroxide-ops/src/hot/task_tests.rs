@@ -182,16 +182,33 @@ fn names_kinds_and_their_keys_must_agree() {
     );
     assert_eq!(
         problems(&SCANS.replace("recipe = \"pdf-to-text\"", "")),
-        ["Task scans: a convert task needs a recipe."]
+        ["Task scans: no recipe; a convert task needs one."]
     );
     let moving = SCANS.replace("kind = \"convert\"", "kind = \"move\"");
     assert_eq!(
         problems(&moving),
         [
             "Task scans: recipe is not used by a move task.",
-            "Task scans: a move task needs to."
+            "Task scans: no to folder; a move task needs one."
         ]
     );
+    // Lines over 40 cells say the fault first.
+    for (line, fault) in [
+        (
+            "Task scans: no to folder; a move task needs one.",
+            "no to folder",
+        ),
+        (
+            "Task scans: kind cannot be zip; use convert, move, copy, script, plugin or tell.",
+            "kind cannot be zip",
+        ),
+        (
+            "Task scans: recipe is not used by a move task.",
+            "recipe is not used",
+        ),
+    ] {
+        assert!(within_cells(line, fault), "{line}");
+    }
     let moving = moving
         .replace("recipe = \"pdf-to-text\"", "to = 'D:\\software'")
         .replace("after = \"move\"", "after = \"leave\"");

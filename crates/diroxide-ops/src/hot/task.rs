@@ -450,7 +450,7 @@ impl Task {
             let id = value.as_deref().map(str::trim).unwrap_or_default();
             let bare = key.trim_start_matches("a ");
             if id.is_empty() {
-                problems.push(format!("a {} task needs {key}", shape.kind.trim()));
+                problems.push(format!("no {bare}; a {} task needs one", shape.kind.trim()));
                 None
             } else if !is_command_id(id) {
                 problems.push(format!(
@@ -505,7 +505,7 @@ impl Task {
                 }
             },
             (None, true) => {
-                problems.push(format!("a {kind_word} task needs to"));
+                problems.push(format!("no to folder; a {kind_word} task needs one"));
                 None
             }
             (Some(_), false) if kind.is_some() => {
