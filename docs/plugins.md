@@ -1,6 +1,6 @@
 # Plugins
 
-This guide covers plugins: what they are, the three kinds, how you turn one on and what the question says, how to manage them, what you hear when one runs, the keys a plugin's commands get, the eleven examples that come with diroxide, and what a plugin can still do after you say yes.
+This guide covers plugins: what they are, the three kinds, how you turn one on and what the question says, how to manage them, what you hear when one runs, the keys a plugin's commands get, the three plugins that come as optional components, the eleven examples that come with diroxide, and what a plugin can still do after you say yes.
 
 If you want to make one, [writing a plugin](writing-a-plugin.md) and [script commands](script-commands.md) are the guides for that. [Optional components](components.md) says how a plugin can come to your computer.
 
@@ -25,8 +25,10 @@ A plugin adds something diroxide does not do by itself. It can add a command, a 
 
 - Commands. They show in the Plugins menu and the command palette, and `menus.toml` and `banks.toml` may name them. A command that cannot run now is shown disabled with its reason, for example "Search with Everything, disabled" and "Needs es, not found."
 - Lists of rows that are not files, such as the changed files of a git folder. A row says its meaning first. Enter runs the plugin's own command for the row. A file command on such a row, for example F5, says "This row is not a file."
-- Places. A plugin can serve a file system at a name of its own, such as `memfs:/` in the toy example, or `sftp://` for the SFTP places plugin. Copy, view, rename and delete then work there as in any place, with the same plan and the same confirmation as anywhere else. [Remote places over SFTP](remote-places.md) is the plugin that reaches other computers.
+- Places. A plugin can serve a file system at a name of its own, such as `memfs:/` in the toy example, or `sftp://` for the SFTP places plugin. Copy, view, rename and delete then work there as in any place, with the same plan and the same confirmation as anywhere else. [Remote places over SFTP](remote-places.md) is the plugin that reaches other computers. A place can also claim the disk images inside other places: a plugin names the container extensions it opens, such as `.iso`, in its `[[provider]]` table, and a place such as `fedora.iso!EFI/` reaches it, whether the image is in a folder, in a zip or on an SFTP site. The disk image plugin does this; [disk images](disk-images.md) says how they open. A plugin may claim only disk images, the formats of the 7z program and raw images, never a format diroxide reads itself.
 - Previewers and converters. Today you run them from a shell with `diro plugin preview` and `diro plugin convert`. The preview region and the conversions dialog come with a later alpha.
+- Words for the title line. A plugin can describe the folder a panel is in, such as "main, no upstream, 2 changed here (Git)". The title line says the words after the panel, cut at 40 characters, with the plugin's name last. The git plugin does this. It declares a `[[place_info]]` table that names a scheme or a marker file such as `.git`, and diroxide asks the plugin only when a panel lands in a matching folder, and never asks a plugin that declares none.
+- Forms and diffs. A plugin can ask several labeled fields in one dialog and can show two texts in the compare screens. The git plugin's commit dialog and its diffs use both. [Writing a plugin](writing-a-plugin.md#forms-diffs-and-the-title-line) says how.
 - Hooks. A plugin can be asked before a copy, a move, a delete, a rename or a new folder, and stop it with a reason. It can be told afterward, and told when you enter a folder. [Hooks](hooks.md) has the events, the lines you hear and the Folder guard example.
 
 ## Where plugins live
@@ -336,6 +338,14 @@ Other things you may hear:
 
 A missing program, a wrong number of marked items and a name that a script cannot take are each said in words before anything runs.
 
+## Plugins that come as components
+
+Three process plugins of the project come as optional components. Downloading one never turns it on: you turn it on in Manage plugins, after the question. [Optional components](components.md) says how to get them.
+
+- SFTP places (plugin id `sftp`, component `diro-sftp`): opens folders on other computers over SSH. [Remote places over SFTP](remote-places.md) is its guide.
+- Disk images (plugin id `disk`, component `diro-disk`): opens ISO images and virtual disks as folders, read only. It reads the image you open and may use 7-Zip and qemu-img when they are there. Its consent question says it uses no network. [Disk images](disk-images.md) is its guide.
+- Git (plugin id `git`, component `diro-git`): shows the branch and the changes in the title line and the Git column, and runs git's commands from the Plugins menu, always starting on No. Under "The plugin states, unchecked:" it says that it uses git's own remotes when you fetch, pull, push or clone, that it touches your repositories through git and `.gitignore` through diroxide, and that it starts git only, where a commit runs the repository's hooks as in a terminal. [Git](git.md) is its guide.
+
 ## The example plugins
 
 Ten examples come with diroxide, in the `examples/plugins` folder of the source and in the optional component "Example plugins" (id `diro-examples`). Each is small on purpose, and [writing a plugin](writing-a-plugin.md) takes them one at a time.
@@ -378,6 +388,8 @@ diroxide limits what a plugin may ask of it, and checks those limits. It cannot 
 - [Script commands](script-commands.md)
 - [Hooks](hooks.md)
 - [Remote places over SFTP](remote-places.md)
+- [Disk images](disk-images.md)
+- [Git](git.md)
 - [Optional components](components.md)
 - [Security](security.md)
 - [Privacy](privacy.md)
