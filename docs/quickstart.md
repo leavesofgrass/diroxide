@@ -97,7 +97,7 @@ Mark two files and run Compare files from the palette (Ctrl+P, then "compare"). 
 
 ## Open an archive
 
-Move to a zip, a 7z, a tar or another archive and press Enter. It opens like a folder, and the status line says "Opened course.zip: 10 items, 1.8 KB." Move around as you do in any folder. Left, at the top of the archive, goes back to the folder that holds it. Mark members and press F5 to unpack them into the other panel. Nothing in an archive can be changed: "Archives are read only here. Use Pack to make a new one." To make a new archive from marked files, run Pack from the palette, or from the File menu under Archive. [Archives](archives.md) has the rest.
+Move to a zip, a 7z, a tar or another archive and press Enter. It opens like a folder, and the status line says "Opened course.zip: 10 items, 1.8 KB." Move around as you do in any folder. Left, at the top of the archive, goes back to the folder that holds it. Mark members and press F5 to unpack them into the other panel. A zip can be edited with Delete, Rename and Make folder, each asking first with its cost; every other change to an archive says "Archives are read only here. Use Pack to make a new one." To make a new archive from marked files, run Pack from the palette, or from the File menu under Archive. [Archives](archives.md) has the rest.
 
 ## Read a file
 

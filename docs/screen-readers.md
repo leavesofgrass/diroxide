@@ -64,7 +64,8 @@ These lines show what diroxide says for each key. The status line says the same 
 - F5 out of an archive: "Unpack 4 members into out? No is the default. y or n", then the job lines, then "Unpack finished: 4 done." A skipped member has a line, the name first: "Skipped ../escape.txt: name leaves the archive."
 - Pack, from the palette or File, Archive, Pack: a list, "Pack, Pack 2 items into demo.zip, 1 of 9", then the question "Pack 2 items into demo.zip? No is the default. y or n", the job lines, and "Pack finished: 2 done. Checked 2 of 2 entries, all good."
 - Test archive: "Test started: demo.zip", then "Archive is sound: 2 members."
-- A change inside an archive: "Archives are read only here. Use Pack to make a new one."
+- Copying into an archive, or changing a 7z, a tar or a RAR: "Archives are read only here. Use Pack to make a new one."
+- Delete, Rename or Make folder inside a zip: the question starts on No and names the change: "Remove notes.txt from course.zip? No is the default. y or n". The rows under it say the cost first, "Rewrites all of course.zip: 1.2 GB". After it, "Old copy of course.zip is in the trash".
 
 ### The viewer
 
