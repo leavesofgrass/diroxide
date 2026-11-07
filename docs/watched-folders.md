@@ -151,7 +151,7 @@ A file's own line puts the outcome first. `diro watch --task NAME --once` prints
 What a failure means depends on its cause:
 
 - The same file might succeed later: another program is using it, it timed out or was stopped, or it changed during the run. The task waits 10 seconds, then 1 minute, then 10 minutes, as many times as `retries` allows: "Retrying scan-004.pdf in 1 minute".
-- Something is wrong with this file: it is unreadable, damaged or refused. The original goes to `failed` with its reason in the log, and the next file goes on: "Failed: scan-004.pdf, unreadable".
+- Something is wrong with this file: it is unreadable, damaged or refused. The reason goes in the log, the original goes to `failed` when `after` is `move`, and the next file goes on: "Failed: scan-004.pdf, unreadable".
 - Something is wrong with the surroundings: a tool is not installed, the drive is full, the network is lost, or a folder is missing. The task pauses, says why once, and waits for you: "Scans paused: pdftotext is not installed". A task whose folder goes missing resumes by itself when it comes back.
 - Ten files in a row failing for the same cause pause the task: "Scans paused: 10 failures in a row". That is almost always a wrong recipe for the files and not ten bad files.
 - Free space where the results go below 1 GB, or below a tenth of the drive, pauses it: "Scans paused: only 200 MB free".
