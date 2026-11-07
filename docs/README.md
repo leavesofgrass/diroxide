@@ -44,7 +44,7 @@ If you are new, begin with the [quick start](quickstart.md).
 
 ### Archives, files and previews
 
-- [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, the limits that protect you, and `diro archive`.
+- [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, RAR and the other formats that 7-Zip reads, deleting, renaming and making folders inside a zip with the old copy kept in the trash, the limits that protect you, and `diro archive`.
 - [Disk images](disk-images.md): opening an ISO, a raw disk or a virtual disk like a folder, its partitions, copying files out, what the plugin reads itself and what it hands to 7-Zip, the limits that protect you, and what it does not do yet.
 - [The viewer](viewer.md): F3, lines, wrap, jump, search, hex mode, following a log, large files, and code read by ear.
 - [The quick view](quick-view.md): a live preview of the focused file in the other panel, by heading, table and link, and the formats it reads.
