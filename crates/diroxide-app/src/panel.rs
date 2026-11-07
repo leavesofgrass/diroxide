@@ -117,6 +117,20 @@ pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> Lis
     row_with_fields(entry, &specs, &[], (false, false), clock)
 }
 
+/// The suffix of a plugin's words about an entry in its [`Entry::extra`]:
+/// `disk.about` holds "Partition 2, home, ext4, 40.0 GB" (PD's request 5).
+pub const ABOUT_SUFFIX: &str = ".about";
+
+/// A plugin's own words about an entry, when its provider gave some: the
+/// first non-empty `PLUGIN.about` of its [`Entry::extra`].
+pub fn about_of(entry: &Entry) -> Option<&str> {
+    entry
+        .extra
+        .iter()
+        .find(|(key, value)| key.ends_with(ABOUT_SUFFIX) && !value.trim().is_empty())
+        .map(|(_, value)| value.as_str())
+}
+
 /// The row for an entry with built-in columns and fields' columns, in
 /// the columns' order (alpha 4, lane MA): a field's cell says its label
 /// first, "artist Ada Example", or why it waits, "artist reading"; a key
@@ -132,6 +146,11 @@ pub fn row_with_fields(
     let mut details = Vec::new();
     if entry.needs_care || entry.name_not_unicode {
         details.push("name needs care".to_owned());
+    }
+    // A plugin's words about the entry, right after its name: a disk
+    // image's partition says "Partition 2, home, ext4" (PD's request 5).
+    if let Some(about) = about_of(entry) {
+        details.push(about.to_owned());
     }
     if let Some(labels) = labels_words(&entry.labels) {
         details.push(labels);

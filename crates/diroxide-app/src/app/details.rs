@@ -50,6 +50,9 @@ pub(super) struct DetailsState {
     copy: Option<Copying>,
     /// A Say Details waiting for its summary.
     summary: Option<u64>,
+    /// A plugin's words about that file, said before its summary (PD's
+    /// request 5).
+    summary_about: Option<String>,
     /// A Read text in picture waiting for Tesseract: its job.
     picture: Option<diroxide_core::JobId>,
     /// How many words Tesseract read in each picture this session, for
@@ -300,6 +303,16 @@ impl App {
             entry.display_name().into_owned(),
             DetailGroup::Identity,
         ));
+        // A plugin's words about it (PD's request 5): "About: Partition
+        // 2, home, ext4, 40.0 GB".
+        if let Some(about) = crate::panel::about_of(entry) {
+            rows.push(DetailRow::new(
+                "plugin.about",
+                "About",
+                about,
+                DetailGroup::Identity,
+            ));
+        }
         if entry.needs_care {
             let issues = diroxide_vfs::check_name(&entry.name, &panel.names());
             for (i, issue) in issues.iter().enumerate() {
@@ -568,6 +581,10 @@ impl App {
                     return Vec::new();
                 }
                 self.details.summary = None;
+                let line = match self.details.summary_about.take() {
+                    Some(about) => format!("{about}, {line}"),
+                    None => line,
+                };
                 vec![self.say(Message::info(line))]
             }
             DetailsNote::ShowAll {
@@ -657,11 +674,16 @@ impl App {
             Err(empty) => return vec![self.say(Message::status(empty))],
         };
         if !file_like(&entry) {
-            let line = diroxide_preview::details(&entry, file_type.as_ref());
+            let mut line = diroxide_preview::details(&entry, file_type.as_ref());
+            // A plugin's words first: "Partition 2, home, ext4, folder".
+            if let Some(about) = crate::panel::about_of(&entry) {
+                line = format!("{about}, {line}");
+            }
             return vec![self.say(Message::info(line))];
         }
         let generation = self.ask_details(&entry, &place, file_type, Wanted::Summary);
         self.details.summary = Some(generation);
+        self.details.summary_about = crate::panel::about_of(&entry).map(str::to_owned);
         Vec::new()
     }
 
