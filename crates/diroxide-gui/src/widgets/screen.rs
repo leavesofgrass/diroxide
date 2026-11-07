@@ -1,7 +1,8 @@
-//! The window's body: the two panels, or the viewer in their place while
-//! a file is viewed, as the terminal's viewer takes its body. The one not
-//! shown is stashed, so it is out of the tree and out of the focus order.
-//! Its place in the window is kept for focus mode's veil
+//! The window's body: the two panels, the viewer in their place while a
+//! file is viewed, as the terminal's viewer takes its body, or the
+//! picture view while a picture is open (alpha 4, R30 commit 112). The
+//! ones not shown are stashed, so they are out of the tree and out of the
+//! focus order. Its place in the window is kept for focus mode's veil
 //! ([`super::root::Root::set_veiled`]), which covers everything else.
 
 use std::cell::Cell;
@@ -16,11 +17,24 @@ use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Rect, Size};
 use masonry::layout::{LayoutSize, LenReq, Length};
 
-/// The panels or the viewer.
+/// What the body shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Body {
+    /// The two panels.
+    #[default]
+    Panels,
+    /// The viewer.
+    Viewer,
+    /// The picture view.
+    Picture,
+}
+
+/// The panels, the viewer, or the picture view.
 pub struct Screen {
     panels: WidgetPod<dyn Widget>,
     viewer: WidgetPod<dyn Widget>,
-    viewing: bool,
+    picture: Option<WidgetPod<dyn Widget>>,
+    body: Body,
     /// Where the body is in the window, as last painted.
     area: Rc<Cell<Rect>>,
 }
@@ -34,9 +48,17 @@ impl Screen {
         Self {
             panels: panels.erased().to_pod(),
             viewer: viewer.erased().to_pod(),
-            viewing: false,
+            picture: None,
+            body: Body::Panels,
             area: Rc::new(Cell::new(Rect::ZERO)),
         }
+    }
+
+    /// The same body with the picture view as its third.
+    #[must_use]
+    pub fn with_picture(mut self, picture: NewWidget<impl Widget + ?Sized>) -> Self {
+        self.picture = Some(picture.erased().to_pod());
+        self
     }
 
     /// The same body telling `area` where it is in the window.
@@ -48,17 +70,45 @@ impl Screen {
 
     /// Shows the viewer (`true`) or the panels.
     pub fn set_viewing(this: &mut WidgetMut<'_, Self>, viewing: bool) {
-        if this.widget.viewing != viewing {
-            this.widget.viewing = viewing;
-            this.ctx.set_stashed(&mut this.widget.panels, viewing);
-            this.ctx.set_stashed(&mut this.widget.viewer, !viewing);
+        Self::show(this, if viewing { Body::Viewer } else { Body::Panels });
+    }
+
+    /// Shows `body`; the picture view only when the body has one.
+    pub fn show(this: &mut WidgetMut<'_, Self>, body: Body) {
+        let body = if body == Body::Picture && this.widget.picture.is_none() {
+            Body::Panels
+        } else {
+            body
+        };
+        if this.widget.body != body {
+            this.widget.body = body;
+            this.ctx
+                .set_stashed(&mut this.widget.panels, body != Body::Panels);
+            this.ctx
+                .set_stashed(&mut this.widget.viewer, body != Body::Viewer);
+            if let Some(picture) = this.widget.picture.as_mut() {
+                this.ctx.set_stashed(picture, body != Body::Picture);
+            }
             this.ctx.request_layout();
         }
     }
 
     /// Whether the viewer is shown.
     pub fn viewing(&self) -> bool {
-        self.viewing
+        self.body == Body::Viewer
+    }
+
+    /// What the body shows.
+    pub fn body(&self) -> Body {
+        self.body
+    }
+
+    fn shown(&mut self) -> &mut WidgetPod<dyn Widget> {
+        match (self.body, self.picture.as_mut()) {
+            (Body::Picture, Some(picture)) => picture,
+            (Body::Viewer, _) => &mut self.viewer,
+            _ => &mut self.panels,
+        }
     }
 }
 
@@ -68,6 +118,9 @@ impl Widget for Screen {
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
         ctx.register_child(&mut self.panels);
         ctx.register_child(&mut self.viewer);
+        if let Some(picture) = self.picture.as_mut() {
+            ctx.register_child(picture);
+        }
     }
 
     fn measure(
@@ -79,22 +132,18 @@ impl Widget for Screen {
         cross: Option<Length>,
     ) -> Length {
         let context = LayoutSize::maybe(axis.cross(), cross);
-        let shown = if self.viewing {
-            &mut self.viewer
-        } else {
-            &mut self.panels
-        };
+        let shown = self.shown();
         ctx.compute_length(shown, len_req.into(), context, axis, cross)
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
-        ctx.set_stashed(&mut self.panels, self.viewing);
-        ctx.set_stashed(&mut self.viewer, !self.viewing);
-        let shown = if self.viewing {
-            &mut self.viewer
-        } else {
-            &mut self.panels
-        };
+        let body = self.body;
+        ctx.set_stashed(&mut self.panels, body != Body::Panels);
+        ctx.set_stashed(&mut self.viewer, body != Body::Viewer);
+        if let Some(picture) = self.picture.as_mut() {
+            ctx.set_stashed(picture, body != Body::Picture);
+        }
+        let shown = self.shown();
         ctx.run_layout(shown, size);
         ctx.place_child(shown, Point::ORIGIN);
     }
@@ -119,6 +168,10 @@ impl Widget for Screen {
     }
 
     fn children_ids(&self) -> ChildrenIds {
-        ChildrenIds::from_slice(&[self.panels.id(), self.viewer.id()])
+        let mut ids = vec![self.panels.id(), self.viewer.id()];
+        if let Some(picture) = &self.picture {
+            ids.push(picture.id());
+        }
+        ChildrenIds::from_slice(&ids)
     }
 }

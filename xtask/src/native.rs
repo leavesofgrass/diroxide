@@ -61,7 +61,7 @@ pub struct Allow {
 
 /// The allow list, the inventory: each entry with its reason, and nothing
 /// else.
-pub const ALLOWED: [Allow; 14] = [
+pub const ALLOWED: [Allow; 15] = [
     Allow {
         tool: "cc",
         user: "ring",
@@ -97,6 +97,13 @@ pub const ALLOWED: [Allow; 14] = [
         through: &["smithay-clipboard", "copypasta", "masonry_winit"],
         reason: "the same build-only wayland-backend, reached through the window runner's \
                  clipboard on Wayland (the GUI alpha's contract step)",
+    },
+    Allow {
+        tool: "cc",
+        user: "wayland-backend",
+        through: &["smithay-clipboard", "copypasta", "diroxide-gui"],
+        reason: "the same build-only wayland-backend, reached through the window's own \
+                 clipboard on Wayland (alpha 4, R30 commit 113)",
     },
     Allow {
         tool: "cc",
@@ -396,7 +403,7 @@ mod tests {
 
     #[test]
     fn the_inventory_lists_each_entry_with_its_reason() {
-        assert_eq!(ALLOWED.len(), 14);
+        assert_eq!(ALLOWED.len(), 15);
         for allow in &ALLOWED {
             assert!(NATIVE_TOOLS.contains(&allow.tool), "{allow:?}");
             assert!(

@@ -3,7 +3,9 @@
   Opens diroxide's window out of the way and reports what assistive
   technology sees through UI Automation: every element's control type,
   name and patterns; each panel's list box with its options, positions
-  and set size; the status bar; the live-region events with their text;
+  and set size; every picture and every element with a description
+  (FullDescription and HelpText, what a screen reader reads after the
+  name); the status bar; the live-region events with their text;
   the process's top-level windows (winit's helper window among them);
   and whether the window ever took the foreground.
 
@@ -98,6 +100,56 @@ using System.Windows.Automation;
 
 public static class DiroUia
 {
+    // UI Automation's COM client, only the calls Descriptions makes; the
+    // placeholders keep the interfaces' slots in order
+    // (UIAutomationClient.h).
+    [ComImport, Guid("352ffba8-0973-437c-a61f-f64cafd81df9"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUiaConditionMin { }
+
+    [ComImport, Guid("14314595-b4bc-4055-95f2-58f2e42c9855"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUiaArrayMin
+    {
+        int Length { get; }
+        IUiaElementMin GetElement(int index);
+    }
+
+    [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUiaElementMin
+    {
+        void SetFocus();
+        void GetRuntimeId0();
+        void FindFirst0();
+        IUiaArrayMin FindAll(int scope, IUiaConditionMin condition);
+        void FindFirstBuildCache0();
+        void FindAllBuildCache0();
+        void BuildUpdatedCache0();
+        [return: MarshalAs(UnmanagedType.Struct)] object GetCurrentPropertyValue(int propertyId);
+    }
+
+    [ComImport, Guid("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUiaMin
+    {
+        void CompareElements0();
+        void CompareRuntimeIds0();
+        void GetRootElement0();
+        IUiaElementMin ElementFromHandle(IntPtr hwnd);
+        void ElementFromPoint0();
+        void GetFocusedElement0();
+        void GetRootElementBuildCache0();
+        void ElementFromHandleBuildCache0();
+        void ElementFromPointBuildCache0();
+        void GetFocusedElementBuildCache0();
+        void CreateTreeWalker0();
+        void ControlViewWalker0();
+        void ContentViewWalker0();
+        void RawViewWalker0();
+        void RawViewCondition0();
+        void ControlViewCondition0();
+        void ContentViewCondition0();
+        void CreateCacheRequest0();
+        IUiaConditionMin CreateTrueCondition();
+    }
+
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]
@@ -425,6 +477,40 @@ public static class DiroUia
         return lines;
     }
 
+    /// Every element that carries a description (UI Automation's
+    /// FullDescription, which AccessKit fills from a node's description,
+    /// and HelpText), and every image, by its control type, name and
+    /// those two: what a screen reader reads after a picture's or a
+    /// dialog's name. Read through UI Automation's own COM client, since
+    /// the managed one predates FullDescription.
+    public static List<string> Descriptions(IntPtr hwnd)
+    {
+        var lines = new List<string>();
+        try
+        {
+            var uia = (IUiaMin)Activator.CreateInstance(
+                Type.GetTypeFromCLSID(new Guid("ff48dba4-60ef-4201-aa87-54103eef594e")));
+            var window = uia.ElementFromHandle(hwnd);
+            var all = window.FindAll(4 /* TreeScope_Descendants */, uia.CreateTrueCondition());
+            for (int i = 0; i < all.Length; i++)
+            {
+                var e = all.GetElement(i);
+                string type = Convert.ToString(e.GetCurrentPropertyValue(30004)); // LocalizedControlType
+                int typeId = Convert.ToInt32(e.GetCurrentPropertyValue(30003));   // ControlType
+                string name = Convert.ToString(e.GetCurrentPropertyValue(30005)); // Name
+                string full = Convert.ToString(e.GetCurrentPropertyValue(30159)); // FullDescription
+                string help = Convert.ToString(e.GetCurrentPropertyValue(30013)); // HelpText
+                bool image = typeId == 50006;
+                if (!image && string.IsNullOrEmpty(full) && string.IsNullOrEmpty(help)) continue;
+                lines.Add(string.Format("{0} ({1}) name={2} description={3} help={4}",
+                    image ? "Image" : "Element", type, Q(name), Q(full), Q(help)));
+            }
+        }
+        catch (Exception ex) { lines.Add("(could not read: " + ex.Message + ")"); }
+        if (lines.Count == 0) lines.Add("(no image and no element with a description)");
+        return lines;
+    }
+
     /// The list boxes and their options.
     public static List<string> Lists(AutomationElement window)
     {
@@ -521,6 +607,10 @@ Fence ([DiroUia]::MenuBar($window)).ToArray()
 Say '## The list boxes and their options'
 Say ''
 Fence ([DiroUia]::Lists($window)).ToArray()
+
+Say '## Pictures and descriptions'
+Say ''
+Fence ([DiroUia]::Descriptions([DiroUia]::FindFrame($procId))).ToArray()
 
 [DiroUia]::StopLivePolling()
 Say '## Events: live regions and focus'

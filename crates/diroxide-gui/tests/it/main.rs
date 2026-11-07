@@ -44,6 +44,8 @@ mod menus;
 #[cfg(feature = "gui")]
 mod panel_list;
 #[cfg(feature = "gui")]
+mod picture;
+#[cfg(feature = "gui")]
 mod plugins;
 #[cfg(feature = "gui")]
 mod quick_view;
@@ -55,6 +57,8 @@ mod secret;
 mod ten_minutes;
 #[cfg(feature = "gui")]
 mod themes;
+#[cfg(feature = "gui")]
+mod type_lists;
 #[cfg(feature = "gui")]
 mod viewer;
 #[cfg(feature = "gui")]

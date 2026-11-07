@@ -24,6 +24,12 @@
 //!   link" and "hidden" in its name, a marked row starts with an asterisk
 //!   and says "selected", the focused row has an outline as well as its
 //!   band; every role's attribute is drawn too. Color is the extra.
+//! - A theme file may map a file group to one of its color roles
+//!   (`[group-colors] images = "heading2"`, which the app answers as
+//!   `App::row_role`): a plain file's or an archive's row of that group
+//!   is drawn in the role's color ([`Palette::group_color`]), held to the
+//!   floor on the page like every role; its type and group are said in
+//!   words either way, and the default theme maps none.
 //! - Windows High Contrast ("Contrast themes") is honored: while it is on
 //!   the window draws only with the system's own colors
 //!   ([`SystemColors`], read by the platform module), as textweaver does
@@ -147,6 +153,11 @@ pub struct Palette {
     pub dim: Rgb,
     /// Every role's look, in the order of [`PanelRole::ALL`].
     looks: Vec<Look>,
+    /// Every color role as a row's text on the page, in the order of
+    /// [`ColorRole::ALL`]: what a file group a theme maps to a role is
+    /// drawn in (`[group-colors]`, TA's theme words), held to the floor
+    /// as every role is.
+    groups: Vec<Rgb>,
     /// The roles drawn in the text color (or black or white) because
     /// their own color fell short of the floor.
     fell_back: Vec<PanelRole>,
@@ -262,6 +273,10 @@ impl Palette {
             }
             looks.push(Look { fg, bg, attrs });
         }
+        let groups = ColorRole::ALL
+            .iter()
+            .map(|role| fit(theme.color(*role), page, text, floor).0)
+            .collect();
         let mut palette = Self {
             key: theme.name().to_owned(),
             name: theme.meta.display_name.clone(),
@@ -272,6 +287,7 @@ impl Palette {
             ring_inner: page,
             dim: text,
             looks,
+            groups,
             fell_back,
         };
         palette.dim = palette.look(PanelRole::Hidden).fg;
@@ -336,6 +352,8 @@ impl Palette {
             ring_inner: c.window,
             dim: c.gray_text,
             looks,
+            // The system's colors only: a group is drawn as plain text.
+            groups: vec![c.window_text; ColorRole::COUNT],
             fell_back: Vec::new(),
         };
         palette.ring = palette.ring_for(&[c.highlight, c.window_text, c.button_text]);
@@ -366,6 +384,13 @@ impl Palette {
                 bg: self.page,
                 attrs: Attrs::NONE,
             })
+    }
+
+    /// The text color of a row whose file group the theme maps to `role`:
+    /// the role's color where it keeps the floor on the page, else the
+    /// text color (or black or white), as for every role.
+    pub fn group_color(&self, role: ColorRole) -> Rgb {
+        self.groups.get(role.index()).copied().unwrap_or(self.text)
     }
 
     /// The roles drawn in the text color (or black or white) because
@@ -433,6 +458,16 @@ impl Palette {
             self.look(PanelRole::FocusedRow).bg,
             Requirement::NonText,
         );
+        // A file group's color, whichever role a theme maps it to.
+        for role in ColorRole::ALL {
+            pair(
+                format!("a file group in {} on the page", role.label()),
+                format!("window.group.{}", role.key()),
+                self.group_color(*role),
+                self.page,
+                Requirement::Text,
+            );
+        }
         checks
     }
 
@@ -509,8 +544,8 @@ mod tests {
             assert!(report.passed(), "{}", report.summary());
             assert_eq!(
                 report.checks.len(),
-                PanelRole::ALL.len() - 1 + 2 + 3,
-                "every role, the text, the dim text and the ring"
+                PanelRole::ALL.len() - 1 + 2 + 3 + ColorRole::COUNT,
+                "every role, the text, the dim text, the ring and the groups"
             );
         }
         let report = Palette::from_system(&NIGHT_SKY).report();

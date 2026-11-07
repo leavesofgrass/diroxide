@@ -250,6 +250,12 @@ accesskit = "=0.25.1"
 # for: AT-SPI on the tokio executor, so zbus is compiled once, and no
 # second executor (the default async-io would be).
 accesskit_winit = { version = "=0.34.1", default-features = false, features = ["accesskit_unix", "tokio", "rwh_06"] }
+# The window's clipboard on Wayland (alpha 4, R30 commit 113, on the
+# orchestrator's word to lane G5b): the crate the vendored masonry_winit
+# already uses, whose Wayland half (smithay-clipboard, libwayland opened at
+# run time) is in the tree through it; the GUI opens it on the window's own
+# Wayland connection, where the runner opens only the X11 one.
+copypasta = "0.10.2"
 # The GUI (alpha.3, the GUI alpha; ADR-0007; docs/dev/vendoring.md):
 # Masonry, Xilem's widget layer, vendored from textweaver under
 # third_party/xilem at upstream revision 271a27a6 (Monday, September 14,
