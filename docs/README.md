@@ -63,6 +63,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Script commands](script-commands.md): a command from one file in bash, Python or PowerShell: the header, what the script is given, directives, output modes, exit codes, which program runs it on each system, and `--explain`.
 - [Writing a plugin](writing-a-plugin.md): `diro plugin new`, the manifest, the protocol in a page, the services diroxide offers, lists of rows that are not files, places, previewers and converters, and the conformance checks.
 - [Optional components](components.md): helper programs, plugins and data packs, among them the SFTP places plugin, fetched only after you say yes, checked before use, offered once in a first-run list, installed from a file with no network, and removed by a list. Includes `diro components`.
+- [Tools and diro doctor](tools.md): the helper programs diroxide can use (ImageMagick, FFmpeg, pandoc and the rest), how each is found, `tools.toml`, the Tools list in the program, the install command for each system, and `diro doctor` with its sections and exit codes.
 - [Security](security.md): what diroxide checks, what it protects, and what a plugin could still do.
 
 ### Keys and settings
