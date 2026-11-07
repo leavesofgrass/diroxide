@@ -803,7 +803,9 @@ enum Purpose {
 
 impl Purpose {
     /// The variant's name, as this enum declares it: what
-    /// [`App::dialog_purpose`] gives a test.
+    /// [`App::dialog_purpose`] gives a test. The lists and questions
+    /// hosted under `Organize` give their own names, as does the zip
+    /// rewrite's question under `RunArchive` (the fold lane).
     fn name(&self) -> &'static str {
         match self {
             Self::RunPlan { .. } => "RunPlan",
@@ -850,7 +852,12 @@ impl Purpose {
             Self::SortList { .. } => "SortList",
             Self::Limit { .. } => "Limit",
             Self::ArchiveQuestion { .. } => "ArchiveQuestion",
-            Self::RunArchive { .. } => "RunArchive",
+            // The question before a zip is rewritten (Delete, Rename or
+            // Make folder inside it, lane AW) is its own purpose.
+            Self::RunArchive(plan) => match **plan {
+                crate::request::ArchivePlan::Rewrite { .. } => "RewriteArchive",
+                _ => "RunArchive",
+            },
             Self::PlanQuestion { .. } => "PlanQuestion",
             Self::PackForm { .. } => "PackForm",
             Self::PackName { .. } => "PackName",
@@ -875,7 +882,9 @@ impl Purpose {
             Self::SettingValue { .. } => "SettingValue",
             Self::SettingText { .. } => "SettingText",
             Self::Read { .. } => "Read",
-            Self::Organize { .. } => "Organize",
+            // The lists and questions the alpha 4 lanes host under
+            // Organize each give their own name.
+            Self::Organize(wants) => wants.purpose(),
             Self::JobItems { .. } => "JobItems",
             Self::Keys { .. } => "Keys",
             Self::Plugin { .. } => "Plugin",
@@ -1516,7 +1525,10 @@ impl App {
     /// app's source ("Rename", "Jobs", "JobItems"), when one is open. A
     /// test hook (lane A5): the GUI's every-purpose test checks that each
     /// dialog it opens is the one it meant, not only that it has a title.
-    /// The names are the source's, never words to say.
+    /// The names are the source's, never words to say: a `Purpose`
+    /// variant's, or for a dialog hosted under `Organize` its own
+    /// ("ConvertRecipes", "WatchedApprove"), and "RewriteArchive" for
+    /// the zip rewrite's question.
     pub fn dialog_purpose(&self) -> Option<&'static str> {
         self.opens.last().map(|open| open.purpose.name())
     }
