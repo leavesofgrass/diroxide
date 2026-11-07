@@ -17,6 +17,9 @@ carta = { workspace = true, features = ["standalone", "write-plain", "write-gfm"
 crc32fast.workspace = true
 diroxide-core.workspace = true
 diroxide-vfs.workspace = true
+# minisign signatures checked in process (alpha 4, lane E, CR2 approved in
+# its brief; ADR-0015): pure Rust, MIT, no dependencies, verify only.
+minisign-verify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
