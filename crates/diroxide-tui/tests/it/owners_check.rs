@@ -862,8 +862,18 @@ fn the_owners_check_of_alpha_2_runs_with_its_words() {
     );
     let rows = c.rows();
     assert!(rows[0].starts_with("Type: "), "{rows:?}");
-    assert!(rows[1].starts_with("Size: "), "{rows:?}");
-    assert!(rows.iter().any(|r| r == "Entries: 10 items"), "{rows:?}");
+    // Alpha 4's details view lists the facts in their groups: what is in
+    // the file (its entries, counted by the metadata crate's zip reader)
+    // comes before its size.
+    let size = rows
+        .iter()
+        .position(|r| r.starts_with("Size: "))
+        .expect("a Size row");
+    let entries = rows
+        .iter()
+        .position(|r| r == "Entries: 8 files, 2 folders")
+        .expect("the Entries row");
+    assert!(entries < size, "Entries comes before Size: {rows:?}");
     c.key("escape");
     // 33. Change permissions on main.rs: its words first.
     c.focus("main.rs");
