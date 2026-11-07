@@ -687,6 +687,8 @@ pub fn run(app: App, mut runtime: Runtime, options: GuiOptions) -> Result<App, G
     let launcher = crate::spawn::WindowLauncher::new();
     let runtime = runtime.with_launcher(Arc::new(launcher));
     let mut frontend = Frontend::new(app, runtime, options.title.clone());
+    // The picture view's read wakes the loop as the workers do.
+    frontend.set_waker(Arc::clone(&wake));
     // The system's appearance: read while following it, and elsewhere
     // than Windows (whose high contrast mode is read on every step) for
     // its high contrast setting. A few milliseconds, at most half a

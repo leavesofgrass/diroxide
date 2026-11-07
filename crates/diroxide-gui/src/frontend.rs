@@ -50,6 +50,7 @@ use masonry::properties::ContentColor;
 use masonry::widgets::{Flex, Label};
 
 use crate::model::{self, Lines, PanelView};
+use crate::picture::{Opened, PictureView, Zoom};
 use crate::theme::{Choice, Palette, SystemColors};
 use crate::widgets::announcer::Announcer;
 use crate::widgets::buttons::{ButtonPressed, ButtonRow};
@@ -57,10 +58,11 @@ use crate::widgets::choice::ChoiceAction;
 use crate::widgets::paint;
 use crate::widgets::panel::{PanelAction, PanelBox};
 use crate::widgets::panels::Panels;
+use crate::widgets::picture::{PictureAction, PictureBox, PictureLines};
 use crate::widgets::progress::JobProgressBar;
 use crate::widgets::push::PushAction;
 use crate::widgets::root::{Region, Root, RootAction};
-use crate::widgets::screen::Screen;
+use crate::widgets::screen::{Body, Screen};
 use crate::widgets::viewer::{ViewerAction, ViewerBox};
 
 /// The title line's text: the active place first.
@@ -86,6 +88,43 @@ pub const SCREEN: WidgetTag<Screen> = WidgetTag::named("diroxide-screen");
 pub const VIEWER: WidgetTag<ViewerBox> = WidgetTag::named("diroxide-viewer");
 /// The progress of the job in front.
 pub const JOB_PROGRESS: WidgetTag<JobProgressBar> = WidgetTag::named("diroxide-job-progress");
+/// The picture view's graphic (alpha 4, R30 commit 112).
+pub const PICTURE: WidgetTag<PictureBox> = WidgetTag::named("diroxide-picture");
+/// The lines under the picture: its zoom, its animation, its keys.
+pub const PICTURE_LINES: WidgetTag<PictureLines> = WidgetTag::named("diroxide-picture-lines");
+
+/// How long a picture may take to read before the window says it is
+/// opening it, so a quick one is not announced twice.
+pub const OPENING_AFTER: Duration = Duration::from_millis(500);
+
+/// Where the picture view was opened from, and goes back to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PictureFrom {
+    /// The viewer.
+    Viewer,
+    /// The quick view's preview region.
+    Preview,
+}
+
+/// The open picture view.
+#[derive(Clone, Debug)]
+struct OpenPicture {
+    place: diroxide_core::Place,
+    from: PictureFrom,
+    view: PictureView,
+    animation: Option<String>,
+}
+
+/// A picture being read on a thread of its own.
+#[derive(Debug)]
+struct Reading {
+    place: diroxide_core::Place,
+    name: String,
+    from: PictureFrom,
+    answer: std::sync::mpsc::Receiver<Result<Opened, Message>>,
+    since: Instant,
+    said: bool,
+}
 
 /// A panel's list box tag.
 pub const fn panel_tag(side: Side) -> WidgetTag<PanelBox> {
@@ -197,6 +236,11 @@ struct Shown {
     arranged: Option<(diroxide_app::config::Layout, Side)>,
     /// Whether the viewer is shown in the panels' place.
     viewing: bool,
+    /// What the body shows: the panels, the viewer, or the picture view.
+    body: Body,
+    /// The picture view as shown, and its lines.
+    picture: Option<PictureView>,
+    picture_lines: Vec<String>,
     /// The viewer's rows as shown.
     viewer: Option<model::ViewerView>,
     /// What the window's colors were made from, as last put on the
@@ -274,6 +318,21 @@ pub struct Frontend {
     full_screen: bool,
     /// Full screen turned on or off, for the window to carry out.
     full_screen_asked: Option<bool>,
+    /// The open picture view (R30 commit 112).
+    picture: Option<OpenPicture>,
+    /// A picture being read for the view.
+    reading: Option<Reading>,
+    /// The guard picture decodes run under: the preview crate's, one at
+    /// a time, at the pixel guard's deadline.
+    picture_guard: diroxide_preview::doc::Guard,
+    /// The picture view's size, as its graphic last told it.
+    picture_size: (f64, f64),
+    /// Counts the pictures shown, so each is a new image.
+    picture_count: u64,
+    /// The source the "Enter shows the picture" line was said for.
+    hinted: Option<(PictureFrom, diroxide_core::Place)>,
+    /// What wakes the window's loop when a picture is read.
+    waker: Option<diroxide_app::runtime::Waker>,
 }
 
 /// A message waiting for the live region.
@@ -338,7 +397,23 @@ impl Frontend {
             progress_reports: Vec::new(),
             menu_bar: false,
             menu_requests: Vec::new(),
+            picture: None,
+            reading: None,
+            picture_guard: diroxide_preview::doc::Guard::new(
+                diroxide_preview::images::PixelGuard::DEFAULT.deadline,
+                1,
+            ),
+            picture_size: (640.0, 480.0),
+            picture_count: 0,
+            hinted: None,
+            waker: None,
         }
+    }
+
+    /// What wakes the window's loop when a picture the view reads is in:
+    /// the runtime's own waker, which the window gives both.
+    pub fn set_waker(&mut self, waker: diroxide_app::runtime::Waker) {
+        self.waker = Some(waker);
     }
 
     /// The same driver pressing keys as on `platform` (the tests check
@@ -643,9 +718,17 @@ impl Frontend {
         // The body's place in the window, which focus mode's veil leaves
         // clear.
         let body = std::rc::Rc::new(std::cell::Cell::new(masonry::kurbo::Rect::ZERO));
-        let screen =
-            NewWidget::new(Screen::new(panels, viewer).with_area(std::rc::Rc::clone(&body)))
-                .with_tag(SCREEN);
+        // The picture view in the same place while a picture is open: the
+        // graphic, then the lines that say its zoom and its keys.
+        let picture = Flex::column()
+            .with(NewWidget::new(PictureBox::new()).with_tag(PICTURE), 1.0)
+            .with_fixed(NewWidget::new(PictureLines::new()).with_tag(PICTURE_LINES));
+        let screen = NewWidget::new(
+            Screen::new(panels, viewer)
+                .with_picture(NewWidget::new(picture))
+                .with_area(std::rc::Rc::clone(&body)),
+        )
+        .with_tag(SCREEN);
         let column = Flex::column()
             .with_fixed(NewWidget::new(Label::new(lines.title.clone())).with_tag(TITLE_LINE))
             .with(screen, 1.0)
@@ -704,6 +787,13 @@ impl Frontend {
             // (when it is hidden) and enters it, as Windows' own menu keys
             // would.
             self.menu_requests.push(enter);
+            return;
+        }
+        if self.picture_key(&key, now) {
+            // The picture view's own keys, or Enter opening it (the
+            // window's keys until the app has a command for the view).
+            self.after(now);
+            self.refresh(host);
             return;
         }
         if !self.app.key_test_active() && self.local_key(&key) {
@@ -847,6 +937,314 @@ impl Frontend {
         self.carry(effects);
     }
 
+    /// The picture view as it shows now.
+    pub fn picture_view(&self) -> Option<&PictureView> {
+        self.picture.as_ref().map(|open| &open.view)
+    }
+
+    /// Whether a picture is being read for the view.
+    pub fn picture_reading(&self) -> bool {
+        self.reading.is_some()
+    }
+
+    /// A line of the window's own for the live region.
+    fn say_window(&mut self, message: Message) {
+        self.said.push(message.clone());
+        self.to_say.push(Said {
+            message,
+            start: false,
+            opening: false,
+        });
+    }
+
+    /// The picture the viewer or the preview region shows now, which the
+    /// window's Enter opens in the picture view: its place, its name, and
+    /// where it is shown. Only where Enter is the app's for nothing else
+    /// there: no command in the viewer, and in the preview only Open
+    /// link, which a picture's words never carry.
+    fn picture_source(&self) -> Option<(diroxide_core::Place, String, PictureFrom)> {
+        use diroxide_app::Lookup;
+        use diroxide_core::Layer;
+        if self.app.dialog().is_some() || self.app.key_test_active() {
+            return None;
+        }
+        let enter = Key::plain(KeyCode::Enter);
+        if self.app.in_preview() {
+            let shown = self.app.quick_view()?.shown()?;
+            if !crate::picture::is_picture(&shown.name) {
+                return None;
+            }
+            let layers = [Layer::Preview, Layer::List, Layer::Global];
+            let free = match self.app.keymap().lookup(&layers, &enter) {
+                Lookup::NoMatch => true,
+                Lookup::Command(id) => id == ids::PREVIEW_OPEN_LINK,
+            };
+            return free.then(|| {
+                (
+                    shown.place.clone(),
+                    shown.name.clone(),
+                    PictureFrom::Preview,
+                )
+            });
+        }
+        let viewer = self.app.viewer()?;
+        if !crate::picture::is_picture(viewer.name()) {
+            return None;
+        }
+        let layers = [Layer::Viewer, Layer::List, Layer::Global];
+        match self.app.keymap().lookup(&layers, &enter) {
+            Lookup::NoMatch => Some((
+                viewer.place().clone(),
+                diroxide_core::names::display_name(viewer.name()).into_owned(),
+                PictureFrom::Viewer,
+            )),
+            Lookup::Command(_) => None,
+        }
+    }
+
+    /// Whether the viewer or the preview still shows the picture at
+    /// `place`; the picture view closes with its source.
+    fn still_shown(&self, from: PictureFrom, place: &diroxide_core::Place) -> bool {
+        match from {
+            PictureFrom::Viewer => {
+                !self.app.in_preview() && self.app.viewer().is_some_and(|v| v.place() == place)
+            }
+            PictureFrom::Preview => {
+                self.app.in_preview()
+                    && self
+                        .app
+                        .quick_view()
+                        .and_then(|q| q.shown())
+                        .is_some_and(|s| &s.place == place)
+            }
+        }
+    }
+
+    /// The picture view's keys, or Enter opening it; true when the key
+    /// was the view's. In the view: Plus and Minus zoom, 0 fits, 1 shows
+    /// the actual size, the arrows move a zoomed picture, Escape closes;
+    /// every other key is the app's.
+    fn picture_key(&mut self, key: &Key, now: Instant) -> bool {
+        if self.app.key_test_active() || self.app.capturing_key() || self.app.dialog().is_some() {
+            return false;
+        }
+        let plain = key.mods.is_empty();
+        let bare = !key.mods.ctrl && !key.mods.alt && !key.mods.meta;
+        if self.picture.is_some() {
+            match key.code {
+                KeyCode::Escape if plain => self.picture = None,
+                KeyCode::Char('+' | '=') | KeyCode::KeypadPlus if bare => self.zoom_picture(true),
+                KeyCode::Char('-') | KeyCode::KeypadMinus if bare => self.zoom_picture(false),
+                KeyCode::Char('0') if bare => self.set_zoom(Zoom::Fit),
+                KeyCode::Char('1') if bare => self.set_zoom(Zoom::Scale(1.0)),
+                KeyCode::Left if plain => self.pan_picture((-1, 0)),
+                KeyCode::Right if plain => self.pan_picture((1, 0)),
+                KeyCode::Up if plain => self.pan_picture((0, -1)),
+                KeyCode::Down if plain => self.pan_picture((0, 1)),
+                _ => return false,
+            }
+            return true;
+        }
+        if key.code == KeyCode::Enter && plain {
+            if self.reading.is_some() {
+                // One picture at a time: a second Enter waits for the first.
+                return true;
+            }
+            if let Some((place, name, from)) = self.picture_source() {
+                self.read_picture(place, name, from, now);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Reads the picture on a thread of its own: the header through the
+    /// preview crate, held to the pixel guard, and the pixels only
+    /// through its decoder ([`crate::picture::read_picture`]).
+    fn read_picture(
+        &mut self,
+        place: diroxide_core::Place,
+        name: String,
+        from: PictureFrom,
+        now: Instant,
+    ) {
+        let (tx, answer) = std::sync::mpsc::channel();
+        let registry = self.runtime.registry().clone();
+        let decoder = self.picture_guard.clone();
+        let waker = self.waker.clone();
+        let (at, called) = (place.clone(), name.clone());
+        let spawned = std::thread::Builder::new()
+            .name("diroxide-picture".to_owned())
+            .spawn(move || {
+                let guard = diroxide_preview::images::PixelGuard::DEFAULT;
+                let read = registry
+                    .resolve(&at)
+                    .and_then(|provider| provider.open_seekable(&at, &Default::default()))
+                    .map(|mut source| {
+                        crate::picture::read_picture(&mut source, &called, &guard, &decoder)
+                    })
+                    .map_err(|error| Message::from_error("open", &called, &error));
+                let _ = tx.send(read);
+                if let Some(wake) = waker {
+                    wake();
+                }
+            });
+        if let Err(error) = spawned {
+            self.say_window(Message::could_not(
+                "open",
+                &name,
+                &error.to_string(),
+                "Try again in a moment.",
+            ));
+            return;
+        }
+        self.reading = Some(Reading {
+            place,
+            name,
+            from,
+            answer,
+            since: now,
+            said: false,
+        });
+    }
+
+    /// Takes the picture read, when it is in: the view opens on it while
+    /// its source still shows it, or the words say why it is not shown.
+    /// A read that takes longer than [`OPENING_AFTER`] is said first.
+    fn poll_picture(&mut self, now: Instant) {
+        use std::sync::mpsc::TryRecvError;
+        let Some(mut reading) = self.reading.take() else {
+            return;
+        };
+        let answer = match reading.answer.try_recv() {
+            Ok(answer) => answer,
+            Err(TryRecvError::Empty) => {
+                if !reading.said && now.saturating_duration_since(reading.since) >= OPENING_AFTER {
+                    reading.said = true;
+                    let line = format!("Opening picture {}", reading.name);
+                    self.say_window(Message::info(line));
+                }
+                self.reading = Some(reading);
+                return;
+            }
+            Err(TryRecvError::Disconnected) => Err(Message::could_not(
+                "open",
+                &reading.name,
+                "the reading stopped",
+                "Try again.",
+            )),
+        };
+        if !self.still_shown(reading.from, &reading.place) {
+            // The viewer closed or went on to another file meanwhile.
+            return;
+        }
+        match answer {
+            Ok(Opened::Shown(picture)) => {
+                self.picture_count += 1;
+                let dims = (picture.pixels.width, picture.pixels.height);
+                let zoom = Zoom::Fit;
+                let lines = crate::picture::view_lines(
+                    crate::picture::zoom_words(zoom, self.picture_size, dims),
+                    picture.animation.as_deref(),
+                );
+                self.picture = Some(OpenPicture {
+                    place: reading.place,
+                    from: reading.from,
+                    view: PictureView {
+                        name: reading.name,
+                        description: picture.sentence,
+                        lines,
+                        pixels: picture.pixels,
+                        zoom,
+                        center: crate::picture::middle(dims),
+                        generation: self.picture_count,
+                    },
+                    animation: picture.animation,
+                });
+                // The graphic says its name and words as the focus moves
+                // to it; its keys are said once, after.
+                self.say_window(Message::info(crate::picture::HELP_LINE));
+            }
+            Ok(Opened::Refused(words)) => self.say_window(Message::info(words)),
+            Err(message) => self.say_window(message),
+        }
+    }
+
+    /// The lines under the open picture, for its zoom now.
+    fn picture_lines(&mut self) {
+        let size = self.picture_size;
+        if let Some(open) = self.picture.as_mut() {
+            let dims = (open.view.pixels.width, open.view.pixels.height);
+            open.view.lines = crate::picture::view_lines(
+                crate::picture::zoom_words(open.view.zoom, size, dims),
+                open.animation.as_deref(),
+            );
+        }
+    }
+
+    /// Sets the zoom, keeps the view's middle inside the picture, and says
+    /// the zoom in words.
+    fn set_zoom(&mut self, zoom: Zoom) {
+        let size = self.picture_size;
+        let Some(open) = self.picture.as_mut() else {
+            return;
+        };
+        let dims = (open.view.pixels.width, open.view.pixels.height);
+        open.view.zoom = zoom;
+        open.view.center = match zoom {
+            Zoom::Fit => crate::picture::middle(dims),
+            Zoom::Scale(scale) => crate::picture::pan(open.view.center, (0, 0), scale, size, dims),
+        };
+        let words = crate::picture::zoom_words(zoom, size, dims);
+        self.picture_lines();
+        self.say_window(Message::info(words));
+    }
+
+    /// One zoom step in or out.
+    fn zoom_picture(&mut self, inward: bool) {
+        let size = self.picture_size;
+        let Some(open) = self.picture.as_ref() else {
+            return;
+        };
+        let dims = (open.view.pixels.width, open.view.pixels.height);
+        let zoom = crate::picture::zoom_step(open.view.zoom, size, dims, inward);
+        self.set_zoom(zoom);
+    }
+
+    /// Moves a zoomed picture by an arrow; a picture wholly in view stays.
+    fn pan_picture(&mut self, by: (i8, i8)) {
+        let size = self.picture_size;
+        let Some(open) = self.picture.as_mut() else {
+            return;
+        };
+        let dims = (open.view.pixels.width, open.view.pixels.height);
+        let scale = open.view.zoom.scale(size, dims);
+        if open.view.zoom != Zoom::Fit {
+            open.view.center = crate::picture::pan(open.view.center, by, scale, size, dims);
+        }
+    }
+
+    /// Says once, as the viewer or the preview comes to a picture the
+    /// window can show, that Enter shows it.
+    fn hint_picture(&mut self) {
+        if self.app.dialog().is_some() || self.app.key_test_active() {
+            // A prompt over the viewer (a search, a jump) leaves the hint
+            // said: it is not said again when the prompt closes.
+            return;
+        }
+        match self.picture_source() {
+            Some((place, _, from)) => {
+                let key = (from, place);
+                if self.picture.is_none() && self.hinted.as_ref() != Some(&key) {
+                    self.hinted = Some(key);
+                    self.say_window(Message::info(crate::picture::ENTER_HINT));
+                }
+            }
+            None if self.picture.is_none() && self.reading.is_none() => self.hinted = None,
+            None => {}
+        }
+    }
+
     /// Tells the driver whether the window has a native menu bar now, so
     /// the menu keys enter it.
     pub fn set_menu_bar(&mut self, native: bool) {
@@ -986,6 +1384,18 @@ impl Frontend {
                 let ViewerAction::Size(columns, rows) = *viewer;
                 if self.viewer_size != (columns, rows) {
                     self.viewer_size = (columns, rows);
+                    self.refresh(host);
+                }
+                return;
+            }
+            Err(other) => other,
+        };
+        let action = match action.downcast::<PictureAction>() {
+            Ok(picture) => {
+                let PictureAction::Size(width, height) = *picture;
+                if self.picture_size != (width, height) {
+                    self.picture_size = (width, height);
+                    self.picture_lines();
                     self.refresh(host);
                 }
                 return;
@@ -1180,6 +1590,7 @@ impl Frontend {
                 self.handle_event(event);
             }
         }
+        self.poll_picture(now);
         self.after(now);
         self.refresh(host);
     }
@@ -1235,8 +1646,14 @@ impl Frontend {
         let deadline = Instant::now() + limit;
         loop {
             self.wake(host, now);
-            if !self.runtime.is_busy() || Instant::now() >= deadline {
+            let busy = self.runtime.is_busy() || self.reading.is_some();
+            if !busy || Instant::now() >= deadline {
                 break;
+            }
+            if !self.runtime.is_busy() {
+                // Only the picture view's read: its thread wakes no runtime.
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
             }
             let events = self.runtime.wait(Duration::from_millis(10));
             for event in events {
@@ -1285,6 +1702,7 @@ impl Frontend {
         if self.hold_retry_at.is_some_and(|at| now >= at) {
             self.hold_retry_at = None;
         }
+        self.poll_picture(now);
         self.fade(host, now);
         self.after(now);
         self.refresh(host);
@@ -1299,6 +1717,10 @@ impl Frontend {
             self.viewer_tick_at,
             self.hold_retry_at,
             (self.fades() && !self.veiled).then_some(self.rest_since + FADE_AFTER),
+            self.reading
+                .as_ref()
+                .filter(|r| !r.said)
+                .map(|r| r.since + OPENING_AFTER),
         ]
         .into_iter()
         .flatten()
@@ -1449,9 +1871,41 @@ impl Frontend {
         // The viewer in the panels' place while a file is viewed: the rows
         // on screen for the size its list box told, drawn with the theme.
         let viewing = self.app.viewer().is_some();
-        if viewing != self.shown.viewing {
-            self.shown.viewing = viewing;
-            host.edit(SCREEN, |mut s| Screen::set_viewing(&mut s, viewing));
+        self.shown.viewing = viewing;
+        // The picture view in the body's place while a picture is open; it
+        // closes with its source (the viewer closed, or moved to another
+        // file), and Enter's hint is said as a source comes to a picture.
+        if let Some(open) = &self.picture
+            && !self.still_shown(open.from, &open.place)
+        {
+            self.picture = None;
+        }
+        self.hint_picture();
+        let body = if self.picture.is_some() {
+            Body::Picture
+        } else if viewing {
+            Body::Viewer
+        } else {
+            Body::Panels
+        };
+        let picture = self.picture.as_ref().map(|open| open.view.clone());
+        if picture != self.shown.picture {
+            let lines = picture
+                .as_ref()
+                .map(|p| p.lines.clone())
+                .unwrap_or_default();
+            self.shown.picture = picture.clone();
+            host.edit(PICTURE, |mut b| PictureBox::set_view(&mut b, picture));
+            if lines != self.shown.picture_lines {
+                self.shown.picture_lines = lines.clone();
+                host.edit(PICTURE_LINES, |mut l| {
+                    PictureLines::set_lines(&mut l, lines)
+                });
+            }
+        }
+        if body != self.shown.body {
+            self.shown.body = body;
+            host.edit(SCREEN, |mut s| Screen::show(&mut s, body));
         }
         if viewing {
             let (columns, rows) = self.viewer_size;
@@ -1551,8 +2005,10 @@ impl Frontend {
         {
             return Some(id);
         }
-        if self.shown.viewing {
-            return host.id_of(VIEWER);
+        match self.shown.body {
+            Body::Picture => return host.id_of(PICTURE),
+            Body::Viewer => return host.id_of(VIEWER),
+            Body::Panels => {}
         }
         host.id_of(panel_tag(self.focus_side()))
     }

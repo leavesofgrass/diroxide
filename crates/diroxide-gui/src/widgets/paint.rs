@@ -95,7 +95,7 @@ pub fn outline(painter: &mut Painter<'_>, bar: Rect, palette: &Palette, filled: 
 /// (a dialog's lines, on the dialog's card; the title, status and jobs
 /// lines get theirs from the driver).
 pub fn default_properties(palette: &Arc<Palette>) -> DefaultProperties {
-    use super::{buttons, choice, field, modal, panel, progress, push, root, viewer};
+    use super::{buttons, choice, field, modal, panel, picture, progress, push, root, viewer};
     let mut props = masonry::theme::default_property_set();
     let colors = Colors(Arc::clone(palette));
     props.insert::<root::Root, _>(colors.clone());
@@ -107,6 +107,8 @@ pub fn default_properties(palette: &Arc<Palette>) -> DefaultProperties {
     props.insert::<buttons::ButtonRow, _>(colors.clone());
     props.insert::<push::PushButton, _>(colors.clone());
     props.insert::<progress::JobProgressBar, _>(colors.clone());
+    props.insert::<picture::PictureBox, _>(colors.clone());
+    props.insert::<picture::PictureLines, _>(colors.clone());
     props.insert::<viewer::ViewerBox, _>(colors);
     props.insert::<masonry::widgets::Label, _>(ContentColor::new(color(
         palette.look(PanelRole::Dialog).fg,

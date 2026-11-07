@@ -88,6 +88,13 @@
 //!   same and the fade says nothing. A `--background` window never goes
 //!   full screen.
 //!
+//! Alpha 4's window lane (G5b) added [`picture`]: Enter on a picture in
+//! the viewer or the quick view's preview opens it in the body's place as
+//! one graphic named by its file and described by the preview crate's
+//! words, read through that crate's one pixel guard; Plus, Minus, 0 and
+//! 1 zoom and fit, said in words; an animation shows its first frame
+//! still; Escape goes back.
+//!
 //! On Windows `diro` stays a console program, so a shell waits for it and
 //! the terminal frontend keeps its console; [`console`] lets go of a
 //! console that only the window's start opened (a double-click in
@@ -102,6 +109,7 @@ pub mod frontend;
 pub mod keys;
 pub mod menus;
 pub mod model;
+pub mod picture;
 mod platform;
 pub mod spawn;
 pub mod theme;
