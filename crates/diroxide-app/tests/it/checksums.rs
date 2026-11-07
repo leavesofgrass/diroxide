@@ -346,6 +346,14 @@ fn several_lists_are_chosen_and_an_unnamed_value_says_which_matched() {
     let said = s.command(ids::VERIFY_CHECKSUM);
     assert_eq!(said.last().unwrap(), "SHA256SUMS has no line for notes.txt");
     fs::remove_file(work.join("SHA256SUMS")).unwrap();
+    // The folder's watcher may say the removal in the same run, before or
+    // after the verdict ("Folder changed: 0 added, 1 removed", which once
+    // came last on a loaded machine at AE's merge check): the verdict is
+    // among what was said, whatever the order.
     let said = s.command(ids::VERIFY_CHECKSUM);
-    assert_eq!(said.last().unwrap(), "No checksum list beside notes.txt");
+    assert!(
+        said.iter()
+            .any(|l| l == "No checksum list beside notes.txt"),
+        "{said:?}"
+    );
 }
