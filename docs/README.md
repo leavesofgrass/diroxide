@@ -46,6 +46,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, the limits that protect you, and `diro archive`.
 - [The viewer](viewer.md): F3, lines, wrap, jump, search, hex mode, following a log, large files, and code read by ear.
 - [The quick view](quick-view.md): a live preview of the focused file in the other panel, by heading, table and link, and the formats it reads.
+- [File types and groups](file-types.md): what a row says about a file, how a type is found, the eight groups and the screenshot names, the retro pack, your own `filetypes.toml`, typed actions, Open with on each system, and the encoding chooser.
 - [Split and join](split-join.md): cutting a big file into parts for mail, GitHub, a disc or FAT32, joining them back, the checksum file, `diro split` and `diro join`.
 - [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, times, and the details list.
 
