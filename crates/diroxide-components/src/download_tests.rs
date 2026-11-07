@@ -56,11 +56,17 @@ impl FreeSpace for Room {
     }
 }
 
+/// The downloader over the fake fetcher. The fake always answers, so the
+/// stall time is only a deadline for its thread's next message, never a
+/// wait a passing run sits through: a minute, since at 400 milliseconds a
+/// machine loaded with other builds once starved the fetch thread and the
+/// download said "the server took too long" (D1's merge check, Saturday,
+/// November 7, 2026). The tests of a real stall set their own.
 fn downloader(dir: &Path, sources: Sources, fetcher: Arc<dyn Fetcher>) -> Downloader {
     Downloader::new(dir.join("components"), sources, fetcher)
         .with_target(ANY_TARGET)
         .with_space(Arc::new(Room(u64::MAX)))
-        .with_stall(Duration::from_millis(400))
+        .with_stall(Duration::from_secs(60))
 }
 
 #[derive(Default)]
