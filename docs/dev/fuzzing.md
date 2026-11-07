@@ -2,7 +2,7 @@
 
 diroxide's fuzz targets feed random input to the code that reads what other people make: file names, filters and patterns, archives, the highlighter, picture headers and document containers, the metadata readers, the components list, the plugin protocol and manifests, script headers, the SFTP plugin's packets, the disk image plugin's partition tables and file systems, and the git plugin's reading of git's output. A target may refuse its input with an error, but it must never panic, hang, leak, or run out of memory. The targets are built with cargo-fuzz, which links libFuzzer and AddressSanitizer, and need a nightly Rust toolchain.
 
-They live in four Cargo workspaces of their own, `fuzz/`, `plugins/diro-sftp/fuzz/`, `plugins/diro-disk/fuzz/` and `plugins/diro-git/fuzz/`, so the main build, `cargo test` and `cargo install diro` never compile them: libFuzzer is C++, and the main workspace keeps to the pure-Rust goal (plan section 4). Most targets are a few lines that call a plain function in the crate's own `fuzzing` module, so the same code also runs on its seeds in the crate's normal tests.
+They live in five Cargo workspaces of their own, `fuzz/`, `plugins/diro-sftp/fuzz/`, `plugins/diro-disk/fuzz/`, `plugins/diro-git/fuzz/` and `plugins/diro-crypt/fuzz/`, so the main build, `cargo test` and `cargo install diro` never compile them: libFuzzer is C++, and the main workspace keeps to the pure-Rust goal (plan section 4). Most targets are a few lines that call a plain function in the crate's own `fuzzing` module, so the same code also runs on its seeds in the crate's normal tests.
 
 ## The targets
 
@@ -19,6 +19,7 @@ In `fuzz/`:
 - `archive_xz`: xz decoding under the memory cap, and the provider's checks of an xz file.
 - `archive_7z`: 7z reading, with the coders' pre-scan and passwords.
 - `archive_roundtrip`: diroxide's archive writers against its readers.
+- `archive_slt`: the 7z tool backend's listing parser. The input is a `7z l -slt` listing, as 7-Zip prints it or as a hostile member name might twist it, parsed and indexed under the strict limits. Nothing may panic, every record must point at an item that exists, and no indexed path may climb out. The body is `diroxide_archive::fuzzing::slt`. It has no seeds folder: its samples are `SLT_SAMPLES` in `crates/diroxide-archive/src/fuzzing.rs`, replayed by the crate's tests. Its own comment asks for `-max_len=262144`.
 - `highlight_hang`: the highlighter, which must never hang; the first byte picks the language.
 - `preview_image_header`: the picture words' header readers, with small limits; a header that reads must give words.
 - `preview_container`: the previews' read path for zip-based documents, through its member checks and its nesting cut, with small caps.
@@ -53,6 +54,14 @@ In `plugins/diro-git/fuzz/`, four targets for the git plugin, each a plain funct
 - `config_scan`: the trust scan over a configuration listing with scopes, what a hostile repository's own configuration could hold.
 - `other_readers`: blame, the branch and stash lists, and progress lines.
 
+In `plugins/diro-crypt/fuzz/`, three targets for the encryption plugin, each a plain function in its `fuzzing` module (`plugins/diro-crypt/src/fuzzing.rs`). They read what a hostile file or the host could hand the plugin, and none may panic, loop or allocate by a number it read:
+
+- `recipients`: a recipients file or a pasted key, and the words of what it refuses: an SSH key, a plugin key, a hardware key, a line that is no key.
+- `form_answer`: a form's answer as the host could send it, the passphrase form's and the recipient form's, with values of the wrong kind or missing.
+- `header`: an age file's header, armored or not, how much work its passphrase asks for, and the names made from a file's name.
+
+The encryption targets have no seeds folder. The plugin's tests in `tests/it/fuzz.rs` make their seeds at test time, replay every cut of each and copies with bytes bent, and add random bytes, so `cargo test` in the plugin runs them with no fuzzer.
+
 ## Run a target on your computer
 
 Install the nightly toolchain and cargo-fuzz once. The repository's `rust-toolchain.toml` stays as it is: `+nightly` picks the nightly toolchain for one command.
@@ -80,7 +89,7 @@ The SFTP target runs the same way from its own folder:
 cargo +nightly fuzz run --fuzz-dir plugins/diro-sftp/fuzz sftp_packet plugins/diro-sftp/fuzz/corpus/sftp_packet fixtures/sftp/seeds/sftp_packet -- -max_total_time=60
 ```
 
-`cargo +nightly fuzz list --fuzz-dir fuzz` lists the targets. Some take limits, written in the comment at the top of each target and used by the nightly run as well: `archive_zip`, `archive_7z` and `archive_roundtrip` take `-max_len=1048576`; `archive_stream` and `archive_xz` take `-max_len=262144`; `preview_image_header` and `preview_container` take `-max_len=1048576`, said in their own comments, which the nightly run's case lines do not pass yet; `highlight_hang` takes `-timeout=2`, the viewer's deadline.
+`cargo +nightly fuzz list --fuzz-dir fuzz` lists the targets. Some take limits, written in the comment at the top of each target and used by the nightly run as well: `archive_zip`, `archive_7z` and `archive_roundtrip` take `-max_len=1048576`; `archive_stream` and `archive_xz` take `-max_len=262144`, and so does `archive_slt` by its own comment, which the nightly run's case lines do not pass yet; `preview_image_header` and `preview_container` take `-max_len=1048576`, said in their own comments, which the nightly run's case lines do not pass yet; `highlight_hang` takes `-timeout=2`, the viewer's deadline.
 
 The disk and git targets run the same way from their plugin's folder, and each plugin's own tests replay them. The git targets' seeds are in `plugins/diro-git/fixtures/seeds/TARGET`:
 
@@ -104,7 +113,7 @@ A panic on Windows ends the run without saving its input: Rust's abort is a fast
 
 ## Where a crash input goes
 
-When a target finds a problem, cargo-fuzz saves the input that caused it in `fuzz/artifacts/TARGET/` (or the same folder under `plugins/diro-sftp/fuzz/`, `plugins/diro-disk/fuzz/` or `plugins/diro-git/fuzz/`), named for the kind of problem and a hash: `crash-` for a panic or a memory error, `timeout-` for an input that ran too long, `leak-` for memory never freed, and `oom-` for running out of memory. It prints the command that runs that input again. Git ignores both `artifacts` folders, and the `corpus` and `target` folders beside them.
+When a target finds a problem, cargo-fuzz saves the input that caused it in `fuzz/artifacts/TARGET/` (or the same folder under `plugins/diro-sftp/fuzz/`, `plugins/diro-disk/fuzz/`, `plugins/diro-git/fuzz/` or `plugins/diro-crypt/fuzz/`), named for the kind of problem and a hash: `crash-` for a panic or a memory error, `timeout-` for an input that ran too long, `leak-` for memory never freed, and `oom-` for running out of memory. It prints the command that runs that input again. Git ignores both `artifacts` folders, and the `corpus` and `target` folders beside them.
 
 To run one input again:
 
@@ -118,8 +127,7 @@ Then fix the bug, and keep the input as a regular test in the crate it came from
 
 `.github/workflows/fuzz.yml` runs every night at 09:17 UTC, and by hand from the Actions tab (Fuzz, then Run workflow), where it asks how many seconds each target runs. It never runs on a push.
 
-- One job builds every target once, on Linux, with the nightly toolchain, AddressSanitizer and debug assertions, so arithmetic overflow is a crash too. It starts from the main workspace's `Cargo.lock` and the SFTP plugin's, so the versions fuzzed are the versions that ship. The targets are read from the two manifests, so a new target is fuzzed the next night with no change to the workflow. The nightly run covers `fuzz/` and `plugins/diro-sftp/fuzz/`. The disk and git plugins' 13 targets are compile-checked by day and replayed by their own tests, and are not in the nightly run yet.
-- One job per target runs it for ten minutes, from its corpus of earlier nights and its seeds. Each target's corpus is cached under its own name, and saved after a failure too.
+- One job builds every target once, on Linux, with the nightly toolchain, AddressSanitizer and debug assertions, so arithmetic overflow is a crash too. It starts from the main workspace's `Cargo.lock` and the SFTP plugin's, so the versions fuzzed are the versions that ship. The targets are read from the two manifests, so a new target is fuzzed the next night with no change to the workflow. The nightly run covers `fuzz/` and `plugins/diro-sftp/fuzz/`. The disk, git and encryption plugins' 16 targets are compile-checked by day and replayed by their own tests, and are not in the nightly run yet.- One job per target runs it for ten minutes, from its corpus of earlier nights and its seeds. Each target's corpus is cached under its own name, and saved after a failure too.
 - A target that finds a problem fails its job and uploads the artifact `fuzz-crash-TARGET`: the input, the run's log `fuzz.log` with the stack trace near its end, and `README.txt` with the reproduce line in words.
 - The last job writes the run's summary: one line per target, failures first, the meaning first, such as "Pass: archive_zip, 10 minutes, 41,200 runs" or "Fail: archive_7z, crash, input uploaded, after 1,234 runs".
 
@@ -127,13 +135,14 @@ To replay a nightly crash, download its artifact from the run's page, or with `g
 
 ## By day
 
-A change that stops a target compiling is caught on its push, not at night: the CI job "Fuzz targets compile" in `ci.yml` checks all four fuzz crates with the pinned toolchain. The same check on your computer:
+A change that stops a target compiling is caught on its push, not at night: the CI job "Fuzz targets compile" in `ci.yml` checks all five fuzz crates with the pinned toolchain. The same check on your computer:
 
 ```bash
 cargo check --manifest-path fuzz/Cargo.toml --bins
 cargo check --manifest-path plugins/diro-sftp/fuzz/Cargo.toml --bins
 cargo check --manifest-path plugins/diro-disk/fuzz/Cargo.toml --bins
 cargo check --manifest-path plugins/diro-git/fuzz/Cargo.toml --bins
+cargo check --manifest-path plugins/diro-crypt/fuzz/Cargo.toml --bins
 ```
 
 ## Add a target
