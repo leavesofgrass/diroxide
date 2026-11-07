@@ -18,17 +18,17 @@ ADR-0009 already holds that a secret lives in a wiping type, is asked through th
 - **age lives in the `diro-crypt` plugin, never in the main workspace.** A workspace of its own (`plugins/diro-crypt`), shipped as an optional component, with age 0.12.1 and only its `armor` feature: `ssh` stays off (the `rsa` crate's open timing advisory, RUSTSEC-2023-0071), and so do `plugin`, `async` and `cli-common`. Pure Rust: `cargo tree -i cc --target all` over the plugin's graph finds `cc` only as a build dependency of `psm` under carta's `stacker`, which reaches every plugin through `diroxide-plugins` and `diroxide-ops` and which the main workspace's native gate already allows; age adds none. `unsafe_code` is denied.
 - **Only passphrases and age's own X25519 keys are used.** SSH keys, plugin keys and the hardware tag keys are refused in words ("Hardware keys are not used: line 1"), so the P-256 arithmetic under RUSTSEC-2026-0387 is compiled into the plugin and never reached; basic-toml runs only while the plugin is built. Both advisories are named in the plugin's manifest and `Cargo.toml`. **What fixes them:** an age release on the RustCrypto 0.14 elliptic curves (crypto-bigint 0.7.6 or later) and a translation stack without basic-toml; the plugin moves to it when it is published, and answer 115's first branch (age in the main binary) can be weighed again then.
 - **Three commands, every secret asked and none kept.** "Encrypt with a passphrase" asks it twice in one form's hidden fields (`ui/form`, kind `secret`) and compares the two in the plugin; "Encrypt for a recipient" takes a pasted `age1` key, a recipients file by its path, or both; "Decrypt" looks at the file's header first and asks "Passphrase for report.pdf.age" in a hidden question or an identity file by its path. A passphrase is taken at once into age's wiping string and dropped with the command; an identity file's keys (and, for one under a passphrase, its decrypted text, in a wiping buffer) live in memory for that command only. Nothing is written to a setting, a file, the log, standard error or the keyring. A passphrase recipient is always a file's only recipient (age's rule), because it has its own command.
-- **The scrypt work factor: 18 to encrypt, at most 20 to decrypt** (spike ES2, Friday, November 6, 2026, on the owner's Ryzen 5 5600G, release build, 1 MiB in memory, about 40 percent of the processor busy with other builders):
+- **The scrypt work factor: 18 to encrypt, at most 20 to decrypt** (spike ES2, on the owner's Ryzen 5 5600G, release build, 1 MiB in memory; three runs, two on Friday, November 6, 2026 near 11:00 PM and one on Saturday, November 7, 2026 at 11:04 AM, with 37 to 65 percent of the processor busy with other builders; a fourth run at 97 percent load, just after the machine woke, roughly doubled the times from 19 up and is left out):
 
   | Work factor | Encrypt | Decrypt |
   |---|---|---|
-  | 16 | 0.12 s | 0.12 s |
-  | 17 | 0.27 s | 0.27 s |
-  | 18 | 0.50 to 0.54 s | 0.49 to 0.54 s |
-  | 19 | 0.99 to 1.04 s | 1.05 to 1.10 s |
-  | 20 | 2.11 to 2.13 s | 1.97 to 2.09 s |
-  | 21 | 4.25 to 4.29 s | 4.08 to 4.43 s |
-  | 22 | 8.31 s | 8.26 s |
+  | 16 | 0.12 to 0.14 s | 0.12 to 0.14 s |
+  | 17 | 0.27 to 0.29 s | 0.27 to 0.28 s |
+  | 18 | 0.50 to 0.55 s | 0.49 to 0.54 s |
+  | 19 | 0.99 to 1.16 s | 1.05 to 1.18 s |
+  | 20 | 2.11 to 2.23 s | 1.97 to 2.26 s |
+  | 21 | 4.25 to 4.78 s | 4.08 to 4.93 s |
+  | 22 | 8.31 to 9.46 s | 8.26 to 9.58 s |
 
   The reference program (the Go `age`) encrypts at 18 by default (from memory of its source; not re-read in this lane). age the crate picks a factor for "about one second" on the computer it runs on, and picked 20 here (about two seconds), so a file made by `rage` on a fast computer may ask for more. The plugin encrypts at 18, so its files open in half a second here and on slower computers, and accepts at most 20: a file at the reference default opens in half a second, a file at 20 in about two, and 21 or more is refused before anything is asked, from the header itself, in 2.4 ms: "Could not decrypt report.pdf.age", then "It asks for more work than diroxide allows. It may be hostile." age's own check refuses it again inside the decryption, at the same cap.
 - **Writing.** Each output is written beside its file through the local provider's committing writer (an unfinished `.diro-part-` name in the target folder, renamed last with the rename that never replaces); a taken name is numbered as diroxide's copies are ("report.pdf (2).age"); a cancel or a failure drops the writer, which removes the unfinished file; the original is never touched. age's stream authenticates each 64 KiB chunk, so a damaged or truncated file fails ("The file is damaged or was changed.") and its partial output is removed. Each command answers what it made (`made: [{from, to}]`), so the app records each new file in its undo list and offers the trash for an original, starting on No and saying the trash does not erase it.
