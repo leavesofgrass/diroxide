@@ -17,6 +17,7 @@ use diroxide_core::format::{BRAILLE_CELLS, within_cells};
 use diroxide_gui::theme::{NIGHT_SKY, Palette, unknown_theme_line};
 use diroxide_theme::os::OsScheme;
 use diroxide_theme::{Registry, Rgb, Theme};
+use masonry::accesskit::Role;
 
 use crate::rig::{Rig, app_on, app_with, fixture};
 
@@ -232,4 +233,110 @@ fn an_unknown_theme_is_said_once_at_the_start_and_galaxy_drawn() {
     });
     let rig = Rig::new(app, runtime);
     assert!(!rig.spoken().join(" ").contains("Unknown theme"));
+}
+
+/// The owner's theme file mapping the Images group to heading 2's color
+/// (TA's theme words, R30 commit 31).
+const CROWS: &str = "[theme]\nname = \"crows\"\ndisplay_name = \"Crows\"\n\
+                     inherits = \"galaxy\"\n\n[group-colors]\nimages = \"heading2\"\n";
+
+/// The pixels of the row named `name` in the drawn window.
+fn row_pixels(rig: &mut Rig, name: &str) -> Vec<Rgb> {
+    let bounds = {
+        let state = rig.h.access_tree().state();
+        let mut stack = vec![state.root()];
+        let mut found = None;
+        while let Some(node) = stack.pop() {
+            if node.role() == Role::ListBoxOption && crate::rig::name_of(&node).starts_with(name) {
+                found = node.bounding_box();
+                break;
+            }
+            stack.extend(node.children());
+        }
+        found.unwrap_or_else(|| panic!("no row {name}"))
+    };
+    let image = rig.h.render();
+    let mut out = Vec::new();
+    for y in (bounds.y0.max(0.0) as u32)..(bounds.y1 as u32).min(image.height()) {
+        for x in (bounds.x0.max(0.0) as u32)..(bounds.x1 as u32).min(image.width()) {
+            let px = image.get_pixel(x, y).0;
+            out.push(Rgb::new(px[0], px[1], px[2]));
+        }
+    }
+    out
+}
+
+#[test]
+fn a_theme_files_group_colors_are_drawn_on_the_groups_rows_only() {
+    let dir = fixture(&["notes.txt"], &[]);
+    std::fs::write(dir.path().join("crow.png"), b"crow picture").unwrap();
+    let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+    let themes_dir = paths.themes_dir();
+    std::fs::create_dir_all(&themes_dir).unwrap();
+    std::fs::write(themes_dir.join("crows.toml"), CROWS).unwrap();
+    let mut registry = Registry::builtin();
+    let report = registry.load_dir(&themes_dir);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    let themes: Vec<Theme> = report
+        .loaded
+        .iter()
+        .filter_map(|name| registry.get(name).cloned())
+        .collect();
+    let open = |theme: &str| {
+        let themes = themes.clone();
+        let themes_dir = themes_dir.clone();
+        let (app, runtime) = app_with(dir.path(), dir.path(), |options| {
+            options.settings.theme = theme.to_owned();
+            options.startup.user_themes = themes;
+            options.startup.themes_dir = Some(themes_dir);
+        });
+        let mut rig = Rig::new(app, runtime);
+        // The focus band off the picture's row, so its own color shows.
+        assert!(
+            rig.f
+                .app_mut()
+                .focus_name(diroxide_core::Side::Left, "notes.txt")
+        );
+        rig.refresh();
+        rig
+    };
+    let group_of = |rig: &Rig, name: &str| {
+        let view = diroxide_gui::model::panel_view(rig.f.app(), diroxide_core::Side::Left, 0, 20);
+        view.rows
+            .iter()
+            .find(|r| r.id == name)
+            .and_then(diroxide_gui::model::RowView::group_color)
+    };
+    // The default maps no group: nothing changes.
+    let mut plain = open("galaxy");
+    assert_eq!(group_of(&plain, "crow.png"), None);
+    let heading2 = plain
+        .f
+        .palette()
+        .group_color(diroxide_theme::ColorRole::Heading2);
+    assert!(!row_pixels(&mut plain, "crow.png").contains(&heading2));
+    // Crows: the picture's row in heading 2's color, the text file's not;
+    // the row's words stay the same.
+    let mut crows = open("crows");
+    assert_eq!(crows.f.palette().key, "crows");
+    assert_eq!(
+        group_of(&crows, "crow.png"),
+        Some(diroxide_theme::ColorRole::Heading2)
+    );
+    assert_eq!(group_of(&crows, "notes.txt"), None);
+    let heading2 = crows
+        .f
+        .palette()
+        .group_color(diroxide_theme::ColorRole::Heading2);
+    assert_ne!(heading2, crows.f.palette().text);
+    assert!(row_pixels(&mut crows, "crow.png").contains(&heading2));
+    assert!(!row_pixels(&mut crows, "notes.txt").contains(&heading2));
+    assert!(crows.f.palette().report().passed());
+    let row = |rig: &Rig| {
+        rig.walk()
+            .into_iter()
+            .find(|(_, name)| name.starts_with("crow.png"))
+            .map(|(_, name)| name)
+    };
+    assert_eq!(row(&crows), row(&plain), "the words never change");
 }

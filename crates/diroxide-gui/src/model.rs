@@ -33,7 +33,7 @@ use diroxide_app::panel::place_leaf;
 use diroxide_core::format::count;
 use diroxide_core::names::display_name;
 use diroxide_core::{EntryKind, ListRow, Side};
-use diroxide_theme::PanelRole;
+use diroxide_theme::{ColorRole, PanelRole};
 
 /// Whether an option's states go in its name: on macOS, where VoiceOver
 /// gets a list's options as static text with no states (R4 section 2.2);
@@ -63,6 +63,13 @@ pub struct RowView {
     /// rule, `crates/diroxide-tui/src/view.rs`). The row says it in words
     /// too; the role is the extra.
     pub role: PanelRole,
+    /// The color role the theme gives the row's file group
+    /// (`[group-colors]` in a theme file, `App::row_role`; R30 commit 31,
+    /// TA's request 2): drawn as the text color of a plain file's or an
+    /// archive's row, its role's shape kept. `None` by default, and for
+    /// every row a theme maps nothing for. The row's type and group are
+    /// said in words either way; the color is the extra.
+    pub group: Option<ColorRole>,
 }
 
 impl RowView {
@@ -87,6 +94,7 @@ impl RowView {
             selected: row.selected,
             enabled: row.enabled,
             role: PanelRole::Text,
+            group: None,
         }
     }
 
@@ -96,6 +104,36 @@ impl RowView {
         self.role = role;
         self
     }
+
+    /// The same row with its group's color role.
+    #[must_use]
+    pub fn with_group(mut self, group: Option<ColorRole>) -> Self {
+        self.group = group;
+        self
+    }
+
+    /// The color role its text is drawn in, when the group gives one: a
+    /// plain file's row or an archive's. A folder, a link, a broken link
+    /// and a hidden entry keep their own look, which says what they are.
+    pub fn group_color(&self) -> Option<ColorRole> {
+        self.group
+            .filter(|_| matches!(self.role, PanelRole::Text | PanelRole::Archive))
+    }
+}
+
+/// The theme table that maps file groups to color roles (TA's theme
+/// words, R30 commit 31).
+const GROUP_COLORS: &str = "group-colors";
+
+/// Whether the theme the app names maps any group to a color role, so a
+/// panel's rows are asked for theirs; the default theme maps none.
+pub fn themes_map_groups(app: &App) -> bool {
+    let (theme, _) = app.themes().resolve(&app.settings().theme);
+    theme
+        .extra
+        .get(GROUP_COLORS)
+        .and_then(|table| table.as_table())
+        .is_some_and(|table| !table.is_empty())
 }
 
 /// What a panel's row is, for its colors: the folder's entry at that
@@ -321,11 +359,22 @@ pub fn panel_view(app: &App, side: Side, top: usize, page: usize) -> PanelView {
     let top = scroll_top(top, focus, page, total);
     let range = window_range(top, page, total);
     let in_name = states_in_name();
+    // A group's color role, asked of the app only when the theme maps
+    // groups and the rows are the folder's (a plugin list's rows are no
+    // files of a group).
+    let groups = panel.plugin_list().is_none() && themes_map_groups(app);
     let rows = list.rows()[range.clone()]
         .iter()
         .enumerate()
         .map(|(offset, row)| {
-            RowView::of(row, in_name).with_role(row_role(app, side, range.start + offset, row))
+            let group = if groups {
+                app.row_role(side, &row.id)
+            } else {
+                None
+            };
+            RowView::of(row, in_name)
+                .with_role(row_role(app, side, range.start + offset, row))
+                .with_group(group)
         })
         .collect();
     let empty = if panel.is_loading() && panel.plugin_list().is_none() {
@@ -397,6 +446,7 @@ impl ListView {
                 selected: false,
                 enabled: true,
                 role: PanelRole::Text,
+                group: None,
             })
             .collect();
         let total = rows.len();

@@ -440,7 +440,14 @@ impl Widget for PanelBox {
             } else {
                 palette.look(row.role)
             };
-            let mut color = if row.enabled { look.fg } else { palette.dim };
+            // A file group the theme maps to a role draws a plain file's
+            // or an archive's text in that role's color (`[group-colors]`);
+            // a marked row keeps its band's.
+            let fg = match row.group_color() {
+                Some(group) if !row.selected => palette.group_color(group),
+                _ => look.fg,
+            };
+            let mut color = if row.enabled { fg } else { palette.dim };
             if row.enabled && look.bg != palette.page {
                 painter.fill(bar, paint::color(look.bg)).draw();
             }
