@@ -46,6 +46,9 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Archives](archives.md): opening zip, 7z, tar and xz archives like folders, copying out, unpacking, packing, testing, passwords, split archives, the limits that protect you, and `diro archive`.
 - [The viewer](viewer.md): F3, lines, wrap, jump, search, hex mode, following a log, large files, and code read by ear.
 - [The quick view](quick-view.md): a live preview of the focused file in the other panel, by heading, table and link, and the formats it reads.
+- [Previews and the quick view's formats](previews.md): what pictures, drawings, sound and video, archives, PDF, Word, EPUB, RTF and spreadsheets say, the Preview command and auto-preview, Read text in picture, and the limits that protect the quick view.
+- [The details view](details.md): Alt+Enter, the facts in their order, the Privacy and Checksum rows, Show all with ExifTool, Say details, Copy details and Copy all details.
+- [File types and groups](file-types.md): what a row says about a file, how a type is found, the eight groups and the screenshot names, the retro pack, your own `filetypes.toml`, typed actions, Open with on each system, and the encoding chooser.
 - [Split and join](split-join.md): cutting a big file into parts for mail, GitHub, a disc or FAT32, joining them back, the checksum file, `diro split` and `diro join`.
 - [Links, permissions and times](links-permissions.md): symbolic links and junctions, permissions said in words, the recursive option, times, and the details list.
 
@@ -63,6 +66,7 @@ If you are new, begin with the [quick start](quickstart.md).
 - [Script commands](script-commands.md): a command from one file in bash, Python or PowerShell: the header, what the script is given, directives, output modes, exit codes, which program runs it on each system, and `--explain`.
 - [Writing a plugin](writing-a-plugin.md): `diro plugin new`, the manifest, the protocol in a page, the services diroxide offers, lists of rows that are not files, places, previewers and converters, and the conformance checks.
 - [Optional components](components.md): helper programs, plugins and data packs, among them the SFTP places plugin, fetched only after you say yes, checked before use, offered once in a first-run list, installed from a file with no network, and removed by a list. Includes `diro components`.
+- [Tools and diro doctor](tools.md): the helper programs diroxide can use (ImageMagick, FFmpeg, pandoc and the rest), how each is found, `tools.toml`, the Tools list in the program, the install command for each system, and `diro doctor` with its sections and exit codes.
 - [Security](security.md): what diroxide checks, what it protects, and what a plugin could still do.
 
 ### Keys and settings
