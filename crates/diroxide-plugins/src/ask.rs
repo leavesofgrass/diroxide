@@ -847,9 +847,10 @@ pub struct FormField {
 impl FormField {
     /// Whether a typed value is acceptable: a `text` field's whole value
     /// must match its pattern, when it has one. The error is the sentence
-    /// the dialog says, the field's own words or "The text does not fit
-    /// what is asked." (the host-pieces lane; [`read_form`] refused a
-    /// pattern that does not read).
+    /// the dialog says, the field's own words or, when the plugin gave
+    /// none, "That text is not accepted here."
+    /// ([`crate::lines::text_does_not_fit`]; the host-pieces lane;
+    /// [`read_form`] refused a pattern that does not read).
     pub fn check_text(&self, text: &str) -> Result<(), String> {
         let Some(source) = self.pattern.as_deref().filter(|_| self.kind == "text") else {
             return Ok(());
