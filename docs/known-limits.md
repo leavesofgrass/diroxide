@@ -303,7 +303,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - A spreadsheet's formulas are not worked out again. A part nested deeper than 256 levels is read as flattened text, with a note.
 - Preview and auto-preview gate the whole PDF preview in the quick view, its properties line included. A PDF off this computer gives its properties and no text, because Poppler's standard-input mode has not been tried.
 - A picture that is not on a local disk goes to Tesseract on standard input, up to 64 MiB.
-- The window's picture view has no command of its own yet and is not on the keyboard page. It has not been tried on a picture inside an archive or on an SFTP site, with a decode past its ten-second deadline, on a real Wayland compositor, or on NVDA or JAWS.
+- The window's picture view is the Show picture command, which works only in the window. Stepping to the next picture in the viewer does not say the Enter hint again. The picture view has not been tried on a picture inside an archive or on an SFTP site, with a decode past its ten-second deadline, on a real Wayland compositor, or on NVDA or JAWS.
 - Not tried: macOS, Linux natively, a real XLS, camera raw, HEIC or AVIF file, and a real Tesseract, ExifTool or ffprobe run inside a test. Nothing in the previews has been heard on a screen reader.
 
 ## The details view and access facts
