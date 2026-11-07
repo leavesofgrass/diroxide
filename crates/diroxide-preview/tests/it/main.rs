@@ -4,9 +4,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod carta;
+mod carta_docs;
 mod carta_paths;
+mod documents;
 mod encoding;
+mod images;
 mod markdown;
+mod media;
+mod pdf;
 mod text;
 
 use diroxide_core::{Entry, EntryKind, Place};

@@ -91,8 +91,8 @@ impl DocBuilder {
     /// Adds a note in the reader's own words, once.
     pub fn note(&mut self, note: impl Into<String>) {
         let note = note.into();
-        if !self.view.notes.contains(&note) {
-            self.view.notes.push(note);
+        if !self.view.more.notes.contains(&note) {
+            self.view.more.notes.push(note);
         }
     }
 
@@ -259,7 +259,7 @@ impl DocBuilder {
             return;
         }
         let block = self.take_block();
-        let index = self.view.code_blocks.len();
+        let index = self.view.more.code_blocks.len();
         let first = self.view.rows.len();
         for line in text.split('\n') {
             self.view.rows.push(DocRow {
@@ -274,7 +274,7 @@ impl DocBuilder {
             .map(str::trim)
             .filter(|l| !l.is_empty())
             .map(str::to_owned);
-        self.view.code_blocks.push(CodeBlock {
+        self.view.more.code_blocks.push(CodeBlock {
             rows: first..self.view.rows.len(),
             language,
         });

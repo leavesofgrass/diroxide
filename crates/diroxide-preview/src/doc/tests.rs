@@ -264,3 +264,19 @@ fn a_view_travels_as_json() {
     let back: DocView = serde_json::from_str(&json).unwrap();
     assert_eq!(back, view);
 }
+
+#[test]
+fn the_view_stays_small_and_its_summary_words_travel() {
+    // The app's quick view carries a view in an enum next to an error;
+    // the workspace clippy refuses an enum whose variants differ by more
+    // than 200 bytes, so the view's extra fields live in a box.
+    assert!(size_of::<DocView>() <= 176, "{}", size_of::<DocView>());
+    let mut view = report();
+    view.set_summary_words("3 sheets, 1,204 rows");
+    view.add_note("A note.");
+    let json = serde_json::to_string(&view).unwrap();
+    assert!(json.contains(r#""notes":["A note."]"#), "{json}");
+    let back: DocView = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.summary_words(), "3 sheets, 1,204 rows");
+    assert_eq!(back, view);
+}

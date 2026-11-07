@@ -15,31 +15,51 @@
 //! uses; [`highlight`], syntect as a tokenizer into the token classes,
 //! with its caps, its worker and its deadline, the symbols and the
 //! validity lines. The quick view's [`doc`] modules (W2e): the row-based
-//! document view the quick view moves through, and its readers. Wave 5
-//! (W5b) adds the image, audio, video, document and archive previewers.
+//! document view the quick view moves through, and its readers. Alpha 4
+//! (R30 commits 33 to 40) adds the typed previewers in front of the text
+//! previewer: [`images`], pictures in words from their headers alone;
+//! [`documents`], every format the quick view's [`doc`] readers read
+//! (Markdown, carta's formats, SVG drawings), as rows; [`media`], sound
+//! and video in words through ffprobe; [`archive`], an archive's members
+//! counted and listed, never extracted; [`pdf`], a PDF's properties and
+//! its first pages' text through pdftotext. [`Previews`] tries them in
+//! R28's order (the type documents it), before text and hex, and keeps
+//! what they made in a [`cache`] by place, size, time and previewer
+//! version.
 
+pub mod archive;
+pub mod cache;
 pub mod classes;
 pub mod doc;
+pub mod documents;
 pub mod encoding;
+pub mod fuzzing;
 pub mod hex;
 pub mod highlight;
+pub mod images;
+pub mod media;
+pub mod pdf;
+pub mod words;
 
-use std::io::Read;
+use std::io::{Cursor, Read};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use diroxide_core::format::human_size;
 use diroxide_core::{DetailGroup, DetailRow, Entry, EntryKind, Explain, Place};
 use diroxide_filetype::FileType;
-use diroxide_vfs::{OpContext, Registry, VfsError};
+use diroxide_vfs::{OpContext, ReadSeek, Registry, VfsError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub use cache::{CacheKey, PreviewCache};
 pub use classes::{ClassRun, TokenClass};
 
 /// How many bytes a text or hex preview reads at most.
 pub const MAX_PREVIEW_BYTES: usize = 64 * 1024;
 
 /// What kind of preview this is.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PreviewKind {
@@ -51,6 +71,15 @@ pub enum PreviewKind {
     Folder,
     /// Only the details line.
     Details,
+    /// A picture in words: the sentence, then its rows ([`images`]).
+    Image,
+    /// A document read into rows ([`documents`]); the view travels in
+    /// [`Preview::document`].
+    Document,
+    /// Sound or moving pictures in words, through ffprobe ([`media`]).
+    Media,
+    /// An archive's members, counted and listed ([`archive`]).
+    Listing,
 }
 
 /// A preview: a details line, then lines to read.
@@ -73,6 +102,11 @@ pub struct Preview {
     /// with no runs ([`Preview::runs_of`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<Vec<ClassRun>>,
+    /// The document's rows with their outline, tables and links, for a
+    /// document preview, so the quick view moves by heading and table
+    /// (alpha 4); `None` for every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<doc::DocView>,
 }
 
 impl Preview {
@@ -84,6 +118,7 @@ impl Preview {
             lines: Vec::new(),
             details: Vec::new(),
             runs: Vec::new(),
+            document: None,
         }
     }
 
@@ -137,13 +172,19 @@ pub enum PreviewError {
     /// No previewer takes this entry.
     #[error("there is no preview for this kind of file")]
     NoPreviewer,
+    /// The file is past what a preview reads where its place cannot be
+    /// read at random.
+    #[error("it is too large to preview here")]
+    TooLarge,
 }
 
 impl Explain for PreviewError {
     fn next_step(&self) -> String {
         match self {
             PreviewError::Vfs(inner) => inner.next_step(),
-            PreviewError::Superseded | PreviewError::NoPreviewer => String::new(),
+            PreviewError::Superseded | PreviewError::NoPreviewer | PreviewError::TooLarge => {
+                String::new()
+            }
         }
     }
 }
@@ -152,6 +193,12 @@ impl Explain for PreviewError {
 pub trait Previewer: Send + Sync {
     /// The previewer's name, for Settings.
     fn name(&self) -> &str;
+
+    /// The previewer's version: part of a cached preview's key, raised
+    /// when what it says about a file changes.
+    fn version(&self) -> u32 {
+        1
+    }
 
     /// Whether it takes this entry.
     fn accepts(&self, request: &PreviewRequest, file_type: Option<&FileType>) -> bool;
@@ -252,6 +299,57 @@ pub fn hex_lines(bytes: &[u8], start_offset: u64) -> Vec<String> {
     hex::hex_rows(bytes, start_offset, layout)
 }
 
+/// Opens an entry for random access: its provider's seekable read, or,
+/// where the provider has none, at most `cap` bytes read into memory
+/// ([`PreviewError::TooLarge`] past them).
+pub fn open_source(
+    request: &PreviewRequest,
+    registry: &Registry,
+    ctx: &OpContext,
+    cap: u64,
+) -> Result<Box<dyn ReadSeek>, PreviewError> {
+    let provider = registry.resolve(&request.place)?;
+    match provider.open_seekable(&request.place, ctx) {
+        Ok(source) => Ok(source),
+        Err(VfsError::Unsupported { .. }) => {
+            let reader = provider.read(&request.place, ctx)?;
+            let mut bytes = Vec::new();
+            reader
+                .take(cap.saturating_add(1))
+                .read_to_end(&mut bytes)
+                .map_err(VfsError::from)?;
+            ctx.check()?;
+            if bytes.len() as u64 > cap {
+                return Err(PreviewError::TooLarge);
+            }
+            Ok(Box::new(Cursor::new(bytes)))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// A preview that is its rows: the summary, then every row in the order
+/// of facts, the entry's own first, each said as a line ("Dimensions:
+/// 1920 by 1080").
+pub(crate) fn details_preview(
+    kind: PreviewKind,
+    summary: String,
+    base: Vec<DetailRow>,
+    more: impl IntoIterator<Item = DetailRow>,
+) -> Preview {
+    let mut details = base;
+    details.extend(more);
+    diroxide_core::details::order_rows(&mut details);
+    Preview {
+        kind,
+        summary,
+        lines: details.iter().map(DetailRow::spoken).collect(),
+        details,
+        runs: Vec::new(),
+        document: None,
+    }
+}
+
 fn read_head(
     request: &PreviewRequest,
     registry: &Registry,
@@ -303,6 +401,7 @@ impl Previewer for TextPreviewer {
                 .collect(),
             details: detail_rows(&request.entry, file_type),
             runs: Vec::new(),
+            document: None,
         })
     }
 }
@@ -336,21 +435,72 @@ impl Previewer for HexPreviewer {
             lines,
             details: detail_rows(&request.entry, file_type),
             runs: Vec::new(),
+            document: None,
         })
     }
 }
 
-/// The previewers, tried in order; the details line when none takes it.
+/// The previewers, tried in order, and the cache; the details line
+/// when none takes the entry.
+///
+/// The order (R28 2.2, R30 commit 40), the first that takes the entry
+/// making the preview: a plugin's ([`Previews::add_first`]); the image
+/// words; sound and video through ffprobe; the archive listing; PDF; the
+/// documents (Markdown, carta's formats, SVG drawings, the Office and
+/// OpenDocument packages, the sheets, RTF); then text, which takes every
+/// file and sends bytes that are not text to hex; then hex. Each typed
+/// previewer takes a file by its checked type first and by its name only
+/// when the type is not known, so a file's contents speak before its
+/// extension.
+///
+/// A preview is kept in the cache ([`PreviewCache`]) by its place, size,
+/// time and previewer version; a request whose generation is no longer
+/// the newest ([`LatestOnly`]) is refused before it starts and after it
+/// ends, so an older preview never replaces a newer one.
 pub struct Previews {
     previewers: Vec<Box<dyn Previewer>>,
+    cache: Option<Arc<PreviewCache>>,
 }
 
 impl Previews {
-    /// The built-in previewers: text, then hex.
+    /// The built-in previewers in their order (see [`Previews`]), with a
+    /// cache of their own.
     pub fn builtin() -> Self {
         Self {
-            previewers: vec![Box::new(TextPreviewer), Box::new(HexPreviewer)],
+            previewers: vec![
+                Box::new(images::ImagePreviewer::default()),
+                Box::new(media::MediaPreviewer),
+                Box::new(archive::ArchivePreviewer),
+                Box::new(pdf::PdfPreviewer::default()),
+                Box::new(documents::DocPreviewer::default()),
+                Box::new(TextPreviewer),
+                Box::new(HexPreviewer),
+            ],
+            cache: Some(Arc::new(PreviewCache::default())),
         }
+    }
+
+    /// The same previewers sharing this cache, as the quick view, the
+    /// details list and the Preview command would.
+    pub fn with_cache(mut self, cache: Arc<PreviewCache>) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
+    /// The same previewers with no cache.
+    pub fn without_cache(mut self) -> Self {
+        self.cache = None;
+        self
+    }
+
+    /// The cache, when there is one.
+    pub fn cache(&self) -> Option<&Arc<PreviewCache>> {
+        self.cache.as_ref()
+    }
+
+    /// The previewers' names, in the order they are tried.
+    pub fn names(&self) -> Vec<&str> {
+        self.previewers.iter().map(|p| p.name()).collect()
     }
 
     /// Adds a previewer before the built-in ones, as a plugin's would be.
@@ -358,8 +508,17 @@ impl Previews {
         self.previewers.insert(0, previewer);
     }
 
-    /// Makes the preview with the first previewer that takes the entry; a
-    /// stale generation gives [`PreviewError::Superseded`].
+    /// The name of the previewer that takes an entry, if one does.
+    pub fn chosen(&self, request: &PreviewRequest, file_type: Option<&FileType>) -> Option<&str> {
+        self.previewers
+            .iter()
+            .find(|p| p.accepts(request, file_type))
+            .map(|p| p.name())
+    }
+
+    /// Makes the preview with the first previewer that takes the entry,
+    /// from the cache when it holds it; a stale generation, before or
+    /// after, gives [`PreviewError::Superseded`].
     pub fn render(
         &self,
         request: &PreviewRequest,
@@ -371,13 +530,12 @@ impl Previews {
         if !latest.is_current(request.generation) {
             return Err(PreviewError::Superseded);
         }
-        match self
+        let Some(previewer) = self
             .previewers
             .iter()
             .find(|p| p.accepts(request, file_type))
-        {
-            Some(previewer) => previewer.render(request, file_type, registry, ctx),
-            None => Ok(Preview {
+        else {
+            return Ok(Preview {
                 details: detail_rows(&request.entry, file_type),
                 ..Preview::new(
                     if request.entry.kind == EntryKind::Folder {
@@ -387,14 +545,100 @@ impl Previews {
                     },
                     details(&request.entry, file_type),
                 )
-            }),
+            });
+        };
+        let key = CacheKey {
+            place: request.place.clone(),
+            size: request.entry.size,
+            modified: request.entry.modified,
+            previewer: previewer.name().to_owned(),
+            version: previewer.version(),
+            max_lines: request.max_lines,
+        };
+        if let Some(kept) = self.cache.as_ref().and_then(|c| c.get(&key)) {
+            return Ok(kept);
         }
+        let preview = previewer.render(request, file_type, registry, ctx)?;
+        if let Some(cache) = &self.cache {
+            cache.put(key, preview.clone());
+        }
+        if !latest.is_current(request.generation) {
+            return Err(PreviewError::Superseded);
+        }
+        Ok(preview)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_typed_previewers_go_before_text_and_hex() {
+        let previews = Previews::builtin();
+        assert_eq!(
+            previews.names(),
+            [
+                "image", "media", "archive", "pdf", "document", "text", "hex"
+            ]
+        );
+        let types = diroxide_filetype::TypeRegistry::builtin();
+        let request = |name: &str| request_for(name, EntryKind::File, 1);
+        for (name, type_id, chosen) in [
+            ("a.png", "png", "image"),
+            ("a.svg", "svg", "document"),
+            ("a.mp4", "mp4", "media"),
+            ("a.mp3", "mp3", "media"),
+            ("a.zip", "zip", "archive"),
+            ("a.pdf", "pdf", "pdf"),
+            ("a.docx", "docx", "document"),
+            ("a.xlsx", "xlsx", "document"),
+            ("a.csv", "csv", "document"),
+            ("a.md", "markdown", "document"),
+            ("a.rs", "rust", "text"),
+            ("a.bin", "exe", "text"),
+        ] {
+            assert_eq!(
+                previews.chosen(&request(name), types.get(type_id)),
+                Some(chosen),
+                "{name}"
+            );
+        }
+        // The checked type speaks before the name: a PNG named .txt is a
+        // picture, a text file named .png is not.
+        assert_eq!(
+            previews.chosen(&request("a.txt"), types.get("png")),
+            Some("image")
+        );
+        assert_eq!(
+            previews.chosen(&request("a.png"), types.get("text")),
+            Some("text")
+        );
+    }
+
+    #[test]
+    fn a_kept_preview_answers_until_the_file_changes() {
+        let latest = LatestOnly::new();
+        let previews = Previews::builtin();
+        let mut request = request_for("Cargo.toml", EntryKind::File, latest.next());
+        request.entry.size = Some(1_234);
+        let registry = Registry::with_local();
+        let first = previews
+            .render(&request, None, &latest, &registry, &OpContext::new())
+            .unwrap();
+        assert_eq!(previews.cache().unwrap().usage().0, 1);
+        let again = previews
+            .render(&request, None, &latest, &registry, &OpContext::new())
+            .unwrap();
+        assert_eq!(again, first);
+        request.entry.size = Some(1_235);
+        previews
+            .render(&request, None, &latest, &registry, &OpContext::new())
+            .unwrap();
+        assert_eq!(previews.cache().unwrap().usage().0, 2);
+        let uncached = Previews::builtin().without_cache();
+        assert!(uncached.cache().is_none());
+    }
 
     fn request_for(name: &str, kind: EntryKind, generation: u64) -> PreviewRequest {
         let place = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();

@@ -107,6 +107,22 @@ test = false
 doc = false
 bench = false
 
+# Alpha 4's previews (lane VL): the image words' header readers and the
+# container read path.
+[[bin]]
+name = "preview_image_header"
+path = "fuzz_targets/preview_image_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "preview_container"
+path = "fuzz_targets/preview_container.rs"
+test = false
+doc = false
+bench = false
+
 # The round-trip target (W2b): diroxide's writers against its readers.
 [[bin]]
 name = "archive_roundtrip"

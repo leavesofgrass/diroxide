@@ -8,15 +8,33 @@ homepage.workspace = true
 publish.workspace = true
 
 [dependencies]
+# Spreadsheets as rows (alpha 4, R30 commit 38): XLSX and XLSB cell by
+# cell, XLS and ODS by their range, within the container caps.
+calamine.workspace = true
 # The quick view's readers (W2e): carta for Org, reStructuredText,
 # MediaWiki, DokuWiki and Jira, pulldown-cmark for Markdown.
 carta.workspace = true
 diroxide-core.workspace = true
 diroxide-filetype.workspace = true
+# The image words and the ffprobe reader implement its Reader trait
+# (alpha 4, R30 commit 12's joint), so meta never depends on previews.
+diroxide-meta.workspace = true
 diroxide-vfs.workspace = true
 # The viewer's decoder (W2d), textweaver's encoding module.
 encoding_rs.workspace = true
+# The image words (alpha 4, R30 commit 33): headers through image's
+# decoders and png's text chunks, Exif through kamadak-exif; no pixel is
+# decoded for the words, and the pixel guard stands in front of a decode.
+image.workspace = true
+kamadak-exif.workspace = true
+# PDF properties for the PDF preview (alpha 4, R30 commit 39, answer
+# 120): the metadata reader alone, which does not load the pages.
+lopdf.workspace = true
+png.workspace = true
 pulldown-cmark.workspace = true
+# SVG drawings read as SVG-AAM exposes them (alpha 4, R30 commit 34),
+# behind the nesting cut carried from textweaver's xmldepth.
+roxmltree.workspace = true
 # carta's HTML fragments read into the quick view's rows (path A, W2e).
 scraper.workspace = true
 serde.workspace = true
@@ -28,8 +46,14 @@ toml.workspace = true
 syntect = { workspace = true, optional = true }
 thiserror.workspace = true
 two-face = { workspace = true, optional = true }
+# The container read path (alpha 4, R30 commit 36): DOCX, EPUB, ODT and
+# the sheets checked member by member before any reader sees them.
+zip.workspace = true
 
 [dev-dependencies]
+# The real tools registry, for the test that runs ffprobe when it is
+# installed (alpha 4).
+diroxide-tools.workspace = true
 proptest.workspace = true
 # A harmless sibling file the include test makes, to show what carta does
 # with an include left in.
