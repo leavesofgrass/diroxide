@@ -89,7 +89,15 @@ fn the_first_run_list_marks_with_space_and_asks_once_on_no() {
         "{:#?}",
         s.screen().lines
     );
-    press(&mut s, &clock, "up");
+    // Back on the pack's row, wherever Space left the cursor: the pinned
+    // helper components sit above the pack now, so the row is no longer
+    // the list's first and Up would leave it.
+    for _ in 0..10 {
+        if s.screen().cursor_line == Some(marked) {
+            break;
+        }
+        press(&mut s, &clock, "up");
+    }
     cursor_at(&s, 0, marked);
     press(&mut s, &clock, "enter");
     let screen = s.screen();
