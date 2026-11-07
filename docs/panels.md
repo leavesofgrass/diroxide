@@ -105,6 +105,7 @@ Sorting is quick and has many keys, because sorting is how you find things and d
 - A key with no data in this folder says so after the result: "No entry here has a label; Alt+L sets one" for labels, and "No entry here has its owner" for a key such as owner.
 - Names sort in natural order, so `file2` comes before `file10`, and capitals do not matter. Folders come first, as a setting (`sort.folders`: first, mixed or last). Whatever key you sort by, name is always the last key, so two files that tie come in name order and the cursor never jumps.
 - The status line says the result first and never the position: "Sorted by size, largest first", then "Sorted by size, smallest first" when you press it again. The cursor stays on the same entry.
+- For pictures there is one more key, Sort by date taken, in the Sort submenu of the View menu. It goes by when each picture was taken, and says "Sorted by date taken, oldest first". [Photos](photos.md) has it, with Next day and Previous day in the Go menu.
 - The title line says the sort when it is not your default, so a panel you reach with Tab tells you.
 
 On macOS the system owns Ctrl+F3 to Ctrl+F8. Use the Sort submenu in the View menu or the palette there.
@@ -140,7 +141,7 @@ Marking picks the rows a command will act on. With no marks, a command acts on t
 - Ctrl+D says the marks with their size: "3 selected, 4.2 MB. Documents, 40 items, on report.pdf, 3 of 40". A folder has no size until it is counted. Folder sizes, in the Search menu (F9, then R, then Z), counts the marked folders or the focused one; [search](search.md) has it.
 - Restore selection (in the Select menu and the palette) brings back the marks that a select all, none, invert, pattern, finished job or change of folder replaced: "Selection restored: 31 selected."
 
-The Select menu has more ways to mark: by kind, by size, by date, the same extension, a range, and the next few rows. [Search and the filter language](search.md) describes them.
+The Select menu has more ways to mark: by kind, by size, by date, the same extension, a range, and the next few rows. [Search and the filter language](search.md) describes them. For pictures it also marks the screenshots, the bursts and the pictures with no date taken ([Photos](photos.md)).
 
 Marks belong to rows, not to positions. If the folder is listed again, the marks stay on the same names. If a marked row has disappeared, diroxide says how many marks were lost, and if the focused row has gone it says that the focus moved. After a job, only the entries that failed stay marked, so the marks show what to try again.
 
@@ -177,6 +178,7 @@ When you quit, diroxide remembers each panel's folder, the focused row, the sort
 ## See also
 
 - [Columns, notes and fields](columns.md)
+- [Photos](photos.md)
 - [Operations and undo](operations.md)
 - [Volumes and the trash](volumes-trash.md)
 - [Remote places over SFTP](remote-places.md)
