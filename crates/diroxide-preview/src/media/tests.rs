@@ -265,7 +265,11 @@ fn the_meta_reader_is_on_demand_and_never_takes_a_playlist() {
     use diroxide_meta::Reader;
     let reader = MediaFields::new(Arc::new(Fake::new(MKV)));
     assert_eq!((reader.id(), reader.cost()), ("media", Cost::OnDemand));
-    let place = Place::parse("D:/videos/clip.mkv").unwrap();
+    // A place every system parses: beside the crate.
+    let place = Place::parse(env!("CARGO_MANIFEST_DIR"))
+        .unwrap()
+        .join("clip.mkv")
+        .unwrap();
     let entry = Entry::new("clip.mkv", EntryKind::File);
     let request = ReadRequest {
         place: &place,

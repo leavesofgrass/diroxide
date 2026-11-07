@@ -23,8 +23,9 @@
 //! and video in words through ffprobe; [`archive`], an archive's members
 //! counted and listed, never extracted; [`pdf`], a PDF's properties and
 //! its first pages' text through pdftotext. [`Previews`] tries them in
-//! that order, before text and hex, and keeps what they made in a
-//! [`cache`] by place, size, time and previewer version.
+//! R28's order (the type documents it), before text and hex, and keeps
+//! what they made in a [`cache`] by place, size, time and previewer
+//! version.
 
 pub mod archive;
 pub mod cache;

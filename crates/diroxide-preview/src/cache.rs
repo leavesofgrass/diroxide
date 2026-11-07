@@ -172,7 +172,11 @@ mod tests {
 
     fn key(n: u64) -> CacheKey {
         CacheKey {
-            place: Place::parse(&format!("D:/docs/{n}.txt")).unwrap(),
+            // A place every system parses: beside the crate.
+            place: Place::parse(env!("CARGO_MANIFEST_DIR"))
+                .unwrap()
+                .join(&format!("{n}.txt"))
+                .unwrap(),
             size: Some(n),
             modified: None,
             previewer: "text".to_owned(),

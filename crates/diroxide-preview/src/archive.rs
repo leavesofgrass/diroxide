@@ -337,7 +337,11 @@ mod tests {
 
     fn request() -> PreviewRequest {
         PreviewRequest {
-            place: Place::parse("D:/docs/course.zip").unwrap(),
+            // A place every system parses: beside the crate.
+            place: Place::parse(env!("CARGO_MANIFEST_DIR"))
+                .unwrap()
+                .join("course.zip")
+                .unwrap(),
             entry: Entry::new("course.zip", EntryKind::Archive).with_size(12_000_000),
             generation: 1,
             max_lines: 1_000,
