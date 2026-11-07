@@ -557,6 +557,24 @@ impl App {
                     )))];
                 }
             },
+            // A table typed inline (lane MA): `{ episode = 'S(\d+)' }`.
+            SettingKind::Patterns => {
+                let inline = text.trim();
+                let inline = if inline.starts_with('{') {
+                    inline.to_owned()
+                } else {
+                    format!("{{ {inline} }}")
+                };
+                match toml::from_str::<toml::Table>(&format!("v = {inline}")) {
+                    Ok(mut table) => table.remove("v").unwrap_or(toml::Value::Table(table)),
+                    Err(_) => {
+                        return vec![self.say(Message::error(format!(
+                            "{} needs a table such as episode = 'S(\\d+)E\\d+'. Nothing changed.",
+                            info.name
+                        )))];
+                    }
+                }
+            }
             SettingKind::Columns | SettingKind::DriveKinds | SettingKind::Names => {
                 toml::Value::Array(
                     text.split(',')
@@ -655,6 +673,8 @@ impl App {
                 self.retype_panels();
             }
             "check.skip" => self.retype_panels(),
+            // The custom columns (lane MA): the panels take them at once.
+            "columns" | "regex_columns" => self.columns_setting_changed(),
             _ => {}
         }
     }

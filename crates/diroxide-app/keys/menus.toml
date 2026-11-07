@@ -594,6 +594,10 @@ access = "u"
 command = "view.sort-list"
 access = "i"
 
+[[menu.item]]
+command = "view.fill-columns"
+access = "f"
+
 [[menu]]
 id = "go"
 title = "Go"

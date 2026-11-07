@@ -15,7 +15,7 @@
 //!
 //! W3l owns this module. The app's commands are in `app::folder_views`.
 
-use diroxide_config::{ColumnKind, ConfigProblem, Loaded, Paths};
+use diroxide_config::{ColumnSpec, ConfigProblem, Loaded, Paths};
 use diroxide_core::format::count;
 use diroxide_core::{Clock, ListModel, ListRow, Place, SortSpec, Timestamp};
 use serde::{Deserialize, Serialize};
@@ -45,7 +45,7 @@ pub struct FolderView {
     pub show_hidden: bool,
     /// The details each row says after its name.
     #[serde(default)]
-    pub columns: Vec<ColumnKind>,
+    pub columns: Vec<ColumnSpec>,
 }
 
 impl FolderView {
@@ -240,6 +240,7 @@ pub fn history_list(visits: &Visits, clock: &dyn Clock) -> ListModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diroxide_config::ColumnKind;
     use diroxide_core::format::within_cells;
     use diroxide_core::{FixedClock, SortKey, UtcOffset};
 
@@ -264,7 +265,7 @@ mod tests {
             sort: SortSpec::by(SortKey::Size),
             filter: None,
             show_hidden: false,
-            columns: vec![ColumnKind::Type, ColumnKind::Size],
+            columns: vec![ColumnKind::Type.into(), ColumnKind::Size.into()],
         }
     }
 

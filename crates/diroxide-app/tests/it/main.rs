@@ -9,6 +9,7 @@ mod access;
 mod archives;
 mod bookmarks;
 mod braille;
+mod columns;
 mod commands;
 // Optional components (W4d).
 mod components;

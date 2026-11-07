@@ -49,6 +49,8 @@ impl App {
         panel.set_sort(look.sort, clock.as_ref());
         panel.set_show_hidden(look.show_hidden, clock.as_ref());
         panel.set_columns(look.columns, clock.as_ref());
+        // The view's columns of fields' keys, resolved (lane MA).
+        self.resolve_columns();
     }
 
     /// After a panel moved to a folder: the folder's own view is applied,

@@ -54,6 +54,10 @@ pub enum SettingKind {
     /// name, a size in bytes and an optional headroom in percent
     /// ([`crate::presets`]).
     SplitPresets,
+    /// A table of column names and patterns, `name = "pattern"`: each a
+    /// regular expression over the file name whose first capture group,
+    /// or whole match, is the column's cell (alpha 4, the regex columns).
+    Patterns,
 }
 
 impl SettingKind {
@@ -70,7 +74,10 @@ impl SettingKind {
             SettingKind::Theme => "a theme's name".to_owned(),
             SettingKind::Columns => {
                 let names: Vec<&str> = ColumnKind::ALL.iter().map(|c| c.name()).collect();
-                format!("a list of columns: {}", list_words(&names, "and"))
+                format!(
+                    "a list of columns: {}, or a field's key such as audio.artist",
+                    list_words(&names, "and")
+                )
             }
             SettingKind::DriveKinds => {
                 "a list of drive kinds: fixed, removable and network".to_owned()
@@ -82,6 +89,9 @@ impl SettingKind {
             SettingKind::SplitPresets => {
                 "a list of presets, each with a name, its size in bytes and the percent kept free"
                     .to_owned()
+            }
+            SettingKind::Patterns => {
+                "a table of column names, each with a pattern over the file name".to_owned()
             }
         }
     }
@@ -338,7 +348,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 108] = [
+pub const SCHEMA: [SettingInfo; 109] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -408,7 +418,18 @@ pub const SCHEMA: [SettingInfo; 108] = [
         group: G::Panels,
         kind: K::Columns,
         default: "[\"type\", \"size\", \"modified\"]",
-        help: "The details said after each name, in this order. Permissions read in words; mode and octal give the Unix forms.",
+        help: "The details said after each name, in this order. Permissions read in words; mode and octal give the Unix forms. A field's key adds a column read from the files, such as audio.artist, doc.pages, custom.note or regex.episode.",
+        arrives: None,
+    },
+    // The regex columns (alpha 4, lane MA, R30 commit 52): a column made
+    // from the file name by a pattern, with no plugin and no reading.
+    SettingInfo {
+        key: "regex_columns",
+        name: "Regex columns",
+        group: G::Panels,
+        kind: K::Patterns,
+        default: "{}",
+        help: "Columns made from the file name, such as episode = 'S(\\d+)E\\d+' in single quotes: the first group in parentheses, or the whole match, is the cell. Add regex.episode to the columns to show it.",
         arrives: None,
     },
     // The F4 editor (the owner's answer 74): the setting first, then

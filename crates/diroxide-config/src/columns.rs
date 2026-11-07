@@ -165,6 +165,111 @@ impl fmt::Display for ColumnKind {
     }
 }
 
+/// The longest column key, so a header stays short.
+pub const KEY_LIMIT: usize = 64;
+
+/// The prefix of a regex column's key: `regex.episode` is the column the
+/// `regex_columns` table's `episode` pattern fills.
+pub const REGEX_PREFIX: &str = "regex.";
+
+/// Whether `text` is a column key the app resolves (alpha 4, R30 commit
+/// 52): a metadata field (`audio.artist`, `doc.pages`), the owner's own
+/// (`custom.note`, `custom.project`), a regex column (`regex.episode`) or
+/// a plugin's column (`diro-git.git`). Small letters, digits, `-` and `_`
+/// in parts joined by dots, at least two parts, at most [`KEY_LIMIT`]
+/// characters. Which keys a reader or a plugin gives is the app's to
+/// say; a key nothing gives leaves its cells empty.
+pub fn is_column_key(text: &str) -> bool {
+    let plain = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_';
+    text.len() <= KEY_LIMIT
+        && text.contains('.')
+        && text
+            .split('.')
+            .all(|part| !part.is_empty() && part.chars().all(plain))
+}
+
+/// Whether `name` may name a regex column in `regex_columns`: small
+/// letters, digits, `-` and `_`, at most 24 characters.
+pub fn is_regex_column_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 24
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+}
+
+/// One column of the `columns` setting: a built-in kind, or a key the
+/// app resolves to a metadata field, the owner's own field, a regex
+/// column or a plugin's column. Written as its name or its key.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ColumnSpec {
+    /// A built-in column.
+    Kind(ColumnKind),
+    /// A column by its key: `audio.artist`.
+    Key(String),
+}
+
+impl ColumnSpec {
+    /// A column from its name or key in `config.toml`; `None` for a name
+    /// no column has.
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim();
+        ColumnKind::from_name(text)
+            .map(ColumnSpec::Kind)
+            .or_else(|| is_column_key(text).then(|| ColumnSpec::Key(text.to_owned())))
+    }
+
+    /// Its name or key, as `config.toml` writes it.
+    pub fn name(&self) -> &str {
+        match self {
+            ColumnSpec::Kind(kind) => kind.name(),
+            ColumnSpec::Key(key) => key,
+        }
+    }
+
+    /// The built-in kind, when it is one.
+    pub fn kind(&self) -> Option<ColumnKind> {
+        match self {
+            ColumnSpec::Kind(kind) => Some(*kind),
+            ColumnSpec::Key(_) => None,
+        }
+    }
+
+    /// The key, when it is not a built-in column.
+    pub fn key(&self) -> Option<&str> {
+        match self {
+            ColumnSpec::Kind(_) => None,
+            ColumnSpec::Key(key) => Some(key),
+        }
+    }
+}
+
+impl From<ColumnKind> for ColumnSpec {
+    fn from(kind: ColumnKind) -> Self {
+        ColumnSpec::Kind(kind)
+    }
+}
+
+impl fmt::Display for ColumnSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl Serialize for ColumnSpec {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
+impl<'de> Deserialize<'de> for ColumnSpec {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        ColumnSpec::parse(&text)
+            .ok_or_else(|| serde::de::Error::custom(format!("no column has the name {text}")))
+    }
+}
+
 fn time_cell(word: &str, time: Option<Timestamp>, clock: &dyn Clock) -> String {
     time.map(|t| format!("{word} {}", clock::describe_time(t, clock)))
         .unwrap_or_default()
@@ -198,6 +303,46 @@ mod tests {
             assert_eq!(ColumnKind::from_name(kind.name()), Some(kind));
         }
         assert_eq!(ColumnKind::from_name("colour"), None);
+    }
+
+    #[test]
+    fn a_column_is_a_kind_or_a_key() {
+        assert_eq!(
+            ColumnSpec::parse(" size "),
+            Some(ColumnSpec::Kind(ColumnKind::Size))
+        );
+        for key in [
+            "audio.artist",
+            "custom.project",
+            "regex.episode",
+            "diro-git.git",
+            "a.b.c_d",
+        ] {
+            assert_eq!(ColumnSpec::parse(key), Some(ColumnSpec::Key(key.into())));
+        }
+        for bad in [
+            "colour",
+            "Audio.Artist",
+            "audio.",
+            ".x",
+            "a..b",
+            "a b.c",
+            "",
+        ] {
+            assert_eq!(ColumnSpec::parse(bad), None, "{bad}");
+        }
+        assert!(!is_column_key(&format!("a.{}", "b".repeat(KEY_LIMIT))));
+        // Written and read as its name, so a folder's view keeps it.
+        let specs = vec![
+            ColumnSpec::Kind(ColumnKind::Type),
+            ColumnSpec::Key("audio.artist".into()),
+        ];
+        let json = toml::Value::try_from(&specs).unwrap();
+        assert_eq!(json.to_string(), "[\"type\", \"audio.artist\"]");
+        let back: Vec<ColumnSpec> = json.try_into().unwrap();
+        assert_eq!(back, specs);
+        assert!(is_regex_column_name("episode"));
+        assert!(!is_regex_column_name("Episode"));
     }
 
     #[test]

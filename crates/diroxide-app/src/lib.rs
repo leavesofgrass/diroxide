@@ -24,6 +24,9 @@
 pub mod app;
 pub mod archives;
 pub mod bookmarks;
+// The custom columns: fields' keys, regex and plugin columns (alpha 4,
+// lane MA).
+pub mod columns;
 pub mod commands;
 // Optional components in the app (W4d).
 pub mod components;

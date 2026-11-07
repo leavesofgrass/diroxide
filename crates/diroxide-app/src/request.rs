@@ -280,6 +280,18 @@ impl PartialEq for SharedTools {
     }
 }
 
+/// The metadata pipeline the custom columns read through (alpha 4, lane
+/// MA): the details' readers under a guard of their own, handed to the
+/// column readers. Two are equal when they are the same pipeline.
+#[derive(Clone, Debug)]
+pub struct SharedPipeline(pub std::sync::Arc<diroxide_meta::Pipeline>);
+
+impl PartialEq for SharedPipeline {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// The tools registry the Settings Tools page reports on, handed to a
 /// worker (alpha 4, lane VA). Two are equal when they are the same
 /// registry.
@@ -665,6 +677,30 @@ pub enum Request {
     /// Stop a panel's type check: the panel left the folder, or nothing
     /// in it is left to read.
     StopTypes(Side),
+    /// Read a panel's column cells off the input thread (alpha 4, lane
+    /// MA, R30 commit 52): the files in their order, the first `urgent`
+    /// of them the rows on screen, each with the keys it waits for. A
+    /// newer read of the same panel stops this one's readers. Answered in
+    /// batches as [`AppEvent::ColumnsRead`](crate::AppEvent::ColumnsRead).
+    ReadColumns {
+        /// The panel.
+        side: Side,
+        /// The panel's entries the items belong to.
+        listing: u64,
+        /// The panel's folder.
+        folder: Place,
+        /// The files, nearest the focus first.
+        items: Vec<crate::columns::ColumnItem>,
+        /// How many of the first items are on screen.
+        urgent: usize,
+        /// Each key's cost class: which readers run for it.
+        costs: Vec<(String, diroxide_meta::Cost)>,
+        /// The pipeline the cells are read through.
+        pipeline: SharedPipeline,
+    },
+    /// Stop a panel's column readers: it left the folder, or nothing is
+    /// left to read.
+    StopColumns(Side),
     /// List the programs the system has for a file, for Open with (lane
     /// TA); answered as
     /// [`AppEvent::OpenWithListed`](crate::AppEvent::OpenWithListed).

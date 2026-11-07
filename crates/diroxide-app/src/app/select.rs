@@ -333,7 +333,20 @@ impl App {
     /// direction; Enter sorts, the same key again reverses.
     pub(super) fn sort_list(&mut self) -> Vec<Effect> {
         let side = self.active;
-        let list = commands::sort_list(self.panel(side).sort());
+        let mut list = commands::sort_list(self.panel(side).sort());
+        // The columns of fields' keys after the built-in keys (lane MA).
+        let columns = self.column_sort_rows(side);
+        if !columns.is_empty() {
+            let focus = list.focused().map(|r| r.id.clone());
+            let mut rows = list.rows().to_vec();
+            rows.extend(columns);
+            list.set_rows(rows);
+            if let SortKey::Extra(key) = &self.panel(side).sort().key {
+                list.focus_id(&format!("{}{key}", super::columns_ui::SORT_ROW));
+            } else if let Some(focus) = focus {
+                list.focus_id(&focus);
+            }
+        }
         self.open_dialog(
             crate::dialog::Dialog::Choose {
                 list,

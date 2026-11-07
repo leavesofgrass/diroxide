@@ -12,7 +12,7 @@
 
 use std::collections::HashSet;
 
-use diroxide_config::ColumnKind;
+use diroxide_config::ColumnSpec;
 use diroxide_core::{
     Command, CommandId, Effect, Key, Layer, ListModel, Message, Place, RequestId, Side, SortSpec,
 };
@@ -73,7 +73,7 @@ pub(super) struct Check {
 pub(super) struct Look {
     pub(super) sort: SortSpec,
     pub(super) show_hidden: bool,
-    pub(super) columns: Vec<ColumnKind>,
+    pub(super) columns: Vec<ColumnSpec>,
 }
 
 /// A bookmark setting typed in a field.
@@ -130,6 +130,12 @@ pub(super) enum Wants {
         places: Vec<Place>,
         /// The item's name when there is one item.
         one: Option<String>,
+    },
+    /// The question before the columns read many files, for a sort or
+    /// Fill columns (alpha 4, lane MA).
+    ReadColumns {
+        side: Side,
+        fill: super::columns_ui::Fill,
     },
 }
 
@@ -360,6 +366,7 @@ impl App {
             Wants::Types(wants) => self.type_lists_accept(wants, row),
             Wants::Note { side, places, one } => self.note_typed(side, places, one, &text),
             Wants::Field { side, places, one } => self.field_typed(side, places, one, &text),
+            Wants::ReadColumns { .. } => self.dialog_escape(),
         }
     }
 
@@ -367,6 +374,7 @@ impl App {
     pub(super) fn organize_yes(&mut self, wants: Wants) -> Vec<Effect> {
         match wants {
             Wants::RemoveBookmark { side, place } => self.remove_bookmark(side, &place),
+            Wants::ReadColumns { side, fill } => self.start_fill(side, fill),
             _ => Vec::new(),
         }
     }
@@ -377,6 +385,9 @@ impl App {
         match wants {
             Wants::RemoveBookmark { .. } => {
                 vec![self.say(Message::info("Nothing removed."))]
+            }
+            Wants::ReadColumns { .. } => {
+                vec![self.say(Message::info("Nothing read; the order stays."))]
             }
             Wants::BookmarkForm { side, .. } => self.refresh_bookmarks_list(side),
             Wants::BookmarkText { side, place, .. } => self.bookmark_form(side, place, None),

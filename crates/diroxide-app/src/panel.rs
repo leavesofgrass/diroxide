@@ -30,7 +30,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-use diroxide_config::{ColumnKind, Settings};
+use diroxide_config::{ColumnKind, ColumnSpec, Settings};
 use diroxide_core::filter::{ContentQuery, Filter, Lookup, NoLookup, Tally, Truth, Unknown};
 use diroxide_core::format::human_size;
 use diroxide_core::names::display_name;
@@ -41,6 +41,7 @@ use diroxide_core::{
 use diroxide_filetype::{CheckSkip, Probe, Special, TypeRegistry, TypeStage, skips_content};
 use diroxide_vfs::Capabilities;
 
+use crate::columns::{ColumnCell, ColumnItem, FieldColumn, Source};
 use crate::plugins::lister::PanelList;
 use crate::typing::{TypeAnswer, TypeItem};
 
@@ -112,6 +113,22 @@ pub fn row_for(entry: &Entry, columns: &[Column], clock: &dyn Clock) -> ListRow 
 /// does, then its labels ("label: urgent"), then each column's words;
 /// empty cells are left out.
 pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> ListRow {
+    let specs: Vec<ColumnSpec> = columns.iter().copied().map(ColumnSpec::Kind).collect();
+    row_with_fields(entry, &specs, &[], (false, false), clock)
+}
+
+/// The row for an entry with built-in columns and fields' columns, in
+/// the columns' order (alpha 4, lane MA): a field's cell says its label
+/// first, "artist Ada Example", or why it waits, "artist reading"; a key
+/// with no resolved column says nothing. `here` is whether the place's
+/// contents are read and whether its plugins' columns are asked.
+pub fn row_with_fields(
+    entry: &Entry,
+    columns: &[ColumnSpec],
+    fields: &[FieldColumn],
+    here: (bool, bool),
+    clock: &dyn Clock,
+) -> ListRow {
     let mut details = Vec::new();
     if entry.needs_care || entry.name_not_unicode {
         details.push("name needs care".to_owned());
@@ -120,15 +137,26 @@ pub fn row_with(entry: &Entry, columns: &[ColumnKind], clock: &dyn Clock) -> Lis
         details.push(labels);
     }
     for column in columns {
-        let mut detail = column.cell(entry, clock);
-        // A folder whose size was counted says it where a file's size goes.
-        if detail.is_empty()
-            && *column == ColumnKind::Size
-            && entry.kind == EntryKind::Folder
-            && let Some(size) = entry.size
-        {
-            detail = human_size(size);
-        }
+        let detail = match column {
+            ColumnSpec::Kind(kind) => {
+                let mut detail = kind.cell(entry, clock);
+                // A folder whose size was counted says it where a file's
+                // size goes.
+                if detail.is_empty()
+                    && *kind == ColumnKind::Size
+                    && entry.kind == EntryKind::Folder
+                    && let Some(size) = entry.size
+                {
+                    detail = human_size(size);
+                }
+                detail
+            }
+            ColumnSpec::Key(key) => fields
+                .iter()
+                .find(|f| f.key == *key)
+                .and_then(|f| f.cell_words(entry, here.0, here.1))
+                .unwrap_or_default(),
+        };
         if !detail.is_empty() {
             details.push(detail);
         }
@@ -357,7 +385,17 @@ pub struct Panel {
     list: ListModel,
     sort: SortSpec,
     show_hidden: bool,
-    columns: Vec<ColumnKind>,
+    columns: Vec<ColumnSpec>,
+    /// The columns of fields' keys among `columns`, resolved by the app
+    /// (alpha 4, lane MA): where each one's cells come from.
+    fields: Vec<FieldColumn>,
+    /// Shown rows whose entries took column cells the rows do not say
+    /// yet: put into the rows when the focus comes near or the reading
+    /// ends, since replacing every row of a big folder costs (spike M6).
+    stale_rows: std::collections::BTreeSet<usize>,
+    /// The shown rows' indexes by entry name, made when cells first come
+    /// after a refresh.
+    shown_index: Option<HashMap<String, usize>>,
     /// Folder sizes counted here, by name, until the panel leaves.
     counted: HashMap<String, u64>,
     filter: Option<PanelFilter>,
@@ -440,7 +478,10 @@ impl Panel {
             list,
             sort: settings.sort_spec(),
             show_hidden: settings.show_hidden,
-            columns: settings.column_kinds(),
+            columns: settings.column_specs(),
+            fields: Vec::new(),
+            stale_rows: std::collections::BTreeSet::new(),
+            shown_index: None,
             counted: HashMap::new(),
             filter: None,
             tally: Tally::default(),
@@ -964,6 +1005,38 @@ impl Panel {
                 .retain(|name, _| names.contains(name.as_str()));
         }
         drop(carried);
+        // The column cells read for unchanged files stay, so a refresh of
+        // a watched folder reads only what changed (alpha 4, lane MA).
+        let read_keys: Vec<&str> = self
+            .fields
+            .iter()
+            .filter(|f| matches!(f.source, Source::Meta(_) | Source::Plugin(_)))
+            .map(|f| f.key.as_str())
+            .collect();
+        if same_place && !read_keys.is_empty() {
+            let before: HashMap<&str, &Entry> = old
+                .iter()
+                .filter(|e| read_keys.iter().any(|k| e.extra.contains_key(*k)))
+                .map(|e| (e.name.as_str(), e))
+                .collect();
+            for entry in &mut entries {
+                if let Some(old) = before.get(entry.name.as_str())
+                    && old.size == entry.size
+                    && old.modified == entry.modified
+                    && old.kind == entry.kind
+                {
+                    for key in &read_keys {
+                        if let Some(value) = old.extra.get(*key) {
+                            entry
+                                .extra
+                                .entry((*key).to_owned())
+                                .or_insert_with(|| value.clone());
+                        }
+                    }
+                }
+            }
+        }
+        self.fill_regex_cells(&mut entries);
         self.all_entries = entries;
         self.checked = checked;
         self.typed_place = Some(self.place.clone());
@@ -1221,16 +1294,256 @@ impl Panel {
         }
     }
 
-    /// The details each row says after its name.
-    pub fn columns(&self) -> &[ColumnKind] {
+    /// The details each row says after its name: built-in kinds and
+    /// fields' keys.
+    pub fn columns(&self) -> &[ColumnSpec] {
         &self.columns
     }
 
     /// Changes the details each row says after its name (a folder's own
-    /// view, W3l); the focus and the marks stay by id.
-    pub fn set_columns(&mut self, columns: Vec<ColumnKind>, clock: &dyn Clock) -> RowsReplaced {
+    /// view, W3l); the focus and the marks stay by id. The app resolves
+    /// the keys among them with [`Panel::set_field_columns`].
+    pub fn set_columns(&mut self, columns: Vec<ColumnSpec>, clock: &dyn Clock) -> RowsReplaced {
         self.columns = columns;
         self.refresh(clock)
+    }
+
+    /// The columns of fields' keys, resolved (alpha 4, lane MA).
+    pub fn field_columns(&self) -> &[FieldColumn] {
+        &self.fields
+    }
+
+    /// Takes the resolved columns of the fields' keys among
+    /// [`Panel::columns`]: each regex column's cells are made from the
+    /// names, and the rows are made again.
+    pub fn set_field_columns(
+        &mut self,
+        fields: Vec<FieldColumn>,
+        clock: &dyn Clock,
+    ) -> RowsReplaced {
+        self.fields = fields;
+        let mut entries = std::mem::take(&mut self.all_entries);
+        self.fill_regex_cells(&mut entries);
+        self.all_entries = entries;
+        self.refresh(clock)
+    }
+
+    /// Makes the regex columns' cells from each entry's name.
+    fn fill_regex_cells(&self, entries: &mut [Entry]) {
+        let prefix = diroxide_config::columns::REGEX_PREFIX;
+        for entry in entries.iter_mut() {
+            if !entry.extra.is_empty() {
+                entry.extra.retain(|key, _| !key.starts_with(prefix));
+            }
+        }
+        for field in &self.fields {
+            let Source::Regex(Some(pattern)) = &field.source else {
+                continue;
+            };
+            for entry in entries.iter_mut() {
+                if let Some(cell) = crate::columns::regex_cell(pattern, &entry.name) {
+                    entry.extra.insert(field.key.clone(), cell);
+                }
+            }
+        }
+    }
+
+    /// Whether this panel's plugins' columns are asked: a folder of this
+    /// computer.
+    pub fn asks_plugin_columns(&self) -> bool {
+        self.place.kind() == diroxide_core::PlaceKind::Local
+    }
+
+    /// The row an entry has here: its name, its labels, then each
+    /// column's words in the columns' order (see [`row_with_fields`]).
+    fn row_of(&self, entry: &Entry, clock: &dyn Clock) -> ListRow {
+        row_with_fields(
+            entry,
+            &self.columns,
+            &self.fields,
+            (self.reads_contents(), self.asks_plugin_columns()),
+            clock,
+        )
+    }
+
+    /// The files whose cells the readers still owe, in the order they
+    /// take them: first the visible page and two pages either side
+    /// ([`crate::columns::window_order`]), nearest the focus first, for
+    /// the columns `near` takes; then every other file of the listing for
+    /// the columns `rest` takes. Only columns the metadata readers fill
+    /// count. The number of first items on screen comes second. Empty
+    /// where contents are not read.
+    pub fn column_queue(
+        &self,
+        near: &dyn Fn(&FieldColumn) -> bool,
+        rest: &dyn Fn(&FieldColumn) -> bool,
+        types: &TypeRegistry,
+    ) -> (Vec<ColumnItem>, usize) {
+        let read = |f: &&FieldColumn| f.cost().is_some();
+        let near: Vec<&FieldColumn> = self
+            .fields
+            .iter()
+            .filter(read)
+            .filter(|f| near(f))
+            .collect();
+        let rest: Vec<&FieldColumn> = self
+            .fields
+            .iter()
+            .filter(read)
+            .filter(|f| rest(f))
+            .collect();
+        if (near.is_empty() && rest.is_empty()) || !self.reads_contents() {
+            return (Vec::new(), 0);
+        }
+        let item = |i: usize, entry: &Entry, wanted: &[&FieldColumn]| {
+            let keys: Vec<String> = wanted
+                .iter()
+                .filter(|f| f.waits(entry))
+                .map(|f| f.key.clone())
+                .collect();
+            (!keys.is_empty()).then(|| {
+                let file_type = types.by_index(entry.type_index);
+                ColumnItem {
+                    index: u32::try_from(i).unwrap_or(u32::MAX),
+                    name: entry.name.clone(),
+                    kind: entry.kind,
+                    size: entry.size,
+                    modified: entry.modified,
+                    type_id: file_type.map(|t| t.id.clone()),
+                    group: file_type.and_then(|t| t.group.clone()),
+                    keys,
+                }
+            })
+        };
+        let index_of: HashMap<&str, usize> = self
+            .all_entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (e.name.as_str(), i))
+            .collect();
+        let focus = self.list.focus_index().unwrap_or(0);
+        let page = self.list.page_size();
+        let mut taken = HashSet::new();
+        let mut queue = Vec::new();
+        // The window takes the columns of both kinds: what the rest
+        // reads is read nearest the focus first too.
+        let mut both = near.clone();
+        both.extend(rest.iter().filter(|f| !near.iter().any(|n| n.key == f.key)));
+        for row in crate::columns::window_order(focus, self.entries.len(), page) {
+            if let Some(entry) = self.entries.get(row)
+                && let Some(&i) = index_of.get(entry.name.as_str())
+                && taken.insert(i)
+                && let Some(item) = item(i, &self.all_entries[i], &both)
+            {
+                queue.push(item);
+            }
+        }
+        let urgent = queue.len().min(page.max(1));
+        if !rest.is_empty() {
+            for (i, entry) in self.all_entries.iter().enumerate() {
+                if !taken.contains(&i)
+                    && let Some(item) = item(i, entry, &rest)
+                {
+                    queue.push(item);
+                }
+            }
+        }
+        (queue, urgent)
+    }
+
+    /// Takes what the column readers found for files of this listing:
+    /// each file's cells go into its entry. Returns whether a cell
+    /// reached the page around the focus, whose rows are made again at
+    /// once; the others wait for [`Panel::put_stale_rows`], when the focus
+    /// comes near or the reading ends.
+    pub fn apply_column_cells(&mut self, cells: Vec<ColumnCell>, clock: &dyn Clock) -> bool {
+        if self.shown_index.is_none() {
+            self.shown_index = Some(
+                self.entries
+                    .iter()
+                    .enumerate()
+                    .map(|(i, e)| (e.name.clone(), i))
+                    .collect(),
+            );
+        }
+        let mut touched = Vec::new();
+        for cell in cells {
+            let Some(entry) = self.all_entries.get_mut(cell.index as usize) else {
+                continue;
+            };
+            if entry.name != cell.name {
+                continue;
+            }
+            for (key, value) in &cell.values {
+                entry.extra.insert(key.clone(), value.clone());
+            }
+            if let Some(&row) = self
+                .shown_index
+                .as_ref()
+                .and_then(|index| index.get(&cell.name))
+                && let Some(shown) = self.entries.get_mut(row)
+            {
+                for (key, value) in cell.values {
+                    shown.extra.insert(key, value);
+                }
+                touched.push(row);
+            }
+        }
+        if touched.is_empty() {
+            return false;
+        }
+        self.stale_rows.extend(touched);
+        if self.stale_near_focus() {
+            self.put_stale_rows(clock);
+            return true;
+        }
+        false
+    }
+
+    /// Whether a row waiting for its new cells is within a page of the
+    /// focus.
+    pub fn stale_near_focus(&self) -> bool {
+        let focus = self.list.focus_index().unwrap_or(0);
+        let page = self.list.page_size().max(1);
+        self.stale_rows
+            .range(focus.saturating_sub(page)..=focus.saturating_add(page))
+            .next()
+            .is_some()
+    }
+
+    /// Whether rows wait for their new cells.
+    pub fn has_stale_rows(&self) -> bool {
+        !self.stale_rows.is_empty()
+    }
+
+    /// Puts the cells that came into the rows that wait for them; the
+    /// order stays, the focus and the marks kept by id.
+    pub fn put_stale_rows(&mut self, clock: &dyn Clock) {
+        if self.stale_rows.is_empty() {
+            return;
+        }
+        let stale = std::mem::take(&mut self.stale_rows);
+        let mut rows = self.list.rows().to_vec();
+        for row in stale {
+            if let (Some(slot), Some(entry)) = (rows.get_mut(row), self.entries.get(row)) {
+                let selected = slot.selected;
+                *slot = self.row_of(entry, clock);
+                slot.selected = selected;
+            }
+        }
+        self.list.set_rows(rows);
+    }
+
+    /// How many files still wait for a column's cell, and the cells read
+    /// of the key: for the ask-first sort.
+    pub fn waiting_for(&self, key: &str) -> usize {
+        let Some(field) = self.fields.iter().find(|f| f.key == key) else {
+            return 0;
+        };
+        if field.cost().is_none() || !self.reads_contents() {
+            return 0;
+        }
+        self.all_entries.iter().filter(|e| field.waits(e)).count()
     }
 
     /// How many entries the filter lets through of those hidden rules
@@ -1364,11 +1677,12 @@ impl Panel {
         };
         self.tally = tally;
         diroxide_core::sort::sort_entries(&mut shown, &self.sort);
-        let rows = shown
-            .iter()
-            .map(|e| row_with(e, &self.columns, clock))
-            .collect();
+        let rows = shown.iter().map(|e| self.row_of(e, clock)).collect();
         self.entries = shown;
+        // Every row is made again: none waits for its cells, and the rows'
+        // places by name are made again when cells next come.
+        self.stale_rows.clear();
+        self.shown_index = None;
         self.list.set_rows(rows)
     }
 

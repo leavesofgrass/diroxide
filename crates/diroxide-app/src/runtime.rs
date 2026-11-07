@@ -49,6 +49,8 @@ use diroxide_vfs::{
 };
 
 mod archive_jobs;
+// The readers of the custom columns (alpha 4, lane MA).
+mod columns;
 // Optional components (W4d).
 mod components;
 // Plugins and script commands (W4d).
@@ -577,6 +579,8 @@ pub struct Runtime {
     /// Each panel's type check, counted, so a newer one stops the
     /// readers of the one before (lane TA).
     type_readers: typing::TypeReaders,
+    /// Each panel's column reads, counted the same way (lane MA).
+    column_readers: columns::ColumnReaders,
     /// Open with's lists and starts (lane TA): the system's, or a
     /// recorder in tests.
     open_with: Arc<dyn OpenWithPrograms>,
@@ -671,6 +675,7 @@ impl Runtime {
             trash,
             local_volumes: None,
             type_readers: typing::TypeReaders::default(),
+            column_readers: columns::ColumnReaders::default(),
             open_with: Arc::new(SystemOpenWith),
         }
     }
@@ -1837,6 +1842,33 @@ impl Runtime {
             }
             Request::StopTypes(side) => {
                 self.type_readers.next(side);
+            }
+            Request::ReadColumns {
+                side,
+                listing,
+                folder,
+                items,
+                urgent,
+                costs,
+                pipeline,
+            } => {
+                let job = columns::ColumnJob {
+                    side,
+                    listing,
+                    generation: self.column_readers.next(side),
+                    current: self.column_readers.current(side),
+                    folder,
+                    items,
+                    next: AtomicUsize::new(0),
+                    urgent,
+                    costs,
+                    pipeline: pipeline.0,
+                    registry: Arc::clone(&self.registry),
+                };
+                self.worker(move |shared| columns::run(shared, &job));
+            }
+            Request::StopColumns(side) => {
+                self.column_readers.next(side);
             }
             Request::ListOpenWith { place, mime } => {
                 let programs = Arc::clone(&self.open_with);

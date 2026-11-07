@@ -682,6 +682,16 @@ impl App {
                 effects
             }
             Purpose::SortList => {
+                // A column of a field's key (alpha 4, lane MA).
+                if let Some(key) = row
+                    .as_deref()
+                    .and_then(|r| r.strip_prefix(super::columns_ui::SORT_ROW))
+                {
+                    let key = key.to_owned();
+                    let mut effects = self.close_top();
+                    effects.extend(self.sort_by_column(&key));
+                    return effects;
+                }
                 let Some(id) = row.and_then(|r| CommandId::new(r).ok()) else {
                     return Vec::new();
                 };

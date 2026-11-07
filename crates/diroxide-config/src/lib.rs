@@ -35,7 +35,7 @@ pub mod store;
 pub mod tasks;
 pub mod theme;
 
-pub use columns::ColumnKind;
+pub use columns::{ColumnKind, ColumnSpec};
 pub use error::ConfigError;
 pub use files::{
     ActionConfig, BankConfig, BanksConfig, ButtonConfig, ConversionsConfig, FileTypeConfig,

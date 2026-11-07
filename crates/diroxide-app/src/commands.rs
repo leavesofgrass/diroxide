@@ -353,6 +353,9 @@ pub mod ids {
         SORT_LABEL = "view.sort-label";
         /// The Sort list.
         SORT_LIST = "view.sort-list";
+        /// Read every column's cells in this folder, the on-demand ones
+        /// too (alpha 4, lane MA).
+        FILL_COLUMNS = "view.fill-columns";
         /// Add a label to the marked items, or the focused one.
         LABEL_SET = "label.set";
         /// Add a label, or take it off when every item has it.
@@ -730,7 +733,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 250] = [
+pub static CATALOG: [CommandInfo; 251] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1890,6 +1893,14 @@ pub static CATALOG: [CommandInfo; 250] = [
         Panel,
         &[],
         &["ctrl+shift+s"],
+    ),
+    command(
+        ids::FILL_COLUMNS,
+        "Fill columns",
+        "Reads every column of this folder from its files now, those read only on request too, asking first when many files wait; nothing is read on a remote place.",
+        Panel,
+        &[],
+        &[],
     ),
     command(
         ids::FIND,
