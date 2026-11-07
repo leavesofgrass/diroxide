@@ -1172,6 +1172,23 @@ mod tests {
                 .read_to_string(&mut text)
                 .unwrap();
             assert_eq!(text, "locked notes");
+            // A member whose size is not listed (or one over IN_MEMORY)
+            // takes the staging road: unpacked alone into a staging
+            // folder in the spool, read, and the folder gone after.
+            let mut staged = String::new();
+            let mut reader = backend.read(n, None, backend.password(), &ctx).unwrap();
+            reader.read_to_string(&mut staged).unwrap();
+            assert_eq!(staged, "locked notes");
+            let staging = |dir: &Path| {
+                fs::read_dir(dir)
+                    .unwrap()
+                    .filter_map(Result::ok)
+                    .filter(|e| e.file_name().to_string_lossy().starts_with(STAGING_PREFIX))
+                    .count()
+            };
+            assert_eq!(staging(&dir), 1, "the staging folder lives with the reader");
+            drop(reader);
+            assert_eq!(staging(&dir), 0, "and goes with it");
         }
         let wrong = OpContext::new()
             .with_tools(runner.clone())
