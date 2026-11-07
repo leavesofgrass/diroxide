@@ -62,7 +62,7 @@ The result is `NAME.age` beside each file, and the same lines and the same quest
 
 ## Decrypt
 
-Decrypt looks at each file's header before it asks anything, so you are never asked for what the file does not need. It says "Decrypt 3 files" and then, for each file:
+Decrypt looks at each file's header before it asks anything, so you are never asked for what the file does not need. It says its plan, "Decrypt 3 files", as the job begins, and then, for each file:
 
 - A file made with a passphrase asks "Passphrase for report.pdf.age (hidden):". A wrong one says "Wrong passphrase for report.pdf.age. Try again, 2 of 3." After three, "Gave up on report.pdf.age: 3 wrong tries".
 - A file made for a key asks "Identity file for report.pdf.age". Type the path of your identity file, the one that holds your `AGE-SECRET-KEY-1` line. It may itself be locked with a passphrase, which is then asked the same hidden way. An identity file over 64 KB is refused.
@@ -138,7 +138,7 @@ Verify signature checks one file's signature. Put the focus on the file or on it
 - With no signature: "No signature beside report.pdf".
 - A signature for the checksum list says so after the verdict: "That signature is on SHA256SUMS; Verify checksum uses it."
 
-An OpenPGP signature, `.asc` or `.sig`, is checked by gpg. "Checking the signature" says the check has started. A minisign signature, `.minisig`, is checked inside diroxide, and it needs the signer's public key, which is asked every time and kept nowhere. The field is "minisign public key: a file or pasted". Paste the one-line key that starts `RW`, or type the path of the `minisign.pub` file. An empty answer says "No key given; nothing was checked."
+An OpenPGP signature, `.asc` or `.sig`, is checked by gpg. "Checking the signature" says the check has started. A minisign signature, `.minisig`, is checked inside diroxide, and it needs the signer's public key, which is asked every time and kept nowhere. The field is "minisign public key: a file or pasted". Paste the one-line key that starts `RW`, or type the path of the `minisign.pub` file, which Tab completes; a path that is not whole is read from the signature's own folder. An empty answer says "No key given; nothing was checked."
 
 ### What you hear
 
@@ -157,7 +157,7 @@ The other verdicts, each with its meaning first:
 - "Good signature, but the key expired" and "Good signature, but it has expired".
 - "Key revoked. Do not trust this file."
 - "Cannot check: signed by another key", "Cannot check: public key unreadable" and "Cannot check: no public key given" for minisign.
-- "Cannot check: signature unreadable", "Cannot check: the file is unreadable" and "Cannot check this signature".
+- "Cannot check: signature unreadable" and "Cannot check: the file is unreadable".
 - "gpg not found. Install GnuPG first." when an OpenPGP signature needs gpg and it is not there.
 - "Signature check cancelled".
 
