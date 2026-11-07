@@ -524,6 +524,22 @@ mod tests {
         assert_eq!(text, "Notes, off, 2 done today\n");
     }
 
+    /// Without --once the task runs until Ctrl+C: here the stop is set
+    /// from the start, so it starts, asks about the waiting files, and
+    /// stops at once.
+    #[test]
+    fn without_once_the_task_runs_until_stopped() {
+        let (_dir, paths) = home();
+        let args = WatchTaskArgs {
+            task: Some("notes".into()),
+            ..Default::default()
+        };
+        let (code, text) = run_in(&paths, &args, true);
+        assert_eq!(code, 0, "{text}");
+        assert!(text.contains("Watching Notes. Ctrl+C stops.\n"), "{text}");
+        assert!(text.ends_with("Stopped watching Notes.\n"), "{text}");
+    }
+
     #[test]
     fn an_unknown_task_could_not_run() {
         let (_dir, paths) = home();

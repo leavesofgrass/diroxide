@@ -626,7 +626,8 @@ pub fn run_with(
     } else {
         line(out, &summary)?;
     }
-    let trouble = could_not + tally.failed.saturating_sub(could_not) + tally.refused;
+    // Any file that failed, was refused or could not be planned.
+    let trouble = could_not + tally.failed + tally.refused;
     Ok(if args.dry_run {
         if tally.would == 0 && trouble > 0 {
             1
