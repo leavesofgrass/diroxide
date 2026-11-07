@@ -494,7 +494,6 @@ impl Provider for LocalProvider {
 
     /// Who may do what, asked of the system for this one entry (the
     /// `sys` module's `acl.rs` and `windows_access.rs`).
-    #[cfg(unix)]
     fn access(
         &self,
         place: &Place,

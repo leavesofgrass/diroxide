@@ -46,6 +46,10 @@ pub(crate) use xattr::{
 mod acl;
 #[cfg(unix)]
 pub(crate) use acl::access_facts;
+#[cfg(windows)]
+mod windows_access;
+#[cfg(windows)]
+pub(crate) use windows_access::access_facts;
 
 #[cfg(any(test, target_os = "macos"))]
 mod mac_apps;
