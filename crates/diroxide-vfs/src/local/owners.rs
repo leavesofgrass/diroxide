@@ -105,6 +105,21 @@ impl Owners {
             .find_map(|(id, n)| (n == name).then_some(*id))
     }
 
+    /// Every user or group this machine names, as principals, sorted by
+    /// name: the owner dialog's choices.
+    pub(crate) fn all(&self, group: bool) -> Vec<Principal> {
+        let map = if group { &self.groups } else { &self.users };
+        let mut all: Vec<Principal> = map
+            .iter()
+            .map(|(id, name)| Principal {
+                id: id.to_string(),
+                name: Some(name.clone()),
+            })
+            .collect();
+        all.sort_by(|a, b| a.name.cmp(&b.name));
+        all
+    }
+
     /// The names as this machine has them now, read at most every half
     /// minute.
     pub(crate) fn shared() -> Arc<Owners> {
@@ -219,5 +234,8 @@ mod tests {
         let staff = owners.principal("staff", true).expect("a group");
         assert_eq!(staff.id, "50");
         assert_eq!(owners.principal("ada", true), None, "not a group");
+        let users: Vec<Option<String>> = owners.all(false).into_iter().map(|p| p.name).collect();
+        assert_eq!(users, [Some("ada".to_owned())]);
+        assert_eq!(owners.all(true)[0].id, "50");
     }
 }

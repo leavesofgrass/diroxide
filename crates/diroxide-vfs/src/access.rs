@@ -531,6 +531,30 @@ fn find(_text: &str, _group: bool) -> Option<Principal> {
     None
 }
 
+/// Every user this computer names (`/etc/passwd`, read at most every
+/// half minute), sorted by name: the owner dialog's choices. Users only
+/// a directory service knows are not listed; a number still works.
+/// Empty on Windows.
+pub fn known_users() -> Vec<Principal> {
+    known(false)
+}
+
+/// Every group this computer names (`/etc/group`), sorted by name; the
+/// dialog marks the caller's own with [`Caller::in_group`].
+pub fn known_groups() -> Vec<Principal> {
+    known(true)
+}
+
+#[cfg(unix)]
+fn known(group: bool) -> Vec<Principal> {
+    crate::local::owners::Owners::shared().all(group)
+}
+
+#[cfg(not(unix))]
+fn known(_group: bool) -> Vec<Principal> {
+    Vec::new()
+}
+
 /// Who the running program is, for the owner plan: an administrator may
 /// give anything to anyone; anyone else may change only the group, and
 /// only to one of their own groups.
