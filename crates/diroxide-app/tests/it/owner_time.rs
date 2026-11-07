@@ -267,25 +267,28 @@ fn change_owner_asks_or_refuses_whole_or_hands_off_on_windows() {
     let rows = labels(&s);
     assert!(rows[1].starts_with("Now: owner "), "{rows:?}");
     assert!(rows[2].ends_with(", as now"), "{rows:?}");
+    // Root's own file goes to an unused number; anyone else's to root.
+    let root = diroxide_vfs::access::Caller::current().administrator;
+    let new_owner = if root { "4242" } else { "root" };
     s.key("down");
     s.key("down");
     let said = s.key("enter");
     assert!(said[0].starts_with("New owner of notes.txt:"), "{said:?}");
-    retype(&mut s, "root");
+    retype(&mut s, new_owner);
     let said = s.key("enter");
     assert!(
         said.iter()
-            .any(|l| l.starts_with("Change owner, Owner: root")),
+            .any(|l| l.starts_with(&format!("Change owner, Owner: {new_owner}"))),
         "{said:?}"
     );
     s.key("home");
     let said = s.key("enter");
-    let root = diroxide_vfs::access::Caller::current().administrator;
     if root {
         assert_eq!(
             said.last().map(String::as_str),
-            Some("Change owner of 1 item to root? No is the default. y or n")
+            Some("Change owner of 1 item to 4242? No is the default. y or n")
         );
+        // No changes nothing: the test's own file keeps its owner.
         s.key("n");
     } else {
         assert!(
