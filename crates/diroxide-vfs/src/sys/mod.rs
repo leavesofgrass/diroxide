@@ -38,6 +38,15 @@ pub(crate) use xattr::{
     extended_list, extended_on, extended_read, extended_remove, extended_write,
 };
 
+// Access facts (R30's commits 74 to 77): who may do what with one entry,
+// for the access details view. Unix in `acl.rs` (no `unsafe`), Windows in
+// `windows_access.rs` (the security descriptor, the account names and the
+// Authz check).
+#[cfg(unix)]
+mod acl;
+#[cfg(unix)]
+pub(crate) use acl::access_facts;
+
 #[cfg(any(test, target_os = "macos"))]
 mod mac_apps;
 pub mod open_with;
