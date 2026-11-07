@@ -440,6 +440,9 @@ pub struct QuickViewSettings {
     /// The largest document read whole as a container (DOCX, EPUB, a
     /// spreadsheet), in MB (alpha.7, R28 2.3).
     pub max_document_mb: u64,
+    /// Whether the quick view runs the helper programs by itself after
+    /// its wait (alpha.7, R30 commit 43).
+    pub auto_preview: AutoPreview,
 }
 
 impl Default for QuickViewSettings {
@@ -451,6 +454,36 @@ impl Default for QuickViewSettings {
             follow_changes: true,
             line_numbers: false,
             max_document_mb: 64,
+            auto_preview: AutoPreview::Auto,
+        }
+    }
+}
+
+/// Whether the quick view runs the tool-backed previewers by itself
+/// after its wait: ffprobe for sound and video, pdftotext for a PDF's
+/// text (alpha.7, R30 commit 43; R28 2.2). Off, they run only on the
+/// Preview command and in the details list; never on a plain cursor
+/// move without the quick view.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoPreview {
+    /// On, except in screen reader mode.
+    #[default]
+    Auto,
+    /// The quick view runs them after its wait.
+    On,
+    /// Only the Preview command and the details list run them.
+    Off,
+}
+
+impl AutoPreview {
+    /// Whether the quick view runs them by itself: off in screen reader
+    /// mode when automatic.
+    pub fn runs(self, screen_reader: bool) -> bool {
+        match self {
+            AutoPreview::Auto => !screen_reader,
+            AutoPreview::On => true,
+            AutoPreview::Off => false,
         }
     }
 }

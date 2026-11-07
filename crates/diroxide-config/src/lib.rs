@@ -48,10 +48,11 @@ pub use presets::{
 pub use schema::{Choice, SCHEMA, SettingGroup, SettingInfo, SettingKind};
 pub use session::{Layout, PanelState, SessionState, load_session, save_session};
 pub use settings::{
-    ArchiveSettings, CompareAlgorithm, CompareSettings, CompletionList, ConfirmSettings,
-    DRIVE_KINDS, FilterCase, Frontend, Graphics, HexRow, Highlighting, JobSettings,
-    LargeFilePolicy, Menus, OnErrors, PluginSettings, QuickViewSettings, ScreenReaderMode,
-    SecretEcho, Settings, SingleLetters, SpeedLimitScope, ViewerSettings, WeekStart,
+    ArchiveSettings, AutoPreview, CompareAlgorithm, CompareSettings, CompletionList,
+    ConfirmSettings, DRIVE_KINDS, FilterCase, Frontend, Graphics, HexRow, Highlighting,
+    JobSettings, LargeFilePolicy, Menus, OnErrors, PluginSettings, QuickViewSettings,
+    ScreenReaderMode, SecretEcho, Settings, SingleLetters, SpeedLimitScope, ViewerSettings,
+    WeekStart,
 };
 pub use store::{ConfigProblem, Loaded, problems_line, write_atomic, write_reference};
 pub use tasks::{
