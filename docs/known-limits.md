@@ -1,6 +1,6 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view, columns, checksums, encryption and signatures, privacy before sharing, conversions, watched folders, disk images, git and photos are here, and grow as the alpha does. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view and access facts, columns, checksums, encryption and signatures, privacy before sharing, conversions, watched folders, disk images, git, photos, and links, permissions and times are here as the alpha stands at its release. What alpha 4 held back for the next alpha is listed once, near the top. Where a limit has a workaround, the workaround comes first.
 
 ## What is not in alpha 4 yet
 
@@ -13,8 +13,21 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
 - Tools, previews, the file type model, columns, checksums, the privacy commands, conversions, watched folders, disk images, the git plugin, encryption and signatures, the access rows with Change time and Change owner, and the photo helpers are in alpha 4, and the sections below say what they do not do.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
+- A grid of thumbnails for the photo helpers, an editor for extended attributes, and tasks other than watched folders, such as synchronizing and renaming, come in a later alpha. Extended attributes are read for the details view and are not edited.
 - Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
+
+## Held back from alpha 4
+
+Each item below was planned for alpha 4, is known, and was left for a later alpha. A person may look for each, so it is named here, and it is also in the section of its feature.
+
+- Conversions and watched folders: a plugin's converters are not in the Convert list, and a plugin's command in a watched folder's task still pauses the task. The program has no Save report command. `diro convert --report FILE` writes one.
+- Columns: a field has no sort value, so a duration sorts as text, and field columns have no header or grid. A cell says "reading" for a kind of file that no reader takes, until the readers have been through it.
+- Encryption: the Encryption plugin writes its files itself, so Undo for an age command lasts for the session only, and gpg's ASCII armor is not offered.
+- Photos: the Taken column reads the date to the minute. Move into month folders is planned by the program, so a plugin's before-move hook does not run for it. A row of the details list has no help of its own.
+- Archives: "RAR is read only: diroxide never writes it" is 42 cells, so its last word pans on a Braille display.
+- Speed: listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. [Other limits](#other-limits) has the numbers.
+- The window: a paste under Wayland with no XWayland still reads nothing, and no real Wayland compositor has been tried.
 
 ## Plugins and script commands
 
@@ -28,13 +41,12 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A script can start slowly: about a tenth of a second for bash and Python, and a third of a second to over a second and a half for PowerShell 5.1, on the test machine. Plugins stay running between uses for five minutes, so the cost is paid once.
 - PowerShell 7 has not been tried. Windows PowerShell 5.1 has, with the policy override. A `.cmd` or `.bat` script runs on Windows only.
 - On Windows, bash is Git for Windows' bash. The `bash.exe` in the system folder is WSL's launcher, and diroxide refuses it. Without Git for Windows, bash scripts do not run, and diroxide says so.
-- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/format` and `column/changed` (the host can answer for a page of cells, and the panels show no plugin column yet), `completion/query`, `fs/stage` and `fs/commit`. `place/describe`, `ui/form` and `ui/show_diff` are served since alpha 4. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare the shapes and will be called when the feature that needs them arrives.
+- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/changed` (nothing tells the panels that a plugin's cells are stale) and `completion/query`. `column/format`, `place/describe`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit` are served since alpha 4. [The protocol reference](dev/plugin-protocol.md) is generated from the code's own table and still marks `column/format` as shape only, though the panels call it for a plugin's columns. A plugin can declare the shapes and will be called when the feature that needs them arrives.
 - A plugin's form or diff has few limits checked yet: nothing stops 5,000 fields, a default of 1 MB, a label of 90 cells or a title of 120 cells, and an empty id or label is not refused. Unknown keys are dropped in silence, and a title that already names the plugin gets the name twice. Binary content cannot travel in JSON, so a diff side with NUL bytes is read as text and compared byte by byte, and `encoding` and `place` on a diff side are dropped.
 - Watching a folder through a plugin's place is a shape without a working end-to-end test. SFTP cannot watch a folder, so a remote panel does not refresh by itself; open the folder again to see changes.
 - The Convert command does not list a plugin's converters yet, and the quick view does not call a plugin's previewer. `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
 - A plugin's command run by a watched folder's task pauses the task: "plugin commands are not available here".
-- Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
-- A plugin's columns are declared and not shown in the panels yet.
+- A watched folder's script task runs only a script that promises `unattended = "ok"`, and has been built and not run through the real script host. [Watched folders](#watched-folders) says more. Saved tasks other than watched folders come in a later alpha.
 - A plugin list opens inside a panel. These lists still open over the panels, as dialogs: the Volumes list, the trash browser, the Jobs list, search results, and the results of a script in `lister` mode.
 - A plugin list is not saved when you quit, and it stays in its panel when its plugin stops or is turned off: leave it with Backspace.
 - The window draws a plugin list in its panel. A click on a row of a plugin list does not move the focus to it yet, and a double click presses Enter on the row that has the focus. Use the keys.
@@ -51,7 +63,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 
 [Optional components](components.md) describes the feature. These are the limits.
 
-- The list in a build made from source has the example plugins and the helper programs. The release files add the SFTP places, disk image and git plugins, each with a program for Windows on x86-64, Linux on x86-64 and macOS. Windows on ARM and Linux on ARM have none of the three yet. The example pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
+- The list in a build made from source has the example plugins and the helper programs. The release files add the SFTP places, disk image, git and Encryption plugins, each with a program for Windows on x86-64, Linux on x86-64 and macOS. Windows on ARM and Linux on ARM have none of the four yet. The example pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
 - Downloads use a built-in client, then `curl`, then `wget` from your PATH. A build of diroxide made without the built-in client needs `curl` or `wget`, and says "Not downloaded: curl was not found." when it has neither.
 - A private repository as your own source, reached through the GitHub CLI's sign-in, is not built yet. A folder works, and a repository written `owner/name` is read from its public release downloads.
 - Where a helper has no build for your computer, the message says "No build for this computer." and names the install command for your system where diroxide knows it, such as "Install: sudo apt install ffmpeg". For a plugin of the project, such as the SFTP places plugin, it names the `cargo install` line instead, which needs a Rust toolchain, and the program it builds still has to be put where [remote places](remote-places.md) says.
@@ -59,7 +71,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - After Escape, a stalled transfer in the built-in client can take a moment to stop, until the client's own time limits end it. `curl` and `wget` are ended at once.
 - A component that would run an installer is refused: "installers are not supported yet".
 - The downloaded programs are not code-signed, and neither are the builds of diroxide. Windows' SmartScreen and virus scanners may react.
-- The first-run list of components opens once, at the first start, and only when the list holds something besides the example plugins: that is, the helper programs in every build, and the three plugins in the release files. `diro run`, `diro serve` and a plain listing on a pipe never open it. The list never covers a dialog that is open at the start; Ask first-run choices again, in the Tools menu, opens it later, and says "No optional components to choose from yet" when there is nothing to choose.
+- The first-run list of components opens once, at the first start, and only when the list holds something besides the example plugins: that is, the helper programs in every build, and the four plugins in the release files. `diro run`, `diro serve` and a plain listing on a pipe never open it. The list never covers a dialog that is open at the start; Ask first-run choices again, in the Tools menu, opens it later, and says "No optional components to choose from yet" when there is nothing to choose.
 - A no to a download is not remembered. Get example plugins asks again each time.
 - Installing from a zip file or a folder says "Not downloaded" when it finds none of the files, which is the wrong word for an install.
 - After a helper is installed, diroxide runs it once to see that it starts. The line that says so, "Installed pandoc, but it did not start.", is built and is not said yet by the program or by `diro components`.
@@ -271,11 +283,10 @@ The trash is the default way to delete, and the places where it cannot be truste
 - macOS has not been run. The Homebrew folders and `mdls` were never compiled by the lane that wrote the lookup. System32's `convert.exe` and `tw --version` were left alone on purpose.
 - The registry's tests use stand-in programs. The version commands were run against the real programs in the project's Linux container and on one Windows computer.
 - `7za` and `7zr` read no RAR, so the lookup tries `7z` and `7zz` first.
-- The helper components were pinned by a job on the project's build machine, 23 files with the publishers' own digests. No helper component has been installed and run on a computer yet.
+- The helper components were pinned by a job on the project's CI runner, 23 files with the publishers' own digests. No helper component has been installed and run on a computer yet.
 - Some helper files are held: ExifTool for Windows, 7-Zip for Windows and FFmpeg for Linux, each for a reason [optional components](components.md) gives. ImageMagick on Linux and macOS, and FFmpeg on macOS, are package commands.
 - After a helper is installed, the library runs its version command, and the program does not say the line yet: "pandoc: 3.13, from components" shows in `diro doctor`, and the end of an install says "Ready".
 - The first-run list on Windows offers 7-Zip, which has no file for Windows yet, and gives its size as 0 bytes.
-- The `diro doctor` of the command line does not say what a missing tool would download, as the Tools list in the program does.
 
 ## File types and groups
 
@@ -286,8 +297,8 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The contents speak first: a `.py` file that starts with `#!/bin/sh` is a shell script.
 - MediaWiki, DokuWiki and Jira files have no entry in the table, so their rows say "file". Org and reStructuredText files have one.
 - A type of yours that names a parent with an extension and no signature hides a child known by its own extension, because the tree reaches a child only through its parent. When two types of yours share an id, the first wins.
-- The Preview and Convert slots of a type run from Actions for this file only, and no command calls them yet. The ten numbered user actions have no key.
-- A theme's group colors are drawn by the window. The terminal does not draw them yet.
+- The ten numbered user actions have no key until you bind one in `keymap.toml`.
+- A theme's group colors show in the terminal only at 256 colors or true color, and not in the High Contrast theme.
 - Open with on Windows does not read Explorer's own order, and a Store app, Edge or Chrome starts by its class through the shell without COM set up first. "Choose another program" hands the file to Windows' own dialog, which has not been tried. That dialog read well with NVDA when it was looked at, and JAWS has not been tried.
 - Open with on Linux leaves out programs that run in a terminal, and gives a program's `%u` a path. On macOS a binary `Info.plist` is skipped and counted, the default program is not read, and the code was compiled only in the project's CI.
 - The encoding chooser has Cyrillic IBM866 as its only DOS code page. The others need an encoding type of their own.
@@ -309,7 +320,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 [The details view](details.md) describes the list. These are the limits.
 
-- Closing the list stops the read of a file's facts between readers and at the next read. A program already running, such as ffprobe, finishes within its own time limit, and the answer is dropped.
+- Closing the list stops the read of a file's facts: between readers, at the next read, and an ffprobe run that the read started. Show all's ExifTool run is not stopped by closing the list. It finishes within its own time limit.
 - Show all needs a file on a local disk. Folder sizes are not computed, and a folder has no Privacy row and no Checksum row.
 - The Checksum row shows only the values the Checksum command computed in this session, while the file is as it was. Otherwise it says "Checksum: not computed".
 - `diro info` knows the built-in file types and the built-in tools list, and does not read your `filetypes.toml` or `tools.toml`.
