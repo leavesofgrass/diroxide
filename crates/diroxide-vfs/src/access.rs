@@ -598,14 +598,43 @@ impl Caller {
 
     /// The running program: on Linux and Android from
     /// `/proc/self/status` (its `Uid` and `Groups` lines; the `getgroups`
-    /// list the kernel keeps), elsewhere unknown.
+    /// list the kernel keeps) on Linux, the effective ids and the groups
+    /// from the system calls on macOS and the BSDs, unknown on Windows.
     pub fn current() -> Self {
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        {
-            if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
-                return Self::from_status(&status);
-            }
+        Self::current_here()
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn current_here() -> Self {
+        match std::fs::read_to_string("/proc/self/status") {
+            Ok(status) => Self::from_status(&status),
+            Err(_) => Self::default(),
         }
+    }
+
+    /// No /proc here: the effective ids and the groups from the system
+    /// calls, so an owner change by a user who is not an administrator is
+    /// refused in words before it is tried.
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+    fn current_here() -> Self {
+        let user = rustix::process::geteuid().as_raw();
+        let group = rustix::process::getegid().as_raw();
+        let groups = rustix::process::getgroups().ok().map(|list| {
+            let mut groups: Vec<u32> = list.iter().map(|g| g.as_raw()).collect();
+            if !groups.contains(&group) {
+                groups.insert(0, group);
+            }
+            groups
+        });
+        Self {
+            user: Some(user),
+            administrator: user == 0,
+            groups,
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn current_here() -> Self {
         Self::default()
     }
 
