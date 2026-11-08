@@ -27,6 +27,7 @@ Alpha 4 teaches diroxide what a file is, what is in it and what can be done with
 
 - The quick view reads pictures in words from their headers behind a pixel guard, SVG as a screen reader exposes it, sound and video through ffprobe, archive listings, PDF, Word, EPUB, OpenDocument, RTF, spreadsheets and delimited text, each with caps against hostile files. Nothing is played.
 - Preview runs the helper programs at once, `quick_view.auto_preview` decides whether they run by themselves (off in screen reader mode), and Read text in picture runs Tesseract as a job Cancel stops.
+- F3 opens a picture, a PDF, a document, a sound or a video on the preview's words, with hex one key away. In the window F3 on a picture opens the picture view, a PDF's pages show through pdftoppm and other picture formats through ImageMagick, and a terminal says "Pictures show in the window: diro --gui". The viewer's line numbers are named in its guide: L, the Line numbers item, `viewer.line_numbers`.
 - Alt+Enter lists every fact in ten groups, most important first, with Privacy and Checksum rows for a file and the facts read from inside joining a moment later. Show all asks ExifTool. Say details, Copy details and Copy all details work without the list. Closing the list now stops the read, ffprobe included.
 - The details say who can do what: "You can: read and write", the owner, group and others, the mode, Linux access lists, flags and SELinux labels, and on Windows the access list entries in the order Windows checks them. "You can" is advice.
 
