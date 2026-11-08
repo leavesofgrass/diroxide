@@ -240,7 +240,11 @@ pub fn refused(field: &str, folder: &Place, around: &Surroundings) -> Option<Str
     if around.trash.iter().any(|bin| folder.is_within(bin)) {
         return Some(format!("{field} is a trash folder"));
     }
-    if around.system.iter().any(|system| folder.is_within(system)) {
+    // A user's temporary files sit under /var/folders on macOS, inside the
+    // system folders above; they are the user's (the owner rules agree).
+    if around.system.iter().any(|system| folder.is_within(system))
+        && !crate::access::inside_user_temp(folder)
+    {
         return Some(format!("{field} is a system folder"));
     }
     if around
@@ -406,6 +410,37 @@ mod tests {
         assert_eq!(
             refused("to", &unix("/usr/local/scans"), &linux).as_deref(),
             Some("to is a system folder")
+        );
+        // A user's temporary folder on macOS sits under /var/folders, inside
+        // the system folders; it is the user's. The system folder itself and
+        // its other children stay refused.
+        let mac = Surroundings {
+            style: PathStyle::Unix,
+            home: Some(unix("/Users/ada")),
+            own: vec![unix("/Users/ada/Library/Application Support/diroxide")],
+            program: None,
+            system: vec![unix("/var"), unix("/private"), unix("/usr")],
+            trash: vec![unix("/Users/ada/.Trash")],
+        };
+        assert_eq!(
+            refused(
+                "home",
+                &unix("/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/app-it/notes"),
+                &mac
+            ),
+            None
+        );
+        assert_eq!(
+            refused("home", &unix("/private/var/folders/h5/x/T/notes"), &mac),
+            None
+        );
+        assert_eq!(
+            refused("home", &unix("/var/log/notes"), &mac).as_deref(),
+            Some("home is a system folder")
+        );
+        assert_eq!(
+            refused("home", &unix("/var/folders"), &mac).as_deref(),
+            Some("home is a system folder")
         );
         // Case matters on Unix: /home/Ada is not the home folder.
         assert_eq!(refused("to", &unix("/home/Ada"), &linux), None);

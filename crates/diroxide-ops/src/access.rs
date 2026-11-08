@@ -274,6 +274,17 @@ const OWNER_UNPROTECTED_INSIDE_UNIX: [&str; 6] = [
     "/private/var/folders",
 ];
 
+/// Whether a place is inside one of the per-user temporary roots (not the
+/// root itself): a user's own files live there, however system-like the
+/// folder above looks, so neither the owner rules nor the task rules
+/// treat them as system folders.
+pub(crate) fn inside_user_temp(place: &Place) -> bool {
+    OWNER_UNPROTECTED_INSIDE_UNIX
+        .iter()
+        .filter_map(|path| Place::parse_with(path, PathStyle::Unix).ok())
+        .any(|root| place.is_within(&root) && !root.is_within(place))
+}
+
 /// Folders protected as themselves only, not what is inside: the
 /// folders that hold every user's home.
 const OWNER_PROTECTED_ITSELF: [(&str, PathStyle); 3] = [
@@ -297,11 +308,7 @@ pub fn owner_protection(place: &Place) -> Option<&'static str> {
     if place.is_root() {
         return Some("the top of a drive is protected");
     }
-    let inside_temp = OWNER_UNPROTECTED_INSIDE_UNIX
-        .iter()
-        .filter_map(|path| Place::parse_with(path, PathStyle::Unix).ok())
-        .any(|root| place.is_within(&root) && !root.is_within(place));
-    if inside_temp {
+    if inside_user_temp(place) {
         return None;
     }
     let within = |list: &[&str], style: PathStyle| {
