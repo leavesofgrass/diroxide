@@ -209,7 +209,7 @@ What it refuses, each in words with what to do:
 
 ### On Windows
 
-Windows keeps owners in its own Security dialog, so Change owner hands the focused item over to it and does not change anything itself. The details view says the owner: "Owner: BUILTIN\Administrators". The command says "Opening the Security dialog for notes.txt". In this build nothing can open that dialog yet, so what you hear next is "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." Use File Explorer for now.
+Windows keeps owners in its own Security dialog, so Change owner hands the focused item over to it and does not change anything itself. The details view says the owner: "Owner: BUILTIN\Administrators". The command says "Opening the Security dialog for notes.txt", and Windows opens the file's Properties on its Security page. diroxide starts the dialog and does not wait for it, so the window goes on. The call is one that Microsoft says may change, so if Windows does not open the dialog you hear "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." and the same dialog is there by hand. The tests check the shape of the call and open no window, so the dialog has not been seen or heard opening from diroxide yet.
 
 ## Details: the information list
 
