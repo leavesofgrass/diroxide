@@ -4,45 +4,33 @@ This page says in plain words what each alpha added. [The changelog](../CHANGELO
 
 ## Alpha 4
 
-What alpha 4 adds so far. The alpha is still being built, and this section grows with each pass that reaches the program. A part that is built in the library and not yet in the program says so.
+What alpha 4 adds. It has no release date here yet; the date is added when the alpha is released. The sections follow the order you meet things in: the helper programs, what a file is, what is in it, what you can do with it, and then the window, the plugins and the command line.
 
-Tools and `diro doctor`.
+### Tools and optional components
 
 - diroxide knows 22 helper programs, 23 on macOS: ImageMagick, FFmpeg, pandoc, 7-Zip, Tesseract, git and the rest. It looks for each in `tools.toml`, in the installed components, on PATH and in the folders the program's own installer uses, and says which step found it: "pandoc: 3.9.0.2, on PATH". A feature that needs a program says so, names it and says how to get it. Nothing runs an install command. [Tools and diro doctor](tools.md) is the new guide.
-- The Tools list, in Settings, the Tools menu and the palette, shows each program and where it was found, or what it would download. `diro doctor` says what this `diro` has and finds, one fact a line, name first. Its exit codes are 0, 1 when a tool you need is missing, and 2 for wrong use. `tools.toml` gives a program a path, turns it off, or marks it needed.
+- The Tools list, in Settings, the Tools menu and the palette, shows each program and where it was found, or what it would download. `tools.toml` gives a program a path, turns it off, or marks it needed.
 - Helper programs are optional components now. pandoc, 7-Zip, FFmpeg, ImageMagick and GitHub CLI come from their publishers, each pinned by size and checksum, where a file exists for your computer. Where none does, you hear the install command for your system. A few files are held for now, ExifTool for Windows among them. [Optional components](components.md) lists them.
+- Four plugins are components too, in the release files: the SFTP places, disk image, git and Encryption plugins.
 
-File types and groups.
+### File types and groups
 
 - Every row names its file's type. The type comes from the name at once and from the file's first 64 bytes in the background, so a row can say "type pending" for a moment and then change quietly. When the two disagree, the details say so: "Name says PNG; contents say JPEG".
 - 178 types come built in, in 8 groups: images, music, video, documents, archives, code, text and screenshots. A screenshot is in two groups. A file you add in `filetypes.toml` can be a type or a group of your own. The Groups list in the Select menu selects a group's files, Select by kind lists your groups, and `group:` in a panel's filter takes them. A search still goes by extension, with seven groups.
 - A retro pack of 40 old formats is built in and off (`filetypes.retro`). `check.skip` names slow folders whose files are typed by their names alone.
 - A type can name what Enter, View, Preview and Convert do, and ten numbered actions. Actions for this file, in the File menu, lists them. Open with lists the programs each system has for a file, and on Windows hands "Choose another program" to the system's own dialog.
 - The viewer and the quick view have an encoding chooser: "Encoding of legacy.txt", the automatic choice first, then 29 encodings grouped by language.
-- A theme file can give a group a color with `[group-colors]`, drawn in the window. The window also reads your theme files now, and says "Unknown theme NAME. Galaxy is in use." once for a name it does not know.
-- [File types and groups](file-types.md) is the new guide.
+- A theme file can give a group a color with `[group-colors]`, drawn in the window and in the terminal. [File types and groups](file-types.md) is the new guide.
 
-The details view.
-
-- Alt+Enter lists every fact about the focused entry in ten groups, the most important first. A file always has a Privacy row ("Privacy: nothing private found") and a Checksum row ("Checksum: not computed"). The facts read from inside the file join the list a moment later: "Read 9 more details". An archive says "Entries: 8 files, 2 folders" before its size.
-- Show all asks ExifTool for every tag. Say details, Copy details and Copy all details take a file's details without opening the list, and Copy details leaves the private rows out.
-- [The details view](details.md) is the new guide.
-
-Previews.
+### Previews and the details view
 
 - The quick view reads more: pictures said in words from their headers, SVG drawings read as a screen reader reads them, sound and video through ffprobe, archive listings, PDF, Word, EPUB, OpenDocument, RTF, spreadsheets and delimited text, each with caps that keep a hostile file from stalling it. Nothing is played.
 - Preview, in the View menu, runs the helper programs on the focused file at once. The setting `quick_view.auto_preview` decides whether they also run by themselves, and it is off in screen reader mode. Read text in picture has Tesseract read the words in a picture, as a job Cancel stops.
-- The window has a picture view. Show picture, in the View menu and the palette, opens it, and Enter does the same on a picture in the viewer or the preview. Plus and Minus zoom, 0 fits and 1 shows the actual size. A terminal says "Show picture works only in the window."
-- Copied text now reaches the clipboard on Wayland. A paste under Wayland with no XWayland still reads nothing.
-- [Previews and the quick view's formats](previews.md) is the new guide.
+- Alt+Enter lists every fact about the focused entry in ten groups, the most important first. A file always has a Privacy row ("Privacy: nothing private found") and a Checksum row ("Checksum: not computed"). The facts read from inside the file join the list a moment later: "Read 9 more details". An archive says "Entries: 8 files, 2 folders" before its size. Closing the list stops the read, ffprobe included.
+- Show all asks ExifTool for every tag. Say details, Copy details and Copy all details take a file's details without opening the list, and Copy details leaves the private rows out.
+- [Previews and the quick view's formats](previews.md) and [the details view](details.md) are the new guides.
 
-Disk images, git and plugins.
-
-- A disk image opens like a folder, read only: ISO, raw disks, VHD, VHDX, VDI, VMDK, QCOW2 and squashfs, with their partitions as folders, through the new disk image plugin. It uses 7-Zip and qemu-img when they are there. [Disk images](disk-images.md) is the guide.
-- The git plugin puts the branch and the number of changes in the title line and a Git column, lists the changed files, stages, commits, stashes, fetches, pulls and pushes, and shows the log, blame and diffs, and its questions start on No. A repository you did not make is asked about before git runs anything from its own configuration. [Git](git.md) is the guide.
-- Both are optional components. Plugins can now ask a form of several fields, show two texts in the compare screens, describe a folder for the title line, and claim the disk images found inside other places. [Writing a plugin](writing-a-plugin.md) says how.
-
-Columns, notes and fields.
+### Columns, notes and fields
 
 - A key such as `audio.artist`, `doc.pages` or `image.dimensions` in the `columns` setting adds a column read from inside the files. Each row says its cell after its label, "artist Ada Example", and a cell not read yet says so, "artist reading". Sound tags are read for the whole folder, other facts for the rows around the focus, and a few only when you ask with Fill columns. Nothing is read on a remote place, inside an archive or in a folder named in `check.skip`.
 - Sorting by a column reads the files first, and above 200 files it asks, starting on No, with an estimate: "Read 12,000 files to sort by Artist? About 40 seconds."
@@ -50,54 +38,72 @@ Columns, notes and fields.
 - Set note and Set field, in the Labels menu, keep your own words about a file in `labels.toml`, never in the file. A label, a note and a field now follow a file that diroxide moves or renames, and an undo of that.
 - [Columns, notes and fields](columns.md) is the new guide.
 
-Checksums.
+### Checksums and privacy
 
 - Checksum computes a file's SHA-256, with BLAKE3 in the same read, and lists the value to read, copy, compare with a pasted one, or save as `SHA256SUMS`, never over a file. A pasted value of another length computes that algorithm.
 - Verify checksum finds the list beside a download, or checks every file a list names, the verdict first. A match tells you the file is not damaged, never that it is safe. When a signature sits beside the list it is checked too, and the verdict says whether the list is signed.
-- `diro sum` does the same from a shell, with `--algorithm`, `--list` and `--check`, and `diro info` prints a file's details as plain lines.
-- [Checksums and verifying](checksums.md) is the new guide.
-
-Privacy before sharing.
-
 - Check before sharing says what a file carries that could say who made it, where or with what, and what a strip cannot reach. Strip metadata into a copy makes a `NAME-clean` copy of a JPEG, PNG or WebP picture without them, and Undo puts the copy in the trash. Remove the internet mark asks first, and Undo writes the mark back.
-- [Privacy before sharing](before-sharing.md) is the new guide.
+- [Checksums and verifying](checksums.md) and [Privacy before sharing](before-sharing.md) are the new guides.
 
-Conversions.
+### Conversions
 
 - Convert lists the recipes that take the selected files, plans the conversion into the other panel's folder, and asks first, starting on No. 31 recipes come built in, through ImageMagick, FFmpeg, pandoc and pdftotext, and 11 need nothing installed because carta, a converter written in Rust, runs them. A conversion never replaces a file, its report is kept with the last 20, and Undo puts what it made in the trash.
-- A file type can name a recipe for its Convert action, and your own recipes go in `conversions.toml`. `diro convert` does it from a shell, with `--to`, `--recipe`, `--out`, `--conflicts`, `--recursive`, `--dry-run`, `--report`, `--json`, `--print0` and `--list`, and the family's exit codes, 0 to 3.
-- [Conversions](conversions.md) is the new guide.
+- A file type can name a recipe for its Convert action, and your own recipes go in `conversions.toml`. [Conversions](conversions.md) is the new guide.
 
-Watched folders.
+### Watched folders
 
 - A folder can convert, move, copy or note each file that arrives, from a task file in the `tasks` folder. You hear what the task will do in words and say yes first, and again after any change. It never replaces or removes a file, and Ctrl+Z never undoes it.
 - The Watched folders list, in the Tools menu, shows each task with what it did today, and turns it on or off, pauses it, previews it, shows its log, puts failed files back, says its rule and opens its file. A task says one polite line at a time, pauses with its reason, retries a file after 10 seconds, then 1 minute, then 10 minutes, and pauses after ten failures in a row for one cause.
-- `diro watch --task NAME` runs one from a shell, with `--once` for a catch-up scan that a scheduler can run, `--dry-run` and `--list`.
 - [Watched folders](watched-folders.md) is the new guide.
 
-Archives.
+### Archives and disk images
 
-- RAR, CAB, ARJ, LZH, RPM, cpio, ar, spanned zip sets and disk images no plugin takes are read through 7-Zip, read only. Unpacking to disk needs 7-Zip 25.01 or later, and an older one says so. diroxide never writes RAR.
+- RAR, CAB, ARJ, LZH, RPM, cpio, ar, spanned zip sets and disk images no plugin takes are read through 7-Zip, read only. Unpacking to disk needs 7-Zip 25.01 or later, and an older one says so. diroxide never writes RAR. A member with accented or Japanese letters in its name is found under a C language setting too.
 - Delete, Rename and Make folder work inside a zip. Each rewrites the zip beside the old one, tests it, and only then sends the old copy to the trash, so Undo restores it. The question says the cost and what a rewrite loses, starting on No. The File menu lists Make folder, Rename, Move to trash and Delete for good inside a zip. [Archives](archives.md) has the words.
+- A disk image opens like a folder, read only: ISO, raw disks, VHD, VHDX, VDI, VMDK, QCOW2 and squashfs, with their partitions as folders, through the disk image plugin. A partition's row says its words after its name, "Partition 2, home, ext4". [Disk images](disk-images.md) is the guide.
 
-Encryption and signatures.
+### Encryption and signatures
 
-- The File menu has an Encryption submenu (Alt+F, then Y). Encrypt with a passphrase, Encrypt for a recipient and Decrypt use age, through the new Encryption plugin, an optional component. Encrypt with gpg, Decrypt with gpg and Sign with gpg use your own GnuPG. A passphrase is typed in a hidden field and kept nowhere. Encryption never writes over a file and never removes an original: it asks about moving the original to the trash, starting on No, and says the trash is not secure.
+- The File menu has an Encryption submenu (Alt+F, then Y). Encrypt with a passphrase, Encrypt for a recipient and Decrypt use age, through the Encryption plugin. Encrypt with gpg, Decrypt with gpg and Sign with gpg use your own GnuPG. A passphrase is typed in a hidden field, kept nowhere and wiped from memory when the job ends. Encryption never writes over a file and never removes an original: it asks about moving the original to the trash, starting on No, and says the trash is not secure. Undo says what it did: "Undid encrypt: 1 item is in the trash".
 - Verify signature checks a signature beside a file, with gpg or minisign, the verdict first: "Signature good: key ending 8469", then "Good means the key fits, not who holds it." diroxide never fetches a key.
 - Verify checksum checks the signature beside a list and says "List is signed: 12 of 12 files match", "List not signed: 12 of 12 match", or the signature's verdict and "List not verified: 12 of 12 match".
 - [Encryption and signatures](encryption.md) is the new guide.
 
-Who can do what, times and owners.
+### Access and ownership
 
 - The details view says who can do what with the focused file: "You can: read and write", then the owner, the group and the others, the mode, Linux access lists and flags, and on Windows the entries of the access list with where each comes from. "You can" is advice, and the list's help says so.
-- Change time sets the modified, accessed or created time to now, to a date you type, or to the other panel's file's, said with its weekday, after asking, and Undo puts the old times back. Change owner changes the owner and group on Linux and macOS, never as an administrator. On Windows it hands the file to the system's Security dialog, which this build cannot open yet.
+- Change time sets the modified, accessed or created time to now, to a date you type, or to the other panel's file's, said with its weekday, after asking, and Undo puts the old times back. Change owner changes the owner and group on Linux and macOS, never as an administrator. On Windows it opens the system's Security dialog for the focused item and does not wait for it.
 - [Links, permissions and times](links-permissions.md) has both.
 
-Photos.
+### Photos
 
 - Four photo columns, `photo.taken`, `photo.camera`, `photo.pixels` and `photo.kind`, and Sort by date taken, with the modified time standing in where a picture has no date taken, and saying so.
 - Next day and Previous day move through the dates. Select the screenshots, Select the bursts and Select pictures with no date mark them. Review pictures goes through them one key an answer, and Move into month folders files them under `2026-10` style folders, as one job with one Undo.
 - [Photos](photos.md) is the new guide.
+
+### The window
+
+- The window has a picture view. Show picture, in the View menu and the palette, opens it, and Enter does the same on a picture in the viewer or the preview. Plus and Minus zoom, 0 fits and 1 shows the actual size. A terminal says "Show picture works only in the window."
+- Copied text now reaches the clipboard on Wayland. A paste under Wayland with no XWayland still reads nothing.
+- The window reads your theme files, and says "Unknown theme NAME. Galaxy is in use." once for a name it does not know. The terminal draws a theme's group colors too, at 256 colors or true color.
+- Every list and question of alpha 4 has a name of its own in the window, 112 dialog purposes in all, and the window's scripted walk checks the first words of the new ones within 40 cells. [Using diroxide with a screen reader](screen-readers.md) has the lines.
+
+### The plugins
+
+- A plugin can ask a form of several fields, show two texts in the compare screens, describe a folder for the title line, claim the disk images found inside other places, fill a column, and write an output through the host so Undo can put it in the trash. [Writing a plugin](writing-a-plugin.md) says how.
+- The git plugin puts the branch and the number of changes in the title line and a Git column, lists the changed files, stages, commits, stashes, fetches, pulls and pushes, and shows the log, blame and diffs, and its questions start on No. A repository you did not make is asked about before git runs anything from its own configuration. [Git](git.md) is the guide.
+
+### The command line
+
+- `diro doctor` says what this `diro` has and finds, one fact a line, name first. Its exit codes are 0, 1 when a tool you need is missing, and 2 for wrong use.
+- `diro sum` computes and checks checksums, with `--algorithm`, `--list` and `--check`, and `diro info` prints a file's details as plain lines.
+- `diro convert` converts from a shell, with `--to`, `--recipe`, `--out`, `--conflicts`, `--recursive`, `--dry-run`, `--report`, `--json`, `--print0` and `--list`, and the family's exit codes, 0 to 3.
+- `diro watch --task NAME` runs a watched folder's task from a shell, with `--once` for a catch-up scan that a scheduler can run, `--dry-run` and `--list`.
+
+### For people who build diroxide
+
+- `cargo xtask demo-tools PATH` writes the demo set of the alpha 4 check, the same bytes every run, with a steps file. [Building](dev/building.md) says what it makes.
+- The nightly fuzz run covers all five fuzz folders, 39 targets, and the bench has a baseline of its own. Six tests that failed now and then under load were made steadier. [Fuzzing](dev/fuzzing.md) and [the bench](dev/bench.md) say more.
 
 ## Alpha 3
 

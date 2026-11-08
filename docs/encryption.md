@@ -91,7 +91,7 @@ diroxide never removes an original by itself. After an age or gpg encryption it 
 - No says "The originals stay where they are."
 - Yes moves them to the trash as one job. That is not erasing: anyone who opens the trash can restore them, and the data stays on the disk. [Operations and undo](operations.md) says what deleting does and does not do.
 
-Ctrl+Z undoes an encryption or a decryption by putting the new files in the trash. The originals were never touched, so there is nothing else to put back. Moving the original to the trash is its own job, and its own Ctrl+Z.
+Ctrl+Z undoes an encryption or a decryption by putting the new files in the trash, and says so: "Undid encrypt: 1 item is in the trash", "Undid decrypt: 2 items are in the trash" or "Undid sign: 1 item is in the trash" for gpg, and "Undid plugin command: 2 items are in the trash" for an age command. The originals were never touched, so there is nothing else to put back. Moving the original to the trash is its own job, and its own Ctrl+Z.
 
 ## Encrypt with gpg
 
@@ -198,7 +198,6 @@ gpg keeps a small helper, its agent, that remembers a passphrase for a while. On
 
 - The age commands need the Encryption plugin, and the plugin writes the files itself. The program records the new files for Undo from the plugin's answer, and that record lives for the session only: it does not survive a restart.
 - ASCII armor is offered for age only. gpg's armor is not offered, so every gpg result is `.gpg` or `.sig`.
-- A passphrase typed for gpg passes through the request that starts gpg, as bytes that are not wiped when the request is dropped. The age plugin wipes its copy.
 - SSH keys, plugin keys and hardware keys are refused for age. The age program is not used as a road for them.
 - The commands are in the program. No dedicated `diro` command encrypts, decrypts, signs or checks a signature from a shell yet. `diro run` starts a command by its id, but it has nobody to type a passphrase, so a command that asks for one is left open and ends with exit code 1.
 - A gpg run that needs its agent is slow on Windows, as above, and a passphrase is not remembered between commands there.

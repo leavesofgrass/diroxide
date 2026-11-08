@@ -156,7 +156,7 @@ Windows lets only a program with the right to make symbolic links do so. Turn on
 - "Could not change the owner of notes.txt: only an administrator can. Start diro as administrator, then try again." Giving a file to another owner takes an administrator, and diroxide never starts as one for you.
 - "Could not change the owner of /usr/bin: system folders are protected. Use the system's own tools." The system's folders and everything in them are never changed.
 - "Could not set the change time: the system sets it. Set the modified time instead." The change time is the system's, and no program can set it.
-- On Windows, Change owner says "Opening the Security dialog for notes.txt" and then "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." This build cannot open that dialog yet, so use File Explorer.
+- On Windows, Change owner says "Opening the Security dialog for notes.txt", and Windows opens the Security page of the file's Properties. If it does not open, you hear "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." Do those steps by hand.
 - "Modified time rounded by the disk" is not an error. The disk, a FAT disk for example, keeps a time less exactly than it was asked for.
 
 [Links, permissions and times](links-permissions.md) has the dialogs.

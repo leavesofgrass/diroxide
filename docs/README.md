@@ -90,7 +90,7 @@ If you are new, begin with the [quick start](quickstart.md).
 
 These guides are not written yet, because the features they describe are not built, or are built in the library and not yet in the program. Each arrives with the alpha that ships its feature.
 
-- Tabs and the folder tree, comparing and synchronizing two folders, tasks other than watched folders such as synchronizing and renaming, duplicates, batch rename, thumbnails, writing to disk images, and GitHub.
+- Tabs and the folder tree, comparing and synchronizing two folders, tasks other than watched folders such as synchronizing and renaming, duplicates, batch rename, thumbnails and a grid for the photo helpers, an editor for extended attributes, writing to disk images, and GitHub.
 
 ## For people who build diroxide
 
@@ -125,6 +125,7 @@ Each architecture decision record keeps one decision: the context, the choice, t
 - [ADR-0012: SFTP over the OpenSSH client](adr/0012-sftp-over-the-openssh-client.md): the SFTP places plugin and the askpass helper.
 - [ADR-0013: The job queue and resume](adr/0013-the-job-queue-and-resume.md): the job queue, the connection gate and resume.
 - [ADR-0014: Software drawing and the Windows subsystem](adr/0014-software-drawing-and-the-windows-subsystem.md): drawing without a graphics card, and one console program on Windows.
+- [ADR-0015: Encryption and signatures](adr/0015-encryption.md): age in a plugin, gpg as a program and minisign in process, and why each is where it is.
 
 ## See also
 

@@ -272,7 +272,7 @@ Show picture works only in the window. In a terminal it says "Show picture works
 
 ## The dialogs
 
-Every question, list, form and text the program shows is a dialog. The window draws seven shapes of dialog, and a test opens every purpose the program has, 77 of them, and checks that each has a name and that the keyboard focus is on a named control.
+Every question, list, form and text the program shows is a dialog. The window draws seven shapes of dialog, and a test opens every purpose the program has, 112 of them, and checks that each has a name and that the keyboard focus is on a named control. Seventy-seven are the purposes of the earlier alphas. The other 35 are the lists and questions that alpha 4 added, and each has a purpose and a name of its own.
 
 A dialog covers the window. While it is open, the window behind it is disabled and hidden from screen readers, so reading and the focus stay inside. Only the top dialog is in the accessibility tree. When it closes, the one beneath shows. When the last one closes, the focus goes back to the focused row of the panel. Escape walks back down the same way: from a list of values to the Settings list, and from the Settings list to the panel.
 
@@ -296,6 +296,10 @@ The shapes, in the window:
 - A field with a label, such as "Rename report.pdf to", is a text input. Its text is read as characters, and its caret is the text selection, so a screen reader reads each character as the caret moves over it. The caret starts before the file's extension, as in the terminal.
 - A field with completion, such as the palette or Go to a path, is an editable combo box. Its candidates are a list under it, named "Candidates". Tab completes a path from the folder you are in.
 - A password field is a password input. It holds only the mask, one asterisk for each key, or nothing when the `secret_echo` setting is `silent`. The password itself never enters the accessibility tree, the drawing or the live region. A test plants a password and checks each of them, and the program's debugging output too.
+
+### The lists and questions of alpha 4
+
+These are drawn in the shapes above, and each is named by its first words, so the name is the meaning. They are the details list ("Details of liar.png"), the Groups list, the Encoding chooser, Open with, and Actions for a file; the Convert recipe list with its plan question and the Conversion reports; Checksum, its compare question, Verify checksum and its report, the questions of Strip metadata and Remove the internet mark, and the list of lines that Check before sharing reads out; Set note, Set field and the question before a long sort; the Watched folders list with a task's actions, preview, approval, catch-up and put-back questions; the question before a zip is rewritten; the gpg recipient and signer fields, the gpg plan question, the question about moving an original to the trash and the minisign key field; Change time and Change owner with their fields; Review pictures with its move-to field; and the question before Move into month folders. [Using diroxide with a screen reader](screen-readers.md#what-you-should-hear-in-the-window) has the first words of several of them, from the program's scripted walk of the window.
 
 ### Show the password
 
@@ -400,7 +404,7 @@ The window is drawn in one of 24 themes. The default is Galaxy, a dark page with
 - Every pair of colors the window draws meets 4.5 to 1 contrast for text, or 7 to 1 in a high-contrast theme, and the focus marks meet 3 to 1. Where a theme's own color for a part falls short, the window draws that part in the text color. Tests check every theme.
 - On Windows, High Contrast (Contrast themes) wins over every theme: while it is on, the window draws only with the system's own colors. Turning it on while the window is open is said: "System high contrast colors in use." When you turn it off, your theme comes back.
 - With the `follow_system_appearance` setting on, the window takes the light or dark partner of your theme to match the system's setting. It reads that setting once, when it starts.
-- A theme file can give a file group a color of its own, and the window draws it on the rows of plain files and archives. A row's words never change, so the color is never the only sign, and the terminal does not draw group colors yet. [Group colors](themes.md#group-colors) has the table.
+- A theme file can give a file group a color of its own, and the window draws it on the rows of plain files and archives. A row's words never change, so the color is never the only sign. The terminal draws group colors too, at 256 colors or true color. [Group colors](themes.md#group-colors) has the table.
 - The text is 16 pixels at your display's scale. There is no setting for the size or the font yet.
 - The window has an icon, the diroxide mark, and it changes nothing a screen reader reads. On Windows, Explorer shows it for `diro.exe` and for a shortcut to it, and the taskbar and the title bar show it while the window is open. On Linux, the AppImage carries the mark in every size a desktop's icon theme asks for, and in two menu entries: "diroxide", which opens the window, and "diroxide in a terminal", which opens the terminal in a terminal of its own. A build from source has no menu entry of its own; the two entry files are in the source, under `packaging/appimage`. macOS shows no icon in this alpha.
 

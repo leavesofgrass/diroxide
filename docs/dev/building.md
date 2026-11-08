@@ -156,7 +156,15 @@ The GUI crate builds its model without the `gui` feature too, and `.github/workf
 - `cargo xtask keyboard`: writes `docs/keyboard.md` from the keymap's defaults; `--check` fails when the page is out of date.
 - `cargo xtask regen`: writes every generated page and the icon files; `--check` fails when one is out of date.
 - `cargo xtask icons`: draws the icon files from the mark (see "The icon" below); `--check` compares them byte for byte.
-- `cargo xtask bench --gui`: the bench with the GUI's budgets (see "The GUI's budgets" below); `--only gui` measures them alone.
+- `cargo xtask bench --gui`: the bench with the GUI's budgets (see "The GUI's budgets" below); `--only gui` measures them alone. [The bench](bench.md) has the other flags and the numbers.
+- `cargo xtask components [--check] [--assets FOLDER] [--pin ID] [--addresses]`: writes and checks the optional components' list. `--pin` and `--addresses` belong to the pin job, and [Components](components.md) says what they do.
+- `cargo xtask demo-tools PATH`: the alpha 4 demo set, below.
+
+### The demo set for alpha 4
+
+`cargo xtask demo-tools PATH` writes the demo set of the alpha 4 check into a new or empty folder on drive D:. Every fixture has the same bytes and the same modified time on every run, nothing is downloaded, and no hostile name is put on the disk. The set is pictures and a broken one, a JPEG named `liar.png`, Polish text in Windows-1250, a song of silence, a PDF, a download with its checksum list, two git repositories when git is there, an ISO image and a disk image of two FAT partitions, a watched folder with its task, and `check-steps.txt`, the steps of the owner's check in plain lines.
+
+The fold lane's own words for each fixture are the top of `xtask/src/demo_tools.rs`, and the steps are the `STEPS` in the same file. [Using diroxide with a screen reader](../screen-readers.md#a-check-for-alpha-4) says how the check is run. The command added `image` and `sha2` to the `xtask` crate, both already in the lock. The ISO, the FAT disks and the partition table are written by hand in the command, because the crates that write them would have needed the root manifest.
 
 ## The icon
 

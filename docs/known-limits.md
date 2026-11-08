@@ -1,6 +1,6 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view, columns, checksums, encryption and signatures, privacy before sharing, conversions, watched folders, disk images, git and photos are here, and grow as the alpha does. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view and access facts, columns, checksums, encryption and signatures, privacy before sharing, conversions, watched folders, disk images, git, photos, and links, permissions and times are here as the alpha stands at its release. What alpha 4 held back for the next alpha is listed once, near the top. Where a limit has a workaround, the workaround comes first.
 
 ## What is not in alpha 4 yet
 
@@ -13,8 +13,21 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
 - Tools, previews, the file type model, columns, checksums, the privacy commands, conversions, watched folders, disk images, the git plugin, encryption and signatures, the access rows with Change time and Change owner, and the photo helpers are in alpha 4, and the sections below say what they do not do.
 - Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
+- A grid of thumbnails for the photo helpers, an editor for extended attributes, and tasks other than watched folders, such as synchronizing and renaming, come in a later alpha. Extended attributes are read for the details view and are not edited.
 - Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
+
+## Held back from alpha 4
+
+Each item below was planned for alpha 4, is known, and was left for a later alpha. A person may look for each, so it is named here, and it is also in the section of its feature.
+
+- Conversions and watched folders: a plugin's converters are not in the Convert list, and a plugin's command in a watched folder's task still pauses the task. The program has no Save report command. `diro convert --report FILE` writes one.
+- Columns: a field has no sort value, so a duration sorts as text, and field columns have no header or grid. A cell says "reading" for a kind of file that no reader takes, until the readers have been through it.
+- Encryption: the Encryption plugin writes its files itself, so Undo for an age command lasts for the session only, and gpg's ASCII armor is not offered.
+- Photos: the Taken column reads the date to the minute. Move into month folders is planned by the program, so a plugin's before-move hook does not run for it. A row of the details list has no help of its own.
+- Archives: "RAR is read only: diroxide never writes it" is 42 cells, so its last word pans on a Braille display.
+- Speed: listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. [Other limits](#other-limits) has the numbers.
+- The window: a paste under Wayland with no XWayland still reads nothing, and no real Wayland compositor has been tried.
 
 ## Plugins and script commands
 
@@ -28,13 +41,12 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - A script can start slowly: about a tenth of a second for bash and Python, and a third of a second to over a second and a half for PowerShell 5.1, on the test machine. Plugins stay running between uses for five minutes, so the cost is paid once.
 - PowerShell 7 has not been tried. Windows PowerShell 5.1 has, with the policy override. A `.cmd` or `.bat` script runs on Windows only.
 - On Windows, bash is Git for Windows' bash. The `bash.exe` in the system folder is WSL's launcher, and diroxide refuses it. Without Git for Windows, bash scripts do not run, and diroxide says so.
-- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/format` and `column/changed` (the host can answer for a page of cells, and the panels show no plugin column yet), `completion/query`, `fs/stage` and `fs/commit`. `place/describe`, `ui/form` and `ui/show_diff` are served since alpha 4. [The protocol reference](dev/plugin-protocol.md) marks each. A plugin can declare the shapes and will be called when the feature that needs them arrives.
+- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/changed` (nothing tells the panels that a plugin's cells are stale) and `completion/query`. `column/format`, `place/describe`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit` are served since alpha 4. [The protocol reference](dev/plugin-protocol.md) is generated from the code's own table and still marks `column/format` as shape only, though the panels call it for a plugin's columns. A plugin can declare the shapes and will be called when the feature that needs them arrives.
 - A plugin's form or diff has few limits checked yet: nothing stops 5,000 fields, a default of 1 MB, a label of 90 cells or a title of 120 cells, and an empty id or label is not refused. Unknown keys are dropped in silence, and a title that already names the plugin gets the name twice. Binary content cannot travel in JSON, so a diff side with NUL bytes is read as text and compared byte by byte, and `encoding` and `place` on a diff side are dropped.
 - Watching a folder through a plugin's place is a shape without a working end-to-end test. SFTP cannot watch a folder, so a remote panel does not refresh by itself; open the folder again to see changes.
 - The Convert command does not list a plugin's converters yet, and the quick view does not call a plugin's previewer. `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
 - A plugin's command run by a watched folder's task pauses the task: "plugin commands are not available here".
-- Saved tasks and hot folders that would run scripts with nobody there come in a later alpha. Until then `unattended` is checked and shown in the consent question, and nothing uses it.
-- A plugin's columns are declared and not shown in the panels yet.
+- A watched folder's script task runs only a script that promises `unattended = "ok"`, and has been built and not run through the real script host. [Watched folders](#watched-folders) says more. Saved tasks other than watched folders come in a later alpha.
 - A plugin list opens inside a panel. These lists still open over the panels, as dialogs: the Volumes list, the trash browser, the Jobs list, search results, and the results of a script in `lister` mode.
 - A plugin list is not saved when you quit, and it stays in its panel when its plugin stops or is turned off: leave it with Backspace.
 - The window draws a plugin list in its panel. A click on a row of a plugin list does not move the focus to it yet, and a double click presses Enter on the row that has the focus. Use the keys.
@@ -51,7 +63,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 
 [Optional components](components.md) describes the feature. These are the limits.
 
-- The list in a build made from source has the example plugins and the helper programs. The release files add the SFTP places, disk image and git plugins, each with a program for Windows on x86-64, Linux on x86-64 and macOS. Windows on ARM and Linux on ARM have none of the three yet. The example pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
+- The list in a build made from source has the example plugins and the helper programs. The release files add the SFTP places, disk image, git and Encryption plugins, each with a program for Windows on x86-64, Linux on x86-64 and macOS. Windows on ARM and Linux on ARM have none of the four yet. The example pack is not published with a release yet, so until it is, `diro components download diro-examples` needs `--source FOLDER`, or use `diro components install`. A download from the public address says "Try again later, or install from a file."
 - Downloads use a built-in client, then `curl`, then `wget` from your PATH. A build of diroxide made without the built-in client needs `curl` or `wget`, and says "Not downloaded: curl was not found." when it has neither.
 - A private repository as your own source, reached through the GitHub CLI's sign-in, is not built yet. A folder works, and a repository written `owner/name` is read from its public release downloads.
 - Where a helper has no build for your computer, the message says "No build for this computer." and names the install command for your system where diroxide knows it, such as "Install: sudo apt install ffmpeg". For a plugin of the project, such as the SFTP places plugin, it names the `cargo install` line instead, which needs a Rust toolchain, and the program it builds still has to be put where [remote places](remote-places.md) says.
@@ -59,7 +71,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - After Escape, a stalled transfer in the built-in client can take a moment to stop, until the client's own time limits end it. `curl` and `wget` are ended at once.
 - A component that would run an installer is refused: "installers are not supported yet".
 - The downloaded programs are not code-signed, and neither are the builds of diroxide. Windows' SmartScreen and virus scanners may react.
-- The first-run list of components opens once, at the first start, and only when the list holds something besides the example plugins: that is, the helper programs in every build, and the three plugins in the release files. `diro run`, `diro serve` and a plain listing on a pipe never open it. The list never covers a dialog that is open at the start; Ask first-run choices again, in the Tools menu, opens it later, and says "No optional components to choose from yet" when there is nothing to choose.
+- The first-run list of components opens once, at the first start, and only when the list holds something besides the example plugins: that is, the helper programs in every build, and the four plugins in the release files. `diro run`, `diro serve` and a plain listing on a pipe never open it. The list never covers a dialog that is open at the start; Ask first-run choices again, in the Tools menu, opens it later, and says "No optional components to choose from yet" when there is nothing to choose.
 - A no to a download is not remembered. Get example plugins asks again each time.
 - Installing from a zip file or a folder says "Not downloaded" when it finds none of the files, which is the wrong word for an install.
 - After a helper is installed, diroxide runs it once to see that it starts. The line that says so, "Installed pandoc, but it did not start.", is built and is not said yet by the program or by `diro components`.
@@ -238,7 +250,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Debug builds of diroxide are slow on archives with a million entries. A release build opens one in a few seconds. This matters only to people who build it.
 - A local file whose name holds an archive marker, such as `a.zip!b.txt`, is listed but has no place, so diroxide cannot act on it. The row is not yet flagged "name needs care".
 - What diroxide writes was read back by other programs in the project's Linux container: 7-Zip 25.01, GNU tar 1.35, xz, unzip, gzip, bzip2 and zip. On Windows, bsdtar and unzip read it. Other versions and other archivers have not been tried.
-- Archives read through 7-Zip: a listing runs without `-ba`, so a member's "Read 3.2 GB first" question counts the bytes ahead only when the archive is solid. A hostile member name with a line break could add a fake row to the listing, though a name that climbs out of the archive is still refused. A non-ASCII member name under a C locale on Linux may not be found, which has not been checked. Members over 64 MiB are unpacked alone into the spool first.
+- Archives read through 7-Zip: a listing runs without `-ba`, so a member's "Read 3.2 GB first" question counts the bytes ahead only when the archive is solid. A hostile member name with a line break could add a fake row to the listing, though a name that climbs out of the archive is still refused. diroxide's 7-Zip runs set `LANG=C.UTF-8`, and a test lists a cpio member named with accented and Japanese letters under a C language in the project's Linux container with 7-Zip 25.01, so such a name is found there. Members over 64 MiB are unpacked alone into the spool first.
 - Archives read through 7-Zip, tried: 7-Zip 25.01 in the project's Linux container listed, read and unpacked every format. Not tried: macOS, p7zip, a network place, 7-Zip 26.05, a RAR 5 with a password, a real compressed RAR file from WinRAR, and a separate program holding an archive open. Debian's 7-Zip 25.01 read a RAR made for the test, though a Debian package is said to leave RAR out.
 - Editing inside a zip rewrites the whole zip, so a big one takes time: 1.2 GB of made content took about 52 seconds. A rewrite loses zip comments and extra fields and redoes the compression, with stored members kept stored. An encrypted zip needs its password to read and to write, and ZipCrypto members become AES-256.
 - A zip opened by its bytes with Open as archive, such as a `.docx`, is not a zip by its name, so the File menu hides Make folder, Rename, Move to trash and Delete for good there. Their keys and the palette reach them.
@@ -271,11 +283,10 @@ The trash is the default way to delete, and the places where it cannot be truste
 - macOS has not been run. The Homebrew folders and `mdls` were never compiled by the lane that wrote the lookup. System32's `convert.exe` and `tw --version` were left alone on purpose.
 - The registry's tests use stand-in programs. The version commands were run against the real programs in the project's Linux container and on one Windows computer.
 - `7za` and `7zr` read no RAR, so the lookup tries `7z` and `7zz` first.
-- The helper components were pinned by a job on the project's build machine, 23 files with the publishers' own digests. No helper component has been installed and run on a computer yet.
+- The helper components were pinned by a job on the project's CI runner, 23 files with the publishers' own digests. No helper component has been installed and run on a computer yet.
 - Some helper files are held: ExifTool for Windows, 7-Zip for Windows and FFmpeg for Linux, each for a reason [optional components](components.md) gives. ImageMagick on Linux and macOS, and FFmpeg on macOS, are package commands.
 - After a helper is installed, the library runs its version command, and the program does not say the line yet: "pandoc: 3.13, from components" shows in `diro doctor`, and the end of an install says "Ready".
 - The first-run list on Windows offers 7-Zip, which has no file for Windows yet, and gives its size as 0 bytes.
-- The `diro doctor` of the command line does not say what a missing tool would download, as the Tools list in the program does.
 
 ## File types and groups
 
@@ -286,8 +297,8 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The contents speak first: a `.py` file that starts with `#!/bin/sh` is a shell script.
 - MediaWiki, DokuWiki and Jira files have no entry in the table, so their rows say "file". Org and reStructuredText files have one.
 - A type of yours that names a parent with an extension and no signature hides a child known by its own extension, because the tree reaches a child only through its parent. When two types of yours share an id, the first wins.
-- The Preview and Convert slots of a type run from Actions for this file only, and no command calls them yet. The ten numbered user actions have no key.
-- A theme's group colors are drawn by the window. The terminal does not draw them yet.
+- The ten numbered user actions have no key until you bind one in `keymap.toml`.
+- A theme's group colors show in the terminal only at 256 colors or true color, and not in the High Contrast theme.
 - Open with on Windows does not read Explorer's own order, and a Store app, Edge or Chrome starts by its class through the shell without COM set up first. "Choose another program" hands the file to Windows' own dialog, which has not been tried. That dialog read well with NVDA when it was looked at, and JAWS has not been tried.
 - Open with on Linux leaves out programs that run in a terminal, and gives a program's `%u` a path. On macOS a binary `Info.plist` is skipped and counted, the default program is not read, and the code was compiled only in the project's CI.
 - The encoding chooser has Cyrillic IBM866 as its only DOS code page. The others need an encoding type of their own.
@@ -309,7 +320,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 
 [The details view](details.md) describes the list. These are the limits.
 
-- Closing the list stops the read of a file's facts between readers and at the next read. A program already running, such as ffprobe, finishes within its own time limit, and the answer is dropped.
+- Closing the list stops the read of a file's facts: between readers, at the next read, and an ffprobe run that the read started. Show all's ExifTool run is not stopped by closing the list. It finishes within its own time limit.
 - Show all needs a file on a local disk. Folder sizes are not computed, and a folder has no Privacy row and no Checksum row.
 - The Checksum row shows only the values the Checksum command computed in this session, while the file is as it was. Otherwise it says "Checksum: not computed".
 - `diro info` knows the built-in file types and the built-in tools list, and does not read your `filetypes.toml` or `tools.toml`.
@@ -345,7 +356,6 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The three age commands need the Encryption plugin, an optional component. The plugin writes its files itself, and the program records them for Undo from the plugin's answer. That record lives for the session only, and does not survive a restart.
 - ASCII armor is offered for age and not for gpg, so every gpg result is `.gpg` or `.sig`.
 - age encrypts with a passphrase or an age public key, and decrypts with a passphrase or an identity file. SSH keys, plugin keys and hardware keys are refused, and the age program is not used as a road around the plugin.
-- A passphrase typed for gpg passes through the request that starts gpg, as bytes that are not wiped when the request is dropped. It is never printed, logged or said. The age plugin wipes its copy.
 - On Windows, gpg's agent is stopped with each run, so a passphrase is not remembered from one command to the next, and a command that needs the agent waited about six seconds on the one computer it was measured on.
 - A minisign public key is asked every time and kept nowhere. Verify checksum does not check a list's minisign signature.
 - The commands are in the program. No dedicated `diro` command encrypts, decrypts, signs or checks a signature from a shell yet, and `diro run` has nobody to type a passphrase.
@@ -385,18 +395,17 @@ The trash is the default way to delete, and the places where it cannot be truste
 - `diro watch --task` answers the first start's catch-up question No when nobody is at the terminal. `--once` gives up on a file still changing after 2 minutes.
 - The Watched folders list's "done today" counts come from each task's log, while Say Status counts this session's notes.
 - A task cannot watch an existing folder such as Downloads in place. It watches the `in` folder of its home, and there is no key yet for a queue folder outside `home/in`.
-- The form for making a task without writing the file is planned for the final alpha.
+- The form for making a task without writing the file comes in a later alpha.
 - A hot folder was run for seconds in tests, never for hours. APFS, a network share, macOS, Linux natively and Windows long paths were not tried.
 
 ## Disk images
 
 [Disk images](disk-images.md) describes the plugin. These are the limits.
 
-- Images are read only. Writing to one, making one and formatting are a later alpha. Open as raw disk image, which would show a hybrid ISO's partitions, is not built, and a hybrid ISO opens as the ISO.
+- Images are read only. Writing to one, making one and formatting are a later alpha. Open as raw disk image, which would show a hybrid ISO's partitions, and a Disk image details command are not built, and a hybrid ISO opens as the ISO.
 - A BitLocker or LUKS partition is shown and never opened. An encrypted image through 7-Zip says "it is encrypted, and this plugin asks no password".
 - An NTFS file that NTFS compressed or encrypted is listed, and reading a compressed one says that only 7-Zip reads it. The plugin does not hand such a file to 7-Zip yet.
 - A member of an image that 7-Zip must unpack, over about 6 MB, needs 7-Zip 25.01 or later, and a listing over about 7 MB from 7-Zip is refused. An older 7-Zip says "7-Zip 24.08 is too old: needs 25.01".
-- The partition rows say "partition-2, folder" in the panel, and the partition words, such as "Partition 2, home, ext4, 40.0 GB", are heard in the Volumes list only. The panel's rows and Say Details do not say them yet.
 - The plugin keeps at most sixteen images open, because the program does not tell it when an image's last use ends.
 - A plugin's own next step is replaced by "Try again; if it keeps failing, check the disk." for every refusal except unsupported and too large.
 - Not tried: macOS, p7zip, UDF, HFS+, APFS and exFAT through 7-Zip (no image could be made), an ext4 image made by `mke2fs` (small ext2 and ext4 volumes written by the tests stand in), an NTFS-compressed file, and a password prompt. The tools image has no `e2fsprogs` or `exfatprogs` yet.
@@ -410,7 +419,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Add to .gitignore gets the program's own question, "Replace .gitignore? It cannot be undone.", because the program has no way to append to a file for a plugin.
 - Names that are not UTF-8 cannot be staged or compared, and non-UTF-8 text shows stand-ins in diffs.
 - An untrusted repository's question appears when the panel enters it.
-- Not built: a diff between any two revisions, a list of linked worktrees, and counts by kind in the status list's title. The Git column is declared and the panels do not show a plugin's columns yet.
+- Not built: a diff between any two revisions, a list of linked worktrees, and counts by kind in the status list's title.
 - Git 2.30, the oldest it accepts, has not been tried. It was tried on 2.54.0 natively and 2.47.3 in the project's Linux container.
 - Not tried: macOS, a real repository git refuses for dubious ownership (a refusal was faked), cancelling a running clone (a partial clone was faked), and any screen reader.
 
@@ -439,7 +448,8 @@ The trash is the default way to delete, and the places where it cannot be truste
 - A folder link on Windows cannot be changed in one step, so changing its target uses the trash. On a drive with no trash, changing a folder link's target fails in words.
 - Not built yet from the permissions plan: typing an octal number or a symbolic mode such as `u=rw,g=r`, Make runnable, the list of permission presets, a list of protected places that refuse changes in administrator mode, extra checks for private-key names, changing a file with several hard links once, and a "why can't I?" explanation. The permissions dialog steps each of owner, group and others through six choices instead.
 - Access lists and flags such as immutable and locked are shown in the details view and are not edited. Extended attributes and a file's internet mark are read for the details view and said in words, and are not edited.
-- Change owner on Windows hands the focused item to the system's Security dialog, which this build cannot open yet. You hear "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." and use File Explorer.
+- Change owner on Windows hands the focused item to the system's Security dialog and does not wait for it. The call is one that Microsoft says may change. If Windows does not open the dialog you hear "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." and do those steps by hand. The tests check the call's shape and open no window, so the dialog has not been seen or heard opening from diroxide, with NVDA or JAWS or without them.
+- On macOS and the BSDs diroxide does not read your own groups. Change owner's Group row then says "Group: staff" with no word about whether it is one of yours, its group field completes every group, and the system decides when the change runs.
 - Change owner never starts as an administrator, and it refuses the system's own folders. Putting an owner back can need an administrator.
 - Change time cannot set the change time, which the system keeps, and sets a created time on Windows and macOS only. A typed date is read as your local time, in the form `2026-10-10 22:09`. A disk that rounds a time, such as a FAT disk, is read back after the job and said, and a real FAT disk was not tried.
 - Change time and Change owner were not tried on a real network share, on macOS, with SELinux turned on, or with an account that is not the owner on Windows.
@@ -494,7 +504,7 @@ Dialogs, the viewer and the clipboard:
 
 Colors and bars:
 
-- The window draws the 24 built-in themes and your own theme files, which the program finds by name in the `themes` folder at its start. For a name it does not know it draws Galaxy and says "Unknown theme NAME. Galaxy is in use." once. A theme file's `[group-colors]` are drawn on the rows of plain files and archives in the window, and the terminal does not draw them yet.
+- The window draws the 24 built-in themes and your own theme files, which the program finds by name in the `themes` folder at its start. For a name it does not know it draws Galaxy and says "Unknown theme NAME. Galaxy is in use." once. A theme file's `[group-colors]` are drawn on the rows of plain files and archives in the window, and in the terminal at 256 colors or true color.
 - Ten themes are below AA. The window draws the parts that fall short in the text color, and says how many. [Themes and colors](themes.md) names the ten. No italic face is built in, so a part that a theme draws in italics, such as the archive and hidden rows, may draw upright. Their words say what they are.
 - The system's light or dark setting is read once, when the window starts. Windows' High Contrast is read at every step.
 - Full screen and focus mode are commands, in the View menu and the palette, and F11 is Full screen's key. The panels' sort buttons and the native menu bar are not under focus mode's veil. A window opened with `--background` never goes full screen. In a terminal, Full screen changes nothing and says so, because full screen there is the terminal program's.
@@ -523,6 +533,8 @@ Menus and the mouse:
 - The lines of plugins, script commands and optional components (the turn-on question, the jobs line, the failure lines, the ask-first question) were written to carry their meaning in the first 40 cells and are checked in tests, not heard. A plugin's own text is cleaned and given its name last, but its wording is the plugin's, so a plugin's lines may not fit 40 cells.
 - The lines of the Volumes list, the trash browser, free space and the first-run list were written to carry their meaning in the first 40 cells and are checked in tests, not heard. That includes "Mounted: Backup, removable, 412 GB free", "Restore 3 items? No is the default. y or n", "Not enough room on build:" and "Optional components to get now". A volume's name and a plugin's lines may run past 40 cells.
 
+- Nothing new in alpha 4 has been heard on NVDA, JAWS or Orca, or read on a Braille display: not the tools, the details view, the previews, columns, checksums, conversions, watched folders, disk images, git, encryption, access rows, Change time and owner, or the photo helpers. The lines were written to carry their meaning in the first 40 cells and are checked in tests, and the window's scripted walk checks the first words of the new lists the same way. Lines known to pass 40 cells with the meaning first include the Install lines of `diro doctor`, its Built in line, and "RAR is read only: diroxide never writes it".
+
 ## Names and wide characters
 
 - A file name that is not valid Unicode is flagged and refused. diroxide does not show it with changed characters.
@@ -536,6 +548,7 @@ Menus and the mouse:
 - Cut, copy and paste of files (Ctrl+X, Ctrl+C, Ctrl+V) work between diroxide's own panels. They do not use the system clipboard, so Explorer and the Finder cannot paste what diroxide copied.
 - Cloud files that are only online are named "online only". diroxide asks before it reads their contents.
 - The terminal frontend has no mouse.
+- Listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. On the bench machine, quiet, 100,000 entries list in 134 ms and are read for their details in 6.66 seconds, where that October code, run on the same machine, took 97 ms and 4.4 seconds. The cause is known: the details read opens each file a second time, and a listing builds every entry's full path, checks every name for an unfinished copy and reads the platform's attributes. It is the first performance work of a later alpha. [The bench](dev/bench.md) has the other numbers.
 - How long before a copy is called stalled (20 seconds), and whether it keeps dates or checks a move, are built into the job engine. They are not settings. The number of tries on a lost network and the first wait are settings, in the Jobs and transfers group.
 
 ## See also

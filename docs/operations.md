@@ -164,7 +164,7 @@ Ctrl+Z undoes the last job. What it can reverse:
 - removing the internet mark: the mark is written back, while it is the last thing you did and in the same session: "Put back the internet mark on setup.exe";
 - a link: the link goes to the trash, and a changed link target goes back to the old link from the trash;
 - a change of permissions, attributes, times or owners: the old values are put back, for each entry that is still as the job left it: "Undid time change: 1 item is back". Putting an owner back can need an administrator, and the change says so when it would;
-- an encryption, a decryption or a signature: the new files go to the trash, and the originals were never touched. Moving an original to the trash after an encryption is its own job and its own step. The record of an age command lives for the session only;
+- an encryption, a decryption or a signature: the new files go to the trash, and the originals were never touched: "Undid encrypt: 1 item is in the trash", "Undid decrypt: 2 items are in the trash" and "Undid sign: 1 item is in the trash" for gpg, and "Undid plugin command: 2 items are in the trash" for an age command, which the Encryption plugin runs. Moving an original to the trash after an encryption is its own job and its own step. The record of an age command lives for the session only;
 - a move into month folders: every picture goes back and the folders the job made are removed, in one step. The moves and the trash of Review pictures are jobs of their own, one step each;
 - a label step (set, toggle or clear), and setting a note or a field: the labels go back: "Undid label urgent on 3 items", "Undid note on report.pdf". This lasts for the session only. A job's undo survives a restart; a label's does not.
 

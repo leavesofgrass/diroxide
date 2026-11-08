@@ -373,6 +373,22 @@ More lines, from the tests of the dialogs, the viewer and the themes. Where a li
 - The first start's list: "Optional components to get now".
 - F11: "Full screen on.", and again "Full screen off." Focus mode, from the View menu (Alt+V, then M) or the palette: "Focus mode on: the bars fade after three seconds.", and "Focus mode off." The fade itself says nothing. The tree is the same before and after the bars fade.
 
+The alpha 4 lines, from the same walk over a folder made for it. It runs helper programs through a stand-in that finds none, and Open with lists two made-up programs, so a line that needs a program is not in it. Each line below begins as the walk heard it, inside the first 40 cells, and a list is named by its first words.
+
+- Say details on a one-pixel picture says "PNG, 1 by 1, 8-bit gray, 70 bytes", and the focus stays on the row.
+- Alt+Enter on a JPEG named `liar.png` opens "Details of liar.png", with the focus on "Type: JPEG image". Its type check row says "Name says PNG; contents say JPEG".
+- The Groups list is "Groups: 8 built in", with the focus on "Images: 2 files here".
+- F3 on a Polish text file in Windows-1250 says "Encoding: Windows-1252 (not UTF-8)". The Encoding command opens "Encoding of cp1250.txt" with the focus on "Automatic:". Choosing Windows-1250 says "Encoding Windows-1250, chosen by you", and the focus is on a row that begins with the Polish words, written right.
+- Open with on a PDF is "Open report.pdf with:", with the focus on "Default program, Example Reader".
+- Convert on a Markdown file is "Convert report.md", with the focus on "Markdown to LaTeX". Enter opens the plan's question, "Convert 1 file to LaTeX?", with the focus on "No". Yes ends with "Report: 1 converted".
+- Checksum on a download is "SHA-256 of example-tool.zip, ba78 16bf", with the focus on "ba78 16bf 8f01 cfea". Verify checksum on the zip is "1 file matches SHA256SUMS", with the focus on "List not signed: 1 of 1 match".
+- Verify checksum on the list itself is "1 differs, 1 missing, 1 match", with the focus on "Does not match: example-notes.txt". Down says "Missing: example-extra.txt", and Down again "List not signed: 1 of 3 match".
+- Watched folders is "Watched folders: 1 task", with the focus on "Notes, off". Enter opens "Notes actions", with the focus on "Turn on, asks first". Preview is "Notes: 2 would convert, 0 skipped", with the focus on "Would convert a.md". Turn on asks "Turn on Notes?" with the focus on "No", and No says "Nothing changed."
+- F3 on a picture says "Enter shows the picture."
+- Change time is "Change time", with the focus on "Change the times of report.md".
+- Review pictures is "Review: 1 of 2, crow.png, picture", with the focus on "Keep, K". Escape says "Review ended at 1 of 2". Move into month folders asks "Move 2 pictures into 1 month folder?" with the focus on "No", and No says "Nothing moved."
+- Delete on a file inside a zip asks "Remove lesson.txt from course.zip?" with the focus on "No", and No says "Nothing changed."
+
 The window's parts have names in the tree: "Left panel, work", "Sort the left panel", "Key bar", and on Windows the menu bar with its nine menus. Also on Windows, the toolkit's helper window is named "diroxide background helper". A key bar button is named by its label with its key as its shortcut: "Rename", with F2.
 
 ### What the window does not say
@@ -415,6 +431,12 @@ Then the rest of the walk:
 18. Look in the system's window list, such as Alt+Tab or a screen reader's window list. On Windows there should be a window named "diroxide background helper", and no pane with no name beside "diroxide".
 
 Questions to answer: Did the menu bar show and read? Was every row read once, name first? Did Tab speak once? Was "selected" heard once? Was a dialog's name said once, and was the focused button read after it? Were the buttons easy to find with Tab? Was "Job progress" spoken, and was that right? Was the silence at the edge of a list a problem? Did the viewer read one line at a time? Was a theme's verdict clear in the first 40 cells? Did anything speak when the bars faded? Were "Full screen on." and "Focus mode on: the bars fade after three seconds." each said once, and clear in the first 40 cells? Did a pane with no name show in the window list?
+
+### A check for alpha 4
+
+Alpha 4 has a demo set of its own. `cargo xtask demo-tools FOLDER` writes it into a new or empty folder on drive D:, with plain names and the same bytes and times on every run: pictures and a broken one, a JPEG named `liar.png`, Polish text in Windows-1250, a song of silence, a PDF, a download with its checksum list, two git repositories when git is there, two disk images, a watched folder with its task, and a steps file, `check-steps.txt`. The command lists each fixture with its size, one line each, the name first, and ends with the `diro` line that starts the check.
+
+The steps file numbers its steps 0 to 12, in two sittings: 0 to 6, then 7 to 12. Run them with NVDA, then JAWS, then the Braille display. Each line in quotes in the steps file is what the program is built to say, and a different line is a finding. [Building](dev/building.md#the-tasks) says what the command makes and where its words are.
 
 ## Keys that may clash
 
