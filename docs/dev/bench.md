@@ -24,6 +24,12 @@ One scenario only:
 cargo run --release -p xtask -- bench --only copy
 ```
 
+Several, with commas and no spaces:
+
+```bash
+cargo run --release -p xtask -- bench --only copy,copy-system
+```
+
 The GUI's budgets beside the scenarios (see "The GUI's budgets" below), or alone:
 
 ```bash
@@ -58,7 +64,12 @@ Each line of the output starts with the scenario and its median, then the budget
 - `search-name`: search the 1 GB search tree (100,000 files in 5,000 folders, written once per run from `bench/search-tree.toml`, the small one with `--quick`) for the 1,000 files whose names hold its hit word, through the search engine itself, as the app runs it. The plan's starting budget is 0.6 seconds warm on Linux and 1.5 seconds on Windows.
 - `search-content`: search the same tree's contents for the hit word, the same way: 1,000 files, the binaries skipped. The starting budget is 1.5 seconds on Linux and 3.75 seconds on Windows.
 
-The search scenarios call the search engine directly, since xtask may depend on the search crate (W3s's request 2); each checks that it found exactly the tree's hits.
+- `details`: read the details of 1,000 files, half small pictures and half text, through the app's own details read, as the details list reads them, with no helper program found. The second line counts the rows read.
+- `checksum`: the SHA-256 of a file of 1 GB, as Checksum and `diro sum` compute it. The second line gives the rate.
+- `convert-plan`: plan converting 100 Markdown files to plain text with carta's built-in recipe, without running it: the plan `diro convert --dry-run` says.
+- `columns`: the app opening a folder of 100,000 empty files with three content columns (`text.lines`, `audio.artist`, `image.dimensions`), from its start until it is idle: the listing, the rows with their "reading" cells, and the cells read near the focus.
+
+The search scenarios call the search engine directly, since xtask may depend on the search crate (W3s's request 2); each checks that it found exactly the tree's hits. The four alpha 4 scenarios go through the app and the job engine, which xtask may depend on, and so measure the program's own code.
 
 ## The GUI's budgets
 
@@ -93,7 +104,33 @@ The machine is named by its models only: the processor, its cores and threads, t
 cargo run --release -p xtask -- bench --save-baseline --gui --cold-build
 ```
 
-A baseline is saved only from an optimized, full run of every scenario, on a quiet machine: nothing else building, no check running, one bench at a time.
+A baseline is saved only from an optimized, full run of every scenario, on a quiet machine: nothing else building, no check running, one bench at a time. A run saved without `--gui` keeps the GUI's budgets of the baseline it replaces, and says so, so the scenarios can be saved again without opening a window.
+
+## The alpha 4 baseline
+
+Saved on Saturday, November 7, 2026, from 5:24 to 5:31 PM Pacific time (the run's clock said 2026-11-08 01:24 UTC as it started), with `cargo run --release -p xtask -- bench --save-baseline`, the GUI's budgets kept from the alpha 3 baseline (no window was opened). The machine was quiet: no cargo or rustc ran, the processor was 1 to 10 percent busy before the start, and the bench ran alone. An earlier full run that afternoon, from 4:38 to 4:46 PM, was not saved: just after it a background download and the browser kept the processor a quarter to a third busy, and it put listing at 168 ms and the name search at 619 ms.
+
+- The machine: the owner's Windows machine, an AMD Ryzen 5 5600G with Radeon Graphics, 6 cores and 12 threads, 64 GB of memory, Windows 11 Home build 26200, the trees on a Samsung SSD 990 EVO 2TB on NVMe.
+- The versions: diroxide 0.1.0-alpha.3, alpha 4's work before its version bump, at commit 9a88c25 with this page's changes only, built with rustc 1.96.1 in the release profile.
+
+The medians of three runs each:
+
+- List 100,000 entries: 134 ms, within the 800 ms budget.
+- Stat 100,000 entries: 6.66 s, over the 800 ms budget.
+- List, then stat each of 100,000: 6.81 s.
+- Copy 10 GB through the engine: 21.7 s, 461 MB a second, and with the system call 24.3 s, 411 MB a second: each the median of the three full runs of "The band" below, as R30's commit 115 asks. The saved run's own copies took 16.1 s (runs of 11.3, 16.1 and 28.2 s) and 24.8 s (24.8, 25.8 and 13.6 s).
+- Copy 40 files from a slow place: 1.37 s, the stall said in 3 of 3 runs.
+- List 100,000 entries in a zip: 222 ms; in a tar: 229 ms; in a 7z: 180 ms.
+- Unpack a zip of 200 MB: 429 ms, 466 MB a second.
+- View the first screen of a 256 MB log: 9.4 ms.
+- Search 100,000 files by name: 72 ms, within the 1,500 ms budget.
+- Search 995 MB of files by contents: 1.27 s, within the 3,750 ms budget.
+- Read the details of 1,000 files: 334 ms, 3,000 rows.
+- The SHA-256 of a file of 1 GB: 610 ms, 1.6 GB a second.
+- Plan converting 100 files, a dry run: 13 ms.
+- List 100,000 entries with three columns, the app from its start until idle: 1.53 s.
+
+Against the alpha 3 baseline every scenario was within its band but the system's copy, 46 percent slower than its 17.0 s of November 3, which "The band" explains; listing was 11 percent slower and stat 1 percent.
 
 ## The alpha 3 baseline
 
@@ -126,6 +163,26 @@ The GUI's budgets, recorded and never gated:
 A second run straight after it, from 9:51 to 9:58 AM, not saved, put every scenario within 9 percent of this baseline but the two copies: the copy through the engine took 14.7 s (26 percent faster) and the system's copy 21.4 s (26 percent slower). A 10 GB copy outruns the disk's own write cache and the system's file cache, so its single runs spread from under 5 to almost 38 seconds on this machine; its median moves further than the 20 percent band from one run to the next, and `--gate` would fail on it by chance. The GUI's budgets moved by 2 percent or less.
 
 The baseline it replaced, saved on Friday, October 16, 2026, had the 1 GB copy and none of the archive, viewer and search scenarios. Against it, the listing was 27 percent slower (95 to 121 ms), reading every entry's details 29 percent slower (5.08 to 6.57 s), listing and then reading them 8 percent faster, and the slow place 9 percent faster.
+
+## The band
+
+The ratchet's band is 20 percent (`tolerance_percent` in `bench/params.toml`): a median further than that from the baseline is said, and fails a run with `--gate`. A scenario may have a band of its own under `[band_percent]`.
+
+The two 10 GB copies have 40 percent. On Saturday, November 7, 2026, from 4:24 to 4:33 PM Pacific time, three full runs of both copies in a row (`--only copy,copy-system`, each the median of three) on a quiet machine, nothing else building, gave:
+
+- Through the engine: medians of 21.7, 27.5 and 21.7 s; single runs from 17.3 to 36.2 s.
+- With the system call: medians of 28.2, 22.2 and 24.3 s; single runs from 17.4 to 29.5 s.
+
+With the alpha 3 runs of Tuesday, November 3 (19.9 and 14.7 s through the engine, 17.0 and 21.4 s with the system call), every quiet median lies within 40 percent of the median of the three, 21.7 and 24.3 s, and none within 20 percent of all the others. A 10 GB copy outruns the disk's write cache and the system's file cache, so where a run lands depends on what the caches held when it started. Every other scenario keeps 20 percent.
+
+## The November 3 slowdown, found
+
+The alpha 3 baseline found listing 27 percent slower and stat 29 percent slower than the first baseline of October 16, 2026, and left it. It is the code, not the machine. On Saturday, November 7, 2026, from 4:20 to 4:24 PM Pacific time, the bench of October 16's tree (commit 20e331e, built in release from its own lock) and today's ran one after the other, twice each, on the same disk with nothing else building:
+
+- List 100,000 entries: October 16's code 97 and 97 ms; today's 128 and 128 ms.
+- Stat 100,000 entries: October 16's code 4.39 and 4.41 s; today's 6.67 and 6.66 s.
+
+The October 16 numbers were the Phase 0 local provider's, before W1a's provider replaced it the same day. Today's stat opens each file twice: `std::fs::symlink_metadata` opens it once, then `fill_from_handle` opens it again to read the volume and file id, the number of links and the change time, three more system calls (about 23 microseconds a file on this machine). Today's listing builds each entry's full path for the link check, checks the name against the unfinished copies' pattern, and reads the platform's attributes and the online-only fact, about 0.3 microseconds more an entry. Both are what the details view and the copy ladder use; making the second open lazy, or the path only for links, is the next alpha's to weigh.
 
 ## The archive scenarios' first figures
 
