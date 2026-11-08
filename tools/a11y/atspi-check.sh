@@ -56,6 +56,11 @@ run() {
   printf 'old\n' >"$work/sample/Backup/old.txt"
   # Its own state and config folders, never the user's.
   export XDG_CONFIG_HOME="$work/config" XDG_STATE_HOME="$work/state" HOME="$work/home"
+  # A session file marks the folders as used before, so the first-run list of
+  # optional components (a modal, since alpha 4's pins gave them builds) does
+  # not open over the panels this check looks for.
+  mkdir -p "$work/state/diroxide"
+  : >"$work/state/diroxide/session.toml"
   mkdir -p "$HOME"
   "$exe" --gui --log "$work/gui.log" "$work/sample" "$work/sample/Backup" >"$work/diro.log" 2>&1 &
   local gui=$!
