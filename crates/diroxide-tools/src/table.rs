@@ -185,6 +185,25 @@ pub const BUILTIN: &[ToolSpec] = &[
         },
         kind: ToolKind::Program,
     },
+    // PDF pages as pictures in the window's picture view (lane VP).
+    ToolSpec {
+        id: "pdftoppm",
+        name: "pdftoppm",
+        programs: &["pdftoppm"],
+        version_args: &["-v"],
+        must_say: None,
+        install_folders: &[],
+        purpose: "PDF pages as pictures",
+        install_hint: "Install Poppler's utilities from your package manager.",
+        packages: Packages {
+            winget: Some("oschwartz10612.Poppler"),
+            brew: Some("poppler"),
+            apt: Some("poppler-utils"),
+            dnf: Some("poppler-utils"),
+            pacman: Some("poppler"),
+        },
+        kind: ToolKind::Program,
+    },
     ToolSpec {
         id: "exiftool",
         name: "ExifTool",
