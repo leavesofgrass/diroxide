@@ -22,7 +22,7 @@ cargo xtask components [--check] [--assets FOLDER] [--pin ID ...] [--addresses]
 - `--pin ID` pins one helper component, and `--pin all` pins every one. It downloads each of the component's files, so it runs on the project's own runner (the owner's answer 117, Thursday, November 5, 2026). On a development computer it runs only with the owner's go.
 - `--addresses` asks each pinned address for its headers and fails when one answers 404 or 410. Any other answer, or no answer, is said and not counted. The workspace job of `ci.yml` runs it on every push.
 
-The one-line usage text in `xtask/src/main.rs` does not name `--pin` and `--addresses` yet.
+The one-line usage text in `xtask/src/main.rs` names both.
 
 ## A component's fields
 
