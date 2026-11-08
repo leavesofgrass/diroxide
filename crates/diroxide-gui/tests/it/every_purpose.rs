@@ -1020,9 +1020,7 @@ fn hosted_scenarios() -> Vec<(&'static str, &'static str, Open)> {
             choose(&mut rig, "Type a date and time");
             Some(rig)
         }),
-        ("OwnerForm", "Change owner of notes.txt", |root| {
-            owner(root, None)
-        }),
+        ("OwnerForm", "Change owner", |root| owner(root, None)),
         ("OwnerName", "New owner of notes.txt", |root| {
             owner(root, Some("Owner"))
         }),
