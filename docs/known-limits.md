@@ -250,7 +250,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Debug builds of diroxide are slow on archives with a million entries. A release build opens one in a few seconds. This matters only to people who build it.
 - A local file whose name holds an archive marker, such as `a.zip!b.txt`, is listed but has no place, so diroxide cannot act on it. The row is not yet flagged "name needs care".
 - What diroxide writes was read back by other programs in the project's Linux container: 7-Zip 25.01, GNU tar 1.35, xz, unzip, gzip, bzip2 and zip. On Windows, bsdtar and unzip read it. Other versions and other archivers have not been tried.
-- Archives read through 7-Zip: a listing runs without `-ba`, so a member's "Read 3.2 GB first" question counts the bytes ahead only when the archive is solid. A hostile member name with a line break could add a fake row to the listing, though a name that climbs out of the archive is still refused. A non-ASCII member name under a C locale on Linux may not be found, which has not been checked. Members over 64 MiB are unpacked alone into the spool first.
+- Archives read through 7-Zip: a listing runs without `-ba`, so a member's "Read 3.2 GB first" question counts the bytes ahead only when the archive is solid. A hostile member name with a line break could add a fake row to the listing, though a name that climbs out of the archive is still refused. diroxide's 7-Zip runs set `LANG=C.UTF-8`, and a test lists a cpio member named with accented and Japanese letters under a C language in the project's Linux container with 7-Zip 25.01, so such a name is found there. Members over 64 MiB are unpacked alone into the spool first.
 - Archives read through 7-Zip, tried: 7-Zip 25.01 in the project's Linux container listed, read and unpacked every format. Not tried: macOS, p7zip, a network place, 7-Zip 26.05, a RAR 5 with a password, a real compressed RAR file from WinRAR, and a separate program holding an archive open. Debian's 7-Zip 25.01 read a RAR made for the test, though a Debian package is said to leave RAR out.
 - Editing inside a zip rewrites the whole zip, so a big one takes time: 1.2 GB of made content took about 52 seconds. A rewrite loses zip comments and extra fields and redoes the compression, with stored members kept stored. An encrypted zip needs its password to read and to write, and ZipCrypto members become AES-256.
 - A zip opened by its bytes with Open as archive, such as a `.docx`, is not a zip by its name, so the File menu hides Make folder, Rename, Move to trash and Delete for good there. Their keys and the palette reach them.
@@ -356,7 +356,6 @@ The trash is the default way to delete, and the places where it cannot be truste
 - The three age commands need the Encryption plugin, an optional component. The plugin writes its files itself, and the program records them for Undo from the plugin's answer. That record lives for the session only, and does not survive a restart.
 - ASCII armor is offered for age and not for gpg, so every gpg result is `.gpg` or `.sig`.
 - age encrypts with a passphrase or an age public key, and decrypts with a passphrase or an identity file. SSH keys, plugin keys and hardware keys are refused, and the age program is not used as a road around the plugin.
-- A passphrase typed for gpg passes through the request that starts gpg, as bytes that are not wiped when the request is dropped. It is never printed, logged or said. The age plugin wipes its copy.
 - On Windows, gpg's agent is stopped with each run, so a passphrase is not remembered from one command to the next, and a command that needs the agent waited about six seconds on the one computer it was measured on.
 - A minisign public key is asked every time and kept nowhere. Verify checksum does not check a list's minisign signature.
 - The commands are in the program. No dedicated `diro` command encrypts, decrypts, signs or checks a signature from a shell yet, and `diro run` has nobody to type a passphrase.
@@ -396,18 +395,17 @@ The trash is the default way to delete, and the places where it cannot be truste
 - `diro watch --task` answers the first start's catch-up question No when nobody is at the terminal. `--once` gives up on a file still changing after 2 minutes.
 - The Watched folders list's "done today" counts come from each task's log, while Say Status counts this session's notes.
 - A task cannot watch an existing folder such as Downloads in place. It watches the `in` folder of its home, and there is no key yet for a queue folder outside `home/in`.
-- The form for making a task without writing the file is planned for the final alpha.
+- The form for making a task without writing the file comes in a later alpha.
 - A hot folder was run for seconds in tests, never for hours. APFS, a network share, macOS, Linux natively and Windows long paths were not tried.
 
 ## Disk images
 
 [Disk images](disk-images.md) describes the plugin. These are the limits.
 
-- Images are read only. Writing to one, making one and formatting are a later alpha. Open as raw disk image, which would show a hybrid ISO's partitions, is not built, and a hybrid ISO opens as the ISO.
+- Images are read only. Writing to one, making one and formatting are a later alpha. Open as raw disk image, which would show a hybrid ISO's partitions, and a Disk image details command are not built, and a hybrid ISO opens as the ISO.
 - A BitLocker or LUKS partition is shown and never opened. An encrypted image through 7-Zip says "it is encrypted, and this plugin asks no password".
 - An NTFS file that NTFS compressed or encrypted is listed, and reading a compressed one says that only 7-Zip reads it. The plugin does not hand such a file to 7-Zip yet.
 - A member of an image that 7-Zip must unpack, over about 6 MB, needs 7-Zip 25.01 or later, and a listing over about 7 MB from 7-Zip is refused. An older 7-Zip says "7-Zip 24.08 is too old: needs 25.01".
-- The partition rows say "partition-2, folder" in the panel, and the partition words, such as "Partition 2, home, ext4, 40.0 GB", are heard in the Volumes list only. The panel's rows and Say Details do not say them yet.
 - The plugin keeps at most sixteen images open, because the program does not tell it when an image's last use ends.
 - A plugin's own next step is replaced by "Try again; if it keeps failing, check the disk." for every refusal except unsupported and too large.
 - Not tried: macOS, p7zip, UDF, HFS+, APFS and exFAT through 7-Zip (no image could be made), an ext4 image made by `mke2fs` (small ext2 and ext4 volumes written by the tests stand in), an NTFS-compressed file, and a password prompt. The tools image has no `e2fsprogs` or `exfatprogs` yet.
@@ -421,7 +419,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 - Add to .gitignore gets the program's own question, "Replace .gitignore? It cannot be undone.", because the program has no way to append to a file for a plugin.
 - Names that are not UTF-8 cannot be staged or compared, and non-UTF-8 text shows stand-ins in diffs.
 - An untrusted repository's question appears when the panel enters it.
-- Not built: a diff between any two revisions, a list of linked worktrees, and counts by kind in the status list's title. The Git column is declared and the panels do not show a plugin's columns yet.
+- Not built: a diff between any two revisions, a list of linked worktrees, and counts by kind in the status list's title.
 - Git 2.30, the oldest it accepts, has not been tried. It was tried on 2.54.0 natively and 2.47.3 in the project's Linux container.
 - Not tried: macOS, a real repository git refuses for dubious ownership (a refusal was faked), cancelling a running clone (a partial clone was faked), and any screen reader.
 
@@ -450,7 +448,8 @@ The trash is the default way to delete, and the places where it cannot be truste
 - A folder link on Windows cannot be changed in one step, so changing its target uses the trash. On a drive with no trash, changing a folder link's target fails in words.
 - Not built yet from the permissions plan: typing an octal number or a symbolic mode such as `u=rw,g=r`, Make runnable, the list of permission presets, a list of protected places that refuse changes in administrator mode, extra checks for private-key names, changing a file with several hard links once, and a "why can't I?" explanation. The permissions dialog steps each of owner, group and others through six choices instead.
 - Access lists and flags such as immutable and locked are shown in the details view and are not edited. Extended attributes and a file's internet mark are read for the details view and said in words, and are not edited.
-- Change owner on Windows hands the focused item to the system's Security dialog, which this build cannot open yet. You hear "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." and use File Explorer.
+- Change owner on Windows hands the focused item to the system's Security dialog and does not wait for it. The call is one that Microsoft says may change. If Windows does not open the dialog you hear "Could not open the Security dialog: Windows did not open it. In File Explorer, open Properties, then Security." and do those steps by hand. The tests check the call's shape and open no window, so the dialog has not been seen or heard opening from diroxide, with NVDA or JAWS or without them.
+- On macOS and the BSDs diroxide does not read your own groups. Change owner's Group row then says "Group: staff" with no word about whether it is one of yours, its group field completes every group, and the system decides when the change runs.
 - Change owner never starts as an administrator, and it refuses the system's own folders. Putting an owner back can need an administrator.
 - Change time cannot set the change time, which the system keeps, and sets a created time on Windows and macOS only. A typed date is read as your local time, in the form `2026-10-10 22:09`. A disk that rounds a time, such as a FAT disk, is read back after the job and said, and a real FAT disk was not tried.
 - Change time and Change owner were not tried on a real network share, on macOS, with SELinux turned on, or with an account that is not the owner on Windows.
@@ -505,7 +504,7 @@ Dialogs, the viewer and the clipboard:
 
 Colors and bars:
 
-- The window draws the 24 built-in themes and your own theme files, which the program finds by name in the `themes` folder at its start. For a name it does not know it draws Galaxy and says "Unknown theme NAME. Galaxy is in use." once. A theme file's `[group-colors]` are drawn on the rows of plain files and archives in the window, and the terminal does not draw them yet.
+- The window draws the 24 built-in themes and your own theme files, which the program finds by name in the `themes` folder at its start. For a name it does not know it draws Galaxy and says "Unknown theme NAME. Galaxy is in use." once. A theme file's `[group-colors]` are drawn on the rows of plain files and archives in the window, and in the terminal at 256 colors or true color.
 - Ten themes are below AA. The window draws the parts that fall short in the text color, and says how many. [Themes and colors](themes.md) names the ten. No italic face is built in, so a part that a theme draws in italics, such as the archive and hidden rows, may draw upright. Their words say what they are.
 - The system's light or dark setting is read once, when the window starts. Windows' High Contrast is read at every step.
 - Full screen and focus mode are commands, in the View menu and the palette, and F11 is Full screen's key. The panels' sort buttons and the native menu bar are not under focus mode's veil. A window opened with `--background` never goes full screen. In a terminal, Full screen changes nothing and says so, because full screen there is the terminal program's.
