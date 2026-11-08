@@ -93,7 +93,7 @@ The exit codes are 0 when every file was read, 1 when a file could not be, and 2
 
 ## Known limits
 
-- Closing the list stops the read of the file's facts between readers and at the next read. A program already running, such as ffprobe, finishes within its own time limit, and its answer is dropped.
+- Closing the list stops the read of the file's facts: between readers, at the next read, and an ffprobe run that the read started. Show all's ExifTool run is not stopped by closing the list. It finishes within its own time limit.
 - Show all needs a file on a local disk.
 - Folder sizes are not computed here. Nothing in the details view walks a folder.
 - "You can" is advice: it is what the system answers now for this account, and another program using the file can still stop a change.
