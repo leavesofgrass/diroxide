@@ -1,6 +1,6 @@
 # Themes and colors
 
-This guide covers the 24 themes that come with diroxide, how to choose one, what the words "meets AA" and "below AA" mean, the ten themes that fall short and what the window does for them, your own colors in the `[colors]` table, your own theme files, Windows' High Contrast, and following the system's light or dark setting. The terminal and the window draw the same 24 themes. Where they differ, such as for group colors, this guide says so.
+This guide covers the 24 themes that come with diroxide, how to choose one, what the words "meets AA" and "below AA" mean, the ten themes that fall short and what the window does for them, your own colors in the `[colors]` table, your own theme files, Windows' High Contrast, and following the system's light or dark setting. The terminal and the window draw the same 24 themes. Where they differ, this guide says so.
 
 What this guide quotes is what the program says, taken from the program's code and tests. Nobody has listened to the lines that announce a theme on a screen reader or a Braille display yet. If your experience differs, that is a finding.
 
@@ -142,11 +142,12 @@ images = "heading2"
 ```
 
 - The ids are `images`, `music`, `video`, `documents`, `archives`, `code`, `text` and `screenshots`, and the id of any group of yours from `filetypes.toml`. A line whose id or role does not exist is ignored.
-- The color is one the theme already has, so the contrast check measures nothing new, and the window holds it to the same floor as every other part.
-- The window draws it on the rows of plain files and archives. Folders, links, broken links, hidden entries, marked rows and the focused row keep their own looks. In Windows' High Contrast the rows are plain text.
+- The color is one the theme already has, so the contrast check measures nothing new, and the window and the terminal hold it to the same floor as every other text.
+- The window and the terminal draw it on the rows of plain files and archives. Folders, links, broken links, hidden entries, marked rows and the focused row keep their own looks. In Windows' High Contrast the window draws the rows as plain text.
+- In the terminal the color shows only at 256 colors or true color. At 16 colors, with `NO_COLOR` set, and in the High Contrast theme the rows stay plain.
 - A file in two groups takes the color of its type's group when the table names it, and otherwise the color of its other group.
 - A row says its type and group in words whatever its color, so the color is never the only sign.
-- The default theme maps no groups, so nothing changes until a theme asks. The terminal does not draw group colors yet.
+- The default theme maps no groups, so nothing changes until a theme asks.
 
 [Settings and where the files live](settings.md#themes-and-colors) has the rest. The built-in theme files in the source, in `crates/diroxide-theme/themes`, are models to copy: copy one into your folder under a new name and change its `theme.name`.
 
