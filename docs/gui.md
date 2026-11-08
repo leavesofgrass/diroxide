@@ -246,6 +246,8 @@ The viewer takes the place of the two panels. While it shows, the panels are out
 - Jump and Search ask in a prompt, as dialogs. Follow shows what is added to a growing file, at the progress interval in screen-reader mode.
 - Code is colored as the `highlighting` setting says, which by default means colors off in screen-reader mode, as in the terminal. A screen reader hears the kinds of words through the commands that say them. Where code is colored, each class is drawn with the theme's role for it and with a shape as well (bold keywords, underlined links), so no class shows by color alone. Search matches are underlined.
 - Escape closes the viewer. The panels come back, with the focus on the file's row.
+- F3 on a PDF, a Word, EPUB or other document, a sound or a video opens the viewer on the file's words, titled "report.pdf, preview". On a picture it opens the picture view instead, [below](#the-picture-view). [The viewer](viewer.md#pictures-and-documents) has the words and the way to hex and back.
+- L shows or hides line numbers in the window's viewer as it does in the terminal. It is in the View menu's Viewer submenu as Line numbers, and the setting is `viewer.line_numbers`.
 - The viewer takes no mouse yet.
 
 The quick view turns the other panel into a preview of the file under the cursor.
@@ -260,15 +262,18 @@ The quick view turns the other panel into a preview of the file under the cursor
 
 The window can show a picture. The terminal cannot, so this is the window's own.
 
-- On a picture, in the viewer (F3) or in the quick view's preview, the window says once "Enter shows the picture." Enter opens the picture view.
+- F3 on a picture in a panel opens the picture view at once. The window says the picture's sentence first, such as "PNG, 40 by 30", and then the two help lines. Escape closes the picture and the focus is back on the file's row. Enter in the picture never reaches the row behind it. Show picture, with the focus on a picture in a panel, does the same.
+- In the quick view's preview, on a picture, the window says once "Enter shows the picture." Enter opens the picture view. The same hint is said when a picture's bytes are open in the viewer's hex mode.
 - The picture is one graphic. A screen reader finds it named by its file, and described by the sentence the quick view says for it, such as "PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB". JAWS may need its describe key to read the description.
 - Plus, Equals and the keypad's plus zoom in. Minus zooms out. 0 fits the picture to the window, and 1 shows it at actual size. The arrows move a zoomed picture. Escape goes back to the viewer or the preview. Each key says what it did, and two help lines say the keys as the picture opens.
 - An animation shows its first frame, still, and says so in words. Nothing plays.
-- A picture past the pixel guard is said and never opened. PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are shown, and the other formats say that they need a component.
+- A picture past the pixel guard is said and never opened. PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are shown by diroxide itself.
+- The formats the built-in decoder cannot show, such as HEIC, AVIF and Photoshop files, are drawn through ImageMagick when it is installed, and the sentence says so: "HEIC, 4032 by 3024, through ImageMagick". Without it: "Picture: not shown, needs ImageMagick" and an "Install:" line. A picture that is not on a local disk and needs ImageMagick says "Picture: not shown, not on a local disk".
+- A PDF's pages are drawn through pdftoppm, which comes with Poppler. F3 on a PDF opens the viewer on its words, and Enter there shows the page the cursor is on. Page Down shows the next page and Page Up the previous one, each said as it comes in: "Page 2 of 3". At the ends the window says "Last page, Page 3 of 3" or "First page, Page 1". A third help line is drawn under the others: "Page Down, Page Up: next, previous page". Without pdftoppm the window says "Page pictures need pdftoppm" and the "Install:" line. From a panel, with Show picture on a PDF, the page is said without the count: "Page 1".
 
-Show picture is the command that opens the picture view. It is in the View menu and the palette, and it is on [the keyboard page](keyboard.md) as `view.picture`. Enter is its key in the viewer. In the quick view's preview Enter is Open link, and a picture's lines carry no link, so Enter on a picture shows the picture instead. Because it is a command, you can give it another key in the Keys list or in `keymap.toml` ([Customizing keys](customizing-keys.md)). The hint, "Enter shows the picture.", says the key you have, and it is not said at all if you took the key away.
+Show picture is the command that opens the picture view. It is in the View menu and the palette, and it is on [the keyboard page](keyboard.md) as `view.picture`. Enter is its key in the viewer, on a PDF's words and on a picture's bytes. In the quick view's preview Enter is Open link, and a picture's lines carry no link, so Enter on a picture shows the picture instead. Because it is a command, you can give it another key in the Keys list or in `keymap.toml` ([Customizing keys](customizing-keys.md)). The hint, "Enter shows the picture.", says the key you have, and it is not said at all if you took the key away.
 
-Show picture works only in the window. In a terminal it says "Show picture works only in the window." With no viewer or preview showing a file, it says "Show picture needs the viewer or preview", and on a file that is not a picture, "Not a picture: notes.txt". A picture is a file whose type is in the Images group ([File types and groups](file-types.md)). [Previews](previews.md#the-picture-view-in-the-window) has the exact words, the numbers of the pixel guard and the limits.
+Show picture works only in the window. In a terminal it says where pictures show, never a refusal: "Pictures show in the window: diro --gui". With nothing to show, such as a folder in the panel, it says "Show picture needs a picture or a PDF", and on a file that is not a picture, "Not a picture: notes.txt". A picture is a file whose type is in the Images group ([File types and groups](file-types.md)). [Previews](previews.md#the-picture-view-in-the-window) has the exact words, the numbers of the pixel guard and the limits.
 
 ## The dialogs
 
