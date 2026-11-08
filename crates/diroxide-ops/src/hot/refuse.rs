@@ -278,6 +278,9 @@ mod tests {
         assert_eq!(literal_folder("home", "D:\\scans", w), Ok(win("D:\\scans")));
         assert_eq!(literal_folder("home", "D:/scans", w), Ok(win("D:\\scans")));
         assert!(literal_folder("home", "\\\\nas\\share\\scans", w).is_ok());
+        // A ~ inside a name is a name: Windows' short names, and the GitHub
+        // runner's temporary folder under RUNNER~1.
+        assert!(literal_folder("home", "D:\\SCANS~1", w).is_ok());
         let refused = [
             ("", "home is missing"),
             (" D:\\scans", "home has a space at its start or end"),
@@ -292,7 +295,7 @@ mod tests {
             ("%USERPROFILE%\\scans", "home has a variable"),
             ("$HOME\\scans", "home has a variable"),
             ("~\\scans", "home has a ~, which is never expanded"),
-            ("D:\\SCANS~1", "home has a ~, which is never expanded"),
+            ("D:\\~ada\\scans", "home has a ~, which is never expanded"),
             ("D:\\a.zip!x", "home has a !, which reads as an archive"),
             ("C:", "home is a bare drive letter; write C:\\"),
             ("C:scans", "home is a bare drive letter; write C:\\"),
