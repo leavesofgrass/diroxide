@@ -290,9 +290,18 @@ impl diroxide_vfs::ToolRunner for FakeTools {
         &self,
         request: &diroxide_vfs::ToolRequest,
         cancel: &diroxide_vfs::CancelToken,
-        _record: &mut dyn FnMut(diroxide_vfs::ToolStream, &str) -> std::ops::ControlFlow<()>,
+        record: &mut dyn FnMut(diroxide_vfs::ToolStream, &str) -> std::ops::ControlFlow<()>,
     ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
-        self.run(request, cancel)
+        let output = self.run(request, cancel)?;
+        // The standard output's lines go to the recorder, as a real
+        // run's would (lane VP: pdftotext's text is kept from them).
+        let text = String::from_utf8_lossy(&output.stdout).into_owned();
+        for line in text.lines() {
+            if record(diroxide_vfs::ToolStream::Stdout, line).is_break() {
+                break;
+            }
+        }
+        Ok(output)
     }
 }
 

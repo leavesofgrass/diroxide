@@ -307,6 +307,16 @@ pub enum AppEvent {
         /// The bytes, or why not.
         result: Result<crate::viewer::ViewerSource, Message>,
     },
+    /// The preview's words for the viewer were read, or could not be
+    /// (lane VP); `None` when no previewer takes the file.
+    ViewerWords {
+        /// The request it answers.
+        request: RequestId,
+        /// The file.
+        place: Place,
+        /// The words, or why not.
+        result: Result<Option<crate::quickview::ViewerWords>, Message>,
+    },
     /// An archive job ended: its report, and the runner's lines, the
     /// summary first ("Unpack finished: 4 done.", "Checked 300 of 300
     /// entries, all good.").
@@ -1966,6 +1976,11 @@ impl App {
                 place,
                 result,
             } => self.viewer_source(request, place, result),
+            AppEvent::ViewerWords {
+                request,
+                place,
+                result,
+            } => self.viewer_words(request, place, result),
             AppEvent::ArchiveFinished { report, lines } => self.archive_finished(*report, lines),
             AppEvent::PlacesChecked {
                 request,
@@ -2202,7 +2217,7 @@ impl App {
             if !self.dialogs.is_empty() {
                 return vec![self.say(Message::status("Close this dialog first."))];
             }
-            return self.viewer_closed_command();
+            return self.viewer_command_closed(&command.id);
         }
         if keys::is_keys_command(&command.id) {
             return self.keys_dispatch(command);

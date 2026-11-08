@@ -34,6 +34,8 @@ use diroxide_preview::encoding::{Choice, Encoding, SNIFF_BYTES, binary_kind, cho
 use diroxide_preview::{LatestOnly, Preview, PreviewError, PreviewRequest, Previews};
 use diroxide_vfs::{CancelToken, OpContext, Registry, ToolRunner, VfsError};
 
+use super::{ViewerWords, WordsFrom};
+
 /// The bytes read between two checks of the cancel token.
 const CHUNK: usize = 64 * 1024;
 
@@ -275,16 +277,184 @@ impl Worker {
 /// The file's type: the one the background check settled on (lane TA),
 /// else the one its name says.
 fn file_type_of(shared: &Shared, entry: &Entry) -> Option<FileType> {
-    shared
-        .types
+    type_of(&shared.types, entry)
+}
+
+/// [`file_type_of`] over a type registry alone.
+fn type_of(types: &TypeRegistry, entry: &Entry) -> Option<FileType> {
+    types
         .by_index(entry.type_index)
         .or_else(|| {
-            shared
-                .types
+            types
                 .detect(&entry.name, &[])
-                .and_then(|d| shared.types.get(&d.type_id))
+                .and_then(|d| types.get(&d.type_id))
         })
         .cloned()
+}
+
+/// Which previewer gives the viewer a file's words (lane VP), by the
+/// previewer the quick view would hand it to: `None` for anything but a
+/// plain file, for an archive's listing (its own road) and for text and
+/// hex, which the viewer shows itself.
+pub(super) fn words_from(
+    types: &TypeRegistry,
+    previews: &Previews,
+    place: &Place,
+    entry: &Entry,
+) -> Option<WordsFrom> {
+    if entry.kind != EntryKind::File {
+        return None;
+    }
+    let file_type = type_of(types, entry);
+    let asked = PreviewRequest {
+        place: place.clone(),
+        entry: entry.clone(),
+        generation: 0,
+        max_lines: MAX_ROWS,
+    };
+    match previews.chosen(&asked, file_type.as_ref())? {
+        "image" => Some(WordsFrom::Picture),
+        "media" => Some(WordsFrom::Media),
+        "pdf" => Some(WordsFrom::Pdf),
+        "document" => Some(WordsFrom::Document),
+        _ => None,
+    }
+}
+
+/// The preview's words for the viewer (lane VP), through the quick view's
+/// own readers: a picture, a sound or a PDF through its previewer and the
+/// shared cache, with the tools whatever auto-preview says (F3 asked); a
+/// document through the container read path or its reader, within the
+/// quick view's caps and under its guard. `None` when no previewer takes
+/// the file.
+pub(super) fn viewer_words(
+    shared: &Shared,
+    place: &Place,
+    entry: &mut Entry,
+    refresh: bool,
+    cancel: &CancelToken,
+) -> Result<Option<ViewerWords>, VfsError> {
+    let ctx = OpContext::new()
+        .with_cancel(cancel.clone())
+        .with_tools(Arc::clone(&shared.tools));
+    let provider = shared.registry.resolve(place)?;
+    if refresh && let Ok(fresh) = provider.stat(place, &ctx) {
+        entry.size = fresh.size;
+        entry.modified = fresh.modified;
+    }
+    let Some(from) = words_from(&shared.types, &shared.previews, place, entry) else {
+        return Ok(None);
+    };
+    let file_type = file_type_of(shared, entry);
+    let asked = PreviewRequest {
+        place: place.clone(),
+        entry: entry.clone(),
+        generation: shared.latest.next(),
+        max_lines: MAX_ROWS,
+    };
+    if from != WordsFrom::Document {
+        let preview = match shared.previews.render(
+            &asked,
+            file_type.as_ref(),
+            &shared.latest,
+            &shared.registry,
+            &ctx,
+        ) {
+            Ok(preview) => preview,
+            Err(PreviewError::Superseded) => return Err(VfsError::Cancelled),
+            Err(PreviewError::Vfs(error)) => return Err(error),
+            Err(error) => {
+                return Ok(Some(ViewerWords {
+                    summary: format!("No preview: {error}"),
+                    ..ViewerWords::default()
+                }));
+            }
+        };
+        let mut words = words_of(preview);
+        words.from = Some(from);
+        return Ok(Some(words));
+    }
+    let reader = doc::Reader::for_type(file_type.as_ref(), &entry.name);
+    let base: Vec<String> = diroxide_preview::detail_rows(entry, file_type.as_ref())
+        .iter()
+        .map(diroxide_core::details::DetailRow::spoken)
+        .collect();
+    let (view, error) = if reader.is_package() {
+        match package(shared, &asked, reader, &ctx) {
+            Rendered::Document { view, .. } => (*view, None),
+            Rendered::NotRead(error) => (DocView::empty(DocKind::Document), Some(error)),
+            Rendered::Failed(error) => return Err(error),
+            _ => return Err(VfsError::Cancelled),
+        }
+    } else {
+        let mut bytes = Vec::new();
+        provider
+            .read(place, &ctx)?
+            .take(shared.max_bytes)
+            .read_to_end(&mut bytes)
+            .map_err(VfsError::from)?;
+        if ctx.cancel.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        doc::read_as_or_text(reader, &entry.name, bytes, &shared.read)
+    };
+    let word = file_type
+        .as_ref()
+        .map(|t| t.short.clone())
+        .filter(|s| !s.is_empty())
+        .or_else(|| view.kind.word().map(str::to_owned))
+        .unwrap_or_else(|| "Document".to_owned());
+    let summary = match &error {
+        Some(error) => format!("{word}, unreadable: {error}"),
+        None => diroxide_preview::documents::summary(&word, &view),
+    };
+    Ok(Some(ViewerWords {
+        summary,
+        missing: None,
+        rows: base,
+        text: view.rows().iter().map(doc::DocRow::shown).collect(),
+        notes: view.notes().to_vec(),
+        from: Some(from),
+        pages: None,
+    }))
+}
+
+/// A typed preview as the viewer's words: its sentence, its rows, and a
+/// PDF's text; the helper it lacked, when its sentence says one was not
+/// found.
+fn words_of(preview: Preview) -> ViewerWords {
+    let missing = if preview.summary == diroxide_preview::pdf::NOT_FOUND {
+        Some(diroxide_preview::pdf::PDFTOTEXT.to_owned())
+    } else if preview.summary == diroxide_preview::media::NOT_FOUND {
+        Some(diroxide_preview::media::FFPROBE.to_owned())
+    } else {
+        None
+    };
+    let (text, notes) = match &preview.document {
+        Some(view) => (
+            view.rows().iter().map(doc::DocRow::shown).collect(),
+            view.notes().to_vec(),
+        ),
+        None => (Vec::new(), Vec::new()),
+    };
+    let pages = preview
+        .details
+        .iter()
+        .find(|row| row.key == "doc.pages")
+        .and_then(|row| row.value.replace(',', "").parse().ok());
+    ViewerWords {
+        missing,
+        from: None,
+        pages,
+        rows: preview
+            .details
+            .iter()
+            .map(diroxide_core::details::DetailRow::spoken)
+            .collect(),
+        text,
+        notes,
+        summary: preview.summary,
+    }
 }
 
 /// Reads the previewed file, and only it, and makes its view: a typed
