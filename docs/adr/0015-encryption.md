@@ -1,6 +1,6 @@
 # ADR-0015: Encryption and signatures: age in a plugin, gpg as a program, minisign in process
 
-Status: Proposed, Saturday, November 7, 2026 (alpha 4, Wave 7: lane E's draft, written beside commit 71 for the orchestrator's acceptance at the close; spikes ES1 in the contract step, ES2 and ES3 in lane E).
+Status: Accepted, Sunday, November 8, 2026 (alpha 4, Wave 7: lane E's draft, written beside commit 71 for the orchestrator's acceptance at the close; spikes ES1 in the contract step, ES2 and ES3 in lane E).
 
 ## Context
 

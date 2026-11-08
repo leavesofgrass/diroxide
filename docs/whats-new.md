@@ -4,7 +4,7 @@ This page says in plain words what each alpha added. [The changelog](../CHANGELO
 
 ## Alpha 4
 
-What alpha 4 adds. It has no release date here yet; the date is added when the alpha is released. The sections follow the order you meet things in: the helper programs, what a file is, what is in it, what you can do with it, and then the window, the plugins and the command line.
+What alpha 4 added, released on Sunday, November 8, 2026. The sections follow the order you meet things in: the helper programs, what a file is, what is in it, what you can do with it, and then the window, the plugins and the command line.
 
 ### Tools and optional components
 

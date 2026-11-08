@@ -19,12 +19,12 @@
 [plugin]
 id = "crypt"
 name = "Encryption"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 description = "Encrypts and decrypts files with age, asking every secret in hidden fields."
 license = "Apache-2.0 OR MIT"
 homepage = "https://diroxide.app"
 protocol = 1
-min_host = "0.1.0-alpha.3"
+min_host = "0.1.0-alpha.4"
 
 [run]
 command = ["./diro-crypt"]

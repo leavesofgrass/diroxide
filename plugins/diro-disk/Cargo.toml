@@ -14,21 +14,21 @@
 [package]
 name = "diro-disk"
 description = "The disk-image places plugin of diroxide: ISO, raw disks and virtual disks, read only."
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 homepage = "https://diroxide.app"
 publish = false
 
 [dependencies]
-diroxide-core = { path = "../../crates/diroxide-core", version = "0.1.0-alpha.3" }
+diroxide-core = { path = "../../crates/diroxide-core", version = "0.1.0-alpha.4" }
 # The wire types, the session's lifecycle and the error kinds, shared with
 # the host so the two never drift (pure Rust).
-diroxide-plugins = { path = "../../crates/diroxide-plugins", version = "0.1.0-alpha.3" }
+diroxide-plugins = { path = "../../crates/diroxide-plugins", version = "0.1.0-alpha.4" }
 # The container rules every reader shares, lifted out of the archive
 # crate for this plugin (diroxide_vfs::archive: the limits and the member
 # names), without the job engine.
-diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.3" }
+diroxide-vfs = { path = "../../crates/diroxide-vfs", version = "0.1.0-alpha.4" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.146"
 # ISO 9660 with Joliet and Rock Ridge (R30 commit 88): G5a's spike DS2
@@ -62,7 +62,7 @@ qcow2-core = { version = "0.3.4", default-features = false }
 [dev-dependencies]
 # The host's own settings, for the provider contract list run through the
 # real host (already under diroxide-plugins; no new crate).
-diroxide-config = { path = "../../crates/diroxide-config", version = "0.1.0-alpha.3" }
+diroxide-config = { path = "../../crates/diroxide-config", version = "0.1.0-alpha.4" }
 # The partition tables written by other hands, for the cross-check of
 # the plugin's own reader (R29 1.3); tests only, pure Rust.
 gptman = { version = "3.1.1", default-features = false }
@@ -76,7 +76,7 @@ mbrman = "0.6.1"
 # The real archive provider and a zip writer, for the nesting test
 # (bundle.zip!disk.iso!EFI through the zip, as the app reads it); tests
 # only, pure Rust, already in the main workspace's lock.
-diroxide-archive = { path = "../../crates/diroxide-archive", version = "0.1.0-alpha.3" }
+diroxide-archive = { path = "../../crates/diroxide-archive", version = "0.1.0-alpha.4" }
 zip = { version = "=9.0.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 proptest = "1.11.0"
 tempfile = "3.27.0"

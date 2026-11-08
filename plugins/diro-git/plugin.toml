@@ -13,12 +13,12 @@
 [plugin]
 id = "git"
 name = "Git"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 description = "Shows git's state in the panels and runs git's commands, starting on No."
 license = "Apache-2.0 OR MIT"
 homepage = "https://diroxide.app"
 protocol = 1
-min_host = "0.1.0-alpha.3"
+min_host = "0.1.0-alpha.4"
 
 [run]
 command = ["./diro-git"]

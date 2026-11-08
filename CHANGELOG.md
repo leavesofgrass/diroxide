@@ -2,9 +2,9 @@
 
 Notable changes to diroxide, newest first. Agents write under a scratch heading with their id; the orchestrator regroups the entries by area before each alpha. Versions follow the alpha series in the plan; nothing is released until the owner says so.
 
-## Unreleased, to be 0.1.0-alpha.4
+## 0.1.0-alpha.4
 
-Alpha 4 teaches diroxide what a file is, what is in it and what can be done with it: a tools registry with `diro doctor` and helper programs as optional components, a file type model with groups, a details view with who can do what, richer previews, custom columns, notes and fields, checksums with signature checks, privacy checks, conversions, watched folders, archive formats read through 7-Zip and edited inside a zip, disk images and git as plugins, encryption and signatures, Change time and Change owner, the photo helpers, the window's picture view, and new commands in `diro`. It is the planned alpha.7. The heading, the date and the version are set when it is released.
+Alpha 4 teaches diroxide what a file is, what is in it and what can be done with it: a tools registry with `diro doctor` and helper programs as optional components, a file type model with groups, a details view with who can do what, richer previews, custom columns, notes and fields, checksums with signature checks, privacy checks, conversions, watched folders, archive formats read through 7-Zip and edited inside a zip, disk images and git as plugins, encryption and signatures, Change time and Change owner, the photo helpers, the window's picture view, and new commands in `diro`. It is the planned alpha.7, released on Sunday, November 8, 2026.
 
 ### Tools and optional components
 

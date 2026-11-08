@@ -11,12 +11,12 @@
 [plugin]
 id = "disk"
 name = "Disk images"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 description = "Opens disk images as folders: ISO, raw disks and virtual disks, read only."
 license = "Apache-2.0 OR MIT"
 homepage = "https://diroxide.app"
 protocol = 1
-min_host = "0.1.0-alpha.3"
+min_host = "0.1.0-alpha.4"
 
 [run]
 command = ["./diro-disk"]

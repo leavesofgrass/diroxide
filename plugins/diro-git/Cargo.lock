@@ -280,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "diro-git"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "diroxide-config",
  "diroxide-core",
@@ -295,7 +295,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-config"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "diroxide-core",
  "diroxide-theme",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-core"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "regex",
  "serde",
@@ -318,7 +318,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-ops"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "carta",
  "crc32fast",
@@ -334,7 +334,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-plugins"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "diroxide-config",
  "diroxide-core",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-theme"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "serde",
  "thiserror",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-tools"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "diroxide-config",
  "diroxide-core",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-vfs"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "diroxide-core",
  "dirs",

@@ -19,10 +19,10 @@ diroxide stays small and pure Rust because these are optional. A component comes
 The list has five components of the project's own, and the helper programs below them:
 
 - Example plugins (id `diro-examples`): a data pack of the eleven example plugins and scripts, about 124 KB, license Apache-2.0 OR MIT. It unpacks into a folder of its own, with one folder or script for each example. Volume actions, which unmounts, ejects and mounts for the Volumes list, is one of them. Installing the pack turns nothing on. The pack is not published with a release yet. Until it is, get it from a folder with `--source`, or install it from a file, as below.
-- SFTP places plugin (id `diro-sftp`, version 0.1.0-alpha.3): the plugin that opens folders on other computers over SSH, license Apache-2.0 OR MIT. It needs the OpenSSH program on your computer; [remote places over SFTP](remote-places.md) says more. It is in the list of the release files, because the release builds the program for each computer below and pins it. A build you made from source does not have it in its list, because there is no program to pin. Build the plugin yourself, as that guide says.
-- Disk image places plugin (id `diro-disk`, version 0.1.0-alpha.3): the plugin that opens ISO images and virtual disks like folders, license Apache-2.0 OR MIT. It needs no other program, and it uses 7-Zip and qemu-img when they are there; [disk images](disk-images.md) says more. Like the SFTP plugin it is in the release files' list and not in a build made from source.
-- Git plugin (id `diro-git`, version 0.1.0-alpha.3): the plugin that shows a repository's branch and changes in the panels and runs git commands, license Apache-2.0 OR MIT. It needs the git program on your computer, version 2.30 or newer; [git in the panels](git.md) says more. It too is in the release files' list only.
-- Encryption plugin (id `diro-crypt`, version 0.1.0-alpha.3, plugin id `crypt`): the plugin that encrypts and decrypts files with age, asking every secret in a hidden field and keeping none, license Apache-2.0 OR MIT. It needs no other program, because age runs inside it. The gpg commands of the same submenu use your own GnuPG instead ([Tools and diro doctor](tools.md)). [Encryption and signatures](encryption.md) says more, and why age is a plugin and not part of `diro`. It too is in the release files' list only.
+- SFTP places plugin (id `diro-sftp`, version 0.1.0-alpha.4): the plugin that opens folders on other computers over SSH, license Apache-2.0 OR MIT. It needs the OpenSSH program on your computer; [remote places over SFTP](remote-places.md) says more. It is in the list of the release files, because the release builds the program for each computer below and pins it. A build you made from source does not have it in its list, because there is no program to pin. Build the plugin yourself, as that guide says.
+- Disk image places plugin (id `diro-disk`, version 0.1.0-alpha.4): the plugin that opens ISO images and virtual disks like folders, license Apache-2.0 OR MIT. It needs no other program, and it uses 7-Zip and qemu-img when they are there; [disk images](disk-images.md) says more. Like the SFTP plugin it is in the release files' list and not in a build made from source.
+- Git plugin (id `diro-git`, version 0.1.0-alpha.4): the plugin that shows a repository's branch and changes in the panels and runs git commands, license Apache-2.0 OR MIT. It needs the git program on your computer, version 2.30 or newer; [git in the panels](git.md) says more. It too is in the release files' list only.
+- Encryption plugin (id `diro-crypt`, version 0.1.0-alpha.4, plugin id `crypt`): the plugin that encrypts and decrypts files with age, asking every secret in a hidden field and keeping none, license Apache-2.0 OR MIT. It needs no other program, because age runs inside it. The gpg commands of the same submenu use your own GnuPG instead ([Tools and diro doctor](tools.md)). [Encryption and signatures](encryption.md) says more, and why age is a plugin and not part of `diro`. It too is in the release files' list only.
 
 `diro components list` always shows what this build knows. The list is part of each build, so a component newer than your diroxide arrives with your next update.
 
@@ -76,7 +76,7 @@ For a plugin:
 ```text
 Opening SFTP places needs a plugin.
 License Apache-2.0 OR MIT. From the public manifest.
-Download diro-sftp 0.1.0-alpha.3, 4.2 MB? y or n
+Download diro-sftp 0.1.0-alpha.4, 4.2 MB? y or n
 ```
 
 The sizes in these examples are only examples. The question gives the real size of the file for your computer.
@@ -305,7 +305,7 @@ Run it from that `plugins` folder, or give the full path to the one you want. It
 diroxide tries these addresses for each file, in order:
 
 1. Your own source, if you set one (below).
-2. The file's address in the list, or, when it has none, the project's public releases. Each component is published under its own tag there, its id and its version, such as `diro-examples-0.1.1` and `diro-sftp-0.1.0-alpha.3`.
+2. The file's address in the list, or, when it has none, the project's public releases. Each component is published under its own tag there, its id and its version, such as `diro-examples-0.1.1` and `diro-sftp-0.1.0-alpha.4`.
 
 It fetches with a small client built into diroxide. If that client cannot reach the server at all, because there is no answer, no connection or a TLS problem, diroxide tries `curl` and then `wget` from your PATH. A server's answer, such as "not found", is final and is not retried with another program. A build of diroxide made without the built-in client uses `curl` and then `wget` alone. When none of them is there you hear "Not downloaded: curl was not found." and "Install curl, or install from a file."
 
