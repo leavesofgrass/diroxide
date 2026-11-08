@@ -157,7 +157,9 @@ pub fn container(head: &[u8], tail: &[u8]) -> Container {
     if at(head, 0, b"# Disk DescriptorFile") {
         return Container::VmdkDescriptor;
     }
-    let footer = if at(tail, tail.len().saturating_sub(512), b"conectix") {
+    // A tail shorter than the footer is never the footer (the nightly
+    // fuzz run found the slice below zero on an eight-byte file).
+    let footer = if tail.len() >= 512 && at(tail, tail.len() - 512, b"conectix") {
         Some(&tail[tail.len() - 512..])
     } else if at(head, 0, b"conectix") {
         Some(head)

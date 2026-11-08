@@ -92,3 +92,15 @@ fn listings_of_any_text_parse() {
     }
     fuzzing::seven_listing(&[0xff, 0xfe, b'\n', b'=', b' ']);
 }
+
+/// The nightly fuzz run's first two crash inputs (Sunday, November 8,
+/// 2026): a file that is only the VHD footer's magic, and one with four
+/// bytes after it. The sniffer took the eight bytes for a 512-byte footer
+/// and sliced below zero. Every target body runs them whole.
+#[test]
+fn the_nightly_crash_inputs_pass_every_target() {
+    fuzzing::all(b"conectix");
+    fuzzing::all(b"conectix\xff\xff\x83\x0a");
+    fuzzing::all(&[b"conectix".as_slice(), &[0u8; 511]].concat());
+    fuzzing::all(&[&[0u8; 500], b"conectix".as_slice()].concat());
+}
