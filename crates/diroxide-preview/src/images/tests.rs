@@ -539,3 +539,35 @@ fn the_meta_reader_gives_the_same_rows_as_fields() {
         Err(MetaError::Unreadable("not a picture".to_owned()))
     );
 }
+
+/// A PNG whose first chunk is noise (the demo set's `broken.png`: the
+/// signature, then noise) fails in plain words, never in the png crate's
+/// debug text with the chunk's raw bytes inside braces.
+#[test]
+fn a_png_of_noise_after_its_signature_fails_in_plain_words() {
+    let mut noisy = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    noisy.extend_from_slice(&[0, 0, 0, 13]);
+    noisy.extend_from_slice(&[0xF2, 0xFE, 0x8A, 0x01]);
+    noisy.extend_from_slice(&[0; 17]);
+    let Err(ImageError::Damaged(words)) = facts(noisy) else {
+        panic!("noise after the signature must be damaged");
+    };
+    assert!(
+        words.chars().all(|c| c.is_ascii_graphic() || c == ' ') && !words.contains('{'),
+        "{words}"
+    );
+    let line = unreadable_sentence("PNG", &ImageError::Damaged(words));
+    assert_eq!(line, "PNG, unreadable: the header is damaged");
+    fits(&line);
+    assert_eq!(
+        super::header::plain_or("file is cut short".to_owned(), "x"),
+        "file is cut short"
+    );
+    assert_eq!(
+        super::header::plain_or(
+            "ChunkType { type: \u{f2}\u{fe} }".to_owned(),
+            "the header is damaged"
+        ),
+        "the header is damaged"
+    );
+}

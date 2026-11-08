@@ -269,7 +269,7 @@ fn png_error(error: png::DecodingError) -> ImageError {
     match error {
         png::DecodingError::IoError(e) => ImageError::from(e),
         png::DecodingError::LimitsExceeded => ImageError::HeaderTooLong,
-        other => ImageError::Damaged(other.to_string()),
+        other => ImageError::Damaged(plain_or(other.to_string(), "the header is damaged")),
     }
 }
 
@@ -794,4 +794,15 @@ fn find_box(
         }
         at = box_end;
     }
+}
+
+/// A decoder's words, kept when they are plain (printable ASCII and no
+/// debug braces), else the fallback: the png crate prints a chunk's raw
+/// type bytes inside braces ("ChunkType { type: ..., critical: false }
+/// chunk appeared before IHDR chunk"), which a screen reader cannot say.
+pub(crate) fn plain_or(words: String, fallback: &str) -> String {
+    let plain = !words.is_empty()
+        && words.chars().all(|c| c.is_ascii_graphic() || c == ' ')
+        && !words.contains(['{', '}']);
+    if plain { words } else { fallback.to_owned() }
 }

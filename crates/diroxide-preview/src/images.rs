@@ -196,11 +196,17 @@ impl PixelGuard {
             })
             .map_err(|e| match e {
                 crate::doc::DocError::TookTooLong => ImageError::TookTooLong,
-                other => ImageError::Damaged(other.to_string()),
+                other => ImageError::Damaged(header::plain_or(
+                    other.to_string(),
+                    "the picture data is damaged",
+                )),
             })?
             .map_err(|e| match e {
                 image::ImageError::Limits(_) => ImageError::TooLarge,
-                other => ImageError::Damaged(other.to_string()),
+                other => ImageError::Damaged(header::plain_or(
+                    other.to_string(),
+                    "the picture data is damaged",
+                )),
             })
     }
 }
