@@ -104,7 +104,14 @@ pub enum PictureFrom {
     Viewer,
     /// The quick view's preview region.
     Preview,
+    /// The panel's focused row: F3 or Show picture with nothing open
+    /// (lane VP).
+    Panel,
 }
+
+/// A PDF page shown as a picture (lane VP): the page, and the pages in
+/// all when known.
+pub type Page = diroxide_app::app::picture_view::PageAsk;
 
 /// The open picture view.
 #[derive(Clone, Debug)]
@@ -113,6 +120,8 @@ struct OpenPicture {
     from: PictureFrom,
     view: PictureView,
     animation: Option<String>,
+    /// For a PDF, the page shown.
+    page: Option<Page>,
 }
 
 /// A picture being read on a thread of its own.
@@ -121,6 +130,8 @@ struct Reading {
     place: diroxide_core::Place,
     name: String,
     from: PictureFrom,
+    /// For a PDF, the page drawn.
+    page: Option<Page>,
     answer: std::sync::mpsc::Receiver<Result<Opened, Message>>,
     since: Instant,
     said: bool,
@@ -800,7 +811,7 @@ impl Frontend {
             self.menu_requests.push(enter);
             return;
         }
-        if self.picture_key(&key) {
+        if self.picture_key(&key, now) {
             // The picture view's own keys; Enter opening it is the app's
             // Show picture (view.picture, lane AE).
             self.after(now);
@@ -982,8 +993,9 @@ impl Frontend {
         let from = match ask.from {
             PictureSource::Viewer => PictureFrom::Viewer,
             PictureSource::Preview => PictureFrom::Preview,
+            PictureSource::Panel => PictureFrom::Panel,
         };
-        self.read_picture(ask.place, ask.name, from, now);
+        self.read_picture(ask.place, ask.name, from, ask.page, now);
     }
 
     /// Whether the viewer or the preview still shows the picture at
@@ -1001,6 +1013,12 @@ impl Frontend {
                         .and_then(|q| q.shown())
                         .is_some_and(|s| &s.place == place)
             }
+            PictureFrom::Panel => {
+                !self.app.in_preview()
+                    && self.app.viewer().is_none()
+                    && self.app.dialog().is_none()
+                    && self.app.active_panel().focused_place().as_ref() == Some(place)
+            }
         }
     }
 
@@ -1008,7 +1026,7 @@ impl Frontend {
     /// view: Plus and Minus zoom, 0 fits, 1 shows the actual size, the
     /// arrows move a zoomed picture, Escape closes; every other key is
     /// the app's.
-    fn picture_key(&mut self, key: &Key) -> bool {
+    fn picture_key(&mut self, key: &Key, now: Instant) -> bool {
         if self.app.key_test_active() || self.app.capturing_key() || self.app.dialog().is_some() {
             return false;
         }
@@ -1017,6 +1035,9 @@ impl Frontend {
         if self.picture.is_some() {
             match key.code {
                 KeyCode::Escape if plain => self.picture = None,
+                // Enter shows what is shown already; it never reaches the
+                // panel's row behind the picture (lane VP).
+                KeyCode::Enter if plain => {}
                 KeyCode::Char('+' | '=') | KeyCode::KeypadPlus if bare => self.zoom_picture(true),
                 KeyCode::Char('-') | KeyCode::KeypadMinus if bare => self.zoom_picture(false),
                 KeyCode::Char('0') if bare => self.set_zoom(Zoom::Fit),
@@ -1025,6 +1046,9 @@ impl Frontend {
                 KeyCode::Right if plain => self.pan_picture((1, 0)),
                 KeyCode::Up if plain => self.pan_picture((0, -1)),
                 KeyCode::Down if plain => self.pan_picture((0, 1)),
+                // A PDF's next and previous page (lane VP).
+                KeyCode::PageDown if plain && self.page_shown() => self.turn_page(true, now),
+                KeyCode::PageUp if plain && self.page_shown() => self.turn_page(false, now),
                 _ => return false,
             }
             return true;
@@ -1040,24 +1064,50 @@ impl Frontend {
         place: diroxide_core::Place,
         name: String,
         from: PictureFrom,
+        page: Option<Page>,
         now: Instant,
     ) {
         let (tx, answer) = std::sync::mpsc::channel();
         let registry = self.runtime.registry().clone();
         let decoder = self.picture_guard.clone();
         let waker = self.waker.clone();
+        // ImageMagick and pdftoppm through the app's tools (lane VP).
+        let helpers = self.app.picture_helpers();
         let (at, called) = (place.clone(), name.clone());
         let spawned = std::thread::Builder::new()
             .name("diroxide-picture".to_owned())
             .spawn(move || {
                 let guard = diroxide_preview::images::PixelGuard::DEFAULT;
-                let read = registry
-                    .resolve(&at)
-                    .and_then(|provider| provider.open_seekable(&at, &Default::default()))
-                    .map(|mut source| {
-                        crate::picture::read_picture(&mut source, &called, &guard, &decoder)
-                    })
-                    .map_err(|error| Message::from_error("open", &called, &error));
+                let local = at.local_path().map(std::path::PathBuf::from);
+                let read = match page {
+                    // A PDF's page, drawn by pdftoppm.
+                    Some(page) => {
+                        let line =
+                            diroxide_app::app::picture_view::page_words(page.page, page.pages);
+                        let png = match &local {
+                            Some(path) => helpers.page_png(path, page.page, guard.max_buffer),
+                            None => Err(vec![crate::picture::NOT_LOCAL.to_owned()]),
+                        };
+                        Ok(crate::picture::read_page(png, &line, &guard, &decoder))
+                    }
+                    None => registry
+                        .resolve(&at)
+                        .and_then(|provider| provider.open_seekable(&at, &Default::default()))
+                        .map(|mut source| {
+                            let convert = || match &local {
+                                Some(path) => helpers.magick_png(path, guard.max_buffer),
+                                None => Err(vec![crate::picture::NOT_LOCAL.to_owned()]),
+                            };
+                            crate::picture::read_picture_with(
+                                &mut source,
+                                &called,
+                                &guard,
+                                &decoder,
+                                Some(&convert),
+                            )
+                        })
+                        .map_err(|error| Message::from_error("open", &called, &error)),
+                };
                 let _ = tx.send(read);
                 if let Some(wake) = waker {
                     wake();
@@ -1076,10 +1126,54 @@ impl Frontend {
             place,
             name,
             from,
+            page,
             answer,
             since: now,
             said: false,
         });
+    }
+
+    /// Whether the picture view shows a PDF's page.
+    fn page_shown(&self) -> bool {
+        self.picture
+            .as_ref()
+            .is_some_and(|open| open.page.is_some())
+    }
+
+    /// The next or the previous page of the PDF shown (lane VP): drawn on
+    /// the picture thread, "Page 2 of 3" said when it is in; at the ends,
+    /// said.
+    fn turn_page(&mut self, forward: bool, now: Instant) {
+        if self.reading.is_some() {
+            return;
+        }
+        let Some(open) = self.picture.as_ref() else {
+            return;
+        };
+        let Some(page) = open.page else {
+            return;
+        };
+        let next = if forward {
+            page.page.saturating_add(1)
+        } else {
+            page.page.saturating_sub(1)
+        };
+        let past_end = page.pages.is_some_and(|pages| next > pages);
+        if next == 0 || past_end {
+            let which = if forward { "Last page" } else { "First page" };
+            let line = format!(
+                "{which}, {}",
+                diroxide_app::app::picture_view::page_words(page.page, page.pages)
+            );
+            self.say_window(Message::info(line));
+            return;
+        }
+        let (place, name, from) = (open.place.clone(), open.view.name.clone(), open.from);
+        let page = Page {
+            page: next,
+            pages: page.pages,
+        };
+        self.read_picture(place, name, from, Some(page), now);
     }
 
     /// Takes the picture read, when it is in: the view opens on it while
@@ -1117,10 +1211,22 @@ impl Frontend {
                 self.picture_count += 1;
                 let dims = (picture.pixels.width, picture.pixels.height);
                 let zoom = Zoom::Fit;
-                let lines = crate::picture::view_lines(
+                let mut lines = crate::picture::view_lines(
                     crate::picture::zoom_words(zoom, self.picture_size, dims),
                     picture.animation.as_deref(),
                 );
+                if reading.page.is_some() {
+                    lines.push(crate::picture::PAGE_HELP_LINE.to_owned());
+                }
+                // Straight from the panel or a page turned, the picture's
+                // words come first, as the quick view says them (lane VP).
+                let words_first = reading.from == PictureFrom::Panel || reading.page.is_some();
+                let turned = self
+                    .picture
+                    .as_ref()
+                    .is_some_and(|open| open.page.is_some())
+                    && reading.page.is_some();
+                let sentence = picture.sentence.clone();
                 self.picture = Some(OpenPicture {
                     place: reading.place,
                     from: reading.from,
@@ -1134,12 +1240,23 @@ impl Frontend {
                         generation: self.picture_count,
                     },
                     animation: picture.animation,
+                    page: reading.page,
                 });
+                if words_first {
+                    self.say_window(Message::info(sentence));
+                }
                 // The graphic says its name and words as the focus moves
                 // to it; its keys are said once, after.
-                self.say_window(Message::info(crate::picture::HELP_LINE));
+                if !turned {
+                    self.say_window(Message::info(crate::picture::HELP_LINE));
+                }
             }
-            Ok(Opened::Refused(words)) => self.say_window(Message::info(words)),
+            Ok(Opened::Refused(words)) => {
+                // A line each: the refusal, then an install line.
+                for line in words.lines() {
+                    self.say_window(Message::info(line));
+                }
+            }
             Err(message) => self.say_window(message),
         }
     }
@@ -1153,6 +1270,11 @@ impl Frontend {
                 crate::picture::zoom_words(open.view.zoom, size, dims),
                 open.animation.as_deref(),
             );
+            if open.page.is_some() {
+                open.view
+                    .lines
+                    .push(crate::picture::PAGE_HELP_LINE.to_owned());
+            }
         }
     }
 

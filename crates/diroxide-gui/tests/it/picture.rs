@@ -152,7 +152,9 @@ fn opened(rig: &mut Rig) {
 fn enter_in_the_viewer_opens_a_made_png_as_one_named_graphic_with_its_words() {
     let (mut rig, _dir) = window_with("photo.png", &plain_png(64, 48, [0, 128, 255, 255]));
     let from = rig.spoken().len();
-    rig.press("f3");
+    // The viewer over the bytes, through Hex mode (F3 opens the picture
+    // itself, lane VP).
+    rig.run("viewer.hex");
     assert!(rig.f.app().viewer().is_some());
     // The window says once that Enter shows the picture.
     let spoken = rig.spoken()[from..].join(" ");
@@ -203,7 +205,6 @@ fn enter_in_the_viewer_opens_a_made_png_as_one_named_graphic_with_its_words() {
 fn the_picture_is_drawn_in_the_window() {
     let (mut rig, _dir) = window_with("photo.png", &plain_png(64, 48, [0, 128, 255, 255]));
     rig.press("f3");
-    rig.press("enter");
     opened(&mut rig);
     rig.redraw();
     // The middle of the window is the picture's blue, at the fit.
@@ -217,7 +218,6 @@ fn the_picture_is_drawn_in_the_window() {
 fn plus_minus_zero_and_one_zoom_and_fit_and_say_it_in_words() {
     let (mut rig, _dir) = window_with("photo.png", &plain_png(64, 48, [10, 20, 30, 255]));
     rig.press("f3");
-    rig.press("enter");
     opened(&mut rig);
     rig.press("1");
     assert_eq!(
@@ -254,14 +254,13 @@ fn a_picture_past_the_pixel_guard_is_said_in_words_and_never_opened() {
     // The header says 20,000 by 20,000; the bytes hold one pixel.
     let (mut rig, _dir) = window_with("huge.png", &png(20_000, 20_000, 1, 1, [0, 0, 0, 255]));
     rig.press("f3");
-    rig.press("enter");
     opened(&mut rig);
     assert!(rig.f.picture_view().is_none());
     assert!(graphic(&rig).is_none());
     let said = rig.spoken().last().cloned().unwrap();
     assert_eq!(said, "PNG, 20000 by 20000, too large to open");
     assert!(said.chars().count() <= BRAILLE_CELLS);
-    // The viewer keeps the focus.
+    // The panel's row keeps the focus.
     assert_eq!(rig.focus_node().0, Role::ListBoxOption);
 }
 
@@ -269,7 +268,6 @@ fn a_picture_past_the_pixel_guard_is_said_in_words_and_never_opened() {
 fn an_animation_is_shown_still_and_says_it_is_not_playing() {
     let (mut rig, _dir) = window_with("crow.gif", &two_frame_gif());
     rig.press("f3");
-    rig.press("enter");
     opened(&mut rig);
     let (name, description) = graphic(&rig).unwrap_or_else(|| panic!("{:?}", rig.spoken()));
     assert_eq!(name, "crow.gif");
@@ -316,7 +314,7 @@ fn enter_in_the_quick_views_preview_opens_the_picture_and_escape_goes_back() {
 fn the_hint_is_said_once_even_after_a_prompt_over_the_viewer() {
     let (mut rig, _dir) = window_with("photo.png", &plain_png(8, 8, [0, 0, 0, 255]));
     let from = rig.spoken().len();
-    rig.press("f3");
+    rig.run("viewer.hex");
     rig.run("viewer.jump");
     assert!(rig.dialog_name().is_some());
     rig.press("escape");
@@ -336,4 +334,144 @@ fn enter_on_a_text_file_in_the_viewer_is_the_apps() {
     assert!(!rig.f.picture_reading());
     assert!(rig.f.picture_view().is_none());
     assert!(!rig.spoken()[from..].iter().any(|l| l == ENTER_HINT));
+}
+
+/// Each line the app and the window said since `from`, one a message.
+fn said_since(rig: &Rig, from: usize) -> Vec<String> {
+    rig.said()[from..].iter().map(|m| m.text.clone()).collect()
+}
+
+/// A helper-program runner for the window's tests (lane VP): it finds the
+/// tools named, answers each with a made PNG, and records the runs; no
+/// real program starts.
+struct DrawingTools {
+    found: Vec<&'static str>,
+    png: Vec<u8>,
+    runs: std::sync::Mutex<Vec<Vec<String>>>,
+}
+
+impl diroxide_vfs::ToolRunner for DrawingTools {
+    fn has(&self, tool: &str) -> bool {
+        self.found.contains(&tool)
+    }
+
+    fn run(
+        &self,
+        request: &diroxide_vfs::ToolRequest,
+        _cancel: &diroxide_vfs::CancelToken,
+    ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+        let mut line = vec![request.tool.clone()];
+        line.extend(
+            request
+                .args
+                .iter()
+                .map(|a| a.to_string_lossy().into_owned()),
+        );
+        self.runs.lock().unwrap().push(line);
+        if !self.has(&request.tool) {
+            return Err(diroxide_vfs::ToolRunError::NotInstalled {
+                tool: request.tool.clone(),
+                name: request.tool.clone(),
+            });
+        }
+        Ok(diroxide_vfs::ToolOutput::new(
+            Some(0),
+            self.png.clone(),
+            Vec::new(),
+        ))
+    }
+
+    fn run_streaming(
+        &self,
+        request: &diroxide_vfs::ToolRequest,
+        cancel: &diroxide_vfs::CancelToken,
+        _record: &mut dyn FnMut(diroxide_vfs::ToolStream, &str) -> std::ops::ControlFlow<()>,
+    ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+        self.run(request, cancel)
+    }
+}
+
+#[test]
+fn f3_opens_a_picture_from_the_panel_with_its_sentence_said_first() {
+    let (mut rig, _dir) = window_with("photo.png", &plain_png(40, 30, [0, 0, 255, 255]));
+    let from = rig.said().len();
+    rig.press("f3");
+    opened(&mut rig);
+    assert!(rig.f.app().viewer().is_none(), "no hex on the way");
+    let spoken = said_since(&rig, from);
+    // One utterance for the screen reader, the sentence first.
+    let heard = rig.spoken().last().cloned().unwrap_or_default();
+    assert!(heard.starts_with("PNG, 40 by 30"), "{heard}");
+    let sentence = spoken
+        .iter()
+        .position(|l| l.starts_with("PNG, 40 by 30"))
+        .unwrap_or_else(|| panic!("{spoken:?}"));
+    let help = spoken.iter().position(|l| l == HELP_LINE).unwrap();
+    assert!(sentence < help, "{spoken:?}");
+    assert!(!spoken.iter().any(|l| l.contains("hex mode")), "{spoken:?}");
+    let (name, _) = graphic(&rig).unwrap();
+    assert_eq!(name, "photo.png");
+    // Enter in the picture never reaches the row behind it.
+    rig.press("enter");
+    assert!(rig.f.picture_view().is_some());
+    rig.press("escape");
+    assert!(rig.f.picture_view().is_none());
+    assert_eq!(rig.focus_node().0, Role::ListBoxOption);
+}
+
+#[test]
+fn a_pdfs_pages_show_as_pictures_through_pdftoppm_and_page_down_turns_them() {
+    let (mut rig, _dir) = window_with("report.pdf", b"%PDF-1.4\n% made for the test\n");
+    let tools = std::sync::Arc::new(DrawingTools {
+        found: vec!["pdftoppm"],
+        png: plain_png(30, 40, [255, 255, 255, 255]),
+        runs: std::sync::Mutex::new(Vec::new()),
+    });
+    rig.f.app_mut().set_tool_runner(tools.clone());
+    let from = rig.said().len();
+    rig.run("view.picture");
+    opened(&mut rig);
+    let (name, description) = graphic(&rig).unwrap_or_else(|| panic!("{:?}", rig.spoken()));
+    assert_eq!(name, "report.pdf");
+    assert_eq!(description, "Page 1");
+    assert!(said_since(&rig, from).iter().any(|l| l == "Page 1"));
+    assert!(
+        picture_lines(&rig)
+            .iter()
+            .any(|l| l == diroxide_gui::picture::PAGE_HELP_LINE)
+    );
+    rig.press("pagedown");
+    opened(&mut rig);
+    assert_eq!(rig.said().last().map(|m| m.text.as_str()), Some("Page 2"));
+    rig.press("pageup");
+    opened(&mut rig);
+    rig.press("pageup");
+    assert_eq!(
+        rig.said().last().map(|m| m.text.as_str()),
+        Some("First page, Page 1")
+    );
+    let runs = tools.runs.lock().unwrap().clone();
+    assert_eq!(runs.len(), 3, "{runs:?}");
+    assert_eq!(&runs[1][..5], ["pdftoppm", "-f", "2", "-l", "2"]);
+}
+
+#[test]
+fn without_pdftoppm_a_page_says_so_with_the_install_line() {
+    let (mut rig, _dir) = window_with("report.pdf", b"%PDF-1.4\n% made for the test\n");
+    let tools = std::sync::Arc::new(DrawingTools {
+        found: Vec::new(),
+        png: Vec::new(),
+        runs: std::sync::Mutex::new(Vec::new()),
+    });
+    rig.f.app_mut().set_tool_runner(tools);
+    let from = rig.said().len();
+    rig.run("view.picture");
+    opened(&mut rig);
+    assert!(rig.f.picture_view().is_none());
+    let spoken = said_since(&rig, from);
+    let at = spoken
+        .iter()
+        .position(|l| l == "Page pictures need pdftoppm")
+        .unwrap_or_else(|| panic!("{spoken:?}"));
+    assert!(spoken[at + 1].starts_with("Install: "), "{spoken:?}");
 }
