@@ -28,6 +28,7 @@ What alpha 4 adds. It has no release date here yet; the date is added when the a
 - Preview, in the View menu, runs the helper programs on the focused file at once. The setting `quick_view.auto_preview` decides whether they also run by themselves, and it is off in screen reader mode. Read text in picture has Tesseract read the words in a picture, as a job Cancel stops.
 - Alt+Enter lists every fact about the focused entry in ten groups, the most important first. A file always has a Privacy row ("Privacy: nothing private found") and a Checksum row ("Checksum: not computed"). The facts read from inside the file join the list a moment later: "Read 9 more details". An archive says "Entries: 8 files, 2 folders" before its size. Closing the list stops the read, ffprobe included.
 - Show all asks ExifTool for every tag. Say details, Copy details and Copy all details take a file's details without opening the list, and Copy details leaves the private rows out.
+- F3 reads what the quick view reads. A picture opens the picture view in the window and its words in a terminal, and a PDF, a Word, EPUB or other document, a sound or a video opens the viewer on its words, titled "report.pdf, preview". Hex is one key away, H, and back. A PDF's pages show as pictures through pdftoppm, with Page Down and Page Up, and HEIC, AVIF and Photoshop files through ImageMagick. A missing helper is said in words, with its install line. The viewer's line numbers are L, the Line numbers item and `viewer.line_numbers`. [The viewer](viewer.md#pictures-and-documents) has the words.
 - [Previews and the quick view's formats](previews.md) and [the details view](details.md) are the new guides.
 
 ### Columns, notes and fields
@@ -83,7 +84,7 @@ What alpha 4 adds. It has no release date here yet; the date is added when the a
 
 ### The window
 
-- The window has a picture view. Show picture, in the View menu and the palette, opens it, and Enter does the same on a picture in the viewer or the preview. Plus and Minus zoom, 0 fits and 1 shows the actual size. A terminal says "Show picture works only in the window."
+- The window has a picture view. Show picture, in the View menu and the palette, opens it, and Enter does the same on a picture in the viewer or the preview. Plus and Minus zoom, 0 fits and 1 shows the actual size. A terminal says "Pictures show in the window: diro --gui".
 - Copied text now reaches the clipboard on Wayland. A paste under Wayland with no XWayland still reads nothing.
 - The window reads your theme files, and says "Unknown theme NAME. Galaxy is in use." once for a name it does not know. The terminal draws a theme's group colors too, at 256 colors or true color.
 - Every list and question of alpha 4 has a name of its own in the window, 112 dialog purposes in all, and the window's scripted walk checks the first words of the new ones within 40 cells. [Using diroxide with a screen reader](screen-readers.md) has the lines.
