@@ -384,7 +384,8 @@ The alpha 4 lines, from the same walk over a folder made for it. It runs helper 
 - Checksum on a download is "SHA-256 of example-tool.zip, ba78 16bf", with the focus on "ba78 16bf 8f01 cfea". Verify checksum on the zip is "1 file matches SHA256SUMS", with the focus on "List not signed: 1 of 1 match".
 - Verify checksum on the list itself is "1 differs, 1 missing, 1 match", with the focus on "Does not match: example-notes.txt". Down says "Missing: example-extra.txt", and Down again "List not signed: 1 of 3 match".
 - Watched folders is "Watched folders: 1 task", with the focus on "Notes, off". Enter opens "Notes actions", with the focus on "Turn on, asks first". Preview is "Notes: 2 would convert, 0 skipped", with the focus on "Would convert a.md". Turn on asks "Turn on Notes?" with the focus on "No", and No says "Nothing changed."
-- F3 on a picture says "Enter shows the picture."
+- F3 on a picture opens the picture view and says the sentence first, "PNG, 1 by 1", then the help line "Plus, Minus zoom; 0 fits; Escape closes". Escape closes the picture and the focus is back on the file's row.
+- F3 on `report.pdf` opens the viewer on its words: "report.pdf, preview", then "PDF, 3 pages, Example Report". Without pdftotext, "No preview: pdftotext not found" and an "Install:" line. H says "Hex mode: the bytes of report.pdf" and H again "report.pdf, preview". With Poppler installed, Enter on a page's text says "Page 1 of 3" as the page's picture opens, and Page Down says "Page 2 of 3". Without it, "Page pictures need pdftoppm".
 - Change time is "Change time", with the focus on "Change the times of report.md".
 - Review pictures is "Review: 1 of 2, crow.png, picture", with the focus on "Keep, K". Escape says "Review ended at 1 of 2". Move into month folders asks "Move 2 pictures into 1 month folder?" with the focus on "No", and No says "Nothing moved."
 - Delete on a file inside a zip asks "Remove lesson.txt from course.zip?" with the focus on "No", and No says "Nothing changed."
@@ -437,6 +438,10 @@ Questions to answer: Did the menu bar show and read? Was every row read once, na
 Alpha 4 has a demo set of its own. `cargo xtask demo-tools FOLDER` writes it into a new or empty folder on drive D:, with plain names and the same bytes and times on every run: pictures and a broken one, a JPEG named `liar.png`, Polish text in Windows-1250, a song of silence, a PDF, a download with its checksum list, two git repositories when git is there, two disk images, a watched folder with its task, and a steps file, `check-steps.txt`. The command lists each fixture with its size, one line each, the name first, and ends with the `diro` line that starts the check.
 
 The steps file numbers its steps 0 to 12, in two sittings: 0 to 6, then 7 to 12. Run them with NVDA, then JAWS, then the Braille display. Each line in quotes in the steps file is what the program is built to say, and a different line is a finding. [Building](dev/building.md#the-tasks) says what the command makes and where its words are.
+
+Two things in the demo set to hear since F3 learned to read pictures and documents. In `photos` or `mixed`, F3 on a picture in the window: listen for the picture's sentence first, then the keys, and Escape back to the row. In `docs`, F3 on `report.pdf`: listen for the title with the word preview, the sentence, the rows, and then H for the bytes and H back. In a terminal, F3 on the same picture says its sentence and "Pictures show in the window: diro --gui". The steps file written by `demo-tools` may still name the older line for a picture, "Enter shows the picture.", in its step 12. That line is now said only in the preview, and when a picture's bytes are open in hex.
+
+Line numbers in the viewer: L shows or hides them, and Ctrl+D says the line either way. Listen for "Line numbers on" and "Line numbers off".
 
 ## Keys that may clash
 
