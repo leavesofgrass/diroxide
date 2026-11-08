@@ -470,11 +470,12 @@ fn the_owners_alpha_four_steps_in_the_window() {
     at = rig.said().len();
     rig.press("n");
     at = heard.said(&rig, at, "Nothing changed.");
-    // The picture view (lanes G5b and AE): F3 on a photo says how to see
-    // it; Enter would open the picture.
+    // The picture view (lanes G5b, AE and VP): F3 on a photo opens it at
+    // once, its sentence said first, then its keys; Escape goes back.
     go(&mut rig, "photo.png");
     rig.press("f3");
-    heard.said_when_done(&mut rig, at, "Enter shows the picture.");
+    heard.said_when_done(&mut rig, at, "PNG, 1 by 1");
+    heard.said_when_done(&mut rig, at, "Plus, Minus zoom; 0 fits; Escape closes");
     rig.press("escape");
     // Change time (lane AP): a list of settings, its first row the plan.
     go(&mut rig, "report.md");

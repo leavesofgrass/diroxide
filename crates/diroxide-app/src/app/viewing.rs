@@ -165,18 +165,45 @@ impl std::fmt::Debug for Viewing {
 }
 
 /// Why a viewer source is being read.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) enum SourceFor {
-    /// F3: a new viewer.
+    /// F3: a new viewer; `bytes` when the Hex command asked for the
+    /// file's bytes, so no preview's words are read (lane VP).
     Open {
         side: Side,
         row: String,
         siblings: Vec<Sibling>,
+        bytes: bool,
     },
     /// The next or the previous file, in the open viewer.
     Show,
     /// Reload, in the open viewer.
     Reload,
+    /// The preview's words, read after the bytes looked binary (lane
+    /// VP): where they go, the viewer over the bytes when it is not open
+    /// yet, and what it said, said only when there are no words.
+    Words {
+        to: WordsTo,
+        bytes: Option<Box<Viewer>>,
+        held: Vec<Message>,
+    },
+}
+
+/// Where a preview's words go once read (lane VP).
+#[derive(Debug)]
+pub(crate) enum WordsTo {
+    /// A new viewer, the bytes behind the words.
+    Open {
+        side: Side,
+        row: String,
+        siblings: Vec<Sibling>,
+    },
+    /// The open viewer, stepped to the next or the previous file.
+    Show,
+    /// The open viewer's words, read again.
+    Reload,
+    /// Behind the bytes the open viewer shows, said nothing.
+    Behind,
 }
 
 impl App {
@@ -263,6 +290,19 @@ impl App {
         if let Some(effects) = self.typed_slot(crate::typing::Slot::View) {
             return effects;
         }
+        // A picture in the window opens in the picture view at once
+        // (lane VP, the owner's finding).
+        if let Some(effects) = self.show_focused_picture() {
+            return effects;
+        }
+        self.view_focused(false)
+    }
+
+    /// The focused file in the viewer: its bytes as the viewer reads
+    /// them, and for a file whose bytes are binary the preview's words in
+    /// front of them unless `bytes` (the Hex command with no viewer open,
+    /// the road to a picture's or a document's bytes).
+    fn view_focused(&mut self, bytes: bool) -> Vec<Effect> {
         let side = self.active;
         let panel = self.panel(side);
         let (Some(entry), Some(place)) = (panel.focused_entry(), panel.focused_place()) else {
@@ -296,6 +336,7 @@ impl App {
                 side,
                 row,
                 siblings,
+                bytes,
             },
         )
     }
@@ -318,6 +359,7 @@ impl App {
                 side,
                 row,
                 siblings,
+                bytes: false,
             },
         )
     }
@@ -369,6 +411,7 @@ impl App {
                 side,
                 row,
                 siblings,
+                bytes,
             } => {
                 let options = ViewerOptions::from_settings(&self.settings, self.screen_reader);
                 let (mut viewer, mut said) =
@@ -389,39 +432,348 @@ impl App {
                     .get_or_insert_with(highlight::Session::new)
                     .clone();
                 said.extend(viewer.set_highlighter(session));
-                // A search result: the viewer at its line, the results
-                // aside until it closes (W3a).
-                if let Some(line) = self.take_view_line() {
-                    said.extend(viewer.jump(&line.to_string()));
+                // Bytes that are not text, of a file a previewer takes:
+                // its words first, the bytes behind them (lane VP).
+                if !bytes
+                    && viewer.looks_binary()
+                    && let Some(wanted) = self.words_wanted(&place)
+                {
+                    let to = WordsTo::Open {
+                        side,
+                        row,
+                        siblings,
+                    };
+                    return self.ask_words(&place, wanted, to, Some(Box::new(viewer)), said, false);
                 }
-                if self.take_park_on_open() {
-                    self.park_results();
-                }
-                self.viewing = Some(Viewing {
-                    viewer: Box::new(viewer),
-                    side,
-                    row,
-                    siblings,
-                    last_follow: None,
-                });
+                self.install_viewer(viewer, side, row, siblings, &mut said);
                 // A picture says what shows it, in the window (lane AE).
                 said.extend(self.picture_hint(&place));
                 said
             }
-            SourceFor::Show => match self.viewing.as_mut() {
-                Some(viewing) => viewing.viewer.show(place, source),
-                None => return Vec::new(),
-            },
-            SourceFor::Reload => match self.viewing.as_mut() {
-                Some(viewing) => viewing.viewer.reload_with(source),
-                None => return Vec::new(),
-            },
+            SourceFor::Show => {
+                let Some(viewing) = self.viewing.as_mut() else {
+                    return Vec::new();
+                };
+                // Stepping on from a preview's words: its bytes' viewer
+                // shows the next file; the words stay behind nothing.
+                if viewing.viewer.is_preview()
+                    && let Some(bytes) = viewing.viewer.take_other()
+                {
+                    viewing.viewer = bytes;
+                }
+                let _ = viewing.viewer.take_other();
+                let said = viewing.viewer.show(place.clone(), source);
+                let binary = viewing.viewer.looks_binary();
+                match binary.then(|| self.words_wanted(&place)).flatten() {
+                    Some(wanted) => {
+                        return self.ask_words(&place, wanted, WordsTo::Show, None, said, false);
+                    }
+                    None => said,
+                }
+            }
+            SourceFor::Reload => {
+                let Some(viewing) = self.viewing.as_mut() else {
+                    return Vec::new();
+                };
+                if viewing.viewer.is_preview() {
+                    // The bytes behind the words are read again, then the
+                    // words.
+                    if let Some(bytes) = viewing.viewer.other_mut() {
+                        let _ = bytes.reload_with(source);
+                    }
+                    match self.words_wanted(&place) {
+                        Some(wanted) => {
+                            return self.ask_words(
+                                &place,
+                                wanted,
+                                WordsTo::Reload,
+                                None,
+                                Vec::new(),
+                                true,
+                            );
+                        }
+                        None => Vec::new(),
+                    }
+                } else {
+                    let said = viewing.viewer.reload_with(source);
+                    let behind = viewing.viewer.other().is_some_and(Viewer::is_preview);
+                    if behind && let Some(wanted) = self.words_wanted(&place) {
+                        let _ =
+                            self.ask_words(&place, wanted, WordsTo::Behind, None, Vec::new(), true);
+                    }
+                    said
+                }
+            }
+            SourceFor::Words { to, bytes, held } => {
+                // Not an answer to a source read: put it back.
+                self.viewer_wait = Some((waited, SourceFor::Words { to, bytes, held }));
+                return Vec::new();
+            }
         };
         let mut effects = vec![Effect::Redraw(Redraw::All)];
         for message in said {
             effects.push(self.say(message));
         }
         effects
+    }
+
+    /// A new viewer, open: at a search result's line, with the results
+    /// aside until it closes (W3a).
+    fn install_viewer(
+        &mut self,
+        mut viewer: Viewer,
+        side: Side,
+        row: String,
+        siblings: Vec<Sibling>,
+        said: &mut Vec<Message>,
+    ) {
+        if let Some(line) = self.take_view_line() {
+            said.extend(viewer.jump(&line.to_string()));
+        }
+        if self.take_park_on_open() {
+            self.park_results();
+        }
+        self.viewing = Some(Viewing {
+            viewer: Box::new(viewer),
+            side,
+            row,
+            siblings,
+            last_follow: None,
+        });
+    }
+
+    /// The entry a viewed place is listed as, for its type: the panel's
+    /// row where a panel lists it (its checked type), else its name.
+    fn listed_entry(&self, place: &Place) -> diroxide_core::Entry {
+        [self.active, self.active.other()]
+            .into_iter()
+            .find_map(|side| {
+                let panel = self.panel(side);
+                (place.parent().as_ref() == Some(panel.place()))
+                    .then(|| place.name().and_then(|n| panel.entry(n)).cloned())
+                    .flatten()
+            })
+            .unwrap_or_else(|| {
+                diroxide_core::Entry::new(
+                    place.name().unwrap_or_default(),
+                    diroxide_core::EntryKind::File,
+                )
+            })
+    }
+
+    /// The quick view's readers for the viewer's words (lane VP): the
+    /// app's types, quick view options, tools and previews' cache.
+    fn words_preview(&self) -> crate::quickview::ViewerPreview {
+        crate::quickview::ViewerPreview::new(
+            std::sync::Arc::clone(&self.types),
+            crate::quickview::QuickViewOptions::from_settings(&self.settings, self.screen_reader),
+            self.tool_runner().0,
+            std::sync::Arc::clone(&self.preview.cache.0),
+        )
+    }
+
+    /// Whether a file whose bytes looked binary gets the preview's words:
+    /// its entry and the previewer, when one takes it. A picture in the
+    /// window (the picture view shows it), an archive, and a file no
+    /// previewer takes show their bytes as before.
+    fn words_wanted(
+        &self,
+        place: &Place,
+    ) -> Option<(diroxide_core::Entry, crate::quickview::WordsFrom)> {
+        let entry = self.listed_entry(place);
+        let from = self.words_preview().takes(place, &entry)?;
+        // The window shows a picture itself; the words are the terminal's.
+        if from == crate::quickview::WordsFrom::Picture
+            && self.keymap.column() != diroxide_core::KeyColumn::Terminal
+        {
+            return None;
+        }
+        Some((entry, from))
+    }
+
+    /// Asks for the preview's words: the request is sent, the bytes'
+    /// viewer and what it said are held until they come.
+    #[allow(clippy::too_many_arguments)]
+    fn ask_words(
+        &mut self,
+        place: &Place,
+        (entry, from): (diroxide_core::Entry, crate::quickview::WordsFrom),
+        to: WordsTo,
+        bytes: Option<Box<Viewer>>,
+        held: Vec<Message>,
+        refresh: bool,
+    ) -> Vec<Effect> {
+        let preview = self.words_preview();
+        let request = self.ids.request();
+        self.request(Request::ViewerWords(Box::new(crate::request::WordsAsk {
+            request,
+            place: place.clone(),
+            entry: entry.clone(),
+            refresh,
+            preview,
+        })));
+        let quiet = matches!(to, WordsTo::Behind);
+        self.viewer_wait = Some((request, SourceFor::Words { to, bytes, held }));
+        if from.runs_a_helper() && !quiet {
+            let line = format!("Reading the preview of {}", entry.display_name());
+            return vec![
+                self.say(Message::status(line).with_importance(diroxide_core::Importance::Normal)),
+            ];
+        }
+        Vec::new()
+    }
+
+    /// The preview's words arrived (lane VP): the viewer opens on them, the
+    /// bytes behind; without words the bytes show as before, and a read
+    /// that failed says why first, never falling to hex in silence.
+    pub(super) fn viewer_words(
+        &mut self,
+        request: RequestId,
+        place: Place,
+        result: Result<Option<crate::quickview::ViewerWords>, Message>,
+    ) -> Vec<Effect> {
+        let Some((waited, why)) = self.viewer_wait.take() else {
+            return Vec::new();
+        };
+        let SourceFor::Words { to, bytes, held } = why else {
+            self.viewer_wait = Some((waited, why));
+            return Vec::new();
+        };
+        if waited != request {
+            self.viewer_wait = Some((waited, SourceFor::Words { to, bytes, held }));
+            return Vec::new();
+        }
+        let (words, failed) = match result {
+            Ok(Some(words)) => (Some(words), None),
+            Ok(None) => (None, None),
+            Err(message) => (None, Some(message)),
+        };
+        let Some(words) = words else {
+            let mut said: Vec<Message> = failed.into_iter().collect();
+            match to {
+                WordsTo::Open {
+                    side,
+                    row,
+                    siblings,
+                } => {
+                    let Some(viewer) = bytes else {
+                        return Vec::new();
+                    };
+                    said.extend(held);
+                    self.install_viewer(*viewer, side, row, siblings, &mut said);
+                }
+                WordsTo::Show => said.extend(held),
+                WordsTo::Reload | WordsTo::Behind => {}
+            }
+            return self.viewer_said(said);
+        };
+        let (text, spoken, starts) = self.words_text(&words);
+        let options = ViewerOptions::from_settings(&self.settings, self.screen_reader);
+        let (mut viewer, mut said) = match Viewer::from_preview(place.clone(), text, options) {
+            Ok(opened) => opened,
+            Err(error) => {
+                let name = place
+                    .name()
+                    .map(diroxide_core::names::display_name)
+                    .unwrap_or_default()
+                    .into_owned();
+                return vec![self.say(error.message(&name))];
+            }
+        };
+        said.extend(spoken.into_iter().map(Message::info));
+        viewer.set_pages(words.pages, starts);
+        match to {
+            WordsTo::Open {
+                side,
+                row,
+                siblings,
+            } => {
+                viewer.set_siblings(siblings.clone());
+                if let Some(bytes) = bytes {
+                    viewer.set_other(bytes);
+                }
+                self.install_viewer(viewer, side, row, siblings, &mut said);
+            }
+            WordsTo::Show => {
+                let Some(viewing) = self.viewing.as_mut() else {
+                    return Vec::new();
+                };
+                viewer.set_siblings(viewing.siblings.clone());
+                if let (Some(first), Some((at, of))) = (said.first_mut(), viewer.file_position()) {
+                    first.text = format!("{}, {at} of {of}", viewer.title());
+                }
+                let shown = std::mem::replace(&mut viewing.viewer, Box::new(viewer));
+                viewing.viewer.set_other(shown);
+            }
+            WordsTo::Reload => {
+                let Some(viewing) = self.viewing.as_mut() else {
+                    return Vec::new();
+                };
+                viewer.set_siblings(viewing.siblings.clone());
+                if let Some(bytes) = viewing.viewer.take_other() {
+                    viewer.set_other(bytes);
+                }
+                if let Some(first) = said.first_mut() {
+                    first.text = format!("Reloaded {}", viewer.title());
+                }
+                *viewing.viewer = viewer;
+            }
+            WordsTo::Behind => {
+                if let Some(viewing) = self.viewing.as_mut() {
+                    viewer.set_siblings(viewing.siblings.clone());
+                    viewing.viewer.set_other(Box::new(viewer));
+                }
+                return vec![Effect::Redraw(Redraw::All)];
+            }
+        }
+        // A PDF's words in the window: Enter shows its pages.
+        said.extend(self.picture_hint(&place));
+        self.viewer_said(said)
+    }
+
+    /// The viewer's text for a preview's words, and the lines said after
+    /// its title (lane VP): the sentence, a missing helper's install line,
+    /// in the terminal how a picture is shown; then the rows, a
+    /// document's text and its notes, and the line that says how to reach
+    /// the bytes.
+    #[allow(clippy::type_complexity)]
+    fn words_text(
+        &self,
+        words: &crate::quickview::ViewerWords,
+    ) -> (String, Vec<String>, Vec<(u64, u32)>) {
+        let mut spoken = vec![words.summary.clone()];
+        if let Some(tool) = &words.missing
+            && let Some(step) = self.tools_registry().next_step(tool)
+        {
+            spoken.push(match step {
+                diroxide_tools::NextStep::Command(command) => format!("Install: {command}"),
+                diroxide_tools::NextStep::Words(words) => words,
+            });
+        }
+        if words.from == Some(crate::quickview::WordsFrom::Picture) {
+            spoken.push(super::picture_view::IN_THE_WINDOW.to_owned());
+        }
+        let mut lines = spoken.clone();
+        lines.extend(words.rows.iter().cloned());
+        let mut starts = Vec::new();
+        if !words.text.is_empty() {
+            lines.push(String::new());
+            for row in &words.text {
+                // A PDF's page headings ("Page 2"), for the page pictures.
+                if words.from == Some(crate::quickview::WordsFrom::Pdf)
+                    && let Some(page) = row.strip_prefix("Page ").and_then(|n| n.parse().ok())
+                {
+                    starts.push((lines.len() as u64, page));
+                }
+                lines.push(row.clone());
+            }
+        }
+        lines.extend(words.notes.iter().cloned());
+        lines.push(String::new());
+        lines.push(crate::viewer::hex_hint(&self.key(&ids::VIEWER_HEX)));
+        let mut text = lines.join("\n");
+        text.push('\n');
+        (text, spoken, starts)
     }
 
     /// A command while the viewer is open and no dialog is: the viewer's
@@ -474,6 +826,22 @@ impl App {
             }
         };
         Some(effects)
+    }
+
+    /// A viewer command with no viewer open (lane VP): Hex mode opens the
+    /// focused file's bytes in hex, the road to a picture's or a
+    /// document's bytes; any other is said, never an error.
+    pub(super) fn viewer_command_closed(&mut self, id: &CommandId) -> Vec<Effect> {
+        if *id == ids::VIEWER_HEX && self.dialogs.is_empty() && !self.in_preview() {
+            let file = self
+                .panel(self.active)
+                .focused_entry()
+                .is_some_and(|e| !e.is_folder_like());
+            if file {
+                return self.view_focused(true);
+            }
+        }
+        self.viewer_closed_command()
     }
 
     /// A viewer command with no viewer open: said, never an error.
@@ -544,7 +912,14 @@ impl App {
     fn viewer_command(&mut self, command: ViewerCommand) -> Vec<Effect> {
         use ViewerCommand as C;
         if self.viewing.is_none() {
-            return self.viewer_closed_command();
+            return if command == C::Hex {
+                self.viewer_command_closed(&ids::VIEWER_HEX)
+            } else {
+                self.viewer_closed_command()
+            };
+        }
+        if command == C::Hex && self.viewer().is_some_and(|v| v.other().is_some()) {
+            return self.swap_faces();
         }
         match command {
             C::Close => return self.close_viewer(),
@@ -585,7 +960,10 @@ impl App {
             C::Reload => {
                 // Text diroxide made is not read from the place again
                 // (Read text in picture, alpha 4).
-                if self.viewer().is_some_and(Viewer::is_made) {
+                if self
+                    .viewer()
+                    .is_some_and(|v| v.is_made() && !v.is_preview())
+                {
                     let line =
                         "This text was read from the picture. Read text in picture reads it again.";
                     return vec![self.say(Message::info(line))];
@@ -638,6 +1016,27 @@ impl App {
             _ => Vec::new(),
         };
         self.viewer_said(said)
+    }
+
+    /// The Hex command over a preview's words (lane VP): the bytes come to
+    /// the front in hex mode, "Hex mode: the bytes of report.pdf"; over
+    /// those bytes it brings the words back, their title said.
+    fn swap_faces(&mut self) -> Vec<Effect> {
+        let Some(viewing) = self.viewing.as_mut() else {
+            return Vec::new();
+        };
+        let Some(mut other) = viewing.viewer.take_other() else {
+            return Vec::new();
+        };
+        let line = if other.is_preview() {
+            other.title().to_owned()
+        } else {
+            other.show_hex();
+            crate::viewer::hex_face_line(other.name())
+        };
+        let shown = std::mem::replace(&mut viewing.viewer, other);
+        viewing.viewer.set_other(shown);
+        self.viewer_said(vec![Message::info(line)])
     }
 
     /// Next or previous file: the sibling read on a worker, then shown in

@@ -43,6 +43,12 @@ pub const HELP_LINE: &str = "Plus, Minus zoom; 0 fits; Escape closes";
 /// The second help line, drawn under the first.
 pub const MORE_HELP_LINE: &str = "1 actual size; arrows move when zoomed";
 
+/// The help line drawn under a PDF's page (lane VP).
+pub const PAGE_HELP_LINE: &str = "Page Down, Page Up: next, previous page";
+
+/// Said when a helper would need a file on a local disk.
+pub const NOT_LOCAL: &str = "Picture: not shown, not on a local disk";
+
 /// How much one Plus or Minus zooms.
 pub const ZOOM_STEP: f64 = 1.25;
 
@@ -144,6 +150,26 @@ pub fn read_picture<S: Read + Seek + Send>(
     guard: &PixelGuard,
     decoder: &Guard,
 ) -> Opened {
+    read_picture_with(source, name, guard, decoder, None)
+}
+
+/// What draws a picture the decoder cannot read as PNG: ImageMagick
+/// through the app's tools (lane VP), or the lines that say why not (its
+/// refusal, then its install line).
+pub type Converter<'a> = &'a dyn Fn() -> Result<Vec<u8>, Vec<String>>;
+
+/// [`read_picture`], and for a picture that needs a component (HEIC,
+/// AVIF, PSD and the rest) its PNG from `convert`, decoded under the same
+/// guard (lane VP): "HEIC, 4032 by 3024, through ImageMagick". Without
+/// the helper the words say so, a line each in [`Opened::Refused`]:
+/// "HEIC, 4032 by 3024, needs ImageMagick" and the install line.
+pub fn read_picture_with<S: Read + Seek + Send>(
+    source: &mut S,
+    name: &str,
+    guard: &PixelGuard,
+    decoder: &Guard,
+    convert: Option<Converter<'_>>,
+) -> Opened {
     let size = source.seek(SeekFrom::End(0)).ok();
     if source.seek(SeekFrom::Start(0)).is_err() {
         return Opened::Refused(format!("{}, unreadable", format_word(name)));
@@ -153,6 +179,12 @@ pub fn read_picture<S: Read + Seek + Send>(
         Err(error) => return Opened::Refused(unreadable_sentence(&format_word(name), &error)),
     };
     let sentence = facts.sentence(size, guard);
+    if facts.needs.is_some()
+        && !facts.too_large(guard)
+        && let Some(convert) = convert
+    {
+        return converted(&sentence, convert(), guard, decoder);
+    }
     if facts.too_large(guard) || facts.needs.is_some() {
         // Never decoded: the sentence already says why.
         return Opened::Refused(sentence);
@@ -196,6 +228,89 @@ pub fn read_picture<S: Read + Seek + Send>(
         sentence,
         animation: animation_line(facts.frames),
     })
+}
+
+/// A decoded picture as one to show (a macro, since the decoder's
+/// picture type belongs to a crate the window does not name).
+macro_rules! shown {
+    ($decoded:expr, $sentence:expr, $animation:expr $(,)?) => {{
+        let rgba = $decoded.to_rgba8();
+        let (width, height) = (rgba.width(), rgba.height());
+        Opened::Shown(Picture {
+            pixels: Pixels {
+                width,
+                height,
+                rgba: Arc::new(rgba.into_raw()),
+            },
+            sentence: $sentence,
+            animation: $animation,
+        })
+    }};
+}
+
+/// The words a header says when the decoder lacks the format.
+const NEEDS_A_COMPONENT: &str = "needs a component";
+
+/// A picture a helper drew as PNG, decoded under the guard, upright as
+/// the helper turned it; or the helper's words, the sentence first.
+fn converted(
+    sentence: &str,
+    png: Result<Vec<u8>, Vec<String>>,
+    guard: &PixelGuard,
+    decoder: &Guard,
+) -> Opened {
+    let png = match png {
+        Ok(png) => png,
+        Err(lines) => {
+            let missing = lines.first().map(String::as_str)
+                == Some(diroxide_app::app::picture_view::NEEDS_MAGICK);
+            let mut said = Vec::new();
+            if missing {
+                said.push(sentence.replace(NEEDS_A_COMPONENT, "needs ImageMagick"));
+                said.extend(lines.into_iter().skip(1));
+            } else {
+                said.push(sentence.to_owned());
+                said.extend(lines);
+            }
+            return Opened::Refused(said.join("\n"));
+        }
+    };
+    if png.len() as u64 > guard.max_buffer {
+        return Opened::Refused(format!("{sentence}\nPicture: too large to open"));
+    }
+    match guard.decode(png, decoder) {
+        Ok(decoded) => shown!(
+            decoded,
+            sentence.replace(NEEDS_A_COMPONENT, "through ImageMagick"),
+            None,
+        ),
+        Err(error) => Opened::Refused(unreadable_sentence(
+            sentence.split(',').next().unwrap_or("Picture"),
+            &error,
+        )),
+    }
+}
+
+/// A PDF page drawn as PNG through pdftoppm (lane VP), decoded under the
+/// guard; its description the page in words ("Page 1 of 3"). Without the
+/// helper, its words: "Page pictures need pdftoppm" and the install line.
+pub fn read_page(
+    png: Result<Vec<u8>, Vec<String>>,
+    page_line: &str,
+    guard: &PixelGuard,
+    decoder: &Guard,
+) -> Opened {
+    let png = match png {
+        Ok(png) => png,
+        Err(lines) => return Opened::Refused(lines.join("\n")),
+    };
+    if png.len() as u64 > guard.max_buffer {
+        return Opened::Refused(format!("{page_line}, too large to open"));
+    }
+    match guard.decode(png, decoder) {
+        Ok(decoded) => shown!(decoded, page_line.to_owned(), None),
+        Err(error) => Opened::Refused(unreadable_sentence(page_line, &error)),
+    }
 }
 
 /// How the picture is scaled in the view.
@@ -346,6 +461,93 @@ mod tests {
         assert_eq!(line, "Animation: 12 frames, not playing");
         assert_eq!(line.chars().count(), 33);
         assert_eq!(animation_line(Frames::One), None);
+        for line in [PAGE_HELP_LINE, NOT_LOCAL] {
+            assert!(fits_braille(line), "{line}");
+        }
+    }
+
+    /// A blue PNG of `w` by `h`, 8-bit RGBA, stored without compression,
+    /// as a helper program would answer (made in memory, never fetched).
+    fn tests_png(w: u32, h: u32) -> Vec<u8> {
+        fn crc32(data: &[u8]) -> u32 {
+            let mut crc = 0xFFFF_FFFF_u32;
+            for &byte in data {
+                crc ^= u32::from(byte);
+                for _ in 0..8 {
+                    crc = if crc & 1 == 1 {
+                        (crc >> 1) ^ 0xEDB8_8320
+                    } else {
+                        crc >> 1
+                    };
+                }
+            }
+            !crc
+        }
+        fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+            out.extend((data.len() as u32).to_be_bytes());
+            let mut body = kind.to_vec();
+            body.extend(data);
+            out.extend(&body);
+            out.extend(crc32(&body).to_be_bytes());
+        }
+        let row: Vec<u8> = std::iter::once(0)
+            .chain((0..w).flat_map(|_| [0, 0, 255, 255]))
+            .collect();
+        let raw: Vec<u8> = (0..h).flat_map(|_| row.iter().copied()).collect();
+        let (mut a, mut b) = (1_u32, 0_u32);
+        for &byte in &raw {
+            a = (a + u32::from(byte)) % 65_521;
+            b = (b + a) % 65_521;
+        }
+        let mut zlib = vec![0x78, 0x01, 1];
+        let len = raw.len() as u16;
+        zlib.extend(len.to_le_bytes());
+        zlib.extend((!len).to_le_bytes());
+        zlib.extend(&raw);
+        zlib.extend(((b << 16) | a).to_be_bytes());
+        let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+        let mut ihdr = Vec::new();
+        ihdr.extend(w.to_be_bytes());
+        ihdr.extend(h.to_be_bytes());
+        ihdr.extend([8, 6, 0, 0, 0]);
+        chunk(&mut out, b"IHDR", &ihdr);
+        chunk(&mut out, b"IDAT", &zlib);
+        chunk(&mut out, b"IEND", &[]);
+        out
+    }
+
+    #[test]
+    fn a_converted_picture_shows_and_a_missing_helper_says_its_install_line() {
+        let png = tests_png(6, 4);
+        let guard = PixelGuard::DEFAULT;
+        let decoder = Guard::default();
+        let opened = converted("HEIC, 6 by 4, needs a component", Ok(png), &guard, &decoder);
+        let Opened::Shown(picture) = opened else {
+            panic!("{opened:?}")
+        };
+        assert_eq!(picture.sentence, "HEIC, 6 by 4, through ImageMagick");
+        assert_eq!((picture.pixels.width, picture.pixels.height), (6, 4));
+        let missing = converted(
+            "HEIC, 6 by 4, needs a component",
+            Err(vec![
+                diroxide_app::app::picture_view::NEEDS_MAGICK.to_owned(),
+                "Install: winget install ImageMagick.ImageMagick".to_owned(),
+            ]),
+            &guard,
+            &decoder,
+        );
+        assert_eq!(
+            missing,
+            Opened::Refused(
+                "HEIC, 6 by 4, needs ImageMagick\nInstall: winget install ImageMagick.ImageMagick"
+                    .to_owned()
+            )
+        );
+        let page = read_page(Ok(tests_png(8, 10)), "Page 1 of 3", &guard, &decoder);
+        let Opened::Shown(page) = page else {
+            panic!("{page:?}")
+        };
+        assert_eq!(page.sentence, "Page 1 of 3");
     }
 
     #[test]

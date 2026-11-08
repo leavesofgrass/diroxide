@@ -282,6 +282,18 @@ pub struct Viewer {
     /// place (Read text in picture, alpha 4): Reload does not read the
     /// place again.
     made: bool,
+    /// Whether its text is the preview's words for a file whose bytes are
+    /// binary (lane VP): Reload reads the preview again.
+    preview: bool,
+    /// The file's other face (lane VP): the viewer over its bytes behind
+    /// the preview's words, or the words behind the bytes, which the Hex
+    /// command swaps in.
+    other: Option<Box<Viewer>>,
+    /// A PDF's page count, when its words came from its preview: the
+    /// window shows its pages as pictures (lane VP).
+    pages: Option<u32>,
+    /// Where a PDF's pages start in its words.
+    page_starts: Vec<(u64, u32)>,
 }
 
 impl fmt::Debug for Viewer {
@@ -348,6 +360,10 @@ impl Viewer {
             point: 0,
             chosen: None,
             made: false,
+            preview: false,
+            other: None,
+            pages: None,
+            page_starts: Vec::new(),
         };
         viewer.load()?;
         let said = viewer.opening_lines();
@@ -375,6 +391,84 @@ impl Viewer {
     /// Whether its text was made by diroxide ([`Viewer::from_text`]).
     pub fn is_made(&self) -> bool {
         self.made
+    }
+
+    /// A viewer over a preview's words for a file whose bytes are binary
+    /// (lane VP): its title "report.pdf, preview" said first; Reload
+    /// reads the preview again ([`Viewer::is_preview`]).
+    pub fn from_preview(
+        place: Place,
+        text: String,
+        options: ViewerOptions,
+    ) -> Result<(Self, Vec<Message>), ViewerError> {
+        let name = place
+            .name()
+            .map_or_else(|| place.title(), |n| display_name(n).into_owned());
+        let (mut viewer, said) = Self::from_text(place, preview_title(&name), text, options)?;
+        viewer.preview = true;
+        Ok((viewer, said))
+    }
+
+    /// Whether its text is a preview's words ([`Viewer::from_preview`]).
+    pub fn is_preview(&self) -> bool {
+        self.preview
+    }
+
+    /// A PDF's page count, when its words came from its preview.
+    pub fn pages(&self) -> Option<u32> {
+        self.pages
+    }
+
+    /// Keeps a PDF's page count with its words, and the lines where its
+    /// pages start (each line 0-based, with its page).
+    pub fn set_pages(&mut self, pages: Option<u32>, starts: Vec<(u64, u32)>) {
+        self.pages = pages;
+        self.page_starts = starts;
+    }
+
+    /// The PDF page the cursor is in, by the page headings of its words;
+    /// 1 before the first or without them.
+    pub fn current_page(&self) -> u32 {
+        self.page_starts
+            .iter()
+            .take_while(|(line, _)| *line <= self.cursor.line)
+            .last()
+            .map_or(1, |(_, page)| *page)
+    }
+
+    /// Whether the file's first bytes are not text, so it opened in hex
+    /// mode ("photo.png looks binary; hex mode").
+    pub fn looks_binary(&self) -> bool {
+        self.binary.is_some()
+    }
+
+    /// Keeps the file's other face behind this one: the bytes behind the
+    /// words, or the words behind the bytes (lane VP).
+    pub fn set_other(&mut self, other: Box<Viewer>) {
+        self.other = Some(other);
+    }
+
+    /// The file's other face, taken, when it has one.
+    pub fn take_other(&mut self) -> Option<Box<Viewer>> {
+        self.other.take()
+    }
+
+    /// The file's other face, when it has one.
+    pub fn other(&self) -> Option<&Viewer> {
+        self.other.as_deref()
+    }
+
+    /// The other face, mutable: a reload of the bytes behind the words.
+    pub fn other_mut(&mut self) -> Option<&mut Viewer> {
+        self.other.as_deref_mut()
+    }
+
+    /// Shows the bytes in hex mode, whatever the mode was: the face
+    /// swapped in by the Hex command over a preview's words.
+    pub fn show_hex(&mut self) {
+        if self.mode != ViewerMode::Hex {
+            let _ = self.toggle_hex();
+        }
     }
 
     /// Reads the start of the source: the text form, the binary check and
@@ -751,6 +845,29 @@ impl Viewer {
             count(lines, "line", "lines")
         }
     }
+}
+
+/// The title of a preview's words in the viewer: "report.pdf, preview"
+/// (lane VP).
+pub fn preview_title(name: &str) -> String {
+    format!("{name}, preview")
+}
+
+/// The line that says how to reach the bytes behind a preview's words:
+/// "h shows the bytes in hex" (24 cells), the Hex command's key first;
+/// "Hex mode shows the bytes" when it has none (lane VP).
+pub fn hex_hint(key: &str) -> String {
+    if key.is_empty() {
+        "Hex mode shows the bytes".to_owned()
+    } else {
+        format!("{key} shows the bytes in hex")
+    }
+}
+
+/// What the Hex command says as it swaps the bytes in front of the
+/// words: "Hex mode: the bytes of report.pdf" (lane VP).
+pub fn hex_face_line(name: &str) -> String {
+    format!("Hex mode: the bytes of {name}")
 }
 
 /// A whole percent, rounded down, of `part` in `whole`.

@@ -343,6 +343,21 @@ impl PartialEq for SharedRegistry {
     }
 }
 
+/// The preview's words the viewer asks for (lane VP).
+#[derive(Clone, Debug, PartialEq)]
+pub struct WordsAsk {
+    /// The request, so a late answer to an old one is dropped.
+    pub request: diroxide_core::RequestId,
+    /// The file.
+    pub place: Place,
+    /// Its entry, as listed.
+    pub entry: diroxide_core::Entry,
+    /// Ask its size and time again (Reload).
+    pub refresh: bool,
+    /// The quick view's readers, tools and cache.
+    pub preview: crate::quickview::ViewerPreview,
+}
+
 /// A request from the app to its runtime. See the module documentation.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
@@ -512,6 +527,11 @@ pub enum Request {
         /// The bytes a stream keeps at most.
         cap: u64,
     },
+    /// Read the preview's words for the viewer on a worker (lane VP): F3
+    /// on a document or a sound whose bytes are binary, or on a picture
+    /// in the terminal; answered as
+    /// [`AppEvent::ViewerWords`](crate::AppEvent::ViewerWords).
+    ViewerWords(Box<WordsAsk>),
     /// Count an archive's entries for the details list, on a worker;
     /// answered as [`AppEvent::ArchiveEntries`](crate::AppEvent::ArchiveEntries).
     ArchiveEntries(Place),

@@ -29,6 +29,9 @@
 //! - **"Open in textweaver"** hands the file to `tw` through the tools
 //!   registry ([`QuickView::open_in_textweaver`]), or says how to install
 //!   it.
+//! - **The viewer reads its words here too** (lane VP): F3 on a picture,
+//!   a PDF, a document or a sound file opens on the preview's words
+//!   ([`ViewerPreview`]), read through this same pipeline.
 //!
 //! How a frontend drives it, as W2d's viewer is driven: every command is
 //! a plain method that returns the [`Message`]s to say, in order, and
@@ -853,6 +856,137 @@ impl QuickView {
             }
             Err(refusal) => vec![Message::status(refusal.line())],
         }
+    }
+}
+
+/// Which previewer gives the viewer its words (lane VP): F3 on a file
+/// whose bytes are binary opens on these instead of hex.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WordsFrom {
+    /// A picture, in words from its header.
+    Picture,
+    /// Sound or video, through ffprobe.
+    Media,
+    /// A PDF: its properties, and its first pages through pdftotext.
+    Pdf,
+    /// An Office, OpenDocument, EPUB or RTF document, or a workbook,
+    /// read in diroxide itself.
+    Document,
+}
+
+impl WordsFrom {
+    /// Whether its words come from a helper program (ffprobe, pdftotext),
+    /// so they may take a moment.
+    pub fn runs_a_helper(self) -> bool {
+        matches!(self, WordsFrom::Media | WordsFrom::Pdf)
+    }
+}
+
+/// The preview's words for the viewer (lane VP): what F3 shows of a file
+/// whose bytes are binary and that a previewer takes, in place of hex.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ViewerWords {
+    /// The preview's sentence ("PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB"),
+    /// or why there is none ("No preview: pdftotext not found").
+    pub summary: String,
+    /// The helper program the words needed and did not find, by its
+    /// tools registry id ("pdftotext"), for the install line.
+    pub missing: Option<String>,
+    /// The rows, each "Label: value", in the details' order.
+    pub rows: Vec<String>,
+    /// A document's text, a row a line; empty for a picture.
+    pub text: Vec<String>,
+    /// What the reader noted (a nesting cut, rows left out).
+    pub notes: Vec<String>,
+    /// The previewer the words came from.
+    pub from: Option<WordsFrom>,
+    /// A PDF's page count, for the window's page pictures.
+    pub pages: Option<u32>,
+}
+
+/// What reads the preview's words for the viewer, on a worker (lane VP):
+/// the quick view's own pipeline, with its caps, its deadline, the app's
+/// tools and the previews' shared cache, so a picture or a PDF the quick
+/// view showed is not read again. Two are equal when they share their
+/// parts.
+#[derive(Clone)]
+pub struct ViewerPreview {
+    types: Arc<TypeRegistry>,
+    options: QuickViewOptions,
+    tools: Arc<dyn ToolRunner>,
+    cache: Arc<PreviewCache>,
+}
+
+impl std::fmt::Debug for ViewerPreview {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ViewerPreview")
+            .field("options", &self.options)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for ViewerPreview {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.types, &other.types)
+            && Arc::ptr_eq(&self.cache, &other.cache)
+            && std::ptr::addr_eq(Arc::as_ptr(&self.tools), Arc::as_ptr(&other.tools))
+            && self.options == other.options
+    }
+}
+
+impl ViewerPreview {
+    /// A reader over the app's file types, quick view options, tools and
+    /// previews' cache.
+    pub fn new(
+        types: Arc<TypeRegistry>,
+        options: QuickViewOptions,
+        tools: Arc<dyn ToolRunner>,
+        cache: Arc<PreviewCache>,
+    ) -> Self {
+        Self {
+            types,
+            options,
+            tools,
+            cache,
+        }
+    }
+
+    /// Which previewer would give a file its words: a picture, sound or
+    /// video, a PDF, or a document; `None` for an archive (its own road)
+    /// and for a file no previewer takes, which stays hex. Reads nothing.
+    pub fn takes(&self, place: &Place, entry: &Entry) -> Option<WordsFrom> {
+        worker::words_from(
+            &self.types,
+            &Previews::builtin().without_cache(),
+            place,
+            entry,
+        )
+    }
+
+    /// Reads the preview's words through `registry`, the runtime's, on a
+    /// worker: `None` when no previewer takes the file. `refresh` asks the
+    /// provider for its size and time again (Reload), so the cache does
+    /// not serve an old preview.
+    pub fn read(
+        &self,
+        registry: &Registry,
+        place: &Place,
+        entry: &Entry,
+        refresh: bool,
+        cancel: &CancelToken,
+    ) -> Result<Option<ViewerWords>, diroxide_vfs::VfsError> {
+        let latest = Arc::new(LatestOnly::new());
+        let tools = SharedTools(Arc::clone(&self.tools));
+        let cache = SharedCache(Arc::clone(&self.cache));
+        let shared = QuickView::shared(
+            registry.clone(),
+            self.types.as_ref().clone(),
+            &latest,
+            &self.options,
+            (&tools, &cache),
+        );
+        let mut entry = entry.clone();
+        worker::viewer_words(&shared, place, &mut entry, refresh, cancel)
     }
 }
 

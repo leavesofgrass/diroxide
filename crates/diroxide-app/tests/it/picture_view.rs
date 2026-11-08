@@ -28,6 +28,7 @@ fn open(column: KeyColumn) -> (tempfile::TempDir, Session) {
     fs::create_dir_all(&work).unwrap();
     fs::write(work.join("photo.png"), png_bytes(4, 3)).unwrap();
     fs::write(work.join("notes.txt"), "a line\n").unwrap();
+    fs::create_dir_all(work.join("albums")).unwrap();
     let session = Session::open_with_keymap(
         place(&work),
         place(dir.path()),
@@ -39,11 +40,38 @@ fn open(column: KeyColumn) -> (tempfile::TempDir, Session) {
 }
 
 #[test]
-fn enter_in_the_windows_viewer_asks_for_the_picture_and_the_hint_is_said_once() {
+fn f3_in_the_window_asks_for_the_picture_at_once_with_no_viewer() {
     let (_dir, mut s) = open(KeyColumn::Gui);
     s.focus("photo.png");
     let said = s.key("f3");
+    assert!(s.app.viewer().is_none(), "no hex on the way: {said:?}");
+    let ask = s.app.take_picture_ask().expect("F3 asks for the picture");
+    assert_eq!(ask.name, "photo.png");
+    assert_eq!(ask.from, PictureSource::Panel);
+    assert_eq!(ask.page, None);
+    // Show picture from the palette or the View menu with nothing open.
+    s.command(ids::VIEW_PICTURE);
+    let ask = s.app.take_picture_ask().expect("Show picture asks too");
+    assert_eq!(ask.from, PictureSource::Panel);
+    // A text file still opens in the viewer.
+    s.focus("notes.txt");
+    s.key("f3");
+    assert!(s.app.viewer().is_some());
+    assert!(s.app.take_picture_ask().is_none());
+}
+
+#[test]
+fn hex_mode_reaches_the_bytes_and_enter_in_the_windows_viewer_asks_for_the_picture() {
+    let (_dir, mut s) = open(KeyColumn::Gui);
+    s.focus("photo.png");
+    // Hex mode with no viewer open: the picture's bytes (the road for
+    // anyone who wants them).
+    let said = s.command(ids::VIEWER_HEX);
     assert!(s.app.viewer().is_some(), "{said:?}");
+    assert!(
+        said.iter().any(|l| l == "photo.png looks binary; hex mode"),
+        "{said:?}"
+    );
     let hint = hint_words("Enter");
     assert_eq!(said.iter().filter(|l| **l == hint).count(), 1, "{said:?}");
     assert!(s.app.take_picture_ask().is_none(), "nothing asked yet");
@@ -76,6 +104,8 @@ fn a_text_file_is_not_a_picture_and_says_so() {
 #[test]
 fn with_nothing_shown_or_in_a_terminal_it_says_why_in_words() {
     let (_dir, mut s) = open(KeyColumn::Gui);
+    // A folder focused: nothing to show.
+    s.focus("albums");
     let said = s.command(ids::VIEW_PICTURE);
     assert_eq!(said.last().map(String::as_str), Some(NOTHING_SHOWN));
     let (_dir, mut t) = open(KeyColumn::Terminal);
@@ -83,8 +113,12 @@ fn with_nothing_shown_or_in_a_terminal_it_says_why_in_words() {
     let said = t.key("f3");
     assert!(t.app.viewer().is_some());
     assert!(!said.contains(&hint_words("Enter")), "{said:?}");
+    // The terminal says how to see it, never a refusal, never hex.
+    assert!(said.iter().any(|l| l == NOT_IN_TERMINAL), "{said:?}");
+    assert!(!said.iter().any(|l| l.contains("hex mode")), "{said:?}");
     let said = t.command(ids::VIEW_PICTURE);
     assert_eq!(said.last().map(String::as_str), Some(NOT_IN_TERMINAL));
+    assert_eq!(NOT_IN_TERMINAL, "Pictures show in the window: diro --gui");
     assert!(t.app.take_picture_ask().is_none());
     for line in [NOT_IN_TERMINAL, NOTHING_SHOWN] {
         assert!(line.chars().count() <= BRAILLE_CELLS, "{line}");

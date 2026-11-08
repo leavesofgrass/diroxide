@@ -85,6 +85,7 @@ mod streaming;
 // Open with and the encoding chooser (alpha 4, lane TA).
 mod types;
 mod viewer;
+mod viewer_words;
 mod views;
 // The Volumes list (lane A3).
 mod volumes;

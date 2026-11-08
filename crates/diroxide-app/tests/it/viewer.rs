@@ -91,9 +91,17 @@ fn f3_views_a_member_of_an_archive_and_escape_goes_back_to_its_row() {
     assert_eq!(s.focused(), "b.txt");
     // With the viewer closed, its commands say how to open it.
     assert_eq!(
-        s.command(ids::VIEWER_HEX),
+        s.command(ids::VIEWER_BYTE),
         ["The viewer is not open. F3 opens it."]
     );
+    // Hex mode opens the focused file's bytes (lane VP: the road to a
+    // picture's or a document's bytes).
+    let said = s.command(ids::VIEWER_HEX);
+    assert_eq!(
+        said.first().map(String::as_str),
+        Some("b.txt, in course.zip!week1")
+    );
+    assert!(s.app.viewer_open());
 }
 
 #[test]

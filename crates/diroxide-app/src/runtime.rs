@@ -1556,6 +1556,30 @@ impl Runtime {
                     });
                 });
             }
+            Request::ViewerWords(ask) => {
+                let registry = Arc::clone(&self.registry);
+                self.worker(move |shared| {
+                    let crate::request::WordsAsk {
+                        request,
+                        place,
+                        entry,
+                        refresh,
+                        preview,
+                    } = *ask;
+                    let cancel = CancelToken::new();
+                    let result = preview
+                        .read(&registry, &place, &entry, refresh, &cancel)
+                        .map_err(|error| {
+                            let name = diroxide_core::names::display_name(&entry.name).into_owned();
+                            Message::from_error("read", &name, &error)
+                        });
+                    shared.send(AppEvent::ViewerWords {
+                        request,
+                        place,
+                        result,
+                    });
+                });
+            }
             Request::ArchiveEntries(place) => {
                 let Some(archives) = self.archives.clone() else {
                     return;
