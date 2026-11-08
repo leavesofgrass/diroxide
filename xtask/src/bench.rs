@@ -103,6 +103,14 @@ pub struct Sizes {
     pub unpack_bytes: u64,
     /// Bytes of the log the viewer opens.
     pub viewer_bytes: u64,
+    /// Files whose details are read (alpha 4, R30's commit 117).
+    pub details_files: usize,
+    /// Bytes of the file whose SHA-256 is computed.
+    pub checksum_bytes: u64,
+    /// Markdown files in the conversion's dry run.
+    pub convert_files: usize,
+    /// Entries listed with three content columns.
+    pub column_entries: usize,
 }
 
 /// The starting budgets, in milliseconds.
@@ -135,6 +143,11 @@ pub struct Params {
     pub runs: usize,
     /// The ratchet's band, in percent.
     pub tolerance_percent: u64,
+    /// A wider band for a scenario whose medians move further than the
+    /// ratchet's from one quiet run to the next, by its id, in percent
+    /// (R30's commit 115: the two 10 GB copies).
+    #[serde(default)]
+    pub band_percent: BTreeMap<String, u64>,
     /// The starting budgets.
     pub budgets_ms: Budgets,
     /// The full sizes.
@@ -144,6 +157,15 @@ pub struct Params {
 }
 
 impl Params {
+    /// The band a scenario's median is held to: its own, else the
+    /// ratchet's.
+    pub fn band_for(&self, id: &str) -> u64 {
+        self.band_percent
+            .get(id)
+            .copied()
+            .unwrap_or(self.tolerance_percent)
+    }
+
     /// Reads `bench/params.toml` under the workspace root.
     pub fn read(root: &Path) -> Result<Self> {
         let file = root.join("bench").join("params.toml");
@@ -235,7 +257,7 @@ pub struct Options {
 }
 
 /// The scenario ids, in the order they run.
-pub const SCENARIOS: [&str; 13] = [
+pub const SCENARIOS: [&str; 17] = [
     "list",
     "stat",
     "list-stat",
@@ -249,6 +271,10 @@ pub const SCENARIOS: [&str; 13] = [
     "viewer",
     "search-name",
     "search-content",
+    "details",
+    "checksum",
+    "convert-plan",
+    "columns",
 ];
 
 /// The archive listings: their id, the archive's name and its kind in
@@ -282,13 +308,16 @@ pub fn parse(args: &[&str]) -> Result<Options> {
                         SCENARIOS.join(", ")
                     );
                 };
-                if *id == "gui" {
-                    options.gui = true;
-                } else if !SCENARIOS.contains(id) {
-                    bail!(
-                        "{id} is not a scenario; the scenarios are {}, and gui for the GUI's budgets",
-                        SCENARIOS.join(", ")
-                    );
+                // One scenario, or several with commas: copy,copy-system.
+                for one in id.split(',') {
+                    if one == "gui" {
+                        options.gui = true;
+                    } else if !SCENARIOS.contains(&one) {
+                        bail!(
+                            "{one} is not a scenario; the scenarios are {}, and gui for the GUI's budgets",
+                            SCENARIOS.join(", ")
+                        );
+                    }
                 }
                 options.only = Some((*id).to_owned());
             }
@@ -434,7 +463,9 @@ pub struct Setting<'a> {
 }
 
 fn wanted(setting: &Setting<'_>, ids: &[&str]) -> bool {
-    setting.only.is_none_or(|only| ids.contains(&only))
+    setting
+        .only
+        .is_none_or(|only| only.split(',').any(|one| ids.contains(&one)))
 }
 
 /// Runs the scenarios and returns their outcomes, saying what it does as
@@ -697,7 +728,224 @@ pub fn run_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
     if wanted(setting, &["search-name", "search-content"]) {
         outcomes.extend(search_scenarios(setting)?);
     }
+    if wanted(setting, &["details"]) {
+        outcomes.push(details_scenario(setting)?);
+    }
+    if wanted(setting, &["checksum"]) {
+        outcomes.push(checksum_scenario(setting)?);
+    }
+    if wanted(setting, &["convert-plan"]) {
+        outcomes.push(convert_plan_scenario(setting)?);
+    }
+    if wanted(setting, &["columns"]) {
+        outcomes.push(columns_scenario(setting)?);
+    }
     Ok(outcomes)
+}
+
+/// Makes a scenario's folder in the run's work folder.
+fn scenario_folder(setting: &Setting<'_>, name: &str) -> Result<PathBuf> {
+    let folder = setting.work.join(name);
+    fs::create_dir(&folder).with_context(|| format!("{} could not be made", folder.display()))?;
+    Ok(folder)
+}
+
+/// The details of many files (alpha 4, R30's commit 117): each file's
+/// fields read through the app's own details read, as the details list
+/// reads them, with no helper program; half small pictures, half text.
+fn details_scenario(setting: &Setting<'_>) -> Result<Outcome> {
+    use diroxide_app::details::{DetailsAsk, Wanted, read_fields};
+    use diroxide_app::request::SharedTools;
+    let count = setting.sizes.details_files;
+    let folder = scenario_folder(setting, "details")?;
+    println!(
+        "bench: writing {} small files to read the details of.",
+        grouped(count as u64)
+    );
+    let mut places = Vec::with_capacity(count);
+    for n in 0..count {
+        let path = if n % 2 == 0 {
+            let path = folder.join(format!("picture-{n:05}.png"));
+            fs::write(&path, sample::png(16, 16, [40, 60, 90]))
+                .with_context(|| format!("{} could not be written", path.display()))?;
+            path
+        } else {
+            let path = folder.join(format!("text-{n:05}.txt"));
+            fs::write(&path, format!("line one of {n}\nline two\n"))
+                .with_context(|| format!("{} could not be written", path.display()))?;
+            path
+        };
+        places.push(place_of(&path)?);
+    }
+    let registry = Registry::with_local();
+    let provider = registry
+        .resolve(&place_of(&folder)?)
+        .map_err(|e| anyhow::anyhow!("no provider for the bench folder: {e}"))?;
+    let ctx = OpContext::new();
+    let entries = places
+        .iter()
+        .map(|place| {
+            provider
+                .stat(place, &ctx)
+                .map_err(|e| anyhow::anyhow!("a file could not be read: {e}"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let tools = SharedTools(Arc::new(diroxide_vfs::NoTools));
+    let mut rows = 0;
+    let times = measure(setting.params.runs, |_| {
+        let started = Instant::now();
+        let mut read = 0;
+        for (place, entry) in places.iter().zip(&entries) {
+            let ask = DetailsAsk {
+                generation: 1,
+                place: place.clone(),
+                entry: entry.clone(),
+                file_type: None,
+                tools: tools.clone(),
+                cache: None,
+                wanted: Wanted::Fields,
+            };
+            read += read_fields(&registry, &ask).0.len();
+        }
+        let elapsed = started.elapsed();
+        rows = read;
+        Ok(elapsed)
+    })?;
+    Ok(outcome(
+        "details",
+        format!("Read the details of {} files", grouped(count as u64)),
+        times,
+        None,
+        format!("{} rows, no helper program", grouped(rows as u64)),
+    ))
+}
+
+/// The SHA-256 of a large file, as Checksum and `diro sum` compute it
+/// (alpha 4, R30's commit 117).
+fn checksum_scenario(setting: &Setting<'_>) -> Result<Outcome> {
+    let bytes = setting.sizes.checksum_bytes;
+    let size = human_size(bytes);
+    let folder = scenario_folder(setting, "checksum")?;
+    let file = folder.join("download.bin");
+    println!("bench: writing a file of {size} to checksum.");
+    sample::big_file(&file, bytes, None)?;
+    let place = place_of(&file)?;
+    let registry = Registry::with_local();
+    let algorithm = diroxide_app::metadata::algorithm_named("SHA-256")
+        .context("SHA-256 is not an algorithm the app computes")?;
+    let times = measure(setting.params.runs, |_| {
+        let started = Instant::now();
+        diroxide_app::metadata::sum_file(&registry, &place, algorithm)
+            .map_err(|e| anyhow::anyhow!("the file could not be checksummed: {e}"))?;
+        Ok(started.elapsed())
+    })?;
+    fs::remove_file(&file).with_context(|| format!("{} could not be removed", file.display()))?;
+    let seconds = median(&times) / 1000.0;
+    let rate = if seconds > 0.0 {
+        format!("{} a second", human_size((bytes as f64 / seconds) as u64))
+    } else {
+        String::new()
+    };
+    Ok(outcome(
+        "checksum",
+        format!("SHA-256 of a file of {size}"),
+        times,
+        None,
+        rate,
+    ))
+}
+
+/// Planning a conversion of many Markdown files to plain text, carta's
+/// built-in recipe, without running it: the plan `diro convert
+/// --dry-run` says (alpha 4, R30's commit 117).
+fn convert_plan_scenario(setting: &Setting<'_>) -> Result<Outcome> {
+    use diroxide_ops::convert::{ByExtension, ConvertRequest, RecipeBook};
+    let count = setting.sizes.convert_files;
+    let folder = scenario_folder(setting, "convert")?;
+    let out = folder.join("out");
+    fs::create_dir(&out).with_context(|| format!("{} could not be made", out.display()))?;
+    let mut sources = Vec::with_capacity(count);
+    for n in 0..count {
+        let path = folder.join(format!("note-{n:03}.md"));
+        fs::write(&path, format!("# Note {n}\n\nA line of the note.\n"))
+            .with_context(|| format!("{} could not be written", path.display()))?;
+        sources.push(place_of(&path)?);
+    }
+    let recipe = RecipeBook::built_in()
+        .get("markdown-to-plain-text")
+        .cloned()
+        .context("the recipe markdown-to-plain-text is not in the book")?;
+    let engine = Engine::new(Arc::new(Registry::with_local()));
+    let destination = place_of(&out)?;
+    let mut planned = 0;
+    let times = measure(setting.params.runs, |run| {
+        let request = ConvertRequest::new(
+            JobId::new(run as u64 + 1),
+            sources.clone(),
+            destination.clone(),
+            recipe.clone(),
+        );
+        let started = Instant::now();
+        let plan = engine
+            .plan_convert(&request, &ByExtension, &JobControl::new())
+            .map_err(|e| anyhow::anyhow!("the conversion could not be planned: {e}"))?;
+        let elapsed = started.elapsed();
+        planned = plan.work.len();
+        Ok(elapsed)
+    })?;
+    if planned != count {
+        bail!("the plan converts {planned} files, not {count}");
+    }
+    Ok(outcome(
+        "convert-plan",
+        format!("Plan converting {count} files, a dry run"),
+        times,
+        None,
+        "Markdown to plain text, carta built in".to_owned(),
+    ))
+}
+
+/// A folder of many entries opened by the app with three content columns
+/// (text lines, the artist, a picture's size), from its start until it is
+/// idle: the listing, the rows with their "reading" cells, and the cells
+/// read near the focus (alpha 4, R30's commit 117; MA's spike M6).
+fn columns_scenario(setting: &Setting<'_>) -> Result<Outcome> {
+    use diroxide_app::{App, AppOptions, Runtime};
+    let count = setting.sizes.column_entries;
+    let folder = scenario_folder(setting, "columns")?;
+    let other = scenario_folder(setting, "columns-other")?;
+    println!(
+        "bench: writing {} empty files for the columns.",
+        grouped(count as u64)
+    );
+    sample::flat_folder(&folder, count)?;
+    let (left, right) = (place_of(&folder)?, place_of(&other)?);
+    let times = measure(setting.params.runs, |_| {
+        let mut options = AppOptions::new(left.clone(), right.clone());
+        options.settings.columns = ["text.lines", "audio.artist", "image.dimensions"]
+            .iter()
+            .map(|key| (*key).to_owned())
+            .collect();
+        options.settings.components_first_run_shown = true;
+        let started = Instant::now();
+        let mut app = App::new(options);
+        let mut runtime = Runtime::with_local().with_components_offline();
+        let effects = app.start();
+        runtime.run_until_idle(&mut app, effects);
+        let elapsed = started.elapsed();
+        let rows = app.panel(diroxide_core::Side::Left).list().len();
+        if rows < count {
+            bail!("the panel lists {rows} rows, not {count}");
+        }
+        Ok(elapsed)
+    })?;
+    Ok(outcome(
+        "columns",
+        format!("List {} entries with three columns", grouped(count as u64)),
+        times,
+        None,
+        "the app from its start until idle".to_owned(),
+    ))
 }
 
 /// The search scenarios (alpha.3, W3s): the search tree written once
@@ -1227,7 +1475,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
         let base = base_run
             .as_ref()
             .and_then(|run| run.scenarios.iter().find(|s| s.id == outcome.id));
-        let (lines, inside) = describe(outcome, base, params.tolerance_percent);
+        let (lines, inside) = describe(outcome, base, params.band_for(&outcome.id));
         all_inside &= inside;
         for line in lines {
             println!("{line}");
@@ -1263,6 +1511,16 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
         if baseline.about.is_empty() {
             baseline.about = "The bench's baseline per platform, written by cargo xtask bench --save-baseline (docs/dev/bench.md).".to_owned();
         }
+        let mut result = result;
+        // A run without --gui keeps the GUI's budgets of the baseline it
+        // replaces, so saving the scenarios never drops them (the fold
+        // lane: no window opened for a scenarios' baseline).
+        if result.gui.is_empty()
+            && let Some(kept) = base_run.as_ref().filter(|run| !run.gui.is_empty())
+        {
+            result.gui = kept.gui.clone();
+            println!("bench: the GUI's budgets are kept from the baseline this one replaces.");
+        }
         baseline.platforms.insert(platform.clone(), result);
         fs::write(
             &baseline_file,
@@ -1272,10 +1530,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
         println!("bench: saved as the {platform} baseline in bench/baseline.json.");
     }
     if options.gate && !all_inside {
-        println!(
-            "bench: Fail. A median left the {} percent band.",
-            params.tolerance_percent
-        );
+        println!("bench: Fail. A median left its band, said above.");
         return Ok(false);
     }
     let verdict = if all_inside {
@@ -1448,6 +1703,20 @@ mod tests {
         let back: Run = serde_json::from_str(&serde_json::to_string(&run).unwrap()).unwrap();
         assert_eq!(back, run);
         assert!(now_utc().ends_with(" UTC") && now_utc().len() == "2026-11-03 17:42 UTC".len());
+    }
+
+    /// `--only` takes several scenarios with commas, and the two copies
+    /// are held to the wider band R30's commit 115 measured.
+    #[test]
+    fn several_scenarios_and_the_copies_own_band() {
+        let options = parse(&["--only", "copy,copy-system"]).unwrap();
+        assert_eq!(options.only.as_deref(), Some("copy,copy-system"));
+        assert!(parse(&["--only", "copy,dance"]).is_err());
+        let params = Params::read(&root()).unwrap();
+        assert_eq!(params.band_for("list"), params.tolerance_percent);
+        for copy in ["copy", "copy-system"] {
+            assert!(params.band_for(copy) > params.tolerance_percent, "{copy}");
+        }
     }
 
     #[test]

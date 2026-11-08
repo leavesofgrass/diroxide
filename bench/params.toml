@@ -10,6 +10,18 @@ runs = 3
 # exist).
 tolerance_percent = 20
 
+# The two 10 GB copies outrun the disk's write cache and the system's file
+# cache, so their medians move further than 20 percent from one quiet run
+# to the next (R30's commit 115, docs/dev/bench.md "The band"): on
+# Saturday, November 7, 2026, three full runs in a row on a quiet machine
+# gave the engine's copy 21.7, 27.5 and 21.7 s and the system's 28.2, 22.2
+# and 24.3 s, and the alpha 3 runs of Tuesday, November 3 gave 19.9 and
+# 14.7 s and 17.0 and 21.4 s. Every one of those medians lies within 40
+# percent of the median of the three, which is each copy's band.
+[band_percent]
+copy = 40
+copy-system = 40
+
 # R8's starting budgets (research/file-operations.md, "Large
 # directories"): a warm listing of 100,000 entries in 300 ms on Linux and
 # macOS and 800 ms on Windows. The stat scenario starts from the same
@@ -52,6 +64,13 @@ stall_after_ms = 150
 archive_entries = 100000
 unpack_bytes = 200000000
 viewer_bytes = 256000000
+# The alpha 4 scenarios (R30's commit 117): the details of 1,000 files,
+# the SHA-256 of a 1 GB file, the plan of a 100-file conversion, and
+# 100,000 entries listed by the app with three content columns.
+details_files = 1000
+checksum_bytes = 1000000000
+convert_files = 100
+column_entries = 100000
 
 # The quick run (--quick), for tests and a first look: the same scenarios
 # on small trees.
@@ -67,3 +86,7 @@ stall_after_ms = 100
 archive_entries = 2000
 unpack_bytes = 4000000
 viewer_bytes = 2000000
+details_files = 40
+checksum_bytes = 8000000
+convert_files = 10
+column_entries = 2000
