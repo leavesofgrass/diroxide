@@ -351,6 +351,23 @@ fn unix_paths_follow_their_own_rules() {
     );
 }
 
+/// A ~ inside a folder's name is a name, as in Windows' short names
+/// (the GitHub runner's temporary folder is C:\\Users\\RUNNER~1\\...); only a
+/// ~ that starts the path or a component is the home folder a shell
+/// would expand.
+#[test]
+fn a_tilde_inside_a_name_is_a_name() {
+    let around = Surroundings::none(PathStyle::Windows);
+    let short = SCANS.replace("home = 'D:\\scans'", "home = 'C:\\Users\\RUNNER~1\\scans'");
+    let task = Task::from_toml(&short, "tasks/scans.toml", &around).unwrap();
+    assert_eq!(
+        task.folders.input.to_string(),
+        "C:\\Users\\RUNNER~1\\scans\\in"
+    );
+    let component = SCANS.replace("home = 'D:\\scans'", "home = 'D:\\~ada\\scans'");
+    assert!(Task::from_toml(&component, "tasks/scans.toml", &around).is_err());
+}
+
 #[test]
 fn settle_reads_from_half_a_second_to_an_hour() {
     assert_eq!(parse_settle("500ms"), Ok(Duration::from_millis(500)));

@@ -165,7 +165,10 @@ pub fn literal_folder(field: &str, text: &str, style: PathStyle) -> Result<Place
     if text.contains(['$', '%']) {
         return Err(format!("{field} has a variable"));
     }
-    if text.contains('~') {
+    // A ~ that starts the path or a folder's name means a home folder in
+    // a shell and is never expanded here; a ~ inside a name is a name
+    // (Windows' short names, RUNNER~1).
+    if text.starts_with('~') || text.contains("/~") || text.contains("\\~") {
         return Err(format!("{field} has a ~, which is never expanded"));
     }
     if text.contains('!') {
