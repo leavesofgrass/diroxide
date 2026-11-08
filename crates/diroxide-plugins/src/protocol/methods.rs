@@ -695,7 +695,7 @@ pub const ALL: [Method; 66] = [
         A::Lists,
         "a [[column]] table",
         "Asks for a batch of a column's values, at most 500 places.",
-        LATER,
+        NOW,
     ),
     method(
         COLUMN_CHANGED,

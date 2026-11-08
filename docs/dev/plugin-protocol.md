@@ -117,7 +117,7 @@ Each method says who sends it, whether it is answered, what allows it, and wheth
 - `lister/open`: plugin to host, request. Shows rows that are not files in a panel, over its place, which returns when the list is left. Allowed by: a [[lister]] table. State: served.
 - `lister/rows`: host to plugin, request. Asks for more rows of a lister, or a refresh. Allowed by: a [[lister]] table. State: served.
 - `lister/closed`: host to plugin, notification. Says a lister's list left its panel: the owner left it, or a place replaced it. Allowed by: a [[lister]] table. State: served.
-- `column/format`: host to plugin, request. Asks for a batch of a column's values, at most 500 places. Allowed by: a [[column]] table. State: shape only, served later.
+- `column/format`: host to plugin, request. Asks for a batch of a column's values, at most 500 places. Allowed by: a [[column]] table. State: served.
 - `column/changed`: plugin to host, notification. Says some of a column's values are stale. Allowed by: a [[column]] table. State: shape only, served later.
 - `place/describe`: host to plugin, request. Asks for a short description of a place for the title line. Allowed by: a [[place_info]] table. State: served.
 - `completion/query`: host to plugin, request. Asks for candidates for the text typed so far. Allowed by: a prompt whose completion source is the plugin. State: shape only, served later.
