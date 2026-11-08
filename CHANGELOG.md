@@ -2,6 +2,94 @@
 
 Notable changes to diroxide, newest first. Agents write under a scratch heading with their id; the orchestrator regroups the entries by area before each alpha. Versions follow the alpha series in the plan; nothing is released until the owner says so.
 
+## Unreleased, to be 0.1.0-alpha.4
+
+Alpha 4 teaches diroxide what a file is, what is in it and what can be done with it: a tools registry with `diro doctor` and helper programs as optional components, a file type model with groups, a details view with who can do what, richer previews, custom columns, notes and fields, checksums with signature checks, privacy checks, conversions, watched folders, archive formats read through 7-Zip and edited inside a zip, disk images and git as plugins, encryption and signatures, Change time and Change owner, the photo helpers, the window's picture view, and new commands in `diro`. It is the planned alpha.7. The heading, the date and the version are set when it is released.
+
+### Tools and optional components
+
+- 22 helper programs are known, 23 on macOS, found through `tools.toml`, the installed components, PATH and each program's installer folders, and said with the step that found them: "pandoc: 3.9.0.2, on PATH". A feature that needs one names it and says how to get it. Nothing runs an install command.
+- The Tools list, in Settings, the Tools menu and the palette, shows each program, where it was found or what it would download. `tools.toml` sets a path, turns a program off or marks it needed.
+- pandoc, 7-Zip, FFmpeg, ImageMagick and GitHub CLI are optional components, pinned by size and checksum where a publisher makes a file for the computer. ExifTool for Windows, 7-Zip for Windows and FFmpeg for Linux are held for now. Where no file exists the install command for the system is said. The pins come from a CI job that runs by hand and monthly, `cargo xtask components --pin`.
+- The release files carry four plugin components: SFTP places, disk images, git and Encryption.
+- `diro doctor` lists what this program has and finds, one fact a line, name first, and says what a missing tool would download. Exit codes 0, 1 for a needed tool missing, 2 for wrong use.
+
+### File types and groups
+
+- Every row names its file's type, from the name at once and from the first 64 bytes in the background ("type pending"), and says when they disagree: "Name says PNG; contents say JPEG". 178 types come built in, in 8 groups, plus a retro pack of 40 off by default (`filetypes.retro`) and `check.skip` for slow folders.
+- `filetypes.toml` adds types and groups. A type can name what Enter, View, Preview and Convert do and ten numbered actions, through a command, a tool, a plugin's command or a conversion recipe. Actions for this file lists them.
+- The Groups list, Select by kind and `group:` in the filter take the groups, yours included.
+- Open with lists the programs each system has for a file, and on Windows hands "Choose another program" to the system's own dialog.
+- The viewer and the quick view have an encoding chooser with 29 encodings.
+- A theme file's `[group-colors]` color a group's rows, in the window and in the terminal at 256 colors or true color, never in High Contrast.
+
+### Previews and the details view
+
+- The quick view reads pictures in words from their headers behind a pixel guard, SVG as a screen reader exposes it, sound and video through ffprobe, archive listings, PDF, Word, EPUB, OpenDocument, RTF, spreadsheets and delimited text, each with caps against hostile files. Nothing is played.
+- Preview runs the helper programs at once, `quick_view.auto_preview` decides whether they run by themselves (off in screen reader mode), and Read text in picture runs Tesseract as a job Cancel stops.
+- Alt+Enter lists every fact in ten groups, most important first, with Privacy and Checksum rows for a file and the facts read from inside joining a moment later. Show all asks ExifTool. Say details, Copy details and Copy all details work without the list. Closing the list now stops the read, ffprobe included.
+- The details say who can do what: "You can: read and write", the owner, group and others, the mode, Linux access lists, flags and SELinux labels, and on Windows the access list entries in the order Windows checks them. "You can" is advice.
+
+### Columns, notes and fields
+
+- Keys such as `audio.artist`, `doc.pages` and `image.dimensions` in `columns` add columns read from inside files, each cell said after its label and "reading" until read, in three loading modes, with Fill columns. `[regex_columns]` makes a column from a pattern over the name, and a plugin can fill one.
+- Sorting by a column reads first, and above 200 files asks, starting on No, with an estimate.
+- Set note and Set field keep your words in `labels.toml`. Labels, notes and fields follow a file diroxide moves or renames, and an undo of that.
+
+### Checksums and privacy
+
+- Checksum computes SHA-256 with BLAKE3 in the same read, to read, copy, compare with a pasted value or save as `SHA256SUMS`, never over a file.
+- Verify checksum checks the list beside a download or a list itself, the verdict first, and never says "safe". A signature beside the list is checked, with the verdict "List is signed", "List not signed" or "List not verified".
+- Check before sharing reports what a file carries about who, where and with what. Strip metadata makes a `NAME-clean` copy of a JPEG, PNG or WebP. Remove the internet mark asks first. Undo works for the last two.
+
+### Conversions
+
+- Convert lists recipes, plans into the other panel's folder, asks first starting on No, never replaces a file, keeps the last 20 reports and Undo trashes what it made. 31 recipes are built in, 11 of them through carta, a converter in Rust that needs nothing installed.
+- A file type can name a recipe, and `conversions.toml` holds yours.
+
+### Watched folders
+
+- A task file in the `tasks` folder converts, moves, copies or notes each file that arrives in a folder. The task is read to you in words and approved first, and again after any change. It never replaces or removes a file and Ctrl+Z never undoes it.
+- The Watched folders list turns a task on or off, pauses it, previews it, shows its log, puts failed files back and says its rule. A task retries after 10 seconds, 1 minute and 10 minutes, and pauses after ten failures in a row for one cause.
+
+### Archives and disk images
+
+- RAR, CAB, ARJ, LZH, RPM, cpio, ar, spanned zip sets and unclaimed disk images are read through 7-Zip, read only, needing 7-Zip 25.01 to unpack. diroxide never writes RAR. 7-Zip runs set `LANG=C.UTF-8` so member names with accents or Japanese letters are found.
+- Delete, Rename and Make folder work inside a zip by rewriting it beside the old one, testing it, and sending the old copy to the trash. The question starts on No and says the cost. The File menu shows the four commands inside a zip through the new menu conditions `edits` and `removes`.
+- The disk image plugin opens ISO, raw disks, VHD, VHDX, VDI, VMDK, QCOW2 and squashfs read only, with partitions as folders. A plugin's words about an entry now reach its row, Say Details and the details list ("About: Partition 2, home, ext4").
+
+### Encryption and signatures
+
+- The File menu's Encryption submenu (Alt+F, then Y) holds Encrypt with a passphrase, Encrypt for a recipient and Decrypt through the Encryption plugin (age), and Encrypt, Decrypt and Sign with gpg through your own GnuPG. Secrets are typed in hidden fields, kept nowhere and wiped when the job ends, and `ToolInput::Secret` carries them to 7-Zip and gpg. Nothing is written over a file or removes an original. Undo says "Undid encrypt: 1 item is in the trash".
+- Verify signature checks a gpg or minisign signature, verdict first. diroxide never fetches a key.
+
+### Access and ownership
+
+- Change time sets the modified, accessed or created time to now, a typed date or the other panel's file's, with the weekday said, and Undo puts the old times back.
+- Change owner changes owner and group on Linux and macOS, never as an administrator, refusing the system's folders. On Windows it opens the system's Security dialog for the focused item and does not wait for it.
+
+### Photos
+
+- Columns `photo.taken`, `photo.camera`, `photo.pixels` and `photo.kind`, Sort by date taken, Next day and Previous day, selecting screenshots, bursts and pictures with no date (`photos.burst_gap_seconds`), Review pictures one key an answer, and Move into month folders as one job with one Undo.
+
+### The window
+
+- A picture view: Show picture, Enter in the viewer or the preview, Plus and Minus, 0 and 1. Copied text reaches the clipboard on Wayland.
+- The window reads your theme files and says "Unknown theme NAME. Galaxy is in use." once. Every new list and question has a name of its own, 112 dialog purposes in all, and the scripted walk checks the first 40 cells of the new ones.
+
+### The plugins
+
+- Protocol: `ui/form`, `ui/show_diff`, `place/describe`, `column/format`, `fs/stage` and `fs/commit` are served, and a `[[provider]]` table takes `extensions` and `wants`. A plugin's output committed through the host joins Undo.
+- The git plugin shows the branch and changes in the title line and a Git column, and stages, commits, stashes, fetches, pulls, pushes and shows the log, blame and diffs, with questions that start on No and a trust question before git runs anything from a repository's own configuration.
+
+### The command line
+
+- `diro doctor`, `diro info`, `diro sum` (`--algorithm`, `--list`, `--check`), `diro convert` (`--to`, `--recipe`, `--out`, `--conflicts`, `--recursive`, `--dry-run`, `--report`, `--json`, `--print0`, `--list`) and `diro watch --task NAME` (`--once`, `--dry-run`, `--list`), with the family's exit codes.
+
+### For contributors
+
+- `cargo xtask demo-tools PATH` writes the alpha 4 demo set and its steps file. The nightly fuzz run covers 39 targets in five folders. The bench has a new baseline and found that listing and details reads cost more than in the build of October 16, 2026. Six load flakes were made steadier.
+
 ## 0.1.0-alpha.3
 
 Alpha 3 adds the GUI: the same `diro` opens a window on a desktop, with each panel one list a screen reader reads name first, the dialogs as real controls, the twenty-four themes with their contrast verdicts said, native menus on Windows, focus mode and full screen, drawing on the processor where there is no graphics driver, and the icons from the mark; beside it, plugin lists inside a panel, Pause for waiting jobs and the queue kept across restarts, the nightly fuzz workflow and the two archive bugs it found, the Markdown reader's link loop fixed, and the bench baseline. It is the planned alpha.6. This entry was written on Tuesday, November 3, 2026.
