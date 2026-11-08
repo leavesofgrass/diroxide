@@ -546,7 +546,8 @@ impl Engine {
         let request = ToolRequest::new(GPG, args)
             .with_limits(RunLimits::new(RUN_LIMIT, OUTPUT_CAP))
             .with_input(input)
-            .in_folder(folder);
+            .in_folder(folder)
+            .with_env(gpg::GPG_LOCALE.0, gpg::GPG_LOCALE.1);
         self.tools().run(&request, &control.cancel)
     }
 

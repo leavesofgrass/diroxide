@@ -143,13 +143,15 @@ pub fn verify_args(signature: &Path, data: Option<&Path>) -> Vec<OsString> {
     args
 }
 
-/// A passphrase as gpg's standard input: its bytes and a line feed.
+/// A passphrase as gpg's standard input: its bytes and a line feed, as a
+/// secret input, hidden from Debug and wiped when dropped (E's request 5).
 pub fn passphrase_input(secret: &Secret) -> ToolInput {
-    let mut bytes = Vec::with_capacity(secret.expose().len() + 1);
-    bytes.extend_from_slice(secret.expose().as_bytes());
-    bytes.push(b'\n');
-    ToolInput::Bytes(bytes)
+    ToolInput::secret_line(secret)
 }
+
+/// The locale every gpg run gets, so its status words and messages come
+/// out the same whatever the computer's language (E's request 6).
+pub const GPG_LOCALE: (&str, &str) = ("LC_ALL", "C");
 
 /// Whether a recipient's text can be given to gpg: not empty, no control
 /// characters, not over 256 characters, and not starting with a dash.
@@ -454,10 +456,10 @@ mod tests {
     #[test]
     fn a_passphrase_goes_to_standard_input_only() {
         let secret = Secret::new("canary-7f3a-not-a-password".to_owned());
-        match passphrase_input(&secret) {
-            ToolInput::Bytes(bytes) => assert_eq!(bytes, b"canary-7f3a-not-a-password\n"),
-            other => panic!("{other:?}"),
-        }
+        let input = passphrase_input(&secret);
+        assert!(matches!(input, ToolInput::Secret(_)), "{input:?}");
+        assert_eq!(input.bytes(), Some(&b"canary-7f3a-not-a-password\n"[..]));
+        assert!(!format!("{input:?}").contains("canary"), "{input:?}");
     }
 
     // The status words below are those spike ES3 saw from gpg 2.4.9

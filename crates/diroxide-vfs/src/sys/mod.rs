@@ -56,6 +56,9 @@ mod mac_apps;
 pub mod open_with;
 #[cfg(windows)]
 mod owner_pipe;
+/// Windows' Security dialog for Change owner (AP's request 1); the
+/// crate's lib.rs re-exports it.
+pub mod security_dialog;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]

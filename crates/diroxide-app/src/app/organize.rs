@@ -161,6 +161,78 @@ impl Wants {
     pub(super) fn list_always(&self) -> bool {
         matches!(self, Wants::Label { .. })
     }
+
+    /// The dialog's purpose as [`App::dialog_purpose`] gives it: the W3l
+    /// lists are "Organize"; every list and question the alpha 4 lanes
+    /// host here has its own name (R30's commit 114, the fold lane), so
+    /// the window's test of every purpose opens each one. The matches
+    /// list every variant, so a dialog added here later needs a name.
+    pub(super) fn purpose(&self) -> &'static str {
+        use super::access_ui::AccessWants;
+        use super::converting::ConvertWants;
+        use super::crypt_ui::CryptWants;
+        use super::metadata_ui::MetaWants;
+        use super::photos_ui::PhotoWants;
+        use super::type_actions::TypeWants;
+        use super::watched::WatchedWants;
+        match self {
+            Wants::Label { .. }
+            | Wants::Labels
+            | Wants::Bookmarks { .. }
+            | Wants::RemoveBookmark { .. }
+            | Wants::BookmarkForm { .. }
+            | Wants::BookmarkText { .. }
+            | Wants::History { .. } => "Organize",
+            Wants::Types(wants) => match wants {
+                TypeWants::Actions { .. } => "TypeActions",
+                TypeWants::Encoding { .. } => "Encoding",
+                TypeWants::OpenWith { .. } => "OpenWith",
+            },
+            Wants::Convert(wants) => match wants {
+                ConvertWants::Recipes { .. } => "ConvertRecipes",
+                ConvertWants::Run { .. } => "ConvertPlan",
+                ConvertWants::Reports(_) => "ConvertReports",
+            },
+            Wants::Watched(wants) => match wants {
+                WatchedWants::List(_) => "WatchedFolders",
+                WatchedWants::Actions(_) => "WatchedActions",
+                WatchedWants::Approve { .. } => "WatchedApprove",
+                WatchedWants::CatchUp { .. } => "WatchedCatchUp",
+                WatchedWants::PutBack { .. } => "WatchedPutBack",
+            },
+            Wants::Note { .. } => "Note",
+            Wants::Field { .. } => "Field",
+            Wants::ReadColumns { .. } => "ReadColumns",
+            Wants::Meta(wants) => match wants {
+                MetaWants::Checksums(_) => "Checksums",
+                MetaWants::Compare(_) => "ChecksumCompare",
+                MetaWants::VerifyLists { .. } => "VerifyLists",
+                MetaWants::VerifyReport { .. } => "VerifyReport",
+                MetaWants::StripQuestion { .. } => "StripQuestion",
+                MetaWants::MarkQuestion { .. } => "MarkQuestion",
+                MetaWants::Lines => "MetaLines",
+            },
+            Wants::Crypt(wants) => match wants {
+                CryptWants::TrashOriginals { .. } => "TrashOriginals",
+                CryptWants::Recipients { .. } => "GpgRecipients",
+                CryptWants::Signer { .. } => "GpgSigner",
+                CryptWants::Run { .. } => "GpgPlan",
+                CryptWants::MinisignKey { .. } => "MinisignKey",
+            },
+            Wants::Access(wants) => match wants {
+                AccessWants::TimeForm(_) => "TimeForm",
+                AccessWants::TypedTime(_) => "TypedTime",
+                AccessWants::OwnerForm(_) => "OwnerForm",
+                AccessWants::OwnerName(_) => "OwnerName",
+                AccessWants::GroupName(_) => "GroupName",
+            },
+            Wants::Photos(wants) => match wants {
+                PhotoWants::Review(_) => "Review",
+                PhotoWants::ReviewMove(_) => "ReviewMove",
+                PhotoWants::Months(_) => "MonthFolders",
+            },
+        }
+    }
 }
 
 /// What a command of these lists does.

@@ -235,6 +235,24 @@ impl ListModel {
         self.rows.is_empty()
     }
 
+    /// Replaces one row in place, for a batch of a column's cells patched
+    /// into a long list without building every row again (MA's request 2;
+    /// spike M6 measured 0.2 to 0.3 seconds a patch at 100,000 rows). The
+    /// row at `index` must have the same id; it keeps its mark, as marks
+    /// travel by id, and the focus stays. Returns false, changing
+    /// nothing, when there is no row at `index` or its id differs.
+    pub fn set_row(&mut self, index: usize, mut row: ListRow) -> bool {
+        let Some(slot) = self.rows.get_mut(index) else {
+            return false;
+        };
+        if slot.id != row.id {
+            return false;
+        }
+        row.selected = slot.selected;
+        *slot = row;
+        true
+    }
+
     /// Replaces the rows. The listed row must never lie (plan section
     /// 5.2): marks travel by row id, never by position, so a new row is
     /// marked when the row with its id was marked (or it comes marked); the
@@ -489,6 +507,22 @@ mod tests {
         assert_eq!(l.focus_index(), Some(2));
         l.move_focus(Move::To(99));
         assert_eq!(l.focus_index(), Some(2));
+    }
+
+    #[test]
+    fn one_row_is_patched_in_place_keeping_its_mark_and_the_focus() {
+        let mut l = list(&["a", "b", "c"]);
+        l.move_focus(Move::To(2));
+        l.rows[1].selected = true;
+        let patched = ListRow::new("b", "b").with_details(["artist Ada Example"]);
+        assert!(l.set_row(1, patched));
+        assert_eq!(l.rows()[1].details, ["artist Ada Example"]);
+        assert!(l.rows()[1].selected, "the mark travels with the id");
+        assert_eq!(l.focus_index(), Some(2));
+        // Another id, or no row there: nothing changes.
+        assert!(!l.set_row(1, ListRow::new("z", "z")));
+        assert!(!l.set_row(9, ListRow::new("a", "a")));
+        assert_eq!(l.rows()[1].id, "b");
     }
 
     #[test]

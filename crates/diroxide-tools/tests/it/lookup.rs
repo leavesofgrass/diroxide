@@ -60,9 +60,15 @@ fn make_executable(path: &Path) {
 #[cfg(not(unix))]
 fn make_executable(_path: &Path) {}
 
-/// A registry that looks only in `path` and in no install folder.
+/// A registry that looks only in `path` and in no install folder. Its
+/// fake tools' version commands may run for a minute: they are scripts,
+/// and on a machine loaded with other builds a `.cmd` once took 2.8
+/// seconds to start, past the product's two (E's merge check, Saturday,
+/// November 7, 2026). A passing run waits only for the script's end.
 fn on_path(path: &Path) -> ToolRegistry {
-    ToolRegistry::builtin().with_path(Some(path.as_os_str().to_owned()))
+    ToolRegistry::builtin()
+        .with_path(Some(path.as_os_str().to_owned()))
+        .with_version_timeout(std::time::Duration::from_secs(60))
 }
 
 /// The report's line for one tool, and the line after it.
@@ -150,6 +156,29 @@ fn the_lookup_order_is_said_in_words() {
     assert_eq!(line, "pandoc: not at its tools.toml path");
     assert_eq!(next.as_deref(), Some("Check its path in tools.toml."));
     assert_eq!(missing.find("pandoc"), Ok(ToolStatus::NotFound));
+}
+
+/// The runner says a tool's version as the Tools page does (CL's request
+/// 4): read from the found program, carta's built in, and none for a tool
+/// that is not found.
+#[test]
+fn the_runner_says_a_tools_version() {
+    use diroxide_vfs::ToolRunner;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("path");
+    fake(&path, "pandoc", &["pandoc 3.9.0.2"], &[], 0);
+    let tools = on_path(&path);
+    assert_eq!(
+        ToolRunner::version(&tools, "pandoc").as_deref(),
+        Some("3.9.0.2")
+    );
+    assert_eq!(
+        ToolRunner::version(&tools, "carta").as_deref(),
+        Some(diroxide_tools::CARTA_VERSION)
+    );
+    assert_eq!(ToolRunner::version(&tools, "magick"), None);
+    // A runner that reads no versions says none, and runs nothing.
+    assert_eq!(diroxide_vfs::NoTools.version("pandoc"), None);
 }
 
 /// ImageMagick has to say "ImageMagick": a `convert` that does not (as

@@ -354,7 +354,21 @@ impl PluginCompleter {
 
     /// Candidates for the text typed so far, with the cursor's position in
     /// characters. Cancels the query before it, which is still answered.
+    /// Gives up after [`COMPLETION_TIMEOUT`].
     pub fn query(&self, typed: &str, cursor: usize) -> Result<Vec<Candidate>, RpcError> {
+        self.query_within(typed, cursor, COMPLETION_TIMEOUT)
+    }
+
+    /// The same, giving up after `timeout`: the crate's tests wait on the
+    /// plugin's answer or its cancellation, the events they check, with a
+    /// deadline a loaded machine does not reach (the cancellation test's
+    /// failure under load, Friday, November 6, 2026).
+    pub(crate) fn query_within(
+        &self,
+        typed: &str,
+        cursor: usize,
+        timeout: Duration,
+    ) -> Result<Vec<Candidate>, RpcError> {
         let live = self.inner.live.upgrade().ok_or_else(|| {
             RpcError::new(
                 ErrorKind::PluginUnavailable,
@@ -385,7 +399,7 @@ impl PluginCompleter {
                     .unwrap_or_else(PoisonError::into_inner) = Some(id.clone());
             })
             .map_err(|e| RpcError::new(ErrorKind::PluginUnavailable, e.to_string()))?;
-        let outcome = call.wait(COMPLETION_TIMEOUT).unwrap_or_else(|| {
+        let outcome = call.wait(timeout).unwrap_or_else(|| {
             let _ = connection.cancel(&call.id);
             Err(RpcError::new(ErrorKind::TimedOut, "no candidates in time"))
         });
@@ -833,9 +847,10 @@ pub struct FormField {
 impl FormField {
     /// Whether a typed value is acceptable: a `text` field's whole value
     /// must match its pattern, when it has one. The error is the sentence
-    /// the dialog says, the field's own words or "The text does not fit
-    /// what is asked." (the host-pieces lane; [`read_form`] refused a
-    /// pattern that does not read).
+    /// the dialog says, the field's own words or, when the plugin gave
+    /// none, "That text is not accepted here."
+    /// ([`crate::lines::text_does_not_fit`]; the host-pieces lane;
+    /// [`read_form`] refused a pattern that does not read).
     pub fn check_text(&self, text: &str) -> Result<(), String> {
         let Some(source) = self.pattern.as_deref().filter(|_| self.kind == "text") else {
             return Ok(());

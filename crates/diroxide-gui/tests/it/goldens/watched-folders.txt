@@ -1,0 +1,10 @@
+Window "work - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        Label "work, 8 items, in <dir>" live=polite
+      Dialog "Watched folders: 1 task"
+        GenericContainer ""
+          Label "Up and Down choose a task, Enter lists what it can do, Escape closes."
+        ListBox "Watched folders: 1 task"
+          ListBoxOption "Notes, off, Notes. Watches <dir>/notes/in. When a file named like *.md arrives and stops changing for 2 seconds, it runs the recipe markdown-to-org on it and puts the result in <dir>/notes/out. It then moves the original to <dir>/notes/processed; if the recipe fails, to <dir>/notes/failed. A taken name gets a number. Nothing is overwritten or removed. One file at a time." 1 of 1 FOCUS

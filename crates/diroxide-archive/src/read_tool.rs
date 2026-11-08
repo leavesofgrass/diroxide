@@ -447,13 +447,19 @@ fn run_failure(error: ToolRunError, signature: Signature) -> VfsError {
     }
 }
 
-/// Standard input for a run: the password and a line feed, or nothing.
+/// Standard input for a run: the password and a line feed as a secret
+/// input (hidden from Debug, wiped when dropped), or nothing.
 fn input_of(password: Option<&Secret>) -> ToolInput {
     match password {
-        Some(secret) => ToolInput::Bytes(format!("{}\n", secret.expose()).into_bytes()),
+        Some(secret) => ToolInput::secret_line(secret),
         None => ToolInput::Closed,
     }
 }
+
+/// The locale every 7-Zip run gets: its messages in English and member
+/// names read and written as UTF-8 whatever the computer's language, so
+/// the listing parser and the password sentences match (Z's request 3).
+pub(crate) const SEVEN_ZIP_LOCALE: (&str, &str) = ("LANG", "C.UTF-8");
 
 /// Runs 7-Zip with these arguments through the context's runner.
 fn run(
@@ -465,7 +471,8 @@ fn run(
 ) -> Result<ToolOutput, VfsError> {
     let request = ToolRequest::new(TOOL, args)
         .with_input(input_of(password))
-        .with_limits(limits);
+        .with_limits(limits)
+        .with_env(SEVEN_ZIP_LOCALE.0, SEVEN_ZIP_LOCALE.1);
     ctx.tools
         .run(&request, &ctx.cancel)
         .map_err(|e| run_failure(e, signature))
@@ -1000,6 +1007,7 @@ mod tests {
             let mut command = Command::new(&self.path);
             command
                 .args(&request.args)
+                .envs(request.env.iter().map(|(k, v)| (k, v)))
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
@@ -1013,7 +1021,7 @@ mod tests {
                 message: e.to_string(),
             })?;
             let mut stdin = child.stdin.take();
-            if let (ToolInput::Bytes(bytes), Some(stdin)) = (&request.input, stdin.as_mut()) {
+            if let (Some(bytes), Some(stdin)) = (request.input.bytes(), stdin.as_mut()) {
                 let _ = stdin.write_all(bytes);
             }
             drop(stdin);
@@ -1212,10 +1220,13 @@ mod tests {
     #[test]
     fn a_password_goes_to_standard_input_never_the_arguments() {
         let secret = Secret::new("canary-7f3a-not-a-password".to_owned());
-        let ToolInput::Bytes(bytes) = input_of(Some(&secret)) else {
-            panic!("the password goes to standard input");
-        };
-        assert_eq!(bytes, b"canary-7f3a-not-a-password\n");
+        let input = input_of(Some(&secret));
+        assert!(
+            matches!(input, ToolInput::Secret(_)),
+            "the password goes to standard input as a secret"
+        );
+        assert_eq!(input.bytes(), Some(&b"canary-7f3a-not-a-password\n"[..]));
+        assert!(!format!("{input:?}").contains("canary"), "{input:?}");
         assert_eq!(input_of(None), ToolInput::Closed);
         let args = list_args(Path::new("Backup.rar"));
         assert!(args.iter().all(|a| !a.to_string_lossy().starts_with("-p")));

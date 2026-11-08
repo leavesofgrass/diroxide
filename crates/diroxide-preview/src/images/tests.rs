@@ -518,6 +518,8 @@ fn the_meta_reader_gives_the_same_rows_as_fields() {
         entry: &entry,
         type_id: Some("jpeg"),
         group: Some("images"),
+        cancel: None,
+        tools: None,
     };
     assert!(reader.accepts(&request));
     let svg = ReadRequest {

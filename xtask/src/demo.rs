@@ -374,8 +374,8 @@ fn main() {
 }
 "#;
 
-/// `report.md`: twelve headings and a table.
-const REPORT_MD: &str = "# Quarterly report
+/// `report.md`: twelve headings and a table (`demo-tools` writes it too).
+pub(crate) const REPORT_MD: &str = "# Quarterly report
 
 A short report for the quick view: twelve headings and one table.
 
@@ -424,8 +424,9 @@ A crow-friendly feeder, raccoon-proof.
 To the neighbors who counted.
 ";
 
-/// `notes.org`: an Org file for carta's reader.
-const NOTES_ORG: &str = "#+TITLE: Field notes
+/// `notes.org`: an Org file for carta's reader (`demo-tools` writes it
+/// too).
+pub(crate) const NOTES_ORG: &str = "#+TITLE: Field notes
 
 * Crows
   Seen on the tram cable, three at a time.

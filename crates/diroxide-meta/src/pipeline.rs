@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use diroxide_core::{Entry, Place};
-use diroxide_vfs::{CancelToken, OpContext, Provider, ReadSeek};
+use diroxide_vfs::{CancelToken, OpContext, Provider, ReadSeek, ToolRunner};
 
 use crate::field::{Cell, Field};
 use crate::guard::{Bounded, Guard};
@@ -51,21 +51,26 @@ impl std::fmt::Debug for Pipeline {
 }
 
 /// What one reader is asked, owned, so it can travel to the reader's
-/// thread.
+/// thread: the request's facts, the read's cancel token (the request's,
+/// else the one the read runs under) and the runner, when given.
 struct Asked {
     place: Place,
     entry: Entry,
     type_id: Option<String>,
     group: Option<String>,
+    cancel: CancelToken,
+    tools: Option<Arc<dyn ToolRunner>>,
 }
 
 impl Asked {
-    fn of(request: &ReadRequest<'_>) -> Self {
+    fn of(request: &ReadRequest<'_>, read: &CancelToken) -> Self {
         Self {
             place: request.place.clone(),
             entry: request.entry.clone(),
             type_id: request.type_id.map(str::to_owned),
             group: request.group.map(str::to_owned),
+            cancel: request.cancel.unwrap_or(read).clone(),
+            tools: request.tools.cloned(),
         }
     }
 
@@ -75,6 +80,8 @@ impl Asked {
             entry: &self.entry,
             type_id: self.type_id.as_deref(),
             group: self.group.as_deref(),
+            cancel: Some(&self.cancel),
+            tools: self.tools.as_ref(),
         }
     }
 }
@@ -131,6 +138,20 @@ impl Pipeline {
                     .map(|k| (*k, Cost::Background, EXTENDED)),
             )
             .collect()
+    }
+
+    /// Whether some reader that names `key` takes this file, by its type,
+    /// group or name, without reading it (MA's request 3): a column says
+    /// "reading" only for a file a reader will read for its key, and
+    /// leaves the cell out for the rest (a zip has no artist). The
+    /// extended items' keys are taken for every file.
+    pub fn takes(&self, key: &str, request: &ReadRequest<'_>) -> bool {
+        if EXTENDED_KEYS.contains(&key) {
+            return true;
+        }
+        self.readers
+            .iter()
+            .any(|r| r.keys().contains(&key) && r.accepts(request))
     }
 
     /// The cost class of the first reader that names `key`.
@@ -195,7 +216,7 @@ impl Pipeline {
                     self.run_guarded(
                         Arc::clone(reader),
                         source,
-                        Asked::of(request),
+                        Asked::of(request, &ctx.cancel),
                         *limits,
                         ctx.cancel.clone(),
                     )
@@ -220,7 +241,7 @@ impl Pipeline {
         Some(self.run_guarded(
             Arc::clone(reader),
             source,
-            Asked::of(request),
+            Asked::of(request, cancel),
             *limits,
             cancel.clone(),
         ))
@@ -389,6 +410,104 @@ mod tests {
         }
     }
 
+    /// A reader that says what its request carried: a runner, and whether
+    /// its cancel token is set.
+    struct Sees;
+
+    impl Reader for Sees {
+        fn id(&self) -> &'static str {
+            "sees"
+        }
+        fn cost(&self) -> Cost {
+            Cost::OnDemand
+        }
+        fn accepts(&self, _request: &ReadRequest<'_>) -> bool {
+            true
+        }
+        fn read(
+            &self,
+            _source: &mut dyn ReadSeek,
+            request: &ReadRequest<'_>,
+            _limits: &ReadLimits,
+        ) -> Result<Vec<Field>, MetaError> {
+            let tools = request.tools.is_some_and(|t| t.has("ffprobe"));
+            let cancel = request.cancel.map(CancelToken::is_cancelled);
+            Ok(vec![Field::new(
+                "sees.request",
+                "Request",
+                format!("tools {tools}, cancel {cancel:?}"),
+                DetailGroup::Technical,
+            )])
+        }
+    }
+
+    /// A runner that has every tool and runs none.
+    struct Every;
+
+    impl ToolRunner for Every {
+        fn has(&self, _tool: &str) -> bool {
+            true
+        }
+        fn run(
+            &self,
+            _request: &diroxide_vfs::ToolRequest,
+            _cancel: &CancelToken,
+        ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+            Err(diroxide_vfs::ToolRunError::Cancelled)
+        }
+        fn run_streaming(
+            &self,
+            _request: &diroxide_vfs::ToolRequest,
+            _cancel: &CancelToken,
+            _record: &mut dyn FnMut(diroxide_vfs::ToolStream, &str) -> std::ops::ControlFlow<()>,
+        ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
+            Err(diroxide_vfs::ToolRunError::Cancelled)
+        }
+    }
+
+    /// A key is taken for a file only when a reader that names it accepts
+    /// the file; the extended items' keys for every file (MA's request 3).
+    #[test]
+    fn a_key_is_taken_only_for_a_file_its_reader_accepts() {
+        let pipeline = Pipeline::new().with(Arc::new(Bytes));
+        let place = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let notes = Entry::new("notes.txt", EntryKind::File);
+        let photo = Entry::new("photo.png", EntryKind::File);
+        let text = ReadRequest::new(&place, &notes);
+        let picture = ReadRequest::new(&place, &photo);
+        assert!(pipeline.takes("text.bytes", &text));
+        assert!(!pipeline.takes("text.bytes", &picture));
+        assert!(!pipeline.takes("audio.artist", &text), "no reader names it");
+        assert!(pipeline.takes("file.origin", &picture));
+    }
+
+    /// The reader on its thread gets the request's runner, and a cancel
+    /// token always: the request's, else the read's own (MA's request 1).
+    #[test]
+    fn a_reader_gets_the_requests_runner_and_a_cancel_token() {
+        let pipeline = Pipeline::new().with(Arc::new(Sees));
+        let place = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let entry = Entry::new("clip.mkv", EntryKind::File);
+        let runner: Arc<dyn ToolRunner> = Arc::new(Every);
+        let asked = CancelToken::new();
+        let read = CancelToken::new();
+        read.cancel();
+        let said = |request: &ReadRequest<'_>| -> String {
+            let source: Box<dyn ReadSeek> = Box::new(std::io::Cursor::new(Vec::new()));
+            let fields = pipeline
+                .read_source("sees", source, request, &ReadLimits::default(), &read)
+                .unwrap()
+                .unwrap();
+            fields[0].value.clone()
+        };
+        let mut request = ReadRequest::new(&place, &entry);
+        // Nothing given: no runner, the read's own token (cancelled here).
+        assert_eq!(said(&request), "tools false, cancel Some(true)");
+        request.tools = Some(&runner);
+        request.cancel = Some(&asked);
+        assert_eq!(said(&request), "tools true, cancel Some(false)");
+    }
+
     /// The scratch folder sits under the build's target folder, never the
     /// system's temporary folder.
     fn scratch() -> tempfile::TempDir {
@@ -418,6 +537,8 @@ mod tests {
             entry: &entry,
             type_id: Some("text"),
             group: Some("text"),
+            cancel: None,
+            tools: None,
         };
         let pipeline = Pipeline::new().with(Arc::new(Bytes));
         assert_eq!(pipeline.ids(), ["bytes"]);
@@ -492,6 +613,8 @@ mod tests {
             entry: &entry,
             type_id: None,
             group: None,
+            cancel: None,
+            tools: None,
         };
         let limits = ReadLimits {
             max_bytes: 1024,

@@ -203,11 +203,19 @@ fn each_purpose_is_named_as_the_source_declares_it() {
         })
         .collect();
     assert!(variants.len() > 70, "{variants:?}");
+    // Organize names its own lists in `Wants::purpose`, and RunArchive
+    // gives way to RewriteArchive for the zip rewrite (the fold lane):
+    // each still says its own name in a string arm there.
+    let hosted = include_str!("organize.rs");
     for variant in &variants {
         let arm = format!("Self::{variant} {{ .. }} => \"{variant}\",");
         let unit = format!("Self::{variant} => \"{variant}\",");
+        let quoted = format!("=> \"{variant}\",");
         assert!(
-            source.contains(&arm) || source.contains(&unit),
+            source.contains(&arm)
+                || source.contains(&unit)
+                || source.contains(&quoted)
+                || hosted.contains(&quoted),
             "{variant} is not named as itself"
         );
     }

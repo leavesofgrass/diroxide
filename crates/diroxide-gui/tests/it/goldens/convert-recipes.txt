@@ -1,0 +1,20 @@
+Window "work - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        Label "work, 8 items, in <dir>" live=polite
+      Dialog "Convert notes.md"
+        GenericContainer ""
+          Label "Up and Down choose a recipe, Enter plans it, Escape closes."
+        ListBox "Convert notes.md"
+          ListBoxOption "Markdown to LaTeX, Makes a whole LaTeX document of each Markdown file, built in." 1 of 11 FOCUS
+          ListBoxOption "Markdown to AsciiDoc, Makes an AsciiDoc document of each Markdown file, built in." 2 of 11
+          ListBoxOption "Markdown to Typst, Makes a Typst document of each Markdown file, built in." 3 of 11
+          ListBoxOption "Markdown to MediaWiki, Makes MediaWiki markup of each Markdown file, built in." 4 of 11
+          ListBoxOption "Markdown to Org, Makes an Org file of each Markdown file, built in." 5 of 11
+          ListBoxOption "Markdown to plain text, Makes a plain text file of each Markdown file, the marks taken out, built in." 6 of 11
+          ListBoxOption "Markdown to Word, built in, Makes a Word document of each Markdown file with no pandoc; pictures it names are left out." 7 of 11
+          ListBoxOption "Markdown to EPUB, built in, Makes an EPUB book of each Markdown file with no pandoc; pictures it names are left out." 8 of 11
+          ListBoxOption "Markdown to Word, needs pandoc, Makes a Word document of each Markdown file; pictures it names are left out." unavailable 9 of 11
+          ListBoxOption "Markdown to a web page, needs pandoc, Makes a whole web page of each Markdown file, its title from the file's name; pictures stay links." unavailable 10 of 11
+          ListBoxOption "Markdown to EPUB, needs pandoc, Makes an EPUB book of each Markdown file; pictures it names are left out." unavailable 11 of 11

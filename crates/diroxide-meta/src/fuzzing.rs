@@ -60,6 +60,8 @@ fn readers_on(bytes: &[u8]) -> usize {
         entry: &entry,
         type_id: None,
         group: None,
+        cancel: None,
+        tools: None,
     };
     let mut fields = 0;
     for reader in crate::readers::builtin() {

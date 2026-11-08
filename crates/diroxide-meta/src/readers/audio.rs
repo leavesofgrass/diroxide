@@ -416,6 +416,8 @@ pub(crate) mod tests {
             entry: &entry,
             type_id: Some("mp3"),
             group: Some("music"),
+            cancel: None,
+            tools: None,
         };
         assert!(reader.accepts(&request));
         let mut source = Cursor::new(bytes);

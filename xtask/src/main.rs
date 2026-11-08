@@ -9,9 +9,11 @@
 //! - `icons [--check]`: draws the application icon from the approved mark
 //!   (the PNG sizes, the `.ico`, the `.icns`, the Windows `.res` and the
 //!   window's own icon), or checks that each file is current.
-//! - `components [--check]`: builds the optional components this
-//!   repository makes, writes them as a folder source under the target
-//!   folder, and writes the public list the binary embeds.
+//! - `components [--check] [--assets FOLDER] [--pin ID] [--addresses]`:
+//!   builds the optional components this repository makes, writes them as
+//!   a folder source under the target folder, and writes the public list
+//!   the binary embeds; `--pin` pins helper files and `--addresses` checks
+//!   the pinned addresses, both from the network.
 //! - `keyboard [--check]`: writes `docs/keyboard.md` from the keymap's
 //!   defaults, as two lists (terminal, GUI), or checks that it is
 //!   current.
@@ -26,6 +28,11 @@
 //! - `search-tree PATH [--small]`: the 1 GB search tree of alpha.3.
 //! - `demo PATH`: the owner's demo set for the alpha.2 check, in a new or
 //!   empty folder on drive D:.
+//! - `demo-tools PATH`: the owner's demo set for the alpha 4 check (the
+//!   photos, the mixed types, the song, the documents, the download and
+//!   its checksum lists, the git repositories, the disk images and the
+//!   watched folder), with the owner's steps, in a new or empty folder on
+//!   drive D:.
 //!
 //! Later waves add `notices` and `dist`.
 
@@ -33,6 +40,7 @@ mod bench;
 mod budgets;
 mod components;
 mod demo;
+mod demo_tools;
 mod deps;
 mod docs_check;
 mod icons;
@@ -52,7 +60,7 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] [--assets FOLDER] [--pin ID] [--addresses] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH | demo-tools PATH";
 
 fn main() -> ExitCode {
     match run() {
@@ -92,6 +100,7 @@ fn run() -> Result<bool> {
         ["sample-folder", rest @ ..] => sample::sample_folder(rest),
         ["search-tree", rest @ ..] => sample::search_tree(&root, rest),
         ["demo", rest @ ..] => demo::run(&root, rest),
+        ["demo-tools", rest @ ..] => demo_tools::run(&root, rest),
         _ => {
             eprintln!("{USAGE}");
             Ok(false)

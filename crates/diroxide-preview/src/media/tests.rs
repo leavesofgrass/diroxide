@@ -276,6 +276,8 @@ fn the_meta_reader_is_on_demand_and_never_takes_a_playlist() {
         entry: &entry,
         type_id: Some("mkv"),
         group: Some("video"),
+        cancel: None,
+        tools: None,
     };
     assert!(reader.accepts(&request));
     let playlist = ReadRequest {
@@ -289,4 +291,47 @@ fn the_meta_reader_is_on_demand_and_never_takes_a_playlist() {
         .read(&mut source, &request, &ReadLimits::default())
         .unwrap();
     assert_eq!(fields[0].line(), "Title: Example Matroska");
+}
+
+/// The request's runner and cancel token come before the reader's own
+/// (MA's request 1): the details read's ffprobe goes through the app's
+/// runner, and a cancelled read stops it.
+#[test]
+fn the_meta_reader_runs_through_the_requests_runner_and_token() {
+    use diroxide_core::Entry;
+    use diroxide_meta::Reader;
+    let own = Arc::new(Fake::new(MKV));
+    let reader = MediaFields::new(Arc::clone(&own) as Arc<dyn ToolRunner>);
+    let asked = Arc::new(Fake::new(MP4));
+    let given: Arc<dyn ToolRunner> = Arc::clone(&asked) as Arc<dyn ToolRunner>;
+    let place = Place::parse(env!("CARGO_MANIFEST_DIR"))
+        .unwrap()
+        .join("clip.mp4")
+        .unwrap();
+    let entry = Entry::new("clip.mp4", EntryKind::File);
+    let cancel = CancelToken::new();
+    let request = ReadRequest {
+        place: &place,
+        entry: &entry,
+        type_id: Some("mp4"),
+        group: Some("video"),
+        cancel: Some(&cancel),
+        tools: Some(&given),
+    };
+    let mut source = std::io::Cursor::new(Vec::new());
+    reader
+        .read(&mut source, &request, &ReadLimits::default())
+        .unwrap();
+    assert_eq!(asked.seen.lock().unwrap().len(), 1);
+    assert!(
+        own.seen.lock().unwrap().is_empty(),
+        "the reader's own runner ran"
+    );
+    // A cancelled read says so and starts nothing.
+    cancel.cancel();
+    let cancelled = reader.read(&mut source, &request, &ReadLimits::default());
+    assert!(
+        matches!(cancelled, Err(MetaError::Place(VfsError::Cancelled))),
+        "{cancelled:?}"
+    );
 }

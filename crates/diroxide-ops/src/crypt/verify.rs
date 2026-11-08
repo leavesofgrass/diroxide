@@ -239,7 +239,8 @@ pub fn verify_signature(
         return SignatureVerdict::GpgMissing;
     }
     let mut request = ToolRequest::new(GPG, gpg::verify_args(&signature, data.as_deref()))
-        .with_limits(RunLimits::new(VERIFY_LIMIT, 1024 * 1024));
+        .with_limits(RunLimits::new(VERIFY_LIMIT, 1024 * 1024))
+        .with_env(gpg::GPG_LOCALE.0, gpg::GPG_LOCALE.1);
     if let Some(folder) = signature.parent() {
         request = request.in_folder(folder);
     }

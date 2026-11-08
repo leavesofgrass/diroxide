@@ -406,7 +406,13 @@ impl PluginTransport for MemoryTransport {
 mod tests {
     use super::*;
 
-    const WAIT: Duration = Duration::from_secs(5);
+    /// How long a test waits for a frame it expects: a deadline for an
+    /// event, never a pause, so a passing run returns as the frame comes.
+    /// A minute, since the helper is this test binary started again, and
+    /// on a machine loaded with other builds its start outran five
+    /// seconds (the stray-bytes test at TA's merge, Friday, November 6,
+    /// 2026); the run's own ten-minute limit stays the backstop.
+    const WAIT: Duration = Duration::from_secs(60);
 
     const HELPER: &str = "DIROXIDE_PLUGIN_HELPER";
 
@@ -569,6 +575,9 @@ mod tests {
     fn stray_bytes_and_crlf_from_a_process_never_stop_it() {
         let transport = start("stray");
         let mut frames = Vec::new();
+        // Every frame until the helper's output ends, the event this waits
+        // on; a silence as long as WAIT ends it too, and the asserts say
+        // what came.
         loop {
             match transport.receive(WAIT) {
                 Ok(Some(Frame::Blank)) => continue,

@@ -20,16 +20,17 @@ pub trait SecurityDialog: Send + Sync {
     fn open(&self, file: &Path) -> Result<(), String>;
 }
 
-/// The system's Security dialog. The file system crate has no call that
-/// opens it yet (lane AP's contract request: `ShellExecuteExW` with the
-/// "properties" verb and the "Security" page, in vfs's `sys` module), so
-/// it says it could not, and the app says what to do in File Explorer.
+/// The system's Security dialog: on Windows the file's Properties sheet
+/// on its Security page, through the file system crate's
+/// [`diroxide_vfs::open_security_dialog`] (lane AP's contract request,
+/// built by the fold lane); elsewhere the system has none, and when it
+/// cannot open the app says what to do in File Explorer.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SystemSecurityDialog;
 
 impl SecurityDialog for SystemSecurityDialog {
-    fn open(&self, _file: &Path) -> Result<(), String> {
-        Err("this build has no call that opens it".to_owned())
+    fn open(&self, file: &Path) -> Result<(), String> {
+        diroxide_vfs::open_security_dialog(file).map_err(|e| e.to_string().to_lowercase())
     }
 }
 

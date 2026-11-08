@@ -252,6 +252,8 @@ mod tests {
             entry: &entry,
             type_id: Some("jpeg"),
             group: Some("images"),
+            cancel: None,
+            tools: None,
         };
         assert!(PhotoFacts.accepts(&request));
         let fields = PhotoFacts

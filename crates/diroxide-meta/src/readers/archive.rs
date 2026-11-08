@@ -174,6 +174,8 @@ pub(crate) mod tests {
             entry: &entry,
             type_id: None,
             group: None,
+            cancel: None,
+            tools: None,
         };
         assert!(ZipFacts.accepts(&request));
         ZipFacts

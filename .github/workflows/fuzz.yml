@@ -1,9 +1,10 @@
 # The nightly fuzz run (plan section 6; docs/dev/fuzzing.md). Every
-# cargo-fuzz target of fuzz/Cargo.toml and the SFTP plugin's sftp_packet
-# is built once, on Linux with the nightly toolchain, AddressSanitizer and
-# debug assertions, then each runs ten minutes in its own job, starting
-# from its corpus of earlier nights (cached by target) and its seeds under
-# fixtures/. A crash, timeout, leak or running out of memory fails that
+# cargo-fuzz target of fuzz/Cargo.toml and of the four plugins' fuzz
+# folders (SFTP, disk images, git and encryption, each a workspace of its
+# own) is built once, on Linux with the nightly toolchain,
+# AddressSanitizer and debug assertions, then each runs ten minutes in its
+# own job, starting from its corpus of earlier nights (cached by target)
+# and its seeds under fixtures/ or the plugin's own fixtures/. A crash, timeout, leak or running out of memory fails that
 # target's job and uploads, as the artifact fuzz-crash-TARGET, the input
 # that caused it, the run's log and the reproduce line in words. The last
 # job writes the run's summary: one plain line per target, the meaning
@@ -43,9 +44,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      # Both fuzz workspaces build into one folder, so the programs are
-      # found in one place.
+      # Every fuzz workspace builds into one folder, so the programs are
+      # found in one place; no two targets share a name.
       CARGO_TARGET_DIR: ${{ github.workspace }}/fuzz-target
+      # The plugins' fuzz folders, each a workspace of its own beside the
+      # main one's fuzz/.
+      PLUGIN_FUZZ: plugins/diro-sftp/fuzz plugins/diro-disk/fuzz plugins/diro-git/fuzz plugins/diro-crypt/fuzz
     outputs:
       matrix: ${{ steps.gather.outputs.matrix }}
       rustc: ${{ steps.gather.outputs.rustc }}
@@ -57,13 +61,16 @@ jobs:
         with:
           tool: cargo-fuzz@${{ env.CARGO_FUZZ_VERSION }}
       # The fuzz workspaces keep no lock of their own (each folder's
-      # .gitignore): starting from the main workspace's lock and the
+      # .gitignore): starting from the main workspace's lock and each
       # plugin's fuzzes the versions that ship, with only libfuzzer-sys
       # and arbitrary added.
       - name: Start from the workspace locks
         run: |
+          set -euo pipefail
           cp Cargo.lock fuzz/Cargo.lock
-          cp plugins/diro-sftp/Cargo.lock plugins/diro-sftp/fuzz/Cargo.lock
+          for folder in $PLUGIN_FUZZ; do
+            cp "$(dirname "$folder")/Cargo.lock" "$folder/Cargo.lock"
+          done
       # --target: the cargo-fuzz that install-action fetches is a musl
       # build and defaults to its own triple, which AddressSanitizer cannot
       # link (textweaver's nightly found this). --debug-assertions is
@@ -72,11 +79,14 @@ jobs:
       # fuzzer can find.
       - name: Build every target with AddressSanitizer and debug assertions
         run: |
+          set -euo pipefail
           rustc +nightly --version
-          cargo +nightly fuzz build --fuzz-dir fuzz --target x86_64-unknown-linux-gnu --debug-assertions
-          cargo +nightly fuzz build --fuzz-dir plugins/diro-sftp/fuzz --target x86_64-unknown-linux-gnu --debug-assertions
-      # The targets are read from the two manifests, so a target added to
-      # either is fuzzed the next night with no change here.
+          for folder in fuzz $PLUGIN_FUZZ; do
+            echo "Building the targets of $folder."
+            cargo +nightly fuzz build --fuzz-dir "$folder" --target x86_64-unknown-linux-gnu --debug-assertions
+          done
+      # The targets are read from the five manifests, so a target added to
+      # any of them is fuzzed the next night with no change here.
       - name: Gather the programs and the list of targets
         id: gather
         run: |
@@ -84,16 +94,20 @@ jobs:
           mkdir -p fuzz-bin
           list="$RUNNER_TEMP/targets.tsv"
           : > "$list"
-          for folder in fuzz plugins/diro-sftp/fuzz; do
+          for folder in fuzz $PLUGIN_FUZZ; do
             targets=$(cargo +nightly fuzz list --fuzz-dir "$folder")
             for target in $targets; do
+              if [ -e "fuzz-bin/$target" ]; then
+                echo "Fail: two fuzz folders have a target named $target."
+                exit 1
+              fi
               cp "$CARGO_TARGET_DIR/x86_64-unknown-linux-gnu/release/$target" fuzz-bin/
               printf '%s\t%s\n' "$target" "$folder" >> "$list"
             done
           done
           count=$(wc -l < "$list")
           if [ "$count" -eq 0 ]; then
-            echo "Fail: no fuzz targets were found in the two manifests."
+            echo "Fail: no fuzz targets were found in the five manifests."
             exit 1
           fi
           matrix=$(jq -Rnc '{include: [inputs | split("\t") | {target: .[0], folder: .[1]}]}' < "$list")
@@ -117,10 +131,13 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
     steps:
-      # Only the seeds are needed from the repository.
+      # Only the seeds are needed from the repository: the main fixtures
+      # and the git plugin's, the one plugin with seeds of its own.
       - uses: actions/checkout@v5
         with:
-          sparse-checkout: fixtures
+          sparse-checkout: |
+            fixtures
+            plugins/diro-git/fixtures
       - uses: actions/download-artifact@v4
         with:
           name: fuzz-targets
@@ -166,21 +183,23 @@ jobs:
             length="$FUZZ_SECONDS seconds"
           fi
           # Seeds: real inputs, read and never written. A folder named for
-          # the target under a seeds folder in fixtures/ is found by
-          # itself; four targets read fixture folders of their own.
+          # the target under a seeds folder in fixtures/ or a plugin's
+          # fixtures/ is found by itself; four targets read fixture
+          # folders of their own.
           case "$TARGET" in
             manifest_toml) seeds=fixtures/plugins/manifests ;;
             script_header) seeds=fixtures/scripts/headers ;;
             component_manifest) seeds=fixtures/components/manifests ;;
             highlight_hang) seeds=fixtures/viewer/code ;;
-            *) seeds=$(find fixtures -type d -path "*/seeds/$TARGET" -print -quit) ;;
+            *) seeds=$(find fixtures plugins -type d -path "*/seeds/$TARGET" -print -quit 2> /dev/null || true) ;;
           esac
           # The limits each target's own comment asks for.
           timeout=30
           max_len=""
           case "$TARGET" in
             archive_zip|archive_7z|archive_roundtrip) max_len=-max_len=1048576 ;;
-            archive_stream|archive_xz) max_len=-max_len=262144 ;;
+            archive_stream|archive_xz|archive_slt) max_len=-max_len=262144 ;;
+            preview_image_header|preview_container) max_len=-max_len=1048576 ;;
             highlight_hang) timeout=2 ;;
           esac
           program="fuzz-bin/$TARGET"

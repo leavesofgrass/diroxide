@@ -26,6 +26,7 @@ use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use diroxide_core::Secret;
 use serde::{Deserialize, Serialize};
 
 use crate::cancel::CancelToken;
@@ -73,8 +74,37 @@ pub enum ToolInput {
     Closed,
     /// These bytes, then end of file (ExifTool's `-@ -` list).
     Bytes(Vec<u8>),
+    /// A password or passphrase and its line ending, then end of file
+    /// (7-Zip's password, gpg's passphrase): its text is said only as
+    /// "Secret(hidden)" by Debug, a clone is wiped too, and it is wiped
+    /// from memory when dropped (Z's requests 2 and 3, E's 5 and 6).
+    /// A runner writes [`Secret::expose`]'s bytes and keeps no copy.
+    Secret(Secret),
     /// A file's bytes, read as the program asks for them.
     File(PathBuf),
+}
+
+impl ToolInput {
+    /// A secret's text and a line feed after it, as a program reads a
+    /// password from its standard input.
+    pub fn secret_line(secret: &Secret) -> Self {
+        let mut line = Secret::new(String::with_capacity(secret.expose().len() + 1));
+        for c in secret.expose().chars() {
+            line.push(c);
+        }
+        line.push('\n');
+        ToolInput::Secret(line)
+    }
+
+    /// The bytes a runner writes: the bytes, or the secret's; `None` for
+    /// a closed input or a file.
+    pub fn bytes(&self) -> Option<&[u8]> {
+        match self {
+            ToolInput::Bytes(bytes) => Some(bytes),
+            ToolInput::Secret(secret) => Some(secret.expose().as_bytes()),
+            ToolInput::Closed | ToolInput::File(_) => None,
+        }
+    }
 }
 
 /// How streamed output is cut into records.
@@ -152,6 +182,11 @@ pub struct ToolRequest {
     pub folder: Option<PathBuf>,
     /// How [`ToolRunner::run_streaming`] cuts the output.
     pub split: Split,
+    /// Environment variables set for this run, after the runner's own:
+    /// `LANG=C.UTF-8` for 7-Zip and `LC_ALL=C` for gpg, so their words
+    /// and their names come out the same whatever the computer's language
+    /// (Z's and E's requests; the callers set them).
+    pub env: Vec<(OsString, OsString)>,
 }
 
 impl ToolRequest {
@@ -169,7 +204,14 @@ impl ToolRequest {
             limits: RunLimits::DEFAULT,
             folder: None,
             split: Split::Lines,
+            env: Vec::new(),
         }
+    }
+
+    /// The same run with an environment variable set.
+    pub fn with_env(mut self, name: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.env.push((name.into(), value.into()));
+        self
     }
 
     /// The same run with these limits.
@@ -304,6 +346,17 @@ pub trait ToolRunner: Send + Sync {
     /// does not know it.
     fn name_of(&self, tool: &str) -> String {
         tool.to_owned()
+    }
+
+    /// The tool's version in words ("7.1.2-35", "3.9.0.2"), read by its
+    /// own version command, for a plan's "tool and its version" line and a
+    /// watched folder's approval (CL's request 4, HL's and AW's 6);
+    /// `None` when it is not found, says no version, or this runner does
+    /// not read versions, which is the default, so a test's runner never
+    /// runs a version command.
+    fn version(&self, tool: &str) -> Option<String> {
+        let _ = tool;
+        None
     }
 
     /// Runs a program to its end under the request's limits, stopped with

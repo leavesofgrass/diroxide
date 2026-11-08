@@ -717,13 +717,16 @@ pub const FIELD_KEYS: [&str; 11] = [
 ];
 
 /// The ffprobe reader as a metadata reader (R30 commit 12's joint), on
-/// demand, since it starts a program. The reader holds its runner: the
-/// trait's `read` carries no context.
+/// demand, since it starts a program. A read uses the request's runner
+/// and cancel token when it carries them (the fold lane, MA's request 1),
+/// so a cancelled details read stops ffprobe; the reader's own are for a
+/// request that carries none.
 #[derive(Clone)]
 pub struct MediaFields {
-    /// The runner ffprobe goes through.
+    /// The runner ffprobe goes through when the request gives none.
     pub tools: Arc<dyn ToolRunner>,
-    /// The token a run checks; a fresh one by default.
+    /// The token a run checks when the request gives none; a fresh one by
+    /// default.
     pub cancel: CancelToken,
 }
 
@@ -779,7 +782,15 @@ impl diroxide_meta::Reader for MediaFields {
                 .map_err(VfsError::from)?;
             Ok(bytes)
         })?;
-        match probe(self.tools.as_ref(), &self.cancel, input) {
+        // The asking read's runner and cancel token, when it gives them
+        // (the pipeline always gives its token), before the reader's own.
+        let tools = request.tools.map_or(self.tools.as_ref(), |t| t.as_ref());
+        let cancel = request.cancel.unwrap_or(&self.cancel);
+        if cancel.is_cancelled() {
+            // No program is started for a read already cancelled.
+            return Err(MetaError::Place(VfsError::Cancelled));
+        }
+        match probe(tools, cancel, input) {
             Ok(facts) => Ok(facts.fields()),
             Err(MediaError::Cancelled) => Err(MetaError::Place(VfsError::Cancelled)),
             Err(error) => Err(MetaError::Unreadable(error.to_string())),

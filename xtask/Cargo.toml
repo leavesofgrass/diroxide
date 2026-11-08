@@ -24,9 +24,14 @@ diroxide-plugins.workspace = true
 # request 2, as P2b did for the archive scenarios).
 diroxide-search.workspace = true
 diroxide-vfs.workspace = true
+# cargo xtask demo-tools writes the portrait as a JPEG (R30's commit 118),
+# pure Rust, the workspace's image crate with its JPEG encoder.
+image.workspace = true
 resvg.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# cargo xtask demo-tools writes the download's checksum lists.
+sha2.workspace = true
 # The bench names the machine of its runs by its models (R27's commit
 # 36): the processor, the cores, the memory, the system and the disk.
 sysinfo.workspace = true

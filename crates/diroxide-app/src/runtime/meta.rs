@@ -327,6 +327,8 @@ fn check(
                 entry: &entry,
                 type_id: None,
                 group: None,
+                cancel: Some(&ctx.cancel),
+                tools: Some(&ctx.tools),
             };
             diroxide_meta::privacy::check(
                 &pipeline,

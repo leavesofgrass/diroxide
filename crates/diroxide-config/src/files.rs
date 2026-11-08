@@ -290,7 +290,11 @@ pub struct MenuItemConfig {
     /// The access key, one letter or digit, unique in its menu.
     pub access: Option<String>,
     /// Shown only when the place has this capability: `writable`,
-    /// `trash`, `no_trash`, `restore`, `links` or `attributes`.
+    /// `trash`, `no_trash`, `restore`, `links` or `attributes`; or
+    /// `edits` (entries can be made, renamed and deleted: the place can
+    /// be changed, or it is a zip diroxide rewrites) or `removes` (Delete
+    /// removes entries: the place has a trash, or it is a zip diroxide
+    /// rewrites, the old copy going to the trash).
     pub when: Option<String>,
 }
 

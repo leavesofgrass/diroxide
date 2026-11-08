@@ -33,6 +33,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
+use std::time::Duration;
 
 use diroxide_config::ToolsConfig;
 use diroxide_core::Explain;
@@ -57,7 +58,7 @@ pub use report::{
 };
 pub use run::{AtCap, Caps, Cut, Emit, Finished, Limited, RunFailure, Streaming, run_limited};
 pub use table::{BUILTIN, CARTA_VERSION};
-pub use version::{version_line, version_number};
+pub use version::{version_line, version_line_within, version_number};
 
 /// One external tool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -236,6 +237,9 @@ pub struct ToolRegistry {
     platform: Platform,
     /// `/etc/os-release`'s text on Linux, read once.
     os_release: Option<String>,
+    /// How long a version command may run: [`version::VERSION_TIMEOUT`],
+    /// or longer for tests ([`ToolRegistry::with_version_timeout`]).
+    version_timeout: Duration,
 }
 
 impl ToolRegistry {
@@ -251,7 +255,23 @@ impl ToolRegistry {
             verdicts: Arc::default(),
             platform: Platform::current(),
             os_release: package::os_release(),
+            version_timeout: version::VERSION_TIMEOUT,
         }
+    }
+
+    /// The same registry letting a version command run for `timeout`
+    /// rather than two seconds: for tests whose fake tools are scripts,
+    /// which a machine loaded with other builds can be slow to start. A
+    /// passing run never waits it out, since the command's end is the
+    /// event the read waits for.
+    pub fn with_version_timeout(mut self, timeout: Duration) -> Self {
+        self.version_timeout = timeout;
+        self
+    }
+
+    /// How long a version command may run.
+    pub fn version_timeout(&self) -> Duration {
+        self.version_timeout
     }
 
     /// The same registry naming package commands for another system, for
@@ -410,7 +430,8 @@ impl ToolRegistry {
             return *verdict;
         }
         let verdict = !spec.version_args.is_empty()
-            && version_line(path, spec.version_args).is_some_and(|line| line.contains(words));
+            && version_line_within(path, spec.version_args, self.version_timeout)
+                .is_some_and(|line| line.contains(words));
         self.verdicts
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -479,7 +500,9 @@ impl ToolRegistry {
                 ToolState::Found { version: None, by }
             }
             Ok(Location::Found { path, by }) => {
-                match version_line(&path, spec.version_args).and_then(|l| version_number(&l)) {
+                match version_line_within(&path, spec.version_args, self.version_timeout)
+                    .and_then(|l| version_number(&l))
+                {
                     Some(version) => ToolState::Found {
                         version: Some(version),
                         by,
