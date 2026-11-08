@@ -275,7 +275,7 @@ fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
 
 /// An RGB picture of `width` by `height`, a gradient from `color`, in a
 /// valid PNG with stored (uncompressed) deflate blocks.
-fn png(width: u32, height: u32, color: [u8; 3]) -> Vec<u8> {
+pub(crate) fn png(width: u32, height: u32, color: [u8; 3]) -> Vec<u8> {
     let mut raw = Vec::new();
     for y in 0..height {
         raw.push(0);
@@ -416,8 +416,9 @@ const TOP_FILES: [(&str, &str); 26] = [
     ),
 ];
 
-/// The pictures in `Photos`, with their sizes in pixels.
-const PHOTOS: [(&str, u32); 12] = [
+/// The pictures in `Photos`, with their sizes in pixels (`demo-tools`
+/// writes them too).
+pub(crate) const PHOTOS: [(&str, u32); 12] = [
     ("aerial-tram-at-dusk.png", 48),
     ("crow-on-the-wire.png", 32),
     ("crows-at-sunset.png", 40),
