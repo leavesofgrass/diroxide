@@ -23,6 +23,7 @@ PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are read from their headers alone. No pi
 - "ICO, 2 sizes, largest 32 by 32".
 - "JPEG, 20000 by 20000, too large to open", for a picture over the pixel guard, below.
 - "PNG, unreadable: file is cut short", for a file whose header ends too soon.
+- "PNG, unreadable: the header is damaged", for a file whose header breaks its format's rules; the decoder's own words are said only when they are plain, never its debug text.
 
 HEIC, AVIF, JPEG XL, JPEG 2000, Photoshop and camera raw files are named and sized where that is cheap, and say that they need a component to be shown: "HEIC, 4032 by 3024, needs a component". The quick view and the terminal never draw a picture: the sentence is the preview. The window has a picture view, below.
 
