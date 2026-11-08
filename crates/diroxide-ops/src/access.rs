@@ -261,6 +261,19 @@ const OWNER_PROTECTED_UNIX: [&str; 18] = [
     "/private",
 ];
 
+/// Where a system's temporary files live, inside which owners may change:
+/// macOS keeps each user's under `/var/folders` (and `/private/var/folders`,
+/// the same place), which the protected `/var` and `/private` would cover.
+/// The roots themselves stay protected.
+const OWNER_UNPROTECTED_INSIDE_UNIX: [&str; 6] = [
+    "/tmp",
+    "/var/tmp",
+    "/var/folders",
+    "/private/tmp",
+    "/private/var/tmp",
+    "/private/var/folders",
+];
+
 /// Folders protected as themselves only, not what is inside: the
 /// folders that hold every user's home.
 const OWNER_PROTECTED_ITSELF: [(&str, PathStyle); 3] = [
@@ -283,6 +296,13 @@ pub fn owner_protection(place: &Place) -> Option<&'static str> {
     place.local_path()?;
     if place.is_root() {
         return Some("the top of a drive is protected");
+    }
+    let inside_temp = OWNER_UNPROTECTED_INSIDE_UNIX
+        .iter()
+        .filter_map(|path| Place::parse_with(path, PathStyle::Unix).ok())
+        .any(|root| place.is_within(&root) && !root.is_within(place));
+    if inside_temp {
+        return None;
     }
     let within = |list: &[&str], style: PathStyle| {
         list.iter()
@@ -750,6 +770,18 @@ mod tests {
             (unix("/home/ada/notes.txt"), None),
             (unix("/Users/ada"), None),
             (unix("/srv/www"), None),
+            (
+                unix("/var/log/syslog"),
+                Some("system folders are protected"),
+            ),
+            (unix("/var/tmp"), Some("system folders are protected")),
+            (unix("/var/tmp/build/a.out"), None),
+            (
+                unix("/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/app-it/work/notes.txt"),
+                None,
+            ),
+            (unix("/private/var/folders/h5/x/T/notes.txt"), None),
+            (unix("/tmp/notes.txt"), None),
             (windows(r"D:\"), Some("the top of a drive is protected")),
             (
                 windows(r"c:\windows\system32"),
