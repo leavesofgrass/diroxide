@@ -560,11 +560,11 @@ fn a_png_of_noise_after_its_signature_fails_in_plain_words() {
     assert_eq!(line, "PNG, unreadable: the header is damaged");
     fits(&line);
     assert_eq!(
-        super::header::plain_or("file is cut short".to_owned(), "x"),
+        header::plain_or("file is cut short".to_owned(), "x"),
         "file is cut short"
     );
     assert_eq!(
-        super::header::plain_or(
+        header::plain_or(
             "ChunkType { type: \u{f2}\u{fe} }".to_owned(),
             "the header is damaged"
         ),
