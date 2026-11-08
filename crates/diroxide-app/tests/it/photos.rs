@@ -207,7 +207,9 @@ fn sort_by_date_taken_and_the_photo_columns() {
     assert!(at("IMG_0004.jpg") < at("Screenshot (3).png"), "{names:?}");
     // The columns fill near the focus, off the input thread.
     let mut rows = Vec::new();
-    for _ in 0..50 {
+    // A deadline of a minute, which a passing run never waits out: the
+    // runners fill the cells slowly under load (CI on 132e66e).
+    for _ in 0..600 {
         rows = s
             .app
             .panel(Side::Left)
