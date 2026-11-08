@@ -24,9 +24,9 @@ pub const SECURITY_PAGE: &str = "Security";
 /// show no message box of its own.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SecurityCall {
-    /// The verb: [`PROPERTIES_VERB`].
+    /// The verb: `properties`.
     pub verb: &'static str,
-    /// The parameters: the page, [`SECURITY_PAGE`].
+    /// The parameters: the page, `Security`.
     pub page: &'static str,
     /// The file or folder, by its full path.
     pub file: std::path::PathBuf,
