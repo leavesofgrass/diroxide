@@ -27,7 +27,7 @@ A disk with a partition table lists one folder per partition, `partition-1`, `pa
 - "Partition 1, EFI System, FAT32, 537 MB": with no label, the table's type in words.
 - "Partition 3, BitLocker, 40.0 GB, locked": a BitLocker or LUKS partition is shown and never opened.
 
-In this alpha the panel's row says the folder's name, "partition-2, folder", and the title inside it says "partition-2, in disk.img". The volumes list says each partition's words with its size and free space ("Partition 2, home, ext4", then the space), so it is the place to hear which partition is which. A disk with no table, such as an ISO or a floppy, is its file system: `fedora.iso!EFI/BOOT` is a folder in it, and the title says "EFI, in fedora.iso".
+The panel's row says the folder's name and then the plugin's words about it, Say Details says those words first, and the details list has them as a row, "About: Partition 2, home, ext4". The title inside a partition says "partition-2, in disk.img". A file's own note, such as "compressed by NTFS, read it with 7-Zip", and a link's target are said the same way. The volumes list also says each partition's words with its size and free space ("Partition 2, home, ext4", then the space). A disk with no table, such as an ISO or a floppy, is its file system: `fedora.iso!EFI/BOOT` is a folder in it, and the title says "EFI, in fedora.iso".
 
 When an image opens, the status line says what it holds, said on Say Status: "Opened disk.vhdx: 3 partitions, 120 GB".
 
