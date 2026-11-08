@@ -140,6 +140,20 @@ impl Pipeline {
             .collect()
     }
 
+    /// Whether some reader that names `key` takes this file, by its type,
+    /// group or name, without reading it (MA's request 3): a column says
+    /// "reading" only for a file a reader will read for its key, and
+    /// leaves the cell out for the rest (a zip has no artist). The
+    /// extended items' keys are taken for every file.
+    pub fn takes(&self, key: &str, request: &ReadRequest<'_>) -> bool {
+        if EXTENDED_KEYS.contains(&key) {
+            return true;
+        }
+        self.readers
+            .iter()
+            .any(|r| r.keys().contains(&key) && r.accepts(request))
+    }
+
     /// The cost class of the first reader that names `key`.
     pub fn cost_of(&self, key: &str) -> Option<Cost> {
         self.readers
@@ -449,6 +463,22 @@ mod tests {
         ) -> Result<diroxide_vfs::ToolOutput, diroxide_vfs::ToolRunError> {
             Err(diroxide_vfs::ToolRunError::Cancelled)
         }
+    }
+
+    /// A key is taken for a file only when a reader that names it accepts
+    /// the file; the extended items' keys for every file (MA's request 3).
+    #[test]
+    fn a_key_is_taken_only_for_a_file_its_reader_accepts() {
+        let pipeline = Pipeline::new().with(Arc::new(Bytes));
+        let place = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let notes = Entry::new("notes.txt", EntryKind::File);
+        let photo = Entry::new("photo.png", EntryKind::File);
+        let text = ReadRequest::new(&place, &notes);
+        let picture = ReadRequest::new(&place, &photo);
+        assert!(pipeline.takes("text.bytes", &text));
+        assert!(!pipeline.takes("text.bytes", &picture));
+        assert!(!pipeline.takes("audio.artist", &text), "no reader names it");
+        assert!(pipeline.takes("file.origin", &picture));
     }
 
     /// The reader on its thread gets the request's runner, and a cancel
