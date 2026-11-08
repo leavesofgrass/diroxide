@@ -22,7 +22,10 @@ use diroxide_vfs::{
 };
 
 use crate::run::{Caps, Cut, Emit, Finished, Limited, RunFailure, Streaming, run_limited};
-use crate::{Location, ProcessSpec, ToolRegistry, system_words};
+use crate::{
+    CARTA_VERSION, Location, ProcessSpec, ToolRegistry, system_words, version_line_within,
+    version_number,
+};
 
 impl ToolRunner for ToolRegistry {
     fn has(&self, tool: &str) -> bool {
@@ -31,6 +34,25 @@ impl ToolRunner for ToolRegistry {
 
     fn name_of(&self, tool: &str) -> String {
         ToolRegistry::name_of(self, tool)
+    }
+
+    /// The version as the Settings Tools page says it: carta's built-in
+    /// one, or the found program's own version command read within the
+    /// registry's deadline; `None` for a tool not found or with no
+    /// version command.
+    fn version(&self, tool: &str) -> Option<String> {
+        match self.locate(tool) {
+            Ok(Location::BuiltIn) => (tool == "carta").then(|| CARTA_VERSION.to_owned()),
+            Ok(Location::Found { path, .. }) => {
+                let spec = self.spec(tool)?;
+                if spec.version_args.is_empty() {
+                    return None;
+                }
+                version_line_within(&path, spec.version_args, self.version_timeout())
+                    .and_then(|line| version_number(&line))
+            }
+            _ => None,
+        }
     }
 
     fn run(&self, request: &ToolRequest, cancel: &CancelToken) -> Result<ToolOutput, ToolRunError> {

@@ -158,6 +158,29 @@ fn the_lookup_order_is_said_in_words() {
     assert_eq!(missing.find("pandoc"), Ok(ToolStatus::NotFound));
 }
 
+/// The runner says a tool's version as the Tools page does (CL's request
+/// 4): read from the found program, carta's built in, and none for a tool
+/// that is not found.
+#[test]
+fn the_runner_says_a_tools_version() {
+    use diroxide_vfs::ToolRunner;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("path");
+    fake(&path, "pandoc", &["pandoc 3.9.0.2"], &[], 0);
+    let tools = on_path(&path);
+    assert_eq!(
+        ToolRunner::version(&tools, "pandoc").as_deref(),
+        Some("3.9.0.2")
+    );
+    assert_eq!(
+        ToolRunner::version(&tools, "carta").as_deref(),
+        Some(diroxide_tools::CARTA_VERSION)
+    );
+    assert_eq!(ToolRunner::version(&tools, "magick"), None);
+    // A runner that reads no versions says none, and runs nothing.
+    assert_eq!(diroxide_vfs::NoTools.version("pandoc"), None);
+}
+
 /// ImageMagick has to say "ImageMagick": a `convert` that does not (as
 /// System32's disk tool would not) is passed over, and on Windows
 /// `convert` is never looked for or run at all.

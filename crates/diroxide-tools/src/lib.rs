@@ -269,6 +269,11 @@ impl ToolRegistry {
         self
     }
 
+    /// How long a version command may run.
+    pub fn version_timeout(&self) -> Duration {
+        self.version_timeout
+    }
+
     /// The same registry naming package commands for another system, for
     /// tests and for a report about another computer.
     pub fn with_platform(mut self, platform: Platform, os_release: Option<String>) -> Self {

@@ -348,6 +348,17 @@ pub trait ToolRunner: Send + Sync {
         tool.to_owned()
     }
 
+    /// The tool's version in words ("7.1.2-35", "3.9.0.2"), read by its
+    /// own version command, for a plan's "tool and its version" line and a
+    /// watched folder's approval (CL's request 4, HL's and AW's 6);
+    /// `None` when it is not found, says no version, or this runner does
+    /// not read versions, which is the default, so a test's runner never
+    /// runs a version command.
+    fn version(&self, tool: &str) -> Option<String> {
+        let _ = tool;
+        None
+    }
+
     /// Runs a program to its end under the request's limits, stopped with
     /// its children when `cancel` is set, and gives back its exit code and
     /// output.
