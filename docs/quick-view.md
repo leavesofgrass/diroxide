@@ -31,6 +31,8 @@ What the announcement says, one line, with the file first:
 - A kind no previewer takes: "No preview: setup.exe, Windows program, 66 bytes". A folder says "No preview: src, folder".
 - A file that cannot be read as its format: "Could not read notes.org: not valid Org.", then "Showing the text."
 
+After a picture's line, the window says once as the focus enters the preview: "Enter shows the picture." A terminal says nothing more, because the line is the whole preview and a terminal draws no picture. It does not read as a refusal. F3 in a terminal on the same picture opens the viewer on the same words and adds where pictures show: "Pictures show in the window: diro --gui". F3 in the window on a picture opens the picture view. [The viewer](viewer.md#pictures-and-documents) has what F3 shows for a PDF, a document, a sound or a video.
+
 Alt+O (Say other panel) names the preview: "Other panel: Preview, report.md".
 
 ### In screen-reader mode
