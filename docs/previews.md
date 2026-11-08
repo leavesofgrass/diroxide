@@ -25,7 +25,7 @@ PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are read from their headers alone. No pi
 - "PNG, unreadable: file is cut short", for a file whose header ends too soon.
 - "PNG, unreadable: the header is damaged", for a file whose header breaks its format's rules; the decoder's own words are said only when they are plain, never its debug text.
 
-HEIC, AVIF, JPEG XL, JPEG 2000, Photoshop and camera raw files are named and sized where that is cheap, and say that they need a component to be shown: "HEIC, 4032 by 3024, needs a component". The quick view and the terminal never draw a picture: the sentence is the preview. The window has a picture view, below.
+HEIC, AVIF, JPEG XL, JPEG 2000, Photoshop and camera raw files are named and sized where that is cheap, and say that they need a component to be shown: "HEIC, 4032 by 3024, needs a component". The quick view and the terminal never draw a picture: the sentence is the preview. F3 in a terminal opens the viewer on these words, and says "Pictures show in the window: diro --gui". The window has a picture view, below, and F3 on a picture opens it.
 
 The details view lists the picture's rows, each in words:
 
@@ -93,6 +93,7 @@ A PDF's properties, its title, author, page count, version and whether it is enc
 - Without pdftotext: "No preview: pdftotext not found". The properties are still said.
 - Git for Windows ships a build of Xpdf's pdftotext, and it works.
 - In the quick view the whole PDF preview waits for the Preview command or for auto-preview, as sound and video do. The details view shows the PDF's properties either way.
+- F3 on a PDF opens the viewer on these words, in the window and in a terminal, and runs pdftotext at once. The title comes first, "report.pdf, preview", then "PDF, 3 pages, Example Report", the rows, and a "Page 1" heading for each page. H shows the bytes in hex. [The viewer](viewer.md#pictures-and-documents) has the whole walk. The pages as pictures are in [the picture view](#the-picture-view-in-the-window), below.
 
 ## Helper programs, Preview, and auto-preview
 
@@ -133,12 +134,15 @@ Read text in picture has Tesseract read the words in the focused picture, and sh
 
 The window can show a picture, as one graphic. It is the window's own: the terminal has none.
 
-- In the viewer (F3) or in the quick view's preview, on a picture, the window says once "Enter shows the picture." Enter opens it. While it reads, a picture that takes more than half a second says "Opening picture photo.png".
+- F3 on a picture in a panel opens the picture view at once. The sentence is said first, then the help lines. Escape goes back to the file's row. Show picture does the same from a panel.
+- In the quick view's preview, on a picture, the window says once "Enter shows the picture." Enter opens it. The same hint is said when a picture's bytes are open in the viewer. While it reads, a picture that takes more than half a second says "Opening picture photo.png".
 - A screen reader finds one graphic named by the file, "photo.png", and described by the same sentence the quick view says, "PNG, 1920 by 1080, 8-bit RGBA, 2.3 MB". JAWS may need its describe key to read the description.
 - Plus, Equals or the keypad's plus zoom in. Minus zooms out. 0 fits the picture to the window and 1 shows it at actual size. The arrows move a zoomed picture and say nothing. Escape goes back to the viewer or the preview. The window says what each key did: "Fit to the window, 42 percent", "Actual size, 100 percent", "Zoom 125 percent". Two help lines are drawn and said as the picture opens: "Plus, Minus zoom; 0 fits; Escape closes" and "1 actual size; arrows move when zoomed".
 - An animation shows its first frame still, and says "Animation: 12 frames, not playing". Nothing plays.
 - The pixel guard stands in front of the pixels, with the numbers above. A picture past it is said and never opened: "PNG, 20000 by 20000, too large to open", "PNG, file too large to open" past 256 MiB, or "PNG, unreadable: file is cut short".
-- PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are shown. The other formats say that they need a component.
+- PNG, JPEG, GIF, WebP, BMP, TIFF and ICO are shown by diroxide itself.
+- HEIC, AVIF, Photoshop and the other formats the built-in decoder cannot show are drawn through ImageMagick when it is installed, as PNG, under the same pixel guard and a ten-second limit. The sentence says so: "HEIC, 4032 by 3024, through ImageMagick". Without ImageMagick: "Picture: not shown, needs ImageMagick" and an "Install:" line. For a picture off a local disk: "Picture: not shown, not on a local disk".
+- A PDF's pages are drawn through pdftoppm, which comes with Poppler, as a picture at most 2,048 pixels on a side. In the viewer on a PDF's words the window says "Enter shows the pages as pictures." Enter shows the page the cursor is on. Page Down and Page Up turn pages and say "Page 2 of 3"; at the ends, "Last page, Page 3 of 3" and "First page, Page 1". A help line is drawn under the others: "Page Down, Page Up: next, previous page". Without pdftoppm: "Page pictures need pdftoppm" and an "Install:" line. From a panel the page is said without its count: "Page 1".
 
 The command is Show picture, in the View menu and the palette, with Enter as its key in the viewer and in the preview on a picture. It is on [the keyboard page](keyboard.md) as `view.picture`. [The GUI](gui.md#the-picture-view) says what it answers in a terminal, with nothing shown and on a file that is not a picture. The window's picture view has not been heard on a screen reader.
 
@@ -157,7 +161,8 @@ The previews are kept in memory so that moving back to a file is instant: up to 
 
 ## Known limits
 
-- In the quick view and the terminal a picture is only said, never drawn. The window's picture view draws PNG, JPEG, GIF, WebP, BMP, TIFF and ICO.
+- In the quick view and the terminal a picture is only said, never drawn. The window's picture view draws PNG, JPEG, GIF, WebP, BMP, TIFF and ICO, and the other formats through ImageMagick.
+- ImageMagick, pdftoppm, pdftotext and ffprobe have been run only through stand-ins in the tests. pdftoppm is called with `-f N -l N -png -singlefile -scale-to 2048` and no output name, which relies on Poppler's build writing the PNG to standard output, which is true of Poppler's and not of Xpdf's. Until it is tried on a machine with Poppler installed, treat the pages as untried. Git for Windows' pdftotext is Xpdf's and reads text only.
 - The picture view has not been tried on a picture inside an archive or on an SFTP site.
 - A TIFF's page count and a JPEG XL's size are not read. For raw and HEIF pictures, the Exif data is looked for in the first 1 MiB and 16 MiB.
 - RTF: bold and italic are not said, and deleted revisions are left out.
