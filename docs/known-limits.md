@@ -533,6 +533,8 @@ Menus and the mouse:
 - The lines of plugins, script commands and optional components (the turn-on question, the jobs line, the failure lines, the ask-first question) were written to carry their meaning in the first 40 cells and are checked in tests, not heard. A plugin's own text is cleaned and given its name last, but its wording is the plugin's, so a plugin's lines may not fit 40 cells.
 - The lines of the Volumes list, the trash browser, free space and the first-run list were written to carry their meaning in the first 40 cells and are checked in tests, not heard. That includes "Mounted: Backup, removable, 412 GB free", "Restore 3 items? No is the default. y or n", "Not enough room on build:" and "Optional components to get now". A volume's name and a plugin's lines may run past 40 cells.
 
+- Nothing new in alpha 4 has been heard on NVDA, JAWS or Orca, or read on a Braille display: not the tools, the details view, the previews, columns, checksums, conversions, watched folders, disk images, git, encryption, access rows, Change time and owner, or the photo helpers. The lines were written to carry their meaning in the first 40 cells and are checked in tests, and the window's scripted walk checks the first words of the new lists the same way. Lines known to pass 40 cells with the meaning first include the Install lines of `diro doctor`, its Built in line, and "RAR is read only: diroxide never writes it".
+
 ## Names and wide characters
 
 - A file name that is not valid Unicode is flagged and refused. diroxide does not show it with changed characters.
@@ -546,6 +548,7 @@ Menus and the mouse:
 - Cut, copy and paste of files (Ctrl+X, Ctrl+C, Ctrl+V) work between diroxide's own panels. They do not use the system clipboard, so Explorer and the Finder cannot paste what diroxide copied.
 - Cloud files that are only online are named "online only". diroxide asks before it reads their contents.
 - The terminal frontend has no mouse.
+- Listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. On the bench machine, quiet, 100,000 entries list in 134 ms and are read for their details in 6.66 seconds, where that October code, run on the same machine, took 97 ms and 4.4 seconds. The cause is known: the details read opens each file a second time, and a listing builds every entry's full path, checks every name for an unfinished copy and reads the platform's attributes. It is the first performance work of a later alpha. [The bench](dev/bench.md) has the other numbers.
 - How long before a copy is called stalled (20 seconds), and whether it keeps dates or checks a move, are built into the job engine. They are not settings. The number of tries on a lost network and the first wait are settings, in the Jobs and transfers group.
 
 ## See also
