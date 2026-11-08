@@ -1197,7 +1197,7 @@ const STEPS: &[&str] = &[
     "Each row names the component and its use first.",
     "",
     "Step 12, more of alpha 4, each answered No or closed with Escape.",
-    "In mixed, F3 on portrait.jpg in the window: \"Enter shows the picture.\".",
+    "In mixed, F3 on portrait.jpg in the window: the picture, its sentence said first; Escape goes back.",
     "On any file, File menu, Change time: \"Change the times of\" first.",
     "In photos, Tools menu, Review pictures: \"Review: 1 of 13\", then Escape.",
     "Move into month folders: the question starts on No; n.",

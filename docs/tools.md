@@ -19,6 +19,7 @@ The registry knows 22 tools on Windows and Linux, and 23 on macOS, where `mdls` 
 - 7-Zip (`7z`): reading RAR, CAB and other archives, and cross-checking.
 - pdftotext (`pdftotext`): PDF text previews.
 - pdfinfo (`pdfinfo`): PDF details. It comes with the same package as pdftotext.
+- pdftoppm (`pdftoppm`): PDF pages as pictures, for the window's picture view. It comes with the same package as pdftotext; without it the window says "Page pictures need pdftoppm" and the install line.
 - ExifTool (`exiftool`): photo, audio and document details.
 - Tesseract (`tesseract`): reading text in pictures.
 - qemu-img (`qemu-img`): converting disk images.
@@ -183,7 +184,7 @@ These are the names in diroxide's own table. The line "Install:" says the one fo
 - FFmpeg and FFprobe: winget `Gyan.FFmpeg`, Homebrew `ffmpeg`, apt `ffmpeg`, dnf `ffmpeg-free`, pacman `ffmpeg`.
 - pandoc: winget `JohnMacFarlane.Pandoc`, Homebrew `pandoc`, apt `pandoc`, dnf `pandoc`, pacman `pandoc-cli`.
 - 7-Zip: winget `7zip.7zip`, Homebrew `sevenzip`, apt `7zip`, dnf `7zip`, pacman `7zip`.
-- pdftotext and pdfinfo: winget `oschwartz10612.Poppler`, Homebrew `poppler`, apt `poppler-utils`, dnf `poppler-utils`, pacman `poppler`.
+- pdftotext, pdfinfo and pdftoppm: winget `oschwartz10612.Poppler`, Homebrew `poppler`, apt `poppler-utils`, dnf `poppler-utils`, pacman `poppler`.
 - ExifTool: winget `OliverBetz.ExifTool`, Homebrew `exiftool`, apt `libimage-exiftool-perl`, dnf `perl-Image-ExifTool`, pacman `perl-image-exiftool`.
 - Tesseract: winget `UB-Mannheim.TesseractOCR`, Homebrew `tesseract`, apt `tesseract-ocr`, dnf `tesseract`, pacman `tesseract`.
 - qemu-img: winget `SoftwareFreedomConservancy.QEMU`, Homebrew `qemu`, apt `qemu-utils`, dnf `qemu-img`, pacman `qemu-img`.
