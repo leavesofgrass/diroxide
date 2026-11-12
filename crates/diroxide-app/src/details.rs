@@ -237,9 +237,22 @@ pub fn read_fields_with(
         EXTENDED,
         diroxide_meta::origin::extended_fields(provider.as_ref(), &ask.place, &ctx),
     ));
-    let fields = keep_audio_tags(Pipeline::fields(&outcomes));
+    let fields = without_working_keys(keep_audio_tags(Pipeline::fields(&outcomes)));
     let rows = fields.iter().map(Field::row).collect();
     (rows, unread_words(&outcomes))
+}
+
+/// Keys the readers give for the app's own use, not as details: the date
+/// taken to the second (lane FX), which bursts and columns read, while
+/// the details say the date taken once, as "Taken".
+const WORKING_KEYS: [&str; 1] = ["image.taken_second"];
+
+/// The details without the [`WORKING_KEYS`], so a fact is not said twice.
+pub fn without_working_keys(fields: Vec<Field>) -> Vec<Field> {
+    fields
+        .into_iter()
+        .filter(|f| !WORKING_KEYS.contains(&f.key.as_str()))
+        .collect()
 }
 
 /// The pairs of an ffprobe row and the audio reader's row that says the
@@ -612,6 +625,18 @@ mod tests {
         assert_eq!(video.len(), 2, "no audio reader, ffprobe's rows stay");
         let covered = keep_audio_tags(vec![field("audio.cover"), field("media.cover_picture.1")]);
         assert_eq!(covered.len(), 1);
+    }
+
+    #[test]
+    fn the_date_taken_is_said_once_without_its_seconds_form() {
+        let field = |key: &str| Field::new(key, key, "x", DetailGroup::Dates);
+        let kept = without_working_keys(vec![
+            field("image.taken"),
+            field("image.taken_second"),
+            field("image.camera"),
+        ]);
+        let keys: Vec<&str> = kept.iter().map(|f| f.key.as_str()).collect();
+        assert_eq!(keys, ["image.taken", "image.camera"]);
     }
 
     /// VL's request 2: the image words and ffprobe's reader name their
