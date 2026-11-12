@@ -323,15 +323,18 @@ impl Backing for Joined {
     }
 
     fn read_at(&self, offset: u64, buffer: &mut [u8]) -> std::io::Result<usize> {
-        let mut start = 0u64;
+        // Each part's length is the descriptor's claim, so the sum of the
+        // parts can pass the end of a u64 (the nightly fuzz run found the
+        // addition overflowing on a descriptor of two huge extents). The
+        // offset is measured into each part instead of the parts summed.
+        let mut within = offset;
         for (len, part) in &self.parts {
-            if offset < start + len {
-                let within = offset - start;
+            if within < *len {
                 let room = usize::try_from(len - within).unwrap_or(usize::MAX);
                 let n = buffer.len().min(room);
                 return part.read_at(within, &mut buffer[..n]);
             }
-            start += len;
+            within -= len;
         }
         Ok(0)
     }
