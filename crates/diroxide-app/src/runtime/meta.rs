@@ -76,10 +76,7 @@ pub(super) fn job_of(ask: &MetaAsk) -> Option<JobId> {
         | MetaAsk::Verify { job, .. }
         | MetaAsk::Strip { job, .. }
         | MetaAsk::RemoveMark { job, .. } => Some(*job),
-        MetaAsk::SaveList { .. }
-        | MetaAsk::Check { .. }
-        | MetaAsk::ReadMark { .. }
-        | MetaAsk::RestoreMark { .. } => None,
+        MetaAsk::SaveList { .. } | MetaAsk::Check { .. } | MetaAsk::ReadMark { .. } => None,
     }
 }
 
@@ -131,12 +128,6 @@ pub(super) fn run(
                 diroxide_meta::origin::remove_internet_mark(provider, &place, ctx)
             }),
             job,
-            place,
-        },
-        MetaAsk::RestoreMark { place, removal } => MetaNote::MarkRestored {
-            result: with_provider(registry, &place, |provider, ctx| {
-                diroxide_meta::origin::restore_internet_mark(provider, &place, &removal, ctx)
-            }),
             place,
         },
     };

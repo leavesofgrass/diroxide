@@ -81,13 +81,6 @@ pub enum MetaAsk {
         /// The file.
         place: Place,
     },
-    /// Undo of Remove the internet mark: write back what it held.
-    RestoreMark {
-        /// The file.
-        place: Place,
-        /// What the removal took.
-        removal: diroxide_meta::origin::MarkRemoval,
-    },
 }
 
 /// What the runtime found.
@@ -150,13 +143,6 @@ pub enum MetaNote {
         place: Place,
         /// What it took.
         result: Result<Option<diroxide_meta::origin::MarkRemoval>, String>,
-    },
-    /// Undo of Remove the internet mark ended.
-    MarkRestored {
-        /// The file.
-        place: Place,
-        /// Done, or why not.
-        result: Result<(), String>,
     },
 }
 
@@ -345,12 +331,6 @@ pub fn info_lines(
             .map(crate::details::row_text),
     );
     Ok(lines)
-}
-
-/// The line after Undo put the internet mark back: "Put back the
-/// internet mark on setup.exe".
-pub fn restored_words(name: &str) -> String {
-    format!("Put back the internet mark on {}", display_name(name))
 }
 
 /// What Verify checksum found.

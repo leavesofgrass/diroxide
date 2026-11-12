@@ -609,11 +609,8 @@ impl App {
     }
 
     pub(super) fn undo(&mut self) -> Vec<Effect> {
-        // A removed internet mark newer than the last job and the last
-        // label change is put back first (lane MA).
-        if let Some(effects) = self.undo_mark_removal() {
-            return effects;
-        }
+        // A removed internet mark is an undo record of its own, with its
+        // extended items (lane AF), so it is undone as any job's.
         // A label change newer than the last job is undone first (W3l).
         if let Some(effects) = self.undo_label_change() {
             return effects;
@@ -1457,6 +1454,8 @@ pub(crate) fn undo_words(kind: Option<&JobKind>, done: u64) -> String {
         Some(JobKind::Encrypt) => "encrypt",
         Some(JobKind::Decrypt) => "decrypt",
         Some(JobKind::Sign) => "sign",
+        // Remove the internet mark, its items written back (lane AF).
+        Some(JobKind::EditMetadata) => "mark removal",
         _ => "job",
     };
     let how = match kind {

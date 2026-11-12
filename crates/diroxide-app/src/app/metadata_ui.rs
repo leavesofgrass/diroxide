@@ -40,9 +40,10 @@
 //! - **Remove the internet mark** reads the mark first ("No internet mark
 //!   on setup.exe" when there is none), then asks, starting on No ("Remove
 //!   the internet mark from setup.exe? Windows stops warning when you
-//!   open it."), and removes it as a job; what it held is kept, so Undo
-//!   writes it back ("Put back the internet mark on setup.exe") until the
-//!   job engine's undo record can hold it (ML's request 2).
+//!   open it."), and removes it as a job; what it held goes into an undo
+//!   record's extended items (lane FX's `UndoRecord::extended`, ML's
+//!   request 2), so Undo writes it back through the job engine as any
+//!   job's undo: "Undid mark removal: 1 item is back".
 //!
 //! The lists and questions of this lane are hosted under the Organize
 //! purpose, so the window's test of every purpose keeps its count.
@@ -84,9 +85,6 @@ pub(super) struct MetaState {
     strips: std::collections::HashSet<JobId>,
     /// The internet mark removals running, each with its file.
     marks: HashMap<JobId, Place>,
-    /// The internet marks removed, newest last, each with the newest job
-    /// in the undo log then and what it held: Undo writes it back.
-    mark_undo: Vec<(u64, Place, diroxide_meta::origin::MarkRemoval)>,
     /// The SHA-256 each file had this session, with its size and modified
     /// time then: the details' Checksum row says it while they are the
     /// same.
@@ -576,7 +574,8 @@ impl App {
         }
     }
 
-    /// The mark was removed: said, and what it held kept for Undo.
+    /// The mark was removed: said, and what it held kept in an undo
+    /// record's extended items, which Undo writes back.
     fn mark_removed(
         &mut self,
         job: JobId,
@@ -605,45 +604,23 @@ impl App {
         let mut effects = vec![Effect::Redraw(Redraw::JobsLine)];
         match result {
             Ok(Some(removal)) => {
-                let after = self.newest_job();
-                self.meta.mark_undo.push((after, place, removal));
+                let mut record = diroxide_ops::UndoRecord::for_job(job, JobKind::EditMetadata);
+                record.extended = removal
+                    .removed
+                    .into_iter()
+                    .map(|(name, before)| diroxide_ops::ExtendedBefore {
+                        place: place.clone(),
+                        name,
+                        before: Some(before),
+                    })
+                    .collect();
+                self.undo.record(record);
                 effects.push(self.say(Message::done(line)));
             }
             Ok(None) => effects.push(self.say(Message::info(line))),
             Err(_) => effects.push(self.say(Message::error(line))),
         }
         effects
-    }
-
-    /// Undo, when the last internet mark removal came after the last job
-    /// and the last label change: it is written back. `None` leaves Undo
-    /// to the others.
-    pub(super) fn undo_mark_removal(&mut self) -> Option<Vec<Effect>> {
-        let (after_job, _, _) = self.meta.mark_undo.last()?;
-        if self.newest_job() > *after_job {
-            return None;
-        }
-        if self
-            .organize
-            .label_undo
-            .last()
-            .is_some_and(|(label_after, _)| label_after > after_job)
-        {
-            return None;
-        }
-        let (_, place, removal) = self.meta.mark_undo.pop()?;
-        let name = place
-            .name()
-            .map(display_name)
-            .unwrap_or_default()
-            .into_owned();
-        self.request(Request::Meta(Box::new(MetaAsk::RestoreMark {
-            place,
-            removal,
-        })));
-        Some(vec![self.say(Message::status(format!(
-            "Putting back the internet mark on {name}"
-        )))])
     }
 
     /// Verify checksum on the focused file, with the list chosen when
@@ -934,19 +911,6 @@ impl App {
             MetaNote::Checked { reports } => self.checked(reports),
             MetaNote::Mark { place, result } => self.mark_read(place, result),
             MetaNote::MarkRemoved { job, place, result } => self.mark_removed(job, place, result),
-            MetaNote::MarkRestored { place, result } => {
-                let name = place
-                    .name()
-                    .map(display_name)
-                    .unwrap_or_default()
-                    .into_owned();
-                match result {
-                    Ok(()) => vec![self.say(Message::done(crate::metadata::restored_words(&name)))],
-                    Err(why) => vec![self.say(Message::error(format!(
-                        "Could not put back the internet mark on {name}: {why}"
-                    )))],
-                }
-            }
         }
     }
 
