@@ -809,31 +809,18 @@ impl SyncPlan {
     /// compare saw at each step's subject (the engine checks them again
     /// before each step), the counts, and the summary as its note. A
     /// replace is the engine's overwrite, the old file to the trash first
-    /// where the place has one. Until the job kinds of the contract
-    /// request exist, a plan that copies runs as a copy, one that only
-    /// removes as a trash or a delete for good.
+    /// where the place has one. The job is a [`JobKind::Synchronize`]: the
+    /// hooks hear its copies as a copy and its removals as a delete
+    /// ([`crate::hooks::HookCall::all`]).
     pub fn job_plan(&self, job: JobId) -> Result<Plan, OpsError> {
         Ok(self.plan_of(&self.steps()?, job))
     }
 
     /// The engine's plan for some of this plan's steps, each with its row.
     pub(crate) fn plan_of(&self, steps: &[(usize, Step)], job: JobId) -> Plan {
-        let copies = steps
-            .iter()
-            .any(|(_, step)| matches!(step, Step::Copy { .. }));
-        let trashes = steps
-            .iter()
-            .any(|(_, step)| matches!(step, Step::Trash { .. }));
-        let kind = if copies {
-            JobKind::Copy
-        } else if trashes {
-            JobKind::Trash
-        } else {
-            JobKind::DeletePermanently
-        };
         let mut plan = Plan::new(
             job,
-            kind,
+            JobKind::Synchronize,
             steps.iter().map(|(_, step)| step.clone()).collect(),
             ConflictPolicy::Overwrite,
         );

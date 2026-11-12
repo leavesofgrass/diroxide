@@ -10,17 +10,19 @@
 //! Hooks, as copy has them: the `before_*` hooks are asked after the plan
 //! and before the confirmation ([`SyncPlan::before_hooks`]), the copies as
 //! a copy and the deletes as a delete, so a plugin that guards deletes is
-//! asked about a mirror's deletes; the `after_*` hooks hear the report.
+//! asked about a mirror's deletes; the `after_*` hooks hear the report
+//! split the same way. The engine does both for every
+//! [`JobKind::Synchronize`](diroxide_core::JobKind::Synchronize) plan
+//! ([`crate::hooks::HookCall::all`], [`split_report`]).
 
-use std::collections::HashSet;
-use std::sync::Arc;
-
-use diroxide_core::{Entry, EntryKind, JobId, JobKind, Place};
+use diroxide_core::{Entry, EntryKind, JobId, Place};
 use diroxide_vfs::{OpContext, VfsError};
+
+pub use crate::hooks::split_report;
 
 use crate::engine::{Engine, JobControl, JobReport, JobSink};
 use crate::error::OpsError;
-use crate::hooks::{self, HookCall, HookRunner};
+use crate::hooks::{self, HookCall};
 use crate::plan::{Plan, Step};
 use crate::sync::plan::{SyncAction, SyncPlan};
 
@@ -42,10 +44,6 @@ pub struct SyncEnv<'a> {
     pub control: &'a JobControl,
     /// Progress, conflicts and errors.
     pub sink: &'a dyn JobSink,
-    /// The hook runner the engine was given, so the deletes of a plan
-    /// that also copies are told to the `after_delete` hooks; `None`
-    /// without hooks.
-    pub hooks: Option<Arc<dyn HookRunner>>,
     /// Whether the app already asked the `before_*` hooks
     /// ([`SyncPlan::before_hooks`]) before its confirmation. When not,
     /// the run asks them first.
@@ -56,7 +54,6 @@ impl std::fmt::Debug for SyncEnv<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SyncEnv")
             .field("job", &self.job)
-            .field("hooks", &self.hooks.is_some())
             .field("hooks_asked", &self.hooks_asked)
             .finish_non_exhaustive()
     }
@@ -66,34 +63,13 @@ impl SyncPlan {
     /// The plans the hooks hear, one per event: the copies as a copy, the
     /// deletes as a delete (to the trash, or for good).
     pub fn hook_plans(&self, job: JobId) -> Result<Vec<Plan>, OpsError> {
-        let steps = self.steps()?;
-        let mut plans = Vec::new();
-        let copies: Vec<_> = steps
-            .iter()
-            .filter(|(_, step)| matches!(step, Step::Copy { .. }))
-            .cloned()
-            .collect();
-        let deletes: Vec<_> = steps
-            .iter()
-            .filter(|(_, step)| !matches!(step, Step::Copy { .. }))
-            .cloned()
-            .collect();
-        for part in [copies, deletes] {
-            if !part.is_empty() {
-                plans.push(self.plan_of(&part, job));
-            }
-        }
-        Ok(plans)
+        Ok(hooks::hook_parts(&self.job_plan(job)?))
     }
 
     /// The calls the `before_*` hooks hear: a copy call for the copies, a
     /// delete call for the deletes.
     pub fn hook_calls(&self, job: JobId) -> Result<Vec<HookCall>, OpsError> {
-        Ok(self
-            .hook_plans(job)?
-            .iter()
-            .filter_map(HookCall::of)
-            .collect())
+        Ok(HookCall::all(&self.job_plan(job)?))
     }
 
     /// Asks the `before_*` hooks of the plan, after the plan and before
@@ -106,11 +82,7 @@ impl SyncPlan {
         job: JobId,
         control: &JobControl,
     ) -> Result<Vec<String>, OpsError> {
-        let mut warnings = Vec::new();
-        for plan in self.hook_plans(job)? {
-            warnings.extend(engine.before_hooks(&plan, control)?);
-        }
-        Ok(warnings)
+        engine.before_hooks(&self.job_plan(job)?, control)
     }
 }
 
@@ -156,78 +128,7 @@ pub fn run_sync(plan: &SyncPlan, env: &SyncEnv<'_>) -> Result<JobReport, OpsErro
     report
         .warnings
         .extend(said.into_iter().map(|line| (plan.left.clone(), line)));
-    if job_plan.kind == JobKind::Copy
-        && let Some(runner) = &env.hooks
-    {
-        tell_deletes(runner, &job_plan, &report);
-    }
     Ok(report)
-}
-
-/// A synchronize job's report split by hook event, as the hooks of the
-/// contract request would hear it: the copies as a copy, the removals as
-/// a delete (to the trash, or for good). Each part holds only its own
-/// places; a part with no steps is left out.
-pub fn split_report(plan: &Plan, report: &JobReport) -> Vec<JobReport> {
-    let copies: HashSet<&Place> = plan
-        .steps
-        .iter()
-        .filter(|step| matches!(step, Step::Copy { .. }))
-        .map(Step::subject)
-        .collect();
-    let removals: HashSet<&Place> = plan
-        .steps
-        .iter()
-        .filter(|step| matches!(step, Step::Trash { .. } | Step::Remove { .. }))
-        .map(Step::subject)
-        .collect();
-    let for_good = plan
-        .steps
-        .iter()
-        .any(|step| matches!(step, Step::Remove { .. }));
-    let removal_kind = if for_good {
-        JobKind::DeletePermanently
-    } else {
-        JobKind::Trash
-    };
-    [(copies, JobKind::Copy), (removals, removal_kind)]
-        .into_iter()
-        .filter(|(places, _)| !places.is_empty())
-        .map(|(places, kind)| part_of(report, &places, kind))
-        .collect()
-}
-
-/// The part of a report about these places, as a job of this kind.
-fn part_of(report: &JobReport, places: &HashSet<&Place>, kind: JobKind) -> JobReport {
-    let mut part = JobReport::new(report.job, kind);
-    part.cancelled = report.cancelled;
-    part.stopped = report.stopped;
-    part.done = report
-        .done
-        .iter()
-        .filter(|place| places.contains(place))
-        .cloned()
-        .collect();
-    let mine = |list: &[(Place, String)]| -> Vec<(Place, String)> {
-        list.iter()
-            .filter(|(place, _)| places.contains(place))
-            .cloned()
-            .collect()
-    };
-    part.skipped = mine(&report.skipped);
-    part.failed = mine(&report.failed);
-    part
-}
-
-/// The engine tells the `after_*` hooks of the job's kind, a copy, about
-/// the whole report; the removals of the same job are told to the
-/// `after_delete` hooks here.
-fn tell_deletes(runner: &Arc<dyn HookRunner>, plan: &Plan, report: &JobReport) {
-    for part in split_report(plan, report) {
-        if part.kind != JobKind::Copy {
-            hooks::send_after(runner, &part);
-        }
-    }
 }
 
 /// Reads a step's places again and compares them with the compare's

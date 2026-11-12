@@ -103,7 +103,6 @@ fn env<'a>(engine: &'a Engine, job: u64, control: &'a JobControl, sink: &'a Scri
         job: JobId::new(job),
         control,
         sink,
-        hooks: None,
         hooks_asked: true,
     }
 }
@@ -773,7 +772,8 @@ fn a_mirror_runs_as_one_job_with_one_undo_record() {
     let job = plan.job_plan(JobId::new(5)).unwrap();
     // The engine checks every step's entry against the compare's.
     assert_eq!(job.expected.len(), job.steps.len());
-    assert_eq!(job.kind, JobKind::Copy);
+    assert_eq!(job.kind, JobKind::Synchronize);
+    assert_eq!(job.summary(), "Synchronize: 6 copies, 2 removals, 11 bytes");
     let engine = engine(&fake);
     let control = JobControl::new();
     let sink = Script::default();
@@ -893,7 +893,7 @@ impl HookRunner for Recorder {
 
     fn before(&self, _hook: &WakingHook, call: &HookCall) -> HookVerdict {
         if self.veto == Some(call.event) {
-            HookVerdict::Cancel("Delete stopped: old is kept (Folder guard)".to_owned())
+            HookVerdict::Cancel("Delete stopped: guarded (Folder guard)".to_owned())
         } else {
             HookVerdict::Continue
         }
@@ -929,10 +929,7 @@ fn a_mirror_asks_the_copy_hooks_and_the_delete_hooks() {
     assert_eq!(calls[1].items[0].from, p("/right/gone.txt"));
 
     let sink = Script::default();
-    let env = SyncEnv {
-        hooks: Some(Arc::clone(&runner) as Arc<dyn HookRunner>),
-        ..env(&engine, 9, &control, &sink)
-    };
+    let env = env(&engine, 9, &control, &sink);
     let report = run_sync(&plan, &env).unwrap();
     let started = Instant::now();
     while runner.afters.lock().unwrap().len() < 2 && started.elapsed() < Duration::from_secs(5) {
@@ -974,10 +971,27 @@ fn a_delete_hook_that_stops_a_mirror_stops_it_before_anything_is_touched() {
         ..env(&engine, 4, &control, &sink)
     };
     let error = run_sync(&plan, &env).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "Delete stopped: old is kept (Folder guard)"
-    );
+    // The engine's own hook calls: the copies were asked first and let
+    // go, then the removals stopped the whole plan. 38 cells.
+    let line = error.to_string();
+    assert_eq!(line, "Delete stopped: guarded (Folder guard)");
+    assert_eq!(line.chars().count(), 38);
+    let events: Vec<_> = runner
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|c| c.event)
+        .collect();
+    assert_eq!(events, vec![HookEvent::Copy, HookEvent::Delete]);
+    // A hop's temporary name never reaches a plugin: every item the hooks
+    // heard is a place of the plan.
+    for call in runner.calls.lock().unwrap().iter() {
+        assert!(call.items.iter().all(|item| {
+            let name = item.from.name().unwrap_or_default();
+            !diroxide_vfs::names::is_unfinished(name)
+        }));
+    }
     assert!(fake.exists(&p("/right/gone.txt")));
     assert!(!fake.exists(&p("/right/only.txt")));
 }
