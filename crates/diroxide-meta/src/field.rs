@@ -261,7 +261,10 @@ mod tests {
         ];
         fields.sort_by(Field::compare);
         let said: Vec<&str> = fields.iter().map(|f| f.value.as_str()).collect();
-        assert_eq!(said, ["under 1 sec", "45 sec", "2 min", "1 hr 2 min", "odd"]);
+        assert_eq!(
+            said,
+            ["under 1 sec", "45 sec", "2 min", "1 hr 2 min", "odd"]
+        );
         let mut keys: Vec<String> = fields.iter().map(Field::sort_key).collect();
         let before = keys.clone();
         keys.sort();

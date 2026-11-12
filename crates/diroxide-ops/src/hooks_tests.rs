@@ -265,7 +265,10 @@ fn jobs_without_an_event_wake_no_hook() {
 }
 
 /// The pictures of Move into month folders, one folder there already.
-fn months() -> (FakeProvider, Vec<(diroxide_core::Place, diroxide_core::Place)>) {
+fn months() -> (
+    FakeProvider,
+    Vec<(diroxide_core::Place, diroxide_core::Place)>,
+) {
     let fake = FakeProvider::new();
     for name in ["a.jpg", "b.jpg", "c.jpg"] {
         fake.add_file(&p(&format!("/pics/{name}")), b"jpeg");
@@ -360,7 +363,14 @@ fn a_file_with_a_folders_name_refuses_the_whole_move() {
         &Script::default(),
     );
     assert!(refused.is_err());
-    assert!(engine(&fake)
-        .plan_moves(&month_request(), &[], &JobControl::new(), &Script::default())
-        .is_err());
+    assert!(
+        engine(&fake)
+            .plan_moves(
+                &month_request(),
+                &[],
+                &JobControl::new(),
+                &Script::default()
+            )
+            .is_err()
+    );
 }

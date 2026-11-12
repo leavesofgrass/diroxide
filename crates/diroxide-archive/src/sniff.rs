@@ -327,10 +327,7 @@ impl Signature {
 /// only in diroxide", 28 cells. The owner's answer 116: diroxide reads
 /// RAR and never writes it.
 pub fn never_written(signature: Signature) -> String {
-    format!(
-        "{} is read only in diroxide",
-        signature.short()
-    )
+    format!("{} is read only in diroxide", signature.short())
 }
 
 /// The line when 7-Zip is not installed for a format that needs it, the

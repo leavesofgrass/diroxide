@@ -178,7 +178,12 @@ impl UndoRecord {
     /// one first would bring it straight back.
     pub fn undo_plan(&self, job: JobId, folders: &[Place]) -> Plan {
         let mut set_aside: Vec<Place> = Vec::new();
-        let mut steps: Vec<Step> = self.extended.iter().rev().map(ExtendedBefore::back).collect();
+        let mut steps: Vec<Step> = self
+            .extended
+            .iter()
+            .rev()
+            .map(ExtendedBefore::back)
+            .collect();
         steps.extend(
             self.attributes
                 .iter()
