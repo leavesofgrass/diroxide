@@ -28,6 +28,9 @@
 //!   components, asked for before anything is fetched (W4c).
 //! - `diro doctor [--check [TOOL...]]`: what this diro has and finds,
 //!   one fact a line, the name first (alpha 4's lane K).
+//! - `diro rename`, `diro dups PATH...` and `diro sync HERE THERE`
+//!   (alpha 5's lane CX): batch rename by a rule, duplicates, and
+//!   synchronize from a plan.
 //! - `diro --version`, `diro --help`.
 //!
 //! Every argument must be valid Unicode: a name that is not is refused
@@ -94,6 +97,12 @@ pub enum Invocation {
     Sum(cmd::sum::SumArgs),
     /// Run a task's hot folder (alpha.7; a stub until its lane).
     WatchTask(cmd::watch_task::WatchTaskArgs),
+    /// Rename many names by a rule (alpha 5).
+    Rename(Box<cmd::rename::RenameArgs>),
+    /// Find duplicate files (alpha 5).
+    Dups(cmd::dups::DupsArgs),
+    /// Compare two folders and synchronize them (alpha 5).
+    Sync(cmd::sync::SyncArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -177,6 +186,10 @@ pub fn help_text() -> String {
         "diro info PATH...         say a file's details as plain lines, the name first",
         "diro sum FILE...          print each file's SHA-256, the name first",
         "diro sum --check LIST     check the files LIST names: 0 all match, 1 not",
+        "diro rename PATH... RULE  rename many names by a rule, the preview first",
+        "diro rename --in FOLDER RULE  rename a folder's entries; --filter picks",
+        "diro dups PATH...         find duplicate files, the count first",
+        "diro sync HERE THERE      compare two folders, then copy by the plan",
         "diro --version            print the version",
         "diro --help               print this help",
         "",
@@ -203,6 +216,7 @@ pub fn help_text() -> String {
         "diro components --help gives the options of diro components.",
         "diro convert --help gives the options of diro convert.",
         "diro plugin --help gives the options of diro plugin.",
+        "diro rename --help, diro dups --help and diro sync --help give theirs.",
         "diro ls --help gives the options of diro ls; diro search --help and diro archive --help theirs.",
     ]
     .join("\n")
@@ -319,6 +333,9 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "sum" => cmd::sum::parse(&args[1..]).map(Invocation::Sum),
         "components" => cmd::components::parse(&args[1..]).map(Invocation::Components),
         "run" => cmd::run::parse(&args[1..]).map(Invocation::Run),
+        "rename" => cmd::rename::parse(&args[1..]).map(|a| Invocation::Rename(Box::new(a))),
+        "dups" => cmd::dups::parse(&args[1..]).map(Invocation::Dups),
+        "sync" => cmd::sync::parse(&args[1..]).map(Invocation::Sync),
         _ => parse_open(&args).map(Invocation::Open),
     }
 }
@@ -360,6 +377,9 @@ pub fn run(
         Invocation::Info(args) => cmd::info::run(&args, out),
         Invocation::Sum(args) => cmd::sum::run(&args, out),
         Invocation::WatchTask(args) => cmd::watch_task::run(&args, out),
+        Invocation::Rename(args) => cmd::rename::run(&args, input, out),
+        Invocation::Dups(args) => cmd::dups::run(&args, out),
+        Invocation::Sync(args) => cmd::sync::run(&args, out),
     }
 }
 
