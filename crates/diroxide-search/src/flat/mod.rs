@@ -365,6 +365,11 @@ struct Counter<'a> {
 
 impl SearchSink for Counter<'_> {
     fn found(&mut self, hit: SearchHit) -> ControlFlow<()> {
+        // A hit already on its way when the sink said stop is not handed
+        // on: the sink hears nothing after its own Break.
+        if self.stop {
+            return ControlFlow::Break(());
+        }
         if hit.entry.kind == EntryKind::Folder {
             self.folders += 1;
             if !self.options.folders {
