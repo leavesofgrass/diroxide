@@ -1340,6 +1340,23 @@ impl Runtime {
                     });
                 });
             }
+            Request::PlanMoves { request, moves } => {
+                // Moves into several folders, planned by the engine so the
+                // checks and the before-move hooks are any move's (lane AF).
+                self.scheduler.planned(&request);
+                let engine = self.engine.clone();
+                let control = JobControl::new();
+                self.worker(move |shared| {
+                    let sink = forward_sink(request.id, shared, &engine, &control);
+                    let result = engine
+                        .plan_moves(&request, &moves, &control, &sink)
+                        .map(Box::new);
+                    shared.send(AppEvent::Planned {
+                        job: request.id,
+                        result,
+                    });
+                });
+            }
             Request::PlanUndo { job, record } => {
                 let engine = self.engine.clone();
                 self.worker(move |shared| {
