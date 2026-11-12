@@ -33,12 +33,17 @@
 //! - [`CaseRule`]: smart case, the habit of ripgrep, fd and vim: case
 //!   matters only when the text has a capital letter.
 //! - [`folder_rule`]: the slash at either end of a name pattern.
+//! - [`Regex`] and [`Captures`], re-exported from the regex crate, so a
+//!   crate that holds what [`compile_regex`] gives (the batch rename's
+//!   rules) names it without a dependency of its own.
 
 use std::borrow::Cow;
 use std::fmt;
 
-use regex::{Regex, RegexBuilder};
+use regex::RegexBuilder;
 use thiserror::Error;
+
+pub use regex::{Captures, Regex};
 
 use crate::error::Explain;
 use crate::sort::NameCase;
