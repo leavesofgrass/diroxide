@@ -1,5 +1,5 @@
 //! The session: what the program restores when it starts again (R19):
-//! each panel's tabs, and each tab's place, focused entry, sort, whether it shows
+//! each panel's place, its focused entry, its sort, whether it shows
 //! hidden entries and its history; the layout and which panel was active.
 //! It lives in the state folder as `session.toml`, written atomically, and
 //! belongs to the configuration crate, not the app, so the app's core
@@ -44,18 +44,19 @@ impl Layout {
     }
 }
 
-/// A tab's lock (alpha 5, lane TB), said in words after its name: free,
-/// the default; locked, where the tab refuses to close and a folder
-/// change opens a new tab; pinned, kept at the start of the panel's tabs.
+/// A tab's lock (alpha 5, lane TB; research/modern-features.md, "Folder
+/// tabs"), said in words after its name: free, the default; locked, where
+/// closing asks first and a folder change opens a new tab; pinned, free to
+/// change folder but remembering a base folder to go back to.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TabLock {
     /// Nothing held: the tab closes and changes folder.
     #[default]
     Free,
-    /// The tab refuses to close; a folder change opens a new tab.
+    /// Closing asks first; a folder change opens a new tab.
     Locked,
-    /// The tab is kept at the start of the panel's tabs.
+    /// Folder changes are free; the tab remembers a base folder.
     Pinned,
 }
 
@@ -80,7 +81,7 @@ impl TabLock {
 }
 
 /// One tab of a panel (alpha 5, lane TB): its place, cursor, sort,
-/// hidden files, history and lock.
+/// hidden files, history, lock, and a pinned tab's base folder.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TabState {
@@ -96,11 +97,43 @@ pub struct TabState {
     pub history: Vec<Place>,
     /// Free, locked or pinned.
     pub lock: TabLock,
+    /// A pinned tab's base folder, which Go to base folder returns to.
+    pub base: Option<Place>,
 }
 
-/// One panel's state. Its own fields are the current tab's, so a file
-/// written before tabs, which has no `tabs`, reads as one tab, and an
-/// older build reading a newer file finds the current tab where it looks.
+impl TabState {
+    /// The tab a panel's state describes, free.
+    pub fn of_panel(panel: &PanelState) -> Self {
+        Self {
+            place: panel.place.clone(),
+            focused: panel.focused.clone(),
+            sort: panel.sort.clone(),
+            show_hidden: panel.show_hidden,
+            history: panel.history.clone(),
+            ..Self::default()
+        }
+    }
+
+    /// The panel's state this tab gives when it is current.
+    pub fn as_panel(&self) -> PanelState {
+        PanelState {
+            place: self.place.clone(),
+            focused: self.focused.clone(),
+            sort: self.sort.clone(),
+            show_hidden: self.show_hidden,
+            history: self.history.clone(),
+        }
+    }
+
+    /// Whether the tab holds nothing a panel's state does not: free, with
+    /// no base folder.
+    pub fn is_plain(&self) -> bool {
+        self.lock == TabLock::Free && self.base.is_none()
+    }
+}
+
+/// One panel's state: its current tab's, so an older build reading a
+/// session with tabs finds the current tab where it looks.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PanelState {
@@ -114,60 +147,11 @@ pub struct PanelState {
     pub show_hidden: bool,
     /// The places visited, oldest first, for back and forward.
     pub history: Vec<Place>,
-    /// The current tab's lock.
-    pub lock: TabLock,
-    /// Every tab in order, the current one among them, when there is
-    /// more than one; empty for a panel of one tab (alpha 5, lane TB).
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub tabs: Vec<TabState>,
-    /// The current tab's index in `tabs`.
-    pub current_tab: usize,
 }
 
-impl PanelState {
-    /// The current tab as a panel of one tab describes it.
-    pub fn as_tab(&self) -> TabState {
-        TabState {
-            place: self.place.clone(),
-            focused: self.focused.clone(),
-            sort: self.sort.clone(),
-            show_hidden: self.show_hidden,
-            history: self.history.clone(),
-            lock: self.lock,
-        }
-    }
-
-    /// Every tab in order and the current one's index: the one tab of a
-    /// file written before tabs, or `tabs` with the index kept in range.
-    pub fn tab_list(&self) -> (Vec<TabState>, usize) {
-        if self.tabs.is_empty() {
-            return (vec![self.as_tab()], 0);
-        }
-        let current = self.current_tab.min(self.tabs.len() - 1);
-        (self.tabs.clone(), current)
-    }
-
-    /// A panel's state from its tabs in order and the current one's
-    /// index: the panel's own fields are the current tab's, and `tabs` is
-    /// written only when there is more than one.
-    pub fn from_tabs(tabs: Vec<TabState>, current: usize) -> Self {
-        let current = current.min(tabs.len().saturating_sub(1));
-        let now = tabs.get(current).cloned().unwrap_or_default();
-        let many = tabs.len() > 1;
-        Self {
-            place: now.place,
-            focused: now.focused,
-            sort: now.sort,
-            show_hidden: now.show_hidden,
-            history: now.history,
-            lock: now.lock,
-            tabs: if many { tabs } else { Vec::new() },
-            current_tab: if many { current } else { 0 },
-        }
-    }
-}
-
-/// What is restored at the next start.
+/// What is restored at the next start. Version 2 (alpha 5, lane TB) adds
+/// each panel's tabs beside the two panels, and reads version 1 as one
+/// tab a panel; `panels` stays each panel's current tab.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SessionState {
@@ -177,8 +161,13 @@ pub struct SessionState {
     pub layout: Layout,
     /// The active panel.
     pub active: Side,
-    /// The left and right panels.
+    /// The left and right panels, each its current tab.
     pub panels: [PanelState; 2],
+    /// Each panel's tabs in order, the current one among them; empty for
+    /// a panel of one plain tab.
+    pub tabs: [Vec<TabState>; 2],
+    /// Each panel's current tab's index in `tabs`.
+    pub current: [usize; 2],
 }
 
 impl Default for SessionState {
@@ -188,13 +177,15 @@ impl Default for SessionState {
             layout: Layout::default(),
             active: Side::Left,
             panels: [PanelState::default(), PanelState::default()],
+            tabs: [Vec::new(), Vec::new()],
+            current: [0, 0],
         }
     }
 }
 
 impl SessionState {
     /// The version this build writes.
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
 
     /// One panel's state.
     pub fn panel(&self, side: Side) -> &PanelState {
@@ -204,6 +195,36 @@ impl SessionState {
     /// One panel's state, to change.
     pub fn panel_mut(&mut self, side: Side) -> &mut PanelState {
         &mut self.panels[side.index()]
+    }
+
+    /// A panel's tabs in order and the current one's index: one tab, the
+    /// panel's own, when the file has none (version 1, or one plain tab);
+    /// the index kept in range.
+    pub fn tab_list(&self, side: Side) -> (Vec<TabState>, usize) {
+        let tabs = &self.tabs[side.index()];
+        if tabs.is_empty() {
+            return (vec![TabState::of_panel(self.panel(side))], 0);
+        }
+        let current = self.current[side.index()].min(tabs.len() - 1);
+        (tabs.clone(), current)
+    }
+
+    /// Sets a panel's tabs and its current one: the panel's state becomes
+    /// the current tab's, and the tabs are kept only when there is more
+    /// than one or the one holds a lock or a base folder.
+    pub fn set_tabs(&mut self, side: Side, tabs: Vec<TabState>, current: usize) {
+        let i = side.index();
+        let current = current.min(tabs.len().saturating_sub(1));
+        if let Some(now) = tabs.get(current) {
+            self.panels[i] = now.as_panel();
+        }
+        if tabs.len() > 1 || tabs.first().is_some_and(|t| !t.is_plain()) {
+            self.tabs[i] = tabs;
+            self.current[i] = current;
+        } else {
+            self.tabs[i] = Vec::new();
+            self.current[i] = 0;
+        }
     }
 
     /// Reads `session.toml` text.
@@ -315,13 +336,15 @@ mod tests {
             place.to_string()
         );
         let session = SessionState::from_toml(&text).unwrap();
-        let (tabs, current) = session.panel(Side::Left).tab_list();
+        assert_eq!(session.version, 1);
+        let (tabs, current) = session.tab_list(Side::Left);
         assert_eq!(current, 0);
         assert_eq!(tabs.len(), 1);
         assert_eq!(tabs[0].place.as_ref(), Some(&place));
         assert_eq!(tabs[0].focused.as_deref(), Some("a.txt"));
         assert_eq!(tabs[0].lock, TabLock::Free);
-        assert_eq!(session.panel(Side::Right).tab_list().0.len(), 1);
+        assert_eq!(session.tab_list(Side::Right).0.len(), 1);
+        assert_eq!(SessionState::default().version, 2);
     }
 
     #[test]
@@ -337,24 +360,27 @@ mod tests {
             tab("music", TabLock::Free),
             tab("work", TabLock::Locked),
         ];
+        let mut tabs = tabs;
+        tabs[0].base = Some(folder("docs"));
         let mut session = SessionState::default();
-        *session.panel_mut(Side::Right) = PanelState::from_tabs(tabs.clone(), 2);
+        session.set_tabs(Side::Right, tabs.clone(), 2);
+        // The panel's own state is the current tab's, for older builds.
         let right = session.panel(Side::Right);
-        // The panel's own fields are the current tab's, for older builds.
         assert_eq!(right.place.as_ref(), Some(&folder("work")));
-        assert_eq!(right.lock, TabLock::Locked);
+        assert_eq!(right.focused.as_deref(), Some("work.txt"));
         let text = session.to_toml().unwrap();
         let back = SessionState::from_toml(&text).unwrap();
         assert_eq!(back, session);
-        assert_eq!(back.panel(Side::Right).tab_list(), (tabs, 2));
-        // One tab writes no list of tabs.
-        let one = PanelState::from_tabs(vec![tab("docs", TabLock::Free)], 0);
-        assert!(one.tabs.is_empty());
-        assert_eq!(one.tab_list().0.len(), 1);
+        assert_eq!(back.tab_list(Side::Right), (tabs, 2));
+        // One plain tab writes no list of tabs; a lone locked one does.
+        session.set_tabs(Side::Left, vec![tab("docs", TabLock::Free)], 0);
+        assert!(session.tabs[0].is_empty());
+        assert_eq!(session.tab_list(Side::Left).0.len(), 1);
+        session.set_tabs(Side::Left, vec![tab("docs", TabLock::Locked)], 0);
+        assert_eq!(session.tabs[0].len(), 1);
         // A current index past the end is kept in range.
-        let mut far = PanelState::from_tabs(vec![tab("a", TabLock::Free); 2], 1);
-        far.current_tab = 9;
-        assert_eq!(far.tab_list().1, 1);
+        session.current[1] = 9;
+        assert_eq!(session.tab_list(Side::Right).1, 2);
         assert_eq!(TabLock::Pinned.word(), "pinned");
         assert_eq!(TabLock::Free.said(), None);
         assert_eq!(TabLock::Locked.said(), Some("locked"));
