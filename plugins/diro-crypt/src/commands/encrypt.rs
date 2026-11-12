@@ -152,7 +152,7 @@ fn run(ctx: &Ctx<'_>, targets: &[super::Target], lock: &Lock<'_>, armor: bool, t
             cancelled: &cancelled,
             progress: &mut progress,
         };
-        let end = crypt::encrypt_file(&target.path, lock, armor, &mut watch);
+        let end = crypt::encrypt_file(&target.path, lock, armor, &ctx.host, &mut watch);
         ctx.record(tally, target, end, Verb::Encrypt);
     }
 }

@@ -66,7 +66,7 @@ fn attempt(ctx: &Ctx<'_>, target: &Target, unlock: &Unlock<'_>) -> End {
         cancelled: &cancelled,
         progress: &mut progress,
     };
-    crypt::decrypt_file(&target.path, unlock, &mut watch)
+    crypt::decrypt_file(&target.path, unlock, &ctx.host, &mut watch)
 }
 
 /// One file: its header looked at, the right question asked, the result
