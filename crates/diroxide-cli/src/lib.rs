@@ -28,6 +28,9 @@
 //!   components, asked for before anything is fetched (W4c).
 //! - `diro doctor [--check [TOOL...]]`: what this diro has and finds,
 //!   one fact a line, the name first (alpha 4's lane K).
+//! - `diro rename`, `diro dups PATH...`, `diro sync HERE THERE` and
+//!   `diro -` (alpha 5's lane CX): batch rename by a rule, duplicates,
+//!   synchronize from a plan, and a list of paths from standard input.
 //! - `diro --version`, `diro --help`.
 //!
 //! Every argument must be valid Unicode: a name that is not is refused
@@ -94,6 +97,14 @@ pub enum Invocation {
     Sum(cmd::sum::SumArgs),
     /// Run a task's hot folder (alpha.7; a stub until its lane).
     WatchTask(cmd::watch_task::WatchTaskArgs),
+    /// Rename many names by a rule (alpha 5).
+    Rename(Box<cmd::rename::RenameArgs>),
+    /// Find duplicate files (alpha 5).
+    Dups(cmd::dups::DupsArgs),
+    /// Compare two folders and synchronize them (alpha 5).
+    Sync(cmd::sync::SyncArgs),
+    /// The paths on standard input as a list (`diro -`, alpha 5).
+    StdinList(cmd::stdin_list::StdinListArgs),
     /// Print the version.
     Version,
     /// Print the help.
@@ -177,6 +188,11 @@ pub fn help_text() -> String {
         "diro info PATH...         say a file's details as plain lines, the name first",
         "diro sum FILE...          print each file's SHA-256, the name first",
         "diro sum --check LIST     check the files LIST names: 0 all match, 1 not",
+        "diro rename PATH... RULE  rename many names by a rule, the preview first",
+        "diro rename --in FOLDER RULE  rename a folder's entries; --filter picks",
+        "diro dups PATH...         find duplicate files, the count first",
+        "diro sync HERE THERE      compare two folders, then copy by the plan",
+        "diro -                    the NUL-separated paths on standard input as a list",
         "diro --version            print the version",
         "diro --help               print this help",
         "",
@@ -203,13 +219,15 @@ pub fn help_text() -> String {
         "diro components --help gives the options of diro components.",
         "diro convert --help gives the options of diro convert.",
         "diro plugin --help gives the options of diro plugin.",
+        "diro rename --help, diro dups --help and diro sync --help give theirs.",
         "diro ls --help gives the options of diro ls; diro search --help and diro archive --help theirs.",
     ]
     .join("\n")
 }
 
-/// Reads the options and places of `diro [PATH] [OTHER]`.
-fn parse_open(args: &[String]) -> Result<OpenOptions, CliError> {
+/// Reads the options and places of `diro [PATH] [OTHER]`; `diro -` reads
+/// its opening options here too.
+pub(crate) fn parse_open(args: &[String]) -> Result<OpenOptions, CliError> {
     let mut options = OpenOptions::default();
     let mut only_places = false;
     let mut rest = args.iter();
@@ -319,6 +337,12 @@ pub fn parse(args: Vec<OsString>) -> Result<Invocation, CliError> {
         "sum" => cmd::sum::parse(&args[1..]).map(Invocation::Sum),
         "components" => cmd::components::parse(&args[1..]).map(Invocation::Components),
         "run" => cmd::run::parse(&args[1..]).map(Invocation::Run),
+        "rename" => cmd::rename::parse(&args[1..]).map(|a| Invocation::Rename(Box::new(a))),
+        "dups" => cmd::dups::parse(&args[1..]).map(Invocation::Dups),
+        "sync" => cmd::sync::parse(&args[1..]).map(Invocation::Sync),
+        _ if cmd::stdin_list::wants(&args) => {
+            cmd::stdin_list::parse(&args).map(Invocation::StdinList)
+        }
         _ => parse_open(&args).map(Invocation::Open),
     }
 }
@@ -360,6 +384,10 @@ pub fn run(
         Invocation::Info(args) => cmd::info::run(&args, out),
         Invocation::Sum(args) => cmd::sum::run(&args, out),
         Invocation::WatchTask(args) => cmd::watch_task::run(&args, out),
+        Invocation::Rename(args) => cmd::rename::run(&args, input, out),
+        Invocation::Dups(args) => cmd::dups::run(&args, out),
+        Invocation::Sync(args) => cmd::sync::run(&args, out),
+        Invocation::StdinList(args) => cmd::stdin_list::run(&args, input, out),
     }
 }
 
@@ -550,6 +578,36 @@ mod tests {
         assert!(matches!(
             parse(args(&["watch", "--task"])),
             Err(CliError::Missing(_))
+        ));
+    }
+
+    /// Alpha 5's routes: `diro -` takes the opening options before or
+    /// after the dash; `diro -- -` still opens a folder named `-`.
+    #[test]
+    fn the_alpha_five_routes_parse() {
+        assert!(matches!(
+            parse(args(&["--portable", "-"])),
+            Ok(Invocation::StdinList(list)) if list.open.portable
+        ));
+        assert!(matches!(
+            parse(args(&["-", "--lines"])),
+            Ok(Invocation::StdinList(_))
+        ));
+        assert_eq!(
+            parse(args(&["--", "-"])),
+            Ok(Invocation::Open(open(&["-"])))
+        );
+        assert!(matches!(
+            parse(args(&["rename", "--in", "photos", "--case", "lower"])),
+            Ok(Invocation::Rename(_))
+        ));
+        assert!(matches!(
+            parse(args(&["dups", "photos"])),
+            Ok(Invocation::Dups(_))
+        ));
+        assert!(matches!(
+            parse(args(&["sync", "a", "b", "-n"])),
+            Ok(Invocation::Sync(_))
         ));
     }
 

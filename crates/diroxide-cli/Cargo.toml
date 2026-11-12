@@ -25,6 +25,9 @@ diroxide-core.workspace = true
 # diro diff (W3d): compare two files in words.
 diroxide-diff.workspace = true
 diroxide-filetype.workspace = true
+# diro dups (alpha 5, lane CX): the duplicate finder's full hash is
+# meta's BLAKE3, the one the Checksum command computes.
+diroxide-meta.workspace = true
 # The GUI frontend: its window behind the `gui` feature below; without it,
 # `diro --gui` says the GUI was left out of this build.
 diroxide-gui.workspace = true
