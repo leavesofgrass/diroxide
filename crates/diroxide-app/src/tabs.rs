@@ -58,9 +58,7 @@ pub fn check_set_name(text: &str) -> Result<String, String> {
         return Err("A tab set's name cannot hold control characters.".to_owned());
     }
     if name.chars().count() > NAME_LIMIT {
-        return Err(format!(
-            "Name too long: {NAME_LIMIT} characters at most."
-        ));
+        return Err(format!("Name too long: {NAME_LIMIT} characters at most."));
     }
     Ok(name.to_owned())
 }

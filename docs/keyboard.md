@@ -81,6 +81,8 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Ctrl+6: Favorite label 6. Adds the sixth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-6)
 - Ctrl+7: Favorite label 7. Adds the seventh label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-7)
 - Ctrl+B or Alt+B: Bookmarks. Lists the bookmarks; the first row adds or removes this folder, and an alias letter jumps. (go.bookmarks)
+- Ctrl+T: New tab. Opens a new tab in this panel, a copy of the current one. (tab.new)
+- Ctrl+W: Close tab. Closes the current tab; a locked tab asks first, and the last tab stays open. (tab.close)
 
 ### In any list
 
@@ -305,6 +307,30 @@ The command palette reaches every command by name: Ctrl+P in a terminal, Ctrl+Sh
 - Tools list. Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it. (app.tools)
 - Watched folders. Lists the tasks that watch a folder, one a row with what it did today; a task's actions turn it on or off, pause it, preview it, show its log and put failed files back. (app.hot-folders)
 - Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
+- New tab for the focused folder. Opens the focused folder in a new tab of this panel. (tab.new-for-focused)
+- Close other tabs. Closes this panel's other tabs, keeping the locked ones. (tab.close-others)
+- Undo close tab. Brings back the tab closed last, in this session. (tab.undo-close)
+- Next tab. Goes to this panel's next tab. (tab.next)
+- Previous tab. Goes to this panel's previous tab. (tab.previous)
+- Tab list. Lists this panel's tabs, name first, to go to one. (tab.list)
+- Move tab left. Moves the current tab one place toward the first. (tab.move-left)
+- Move tab right. Moves the current tab one place toward the last. (tab.move-right)
+- Go to tab 1. Goes to this panel's first tab. (tab.go-1)
+- Go to tab 2. Goes to this panel's second tab. (tab.go-2)
+- Go to tab 3. Goes to this panel's third tab. (tab.go-3)
+- Go to tab 4. Goes to this panel's fourth tab. (tab.go-4)
+- Go to tab 5. Goes to this panel's fifth tab. (tab.go-5)
+- Go to tab 6. Goes to this panel's sixth tab. (tab.go-6)
+- Go to tab 7. Goes to this panel's seventh tab. (tab.go-7)
+- Go to tab 8. Goes to this panel's eighth tab. (tab.go-8)
+- Go to tab 9. Goes to this panel's ninth tab. (tab.go-9)
+- Move tab to other panel. Moves the current tab to the other panel, where it becomes current. (tab.to-other-panel)
+- Copy tab to other panel. Opens a copy of the current tab in the other panel, where it becomes current. (tab.copy-to-other-panel)
+- Lock tab. Locks or frees the current tab: closing a locked tab asks first, and a folder change opens a new tab. (tab.lock)
+- Pin tab. Pins or frees the current tab: a pinned tab changes folder freely and remembers this folder as its base. (tab.pin)
+- Go to base folder. Goes back to the pinned tab's base folder. (tab.base)
+- Save tab set. Saves both panels' tabs by a name, in the state folder. (tab.save-set)
+- Load tab set. Lists the saved tab sets to load one in place of the open tabs. (tab.load-set)
 
 ## In the GUI
 
@@ -390,6 +416,19 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - Ctrl+6: Favorite label 6. Adds the sixth label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-6)
 - Ctrl+7: Favorite label 7. Adds the seventh label of the Labels list to the marked items, or takes it off when every one has it. (label.favorite-7)
 - Ctrl+B or Alt+B: Bookmarks. Lists the bookmarks; the first row adds or removes this folder, and an alias letter jumps. (go.bookmarks)
+- Ctrl+T: New tab. Opens a new tab in this panel, a copy of the current one. (tab.new)
+- Ctrl+W: Close tab. Closes the current tab; a locked tab asks first, and the last tab stays open. (tab.close)
+- Ctrl+Tab: Next tab. Goes to this panel's next tab. (tab.next)
+- Ctrl+Shift+Tab: Previous tab. Goes to this panel's previous tab. (tab.previous)
+- Alt+1: Go to tab 1. Goes to this panel's first tab. (tab.go-1)
+- Alt+2: Go to tab 2. Goes to this panel's second tab. (tab.go-2)
+- Alt+3: Go to tab 3. Goes to this panel's third tab. (tab.go-3)
+- Alt+4: Go to tab 4. Goes to this panel's fourth tab. (tab.go-4)
+- Alt+5: Go to tab 5. Goes to this panel's fifth tab. (tab.go-5)
+- Alt+6: Go to tab 6. Goes to this panel's sixth tab. (tab.go-6)
+- Alt+7: Go to tab 7. Goes to this panel's seventh tab. (tab.go-7)
+- Alt+8: Go to tab 8. Goes to this panel's eighth tab. (tab.go-8)
+- Alt+9: Go to tab 9. Goes to this panel's ninth tab. (tab.go-9)
 
 ### In any list
 
@@ -607,6 +646,19 @@ These are the GUI's keys. On macOS the GUI uses Command where this list says Ctr
 - Tools list. Lists each helper program diroxide can use, its version and where it was found, or what it would download and how to install it. (app.tools)
 - Watched folders. Lists the tasks that watch a folder, one a row with what it did today; a task's actions turn it on or off, pause it, preview it, show its log and put failed files back. (app.hot-folders)
 - Ask first-run choices again. Opens the first-run list of optional components now, nothing chosen. (components.first-run)
+- New tab for the focused folder. Opens the focused folder in a new tab of this panel. (tab.new-for-focused)
+- Close other tabs. Closes this panel's other tabs, keeping the locked ones. (tab.close-others)
+- Undo close tab. Brings back the tab closed last, in this session. (tab.undo-close)
+- Tab list. Lists this panel's tabs, name first, to go to one. (tab.list)
+- Move tab left. Moves the current tab one place toward the first. (tab.move-left)
+- Move tab right. Moves the current tab one place toward the last. (tab.move-right)
+- Move tab to other panel. Moves the current tab to the other panel, where it becomes current. (tab.to-other-panel)
+- Copy tab to other panel. Opens a copy of the current tab in the other panel, where it becomes current. (tab.copy-to-other-panel)
+- Lock tab. Locks or frees the current tab: closing a locked tab asks first, and a folder change opens a new tab. (tab.lock)
+- Pin tab. Pins or frees the current tab: a pinned tab changes folder freely and remembers this folder as its base. (tab.pin)
+- Go to base folder. Goes back to the pinned tab's base folder. (tab.base)
+- Save tab set. Saves both panels' tabs by a name, in the state folder. (tab.save-set)
+- Load tab set. Lists the saved tab sets to load one in place of the open tabs. (tab.load-set)
 
 ## Keys a terminal may keep
 
@@ -687,10 +739,6 @@ diroxide binds none of these. A keypad key works under a screen reader only with
 
 ## Kept for later alphas
 
-- Ctrl+T: New tab, coming later.
-- Ctrl+W: Close tab, coming later.
-- Ctrl+Tab: Next tab, coming later, in the GUI.
-- Ctrl+Shift+Tab: Previous tab, coming later, in the GUI.
 - Ctrl+Shift+E: Folder tree, coming later, in the GUI.
 
 ## See also

@@ -146,12 +146,27 @@ fn a_parked_tabs_late_listing_changes_nothing_and_it_fills_on_return() {
     // The late answer for tab 2 lands while tab 1 is shown.
     settle(&mut app, &mut runtime, slow);
     assert_eq!(app.panel(Side::Left).place(), &here());
-    assert!(app.panel(Side::Left).list().rows().iter().any(|r| r.id == "src"));
+    assert!(
+        app.panel(Side::Left)
+            .list()
+            .rows()
+            .iter()
+            .any(|r| r.id == "src")
+    );
     // Shown again, tab 2 lists src after all.
     let said = run(&mut app, &mut runtime, ids::TAB_NEXT);
-    assert!(said.iter().any(|s| s.starts_with("src, tab 2 of 2")), "{said:?}");
+    assert!(
+        said.iter().any(|s| s.starts_with("src, tab 2 of 2")),
+        "{said:?}"
+    );
     assert_eq!(app.panel(Side::Left).place(), &src());
-    assert!(app.panel(Side::Left).list().rows().iter().any(|r| r.id == "app.rs"));
+    assert!(
+        app.panel(Side::Left)
+            .list()
+            .rows()
+            .iter()
+            .any(|r| r.id == "app.rs")
+    );
 }
 
 #[test]
@@ -299,7 +314,10 @@ fn the_tab_list_is_a_chooser_of_rows_name_first() {
     };
     assert_eq!(list.title(), "Tabs, left panel, 2 tabs");
     assert_eq!(list.focused().unwrap().label, "src, tab 2 of 2");
-    assert!(said.iter().any(|s| s.contains("src, tab 2 of 2")), "{said:?}");
+    assert!(
+        said.iter().any(|s| s.contains("src, tab 2 of 2")),
+        "{said:?}"
+    );
     press(&mut app, &mut runtime, "up");
     let said = press(&mut app, &mut runtime, "enter");
     assert!(app.dialog().is_none());
@@ -395,7 +413,11 @@ fn a_session_opened_elsewhere_keeps_its_tabs_beside_the_new_place() {
     assert_eq!(app.panel(Side::Left).place(), &here());
     assert_eq!(
         app.tab_rows(Side::Left),
-        ["src, tab 1 of 3", "app, tab 2 of 3", "diroxide-app, tab 3 of 3"]
+        [
+            "src, tab 1 of 3",
+            "app, tab 2 of 3",
+            "diroxide-app, tab 3 of 3"
+        ]
     );
 }
 

@@ -470,7 +470,9 @@ impl App {
         let strip = &mut self.tabs.strips[i];
         let old = strip.current;
         strip.slots[old].held = Some(Box::new(copy));
-        strip.slots.insert(old + 1, Slot::current(TabLock::Free, None));
+        strip
+            .slots
+            .insert(old + 1, Slot::current(TabLock::Free, None));
         strip.current = old + 1;
     }
 
@@ -521,9 +523,7 @@ impl App {
             return vec![self.say(Message::status(text))];
         }
         if self.tab_lock(side) == TabLock::Locked {
-            let question = with_default_no(Message::question(&format!(
-                "Close locked tab {name}"
-            )));
+            let question = with_default_no(Message::question(&format!("Close locked tab {name}")));
             return self.open_organize(
                 Dialog::Confirm {
                     question,
@@ -983,9 +983,7 @@ impl App {
     /// Load tab set: the saved sets as a chooser, or why there are none.
     fn load_set_list(&mut self) -> Vec<Effect> {
         if self.tabs.sets.is_empty() {
-            return vec![self.say(Message::status(
-                "No tab sets saved yet.",
-            ))];
+            return vec![self.say(Message::status("No tab sets saved yet."))];
         }
         let rows = self
             .tabs
