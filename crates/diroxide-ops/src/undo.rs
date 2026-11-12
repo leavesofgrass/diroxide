@@ -395,6 +395,29 @@ mod tests {
     }
 
     #[test]
+    fn a_record_alpha_four_wrote_loads_with_no_extended_items() {
+        // Every field alpha 4's journal and undo log wrote, written by
+        // hand in its shape: no `extended` key.
+        use crate::testing::p;
+        let place = |text: &str| serde_json::to_string(&p(text)).unwrap();
+        let kind = serde_json::to_string(&JobKind::Move).unwrap();
+        let origin = serde_json::to_string(&JobOrigin::User).unwrap();
+        let text = format!(
+            r#"{{"job":7,"kind":{kind},"origin":{origin},"moves":[[{a},{b}]],"trashed":[{c}],"created":[],"relinked":[]}}"#,
+            a = place("/a/x.txt"),
+            b = place("/b/x.txt"),
+            c = place("/a/old.txt"),
+        );
+        let old: UndoRecord = serde_json::from_str(&text).unwrap();
+        assert_eq!(old.job, Some(JobId::new(7)));
+        assert_eq!(old.moves, [(p("/a/x.txt"), p("/b/x.txt"))]);
+        assert_eq!(old.trashed, [p("/a/old.txt")]);
+        assert!(old.extended.is_empty());
+        // And a record without extended items still writes alpha 4's shape.
+        assert!(!serde_json::to_string(&old).unwrap().contains("extended"));
+    }
+
+    #[test]
     fn the_log_keeps_the_newest() {
         let mut log = UndoLog::new(2);
         log.record(UndoRecord::default());
