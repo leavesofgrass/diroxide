@@ -100,6 +100,18 @@ command = "file.rename"
 access = "r"
 when = "edits"
 
+# Reserved for alpha 5's app lanes (lane P5): Rename one by one (RA),
+# Save as collection and Collect (LA). No access keys yet.
+[[menu.item]]
+command = "rename.one-by-one"
+when = "writable"
+
+[[menu.item]]
+command = "file.save-as-collection"
+
+[[menu.item]]
+command = "file.collect"
+
 [[menu.item]]
 command = "file.duplicate"
 access = "u"
@@ -437,6 +449,10 @@ access = "g"
 [[menu.item]]
 command = "view.watch-folder"
 access = "a"
+
+# Reserved for alpha 5's lane LA (lane P5): the flat view.
+[[menu.item]]
+command = "view.flat"
 
 # Tabs (alpha 5, lane TB): the tab list, and every tab command in the
 # Tabs submenu, the terminal's way to them.
@@ -857,6 +873,15 @@ access = "x"
 command = "photo.previous-day"
 access = "y"
 
+# Reserved for alpha 5's lane LA (lane P5): collections and recent files.
+[[menu.item]]
+command = "go.collections"
+access = "j"
+
+[[menu.item]]
+command = "go.recent-files"
+access = "q"
+
 # Search (W3a): Find files and what it finds.
 [[menu]]
 id = "search"
@@ -1083,6 +1108,25 @@ access = "r"
 [[menu.item]]
 command = "photo.month-folders"
 access = "m"
+
+# Reserved for alpha 5's app lanes (lane P5): Batch rename (RA), Compare
+# folders and Synchronize (SA), Find duplicates (DA).
+[[menu.item]]
+command = "rename.batch"
+access = "b"
+when = "writable"
+
+[[menu.item]]
+command = "compare.folders"
+access = "a"
+
+[[menu.item]]
+command = "sync.plan"
+access = "y"
+
+[[menu.item]]
+command = "dups.find"
+access = "u"
 
 [[menu]]
 id = "keys"

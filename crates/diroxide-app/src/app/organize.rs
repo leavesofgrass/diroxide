@@ -156,6 +156,33 @@ pub(super) enum Wants {
     /// The tab list, Save tab set's name and the saved sets (alpha 5,
     /// lane TB).
     Tabs(super::tabbing::TabWants),
+    /// The dialogs of batch rename (alpha 5, lane RA; reserved by lane
+    /// P5), hosted here for the same reason.
+    #[allow(
+        dead_code,
+        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+    )]
+    Rename(super::renaming::RenameWants),
+    /// The dialogs of compare folders and synchronize (alpha 5, lane SA;
+    /// reserved by lane P5).
+    #[allow(
+        dead_code,
+        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+    )]
+    Sync(super::syncing::SyncWants),
+    /// The dialogs of duplicates (alpha 5, lane DA; reserved by lane P5).
+    #[allow(
+        dead_code,
+        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+    )]
+    Dups(super::duplicates::DupsWants),
+    /// The dialogs of the flat view, collections and recent files (alpha
+    /// 5, lane LA; reserved by lane P5).
+    #[allow(
+        dead_code,
+        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+    )]
+    Lists(super::collections::ListsWants),
 }
 
 impl Wants {
@@ -241,6 +268,12 @@ impl Wants {
                 TabWants::SaveName => "TabSetName",
                 TabWants::Sets => "TabSets",
             },
+            // Reserved for alpha 5's app lanes (lane P5): each lane names
+            // its own purposes.
+            Wants::Rename(wants) => wants.purpose(),
+            Wants::Sync(wants) => wants.purpose(),
+            Wants::Dups(wants) => wants.purpose(),
+            Wants::Lists(wants) => wants.purpose(),
         }
     }
 }
@@ -474,6 +507,11 @@ impl App {
             Wants::Access(wants) => self.access_accept(wants, row, &text),
             Wants::Photos(wants) => self.photo_accept(wants, row, &text),
             Wants::Tabs(wants) => self.tabs_accept(wants, row, &text),
+            // Reserved for alpha 5's app lanes (lane P5).
+            Wants::Rename(wants) => self.rename_accept(wants, row, &text),
+            Wants::Sync(wants) => self.sync_accept(wants, row, &text),
+            Wants::Dups(wants) => self.dups_accept(wants, row, &text),
+            Wants::Lists(wants) => self.lists_accept(wants, row, &text),
         }
     }
 
@@ -488,6 +526,11 @@ impl App {
             Wants::Crypt(wants) => self.crypt_yes(wants),
             Wants::Photos(wants) => self.photo_yes(wants),
             Wants::Tabs(wants) => self.tabs_yes(wants),
+            // Reserved for alpha 5's app lanes (lane P5).
+            Wants::Rename(wants) => self.rename_yes(wants),
+            Wants::Sync(wants) => self.sync_yes(wants),
+            Wants::Dups(wants) => self.dups_yes(wants),
+            Wants::Lists(wants) => self.lists_yes(wants),
             _ => Vec::new(),
         }
     }
@@ -511,6 +554,11 @@ impl App {
             Wants::Convert(wants) => self.convert_escape(wants),
             Wants::Watched(wants) => self.watched_escape(wants),
             Wants::Tabs(wants) => self.tabs_escape(wants),
+            // Reserved for alpha 5's app lanes (lane P5).
+            Wants::Rename(wants) => self.rename_escape(wants),
+            Wants::Sync(wants) => self.sync_escape(wants),
+            Wants::Dups(wants) => self.dups_escape(wants),
+            Wants::Lists(wants) => self.lists_escape(wants),
             _ => Vec::new(),
         }
     }

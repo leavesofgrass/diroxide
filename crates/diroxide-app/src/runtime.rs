@@ -79,6 +79,13 @@ mod saved_queue;
 mod space;
 // The readers of the background type check (lane TA).
 mod typing;
+// Reserved for alpha 5's app lanes by the pre-wiring step (lane P5):
+// batch rename (RA), compare and synchronize (SA), duplicates (DA), the
+// flat view, collections and recent files (LA).
+mod duplicates;
+mod lists;
+mod renaming;
+mod syncing;
 
 pub(crate) use space::{question_lines, room_words};
 
@@ -1735,6 +1742,11 @@ impl Runtime {
                     )));
                 }
             }
+            // Reserved for alpha 5's app lanes (lane P5).
+            Request::RenameBatch(ask) => self.rename_request(*ask),
+            Request::Sync(ask) => self.sync_request(*ask),
+            Request::Duplicates(ask) => self.dups_request(*ask),
+            Request::Lists(ask) => self.lists_request(*ask),
             Request::SaveTabSets(sets) => {
                 if let Some(paths) = &self.paths
                     && let Err(error) = crate::tabs::save(paths, &sets)
