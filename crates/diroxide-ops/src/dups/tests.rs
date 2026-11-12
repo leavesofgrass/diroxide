@@ -209,49 +209,26 @@ fn empty_files_are_said_and_left_out_unless_asked() {
 }
 
 #[test]
-fn hard_links_to_one_file_are_said_and_left_out() {
+fn one_file_under_two_names_without_a_link_count_is_reached_twice() {
+    // The fake gives no link count, so a second name of one identity is
+    // the same file reached again, as through a junction: counted once,
+    // even when hard links are kept, so no helper can mark it.
     let fake = FakeProvider::new();
-    fake.add_file(&p("/h/a.txt"), b"linked bytes");
+    fake.add_file(&p("/h/a.txt"), b"one file");
     fake.add_hard_link(&p("/h/b.txt"), &p("/h/a.txt"));
-    let result = run(&fake, &["/h"], &DupOptions::default());
-    assert!(result.groups.is_empty(), "a file and its link are one file");
-    assert_eq!(result.hard_links_left_out, 1);
-    let row = result.left_out[0].row();
-    assert!(row.starts_with("b.txt, in "), "{row}");
-    assert!(row.ends_with(": same file as a.txt, 2 links"), "{row}");
-    assert_eq!(
-        result.notes(),
-        vec!["1 hard link left out: same file".to_owned()]
-    );
-}
-
-#[test]
-fn hard_links_kept_beside_a_real_copy_free_nothing() {
-    let fake = FakeProvider::new();
-    fake.add_file(&p("/h/a.txt"), b"linked bytes");
-    fake.add_hard_link(&p("/h/b.txt"), &p("/h/a.txt"));
-    fake.add_file(&p("/h/c.txt"), b"linked bytes");
-    let options = DupOptions {
-        include_hard_links: true,
-        ..DupOptions::default()
-    };
-    let result = run(&fake, &["/h"], &options);
-    assert_eq!(result.groups.len(), 1);
-    let group = &result.groups[0];
-    assert_eq!(names(group), ["a.txt", "b.txt", "c.txt"]);
-    assert_eq!(group.files[1].same_file_as, Some(0));
-    assert_eq!(group.distinct(), 2);
-    assert_eq!(group.waste(), 12);
-    let row = group.file_row(1, 1).unwrap();
-    assert!(
-        row.starts_with("b.txt, copy 2 of 3, group 1, same file as copy 1"),
-        "{row}"
-    );
-    // Keeping a.txt leaves its link b.txt unmarked: trashing it frees
-    // nothing.
-    let selection = select(&result, &KeepRule::FirstFound);
-    assert_eq!(selection.marked, vec![p("/h/c.txt")]);
-    assert_eq!(selection.bytes, 12);
+    for include_hard_links in [false, true] {
+        let options = DupOptions {
+            include_hard_links,
+            ..DupOptions::default()
+        };
+        let result = run(&fake, &["/h"], &options);
+        assert!(result.groups.is_empty());
+        assert_eq!(result.reached_twice, 1);
+        assert_eq!(result.notes(), ["1 file reached twice, counted once"]);
+        let row = result.left_out[0].row();
+        assert!(row.starts_with("b.txt, in "), "{row}");
+        assert!(row.contains(": reached twice, counted once as "), "{row}");
+    }
 }
 
 #[test]

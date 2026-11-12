@@ -26,7 +26,17 @@ const PAUSE_STEP: Duration = Duration::from_millis(100);
 
 /// Finds the duplicate files under `roots`, every root through its own
 /// provider from `env.registry`, so two folders on two places are
-/// compared as one search.
+/// compared as one search. The roots are the scope: folders, the marked
+/// entries, or a collection's places; a root that is a file is itself a
+/// candidate. A file reached twice (overlapping roots, a junction, a
+/// folder alias) is dropped before grouping and said.
+///
+/// Hard links are found by identity. A listing that carries none (local
+/// folders on Windows) is completed by a `stat` of each same-size
+/// candidate; only a link count above one makes two names hard links.
+///
+/// A size group with a place that has no random read skips the quick
+/// check and goes to the full pass whole, said in [`DupResult::notes`].
 ///
 /// The steps: the walk (links never followed, other drives and loops
 /// left out and said); files grouped by size; empty files, files under
@@ -165,6 +175,8 @@ struct Search<'a> {
     small_left_out: u64,
     hard_links_left_out: u64,
     unreadable: u64,
+    reached_twice: u64,
+    no_quick: u64,
     compared: bool,
 }
 
@@ -187,6 +199,8 @@ impl<'a> Search<'a> {
             small_left_out: 0,
             hard_links_left_out: 0,
             unreadable: 0,
+            reached_twice: 0,
+            no_quick: 0,
             compared: false,
         }
     }
@@ -353,6 +367,24 @@ impl<'a> Search<'a> {
                 }
             }
             for (at, first) in extra {
+                let place = self.files[at].place.clone();
+                // A second name of a file with one link is the same name
+                // reached again (a junction, a folder alias, overlapping
+                // roots): dropped before grouping, so no helper can mark
+                // a file's only copy. Only a link count above one makes
+                // it a hard link.
+                let linked = [at, first]
+                    .iter()
+                    .any(|&i| self.files[i].hard_links.is_some_and(|n| n > 1));
+                if !linked {
+                    self.reached_twice += 1;
+                    let first_place = self.files[first].place.to_string();
+                    self.leave_out(
+                        place,
+                        format!("reached twice, counted once as {first_place}"),
+                    );
+                    continue;
+                }
                 if self.options.include_hard_links {
                     self.links.entry(first).or_default().push(at);
                     continue;
@@ -368,7 +400,6 @@ impl<'a> Search<'a> {
                     .map(|n| diroxide_core::names::display_name(n).into_owned())
                     .unwrap_or_default();
                 self.hard_links_left_out += 1;
-                let place = self.files[at].place.clone();
                 self.leave_out(place, format!("same file as {name}, {links} links"));
             }
             if distinct.len() > 1 {
@@ -402,31 +433,73 @@ impl<'a> Search<'a> {
     fn quick_check(&mut self) -> Result<(), DupError> {
         let total = self.buckets.iter().map(Vec::len).sum::<usize>() as u64;
         let block = self.options.partial_block.clamp(1, MOST_BLOCK);
+        if total == 0 {
+            return Ok(());
+        }
         self.ticker.begin(DupStage::QuickCheck, total, 0);
-        for at in self.buckets.iter().flatten().copied().collect::<Vec<_>>() {
-            self.ticker.checkpoint(self.control)?;
-            let file = &self.files[at];
-            let provider = Arc::clone(&self.providers[file.provider]);
-            let place = file.place.clone();
-            let size = file.size;
-            self.ticker.progress.current = place.name().map(str::to_owned);
-            match quick(
-                provider.as_ref(),
-                &place,
-                size,
-                block,
-                &self.ctx,
-                self.env.hasher,
-            ) {
-                Ok((digest, whole)) => {
-                    if whole {
-                        self.files[at].full = Some(digest.clone());
+        for bucket in self.buckets.clone() {
+            // A size bucket is checked the same way throughout: if one of
+            // its places has no random read, none of it is quick-checked,
+            // and the whole bucket goes to the full pass.
+            let size = self.files[bucket[0]].size;
+            let done_before = self.ticker.progress.files_done;
+            let mut whole_pass = size > block.saturating_mul(2)
+                && bucket.iter().any(|&at| {
+                    let file = &self.files[at];
+                    !self.providers[file.provider]
+                        .capabilities(&file.place)
+                        .random_read
+                });
+            let mut failed: Vec<usize> = Vec::new();
+            if !whole_pass {
+                for &at in &bucket {
+                    self.ticker.checkpoint(self.control)?;
+                    let file = &self.files[at];
+                    let provider = Arc::clone(&self.providers[file.provider]);
+                    let place = file.place.clone();
+                    self.ticker.progress.current = place.name().map(str::to_owned);
+                    match quick(
+                        provider.as_ref(),
+                        &place,
+                        size,
+                        block,
+                        &self.ctx,
+                        self.env.hasher,
+                    ) {
+                        Ok(Some((digest, whole))) => {
+                            if whole {
+                                self.files[at].full = Some(digest.clone());
+                            }
+                            self.files[at].quick = Some(digest);
+                        }
+                        Ok(None) => whole_pass = true,
+                        Err(error) => {
+                            failed.push(at);
+                            self.unreadable(place, &error)?;
+                        }
                     }
-                    self.files[at].quick = Some(digest);
+                    self.ticker.progress.files_done += 1;
+                    self.ticker.tick();
+                    if whole_pass {
+                        break;
+                    }
                 }
-                Err(error) => self.unreadable(place, &error)?,
             }
-            self.ticker.progress.files_done += 1;
+            if whole_pass {
+                // One key for the bucket, so the full pass decides; a
+                // file already hashed whole keeps that hash, which is the
+                // full pass's own. Unreadable files stay out: no key.
+                let left: Vec<usize> = bucket
+                    .iter()
+                    .copied()
+                    .filter(|at| !failed.contains(at))
+                    .collect();
+                for &at in &left {
+                    self.files[at].quick = Some(Vec::new());
+                }
+                self.no_quick += left.len() as u64;
+            }
+            self.ticker.progress.files_done = done_before + bucket.len() as u64;
             self.ticker.tick();
         }
         self.regroup(|file| file.quick.clone());
@@ -598,6 +671,8 @@ impl<'a> Search<'a> {
             small_left_out: self.small_left_out,
             hard_links_left_out: self.hard_links_left_out,
             unreadable: self.unreadable,
+            reached_twice: self.reached_twice,
+            no_quick: self.no_quick,
             hasher: self.env.hasher.name(),
         }
     }
@@ -625,6 +700,7 @@ impl<'a> Search<'a> {
                 let file = &self.files[at];
                 DupFile {
                     place: file.place.clone(),
+                    size: file.size,
                     modified: file.modified,
                     found: file.found,
                     same_file_as: of.and_then(|of| position.get(&of).copied()),
@@ -651,8 +727,8 @@ fn identity(
 
 /// The quick check of one file: the hash of its first and last `block`
 /// bytes and its size, and whether that hash is of the whole file (a
-/// file no longer than two blocks is hashed whole). A place without
-/// random reads gives its first block only.
+/// file no longer than two blocks is hashed whole). `None` when the place
+/// has no random read: the caller sends the file to the full pass.
 pub(super) fn quick(
     provider: &dyn Provider,
     place: &Place,
@@ -660,43 +736,32 @@ pub(super) fn quick(
     block: u64,
     ctx: &OpContext,
     hasher: &dyn ContentHasher,
-) -> Result<(Vec<u8>, bool), VfsError> {
+) -> Result<Option<(Vec<u8>, bool)>, VfsError> {
     if size <= block.saturating_mul(2) {
-        return full(provider, place, size, ctx, hasher, &mut |_| {}).map(|d| (d, true));
+        return full(provider, place, size, ctx, hasher, &mut |_| {}).map(|d| Some((d, true)));
     }
+    if !provider.capabilities(place).random_read {
+        return Ok(None);
+    }
+    let mut reader = match provider.open_seekable(place, ctx) {
+        Ok(reader) => reader,
+        Err(VfsError::Unsupported { .. }) => return Ok(None),
+        Err(error) => return Err(error),
+    };
     let block = block as usize;
     let mut data = vec![0u8; block];
-    let mut tail = Vec::new();
-    let seekable = if provider.capabilities(place).random_read {
-        match provider.open_seekable(place, ctx) {
-            Ok(reader) => Some(reader),
-            Err(VfsError::Unsupported { .. }) => None,
-            Err(error) => return Err(error),
-        }
-    } else {
-        None
-    };
-    match seekable {
-        Some(mut reader) => {
-            let got = fill(&mut reader, &mut data, &ctx.cancel)?;
-            data.truncate(got);
-            reader
-                .seek(SeekFrom::Start(size - block as u64))
-                .map_err(VfsError::from)?;
-            tail.resize(block, 0);
-            let got = fill(&mut reader, &mut tail, &ctx.cancel)?;
-            tail.truncate(got);
-        }
-        None => {
-            let mut reader = provider.read(place, ctx)?;
-            let got = fill(&mut reader, &mut data, &ctx.cancel)?;
-            data.truncate(got);
-        }
-    }
+    let got = fill(&mut reader, &mut data, &ctx.cancel)?;
+    data.truncate(got);
+    reader
+        .seek(SeekFrom::Start(size - block as u64))
+        .map_err(VfsError::from)?;
+    let mut tail = vec![0u8; block];
+    let got = fill(&mut reader, &mut tail, &ctx.cancel)?;
+    tail.truncate(got);
     data.extend_from_slice(&tail);
     data.extend_from_slice(&size.to_le_bytes());
     let digest = hasher.hash(&mut Cursor::new(data), &ctx.cancel, &mut |_| {})?;
-    Ok((digest, false))
+    Ok(Some((digest, false)))
 }
 
 /// The full hash of one file; a file whose length is no longer `size`

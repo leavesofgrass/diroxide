@@ -17,9 +17,13 @@
 //!   count line first ("8 groups, 21 files, 1.4 GB to free"); each group
 //!   a row ("Group 3 of 41, 3 copies, 2.1 MB each, 4.2 MB to free") and
 //!   each file a row with its name first and its folder after.
-//! - **Selection helpers** ([`select`]): keep the newest, the oldest, the
-//!   first found, the shortest path, or the copies in one folder; mark the
-//!   rest. A helper never marks a whole group, and says what it chose.
+//! - **Selection helpers** ([`select`]): keep the oldest (the default),
+//!   the newest, the shortest path, the first by name, the first found,
+//!   or the copies in one folder; mark the rest. A tie goes to the
+//!   shortest path, then the first found. A helper never marks a whole
+//!   group; a group it cannot decide is left alone and said.
+//! - **Scope:** the roots are folders, the marked entries, or a
+//!   collection's places; a file reached twice is counted once.
 //! - **The check before the trash** ([`recheck_selection`]): every
 //!   keeper and every marked file is read again; a group whose keeper is
 //!   gone or changed is refused whole, and a marked file that changed is
@@ -38,6 +42,8 @@ mod recheck;
 mod select;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_shaped;
 mod words;
 
 use std::time::Duration;
@@ -311,7 +317,10 @@ pub enum DupError {
 pub struct DupFile {
     /// Where it is.
     pub place: Place,
-    /// When its contents last changed, when known.
+    /// Its size in bytes when it was hashed, so the trash plan can check
+    /// it again before anything moves.
+    pub size: u64,
+    /// When its contents last changed, when known, for the same check.
     pub modified: Option<Timestamp>,
     /// Its place in the order the search found files, from 0: what "first
     /// found" means.
@@ -430,6 +439,12 @@ pub struct DupResult {
     pub hard_links_left_out: u64,
     /// Files that could not be read, also in `left_out`.
     pub unreadable: u64,
+    /// Files reached a second time (a junction, a folder alias,
+    /// overlapping roots), counted once and also in `left_out`.
+    pub reached_twice: u64,
+    /// Files whose place has no random read, so the quick check was
+    /// skipped and the full hash read them whole.
+    pub no_quick: u64,
     /// The full hash's name: "BLAKE3", "SHA-256".
     pub hasher: &'static str,
 }
@@ -490,9 +505,22 @@ impl DupResult {
                 grouped_count(self.small_left_out, "file", "files")
             ));
         }
+        if self.reached_twice > 0 {
+            notes.push(format!(
+                "{} reached twice, counted once",
+                grouped_count(self.reached_twice, "file", "files")
+            ));
+        }
+        if self.no_quick > 0 {
+            notes.push(format!(
+                "{} read whole: no quick check there",
+                grouped_count(self.no_quick, "file", "files")
+            ));
+        }
         let others = (self.left_out.len() as u64)
             .saturating_sub(self.unreadable)
-            .saturating_sub(self.hard_links_left_out);
+            .saturating_sub(self.hard_links_left_out)
+            .saturating_sub(self.reached_twice);
         if others > 0 {
             notes.push(format!(
                 "{} left out by the walk",

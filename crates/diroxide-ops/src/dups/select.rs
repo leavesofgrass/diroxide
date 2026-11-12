@@ -7,20 +7,28 @@ use diroxide_core::format::human_size;
 
 use super::{DupGroup, DupResult, grouped_count};
 
-/// Which copy of each group to keep.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Which copy of each group to keep. Every rule keeps one copy and
+/// settles a tie the same way: the shortest full path, then the first
+/// found. [`KeepRule::InFolder`] keeps every copy in its folder.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum KeepRule {
-    /// The one changed last; a group with a time not known is left alone.
-    Newest,
-    /// The one changed first; a group with a time not known is left
-    /// alone.
+    /// The one changed first: the default (plan 5.5, the owner's answer
+    /// 54). A group with a time not known is left alone and said.
+    #[default]
     Oldest,
+    /// The one changed last. A group with a time not known is left alone
+    /// and said.
+    Newest,
+    /// The one with the shortest full path; a tie goes to the first
+    /// found.
+    ShortestPath,
+    /// The one whose name comes first, case ignored; a tie goes to the
+    /// shortest path, then the first found.
+    FirstByName,
     /// The one the search found first.
     FirstFound,
-    /// The one with the shortest full path; the first found of a tie.
-    ShortestPath,
-    /// The copies directly in this folder; a group with none there, or
-    /// with every copy there, is left alone.
+    /// The copies directly in this folder. A group with no copy there,
+    /// or with every copy there, is left alone and said.
     InFolder(Place),
 }
 
@@ -33,6 +41,7 @@ impl KeepRule {
             KeepRule::Oldest => "the oldest".to_owned(),
             KeepRule::FirstFound => "the first found".to_owned(),
             KeepRule::ShortestPath => "the shortest path".to_owned(),
+            KeepRule::FirstByName => "the first by name".to_owned(),
             KeepRule::InFolder(folder) => format!("the copies in {folder}"),
         }
     }
@@ -158,6 +167,15 @@ fn choose(index: usize, group: &DupGroup, rule: &KeepRule) -> GroupChoice {
     let distinct: Vec<usize> = (0..group.files.len())
         .filter(|&at| group.files[at].same_file_as.is_none())
         .collect();
+    let path_length = |at: usize| group.files[at].place.to_string().chars().count();
+    // The tie rule of every helper: the shortest path, then the first
+    // found.
+    let settle = |candidates: &[usize]| {
+        candidates
+            .iter()
+            .copied()
+            .min_by_key(|&at| (path_length(at), group.files[at].found))
+    };
     let first_found = |candidates: &[usize]| {
         candidates
             .iter()
@@ -183,20 +201,25 @@ fn choose(index: usize, group: &DupGroup, rule: &KeepRule) -> GroupChoice {
                 .filter(|&&(_, t)| Some(t) == best)
                 .map(|&(at, _)| at)
                 .collect();
-            first_found(&ties).into_iter().collect()
+            settle(&ties).into_iter().collect()
         }
         KeepRule::FirstFound => first_found(&distinct).into_iter().collect(),
-        KeepRule::ShortestPath => {
-            let shortest = distinct
-                .iter()
-                .map(|&at| group.files[at].place.to_string().chars().count())
-                .min();
+        KeepRule::ShortestPath => settle(&distinct).into_iter().collect(),
+        KeepRule::FirstByName => {
+            let name = |at: usize| {
+                group.files[at]
+                    .place
+                    .name()
+                    .unwrap_or_default()
+                    .to_lowercase()
+            };
+            let first = distinct.iter().map(|&at| name(at)).min();
             let ties: Vec<usize> = distinct
                 .iter()
                 .copied()
-                .filter(|&at| Some(group.files[at].place.to_string().chars().count()) == shortest)
+                .filter(|&at| Some(name(at)) == first)
                 .collect();
-            first_found(&ties).into_iter().collect()
+            settle(&ties).into_iter().collect()
         }
         KeepRule::InFolder(folder) => {
             let here: Vec<usize> = distinct
