@@ -613,7 +613,14 @@ impl TaskRunner {
                     tool: found.tool.clone(),
                     args: found.args.clone(),
                     timeout: found.timeout.as_secs(),
-                    version: self.actions.tool_version(&found.tool),
+                    // The engine's tools runner reads the version first
+                    // (lane CL's request 4); the frontend's answer is the
+                    // fallback for a runner that reads none.
+                    version: self
+                        .engine
+                        .tools()
+                        .version(&found.tool)
+                        .or_else(|| self.actions.tool_version(&found.tool)),
                 })
             }
             TaskAction::Script { id } => self.actions.resolve_script(id),

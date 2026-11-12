@@ -468,6 +468,28 @@ fn a_second_runner_is_refused_while_the_first_holds_the_task() {
 }
 
 #[test]
+fn the_tool_version_comes_from_the_engines_tools_first() {
+    use super::approval::Resolved;
+    let world = World::new();
+    let version = |runner: &super::runner::TaskRunner| match runner.resolve().unwrap() {
+        Resolved::Recipe { version, .. } => version,
+        other => panic!("{other:?}"),
+    };
+    // The runner reads no version: the frontend's answer stands.
+    let runner = world.bare_runner(world.task(""));
+    assert_eq!(version(&runner).as_deref(), Some("25.03.0"));
+    // The engine's tools runner reads one: it wins.
+    *world.tools.version.lock().unwrap() = Some("4.00".to_owned());
+    let runner = world.bare_runner(world.task(""));
+    assert_eq!(version(&runner).as_deref(), Some("4.00"));
+    // A new version changes the approval key: asked again.
+    let (_, before) = world.bare_runner(world.task("")).approval().unwrap();
+    *world.tools.version.lock().unwrap() = Some("4.01".to_owned());
+    let (_, after) = world.bare_runner(world.task("")).approval().unwrap();
+    assert_ne!(before, after);
+}
+
+#[test]
 fn a_task_runs_only_as_approved() {
     let world = World::new();
     let mut never = world.bare_runner(world.task(""));
