@@ -762,10 +762,15 @@ pub mod ids {
         DECRYPT = "file.decrypt";
         /// Encrypt the marked files with gpg, for keys or a passphrase.
         GPG_ENCRYPT = "file.gpg-encrypt";
+        /// Encrypt with gpg into ASCII armor, NAME.asc (lane AF).
+        GPG_ENCRYPT_TEXT = "file.gpg-encrypt-text";
         /// Decrypt OpenPGP files with gpg.
         GPG_DECRYPT = "file.gpg-decrypt";
         /// Make a detached gpg signature of each marked file.
         SIGN = "file.sign";
+        /// Sign with gpg into an ASCII armored signature, NAME.asc (lane
+        /// AF).
+        SIGN_TEXT = "file.sign-text";
         /// Check the focused file's signature, or the focused signature.
         VERIFY_SIGNATURE = "file.verify-signature";
     }
@@ -877,7 +882,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 303] = [
+pub static CATALOG: [CommandInfo; 305] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1783,6 +1788,14 @@ pub static CATALOG: [CommandInfo; 303] = [
         &[],
     ),
     command(
+        ids::GPG_ENCRYPT_TEXT,
+        "Encrypt with gpg, as text",
+        "As Encrypt with gpg, into NAME.asc instead: ASCII armor, text that can be pasted into a mail or a form.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
         ids::GPG_DECRYPT,
         "Decrypt with gpg",
         "Decrypts the marked OpenPGP files, or the focused one, with gpg; a key gpg's agent holds asks nothing, otherwise its passphrase is asked in a hidden field, never on a command line.",
@@ -1794,6 +1807,14 @@ pub static CATALOG: [CommandInfo; 303] = [
         ids::SIGN,
         "Sign with gpg",
         "Makes a detached signature, NAME.sig, of the marked files, or the focused one, with the gpg key you type or your default key, its passphrase asked in a hidden field.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SIGN_TEXT,
+        "Sign with gpg, as text",
+        "As Sign with gpg, into NAME.asc instead: an ASCII armored signature, text that can be pasted.",
         Panel,
         &[],
         &[],
