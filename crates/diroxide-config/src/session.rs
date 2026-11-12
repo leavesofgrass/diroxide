@@ -1,5 +1,5 @@
 //! The session: what the program restores when it starts again (R19):
-//! each panel's place, its focused entry, its sort, whether it shows
+//! each panel's tabs, and each tab's place, focused entry, sort, whether it shows
 //! hidden entries and its history; the layout and which panel was active.
 //! It lives in the state folder as `session.toml`, written atomically, and
 //! belongs to the configuration crate, not the app, so the app's core
@@ -44,7 +44,63 @@ impl Layout {
     }
 }
 
-/// One panel's state.
+/// A tab's lock (alpha 5, lane TB), said in words after its name: free,
+/// the default; locked, where the tab refuses to close and a folder
+/// change opens a new tab; pinned, kept at the start of the panel's tabs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TabLock {
+    /// Nothing held: the tab closes and changes folder.
+    #[default]
+    Free,
+    /// The tab refuses to close; a folder change opens a new tab.
+    Locked,
+    /// The tab is kept at the start of the panel's tabs.
+    Pinned,
+}
+
+impl TabLock {
+    /// The lock in words: "free", "locked", "pinned".
+    pub const fn word(self) -> &'static str {
+        match self {
+            TabLock::Free => "free",
+            TabLock::Locked => "locked",
+            TabLock::Pinned => "pinned",
+        }
+    }
+
+    /// The word said after a tab's name: none for a free tab, since only
+    /// a lock that holds is worth hearing.
+    pub const fn said(self) -> Option<&'static str> {
+        match self {
+            TabLock::Free => None,
+            other => Some(other.word()),
+        }
+    }
+}
+
+/// One tab of a panel (alpha 5, lane TB): its place, cursor, sort,
+/// hidden files, history and lock.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TabState {
+    /// The folder or other place shown.
+    pub place: Option<Place>,
+    /// The focused entry's name, put back under the cursor.
+    pub focused: Option<String>,
+    /// How the tab sorts.
+    pub sort: SortSpec,
+    /// Whether hidden entries are shown.
+    pub show_hidden: bool,
+    /// The places visited, oldest first, for back and forward.
+    pub history: Vec<Place>,
+    /// Free, locked or pinned.
+    pub lock: TabLock,
+}
+
+/// One panel's state. Its own fields are the current tab's, so a file
+/// written before tabs, which has no `tabs`, reads as one tab, and an
+/// older build reading a newer file finds the current tab where it looks.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PanelState {
@@ -58,6 +114,57 @@ pub struct PanelState {
     pub show_hidden: bool,
     /// The places visited, oldest first, for back and forward.
     pub history: Vec<Place>,
+    /// The current tab's lock.
+    pub lock: TabLock,
+    /// Every tab in order, the current one among them, when there is
+    /// more than one; empty for a panel of one tab (alpha 5, lane TB).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tabs: Vec<TabState>,
+    /// The current tab's index in `tabs`.
+    pub current_tab: usize,
+}
+
+impl PanelState {
+    /// The current tab as a panel of one tab describes it.
+    pub fn as_tab(&self) -> TabState {
+        TabState {
+            place: self.place.clone(),
+            focused: self.focused.clone(),
+            sort: self.sort.clone(),
+            show_hidden: self.show_hidden,
+            history: self.history.clone(),
+            lock: self.lock,
+        }
+    }
+
+    /// Every tab in order and the current one's index: the one tab of a
+    /// file written before tabs, or `tabs` with the index kept in range.
+    pub fn tab_list(&self) -> (Vec<TabState>, usize) {
+        if self.tabs.is_empty() {
+            return (vec![self.as_tab()], 0);
+        }
+        let current = self.current_tab.min(self.tabs.len() - 1);
+        (self.tabs.clone(), current)
+    }
+
+    /// A panel's state from its tabs in order and the current one's
+    /// index: the panel's own fields are the current tab's, and `tabs` is
+    /// written only when there is more than one.
+    pub fn from_tabs(tabs: Vec<TabState>, current: usize) -> Self {
+        let current = current.min(tabs.len().saturating_sub(1));
+        let now = tabs.get(current).cloned().unwrap_or_default();
+        let many = tabs.len() > 1;
+        Self {
+            place: now.place,
+            focused: now.focused,
+            sort: now.sort,
+            show_hidden: now.show_hidden,
+            history: now.history,
+            lock: now.lock,
+            tabs: if many { tabs } else { Vec::new() },
+            current_tab: if many { current } else { 0 },
+        }
+    }
 }
 
 /// What is restored at the next start.
@@ -189,5 +296,67 @@ mod tests {
             "session.toml could not be read: line 1 is not valid TOML. A copy is kept as session.toml.bad; the defaults are in use."
         );
         assert!(paths.state_file("session.toml.bad").exists());
+    }
+
+    fn folder(name: &str) -> Place {
+        let text = if cfg!(windows) {
+            format!(r"D:\{name}")
+        } else {
+            format!("/{name}")
+        };
+        Place::parse(&text).unwrap()
+    }
+
+    #[test]
+    fn a_session_written_before_tabs_reads_as_one_tab() {
+        let place = folder("docs");
+        let text = format!(
+            "version = 1\nactive = \"left\"\n\n[[panels]]\nplace = {:?}\nfocused = \"a.txt\"\n\n[[panels]]\n",
+            place.to_string()
+        );
+        let session = SessionState::from_toml(&text).unwrap();
+        let (tabs, current) = session.panel(Side::Left).tab_list();
+        assert_eq!(current, 0);
+        assert_eq!(tabs.len(), 1);
+        assert_eq!(tabs[0].place.as_ref(), Some(&place));
+        assert_eq!(tabs[0].focused.as_deref(), Some("a.txt"));
+        assert_eq!(tabs[0].lock, TabLock::Free);
+        assert_eq!(session.panel(Side::Right).tab_list().0.len(), 1);
+    }
+
+    #[test]
+    fn a_panel_of_three_tabs_reads_back_with_its_locks() {
+        let tab = |name: &str, lock| TabState {
+            place: Some(folder(name)),
+            focused: Some(format!("{name}.txt")),
+            lock,
+            ..TabState::default()
+        };
+        let tabs = vec![
+            tab("docs", TabLock::Pinned),
+            tab("music", TabLock::Free),
+            tab("work", TabLock::Locked),
+        ];
+        let mut session = SessionState::default();
+        *session.panel_mut(Side::Right) = PanelState::from_tabs(tabs.clone(), 2);
+        let right = session.panel(Side::Right);
+        // The panel's own fields are the current tab's, for older builds.
+        assert_eq!(right.place.as_ref(), Some(&folder("work")));
+        assert_eq!(right.lock, TabLock::Locked);
+        let text = session.to_toml().unwrap();
+        let back = SessionState::from_toml(&text).unwrap();
+        assert_eq!(back, session);
+        assert_eq!(back.panel(Side::Right).tab_list(), (tabs, 2));
+        // One tab writes no list of tabs.
+        let one = PanelState::from_tabs(vec![tab("docs", TabLock::Free)], 0);
+        assert!(one.tabs.is_empty());
+        assert_eq!(one.tab_list().0.len(), 1);
+        // A current index past the end is kept in range.
+        let mut far = PanelState::from_tabs(vec![tab("a", TabLock::Free); 2], 1);
+        far.current_tab = 9;
+        assert_eq!(far.tab_list().1, 1);
+        assert_eq!(TabLock::Pinned.word(), "pinned");
+        assert_eq!(TabLock::Free.said(), None);
+        assert_eq!(TabLock::Locked.said(), Some("locked"));
     }
 }
