@@ -15,6 +15,7 @@ pub mod components;
 pub mod convert;
 pub mod diff;
 pub mod doctor;
+pub mod dups;
 pub mod info;
 pub mod init;
 pub mod join;
