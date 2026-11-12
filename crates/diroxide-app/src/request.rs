@@ -599,6 +599,21 @@ pub enum Request {
     /// Write the saved tab sets to `tab-sets.toml` in the state folder
     /// (alpha 5, lane TB).
     SaveTabSets(Box<crate::tabs::TabSets>),
+    /// A batch rename's reads and writes (alpha 5, lane RA; reserved by
+    /// lane P5); answered as
+    /// [`AppEvent::Renaming`](crate::AppEvent::Renaming).
+    RenameBatch(Box<crate::rename_batch::RenameAsk>),
+    /// A folder compare or a synchronize (alpha 5, lane SA; reserved by
+    /// lane P5); answered as [`AppEvent::Syncing`](crate::AppEvent::Syncing).
+    Sync(Box<crate::sync_ui::SyncAsk>),
+    /// A duplicates scan (alpha 5, lane DA; reserved by lane P5);
+    /// answered as
+    /// [`AppEvent::Duplicates`](crate::AppEvent::Duplicates).
+    Duplicates(Box<crate::dups_ui::DupsAsk>),
+    /// The flat view, collections and recent files (alpha 5, lane LA;
+    /// reserved by lane P5); answered as
+    /// [`AppEvent::Lists`](crate::AppEvent::Lists).
+    Lists(Box<crate::lists::ListsAsk>),
     /// Find which of these places are gone, on a worker, for the Labels
     /// list's missing counts (W3l); answered as
     /// [`AppEvent::PlacesChecked`](crate::AppEvent::PlacesChecked).

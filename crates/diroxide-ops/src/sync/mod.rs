@@ -36,8 +36,8 @@
 //! `before_delete` hooks about its removals ([`SyncPlan::before_hooks`]),
 //! so a plugin that guards deletes also guards a mirror, and the report is
 //! split the same way for the `after_*` hooks ([`split_report`]). No new
-//! event names. Until `JobKind::Synchronize` exists (a contract request),
-//! a plan that copies runs as a copy job.
+//! event names: the job is a `JobKind::Synchronize`, and the engine asks
+//! and tells its hooks by the split ([`crate::hooks::HookCall::all`]).
 //!
 //! Out of this alpha: an rsync engine, Save as script, saved tasks that
 //! synchronize, and an archive compare by its stored CRC-32.

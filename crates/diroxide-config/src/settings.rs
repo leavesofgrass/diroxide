@@ -220,6 +220,14 @@ pub struct CompareSettings {
     pub context: u64,
     /// What happens to a larger file.
     pub large_files: LargeFilePolicy,
+    /// How far apart two modified times may be and still count as the
+    /// same in a folder compare, in seconds (alpha 5): never under two,
+    /// the step of FAT drives.
+    pub folder_tolerance_seconds: u64,
+    /// Whether times exactly an hour apart count as the same in a folder
+    /// compare, as a FAT drive shows them across daylight saving (alpha
+    /// 5).
+    pub folder_hour_shift: bool,
 }
 
 impl Default for CompareSettings {
@@ -236,6 +244,96 @@ impl Default for CompareSettings {
             text_limit_mib: 16,
             context: 2,
             large_files: LargeFilePolicy::Ask,
+            folder_tolerance_seconds: 2,
+            folder_hour_shift: false,
+        }
+    }
+}
+
+/// How batch rename's editor buffer writes its lines (alpha 5, question
+/// 134).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenameEditorLines {
+    /// "new name (was old name)": a line moved or removed is still
+    /// matched to its file.
+    #[default]
+    Keyed,
+    /// One new name a line, in the preview's order.
+    Plain,
+}
+
+/// The order of batch rename's preview (alpha 5, question 133).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenamePreviewOrder {
+    /// The rows with problems first, then the others in the panel's
+    /// order.
+    #[default]
+    ProblemsFirst,
+    /// The panel's order throughout.
+    Panel,
+}
+
+/// The `[rename]` table: batch rename (alpha 5). Portable names are the
+/// `portable_names` setting, shared with every rename.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RenameSettings {
+    /// How the editor buffer writes its lines.
+    pub editor_lines: RenameEditorLines,
+    /// The order of the preview.
+    pub preview_order: RenamePreviewOrder,
+}
+
+/// Which hidden files a duplicates scan reads (alpha 5, question 136).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DupHidden {
+    /// As the panel shows them.
+    #[default]
+    Panel,
+    /// Always read.
+    Include,
+    /// Always left out.
+    LeaveOut,
+}
+
+/// The `[duplicates]` table (alpha 5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DupSettings {
+    /// Above this much to read, in GB, the scan asks first.
+    pub ask_above_gb: u64,
+    /// Which hidden files it reads.
+    pub hidden: DupHidden,
+}
+
+impl Default for DupSettings {
+    fn default() -> Self {
+        Self {
+            ask_above_gb: 10,
+            hidden: DupHidden::Panel,
+        }
+    }
+}
+
+/// The `[lists]` table: lists that are not folders (alpha 5); the limits
+/// of a list of paths read from standard input (`diro -`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ListSettings {
+    /// The most paths read.
+    pub stdin_paths: u64,
+    /// The most bytes read, in MiB.
+    pub stdin_mib: u64,
+}
+
+impl Default for ListSettings {
+    fn default() -> Self {
+        Self {
+            stdin_paths: 16_384,
+            stdin_mib: 64,
         }
     }
 }
@@ -776,6 +874,12 @@ pub struct Settings {
     pub search_respect_ignore: bool,
     /// Comparing files (alpha.3).
     pub compare: CompareSettings,
+    /// Batch rename (alpha 5).
+    pub rename: RenameSettings,
+    /// Duplicates (alpha 5).
+    pub duplicates: DupSettings,
+    /// Lists that are not folders (alpha 5).
+    pub lists: ListSettings,
     /// Where the components list is read from; empty for the public list
     /// (alpha.4).
     pub components_source: String,
@@ -849,6 +953,9 @@ impl Default for Settings {
             search_row_cap: 100_000,
             search_respect_ignore: false,
             compare: CompareSettings::default(),
+            rename: RenameSettings::default(),
+            duplicates: DupSettings::default(),
+            lists: ListSettings::default(),
             components_source: String::new(),
             components_first_run_shown: false,
             components_ask_again: false,

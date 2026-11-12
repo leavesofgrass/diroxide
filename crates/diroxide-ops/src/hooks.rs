@@ -22,6 +22,7 @@
 //! A queued job runs its `before` hooks when it is planned, at submission,
 //! and its `after` hooks when it finishes.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -32,7 +33,7 @@ use diroxide_core::{EntryKind, JobId, JobKind, Place};
 use diroxide_vfs::CancelToken;
 
 use crate::engine::JobReport;
-use crate::plan::Plan;
+use crate::plan::{Plan, Step};
 
 /// The most items a hook hears about; the count says how many in all.
 pub const MAX_HOOK_ITEMS: usize = 1000;
@@ -181,6 +182,129 @@ impl HookCall {
             destination: plan.facts.destination.clone(),
         })
     }
+
+    /// Every call a plan's `before_*` hooks hear, in the order they are
+    /// asked. One call for a job whose kind has an event; for a
+    /// [`JobKind::Synchronize`], its copies and replaces as a copy, then
+    /// its removals as a delete (to the trash, or for good), so a plugin
+    /// that guards deletes also guards a mirror. No new event name.
+    pub fn all(plan: &Plan) -> Vec<Self> {
+        if plan.kind != JobKind::Synchronize {
+            return Self::of(plan).into_iter().collect();
+        }
+        hook_parts(plan).iter().filter_map(Self::of).collect()
+    }
+}
+
+/// Whether a step removes its subject: a move to the trash or a delete for
+/// good.
+fn removes(step: &Step) -> bool {
+    matches!(step, Step::Trash { .. } | Step::Remove { .. })
+}
+
+/// The kind a synchronize's removals are told as: a delete for good when
+/// any of them is one, else a move to the trash.
+fn removal_kind<'a>(mut steps: impl Iterator<Item = &'a Step>) -> JobKind {
+    if steps.any(|step| matches!(step, Step::Remove { .. })) {
+        JobKind::DeletePermanently
+    } else {
+        JobKind::Trash
+    }
+}
+
+/// A [`JobKind::Synchronize`] plan as the hooks hear it, one plan per
+/// event: its copies and replaces as a [`JobKind::Copy`], its removals as
+/// a [`JobKind::Trash`] or [`JobKind::DeletePermanently`]. Each part keeps
+/// only its own steps and expected entries, counted again; a part with no
+/// steps is left out. Any other plan is its one part.
+pub fn hook_parts(plan: &Plan) -> Vec<Plan> {
+    if plan.kind != JobKind::Synchronize {
+        return vec![plan.clone()];
+    }
+    let (gone, kept): (Vec<&Step>, Vec<&Step>) = plan.steps.iter().partition(|s| removes(s));
+    let gone_kind = removal_kind(gone.iter().copied());
+    [(kept, JobKind::Copy), (gone, gone_kind)]
+        .into_iter()
+        .filter(|(steps, _)| !steps.is_empty())
+        .map(|(steps, kind)| {
+            let mut part = Plan::new(
+                plan.job,
+                kind,
+                steps.into_iter().cloned().collect(),
+                plan.conflicts,
+            );
+            for step in &part.steps {
+                if let Some(entry) = plan.expected.get(step.subject()) {
+                    part.expected.insert(step.subject().clone(), entry.clone());
+                }
+            }
+            let mut facts = crate::plan::PlanFacts::default();
+            for (place, entry) in &part.expected {
+                if kind == JobKind::Copy {
+                    facts.count(place, entry);
+                } else {
+                    match entry.kind {
+                        EntryKind::Folder => facts.folders += 1,
+                        EntryKind::Link => facts.links += 1,
+                        _ => facts.files += 1,
+                    }
+                }
+            }
+            facts.counted = plan.facts.counted;
+            part.facts = facts;
+            part
+        })
+        .collect()
+}
+
+/// A job's report split by hook event, as its `after_*` hooks hear it:
+/// for a [`JobKind::Synchronize`], the copies as a copy and the removals
+/// as a delete (to the trash, or for good), each part holding only its
+/// own places, a part with no steps left out; any other report whole.
+pub fn split_report(plan: &Plan, report: &JobReport) -> Vec<JobReport> {
+    if plan.kind != JobKind::Synchronize {
+        return vec![report.clone()];
+    }
+    let copies: HashSet<&Place> = plan
+        .steps
+        .iter()
+        .filter(|step| !removes(step))
+        .map(Step::subject)
+        .collect();
+    let removals: HashSet<&Place> = plan
+        .steps
+        .iter()
+        .filter(|step| removes(step))
+        .map(Step::subject)
+        .collect();
+    let gone_kind = removal_kind(plan.steps.iter());
+    [(copies, JobKind::Copy), (removals, gone_kind)]
+        .into_iter()
+        .filter(|(places, _)| !places.is_empty())
+        .map(|(places, kind)| part_of(report, &places, kind))
+        .collect()
+}
+
+/// The part of a report about these places, as a job of this kind.
+fn part_of(report: &JobReport, places: &HashSet<&Place>, kind: JobKind) -> JobReport {
+    let mut part = JobReport::new(report.job, kind);
+    part.cancelled = report.cancelled;
+    part.stopped = report.stopped;
+    part.done = report
+        .done
+        .iter()
+        .filter(|place| places.contains(place))
+        .cloned()
+        .collect();
+    let mine = |list: &[(Place, String)]| -> Vec<(Place, String)> {
+        list.iter()
+            .filter(|(place, _)| places.contains(place))
+            .cloned()
+            .collect()
+    };
+    part.skipped = mine(&report.skipped);
+    part.failed = mine(&report.failed);
+    part
 }
 
 /// How a job ended, for `after_*`.
@@ -393,6 +517,15 @@ pub(crate) fn send_after(runner: &Arc<dyn HookRunner>, report: &JobReport) {
     let _ = thread::Builder::new()
         .name("diroxide-hook-after".to_owned())
         .spawn(move || runner.after(&after));
+}
+
+/// Sends a finished plan's `after_*` events, one per part of
+/// [`split_report`]: a synchronize's copies to `after_copy` and its
+/// removals to `after_delete`, nothing else to either.
+pub(crate) fn send_after_plan(runner: &Arc<dyn HookRunner>, plan: &Plan, report: &JobReport) {
+    for part in split_report(plan, report) {
+        send_after(runner, &part);
+    }
 }
 
 #[cfg(test)]

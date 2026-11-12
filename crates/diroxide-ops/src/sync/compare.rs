@@ -20,13 +20,13 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
-use std::io::Read;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use diroxide_core::format::{count, grouped, human_size};
 use diroxide_core::names::spell_out;
 use diroxide_core::{Entry, EntryKind, Place, PlaceKind, Side, Timestamp};
+use diroxide_vfs::equal::{EqualStop, Stream, equal_with};
 use diroxide_vfs::names::is_unfinished;
 use diroxide_vfs::{OpContext, Provider, Registry, VfsError};
 
@@ -1328,42 +1328,35 @@ impl PairWalk<'_> {
         }
         let mut right = readers.pop().ok_or(VfsError::NotFound)?;
         let mut left = readers.pop().ok_or(VfsError::NotFound)?;
-        let mut a = vec![0_u8; CHUNK];
-        let mut b = vec![0_u8; CHUNK];
-        loop {
-            self.hold()?;
-            let got_a = match fill(&mut left, &mut a) {
-                Ok(n) => n,
-                Err(error) => return Ok(Err((Some(Side::Left), error.to_string()))),
-            };
-            let got_b = match fill(&mut right, &mut b) {
-                Ok(n) => n,
-                Err(error) => return Ok(Err((Some(Side::Right), error.to_string()))),
-            };
-            self.progress.bytes_read += (got_a + got_b) as u64;
+        self.hold()?;
+        // The one block compare (`diroxide_vfs::equal`); a pause waits and
+        // a cancel stops between blocks, as before.
+        let cancel = self.ctx.cancel.clone();
+        let start = self.progress.bytes_read;
+        let mut held = None;
+        let answer = equal_with(&mut left, &mut right, CHUNK, &cancel, &mut |both| {
+            self.progress.bytes_read = start + both;
             self.tell(false);
-            if got_a != got_b || a[..got_a] != b[..got_b] {
-                return Ok(Ok(false));
-            }
-            if got_a == 0 {
-                return Ok(Ok(true));
+            self.hold().map_err(|error| {
+                held = Some(error);
+                VfsError::Cancelled
+            })
+        });
+        if let Some(error) = held {
+            return Err(error);
+        }
+        match answer {
+            Ok(equality) => Ok(Ok(equality.is_same())),
+            Err(EqualStop::Stopped(error)) => Err(error.into()),
+            Err(EqualStop::Read(stream, error)) => {
+                let side = match stream {
+                    Stream::First => Side::Left,
+                    Stream::Second => Side::Right,
+                };
+                Ok(Err((Some(side), error.to_string())))
             }
         }
     }
-}
-
-/// Reads until the buffer is full or the file ends; the bytes read.
-fn fill(reader: &mut dyn Read, buf: &mut [u8]) -> std::io::Result<usize> {
-    let mut filled = 0;
-    while filled < buf.len() {
-        match reader.read(&mut buf[filled..]) {
-            Ok(0) => break,
-            Ok(n) => filled += n,
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(filled)
 }
 
 /// Puts rows in pre-order: each folder right before what is inside it,

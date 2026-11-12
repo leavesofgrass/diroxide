@@ -119,6 +119,7 @@ impl Interrupted {
             JobKind::Undo => "an undo",
             JobKind::Restore => "a restore from the trash",
             JobKind::Purge => "a delete from the trash",
+            JobKind::Synchronize => "a synchronize",
             _ => "a job",
         };
         format!(

@@ -737,3 +737,34 @@ fn sha256_hashes_in_steps_and_hears_cancel() {
     let stopped = Sha256Hasher.hash(&mut std::io::Cursor::new(data), &cancel, &mut |_| {});
     assert_eq!(stopped, Err(VfsError::Cancelled));
 }
+
+#[test]
+fn the_default_hasher_is_blake3_and_finds_the_same_groups() {
+    // BLAKE3 of nothing, as the reference implementation gives it.
+    let empty = Blake3Hasher
+        .hash(
+            &mut std::io::Cursor::new(Vec::new()),
+            &CancelToken::new(),
+            &mut |_| {},
+        )
+        .unwrap();
+    let hex: String = empty.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+        hex,
+        "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+    );
+    let fake = FakeProvider::new();
+    fake.add_file(&p("/a/report.pdf"), b"same bytes here");
+    fake.add_file(&p("/b/report.pdf"), b"same bytes here");
+    fake.add_file(&p("/b/other.txt"), b"different bytes");
+    let result = run_with(
+        &fake,
+        &["/a", "/b"],
+        &DupOptions::default(),
+        &QuietSink,
+        &Blake3Hasher,
+    )
+    .unwrap();
+    assert_eq!(result.groups.len(), 1);
+    assert_eq!(result.hasher, "BLAKE3");
+}

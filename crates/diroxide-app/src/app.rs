@@ -81,6 +81,16 @@ mod staged;
 mod photos_ui;
 // Tabs: a panel holds a list of listers (alpha 5, lane TB).
 mod tabbing;
+// Reserved for alpha 5's app lanes by the pre-wiring step (lane P5):
+// batch rename (RA), compare and synchronize (SA), duplicates (DA), the
+// flat view, collections and recent files (LA), and the stubs' line.
+mod collections;
+mod duplicates;
+mod flat;
+mod recent;
+mod renaming;
+mod reserved;
+mod syncing;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -573,6 +583,18 @@ pub enum AppEvent {
     Access(Box<crate::access::AccessNote>),
     /// What the runtime read for the photo helpers (alpha 4, lane AP).
     Photos(Box<crate::photos::PhotoNote>),
+    /// What the runtime answered a batch rename (alpha 5, lane RA;
+    /// reserved by lane P5).
+    Renaming(Box<crate::rename_batch::RenameNote>),
+    /// What the runtime answered a folder compare or a synchronize (alpha
+    /// 5, lane SA; reserved by lane P5).
+    Syncing(Box<crate::sync_ui::SyncNote>),
+    /// What the runtime answered a duplicates scan (alpha 5, lane DA;
+    /// reserved by lane P5).
+    Duplicates(Box<crate::dups_ui::DupsNote>),
+    /// What the runtime answered the flat view, collections or recent
+    /// files (alpha 5, lane LA; reserved by lane P5).
+    Lists(Box<crate::lists::ListsNote>),
 }
 
 /// A place a plugin offers, for the go-to-place list (R25 commit 78):
@@ -2088,6 +2110,11 @@ impl App {
             AppEvent::HotFolder(note) => self.watched_note(*note),
             AppEvent::Access(note) => self.access_note(*note),
             AppEvent::Photos(note) => self.photo_note(*note),
+            // Reserved for alpha 5's app lanes (lane P5).
+            AppEvent::Renaming(note) => self.rename_note(*note),
+            AppEvent::Syncing(note) => self.sync_note(*note),
+            AppEvent::Duplicates(note) => self.dups_note(*note),
+            AppEvent::Lists(note) => self.lists_note(*note),
         }
     }
 
@@ -2143,6 +2170,21 @@ impl App {
         }
         // Tabs (alpha 5, lane TB).
         if let Some(effects) = self.tabs_dispatch(command) {
+            return effects;
+        }
+        // Reserved for alpha 5's app lanes (lane P5): batch rename (RA),
+        // compare and synchronize (SA), duplicates (DA), the flat view,
+        // collections and recent files (LA).
+        if let Some(effects) = self.rename_dispatch(command) {
+            return effects;
+        }
+        if let Some(effects) = self.sync_dispatch(command) {
+            return effects;
+        }
+        if let Some(effects) = self.dups_dispatch(command) {
+            return effects;
+        }
+        if let Some(effects) = self.lists_dispatch(command) {
             return effects;
         }
         // Watch this folder, and Cancel while it watches (W3t).

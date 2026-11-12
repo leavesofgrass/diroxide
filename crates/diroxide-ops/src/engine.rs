@@ -509,6 +509,7 @@ pub(crate) fn summary_word(kind: JobKind) -> String {
         JobKind::SetAttributes => "Permissions".to_owned(),
         JobKind::SetTimes => "Times".to_owned(),
         JobKind::MakeFolder => "Make folder".to_owned(),
+        JobKind::FindDuplicates => "Find duplicates".to_owned(),
         JobKind::Unknown => "Job".to_owned(),
         _ => {
             let verb = kind.verb();
@@ -636,15 +637,28 @@ impl Engine {
     /// time limit. Returns the lines to say while the job goes on, or
     /// [`OpsError::HookStopped`] with the line that stopped it. Nothing
     /// when the engine has no runner or the job's kind has no event.
+    ///
+    /// A plan may make several calls ([`HookCall::all`]): a synchronize
+    /// asks `before_copy` about its copies, then `before_delete` about its
+    /// removals, all before anything runs; the first veto stops it.
     pub fn before_hooks(&self, plan: &Plan, control: &JobControl) -> Result<Vec<String>, OpsError> {
-        let (Some(runner), Some(call)) = (&self.hooks, HookCall::of(plan)) else {
+        let Some(runner) = &self.hooks else {
             return Ok(Vec::new());
         };
-        match hooks::ask_before(runner, &call, &control.cancel) {
-            None => Err(OpsError::Vfs(VfsError::Cancelled)),
-            Some(Ok(warnings)) => Ok(warnings),
-            Some(Err(line)) => Err(OpsError::HookStopped(line)),
+        let mut warnings = Vec::new();
+        for call in HookCall::all(plan) {
+            match hooks::ask_before(runner, &call, &control.cancel) {
+                None => return Err(OpsError::Vfs(VfsError::Cancelled)),
+                Some(Ok(lines)) => warnings.extend(lines),
+                Some(Err(line)) => return Err(OpsError::HookStopped(line)),
+            }
         }
+        Ok(warnings)
+    }
+
+    /// The hook runner this engine asks, `None` without hooks.
+    pub fn hook_runner(&self) -> Option<&Arc<dyn HookRunner>> {
+        self.hooks.as_ref()
     }
 
     /// The same engine sharing this global speed limit: an engine made
@@ -745,7 +759,12 @@ impl Engine {
     pub fn run(&self, plan: &Plan, control: &JobControl, sink: &dyn JobSink) -> JobReport {
         let by_bytes = matches!(
             plan.kind,
-            JobKind::Copy | JobKind::Duplicate | JobKind::Move | JobKind::Split | JobKind::Join
+            JobKind::Copy
+                | JobKind::Duplicate
+                | JobKind::Move
+                | JobKind::Split
+                | JobKind::Join
+                | JobKind::Synchronize
         ) && plan.facts.counted
             && plan.facts.bytes > 0;
         // A split counts its parts, not its sidecars.
@@ -768,9 +787,10 @@ impl Engine {
             run.execute();
             drop(stop);
             let report = run.into_report();
-            // The after hooks hear the report once, never waited for.
+            // The after hooks hear the report once per event, never
+            // waited for: a synchronize's copies and removals apart.
             if let Some(runner) = &self.hooks {
-                hooks::send_after(runner, &report);
+                hooks::send_after_plan(runner, plan, &report);
             }
             report
         })

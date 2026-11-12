@@ -715,6 +715,10 @@ impl<'a> Planner<'a> {
                 None => folders.push((folder, vec![row])),
             }
         }
+        // Folders deepest first (alpha 5, lane P5): a batch that renames a
+        // folder and something inside it renames the inside first, while
+        // its place still holds.
+        folders.sort_by_key(|(folder, _)| std::cmp::Reverse(depth(folder)));
         let job = self.request.id.get();
         let mut hop = 0;
         for (folder, rows) in folders {
@@ -835,6 +839,83 @@ impl<'a> Planner<'a> {
         self.plan.facts.error_policy = self.request.errors;
         self.plan.facts.items = self.request.sources.len().max(self.request.renames.len()) as u64;
         self.plan
+    }
+}
+
+/// How many folders a place is below its root.
+fn depth(place: &Place) -> usize {
+    let mut depth = 0;
+    let mut at = place.parent();
+    while let Some(parent) = at {
+        depth += 1;
+        at = parent.parent();
+    }
+    depth
+}
+
+impl Engine {
+    /// The rename checks of the planner, row by row (alpha 5, lane P5):
+    /// for each `(place, new name)` pair, the line the plan would refuse
+    /// it with, or `None` when the pair passes. Where [`Engine::plan`]
+    /// stops at the first refusal, this says every row's, so a preview
+    /// can show them all: a name the place cannot store, a slash in a
+    /// name, a source that cannot be read, two rows given one new name in
+    /// a folder (both rows say it). A name the same as the old is no
+    /// problem; the plan leaves it out.
+    pub fn check_renames(&self, pairs: &[(Place, String)]) -> Vec<Option<String>> {
+        let request = JobRequest::new(diroxide_core::JobId::new(0), JobKind::Rename, Vec::new());
+        let control = JobControl::new();
+        let planner = Planner::new(self, &request, &control, &Quiet);
+        let mut lines: Vec<Option<String>> = Vec::with_capacity(pairs.len());
+        // (folder, folded new name) of every row that passed, by row.
+        let mut keys: Vec<Option<(Place, String)>> = Vec::with_capacity(pairs.len());
+        for (from, name) in pairs {
+            let checked = (|| -> Result<(Place, String), OpsError> {
+                let folder = from.parent().ok_or(OpsError::NothingSelected)?;
+                planner.check_new_name(&folder, name)?;
+                folder.join(name).map_err(|_| {
+                    OpsError::NameRefused(format!("A name cannot hold a slash: {name}"))
+                })?;
+                planner.stat(from)?;
+                let insensitive = !planner
+                    .provider(&folder)?
+                    .capabilities(&folder)
+                    .case_sensitive;
+                let key = if insensitive {
+                    name.to_lowercase()
+                } else {
+                    name.clone()
+                };
+                Ok((folder, key))
+            })();
+            match checked {
+                // The same name: the plan leaves it out, so it clashes
+                // with nothing.
+                Ok(_) if from.name() == Some(name.as_str()) => {
+                    lines.push(None);
+                    keys.push(None);
+                }
+                Ok(key) => {
+                    lines.push(None);
+                    keys.push(Some(key));
+                }
+                Err(error) => {
+                    lines.push(Some(error.to_string()));
+                    keys.push(None);
+                }
+            }
+        }
+        for (i, key) in keys.iter().enumerate() {
+            let Some(key) = key else { continue };
+            let twin = keys
+                .iter()
+                .enumerate()
+                .any(|(j, other)| j != i && other.as_ref() == Some(key));
+            if twin && lines[i].is_none() {
+                lines[i] = Some(format!("Two items would both be named {}", pairs[i].1));
+            }
+        }
+        lines
     }
 }
 
@@ -1719,6 +1800,80 @@ mod tests {
                 &sink
             ),
             Err(OpsError::Vfs(VfsError::Cancelled))
+        );
+    }
+
+    #[test]
+    fn the_exported_rename_check_says_every_problem_the_plan_refuses() {
+        let fake = FakeProvider::new();
+        for n in 0..200 {
+            fake.add_file(&p(&format!("/a/f{n:03}.txt")), b"x");
+        }
+        let engine = engine(&fake);
+        let mut pairs: Vec<(Place, String)> = (0..200)
+            .map(|n| (p(&format!("/a/f{n:03}.txt")), format!("g{n:03}.txt")))
+            .collect();
+        // A clean batch: no row has a problem, and the plan takes it.
+        let clean = engine.check_renames(&pairs);
+        assert!(clean.iter().all(Option::is_none));
+        let batch = |pairs: &[(Place, String)]| {
+            JobRequest::new(JobId::new(8), JobKind::Rename, Vec::new()).renaming(pairs.to_vec())
+        };
+        assert!(engine.plan(&batch(&pairs)).is_ok());
+        // Three problems: a twin pair, a source that is gone, a slash.
+        pairs[10].1 = "same.txt".to_owned();
+        pairs[150].1 = "same.txt".to_owned();
+        pairs[42].0 = p("/a/gone.txt");
+        pairs[77].1 = "a/b.txt".to_owned();
+        let lines = engine.check_renames(&pairs);
+        let problems: Vec<usize> = (0..200).filter(|i| lines[*i].is_some()).collect();
+        assert_eq!(problems, [10, 42, 77, 150]);
+        assert_eq!(
+            lines[10].as_deref(),
+            Some("Two items would both be named same.txt")
+        );
+        assert_eq!(lines[10], lines[150]);
+        // The plan refuses the batch, with one of the lines the check said.
+        let refused = engine.plan(&batch(&pairs)).unwrap_err().to_string();
+        assert!(
+            lines.iter().flatten().any(|line| *line == refused),
+            "{refused}"
+        );
+        // Each problem alone is refused by the plan with its own line.
+        for i in &problems {
+            if *i == 150 {
+                continue;
+            }
+            let mut one = vec![pairs[*i].clone()];
+            if *i == 10 {
+                one.push(pairs[150].clone());
+            }
+            let error = engine.plan(&batch(&one)).unwrap_err().to_string();
+            assert_eq!(Some(error), lines[*i].clone(), "row {i}");
+        }
+    }
+
+    #[test]
+    fn a_folder_and_its_inside_rename_inside_first() {
+        let fake = FakeProvider::new();
+        fake.add_file(&p("/a/inner/x.txt"), b"x");
+        let request = JobRequest::new(JobId::new(9), JobKind::Rename, Vec::new()).renaming(vec![
+            (p("/a/inner"), "outer".into()),
+            (p("/a/inner/x.txt"), "y.txt".into()),
+        ]);
+        let plan = engine(&fake).plan(&request).unwrap();
+        assert_eq!(
+            plan.steps,
+            vec![
+                Step::Rename {
+                    from: p("/a/inner/x.txt"),
+                    to: p("/a/inner/y.txt")
+                },
+                Step::Rename {
+                    from: p("/a/inner"),
+                    to: p("/a/outer")
+                },
+            ]
         );
     }
 }

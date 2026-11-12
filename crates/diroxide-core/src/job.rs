@@ -101,6 +101,17 @@ pub enum JobKind {
     /// Read the text in a picture with an OCR program (Tesseract) into
     /// the viewer; nothing is written (alpha 4, VA's request 4).
     ReadPictureText,
+    /// Synchronize two folders from a compare (alpha 5): the copies, the
+    /// replaces and the removals of one plan as one job with one undo
+    /// record. The hooks hear its copies as a copy and its removals as a
+    /// delete, never an event of its own.
+    Synchronize,
+    /// Compare two folders (alpha 5): reads both, writes nothing, emits
+    /// no hook.
+    Compare,
+    /// Find duplicate files (alpha 5): reads and hashes, writes nothing;
+    /// what the owner marks goes to the trash as an ordinary delete.
+    FindDuplicates,
     /// A kind this version does not know. Never planned.
     #[serde(other)]
     Unknown,
@@ -142,6 +153,9 @@ impl JobKind {
         JobKind::StripMetadata,
         JobKind::Rewrite,
         JobKind::ReadPictureText,
+        JobKind::Synchronize,
+        JobKind::Compare,
+        JobKind::FindDuplicates,
         JobKind::Unknown,
     ];
 
@@ -180,6 +194,9 @@ impl JobKind {
             JobKind::StripMetadata => "strip",
             JobKind::Rewrite => "rewrite",
             JobKind::ReadPictureText => "read the text in",
+            JobKind::Synchronize => "synchronize",
+            JobKind::Compare => "compare",
+            JobKind::FindDuplicates => "find duplicates in",
             JobKind::Unknown => "run an unknown job on",
         }
     }
@@ -219,6 +236,9 @@ impl JobKind {
             JobKind::StripMetadata => "Stripping metadata",
             JobKind::Rewrite => "Rewriting",
             JobKind::ReadPictureText => "Reading text",
+            JobKind::Synchronize => "Synchronizing",
+            JobKind::Compare => "Comparing",
+            JobKind::FindDuplicates => "Finding duplicates",
             JobKind::Unknown => "Working",
         }
     }
@@ -788,13 +808,16 @@ mod tests {
             JobKind::StripMetadata => 28,
             JobKind::Rewrite => 29,
             JobKind::ReadPictureText => 30,
-            JobKind::Unknown => 31,
+            JobKind::Synchronize => 31,
+            JobKind::Compare => 32,
+            JobKind::FindDuplicates => 33,
+            JobKind::Unknown => 34,
         }
     }
 
     #[test]
     fn every_kind_has_its_words() {
-        assert_eq!(JobKind::ALL.len(), 32);
+        assert_eq!(JobKind::ALL.len(), 35);
         let mut words = std::collections::HashSet::new();
         for (at, kind) in JobKind::ALL.iter().enumerate() {
             assert_eq!(position(*kind), at, "{kind:?}");

@@ -278,6 +278,24 @@ Remember recent files. Keeps a list of the files opened or edited from diroxide,
 - Holds: true or false.
 - Default: `true`.
 
+### rename.editor_lines
+
+Rename editor lines. How Batch rename writes the names for your text editor. Keyed lines keep each file's old name, so a line moved or removed still finds its file.
+
+- Holds: one of keyed or plain.
+- Default: `"keyed"`.
+- `keyed`: new name, then the old name in brackets.
+- `plain`: one new name a line.
+
+### rename.preview_order
+
+Rename preview order. The order of Batch rename's preview. Counters always number in the panel's order.
+
+- Holds: one of problems_first or panel.
+- Default: `"problems_first"`.
+- `problems_first`: problems first, then the panel's order.
+- `panel`: the panel's order.
+
 ## Jobs and transfers
 
 ### jobs.per_host
@@ -769,6 +787,37 @@ Search skips ignored files. Leaves out files that .gitignore and similar files n
 - Holds: true or false.
 - Default: `false`.
 
+### duplicates.ask_above_gb
+
+Duplicates ask above. Find duplicates asks first when it would read more than this.
+
+- Holds: a number of GB, 1 to 100000.
+- Default: `10`.
+
+### duplicates.hidden
+
+Duplicates hidden files. Which hidden files Find duplicates reads.
+
+- Holds: one of panel, include or leave_out.
+- Default: `"panel"`.
+- `panel`: as the panel shows them.
+- `include`: always read.
+- `leave_out`: always left out.
+
+### lists.stdin_paths
+
+Paths from standard input. The most paths diro reads from standard input into a list.
+
+- Holds: a number of paths, 1 to 1000000.
+- Default: `16384`.
+
+### lists.stdin_mib
+
+Standard input limit. The most diro reads from standard input for a list of paths.
+
+- Holds: a number of MiB, 1 to 1024.
+- Default: `64`.
+
 ## Compare
 
 ### compare.ignore_line_endings
@@ -853,6 +902,20 @@ Larger files. What a compare does with a file over the text compare limit.
 - `ask`: ask each time.
 - `head`: compare their first part as text.
 - `bytes`: compare them byte by byte.
+
+### compare.folder_tolerance_seconds
+
+Folder compare time slack. How far apart two modified times may be and still count as the same when comparing folders. Never under two, the step of FAT drives.
+
+- Holds: a number of seconds, 2 to 3600.
+- Default: `2`.
+
+### compare.folder_hour_shift
+
+Folder compare hour shift. Times exactly an hour apart count as the same when comparing folders, as a FAT drive shows them across daylight saving.
+
+- Holds: true or false.
+- Default: `false`.
 
 ## Plugins
 
