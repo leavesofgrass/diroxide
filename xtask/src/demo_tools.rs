@@ -1,6 +1,8 @@
-//! `cargo xtask demo-tools PATH`: the owner's demo set for the alpha 4
-//! check (R30's commits 118 and 119, section 5.2), written into a new or
-//! empty folder on drive D: with plain names only:
+//! `cargo xtask demo-tools PATH`: the owner's demo set, written into a
+//! new or empty folder on drive D: with plain names only. The alpha 5
+//! check's fixtures (R34's commits 37 and 38, section 5.2) are in
+//! [`alpha5`]: `rename`, `sync`, `dups`, `flat`, `state`, `open` and
+//! `paths.nul`. Alpha 4's (R30's commits 118 and 119) stay beside them:
 //!
 //! - `photos`: the sample folder's twelve PNGs and `broken.png`, the PNG
 //!   signature then noise;
@@ -32,12 +34,14 @@
 //!   and `failed`, and its task file `scans.toml` for the config folder's
 //!   `tasks`;
 //! - `out`, empty;
-//! - `check-steps.txt`: the owner's steps in plain lines, one a line.
+//! - `check-steps.txt`: the alpha 5 check's steps in plain lines, one a
+//!   line.
 //!
 //! Every file has fixed bytes and a fixed modified time, nothing is
 //! downloaded, and no hostile name is on the disk. The command lists each
-//! fixture with its size, one line each, the name first, and ends with the
-//! one `diro` line that starts the check.
+//! fixture with its size, one line each, the name first, then the shell
+//! lines of steps 2 and 8, and ends with the one `diro` line that starts
+//! the check.
 
 use std::fs;
 use std::path::Path;
@@ -55,8 +59,18 @@ use crate::bench::{pack_items, target_folder};
 use crate::demo::{NOTES_ORG, REPORT_MD, checked_folder};
 use crate::sample::{PHOTOS, png};
 
-/// The fixtures, in the order the command lists them.
-pub const FIXTURES: [&str; 10] = [
+mod alpha5;
+
+/// The fixtures, in the order the command lists them: alpha 5's, then
+/// alpha 4's.
+pub const FIXTURES: [&str; 17] = [
+    "rename",
+    "sync",
+    "dups",
+    "flat",
+    "state",
+    "open",
+    "paths.nul",
     "photos",
     "mixed",
     "music",
@@ -73,7 +87,7 @@ pub const FIXTURES: [&str; 10] = [
 pub const STEPS_FILE: &str = "check-steps.txt";
 
 const USAGE: &str =
-    "Usage: cargo xtask demo-tools PATH, a new or empty folder on drive D:, such as D:\\dirocheck4";
+    "Usage: cargo xtask demo-tools PATH, a new or empty folder on drive D:, such as D:\\dirocheck5";
 
 /// The placeholder identity of the demo repositories.
 const GIT_NAME: &str = "Ada Example";
@@ -1138,71 +1152,106 @@ fn hot(folder: &Path) -> Result<()> {
 // ---------------------------------------------------------------------
 // the steps
 
-/// The owner's steps (R30 section 5.1's twelve, with the lines of the
-/// lanes since), one plain line each, `{PATH}` the demo folder.
+/// The owner's steps for the alpha 5 check (R34 section 5.1's ten), one
+/// plain line each: `{PATH}` the demo folder, `{START}`, `{RENAME}` and
+/// `{PIPE}` the lines of [`start_line`], [`rename_line`] and
+/// [`pipe_line`]. The words are the plan's; a step whose lanes had not
+/// reported their words when this was written ends with a line starting
+/// "To be checked", naming them.
 const STEPS: &[&str] = &[
-    "The alpha 4 check, in two sittings: steps 0 to 6, then 7 to 12.",
-    "NVDA first, then JAWS, then the Mantis.",
+    "The alpha 5 check, about 30 minutes, steps 0 to 9.",
+    "NVDA for every step; JAWS for 0, 1, 3, 4 and 5; the Mantis for 1, 3, 4, 5 and 7.",
     "Each line in quotes is what to hear; a different line is a finding.",
-    "Start: diro --portable {PATH}\\photos {PATH}\\out",
+    "A line starting To be checked: those lanes had not reported their words yet.",
+    "First copy the folder {PATH}\\state\\saved into the state folder beside diro.",
+    "Start: {START}",
     "",
-    "Step 0, tools. In a shell: diro doctor. Then Settings, the Tools page.",
-    "Hear: each tool's name first, one fact a line, no folder of yours.",
+    "Step 0, tabs. New tab: Ctrl+T in the window, the View menu in a terminal.",
+    "Hear: \"here, tab 2 of 2\". Go to {PATH}\\rename. Previous tab, Next tab.",
+    "The palette, Tab list: rows name first. Lock the tab:",
+    "Hear: \"rename, tab 2 of 2, locked\". Close tab:",
+    "Hear: \"Tab is locked. Unlock it to close.\"",
+    "Unlock, close, then Undo close tab: \"Reopened rename, tab 2 of 2\".",
+    "Save the tab set as Work, quit, start again: the tabs are back.",
+    "Load it by name: \"Tab set Work loaded, 2 tabs\".",
+    "Listen for: no tab words while only one tab is open.",
+    "To be checked: TB's tab words.",
     "",
-    "Step 1, a photo. In {PATH}\\mixed, Down to portrait.jpg, Alt+Enter.",
-    "Then the palette, Say Details: \"JPEG, 300 by 400, has location\".",
-    "Hear: \"Dimensions: 300 by 400, as shown\", \"Taken: 2026-10-11 09:30\".",
-    "Hear: \"Camera: Example Camera\", \"Location:\", \"Camera serial:\".",
+    "Step 1, rename fifty files by a rule. In rename, mark all 52, F2.",
+    "Add the rule Replace IMG_ with trip-.",
+    "Hear: \"50 of 52 files will change. No problems.\"",
+    "Rows: \"IMG_0001.jpg becomes trip-0001.jpg\".",
+    "Space on a row: \"Skipped by you: IMG_0002.jpg\". Space again.",
+    "Apply: \"Rename 50 files? y or n\", No the default. Then y.",
+    "Hear: \"Renamed 50 files.\" Ctrl+Z: \"Undid rename of 50 files.\"",
+    "To be checked: BR's and RA's rename words.",
     "",
-    "Step 2, a song. In music, Alt+Enter on song.mp3.",
-    "Hear: \"Length: 12 sec\", \"Bit rate: 128 kbps\", \"Artist: Ada Example\". No sound.",
+    "Step 2, swap two names in the editor. Mark a.txt and b.txt, F2,",
+    "then Edit names in the editor. Lines: \"a.txt (was a.txt)\", \"b.txt (was b.txt)\".",
+    "Swap the first words, save, close: \"2 of 2 files will change. No problems.\"",
+    "Row: \"Swap with b.txt: a.txt becomes b.txt\".",
+    "Open the editor again and give both the name b.txt.",
+    "Hear: \"1 problem. 0 of 2 files will change.\"",
+    "Hear: \"Problem, name taken: a.txt becomes b.txt\".",
+    "Apply: \"Cannot rename: 1 problem.\" Fix it, apply, undo.",
+    "From a shell: {RENAME}",
+    "It ends: \"Nothing was renamed.\"",
+    "To be checked: RA's editor words and CX's diro rename.",
     "",
-    "Step 3, a PDF. In docs, Alt+Enter on report.pdf.",
-    "Hear: \"Title: Example Report\", \"Pages: 3\". Then Shift+F3, the quick view.",
-    "Without pdftotext: \"No preview: pdftotext not found\".",
+    "Step 3, compare two folders. The palette, Compare folders.",
+    "Hear: \"5 differences in 10 files\", \"2 different, 1 only here, 1 only there\".",
+    "Hear: \"1 type differs. 5 same.\"",
+    "Rows: \"Different, notes.txt, newer here\", \"Different, todo.txt, newer there\".",
+    "Rows: \"Only here, plan.md\", \"Only there, old.txt\", \"Type differs, thing, file here\".",
+    "Enter on the first: the file compare's verdict line, as alpha 3 says it.",
+    "Listen for: d.txt, one second apart, counted as same.",
+    "To be checked: CS's and SA's compare words.",
     "",
-    "Step 4, file types. In mixed, Alt+Enter on liar.png.",
-    "Hear: \"Name says PNG; contents say JPEG\".",
-    "The palette, Groups: \"Images: 2 files here\".",
-    "F3 on cp1250.txt, the palette, Encoding, then Central European.",
-    "Hear: \"Encoding Windows-1250, chosen by you\".",
-    "In docs, on report.pdf, the palette, Open with: \"Open report.pdf with:\".",
+    "Step 4, synchronize from the plan. The palette, Synchronize.",
+    "Choose \"Update the other panel\". Hear: \"Plan: 1 copy, 1 replace, 3 skipped\".",
+    "Rows: \"Copy there: plan.md, only here\", \"Replace there: notes.txt, newer here\".",
+    "Row: \"Skip: todo.txt, newer there\".",
+    "Space on the replace row: \"Skipped by you: notes.txt\". Space again.",
+    "Run: \"Synchronize 2 items? y or n\". y: \"Synchronize finished: 2 done\".",
+    "The old notes.txt is in the trash; Ctrl+Z puts both sides back.",
+    "Choose \"Mirror to the other panel\": \"Trash there: old.txt, only there\".",
+    "Press Escape: nothing changes.",
+    "To be checked: CS's and SA's synchronize words.",
     "",
-    "Step 5, convert pictures. In photos, select all, the palette, Convert.",
-    "Hear: \"Image to JPEG\" first, then the plan's question starting on No.",
-    "y. The report puts failures first: broken.png, cannot read it.",
-    "The JPEGs are in out. Ctrl+Z puts them in the trash.",
+    "Step 5, duplicates. In {PATH}\\dups, the palette, Find duplicates, This folder.",
+    "Hear: \"3 groups, 7 files, 44 KB to free\", \"2 empty files left out\".",
+    "Hear: \"Group 1 of 3, 3 copies, 16 KB each\".",
+    "Enter: \"crow.png, copy 1 of 3, in photos/a\".",
+    "Keep oldest: \"Marked 4 files, 44 KB. 3 kept.\"",
+    "Space on a group's last unmarked copy: \"One copy must stay.\"",
+    "F8: the plan lists four files and the question starts on No. y.",
+    "Ctrl+Z restores them.",
+    "Listen for: near-a.bin and near-b.bin, alike at both ends, in no group.",
+    "Listen for: linked/one.txt and linked/two.txt, one file, in no group.",
+    "To be checked: DU's and DA's duplicates words.",
     "",
-    "Step 6, convert a document. In docs, report.md, the palette, Convert.",
-    "Hear: \"Markdown to Word\"; the plan \"Convert 1 file to Word?\". y.",
+    "Step 6, flat view. In {PATH}\\flat\\work, the palette, Flat view.",
+    "Hear: \"Flat view on, 14 files in 4 folders\".",
+    "Two rows share a name: \"readme.txt, in a\", \"readme.txt, in b/deep\".",
+    "Show in its folder on the second. Off: \"Flat view off. work.\"",
+    "To be checked: FC's and LA's flat view words.",
     "",
-    "Step 7, verify a download. In download, example-tool.zip, Checksum.",
-    "Hear: \"SHA-256 of example-tool.zip\" and the value's start.",
-    "Verify checksum: two lists are beside it, choose one, then \"1 file matches\".",
-    "On SHA256SUMS, Verify checksum: \"1 differs, 1 missing, 1 match\".",
-    "Hear: \"List not signed\". No word like safe or genuine.",
+    "Step 7, collections. Go menu, Collections.",
+    "Hear: \"Trip photos, collection, 3 items\".",
+    "Hear: \"Large images, saved search, runs on open\".",
+    "Open the first: \"Missing: gone.txt, in old/place\".",
+    "F8 on an item: \"Removed 1 from Trip photos.\", \"The file was not touched.\"",
+    "The file is still there. Mark two files in a panel, Save as collection.",
+    "To be checked: FC's and LA's collection words.",
     "",
-    "Step 8, git. In repo: the title line says main and what changed.",
-    "Plugins menu, Git, Status: \"Modified: hello.txt\", \"Untracked: notes.txt\".",
-    "In repo-hook: \"Not trusted: its config runs a program\", then n.",
+    "Step 8, a list from a pipe. In cmd.exe: {PIPE}",
+    "Hear: \"3 paths from standard input\".",
+    "To be checked: FC's NUL reader and CX's diro -.",
     "",
-    "Step 9, disk images. In disk, Enter on example.iso, then EFI.",
-    "F5 copies README.TXT out. Enter on two-parts.img: two partitions.",
-    "Hear: \"Partition 1, BOOT, FAT16\". F5 copies hello.txt out.",
-    "",
-    "Step 10, a watched folder. Copy hot\\scans.toml into tasks in diro's config folder.",
-    "The palette, hot: \"Scans, off\" and its rule. Preview, then Turn on: n.",
-    "",
-    "Step 11, components. Tools menu, Manage optional components.",
-    "Each row names the component and its use first.",
-    "",
-    "Step 12, more of alpha 4, each answered No or closed with Escape.",
-    "In mixed, F3 on portrait.jpg in the window: the picture, its sentence said first; Escape goes back.",
-    "On any file, File menu, Change time: \"Change the times of\" first.",
-    "In photos, Tools menu, Review pictures: \"Review: 1 of 13\", then Escape.",
-    "Move into month folders: the question starts on No; n.",
-    "File menu, Y, the Encryption submenu: seven items.",
-    "In download, Enter on example-tool.zip, Delete: the rewrite question, n.",
+    "Step 9, recent files. In {PATH}\\open, Enter on report.md, F4 on notes.txt.",
+    "The palette, Recent files: \"Recent: 2 files, newest notes.txt\".",
+    "Clear: \"Recent files cleared.\" Settings: turn the list off.",
+    "To be checked: FC's and LA's recent files words.",
 ];
 
 /// The steps' text for the demo folder.
@@ -1210,7 +1259,12 @@ pub fn steps_text(folder: &Path) -> String {
     let path = folder.display().to_string();
     let mut text = String::new();
     for line in STEPS {
-        text.push_str(&line.replace("{PATH}", &path));
+        let line = line
+            .replace("{START}", &start_line(folder))
+            .replace("{RENAME}", &rename_line(folder))
+            .replace("{PIPE}", &pipe_line(folder))
+            .replace("{PATH}", &path);
+        text.push_str(&line);
         text.push('\n');
     }
     text
@@ -1255,7 +1309,12 @@ fn files_under(path: &Path) -> (u64, u64) {
 
 /// A fixture's line: its name, how many files, their size.
 fn fixture_line(folder: &Path, name: &str) -> String {
-    let (files, bytes) = files_under(&folder.join(name));
+    let path = folder.join(name);
+    if path.is_file() {
+        let bytes = fs::metadata(&path).map_or(0, |meta| meta.len());
+        return format!("{name}, a file, {}", human_size(bytes));
+    }
+    let (files, bytes) = files_under(&path);
     match files {
         0 => format!("{name}, empty folder"),
         1 => format!("{name}, 1 file, {}", human_size(bytes)),
@@ -1263,9 +1322,33 @@ fn fixture_line(folder: &Path, name: &str) -> String {
     }
 }
 
+/// Step 2's shell line: a rename tried without renaming.
+pub fn rename_line(folder: &Path) -> String {
+    format!(
+        "diro rename --in {} --find IMG_ --replace trip- --dry-run",
+        folder.join("rename").display()
+    )
+}
+
+/// Step 8's cmd.exe line: `paths.nul` fed to `diro -`.
+pub fn pipe_line(folder: &Path) -> String {
+    format!("diro - < {}", folder.join("paths.nul").display())
+}
+
+/// The line that starts the check: the two sides of `sync`.
+pub fn start_line(folder: &Path) -> String {
+    let sync = folder.join("sync");
+    format!(
+        "diro --portable {} {}",
+        sync.join("here").display(),
+        sync.join("there").display()
+    )
+}
+
 /// Writes every fixture into `folder`, staging in `staging`, git's only
 /// when `with_git` and git is there.
 pub fn build(folder: &Path, staging: &Path, with_git: bool) -> Result<Made> {
+    let made5 = alpha5::build(folder)?;
     photos(&folder.join("photos"))?;
     mixed(&folder.join("mixed"))?;
     let music = folder.join("music");
@@ -1295,14 +1378,16 @@ pub fn build(folder: &Path, staging: &Path, with_git: bool) -> Result<Made> {
             ));
             continue;
         }
-        lines.push(fixture_line(folder, name));
+        let line = fixture_line(folder, name);
+        lines.push(match alpha5::note(name, &made5) {
+            Some(note) => format!("{line}; {note}"),
+            None => line,
+        });
     }
     lines.push(format!("{STEPS_FILE}, the owner's steps in plain lines"));
-    lines.push(format!(
-        "Start the check: diro --portable {} {}",
-        folder.join("photos").display(),
-        folder.join("out").display()
-    ));
+    lines.push(format!("Step 2's shell line: {}", rename_line(folder)));
+    lines.push(format!("Step 8's cmd.exe line: {}", pipe_line(folder)));
+    lines.push(format!("Start the check: {}", start_line(folder)));
     Ok(Made {
         lines,
         all_good: true,
