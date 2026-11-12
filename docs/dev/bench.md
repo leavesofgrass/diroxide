@@ -184,6 +184,26 @@ The alpha 3 baseline found listing 27 percent slower and stat 29 percent slower 
 
 The October 16 numbers were the Phase 0 local provider's, before W1a's provider replaced it the same day. Today's stat opens each file twice: `std::fs::symlink_metadata` opens it once, then `fill_from_handle` opens it again to read the volume and file id, the number of links and the change time, three more system calls (about 23 microseconds a file on this machine). Today's listing builds each entry's full path for the link check, checks the name against the unfinished copies' pattern, and reads the platform's attributes and the online-only fact, about 0.3 microseconds more an entry. Both are what the details view and the copy ladder use; making the second open lazy, or the path only for links, is the next alpha's to weigh.
 
+## The listing and stat costs, removed
+
+Alpha 5's PF lane removed both causes above on Thursday, November 12, 2026, with nothing said or shown differently:
+
+- A stat opens each entry once on Windows. The one handle gives the metadata, as `symlink_metadata` reads it, and the identity, the link count and the change time, which a second open read before. Every stat still gives the identity, so the engine's same-entry checks, case-only renames and hard links read what they read before. Where the entry cannot be opened for its attributes, the standard library's lookup answers. Unix keeps its one `lstat`.
+- A listing builds an entry's full path only for a link's target. The name checks a listing makes of every entry (needs care, an archive extension) allocate nothing for an ASCII name, and give the same answers, tested name by name against the full check.
+
+The tests in `crates/diroxide-vfs/src/local/mod.rs` count, through the provider, what each entry costs: a listing opens nothing and builds no path but a link's, and a stat opens each entry once on Windows and reads one `lstat` elsewhere.
+
+No quiet minute could be found that day: seven other lanes were building, 6 to 17 cargo and 3 to 20 rustc processes at once. So the old and new code ran back to back, from 10:32 AM to 11:53 AM Pacific time, the old one built at 57bb7d8, each `cargo run --release -p xtask -- bench --only list,stat`, the median of three runs, with the load read before each:
+
+- Old, 8 cargo and 5 rustc: list 648 ms, stat 59.0 s.
+- New, 6 cargo and 14 rustc: list 516 ms, stat 30.8 s.
+- Old, 15 cargo and 6 rustc: list 1.05 s, stat 65.0 s.
+- New, 17 cargo and 5 rustc: list 194 ms, stat 20.6 s.
+- Old, 17 cargo and 3 rustc: list 328 ms, stat 18.2 s.
+- New, 15 cargo and 6 rustc: list 161 ms, stat 12.1 s.
+
+Each new run, beside the old one just before it, listed in 80, 18 and 49 percent of the old time, and read every entry's details in 52, 32 and 66 percent; the load moved under them, which is the spread. A smaller timing on one tree of 10,000 files, the two ways of a stat in alternating rounds under the same load, put one open at 57 to 85 percent of two (a median of 60). The absolute numbers say only the load: the quiet baseline of November 7 was 134 ms and 6.66 s. Whether listing and stat are back at October 16's 97 ms and 4.4 s is for a quiet machine to say, with the next saved baseline.
+
 ## The archive scenarios' first figures
 
 Measured on the owner's Windows machine on Saturday, October 17, 2026, in an optimized full run, with another builder at work beside it; the median of three runs each:
