@@ -230,7 +230,14 @@ fn the_labels_list_counts_missing_items_and_lists_a_labels_items() {
     // missing ones said so.
     let said = f.s.key("enter");
     assert_eq!(said[0], "Looking for 3 items labeled urgent", "{said:?}");
-    assert_eq!(last(&said), "Done: 1 item labeled urgent, 2 missing.");
+    // The folder watcher may say its own line about the two moved files
+    // after it ("Folder changed: 0 added, 2 removed"), so the verdict is
+    // looked for among what was said, not as the last line.
+    assert!(
+        said.iter()
+            .any(|l| l == "Done: 1 item labeled urgent, 2 missing."),
+        "{said:?}"
+    );
     assert_eq!(f.s.dialog_title().as_deref(), Some("Results: label urgent"));
     let line = f.s.dialog().unwrap().focus_line();
     assert!(line.starts_with("report.pdf, in "), "{line}");
