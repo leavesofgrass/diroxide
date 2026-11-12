@@ -40,9 +40,9 @@ use crate::rig::{HostOf, Rig, app_with, name_of};
 /// whose dialog the Jobs list had replaced).
 const UNREACHABLE: &[(&str, &str)] = &[];
 
-/// How many purposes the app declares: 77 variants of `Purpose` and the
-/// 35 hosted lists and questions of alpha 4.
-const PURPOSES: usize = 112;
+/// How many purposes the app declares: 77 variants of `Purpose`, the
+/// 35 hosted lists and questions of alpha 4 and the 4 of the tabs.
+const PURPOSES: usize = 116;
 
 /// The purposes whose scenario may say "not made on this system", each
 /// for its reason: a symbolic link needs Developer Mode on Windows; the
@@ -1058,6 +1058,36 @@ fn hosted_scenarios() -> Vec<(&'static str, &'static str, Open)> {
                 Some(rig)
             },
         ),
+        // Tabs (alpha 5, lane TB): the tab list, the question before a
+        // locked tab closes, Save tab set's name and the saved sets.
+        ("TabList", "Tabs, left panel, 2 tabs", |root| {
+            let mut rig = window(root, |_| {});
+            rig.run("tab.new");
+            rig.run("tab.list");
+            Some(rig)
+        }),
+        ("TabCloseLocked", "Close locked tab work", |root| {
+            let mut rig = window(root, |_| {});
+            rig.run("tab.new");
+            rig.run("tab.lock");
+            rig.run("tab.close");
+            Some(rig)
+        }),
+        ("TabSetName", "", |root| {
+            let mut rig = window(root, |_| {});
+            rig.run("tab.save-set");
+            Some(rig)
+        }),
+        ("TabSets", "Tab sets, 1 set", |root| {
+            let mut rig = window(root, |_| {});
+            rig.run("tab.new");
+            rig.run("tab.save-set");
+            rig.type_text("Work");
+            rig.press("enter");
+            wait(&mut rig);
+            rig.run("tab.load-set");
+            Some(rig)
+        }),
     ]
 }
 
