@@ -79,6 +79,8 @@ pub mod picture_view;
 mod staged;
 // The photo helpers (alpha 4, lane AP).
 mod photos_ui;
+// Tabs: a panel holds a list of listers (alpha 5, lane TB).
+mod tabbing;
 mod viewing;
 // The Volumes list (lane A3).
 mod volumes_ui;
@@ -1104,6 +1106,9 @@ pub struct App {
     tool_overrides: diroxide_config::ToolsConfig,
     /// The installed helper components' programs (K's request 3).
     helper_programs: Vec<std::path::PathBuf>,
+    /// Each panel's other tabs, the closed ones and the saved sets (alpha
+    /// 5, lane TB).
+    tabs: tabbing::TabsState,
 }
 
 /// A selection a wholesale change replaced, kept for Restore selection:
@@ -1446,6 +1451,7 @@ impl App {
             running_typed: false,
             tool_overrides: startup.tools,
             helper_programs: startup.helper_programs,
+            tabs: tabbing::TabsState::new(startup.tab_sets),
         };
         app.apply_session();
         for side in Side::BOTH {
@@ -1731,7 +1737,9 @@ impl App {
     /// D:\work, sorted by size". A plugin's words about the folder follow
     /// the panel too, the plugin's name last: "diroxide, left panel, main,
     /// no upstream, 2 changed here (Git), in D:\work". Hidden characters
-    /// in names are drawn as question marks (the display-name rule).
+    /// in names are drawn as question marks (the display-name rule). With
+    /// more than one tab, or a lock, the tab follows the folder:
+    /// "Documents, tab 2 of 3, locked, left panel, in D:\work".
     pub fn title_line(&self) -> String {
         self.title_line_within(usize::MAX)
     }
@@ -1772,17 +1780,23 @@ impl App {
             // A plugin's words about a place inside a container it claims
             // follow the panel too (PD's request 6): "EFI, in disk.iso, left
             // panel, ISO 9660, 3 files (Disk images)".
-            let side_words = match self.place_words(place) {
+            let mut side_words = match self.place_words(place) {
                 Some(words) => format!("{} panel, {words}", self.active.word()),
                 None => format!("{} panel", self.active.word()),
             };
+            // The tab before the panel (alpha 5, lane TB).
+            if let Some(tab) = self.tab_title_words(self.active) {
+                side_words = format!("{tab}, {side_words}");
+            }
             return self.archive_title_line(place, &side_words, &tail, cells);
         }
-        let mut head = format!(
-            "{}, {} panel",
-            crate::panel::place_leaf(place),
-            self.active.word()
-        );
+        let mut head = crate::panel::place_leaf(place);
+        // The tab after the folder: "Documents, tab 2 of 3, left panel"
+        // (alpha 5, lane TB).
+        if let Some(tab) = self.tab_title_words(self.active) {
+            head.push_str(&format!(", {tab}"));
+        }
+        head.push_str(&format!(", {} panel", self.active.word()));
         // A plugin's words about the folder, its name last (alpha 4, lane
         // HP): "diroxide, left panel, main, no upstream, 2 changed here
         // (Git), in D:\work".
@@ -1887,6 +1901,8 @@ impl App {
             }
             state.history = panel.history().to_vec();
         }
+        // Every tab, the current one as above (alpha 5, lane TB).
+        self.tabs_into_session(&mut session);
         session
     }
 
@@ -1898,6 +1914,7 @@ impl App {
         let mut effects = self.handle_event(event);
         effects.extend(self.plugin_queue_next());
         effects.extend(self.jobs_queue_next());
+        self.note_job_tabs();
         self.follow_cursor();
         self.follow_type_checks();
         effects.extend(self.follow_columns());
@@ -2080,6 +2097,7 @@ impl App {
         let mut effects = self.dispatch_command(command);
         effects.extend(self.plugin_queue_next());
         effects.extend(self.jobs_queue_next());
+        self.note_job_tabs();
         self.follow_cursor();
         self.follow_type_checks();
         effects.extend(self.follow_columns());
@@ -2121,6 +2139,10 @@ impl App {
         }
         // The labels, bookmarks, folder views and History list (W3l).
         if let Some(effects) = self.organize_dispatch(command) {
+            return effects;
+        }
+        // Tabs (alpha 5, lane TB).
+        if let Some(effects) = self.tabs_dispatch(command) {
             return effects;
         }
         // Watch this folder, and Cancel while it watches (W3t).

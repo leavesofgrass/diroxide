@@ -7,34 +7,6 @@
 
 
 [[key]]
-keys = ["ctrl+t"]
-command = "tab.new"
-name = "New tab"
-alpha = "alpha.8"
-column = "both"
-
-[[key]]
-keys = ["ctrl+w"]
-command = "tab.close"
-name = "Close tab"
-alpha = "alpha.8"
-column = "both"
-
-[[key]]
-keys = ["ctrl+tab"]
-command = "tab.next"
-name = "Next tab"
-alpha = "alpha.8"
-column = "gui"
-
-[[key]]
-keys = ["ctrl+shift+tab"]
-command = "tab.previous"
-name = "Previous tab"
-alpha = "alpha.8"
-column = "gui"
-
-[[key]]
 keys = ["ctrl+shift+e"]
 command = "view.tree"
 name = "Folder tree"

@@ -1207,6 +1207,12 @@ impl App {
             return effects;
         }
         let side = flow.as_ref().map_or(self.active, |f| f.side);
+        // After a tab switch the job only speaks: the tab now shown keeps
+        // its cursor and marks (alpha 5, lane TB).
+        let elsewhere = self.job_left_its_tab(report.job, side);
+        if elsewhere {
+            focus = None;
+        }
         let folder = self.panel(side).place().clone();
         let failed: Vec<String> = report
             .failed
@@ -1214,7 +1220,7 @@ impl App {
             .filter(|(place, _)| place.parent().as_ref() == Some(&folder))
             .filter_map(|(place, _)| place.name().map(str::to_owned))
             .collect();
-        if report.kind != JobKind::MakeFolder && report.kind != JobKind::Rename {
+        if report.kind != JobKind::MakeFolder && report.kind != JobKind::Rename && !elsewhere {
             self.keep_selection(side);
             let list = self.panel_mut(side).list_mut();
             list.select_none();

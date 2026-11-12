@@ -61,6 +61,8 @@ pub mod runtime;
 pub mod settings;
 pub mod startup;
 pub mod state;
+// Tabs: their words and the saved tab sets (alpha 5, lane TB).
+pub mod tabs;
 // The Settings Tools page's rows (alpha 4, lane VA).
 pub mod tools_page;
 // Watch this folder (W3t).

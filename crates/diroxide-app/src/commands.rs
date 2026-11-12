@@ -800,6 +800,58 @@ pub mod ids {
         REVIEW_PICTURES = "photo.review";
         /// Move the pictures into folders by month, one job.
         MONTH_FOLDERS = "photo.month-folders";
+        /// Open a new tab, a copy of the current one (alpha 5, lane TB).
+        TAB_NEW = "tab.new";
+        /// Open a new tab for the focused folder.
+        TAB_NEW_FOCUSED = "tab.new-for-focused";
+        /// Close the current tab.
+        TAB_CLOSE = "tab.close";
+        /// Bring back the tab closed last.
+        TAB_UNDO_CLOSE = "tab.undo-close";
+        /// Go to the next tab.
+        TAB_NEXT = "tab.next";
+        /// Go to the previous tab.
+        TAB_PREVIOUS = "tab.previous";
+        /// List this panel's tabs to choose one.
+        TAB_LIST = "tab.list";
+        /// Go to tab 1.
+        TAB_GO_1 = "tab.go-1";
+        /// Go to tab 2.
+        TAB_GO_2 = "tab.go-2";
+        /// Go to tab 3.
+        TAB_GO_3 = "tab.go-3";
+        /// Go to tab 4.
+        TAB_GO_4 = "tab.go-4";
+        /// Go to tab 5.
+        TAB_GO_5 = "tab.go-5";
+        /// Go to tab 6.
+        TAB_GO_6 = "tab.go-6";
+        /// Go to tab 7.
+        TAB_GO_7 = "tab.go-7";
+        /// Go to tab 8.
+        TAB_GO_8 = "tab.go-8";
+        /// Go to tab 9.
+        TAB_GO_9 = "tab.go-9";
+        /// Move the current tab to the other panel.
+        TAB_TO_OTHER = "tab.to-other-panel";
+        /// Copy the current tab to the other panel.
+        TAB_COPY_TO_OTHER = "tab.copy-to-other-panel";
+        /// Move the current tab one place left.
+        TAB_MOVE_LEFT = "tab.move-left";
+        /// Move the current tab one place right.
+        TAB_MOVE_RIGHT = "tab.move-right";
+        /// Close this panel's other tabs, keeping the locked ones.
+        TAB_CLOSE_OTHERS = "tab.close-others";
+        /// Lock or free the current tab.
+        TAB_LOCK = "tab.lock";
+        /// Pin or free the current tab.
+        TAB_PIN = "tab.pin";
+        /// Go back to a pinned tab's base folder.
+        TAB_BASE = "tab.base";
+        /// Save both panels' tabs as a named set.
+        TAB_SAVE_SET = "tab.save-set";
+        /// Load a saved tab set.
+        TAB_LOAD_SET = "tab.load-set";
     }
 }
 
@@ -825,7 +877,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 277] = [
+pub static CATALOG: [CommandInfo; 303] = [
     command(
         ids::QUIT,
         "Quit",
@@ -3043,6 +3095,216 @@ pub static CATALOG: [CommandInfo; 277] = [
         Dialog,
         &["enter"],
         &["enter"],
+    ),
+    // Tabs (alpha 5, lane TB): each tab keeps its own place, sort,
+    // filter, columns, selection, cursor and history.
+    command(
+        ids::TAB_NEW,
+        "New tab",
+        "Opens a new tab in this panel, a copy of the current one.",
+        Panel,
+        &["ctrl+t"],
+        &["ctrl+t"],
+    ),
+    command(
+        ids::TAB_NEW_FOCUSED,
+        "New tab for the focused folder",
+        "Opens the focused folder in a new tab of this panel.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_CLOSE,
+        "Close tab",
+        "Closes the current tab; a locked tab asks first, and the last tab stays open.",
+        Panel,
+        &["ctrl+w"],
+        &["ctrl+w"],
+    ),
+    command(
+        ids::TAB_CLOSE_OTHERS,
+        "Close other tabs",
+        "Closes this panel's other tabs, keeping the locked ones.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_UNDO_CLOSE,
+        "Undo close tab",
+        "Brings back the tab closed last, in this session.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_NEXT,
+        "Next tab",
+        "Goes to this panel's next tab.",
+        Panel,
+        &[],
+        &["ctrl+tab"],
+    ),
+    command(
+        ids::TAB_PREVIOUS,
+        "Previous tab",
+        "Goes to this panel's previous tab.",
+        Panel,
+        &[],
+        &["ctrl+shift+tab"],
+    ),
+    command(
+        ids::TAB_LIST,
+        "Tab list",
+        "Lists this panel's tabs, name first, to go to one.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_MOVE_LEFT,
+        "Move tab left",
+        "Moves the current tab one place toward the first.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_MOVE_RIGHT,
+        "Move tab right",
+        "Moves the current tab one place toward the last.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_GO_1,
+        "Go to tab 1",
+        "Goes to this panel's first tab.",
+        Panel,
+        &[],
+        &["alt+1"],
+    ),
+    command(
+        ids::TAB_GO_2,
+        "Go to tab 2",
+        "Goes to this panel's second tab.",
+        Panel,
+        &[],
+        &["alt+2"],
+    ),
+    command(
+        ids::TAB_GO_3,
+        "Go to tab 3",
+        "Goes to this panel's third tab.",
+        Panel,
+        &[],
+        &["alt+3"],
+    ),
+    command(
+        ids::TAB_GO_4,
+        "Go to tab 4",
+        "Goes to this panel's fourth tab.",
+        Panel,
+        &[],
+        &["alt+4"],
+    ),
+    command(
+        ids::TAB_GO_5,
+        "Go to tab 5",
+        "Goes to this panel's fifth tab.",
+        Panel,
+        &[],
+        &["alt+5"],
+    ),
+    command(
+        ids::TAB_GO_6,
+        "Go to tab 6",
+        "Goes to this panel's sixth tab.",
+        Panel,
+        &[],
+        &["alt+6"],
+    ),
+    command(
+        ids::TAB_GO_7,
+        "Go to tab 7",
+        "Goes to this panel's seventh tab.",
+        Panel,
+        &[],
+        &["alt+7"],
+    ),
+    command(
+        ids::TAB_GO_8,
+        "Go to tab 8",
+        "Goes to this panel's eighth tab.",
+        Panel,
+        &[],
+        &["alt+8"],
+    ),
+    command(
+        ids::TAB_GO_9,
+        "Go to tab 9",
+        "Goes to this panel's ninth tab.",
+        Panel,
+        &[],
+        &["alt+9"],
+    ),
+    command(
+        ids::TAB_TO_OTHER,
+        "Move tab to other panel",
+        "Moves the current tab to the other panel, where it becomes current.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_COPY_TO_OTHER,
+        "Copy tab to other panel",
+        "Opens a copy of the current tab in the other panel, where it becomes current.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_LOCK,
+        "Lock tab",
+        "Locks or frees the current tab: closing a locked tab asks first, and a folder change opens a new tab.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_PIN,
+        "Pin tab",
+        "Pins or frees the current tab: a pinned tab changes folder freely and remembers this folder as its base.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_BASE,
+        "Go to base folder",
+        "Goes back to the pinned tab's base folder.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_SAVE_SET,
+        "Save tab set",
+        "Saves both panels' tabs by a name, in the state folder.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::TAB_LOAD_SET,
+        "Load tab set",
+        "Lists the saved tab sets to load one in place of the open tabs.",
+        Panel,
+        &[],
+        &[],
     ),
 ];
 
