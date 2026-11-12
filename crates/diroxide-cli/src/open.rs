@@ -571,6 +571,7 @@ pub fn build_for(
     let mut runtime = Runtime::new(registry)
         .with_engine_options(engine)
         .with_tool_runner(std::sync::Arc::new(tools.clone()))
+        .with_editor_lookup(tools.clone())
         .with_tool_versions(tools);
     // The watched folders' carta runs in a diro child (lane AW).
     if let Ok(program) = env::current_exe() {

@@ -513,6 +513,10 @@ impl Launcher for WindowLauncher {
     fn editor(&self) -> OsString {
         self.system.editor()
     }
+
+    fn chosen_editor(&self) -> Option<OsString> {
+        self.system.chosen_editor()
+    }
 }
 
 #[cfg(test)]
