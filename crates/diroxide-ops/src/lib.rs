@@ -26,6 +26,8 @@
 pub mod access;
 pub mod convert;
 pub mod crypt;
+// Duplicates, the library half (alpha 5, lane DU).
+pub mod dups;
 pub mod engine;
 pub mod error;
 pub mod fake;
