@@ -25,6 +25,7 @@
 
 pub(crate) mod attributes;
 pub(crate) mod copy;
+pub(crate) mod counting;
 pub(crate) mod entry;
 pub(crate) mod owners;
 pub(crate) mod probe;
@@ -170,8 +171,22 @@ impl LocalProvider {
             if names::is_unfinished(&name) != unfinished {
                 continue;
             }
+            // Free on Windows, where the folder read carries it; a stat
+            // of the entry in its folder on Unix.
+            if cfg!(unix) {
+                counting::looked_up();
+            }
             let mut entry = match item.metadata() {
-                Ok(metadata) => entry_from(name, &metadata, &item.path(), &context),
+                // The full path only for a link's target.
+                Ok(metadata) => entry_from(
+                    name,
+                    &metadata,
+                    || {
+                        counting::path_built();
+                        item.path()
+                    },
+                    &context,
+                ),
                 // An entry that cannot be examined is listed with its
                 // details unknown, never dropped and never an error.
                 Err(_) => {
@@ -233,13 +248,15 @@ impl Provider for LocalProvider {
     fn stat(&self, place: &Place, ctx: &OpContext) -> Result<Entry, VfsError> {
         ctx.check()?;
         let path = Self::path_of(place)?;
-        let metadata = fs::symlink_metadata(&path)?;
+        // One open on Windows for the metadata and the handle's facts
+        // together; one `lstat` elsewhere.
+        let (metadata, facts) = sys::stat_once(&path)?;
         let name = place
             .name()
             .map_or_else(|| place.to_string(), str::to_owned);
         let context = stat_context();
-        let mut entry = entry_from(name, &metadata, &path, &context);
-        sys::fill_from_handle(&mut entry, &path);
+        let mut entry = entry_from(name, &metadata, || &path, &context);
+        facts.apply(&mut entry);
         Ok(entry)
     }
 
@@ -672,5 +689,142 @@ mod tests {
             provider.stat(&missing, &OpContext::new()).unwrap_err(),
             VfsError::NotFound
         );
+    }
+
+    /// The cost per entry, counted through the provider as every caller
+    /// reaches it (PF, alpha 5): a listing opens nothing and builds no
+    /// path but a link's, and a stat opens each entry once on Windows
+    /// (it opened twice before) and reads one `lstat` elsewhere.
+    #[test]
+    fn a_listing_and_a_stat_ask_the_system_once_per_entry() {
+        const FILES: u64 = 40;
+        const FOLDERS: u64 = 3;
+        let scratch = crate::test_support::scratch();
+        let root = scratch.path();
+        for n in 0..FILES {
+            fs::write(root.join(format!("note-{n}.txt")), b"n").unwrap();
+        }
+        fs::write(root.join("course.zip"), b"PK").unwrap();
+        for n in 0..FOLDERS {
+            fs::create_dir(root.join(format!("folder-{n}"))).unwrap();
+        }
+        let entries = FILES + 1 + FOLDERS;
+        let provider: &dyn Provider = &LocalProvider::new();
+        let folder = Place::parse(root.to_str().unwrap()).unwrap();
+        let ctx = OpContext::new();
+
+        counting::take();
+        let listed = provider.list(&folder, &ctx).unwrap();
+        let counts = counting::take();
+        assert_eq!(listed.len() as u64, entries);
+        let per_entry_lookups = u64::from(cfg!(unix));
+        assert_eq!(
+            counts,
+            counting::Counts {
+                opens: 0,
+                lookups: per_entry_lookups * entries,
+                paths: 0,
+            },
+            "a listing"
+        );
+
+        for entry in &listed {
+            let place = folder.join(&entry.name).unwrap();
+            let stat = provider.stat(&place, &ctx).unwrap();
+            let counts = counting::take();
+            let expected = if cfg!(windows) {
+                counting::Counts {
+                    opens: 1,
+                    lookups: 0,
+                    paths: 0,
+                }
+            } else {
+                counting::Counts {
+                    opens: 0,
+                    lookups: 1,
+                    paths: 0,
+                }
+            };
+            assert_eq!(counts, expected, "a stat of {}", entry.name);
+            // What the one open read is what the two read before.
+            assert_eq!(stat.kind, entry.kind, "{}", entry.name);
+            assert_eq!(stat.size, entry.size, "{}", entry.name);
+            assert_eq!(stat.attributes, entry.attributes, "{}", entry.name);
+            assert_eq!(stat.hidden, entry.hidden, "{}", entry.name);
+            assert_eq!(stat.modified, entry.modified, "{}", entry.name);
+            assert_eq!(stat.created, entry.created, "{}", entry.name);
+            assert!(stat.inode.is_some(), "{}", entry.name);
+            assert!(stat.volume.is_some(), "{}", entry.name);
+            assert_eq!(stat.volume, entry.volume, "{}", entry.name);
+            assert!(stat.hard_links.is_some_and(|n| n >= 1), "{}", entry.name);
+            assert!(stat.changed.is_some(), "{}", entry.name);
+        }
+    }
+
+    /// The one open still gives every stat the identity the engine's
+    /// same-entry checks read (R34's correction to PF): two names of one
+    /// file answer one identity and two links, and a change of case keeps
+    /// the identity and renames.
+    #[test]
+    fn a_stat_still_gives_the_identity_for_links_and_case_renames() {
+        let scratch = crate::test_support::scratch();
+        let root = scratch.path();
+        fs::write(root.join("report.pdf"), b"pdf").unwrap();
+        fs::hard_link(root.join("report.pdf"), root.join("second.pdf")).unwrap();
+        let folder = Place::parse(root.to_str().unwrap()).unwrap();
+        let provider = LocalProvider::new();
+        let ctx = OpContext::new();
+        let first = provider
+            .stat(&folder.join("report.pdf").unwrap(), &ctx)
+            .unwrap();
+        let second = provider
+            .stat(&folder.join("second.pdf").unwrap(), &ctx)
+            .unwrap();
+        assert!(first.inode.is_some() && first.volume.is_some());
+        assert_eq!((first.inode, first.volume), (second.inode, second.volume));
+        assert_eq!(first.hard_links, Some(2));
+        assert_eq!(second.hard_links, Some(2));
+
+        let before = provider
+            .stat(&folder.join("second.pdf").unwrap(), &ctx)
+            .unwrap();
+        provider
+            .rename(
+                &folder.join("second.pdf").unwrap(),
+                &folder.join("Second.PDF").unwrap(),
+                &ctx,
+            )
+            .unwrap();
+        let after = provider
+            .stat(&folder.join("Second.PDF").unwrap(), &ctx)
+            .unwrap();
+        assert_eq!((before.inode, before.volume), (after.inode, after.volume));
+        let names: Vec<String> = provider
+            .list(&folder, &ctx)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        assert!(names.contains(&"Second.PDF".to_owned()), "{names:?}");
+        assert!(!names.contains(&"second.pdf".to_owned()), "{names:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_listing_builds_a_path_for_a_link_only() {
+        let scratch = crate::test_support::scratch();
+        let root = scratch.path();
+        fs::write(root.join("report.pdf"), b"pdf").unwrap();
+        std::os::unix::fs::symlink("report.pdf", root.join("latest")).unwrap();
+        let folder = Place::parse(root.to_str().unwrap()).unwrap();
+        counting::take();
+        let listed = LocalProvider::new()
+            .list(&folder, &OpContext::new())
+            .unwrap();
+        let counts = counting::take();
+        assert_eq!(counts.paths, 1);
+        assert_eq!(counts.opens, 0);
+        let link = listed.iter().find(|e| e.name == "latest").unwrap();
+        assert_eq!(link.link.as_ref().unwrap().target, "report.pdf");
     }
 }

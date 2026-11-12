@@ -45,7 +45,8 @@ use windows_sys::Win32::System::JobObjects::{
 
 use super::Identity;
 use crate::cancel::{OpContext, ProgressUpdate};
-use crate::local::entry::EntryContext;
+use crate::local::counting;
+use crate::local::entry::{EntryContext, HandleFacts};
 use crate::local::volumes::VolumeFacts;
 use crate::volume::VolumeKind;
 
@@ -219,23 +220,42 @@ pub(crate) fn is_hidden(_name: &std::ffi::OsStr, metadata: Option<&Metadata>) ->
     metadata.is_some_and(|m| m.file_attributes() & ATTRIBUTE_HIDDEN != 0)
 }
 
-/// The facts a stat reads through a handle: the identity, the link count
-/// and the change time. Missing facts stay unknown; a stat never fails
-/// for them.
-pub(crate) fn fill_from_handle(entry: &mut Entry, path: &Path) {
-    let Ok(file) = open_for_facts(path) else {
-        return;
+/// A stat through one open (PF, alpha 5): the entry is opened once,
+/// without following a final link, and that handle gives both its
+/// metadata, as `symlink_metadata` reads it, and the facts only a handle
+/// has: the identity, the link count and the change time. Before, the
+/// metadata's own open and a second open for the facts cost two.
+///
+/// When the entry cannot be opened for its attributes (a file the system
+/// holds, such as the page file), the standard library's lookup answers,
+/// which reads the folder instead, and the handle's facts stay unknown;
+/// a stat never fails for them. A missing entry is answered at once.
+pub(crate) fn stat_once(path: &Path) -> io::Result<(Metadata, HandleFacts)> {
+    counting::opened();
+    let by_lookup = || {
+        counting::looked_up();
+        std::fs::symlink_metadata(path).map(|m| (m, HandleFacts::default()))
     };
+    let file = match open_for_facts(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Err(error),
+        Err(_) => return by_lookup(),
+    };
+    let Ok(metadata) = file.metadata() else {
+        return by_lookup();
+    };
+    let mut facts = HandleFacts::default();
     if let Ok(identity) = identity_of(&file) {
-        entry.volume = Some(identity.volume);
-        entry.inode = Some(identity.inode());
+        facts.volume = Some(identity.volume);
+        facts.inode = Some(identity.inode());
     }
     if let Ok(info) = by_handle(&file) {
-        entry.hard_links = Some(u64::from(info.nNumberOfLinks));
+        facts.hard_links = Some(u64::from(info.nNumberOfLinks));
     }
     if let Ok(info) = basic_info(&file) {
-        entry.changed = timestamp_from_filetime(info.ChangeTime);
+        facts.changed = timestamp_from_filetime(info.ChangeTime);
     }
+    Ok((metadata, facts))
 }
 
 /// Renames without ever replacing: `MoveFileExW` with no flags, which
