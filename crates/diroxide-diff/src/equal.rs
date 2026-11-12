@@ -1,53 +1,23 @@
 //! "Are these two files equal?" with an early exit: both are read in
 //! blocks side by side, and the reading stops at the first difference
 //! (R18: early exit, not hashes, for a pair; hashes belong to many-to-many
-//! work). Compare uses it, and the duplicate finder of a later alpha will
-//! use it for its final byte comparison.
+//! work). The block compare itself lives in `diroxide-vfs`
+//! ([`diroxide_vfs::equal`]), one for the file compare, the folder compare
+//! of a synchronize and the duplicate finder's byte check; this module
+//! keeps the file compare's errors.
 
-use std::io::{ErrorKind, Read};
+use std::io::Read;
 
+use diroxide_vfs::equal::{EqualStop, equal_with};
 use diroxide_vfs::{CancelToken, VfsError};
 
 use crate::error::DiffError;
 
-/// How much of each file one step reads: 64 KiB.
-pub const BLOCK_BYTES: usize = 64 * 1024;
-
-/// Whether two byte streams are equal.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Equality {
-    /// The same bytes, this many of them.
-    Same {
-        /// The length of each stream.
-        bytes: u64,
-    },
-    /// The streams differ, first at this offset, counted from 0: the
-    /// first byte that differs, or the end of the shorter stream.
-    Different {
-        /// Where they first differ.
-        at: u64,
-    },
-}
-
-impl Equality {
-    /// Whether the streams were equal.
-    pub const fn is_same(self) -> bool {
-        matches!(self, Equality::Same { .. })
-    }
-}
+pub use diroxide_vfs::equal::{BLOCK_BYTES, Equality};
 
 /// Fills `buffer` from `reader` as far as it can: short only at the end.
 pub(crate) fn fill(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize, DiffError> {
-    let mut filled = 0;
-    while filled < buffer.len() {
-        match reader.read(&mut buffer[filled..]) {
-            Ok(0) => break,
-            Ok(n) => filled += n,
-            Err(error) if error.kind() == ErrorKind::Interrupted => {}
-            Err(error) => return Err(DiffError::Read(VfsError::from(error))),
-        }
-    }
-    Ok(filled)
+    diroxide_vfs::equal::fill(reader, buffer).map_err(|error| DiffError::Read(VfsError::from(error)))
 }
 
 /// Reads two streams side by side and says whether they are equal,
@@ -58,35 +28,10 @@ pub fn equal(
     after: &mut dyn Read,
     cancel: &CancelToken,
 ) -> Result<Equality, DiffError> {
-    let mut one = vec![0u8; BLOCK_BYTES];
-    let mut other = vec![0u8; BLOCK_BYTES];
-    let mut offset = 0u64;
-    loop {
-        if cancel.is_cancelled() {
-            return Err(DiffError::Cancelled);
-        }
-        let got_one = fill(before, &mut one)?;
-        let got_other = fill(after, &mut other)?;
-        let common = got_one.min(got_other);
-        if let Some(at) = one[..common]
-            .iter()
-            .zip(&other[..common])
-            .position(|(a, b)| a != b)
-        {
-            return Ok(Equality::Different {
-                at: offset + at as u64,
-            });
-        }
-        if got_one != got_other {
-            return Ok(Equality::Different {
-                at: offset + common as u64,
-            });
-        }
-        offset += common as u64;
-        if got_one < BLOCK_BYTES {
-            return Ok(Equality::Same { bytes: offset });
-        }
-    }
+    equal_with(before, after, BLOCK_BYTES, cancel, &mut |_| Ok(())).map_err(|stop| match stop {
+        EqualStop::Stopped(_) => DiffError::Cancelled,
+        EqualStop::Read(_, error) => DiffError::Read(error),
+    })
 }
 
 #[cfg(test)]

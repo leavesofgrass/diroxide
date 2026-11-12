@@ -800,23 +800,17 @@ pub(super) fn same_bytes(
     ctx.check()?;
     let mut left = provider_a.read(a, ctx)?;
     let mut right = provider_b.read(b, ctx)?;
-    let mut one = vec![0u8; STEP];
-    let mut two = vec![0u8; STEP];
-    let mut done = 0u64;
-    loop {
-        ctx.check()?;
-        let got_one = fill(left.as_mut() as &mut dyn Read, &mut one, &ctx.cancel)?;
-        let got_two = fill(right.as_mut() as &mut dyn Read, &mut two, &ctx.cancel)?;
-        if got_one != got_two || one[..got_one] != two[..got_two] {
-            return Ok(false);
-        }
-        if got_one == 0 {
-            return Ok(true);
-        }
-        done += 2 * got_one as u64;
-        on_step(done);
-        if got_one < STEP {
-            return Ok(true);
-        }
-    }
+    // The one block compare (`diroxide_vfs::equal`), in this finder's
+    // steps.
+    let equality = diroxide_vfs::equal_with(
+        left.as_mut() as &mut dyn Read,
+        right.as_mut() as &mut dyn Read,
+        STEP,
+        &ctx.cancel,
+        &mut |done| {
+            on_step(done);
+            Ok(())
+        },
+    )?;
+    Ok(equality.is_same())
 }

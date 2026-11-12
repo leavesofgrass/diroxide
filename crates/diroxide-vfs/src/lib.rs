@@ -23,6 +23,7 @@ pub mod access;
 pub mod archive;
 pub mod cancel;
 pub mod capabilities;
+pub mod equal;
 pub mod error;
 pub mod extended;
 pub mod facts;
@@ -42,6 +43,7 @@ pub use cancel::{
     CancelToken, NoProgress, NoSecrets, OpContext, ProgressSink, ProgressUpdate, SecretSource,
 };
 pub use capabilities::{AccessCapabilities, Can, Capabilities};
+pub use equal::{EqualStop, Equality, Stream, equal_with};
 pub use error::{ErrorClass, ErrorScope, VfsError};
 pub use extended::{ExtendedAttributes, ExtendedItem, ExtendedKind};
 pub use local::{
