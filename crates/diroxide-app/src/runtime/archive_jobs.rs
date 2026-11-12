@@ -264,7 +264,7 @@ pub(super) fn test_archive_job(
 /// sends the plan, or why not in words: a refusal said whole; 7z and tar
 /// the old read-only sentence ("Archives are read only here. Use Pack to
 /// make a new one."); a format read through 7-Zip its own ("RAR is read
-/// only: diroxide never writes it").
+/// only in diroxide").
 pub(super) fn plan_rewrite_job(
     shared: &Arc<Shared>,
     archives: &ArchiveProvider,
