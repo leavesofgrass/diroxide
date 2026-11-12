@@ -25,7 +25,6 @@ Each item below was planned for alpha 4, is known, and was left for a later alph
 - Columns: a field has no sort value, so a duration sorts as text, and field columns have no header or grid. A cell says "reading" for a kind of file that no reader takes, until the readers have been through it.
 - Encryption: the Encryption plugin writes its files itself, so Undo for an age command lasts for the session only, and gpg's ASCII armor is not offered.
 - Photos: the Taken column reads the date to the minute. Move into month folders is planned by the program, so a plugin's before-move hook does not run for it. A row of the details list has no help of its own.
-- Archives: "RAR is read only: diroxide never writes it" is 42 cells, so its last word pans on a Braille display.
 - Speed: listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. [Other limits](#other-limits) has the numbers.
 - The window: a paste under Wayland with no XWayland still reads nothing, and no real Wayland compositor has been tried.
 
@@ -536,7 +535,7 @@ Menus and the mouse:
 - The lines of plugins, script commands and optional components (the turn-on question, the jobs line, the failure lines, the ask-first question) were written to carry their meaning in the first 40 cells and are checked in tests, not heard. A plugin's own text is cleaned and given its name last, but its wording is the plugin's, so a plugin's lines may not fit 40 cells.
 - The lines of the Volumes list, the trash browser, free space and the first-run list were written to carry their meaning in the first 40 cells and are checked in tests, not heard. That includes "Mounted: Backup, removable, 412 GB free", "Restore 3 items? No is the default. y or n", "Not enough room on build:" and "Optional components to get now". A volume's name and a plugin's lines may run past 40 cells.
 
-- Nothing new in alpha 4 has been heard on NVDA, JAWS or Orca, or read on a Braille display: not the tools, the details view, the previews, columns, checksums, conversions, watched folders, disk images, git, encryption, access rows, Change time and owner, or the photo helpers. The lines were written to carry their meaning in the first 40 cells and are checked in tests, and the window's scripted walk checks the first words of the new lists the same way. Lines known to pass 40 cells with the meaning first include the Install lines of `diro doctor`, its Built in line, and "RAR is read only: diroxide never writes it".
+- Nothing new in alpha 4 has been heard on NVDA, JAWS or Orca, or read on a Braille display: not the tools, the details view, the previews, columns, checksums, conversions, watched folders, disk images, git, encryption, access rows, Change time and owner, or the photo helpers. The lines were written to carry their meaning in the first 40 cells and are checked in tests, and the window's scripted walk checks the first words of the new lists the same way. Lines known to pass 40 cells with the meaning first include the Install lines of `diro doctor`, its Built in line, and "RAR is read only in diroxide".
 
 ## Names and wide characters
 
